@@ -447,7 +447,7 @@ test('новый шаблон строки (D1): серые пояснения �
   await captureScreen(page, testInfo, 'history-row-details');
 });
 
-test('открытие «с конца» и реставрация позиции чтения по «Назад» (карта #1324, D8)', async ({ page, seededUser }) => {
+test('открытие «с конца» держится всегда: «Назад» снова открывает ленту на последних записях (карта #1324, D8; реверс реставрации 10.10)', async ({ page, seededUser }) => {
   test.setTimeout(60_000);
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
@@ -478,35 +478,11 @@ test('открытие «с конца» и реставрация позици�
   }));
   expect(anchored.distanceToBottom).toBeLessThan(120);
 
-  // Читатель поднялся к верху ленты — sentinel догружает старую порцию
-  // (компенсация держит контент, scrollY растёт на высоту prepend'а);
+  // Читатель поднялся к верху ленты — sentinel догружает старую порцию;
   // тап по шапке актёра — «Действия участника» (клик по ссылке из DOM:
-  // без автоскролла Playwright, чтобы позиция чтения оставалась
-  // зафиксированной).
+  // без автоскролла Playwright).
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(page.getByText('Платёж создан: Заготовка 1', { exact: true })).toBeVisible();
-  // Prepend осел: компенсация сместила scrollY, ждём стабилизацию кадра,
-  // чтобы фиксация позиции чтения не попала на середину пересчета.
-  await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
-  await page.waitForTimeout(300);
-  await page.evaluate(() => window.scrollTo(0, 500));
-  await page.waitForTimeout(150);
-  // Позиция чтения — верхняя видимая строка ленты: пользовательская
-  // гарантия D8.2 — «Назад» возвращает к читаемому месту (компенсации
-  // prepend'ов двигают scrollY, но не контент в кадре, поэтому ассерт —
-  // по контенту, не по scrollTop).
-  const topRowText = (await page.evaluate(() => {
-    const rows = [...document.querySelectorAll('p')]
-      .filter((el) => el.textContent.includes('Заготовка'));
-    const top = rows.find((el) => {
-      const rect = el.getBoundingClientRect();
-      return rect.top >= 0 && rect.top < window.innerHeight;
-    });
-    return top === undefined ? null : top.textContent;
-  }));
-  expect(topRowText).not.toBeNull();
-  // Первая шапка в DOM — серия владельца (старейшая): клик ведёт на его
-  // «Действия участника» (клик из DOM — без автоскролла Playwright).
   await page.evaluate(() => {
     (document.querySelector('a[href^="/history/participants"]') as HTMLAnchorElement).click();
   });
@@ -517,25 +493,16 @@ test('открытие «с конца» и реставрация позици�
   await expect(page.getByText('Платёж создан: Заготовка 11', { exact: true })).toBeVisible();
 
   // «Назад» (goBack, кнопка шапки ведёт себя так же — history.back):
-  // позиция чтения восстановлена — та же строка в верхней части кадра,
-  // не верх и не дно ленты (D8.2).
+  // реставрации позиции чтения нет (решение владельца 10.10.2026) —
+  // лента открывается заново на самых свежих записях, дно в вьюпорте.
   await page.goBack();
   await expect(page.getByText('Платёж создан: Заготовка 60', { exact: true })).toBeVisible();
   await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
-  const topAfter = (await page.evaluate(() => {
-    const rows = [...document.querySelectorAll('p')]
-      .filter((el) => el.textContent.includes('Заготовка'));
-    const top = rows.find((el) => {
-      const rect = el.getBoundingClientRect();
-      return rect.top >= 0 && rect.top < window.innerHeight;
-    });
-    return top === undefined ? null : top.textContent;
+  const afterBack = await page.evaluate(() => ({
+    distanceToBottom:
+      document.documentElement.scrollHeight - (window.scrollY + window.innerHeight),
   }));
-  expect(topAfter).toBe(topRowText);
-  const restoredDistance = await page.evaluate(
-    () => document.documentElement.scrollHeight - (window.scrollY + window.innerHeight),
-  );
-  expect(restoredDistance).toBeGreaterThan(120);
+  expect(afterBack.distanceToBottom).toBeLessThan(120);
 });
 
 test('фолбэк загрузки с хромом экрана (#1281): шапка скоупа, «Настройки» и скелетон в колонке', async ({ page, seededUser }, testInfo) => {

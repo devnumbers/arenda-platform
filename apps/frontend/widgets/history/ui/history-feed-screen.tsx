@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
 import { ArrowDown, ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { type HistoryFilterOptions, type HistoryObjectOption } from '@/entities/history';
@@ -37,7 +36,6 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
-import { saveReadingPosition, takeReadingPosition } from '@/shared/lib/scroll/reading-position';
 import { historyScreenBackHref, historyScreenTitle } from '../lib/screen-chrome';
 import { HistoryRow } from './history-row';
 import { FOLLOW_BOTTOM_PX, decideFeedScroll, distanceToBottom, type FeedEdges } from '../lib/feed-scroll';
@@ -54,11 +52,6 @@ const SEARCH_DEBOUNCE_MS = 300;
 /** Канонная пауза метки «новое» у читателя на дне (мс) — механика F демо
  * #879: строки видны сразу, метка гаснет сама (тикет #880). */
 const FRESH_VISIBLE_MS = 2600;
-
-/** Минимальная пауза между записями позиции чтения (мс) — реестр позиций
- * не пишется на каждый кадр скролла, финальную позицию до-записывает
- * сохранение при размонтировании (D8.2). */
-const READING_POSITION_SAVE_INTERVAL_MS = 400;
 
 /** Канон строки-ссылки (хаб «Совместный доступ»): подложка hover/active
  * не меняется, только прозрачность; фокус-ринг с клавиатуры. */
@@ -105,14 +98,13 @@ const HEADER_LINK =
  * HistoryFeedLoading с тем же хромом). Пустые состояния — не сообщения:
  * «Действий не было» и «Ничего не найдено» живут как раньше.
  *
- * Открытие «с конца» и позиция чтения (карта #1324, D8): якорь на самые
- * свежие записи выполняется лейаут-эффектом до пэйнта; страницы истории
- * исключены из глобального «всегда верх» (реестр якорёных роутов
- * shared/lib/scroll/reading-position.ts — ScrollToTop их не скроллит,
- * иначе он затирал бы якорь). Возврат «Назад» на ленту (popstate)
- * восстанавливает позицию чтения вместо якоря — паттерн мессенджеров
- * (D8.2); перечитанное окно (сдвиг обоих краёв, #718) по-прежнему
- * реанкерует на дно.
+ * Открытие «с конца» (карта #1324, D8): якорь на самые свежие записи
+ * выполняется лейаут-эффектом до пэйнта; страницы истории исключены из
+ * глобального «всегда верх» (реестр якорёных роутов
+ * shared/lib/scroll/anchored-routes.ts — ScrollToTop их не скроллит,
+ * иначе он затирал бы якорь). Всегда открытие на последних действиях —
+ * решение владельца 10.10.2026: реставрации позиции чтения при «Назад»
+ * нет; перечитанное окно (сдвиг обоих краёв, #718) реанкерует на дно.
  *
  * Поиск по истории (#710) — иконка в шапке ленты (макет 2157-56876),
  * шапка меняется на поисковую поверх того же экрана (прецедент «Ваших
@@ -353,16 +345,6 @@ export function HistoryFeedScreen({
     };
   }, [acknowledgeFresh]);
 
-  // Позиция чтения (карта #1324, D8.2): ключ — href из рендера экрана
-  // (фильтры/поиск меняют адрес — у каждой записи истории своя позиция);
-  // window.location в очисте доверять нельзя — Next пушит новый URL и
-  // скроллит верх синхронно с навигацией. Ключ живёт выше решателя
-  // прокрутки: реставрация сверяет его с пометкой popstate.
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const feedSearch = searchParams.toString();
-  const feedHref = feedSearch ? `${pathname}?${feedSearch}` : pathname;
-
   const [hasNewBelow, setHasNewBelow] = useState(false);
   const entryCount = entries.length;
   const firstEntryId = entries[0]?.id ?? null;
@@ -423,12 +405,10 @@ export function HistoryFeedScreen({
       }
     }
     if (action.kind === 'anchor') {
-      // Реставрация позиции чтения (карта #1324, D8.2): возврат «Назад»
-      // на ленту помечен popstate-прослушкой ScrollToTop — вместо якоря
-      // встаём на сохранённый scrollTop. Пометки нет (открытие по ссылке,
-      // push-навигация, смена скоупа) — якорь на дно, «как в мессенджере».
-      const restored = takeReadingPosition(feedHref);
-      window.scrollTo({ top: restored ?? height });
+      // Всегда открытие на последних действиях — решение владельца
+      // 10.10.2026 (#1319): реставрации позиции чтения при «Назад» нет,
+      // любая первая загрузка/сужение выдачи встаёт на дно.
+      window.scrollTo({ top: height });
       setHasNewBelow(false);
     } else if (action.kind === 'compensate' || action.kind === 'follow') {
       if (action.delta > 0) {
@@ -440,7 +420,7 @@ export function HistoryFeedScreen({
     } else if (action.kind === 'indicate') {
       setHasNewBelow(true);
     }
-  }, [entryCount, firstEntryId, lastEntryId, acknowledgeFresh, feedHref]);
+  }, [entryCount, firstEntryId, lastEntryId, acknowledgeFresh]);
 
   // Индикатор гаснет и от ручного доскролла до низа — читатель сам дошёл
   // до свежих записей, «есть новые» больше не новость; метки «новое»
@@ -458,26 +438,6 @@ export function HistoryFeedScreen({
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, [hasNewBelow, acknowledgeFresh]);
-
-  // Позиция чтения (карта #1324, D8.2): по ходу чтения пишем scrollTop с
-  // троттлингом, при уходе — синхронный очист дописывает финальную
-  // позицию (useLayoutEffect — до скролла Next, ключ из замыкания
-  // прошлого рендера).
-  useLayoutEffect(() => {
-    let lastSavedAt = 0;
-    const onScroll = (): void => {
-      const now = Date.now();
-      if (now - lastSavedAt >= READING_POSITION_SAVE_INTERVAL_MS) {
-        lastSavedAt = now;
-        saveReadingPosition(feedHref, window.scrollY);
-      }
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      saveReadingPosition(feedHref, window.scrollY);
-    };
-  }, [feedHref]);
 
   const scrollToFresh = (): void => {
     setHasNewBelow(false);
