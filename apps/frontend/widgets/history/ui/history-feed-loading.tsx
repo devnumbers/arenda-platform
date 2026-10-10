@@ -3,11 +3,7 @@
 import type { JSX } from 'react';
 import { Button, PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
 import { historyScreenBackHref, historyScreenTitle } from '../lib/screen-chrome';
-import {
-  HistoryFeedSkeleton,
-  HistoryMemberFeedSkeleton,
-  HistoryPropertyFeedSkeleton,
-} from './history-states';
+import { historyFeedSkeleton } from './history-states';
 
 /**
  * Хром страницы истории в фазе загрузки (карта #1324, #1281): fallback
@@ -28,8 +24,6 @@ export function HistoryFeedLoading({
   readonly participantId?: string;
   readonly propertyId?: string;
 }): JSX.Element {
-  const isPropertyPage = propertyId !== undefined;
-  const isMemberPage = participantId !== undefined;
   return (
     <>
       <TopNav
@@ -39,13 +33,7 @@ export function HistoryFeedLoading({
       </TopNav>
 
       <PageContent className="flex-1 justify-end px-4" aboveTabBarFooter>
-        {isPropertyPage ? (
-          <HistoryPropertyFeedSkeleton />
-        ) : isMemberPage ? (
-          <HistoryMemberFeedSkeleton />
-        ) : (
-          <HistoryFeedSkeleton />
-        )}
+        {historyFeedSkeleton(participantId, propertyId)}
       </PageContent>
 
       {/* Зеркало плавающей кнопки «Настройки» живого экрана (паттерн «CTA

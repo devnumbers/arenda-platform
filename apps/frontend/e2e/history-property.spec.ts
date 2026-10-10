@@ -16,11 +16,12 @@ import {
   type SeededUser,
 } from './fixtures';
 
-// «История объекта» (карта #838, тикет #840; макеты 2184-95600 /
-// 2184-94176): та же лента «Истории действий», прибитая к одному объекту —
-// property_ids = один uuid (ADR 0061 §7), поиск и фильтры переиспользуются,
-// группа «Объекты» шита прибита серым. Вход — кебаб «Участников объекта»
-// (макет 1980-139712).
+// «История объекта» (карта #1324, тикет #1321; макет 3258-76984): та же
+// лента «Истории действий», прибитая к одному объекту — property_ids =
+// один uuid (ADR 0061 §7), поиск и фильтры переиспользуются, группа
+// «Объекты» шита прибита серым. Объект — предмет страницы и живёт в
+// сабтайтле шапки; над лентой сразу плашка дня и карточки актёров. Вход —
+// кебаб «Участников объекта» (макет 1980-139712).
 
 const APARTMENT_ID = SEEDED_APARTMENT_PROPERTY_ID;
 const GARAGE_ID = SEEDED_GARAGE_PROPERTY_ID;
@@ -50,7 +51,7 @@ async function seedPropertyJournal(user: SeededUser): Promise<void> {
   );
 }
 
-test('вход из кебаба «Участников объекта»: лента только этого объекта, шапка над лентой', async ({ page, seededUser }, testInfo) => {
+test('вход из кебаба «Участников объекта»: лента только этого объекта, имя объекта в сабтайтле шапки', async ({ page, seededUser }, testInfo) => {
   await seedPropertyJournal(seededUser);
   const properties = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
@@ -73,11 +74,13 @@ test('вход из кебаба «Участников объекта»: лен
   await expect(page.getByText('Задача выполнена: Заменить кран')).toBeVisible();
   await expect(page.getByText('Платёж удалён: Аренда гаража')).toHaveCount(0);
 
-  // Шапка-карточка объекта — одна над всей лентой (макет 2184-95600),
-  // статична: объект — предмет страницы (зеркало «Действий участника»).
-  await expect(page.getByRole('heading', { name: 'Квартира на Ленина' })).toBeVisible();
-  await expect(page.getByText('Москва, ул. Ленина, 1')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Квартира на Ленина/ })).toHaveCount(0);
+  // Объект — предмет страницы и живёт в сабтайтле шапки (макет
+  // 3258-76984), серым под заголовком; шапки-карточки над лентой больше
+  // нет, имя в шапке не ссылка. Скоуп к шапке: то же имя звучит и в
+  // строке «Название объекта изменено» ленты.
+  await expect(screenHeader(page).getByText('Квартира на Ленина')).toBeVisible();
+  await expect(screenHeader(page).getByRole('link', { name: 'Квартира на Ленина' })).toHaveCount(0);
+  await expect(page.getByText('Москва, ул. Ленина, 1')).toHaveCount(0);
 
   // Группировка вырождена: внутри дня сразу карточки актёров, шапки
   // актёров кликабельны — вход в «Действия участника» (#712).
@@ -85,7 +88,7 @@ test('вход из кебаба «Участников объекта»: лен
   await page.getByRole('link', { name: 'Мария Петрова' }).first().click();
   await page.waitForURL(`**/history/participants/**`);
 
-  // «Настройки» на месте (макет 2184-95600).
+  // «Настройки» на месте (макет 3258-76984).
   await page.goBack();
   await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
 

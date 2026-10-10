@@ -10,10 +10,12 @@ import { Skeleton } from '@/shared/ui/design';
  * экране (макет 2050-158499: только серая строка «Действий не было», без
  * иллюстрации). Скелетоны прибитых страниц — паритет их композиции
  * (решение владельца 24.09): «Действия участника» — одна группа, «История
- * объекта» и пара (#840/#841) — шапка-карточка объекта + одна группа без
- * объектной секции; общий двухгрупповый остаётся только общей ленте —
- * прежде он стоял на всех страницах и заполнял весь viewport, схлопываясь
- * в короткую ленту. Паритет кадрам ленты (карта #1324, #1281): плашка дня
+ * объекта» (#1321, макет 3258-76984) — плашка дня и сразу карточки актёров
+ * (объект — в сабтайтле шапки), пара «участник+объект» (#841) до своего
+ * слайса (#1322) держит прежнюю композицию — шапка-карточка объекта над
+ * лентой; общий двухгрупповый остаётся только общей ленте — прежде он
+ * стоял на всех страницах и заполнял весь viewport, схлопываясь в
+ * короткую ленту. Паритет кадрам ленты (карта #1324, #1281): плашка дня
  * — в sticky-обёртке живой плашки, секции дня с pb-6, объектные группы с
  * gap-4 — pending- и загруженная композиции совпадают геометрией.
  */
@@ -126,11 +128,28 @@ export function HistoryMemberFeedSkeleton(): JSX.Element {
   );
 }
 
-/** Скелет «Истории объекта» (#840) и «Действия участника в объекте»
- * (#841): шапка-карточка прибитого объекта над лентой + одна группа без
- * объектной секции — внутри объекта дни открываются сразу карточками
- * актёров. */
+/** Скелет «Истории объекта» (#840, новая композиция #1321, макет
+ * 3258-76984): объект — предмет страницы и живёт в сабтайтле шапки
+ * (TopNavTitle, вне фазы загрузки §7), над лентой — сразу плашка дня и
+ * карточки актёров без объектной секции. */
 export function HistoryPropertyFeedSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden>
+      <HistoryFeedSkeletonDay>
+        <HistoryFeedSkeletonDayPill />
+        <div className="flex flex-col gap-1.5">
+          <HistoryFeedSkeletonActorCard rows={3} />
+        </div>
+      </HistoryFeedSkeletonDay>
+    </div>
+  );
+}
+
+/** Скелет «Действий участника в объекте» (#841): пара до своего слайса
+ * (#1322) держит прежнюю композицию — шапка-карточка прибитого объекта
+ * над лентой + одна группа без объектной секции (зеркало старой
+ * «Истории объекта»). */
+export function HistoryMemberPropertyFeedSkeleton(): JSX.Element {
   return (
     <div aria-hidden>
       <HistoryFeedSkeletonPinnedProperty />
@@ -142,6 +161,27 @@ export function HistoryPropertyFeedSkeleton(): JSX.Element {
       </HistoryFeedSkeletonDay>
     </div>
   );
+}
+
+/** Выбор скелетона по скоупу страницы — одна точка для живого экрана и
+ * фолбэка Suspense-границы (#1281): хром фолбэка не разъезжается с
+ * хромом экрана (канон screen-chrome). */
+export function historyFeedSkeleton(
+  participantId?: string,
+  propertyId?: string,
+): JSX.Element {
+  const isMemberPage = participantId !== undefined;
+  const isPropertyPage = propertyId !== undefined;
+  if (isMemberPage && isPropertyPage) {
+    return <HistoryMemberPropertyFeedSkeleton />;
+  }
+  if (isPropertyPage) {
+    return <HistoryPropertyFeedSkeleton />;
+  }
+  if (isMemberPage) {
+    return <HistoryMemberFeedSkeleton />;
+  }
+  return <HistoryFeedSkeleton />;
 }
 
 /**
