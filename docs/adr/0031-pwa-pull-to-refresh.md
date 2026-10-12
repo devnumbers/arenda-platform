@@ -1,19 +1,19 @@
-# ADR 0031: PWA pull-to-refresh — кастомный жест в standalone
+# ADR 0031: PWA pull-to-refresh — платформенный гейт: нативный жест на Android, кастомный на iOS
 
-В standalone-PWA кабинета нет UI-способа обновить данные: на iOS WebKit физически отключает нативный pull-to-refresh для `display: standalone/fullscreen`, а на Android нативный PTR работает, но UX расходится с iOS. Решено реализовать **собственный PTR-жест на `touch`-событиях**, активный **только в standalone** (`isStandaloneMode()`), с единым поведением на всех платформах. По срабатывании жест делает **мягкий refresh данных** (`queryClient.invalidateQueries()`), а **не** `window.location.reload()` — потому что ответственность за подтягивание нового деплоя берёт на себя [ADR 0032](./0032-pwa-service-worker-silent-update-on-navigation.md) (silent SW-update-lifecycle), и дублировать её в PTR нет смысла. Нативный Android-PTR не подавляем глобально (в standalone он и так не показывается).
+В standalone-PWA кабинета нет UI-способа обновить данные: на iOS WebKit физически отключает нативный pull-to-refresh для `display: standalone/fullscreen`, а на Android системный PTR браузера в установленной WebAPK **работает** (полная перезагрузка документа). **Ротация 12.10.2026 (решение владельца, эталон — PWA T-Banka, исследование [research/pwa-native-pull-to-refresh.md](../../research/pwa-native-pull-to-refresh.md)): гибрид** — на iOS работает **собственный PTR-жест на `touch`-событиях** (`isStandaloneMode() && isIosDevice()`), на остальных платформах кастомный жест не активен и **системный жест не подавляется**. Изначально (2024) жест был единым на всех платформах ради единого UX; раннее допущение «в standalone Android-PTR и так не показывается» опровергнуто исследованием — на деле кастомный компонент сам подавлял системный жест (`preventDefault` на non-passive `touchmove` + overscroll-гвард — оба являются штатными способами отключения нативного PTR). По срабатывании кастомного жеста (iOS) — **мягкий refresh данных** (`queryClient.invalidateQueries()`), а **не** `window.location.reload()`: ответственность за подтягивание нового деплоя берёт на себя [ADR 0032](./0032-pwa-service-worker-silent-update-on-navigation.md) (silent SW-update-lifecycle), и дублировать её в PTR нет смысла.
 
 **Разделение ответственностей (после ADR 0032):**
 
 | Механизм | Что обновляет | Триггер |
 |---|---|---|
 | `ServiceWorkerUpdater` (ADR 0032) | **Код приложения** (новый JS/CSS/SW) | смена роута / `visibilitychange → hidden` → `controllerchange` → reload |
-| `PullToRefresh` (этот ADR) | **Данные на экране** (react-query cache) | жест pull-down в standalone |
+| `PullToRefresh` (этот ADR) | **Данные на экране** (react-query cache) | жест pull-down в standalone **на iOS**; на Android — системный reload-жест браузера (перезагрузка документа) |
 
 ## Considered Options
 
-1. **Кастомный PTR-жест в standalone (выбрано).** Touch-обработка на `window`, активация только при `scrollTop <= 0`. Поведение идентично на iOS/Android/desktop-тач.
+1. **Кастомный PTR-жест в standalone (выбрано 2024; с 12.10.2026 — только для iOS).** Touch-обработка на `window`, активация только при `scrollTop <= 0`. Изначально — единое поведение на iOS/Android/desktop-тач.
 2. *Нативный PTR везде.* Невозможно: Apple отключает нативный PTR в standalone намертво, CSS/мета-тегами не включается ([SO #75972895](https://stackoverflow.com/questions/75972895/ios-pwa-how-to-re-enable-pull-to-refresh)).
-3. *Гибрид — нативный на Android + кастомный на iOS.* Два разных UX; feature-detect ненадёжен; отказались ради единообразия.
+3. **Гибрид — нативный на Android + кастомный на iOS (выбрано 12.10.2026).** Отвергнут в 2024 ради единообразия («два разных UX, feature-detect ненадёжен»), пересмотрен владельцем 12.10.2026: нативность на каждой платформе важнее единообразия, эталон — PWA T-Banka. Цены решения: на Android семантика жеста — **полная перезагрузка документа**, а не мягкий refresh (перехватить системный жест нельзя — API нет); feature-detect «есть ли системный PTR» не существует, поэтому гейт платформенный (`isIosDevice()`): iOS/WebKit — единственная платформа, где системного жеста в standalone гарантированно нет. Перезагрузка на Android дешёвая: shell отдаёт SW-кеш (ADR 0032), новый код подтягивается тем же SW-lifecycle.
 4. *In-app кнопка «обновить» + SW-update-баннер вместо жеста.* Не даёт интуитивного триггера, которого лишён iOS-пользователь в standalone.
 5. *Готовая библиотека (`react-simple-pull-to-refresh` и т.п.).* Отвергнута: чужой UX сложно подогнать под дизайн-систему, + новая зависимость ради управляемого объёма кода.
 
@@ -41,8 +41,8 @@ Android `SwipeRefreshLayout` (Material, цветной круглый индик
 
 ## Consequences
 
-- **Где:** `apps/frontend/shared/ui/pull-to-refresh/` (компонент `PullToRefresh` + `*.module.css` + barrel export), монтируется в `widgets/cabinet-layout/ui/CabinetLayout.tsx` рядом с `ServiceWorkerRegister`/`ServiceWorkerUpdater`.
-- **Активация:** только при `isStandaloneMode() === true`. В обычном браузере компонент возвращает `null`, пользователь получает нативное поведение платформы.
+- **Где:** `apps/frontend/shared/ui/pull-to-refresh/` (компонент `PullToRefresh` + `*.module.css` + barrel export), монтируется в `widgets/screen-layout/ui/screen-layout.tsx` рядом с `ServiceWorkerRegister`/`ServiceWorkerUpdater`.
+- **Активация (ротация 12.10.2026):** только при `isStandaloneMode() && isIosDevice()` (детект платформы — `shared/lib/pwa/ios.ts`, вынесен из фичи пушей). В обычном браузере и на Android standalone компонент возвращает `null` и не вешает слушателей — пользователь получает нативное поведение платформы (на Android WebAPK — системный reload-жест браузера).
 - **Доступ к контенту:** `PullToRefresh` принимает `contentRef: RefObject<HTMLDivElement>` через пропс. `CabinetLayout` создаёт ref, вешает на `<div className={styles.content} ref={contentRef}>` и передаёт `<PullToRefresh contentRef={contentRef} />`. PTR ставит `transform: translateY()` на этот узел во время жеста.
 - **Механика жеста:** `touchstart`/`touchmove`/`touchend` на `window`; старт только при `window.scrollY <= 0`; сопротивление 0.5; порог armed 70px (визуальных); clamp визуального pull на `THRESHOLD × 1.8`. Слушатели биндятся один раз на lifecycle; `phase` держится в ref, синхронизируется со state через `useEffect`, чтобы не пересоздавать слушатели mid-gesture.
 - **Движение контента:** во время тяги — `contentRef.style.transform = translateY(pullYpx)` (без transition, следует за пальцем). При возврате/фиксации — `transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)`. При armed-release контент фиксируется на `60px`, по завершении refresh уезжает на `0`.
@@ -52,5 +52,5 @@ Android `SwipeRefreshLayout` (Material, цветной круглый индик
 - **Обработка ошибок:** отдельной error-семантики от PTR нет. Упавшие запросы попадают в стандартный error-flow своих виджетов (`FinanceErrorState onRetry`, и т.д.). Старые данные остаются в кеше как stale.
 - **Координация с `ServiceWorkerUpdater` (ADR 0032):** не координируется. Механизмы ортогональны: PTR обновляет данные, SW-updater — код. Если в момент жеста активировался waiting SW и триггерит reload — он выигрывает гонку естественным образом, пользователь не замечает разницы.
 - **Конфликт со скроллом:** скролл документовый (`window`), вложенных контейнеров нет. PTR читает `window.scrollY` — тот же контейнер, с которым работает `ScrollToTop`. Координация не требуется.
-- **Подавление нативного overscroll:** глобально `overscroll-behavior` не меняем. На время активного жеста (палец на экране, `scrollY <= 0`) `touchmove` вызывает `preventDefault()`. CSS-класс `overscroll-behavior-y: contain` оставлен как запасной вариант.
+- **Подавление нативного overscroll:** глобально `overscroll-behavior` не меняем. На время активного жеста (палец на экране, `scrollY <= 0`) `touchmove` вызывает `preventDefault()`. CSS-класс `overscroll-behavior-y: contain` оставлен как запасной вариант. Вся эта механика живёт внутри iOS-ветки гейта: на Android standalone ничего не подавляется — системный PTR браузера свободен (12.10.2026).
 - **Доступность:** PTR — supplementary mobile-only жест; клавиатурного/скринридер-дубликата нет. `aria-live` не добавляем до явного требования accessibility-аудита.

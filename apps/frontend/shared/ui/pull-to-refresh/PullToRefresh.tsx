@@ -11,18 +11,26 @@ import {
 } from 'react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
+import { isIosDevice } from '@/shared/lib/pwa/ios';
 import { useStandalone } from '@/shared/lib/hooks/useStandalone';
 import styles from './PullToRefresh.module.css';
 
 /**
- * Native-feel pull-to-refresh for the standalone app PWA.
+ * Native-feel pull-to-refresh for the iOS standalone app PWA.
  *
- * Native pull-to-refresh is disabled by the OS in PWA standalone mode on iOS
- * (and not shown on Android either). This component reproduces the iOS
- * `UIRefreshControl` feel: pulling down moves the page content itself (not an
- * overlay), a thin grey spinner scales up and accumulates rotation above the
- * content, and on release past the threshold the content stays pinned while
- * the spinner spins until the refresh settles.
+ * WebKit disables the OS pull-to-refresh for `display: standalone/fullscreen`
+ * home-screen apps with no way to re-enable it, so on iOS this component
+ * reproduces the iOS `UIRefreshControl` feel: pulling down moves the page
+ * content itself (not an overlay), a thin grey spinner scales up and
+ * accumulates rotation above the content, and on release past the threshold
+ * the content stays pinned while the spinner spins until the refresh settles.
+ *
+ * On every other platform the component stays inactive on purpose (owner
+ * decision 12.10.2026 — ADR 0031): an installed standalone WebAPK on Android
+ * keeps the browser's native pull-to-refresh (a full document reload — the
+ * T-Bank PWA experience), and binding our own listeners would suppress that
+ * system gesture (non-passive `touchmove` + the overscroll guard are both
+ * native-PTR killers).
  *
  * The gesture triggers a *soft* refresh — `queryClient.invalidateQueries()` —
  * not a page reload. Pulling in new *code* (a new deploy) is owned by the
@@ -63,6 +71,13 @@ export type PullToRefreshProps = {
 
 export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element | null {
     const isStandalone = useStandalone();
+    // Platform gate (owner decision 12.10.2026, ADR 0031): the custom gesture
+    // runs only on iOS, where WebKit kills the native pull-to-refresh in
+    // standalone mode. Everywhere else — Android WebAPK above all — the
+    // system/browser gesture stays available and must not be suppressed.
+    // `isStandalone` is false during SSR and the hydration render, so the
+    // navigator-reading `isIosDevice()` only evaluates after mount.
+    const isActive = isStandalone && isIosDevice();
     const queryClient = useQueryClient();
     const isFetching = useIsFetching();
 
@@ -140,9 +155,9 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         return undefined;
     }, [phase, isFetching, reset]);
 
-    // Bind touch listeners on `window` once per standalone state.
+    // Bind touch listeners on `window` once per active state.
     useEffect(() => {
-        if (!isStandalone) return;
+        if (!isActive) return;
 
         const onTouchStart = (event: TouchEvent): void => {
             // Only single-finger gestures qualify; ignore multi-touch.
@@ -216,7 +231,7 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             window.removeEventListener('touchend', onTouchEnd);
             window.removeEventListener('touchcancel', onTouchCancel);
         };
-    }, [isStandalone, applyContentTransform, beginRefresh, reset, setOverscrollGuard]);
+    }, [isActive, applyContentTransform, beginRefresh, reset, setOverscrollGuard]);
 
     // Clean up the inline transform and overscroll guard if the component
     // unmounts mid-gesture.
@@ -227,7 +242,7 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         };
     }, [applyContentTransform, setOverscrollGuard]);
 
-    if (!isStandalone) return null;
+    if (!isActive) return null;
 
     // Progressive spinner transform during the pull: scale ramps 0→1 as the
     // pull approaches the threshold; rotation accumulates for a "winding"
