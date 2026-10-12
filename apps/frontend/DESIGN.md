@@ -208,8 +208,11 @@ Radix-примитивов + vaul), шрифт Onest.
   1675:54050) закреплён слева под хедером (pt-72, px-12, pb-12), колонка
   200 из **`DesktopMenuButton`** (анатомия Figma 1675:54051: 200×44,
   radius 16, px-12, иконка 24 + подпись 14/16 Medium, зазор 12, между
-  кнопками 2); активная — серая плашка `bg-surface-muted`, остальные
-  белые, hover-фона нет (канон строк — только focus-ring). Разделы —
+  кнопками 2); фон — по сету состояний DesktopMenuButton (Figma 1652:82711,
+  слово владельца 12.10): невыбранная — белая, hover `bg-surface-muted`,
+  при нажатии `bg-surface-muted-hover`; активная — `bg-surface-muted`,
+  hover `bg-surface-muted-hover`, при нажатии `bg-surface-muted-active`;
+  focus-ring прежний. Разделы —
   `mainNavSections` нав-модели, активность — `getActiveNavItem`.
   **`DesktopNavPills`** (Figma 1675:54098/54096) — плавающие пилюли:
   «Уведомления» в левом-нижнем углу (кнопка 200), «Поддержка» в

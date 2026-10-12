@@ -22,16 +22,21 @@ export type DesktopMenuButtonProps = {
 
 /** Кнопка десктопной навигации (Figma 1675:54051, анатомия
  * DesktopMenuButton): 200×44, radius 16, px-12, иконка 24 + подпись
- * 14/16 Medium (Mobile/Text/M/500) с зазором 12. Активная — серая плашка
- * bg-surface-muted (#F3F4F6), остальные белые; hover-фона в макете нет —
- * канон строк (ListRow): только focus-ring и transition. Ширина 200 —
+ * 14/16 Medium (Mobile/Text/M/500) с зазором 12. Фон — по сету состояний
+ * DesktopMenuButton (Figma 1652:82711, слово владельца 12.10):
+ * невыбранная — белая, hover bg-surface-muted, при нажатии
+ * bg-surface-muted-hover; активная — bg-surface-muted, hover
+ * bg-surface-muted-hover, при нажатии bg-surface-muted-active (hover
+ * невыбранной совпадает с фоном активной — так в макете; градации как
+ * у IconButton muted). Focus-ring — прежний, вне этого сета. Ширина 200 —
  * дефолт сайдбара и пилюли «Уведомления» (Figma 1675:54098); пилюля
  * «Поддержка» переопределяет на авто (w-fit, Figma 1675:54096).
  *
  * Плашка и цвет живут на внутреннем span, а не на ссылке/кнопке:
  * безслойные сбросы `a { background-color: transparent }` и
  * `a { color: inherit }` в globals.css перебивают слоёные утилиты Tailwind
- * на самой ссылке (канон TabBarRow). */
+ * на самой ссылке (канон TabBarRow); :hover/:active ссылки/кнопки
+ * распространяются на потомков, поэтому варианты работают на span. */
 export function DesktopMenuButton({
   section,
   onClick,
@@ -46,12 +51,14 @@ export function DesktopMenuButton({
     className,
   );
   const content = (
-    <span
-      className={cn(
-        'flex h-full w-full items-center gap-2 rounded-button px-3 text-content transition-colors',
-        active ? 'bg-surface-muted' : 'bg-surface',
-      )}
-    >
+      <span
+        className={cn(
+          'flex h-full w-full items-center gap-2 rounded-button px-3 text-content transition-colors',
+          active
+            ? 'bg-surface-muted hover:bg-surface-muted-hover active:bg-surface-muted-active'
+            : 'bg-surface hover:bg-surface-muted active:bg-surface-muted-hover',
+        )}
+      >
       <span className="flex min-w-0 items-center gap-3">
         <section.Icon className="h-6 w-6 shrink-0" aria-hidden />
         <span className="truncate text-sm font-medium leading-4">{section.label}</span>

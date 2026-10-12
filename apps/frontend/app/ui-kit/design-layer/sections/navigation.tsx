@@ -206,7 +206,10 @@ export function DesktopMenuButtonSection({ onSupportOpen }: DesktopMenuButtonSec
             <h3 className={styles.groupTitle}>DesktopMenuButton · десктопная навигация (#561)</h3>
             <p className={styles.groupTitle}>
                 Кнопка десктопного хрома (Figma 1675:54051): 200×44, radius 16, иконка 24 +
-                подпись 14/16; активная — серая плашка bg-surface-muted, hover-фона нет.
+                подпись 14/16; фон по сету состояний (Figma 1652:82711) — невыбранная: белая
+                → hover bg-surface-muted → нажатие bg-surface-muted-hover; активная:
+                bg-surface-muted → hover bg-surface-muted-hover → нажатие
+                bg-surface-muted-active.
                 В продукте ScreenLayout рендерит из них DesktopSidebar (6 разделов слева под
                 хедером, Figma 1675:54050) и DesktopNavPills («Уведомления» — левый-низ 200,
                 «Поддержка» — правый-низ авто, Figma 1675:54098/54096) — только на ПК ≥1024
