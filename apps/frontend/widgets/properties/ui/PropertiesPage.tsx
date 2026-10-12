@@ -9,6 +9,7 @@ import {
 } from '@/features/properties';
 import {useSubscription} from '@/features/subscription';
 import {Add, Archive, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
+import {cn} from '@/shared/lib/cn';
 import {useUrlParams} from '@/shared/lib/hooks/use-url-params';
 import {
   Button,
@@ -175,8 +176,16 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
     />
   );
 
+  // Чистая пустота (пилюля и ряд сортировки спрятаны, подвесших нет):
+  // обёртка отдаёт вертикаль и бока канону EmptyState (pt-14/px-8, анатомия
+  // 3235-74057) — свои px-6/pt-6 на этой ветке съезжали пустоту на 24 вниз
+  // и в бока относительно других хабов. С рядом «Архива» или подвесшими
+  // обёртка прежняя — их контент несёт паддинг сам (списки без своих
+  // отступов, см. PropertiesPage.module.css).
+  const bareEmpty = isEmpty && !showSortRow && !showSuspended;
+
   const content = (
-    <div className="flex flex-col gap-4 px-6 pt-6">
+    <div className={cn('flex flex-col gap-4', !bareEmpty && 'px-6 pt-6')}>
       {/* Пилюля поиска — канон SearchPill, «+» в хвосте больше нет
        * (макет 3225-77232: создание в шапке); на подтверждённой пустоте
        * спрятана (#1004): искать нечего, создание остаётся в CTA пустого
