@@ -1,6 +1,7 @@
 import type { AccessRole, PropertyAccessMember } from '@/entities/access';
 import { ACCESS_ROLE_LABELS } from '@/entities/access';
 import { filterByRuQuery, sortByRuText } from '@/entities/participants';
+import { displayUserName } from '@/shared/lib/display-name';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /** Иконка у почты в ряду (макет 1980-107096): владелец — замок,
@@ -75,6 +76,11 @@ export function serializePropertyParticipantRoleFilterToParams(
 export type PropertyParticipantRow = {
   /** Стабильный ключ: id строки доступа, fallback — userId/email. */
   readonly key: string;
+  /** База титула по ФИО-канону D4: чужие — серверный канон
+   * access.DisplayNameOf (почта — только у pending, контракт #693),
+   * своя строка — имя читателя без фамилии (макет «Даниил (Вы)»).
+   * Суффикс «(Вы)» в базе не живёт — его серым рисует вид по isMe
+   * (канон шита фильтров #710). */
   readonly title: string;
   /** Путь стриминга фото профиля участника (ADR 0065, решение #1286);
    * undefined — pending или у юзера нет фото. */
@@ -90,9 +96,18 @@ export type PropertyParticipantRow = {
   /** Роль ноги: фильтр «Все роли» и сортировка. */
   readonly role: AccessRole;
   readonly isOwner: boolean;
-  /** Строка самого читателя («(Вы)») — ряд инертный (#770; политика
-   * тапа — в доке экрана). */
+  /** Строка самого читателя — вид рисует серый суффикс «(Вы)» (канон
+   * #710); ряд инертный (#770; политика тапа — в доке экрана). */
   readonly isMe: boolean;
+};
+
+/** Читатель списка — источник своей строки (isMe): uuid сравнивается с
+ * ногами, имя собирает канон D4 («Имя», без имени — «Пользователь»).
+ * Структурно совместим с User из /me — экран передаёт его напрямую. */
+export type PropertyParticipantsReader = {
+  readonly id: string;
+  /** Имя профиля (first name); null — имени нет. */
+  readonly name: string | null;
 };
 
 /**
@@ -105,22 +120,29 @@ export type PropertyParticipantRow = {
  */
 export function propertyParticipantRows(
   members: ReadonlyArray<PropertyAccessMember>,
-  currentUserId: string | undefined,
+  reader: PropertyParticipantsReader | undefined,
 ): PropertyParticipantRow[] {
-  const rows = members.map(toPropertyParticipantRow(currentUserId));
+  const rows = members.map(toPropertyParticipantRow(reader));
   // Инвариант макета: ряд владельца первым независимо от порядка ответа.
   const owner = rows.find((row) => row.isOwner);
   return owner === undefined ? rows : [owner, ...rows.filter((row) => !row.isOwner)];
 }
 
-function toPropertyParticipantRow(currentUserId: string | undefined) {
+function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined) {
   return (member: PropertyAccessMember): PropertyParticipantRow => {
     const email = member.email ?? '';
     const displayName = member.displayName !== '' ? member.displayName : undefined;
-    const isMe = currentUserId !== undefined && member.userId === currentUserId;
-    const title = [displayName ?? (email !== '' ? email : undefined), isMe ? '(Вы)' : undefined]
-      .filter(Boolean)
-      .join(' ');
+    const isMe = reader !== undefined && member.userId === reader.id;
+    // ФИО-канон D4: своя строка — «Имя (Вы)» — имя читателя из /me без
+    // фамилии серверной строки (прецедент шита фильтров #710); нет
+    // имени — «Пользователь» (даст на виде «Пользователь (Вы)»). Чужие —
+    // серверный канон DisplayNameOf, фронт его не пересобирает; почта в
+    // титуле по контракту бывает только у pending («the email is the
+    // label», #693) — фолбэк ниже для зарегистрированных недостижим
+    // (канон гарантирует display_name), это защита от пустого титула.
+    const title = isMe
+      ? displayUserName(reader.name ?? '', '')
+      : (displayName ?? (email !== '' ? email : ''));
     return {
       key: member.id ?? member.userId ?? (email !== '' ? email : 'unknown'),
       title,

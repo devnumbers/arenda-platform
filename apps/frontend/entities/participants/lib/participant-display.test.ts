@@ -40,6 +40,8 @@ describe('participantRowTitle / participantRowSubtitle', () => {
   it('у зарегистрированного титул — имя, подзаголовок — почта', () => {
     const p = participant();
 
+    // Титул проходит как есть: канон ФИО (D4, «Имя Фамилия») собирает
+    // бекенд — access.DisplayNameOf, фронт его не пересобирает.
     expect(participantRowTitle(p)).toBe('Мария Петрова');
     expect(participantRowSubtitle(p)).toBe('maria@example.com');
   });
@@ -51,10 +53,10 @@ describe('participantRowTitle / participantRowSubtitle', () => {
     expect(participantRowSubtitle(p)).toBeUndefined();
   });
 
-  it('у зарегистрированного без имени титул — «Пользователь», почта подзаголовком (канон #1105, аменд #1123)', () => {
-    // display_name безымянного собирает бекенд (#1106, аменд #1123):
-    // «Имя Фамилия», иначе «Пользователь» — телефон и маски на
-    // поверхности не бывают.
+  it('у зарегистрированного без имени титул — «Пользователь», почта подзаголовком (ФИО-канон D4: голая фамилия не показывается)', () => {
+    // display_name безымянного собирает бекенд (#1106, аменд #1123,
+    // D4: имени нет — «Пользователь» независимо от фамилии): телефон
+    // и маски на поверхности не бывают.
     const p = participant({ displayName: 'Пользователь' });
 
     expect(participantRowTitle(p)).toBe('Пользователь');

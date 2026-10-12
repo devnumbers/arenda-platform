@@ -12,6 +12,9 @@ import {
 } from './property-participants-list';
 
 const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+/** Читатель-владелец сида: имя из /me собирает его строку (D4). */
+const OWNER_READER = { id: OWNER_ID, name: 'Иван' };
+const OTHER_READER = { id: '99999999-9999-4999-8999-999999999999', name: null };
 
 function member(overrides: Partial<PropertyAccessMember>): PropertyAccessMember {
   return {
@@ -55,21 +58,35 @@ const suspended = member({
 });
 
 describe('propertyParticipantRows — VM ряда «Участники объекта» (макет 1980-107096)', () => {
-  it('владелец идёт первым отдельным рядом, у читателя-владельца — «(Вы)»', () => {
-    const rows = propertyParticipantRows([maria, owner, sergey], OWNER_ID);
+  it('владелец идёт первым отдельным рядом; своя строка — имя без фамилии, суффикса в title нет (D4, макет «Даниил (Вы)»)', () => {
+    const rows = propertyParticipantRows([maria, owner, sergey], OWNER_READER);
 
     expect(rows.map((row) => row.role)).toEqual(['owner', 'viewer', 'viewer']);
-    expect(rows[0]?.title).toBe('Иван Иванов (Вы)');
+    // ФИО-канон D4: своя строка — «Имя (Вы)», фамилия серверной строки
+    // («Иван Иванов») не подмешивается; серый суффикс «(Вы)» рисует вид
+    // по isMe (канон шита фильтров #710) — в title его нет.
+    expect(rows[0]?.title).toBe('Иван');
+    expect(rows[0]?.isMe).toBe(true);
   });
 
-  it('чужой владелец (читатель — viewer) без «(Вы)»', () => {
-    const rows = propertyParticipantRows([owner, maria], '99999999-9999-4999-8999-999999999999');
+  it('своя строка собирается из имени читателя (/me), не из серверной строки', () => {
+    const rows = propertyParticipantRows(
+      [member({ id: 'm-me', userId: OWNER_ID, displayName: 'Иван Иванов' })],
+      { id: OWNER_ID, name: 'Ваня' },
+    );
+
+    expect(rows[0]?.title).toBe('Ваня');
+  });
+
+  it('чужой владелец (читатель — viewer) — канон сервера целиком, без «(Вы)»', () => {
+    const rows = propertyParticipantRows([owner, maria], OTHER_READER);
 
     expect(rows[0]?.title).toBe('Иван Иванов');
+    expect(rows[0]?.isMe).toBe(false);
   });
 
   it('почта — подзаголовок; у pending-строки почта уже титул, без дубля', () => {
-    const rows = propertyParticipantRows([maria, pending], OWNER_ID);
+    const rows = propertyParticipantRows([maria, pending], OWNER_READER);
 
     expect(rows[0]?.subtitle).toBe('maria@example.com');
     expect(rows[1]?.title).toBe('invitee@example.com');
@@ -79,17 +96,17 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
   it('безымянный зарегистрированный: «Пользователь» в титуле, почта подзаголовком (канон карты #1105, аменд #1123)', () => {
     // display_name безымянного юзера — анонимный лейбл (шов displayName
     // бекенда, #1106, аменд #1123): телефон и маски на поверхности не
-    // бывают.
+    // бывают. Фронт канон не пересобирает — проходит как есть.
     const rows = propertyParticipantRows(
       [member({ id: 'm-nameless', email: 'nameless@example.com', displayName: 'Пользователь' })],
-      OWNER_ID,
+      OWNER_READER,
     );
 
     expect(rows[0]?.title).toBe('Пользователь');
     expect(rows[0]?.subtitle).toBe('nameless@example.com');
   });
 
-  it('своя безымянная строка: «(Вы)» прицепляется к «Пользователь» как к любому титулу', () => {
+  it('своя безымянная строка: база «Пользователь», «(Вы)» добавит вид — «Пользователь (Вы)» (D4)', () => {
     const MY_NAMELESS_ID = '16111111-1111-4111-8111-111111111161';
     const rows = propertyParticipantRows(
       [
@@ -100,10 +117,11 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
           displayName: 'Пользователь',
         }),
       ],
-      MY_NAMELESS_ID,
+      { id: MY_NAMELESS_ID, name: null },
     );
 
-    expect(rows[0]?.title).toBe('Пользователь (Вы)');
+    expect(rows[0]?.title).toBe('Пользователь');
+    expect(rows[0]?.isMe).toBe(true);
   });
 
   it('иконка у почты: владелец — замок, full_access — перо, viewer — глаз', () => {
@@ -113,14 +131,14 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
         member({ id: 'm4', role: 'full_access' }),
         owner,
       ],
-      OWNER_ID,
+      OWNER_READER,
     );
 
     expect(rows.map((row) => row.emailIcon)).toEqual(['owner', 'eye', 'edit']);
   });
 
   it('suspended-чип только у приостановленного; participantId — uuid, у pending — почта', () => {
-    const rows = propertyParticipantRows([maria, suspended, pending], OWNER_ID);
+    const rows = propertyParticipantRows([maria, suspended, pending], OWNER_READER);
     const byKey = new Map(rows.map((row) => [row.key, row]));
 
     expect(byKey.get('member-1')?.suspended).toBe(false);
@@ -143,7 +161,7 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
         member({ id: 'm-owner', userId: OWNER_ID, email: 'ivan@example.com', role: 'owner', isOwner: true, displayName: 'Иван Иванов' }),
         pending,
       ],
-      '99999999-9999-4999-8999-999999999999',
+      OTHER_READER,
     );
     const byKey = new Map(rows.map((row) => [row.key, row]));
 
@@ -155,7 +173,7 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
   });
 
   it('без почты подзаголовок не рендерится (пустой строки с иконкой нет)', () => {
-    const rows = propertyParticipantRows([member({ email: null })], OWNER_ID);
+    const rows = propertyParticipantRows([member({ email: null })], OWNER_READER);
 
     expect(rows[0]?.subtitle).toBeUndefined();
   });
@@ -164,22 +182,22 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
 describe('своя строка читателя — isMe (тикет #770)', () => {
   const MY_ID = '12111111-1111-4111-8111-111111111121';
 
-  it('manage-участник на чужом объекте: своя строка isMe, чужие — нет', () => {
+  it('manage-участник на чужом объекте: своя строка isMe, титул — имя читателя без фамилии (D4)', () => {
     const rows = propertyParticipantRows(
       [owner, member({ id: 'm-me', userId: MY_ID, displayName: 'Мария Петрова' }), pending],
-      MY_ID,
+      { id: MY_ID, name: 'Мария' },
     );
     const byKey = new Map(rows.map((row) => [row.key, row]));
 
     expect(byKey.get('m-me')?.isMe).toBe(true);
-    expect(byKey.get('m-me')?.title).toBe('Мария Петрова (Вы)');
+    expect(byKey.get('m-me')?.title).toBe('Мария');
     expect(byKey.get('owner-row')?.isMe).toBe(false);
     // pending-строка идентифицируется почтой, не uuid — «своей» быть не может.
     expect(byKey.get('invitation-1')?.isMe).toBe(false);
   });
 
   it('читатель-владелец: ряд владельца тоже свой', () => {
-    const rows = propertyParticipantRows([owner, maria], OWNER_ID);
+    const rows = propertyParticipantRows([owner, maria], OWNER_READER);
 
     expect(rows[0]?.isMe).toBe(true);
     expect(rows[1]?.isMe).toBe(false);
@@ -193,7 +211,7 @@ describe('своя строка читателя — isMe (тикет #770)', ()
 });
 
 describe('filterPropertyParticipantsByQuery — клиентский поиск (имя или почта)', () => {
-  const rows = propertyParticipantRows([owner, maria, pending], OWNER_ID);
+  const rows = propertyParticipantRows([owner, maria, pending], OWNER_READER);
 
   it('пустой запрос (и из пробелов) возвращает всё', () => {
     expect(filterPropertyParticipantsByQuery(rows, '')).toHaveLength(3);
@@ -208,7 +226,7 @@ describe('filterPropertyParticipantsByQuery — клиентский поиск 
 
 describe('sortPropertyParticipantsByTitle — чип «Имя»; владелец всегда первым', () => {
   it('asc по титулу, владелец не участвует и держится впереди', () => {
-    const rows = propertyParticipantRows([owner, sergey, maria], OWNER_ID);
+    const rows = propertyParticipantRows([owner, sergey, maria], OWNER_READER);
     const sorted = sortPropertyParticipantsByTitle(rows, 'asc');
 
     expect(sorted.map((row) => row.role)).toEqual(['owner', 'viewer', 'viewer']);
@@ -216,7 +234,7 @@ describe('sortPropertyParticipantsByTitle — чип «Имя»; владеле�
   });
 
   it('desc — обратный порядок участников, владелец по-прежнему первым', () => {
-    const rows = propertyParticipantRows([owner, sergey, maria], OWNER_ID);
+    const rows = propertyParticipantRows([owner, sergey, maria], OWNER_READER);
     const sorted = sortPropertyParticipantsByTitle(rows, 'desc');
 
     expect(sorted[0]?.role).toBe('owner');

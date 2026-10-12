@@ -153,9 +153,9 @@ test.describe('режим просмотра', () => {
     await page.goto(`/properties/${PROPERTY}/participants`);
 
     // Чтение сохранено: владелец и сам зритель в списке (2235-103698);
-    // собственный ряд подписан «(Вы)».
+    // собственный ряд «Имя (Вы)» (ФИО-канон D4, без фамилии).
     await expect(page.getByText('Иван Иванов', { exact: true })).toBeVisible();
-    await expect(page.getByText('Сергей Сидоров (Вы)', { exact: true })).toBeVisible();
+    await expect(page.getByText('Сергей (Вы)', { exact: true })).toBeVisible();
 
     // Почты участников видны зрителю наравне с остальными (решение
     // владельца 2026-09-20, обход #758: от зрителя ничего не прячем).

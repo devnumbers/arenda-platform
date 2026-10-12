@@ -34,9 +34,9 @@ test('вход из детали объекта: «Управление» → «
   await page.getByRole('button', { name: 'Совместный доступ' }).click();
   await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
 
-  // Владелец — отдельный первый ряд с «(Вы)» (статичный, без шеврона),
-  // участники — с почтой.
-  await expect(page.getByText('Иван Иванов (Вы)')).toBeVisible();
+  // Владелец — отдельный первый ряд «Имя (Вы)» (ФИО-канон D4: без
+  // фамилии; статичный, без шеврона), участники — с почтой.
+  await expect(page.getByText('Иван (Вы)')).toBeVisible();
   const mariaRow = page.getByRole('button', { name: /Мария Петрова/ });
   await expect(mariaRow).toBeVisible();
   await expect(mariaRow.getByText('e2e-member@example.com')).toBeVisible();
@@ -70,12 +70,13 @@ test('manage-участник: своя строка «(Вы)» инертная
 
   await expect(header.getByText('Участники объекта')).toBeVisible();
 
-  // Своя строка с «(Вы)» — статичный ряд: не role=button, без шеврона.
-  await expect(page.getByText('Мария Петрова (Вы)')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
+  // Своя строка «Имя (Вы)» (ФИО-канон D4) — статичный ряд: не
+  // role=button, без шеврона.
+  await expect(page.getByText('Мария (Вы)')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Мария \(Вы\)/ })).toHaveCount(0);
 
   // Тап по своей строке никуда не ведёт — экран остаётся на месте.
-  await page.getByText('Мария Петрова (Вы)').click();
+  await page.getByText('Мария (Вы)').click();
   await expect(header.getByText('Участники объекта')).toBeVisible();
   await expect(page.getByText('Участник не найден')).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT_ID}/participants$`));
@@ -119,12 +120,12 @@ test('чип-фильтр ролей: «Просмотр» оставляет з
   await expect(page.getByText('Сергей Сидоров')).toBeVisible();
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
   // Владелец под фильтр роли не попадает — строка скрыта тоже.
-  await expect(page.getByText('Иван Иванов (Вы)')).toHaveCount(0);
+  await expect(page.getByText('Иван (Вы)')).toHaveCount(0);
 
   await page.getByRole('button', { name: /Просмотр/ }).click();
   await page.getByRole('menuitem', { name: 'Все роли' }).click();
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
-  await expect(page.getByText('Иван Иванов (Вы)')).toBeVisible();
+  await expect(page.getByText('Иван (Вы)')).toBeVisible();
 });
 
 test('приглашение от объекта: свой email — 400, свежая почта — попап и SQL; сид восстанавливается', async ({ page, seededUser }) => {
@@ -247,7 +248,7 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
       page.getByRole('dialog').locator('p', { hasText: 'Все участники удалены' }),
     ).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(page.getByText('Иван Иванов (Вы)')).toBeVisible();
+    await expect(page.getByText('Иван (Вы)')).toBeVisible();
     await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
 
@@ -276,8 +277,8 @@ test('зритель: список без manage-контролов, свой р
   // Ряды без manage-прав статичные (страница участника вне скоупа
   // зрителя) — проверяем текстами, не role=button.
   await expect(page.getByText('Иван Иванов')).toBeVisible();
-  // Зритель видит себя с отметкой «(Вы)»; manage-контролов нет.
-  await expect(page.getByText('Сергей Сидоров (Вы)')).toBeVisible();
+  // Зритель видит себя «Имя (Вы)» (ФИО-канон D4); manage-контролов нет.
+  await expect(page.getByText('Сергей (Вы)')).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Пригласить участника' }).filter({ hasText: 'Пригласить участника' }),
   ).toHaveCount(0);
