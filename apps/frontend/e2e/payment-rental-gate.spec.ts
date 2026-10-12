@@ -16,9 +16,11 @@ import {
 // «Оплатить» остаётся каноном отметки оплаты месяца; экран правки
 // деградирует к карточке недоступности; прямые API-мутации правила отвечают
 // 409 с доменной подсказкой. Звезда избранного и платёжные факты гейту не
-// подчиняются. Сид: аренды в seed.sql нет — фикстура создаёт её API-постом
-// (и переиспользует при retry, инвариант №12 — одна незавершённая на
-// объект).
+// подчиняются. Завершение аренды с #1161 удаляет платёж целиком — гейт
+// вырождается (мир интеграционного теста
+// TestGate_CompletedRentalHasNoPaymentLeftToGate). Сид: аренды в seed.sql
+// нет — фикстура создаёт её API-постом (и переиспользует при retry,
+// инвариант №12 — одна незавершённая на объект).
 //
 // Сид: «Страхование» …552 на квартире — обычное (неуправляемое) правило
 // для регрессии.
@@ -219,68 +221,58 @@ test.describe('гейт мутаций платежа аренды', () => {
     await captureScreen(page, testInfo, 'rental-payment-edit-to-terms');
   });
 
-  test('завершение аренды: платёж остановлен и завершён без противоречивых действий (#988)', async ({
+  test('завершение аренды: платёж удалён — договор остаётся, операции уходят в объект (#1161)', async ({
     page,
     seededUser,
   }, testInfo) => {
     await openCabinetWithSeededSession(page, seededUser);
     const { rentalId, paymentId } = await ensureRental(page);
 
-    // Конвейер аренды: платёж остановлен на дате завершения, будущие
-    // плановые снесены (ADR 0053 §3), действий противоречия на экране нет.
+    // Конвейер аренды с #1161: завершение УДАЛЯЕТ платёж аренды той же
+    // транзакцией — плановые операции от даты завершения сносятся,
+    // просрочки остаются долгом объекта (payment_id отвязан по FK),
+    // оплаченные — его историей; аренда отвечает архивом условий с
+    // rentPayment.paymentId = null.
     const stopDate = todayIso();
     const completed = await page.request.post(
       `/api/properties/${PROPERTY}/rentals/${rentalId}/complete`,
       { data: { completedDate: stopDate } },
     );
     expect(completed.ok()).toBe(true);
+    const rental = (await completed.json()) as {
+      status: string;
+      rentPayment: { paymentId: string | null };
+    };
+    expect(rental.status).toBe('completed');
+    expect(rental.rentPayment.paymentId).toBeNull();
 
-    // Остановка: у выживших операций дата не позже стопа — будущие плановые
-    // снесены, просрочки до стопа остались (серверная правда, не только UI).
-    for (const status of ['planned', 'overdue'] as const) {
-      const left = await page.request.get(
-        `/api/properties/${PROPERTY}/payments/${paymentId}/operations?status=${status}`,
-      );
-      expect(left.ok()).toBe(true);
-      const { items } = (await left.json()) as { items: ReadonlyArray<{ date: string }> };
-      expect(items.every((operation) => operation.date <= stopDate)).toBe(true);
-    }
+    // Платежа больше нет: и он сам, и его скоуп операций отвечают 404
+    // (регрессионная линия старого мира «платёж остановлен»).
+    const paymentGone = await page.request.get(
+      `/api/properties/${PROPERTY}/payments/${paymentId}`,
+    );
+    expect(paymentGone.status()).toBe(404);
+    const operationsGone = await page.request.get(
+      `/api/properties/${PROPERTY}/payments/${paymentId}/operations?status=planned`,
+    );
+    expect(operationsGone.status()).toBe(404);
 
+    // Серверная правда (SQL): строка платежа удалена, у операций ссылка
+    // отвязана. В сценарии «создали и завершили сегодня» все операции
+    // платежа плановые на сегодня — сносятся целиком (нечего отвязывать).
+    expect(
+      await execE2eSql(`SELECT count(*) FROM payments WHERE id = '${paymentId}'`),
+    ).toBe('0');
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM operations WHERE payment_id = '${paymentId}'`,
+      ),
+    ).toBe('0');
+
+    // Deep-link на удалённый платёж — карточка ошибки загрузки.
     await page.goto(`/properties/${PROPERTY}/payments/${paymentId}`);
-    await expect(page.getByText('Арендная плата').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Оплатить' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
-    await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
-    // #1158: аренда завершена — правки условий нет, «Изменить аренду» ушла.
-    await expect(page.getByRole('button', { name: 'Изменить аренду' })).toHaveCount(0);
+    await expect(page.getByText('Не удалось загрузить платеж')).toBeVisible();
 
-    // Гасим всё неоплаченное до стопа — серверный isCompleted становится
-    // true («Завершённый платёж» вычисляемый, CONTEXT.md).
-    for (const status of ['planned', 'overdue'] as const) {
-      const list = await page.request.get(
-        `/api/properties/${PROPERTY}/payments/${paymentId}/operations?status=${status}`,
-      );
-      expect(list.ok()).toBe(true);
-      const { items } = (await list.json()) as { items: ReadonlyArray<{ id: string }> };
-      for (const operation of items) {
-        const paid = await page.request.post(
-          `/api/properties/${PROPERTY}/operations/${operation.id}/pay`,
-        );
-        expect(paid.ok()).toBe(true);
-      }
-    }
-
-    await page.goto(`/properties/${PROPERTY}/payments/${paymentId}`);
-    // Deep-link даёт транзиентное двойное дерево гидрации (~100мс, грабля
-    // #987): строгий локатор ловит обе копии — берём первую видимую.
-    await expect(page.getByText('Платеж завершен').filter({ visible: true }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Оплатить' }).first()).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Изменить аренду' })).toHaveCount(0);
-
-    await captureScreen(page, testInfo, 'rental-payment-completed-after-rental');
+    await captureScreen(page, testInfo, 'rental-completion-deletes-payment');
   });
 });

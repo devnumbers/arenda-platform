@@ -5022,8 +5022,12 @@ paths:
       description: >-
         Completes the rental: records the completion date (start ≤ date ≤
         today in the owner's timezone — «По плану» is the UI's substitution)
-        and stops the managed rent payment at that date — the strictly future
-        planned operations are torn down, the due ones stay with the owner.
+        and deletes the managed rent payment in the same transaction — the
+        planned operations from the completion date on are torn down, the
+        overdue ones survive the payment as the property's debt and the paid
+        ones stay in its history (their payment_id is unlinked by the FK,
+        origin unchanged). The completed rental keeps an immutable archive of
+        the terms for its view and answers with rentPayment.paymentId = null.
         The optional deposit return is a record, not an operation. Completing
         a future rental is impossible by design — a start date in the future
         leaves the valid window empty (400).
