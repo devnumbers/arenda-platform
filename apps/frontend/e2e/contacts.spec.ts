@@ -60,6 +60,9 @@ test.describe('жизненный цикл контакта', () => {
     // обязательности aria-hidden и из accname исключён (design TextField).
     await page.getByRole('textbox', { name: 'Имя', exact: true }).fill(contactName);
     await page.getByRole('textbox', { name: 'Роль' }).fill('сантехник');
+    // Телефон — для пина копирующей плашки на деталке (слово владельца
+    // 12.10.2026: вся строка значения копирует).
+    await page.getByRole('textbox', { name: 'Телефон' }).fill('+7 (993) 123-12-12');
     // Сабмит двумя поверхностями — ✓ в шапке и полноширинная кнопка,
     // появляющаяся по готовности формы; жмём нижнюю.
     await page.getByRole('button', { name: 'Создать контакт' }).last().click();
@@ -99,6 +102,19 @@ test.describe('жизненный цикл контакта', () => {
     await expect(page.getByText(updatedRole, { exact: true })).toBeVisible();
 
     await captureScreen(page, testInfo, 'contact-detail-updated');
+
+    // Тап по плашке значения копирует и не уводит на правку (#1333, слово
+    // владельца 12.10.2026): URL на месте, строка переходит в состояние
+    // «Скопировано» (aria-label всей строки-кнопки; буферу не нужен
+    // permission — подсказка канона useCopiedHint горит независимо).
+    await page.getByText('+7 (993) 123-12-12', { exact: true }).click();
+    await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}$/);
+    await expect(page.getByRole('button', { name: 'Скопировано', exact: true })).toBeVisible();
+    // Правка остаётся на тапе по заголовку карточки.
+    await page.getByRole('link', { name: 'Информация' }).click();
+    await expect(page.getByText('Изменить контакт', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}$/);
 
     // Удаление через кебаб с подтверждением; кебаб — только удаление
     // (#1333): пункта «Изменить» у него больше нет. Возврат на список

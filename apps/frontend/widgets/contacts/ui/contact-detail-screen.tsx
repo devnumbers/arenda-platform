@@ -16,6 +16,7 @@ import {
 } from '@/features/contacts';
 import { useProperty } from '@/features/properties';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
+import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { photoDisplayUrl } from '@/shared/lib/photo';
 import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
@@ -224,30 +225,38 @@ function ContactCardBody({
 }
 
 /** Строка значения в карточке «Информация» (3304:75726, Row Button):
- * значение 16/500, подпись 14 серым, справа кнопка копирования — иконка
- * меняется на галочку на пару секунд (канон useCopiedHint). Паддинги
- * строки — по макету Row Button: текст 24 от края карточки, кнопка
- * копирования 12 (правый край слота 44). */
+ * значение 16/500, подпись 14 серым, справа индикатор копирования —
+ * иконка меняется на галочку на пару секунд (канон useCopiedHint).
+ * Вся плашка — одна кнопка копирования (слово владельца 12.10.2026,
+ * приёмка #1333): тап по строке копирует отображаемое значение —
+ * telephone в маске, как на экране; правка остаётся на тапе по заголовку
+ * и пустым местам карточки (оверлей секции). Интерактив один — div
+ * role=button с клавиатурной активацией (канон §6 DESIGN.md для строк,
+ * копирующих значение: вложенные кнопки невалидны), иконка справа —
+ * декоративный индикатор. */
 function ContactValueRowView({
   row,
 }: {
   readonly row: ReturnType<typeof contactValueRows>[number];
 }): JSX.Element {
   const { copied, copy } = useCopiedHint();
+  const activatorProps = useKeyboardActivation({ onSelect: () => copy(row.value) });
 
   return (
-    <div className="flex items-center gap-3 py-3 pl-6 pr-3">
+    <div
+      {...activatorProps}
+      aria-label={copied ? 'Скопировано' : `Скопировать: ${row.label}`}
+      className="flex w-full cursor-pointer items-center gap-3 py-3 pl-6 pr-3 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dl-surface-muted)]"
+    >
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">
           {row.value}
         </span>
         <span className="truncate text-sm leading-4 text-content-secondary">{row.label}</span>
       </span>
-      <IconButton
-        icon={copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
-        label={copied ? 'Скопировано' : `Скопировать: ${row.label}`}
-        onClick={() => copy(row.value)}
-      />
+      <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center">
+        {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+      </span>
     </div>
   );
 }
