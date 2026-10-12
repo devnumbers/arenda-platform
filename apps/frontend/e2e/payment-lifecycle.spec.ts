@@ -156,19 +156,19 @@ test.describe('сквозная жизнь платежа', () => {
           : `Каждый месяц ${day} числа`,
       ),
     ).toBeVisible();
-    await expect(page.getByText('Ближайшая операция')).toBeVisible();
+    await expect(page.getByText('Ближайший платеж')).toBeVisible();
 
     // Клик по строке ближайшего ведёт на график (#1073) — плановая
     // материализована тиком создания, страница операции не открывается.
     await page
       .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Ближайшая операция' }) })
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
       .locator('[role="button"]')
       .first()
       .click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));
     await page.goBack();
-    await expect(page.getByText('Ближайшая операция')).toBeVisible();
+    await expect(page.getByText('Ближайший платеж')).toBeVisible();
 
     // Избранное: звезда переключается с тостом (путь страницы #465).
     const star = page.getByRole('button', { name: 'Добавить в избранное' });
@@ -194,7 +194,7 @@ test.describe('сквозная жизнь платежа', () => {
     // (плитки подэкранов снесены, #1073).
     await page
       .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Ближайшая операция' }) })
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
       .locator('[role="button"]')
       .first()
       .click();

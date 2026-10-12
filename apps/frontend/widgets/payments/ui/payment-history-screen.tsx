@@ -39,7 +39,11 @@ import {
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
-import { PaymentsHeading, PaymentsStateCard } from './payments-sections';
+import {
+  PAYMENT_HISTORY_EMPTY_HINT,
+  PaymentsHeading,
+  PaymentsStateCard,
+} from './payments-sections';
 import { PaymentGroupedListSkeleton } from './payments-skeletons';
 
 /** Собственный параметр режима изменений в адресе — знание экрана;
@@ -191,7 +195,8 @@ export function PaymentHistoryScreen({
             <>
               {showEmpty ? (
                 // Пустая история (Figma 858:21271): иллюстрация 128 и одна
-                // строка 16/18 — без карточки и подсказки.
+                // строка 16/18 — без карточки и подсказки; текст — тот же,
+                // что у пустого блока страницы платежа (#1338).
                 <div className="flex flex-col items-center gap-4 pt-24">
                   <Image
                     src="/images/payments/history-empty.png"
@@ -201,7 +206,7 @@ export function PaymentHistoryScreen({
                     className="h-32 w-32"
                   />
                   <p className="text-base leading-[18px] text-content">
-                    Платежей еще не было
+                    {PAYMENT_HISTORY_EMPTY_HINT}
                   </p>
                 </div>
               ) : (

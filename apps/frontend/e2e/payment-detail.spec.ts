@@ -12,8 +12,9 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 // Страница платежа (#465): карточка правила (иконка/цвет категории,
 // повторяемость, бейдж паузы), круглые кнопки «На паузу» (confirm-шторка)
 // ↔ «Возобновить», «Изменить», «Оплатить» — гасит старейшее неоплаченное
-// вхождение, звезда избранного в шапке, секции «Ближайшая операция»,
-// «Просроченные платежи» и «История платежа» (макет 3214:76417, #1194).
+// вхождение, звезда избранного в шапке, секции «Ближайший платеж»,
+// «Просроченные платежи» и «История платежа» (#1194; лексика и пустой
+// блок истории — решение владельца #1338).
 // Скриншоты — материал для сверки с Figma (3214:76417 активный,
 // 850:15410 на паузе).
 //
@@ -67,7 +68,7 @@ test.describe('страница платежа', () => {
     // просрочка красным. Заголовок ближайшего — кнопка со стрелкой на
     // график (макет 3214:76417, #1194), клик по строке — тоже график
     // (решение #1073).
-    await expect(page.getByText('Ближайшая операция')).toBeVisible();
+    await expect(page.getByText('Ближайший платеж')).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Открыть график платежей' }),
     ).toBeVisible();
@@ -80,11 +81,17 @@ test.describe('страница платежа', () => {
     await expect(page.getByText(/\d+ (день|дня|дней)/).first()).toBeVisible();
 
     // Плиток подэкранов нет: вход на график — заголовок и строка
-    // ближайшего, вход в историю — стрелка секции. У свежесидовой аренды
-    // paid-операций нет — секция истории скрыта, «Графика платежей» на
-    // странице не существует вовсе.
+    // ближайшего, вход в историю — стрелка секции. Секция истории
+    // рендерится всегда (#1338): у свежесидовой аренды paid-операций нет —
+    // блок с пустым подзаголовком, «Графика платежей» на странице
+    // не существует вовсе. Подзаголовок скоупится секцией — page-wide
+    // getByText дал бы дубль при будущих копиях текста (канон
+    // payment-next-date).
     await expect(page.getByText('График платежей')).toHaveCount(0);
-    await expect(page.getByText('История платежа')).toHaveCount(0);
+    const historySection = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'История платежа' }) });
+    await expect(historySection.getByText('Платежей еще не было')).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-detail-filled-mobile');
   });
@@ -137,7 +144,7 @@ test.describe('страница платежа', () => {
     // отделяет строки от кнопки заголовка.
     const nearestSection = page
       .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Ближайшая операция' }) });
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) });
     const nearestRow = nearestSection.locator('[role="button"]');
     const nearestHeader = nearestSection.getByRole('button', {
       name: 'Открыть график платежей',
@@ -322,7 +329,10 @@ test.describe('страница платежа', () => {
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
     await expect(page.getByText('Платежей еще не было')).toBeVisible();
 
+    // Тот же текст — пустым блоком истории на странице платежа (#1338):
+    // блок рендерится всегда, paid-операций после удаления нет.
     await page.goto(PAYMENT_URLS.rent);
+    await expect(page.getByText('Платежей еще не было')).toBeVisible();
     await captureScreen(page, testInfo, 'payment-detail-paid-out-mobile');
   });
 
