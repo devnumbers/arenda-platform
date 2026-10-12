@@ -71,9 +71,9 @@ func (q *Queries) ActorPins(ctx context.Context, arg ActorPinsParams) ([]ActorPi
 }
 
 const archiveProperty = `-- name: ArchiveProperty :one
-UPDATE properties SET status = 'archived', pinned_at = NULL
+UPDATE properties SET status = 'archived'
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, pinned_at, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type ArchivePropertyParams struct {
@@ -81,14 +81,10 @@ type ArchivePropertyParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
-// The pin write here is dead scaffolding, not state: the personal-pin
-// cutover (#1307) reads and writes pins only in user_property_pins, and the
-// frozen properties.pinned_at column answers nothing. The write survives
-// only because the schema CHECK (properties_pinned_at_check) still forbids
-// a pinned archived row; the contract migration (#1311) drops the CHECK
-// together with the column and this write goes with them. Personal pin rows
-// are never touched here (D16): unarchiving returns the property with the
-// participants' pins.
+// The archive touches no pin state: pins are personal rows — the contract
+// migration (#1311) dropped the global properties.pinned_at column with its
+// CHECK, and personal pin rows are never touched here (D16): unarchiving
+// returns the property with the participants' pins.
 func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error) {
 	row := q.db.QueryRow(ctx, archiveProperty, arg.ID, arg.OwnerID)
 	var i Property
@@ -103,7 +99,6 @@ func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 	)
@@ -202,7 +197,7 @@ func (q *Queries) CountPropertiesByOwnerAndType(ctx context.Context, arg CountPr
 const createProperty = `-- name: CreateProperty :one
 INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, pinned_at, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type CreatePropertyParams struct {
@@ -239,7 +234,6 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 	)
@@ -299,7 +293,7 @@ func (q *Queries) GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesSta
 }
 
 const getPropertyByID = `-- name: GetPropertyByID :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.pinned_at, properties.photo_key, properties.photo_content_type,
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -319,7 +313,6 @@ type GetPropertyByIDRow struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	Attributes       []byte             `json:"attributes"`
-	PinnedAt         pgtype.Timestamptz `json:"pinned_at"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 	MembersCount     int64              `json:"members_count"`
@@ -346,7 +339,6 @@ func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPrope
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 		&i.MembersCount,
@@ -355,7 +347,7 @@ func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPrope
 }
 
 const getPropertyByIDAdmin = `-- name: GetPropertyByIDAdmin :one
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.pinned_at, p.photo_key, p.photo_content_type, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE p.id = $1
@@ -372,7 +364,6 @@ type GetPropertyByIDAdminRow struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	Attributes          []byte             `json:"attributes"`
-	PinnedAt            pgtype.Timestamptz `json:"pinned_at"`
 	PhotoKey            pgtype.Text        `json:"photo_key"`
 	PhotoContentType    pgtype.Text        `json:"photo_content_type"`
 	OwnerPhone          string             `json:"owner_phone"`
@@ -393,7 +384,6 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 		&i.OwnerPhone,
@@ -403,7 +393,7 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 }
 
 const getPropertyByIDAndOwner = `-- name: GetPropertyByIDAndOwner :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.pinned_at, properties.photo_key, properties.photo_content_type,
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -428,7 +418,6 @@ type GetPropertyByIDAndOwnerRow struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	Attributes       []byte             `json:"attributes"`
-	PinnedAt         pgtype.Timestamptz `json:"pinned_at"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 	MembersCount     int64              `json:"members_count"`
@@ -448,7 +437,6 @@ func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyBy
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 		&i.MembersCount,
@@ -457,7 +445,7 @@ func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyBy
 }
 
 const getPropertyByIDAndOwnerForUpdate = `-- name: GetPropertyByIDAndOwnerForUpdate :one
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, pinned_at, photo_key, photo_content_type FROM properties WHERE id = $1 AND owner_id = $2
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type FROM properties WHERE id = $1 AND owner_id = $2
 FOR UPDATE
 `
 
@@ -480,7 +468,6 @@ func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetP
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 	)
@@ -488,7 +475,7 @@ func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetP
 }
 
 const getPropertyByIDForUpdate = `-- name: GetPropertyByIDForUpdate :one
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, pinned_at, photo_key, photo_content_type FROM properties WHERE id = $1 FOR UPDATE
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type FROM properties WHERE id = $1 FOR UPDATE
 `
 
 // Unscoped pessimistic-lock lookup by id, for write paths that resolve access
@@ -507,7 +494,6 @@ func (q *Queries) GetPropertyByIDForUpdate(ctx context.Context, id pgtype.UUID) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 	)
@@ -560,7 +546,7 @@ func (q *Queries) InsertActorPin(ctx context.Context, arg InsertActorPinParams) 
 }
 
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.pinned_at, properties.photo_key, properties.photo_content_type,
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -600,7 +586,6 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 			&i.Property.CreatedAt,
 			&i.Property.UpdatedAt,
 			&i.Property.Attributes,
-			&i.Property.PinnedAt,
 			&i.Property.PhotoKey,
 			&i.Property.PhotoContentType,
 			&i.MembersCount,
@@ -616,7 +601,7 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 }
 
 const listArchivedPropertiesByOwner = `-- name: ListArchivedPropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.pinned_at, properties.photo_key, properties.photo_content_type,
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = properties.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -651,7 +636,6 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 			&i.Property.CreatedAt,
 			&i.Property.UpdatedAt,
 			&i.Property.Attributes,
-			&i.Property.PinnedAt,
 			&i.Property.PhotoKey,
 			&i.Property.PhotoContentType,
 			&i.MembersCount,
@@ -667,7 +651,7 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 }
 
 const listPropertiesAdmin = `-- name: ListPropertiesAdmin :many
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.pinned_at, p.photo_key, p.photo_content_type, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE ($1::uuid IS NULL OR p.owner_id = $1::uuid)
@@ -708,7 +692,6 @@ type ListPropertiesAdminRow struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	Attributes          []byte             `json:"attributes"`
-	PinnedAt            pgtype.Timestamptz `json:"pinned_at"`
 	PhotoKey            pgtype.Text        `json:"photo_key"`
 	PhotoContentType    pgtype.Text        `json:"photo_content_type"`
 	OwnerPhone          string             `json:"owner_phone"`
@@ -743,7 +726,6 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Attributes,
-			&i.PinnedAt,
 			&i.PhotoKey,
 			&i.PhotoContentType,
 			&i.OwnerPhone,
@@ -760,7 +742,7 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 }
 
 const searchVisibleProperties = `-- name: SearchVisibleProperties :many
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.pinned_at, p.photo_key, p.photo_content_type,
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type,
        ((SELECT COUNT(*) FROM property_members pm
          WHERE pm.property_id = p.id) +
        (SELECT COUNT(*) FROM property_member_invitations pmi
@@ -804,7 +786,6 @@ type SearchVisiblePropertiesRow struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	Attributes       []byte             `json:"attributes"`
-	PinnedAt         pgtype.Timestamptz `json:"pinned_at"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 	MembersCount     int64              `json:"members_count"`
@@ -855,7 +836,6 @@ func (q *Queries) SearchVisibleProperties(ctx context.Context, arg SearchVisible
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Attributes,
-			&i.PinnedAt,
 			&i.PhotoKey,
 			&i.PhotoContentType,
 			&i.MembersCount,
@@ -876,7 +856,7 @@ UPDATE properties
 SET photo_key = $3,
     photo_content_type = $4
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, pinned_at, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type SetPropertyPhotoParams struct {
@@ -911,7 +891,6 @@ func (q *Queries) SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 	)
@@ -921,7 +900,7 @@ func (q *Queries) SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoPara
 const unarchiveProperty = `-- name: UnarchiveProperty :one
 UPDATE properties SET status = 'active'
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, pinned_at, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type UnarchivePropertyParams struct {
@@ -943,7 +922,6 @@ func (q *Queries) UnarchiveProperty(ctx context.Context, arg UnarchivePropertyPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 	)
@@ -954,7 +932,7 @@ const updateProperty = `-- name: UpdateProperty :one
 UPDATE properties
 SET name = $3, type = $4, address = $5, description = $6, attributes = $7, status = $8
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, pinned_at, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type UpdatePropertyParams struct {
@@ -991,7 +969,6 @@ func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.PinnedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
 	)

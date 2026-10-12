@@ -91,8 +91,9 @@ type GlobalPaymentObjectCard struct {
 	PropertyID uuid.UUID
 	Name       string
 	Address    string
-	// PinnedAt is the property's global pin (ticket #577): nil — not pinned,
-	// a moment — pinned since then; the objects read orders the pinned first.
+	// PinnedAt is the reading actor's personal pin on the object (ticket
+	// #577, the cutover #1307): nil — not pinned, a moment — pinned since
+	// then; the objects read orders the pinned first.
 	PinnedAt *time.Time
 	// PhotoURL is the card avatar's photo — the object's first (oldest) one
 	// (ticket #582); nil when the object has no photos.

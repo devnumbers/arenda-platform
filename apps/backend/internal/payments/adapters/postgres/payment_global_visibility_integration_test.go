@@ -107,8 +107,8 @@ func newGlobalVisibilityHarness(t *testing.T) *globalVisibilityHarness {
 
 	// The seedRule closure inserts the rule and, when the caller stars it,
 	// the given actor's personal favorite row (the cutover #1308: the
-	// frozen payments columns are neither read nor written; a favorite
-	// fixture is a user_payment_favorites row).
+	// favorite state lives only in user_payment_favorites — the global
+	// columns are gone since the contract #1311).
 	seedRule := func(t *testing.T, prop, userID uuid.UUID, order int64) uuid.UUID {
 		t.Helper()
 		id := uuid.Must(uuid.NewV7())

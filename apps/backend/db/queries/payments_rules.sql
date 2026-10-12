@@ -4,10 +4,10 @@
 -- actor's role); the nested path payment→property is enforced in the WHERE
 -- clause. The materialization tick lives in payments_tick.sql, operations in
 -- payments_operations.sql. The favorite star is a personal state (the
--- cutover #1308, D12): it lives in user_payment_favorites, the frozen
--- payments.is_favorite/favorite_order columns are never read or written
--- here — the actor's rows overlay the actor-facing reads, the star writes
--- are this file's insert/delete pair.
+-- cutover #1308, D12): it lives in user_payment_favorites — the global
+-- payments.is_favorite/favorite_order columns went with the contract
+-- migration #1311; the actor's rows overlay the actor-facing reads, the
+-- star writes are this file's insert/delete pair.
 
 -- name: GetPaymentByID :one
 -- One rule by id within the owner's scope on the given property, with the

@@ -65,8 +65,8 @@ func (h *paymentsHarness) globalSvc() *paymentsapp.GlobalPaymentService {
 // seedGlobalRule inserts a payment rule on any property with any owner —
 // the row-level twin of seedGlobalProperty for multi-book fixtures. The
 // isFavorite flag seeds the owner's personal favorite row (the cutover
-// #1308: the frozen payments column is neither read nor written; a starred
-// fixture is a user_payment_favorites row of the owner).
+// #1308: the favorite state lives only in user_payment_favorites — the
+// global column is gone since the contract #1311).
 func (h *paymentsHarness) seedGlobalRule(
 	propertyID, ownerID uuid.UUID,
 	title, typ string, amountKopecks int64,

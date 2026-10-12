@@ -118,7 +118,6 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		PhotoContentType: row.PhotoContentType,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
-		PinnedAt:         row.PinnedAt,
 	}, row.MembersCount), nil
 }
 
@@ -159,7 +158,6 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		PhotoContentType: row.PhotoContentType,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
-		PinnedAt:         row.PinnedAt,
 	}, row.MembersCount), nil
 }
 
@@ -245,7 +243,6 @@ func (r *PropertyRepository) SearchVisible(
 			PhotoContentType: row.PhotoContentType,
 			CreatedAt:        row.CreatedAt,
 			UpdatedAt:        row.UpdatedAt,
-			PinnedAt:         row.PinnedAt,
 		}, row.MembersCount)
 		p.AccessRole = sharedpolicy.Role(row.AccessRole)
 		properties = append(properties, p)
@@ -440,11 +437,10 @@ func propertyFromRow(row postgres.Property) domain.Property {
 		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
-		// PinnedAt is not mapped here: properties.pinned_at is the frozen
-		// global column of the pre-cutover world (#1307) — no read answers
-		// from it. The actor's pin arrives through the ActorPin/ActorPins
-		// overlay (user_property_pins); the contract migration #1311 drops
-		// the column with its CHECK.
+		// The row carries no pin column: the actor's pin arrives through
+		// the ActorPin/ActorPins overlay (user_property_pins) — the domain's
+		// PinnedAt stays unset here by design, the global column went with
+		// the contract migration #1311.
 	}
 }
 

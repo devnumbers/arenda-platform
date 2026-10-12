@@ -374,8 +374,6 @@ type Payment struct {
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	IsFavorite         bool               `json:"is_favorite"`
-	FavoriteOrder      pgtype.Int8        `json:"favorite_order"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	TitleIsManual      bool               `json:"title_is_manual"`
 	NotifyAutoPaid     bool               `json:"notify_auto_paid"`
@@ -434,7 +432,6 @@ type Property struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	Attributes       []byte             `json:"attributes"`
-	PinnedAt         pgtype.Timestamptz `json:"pinned_at"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 }

@@ -116,15 +116,11 @@ WHERE id = $1 AND owner_id = $2
 RETURNING *;
 
 -- name: ArchiveProperty :one
--- The pin write here is dead scaffolding, not state: the personal-pin
--- cutover (#1307) reads and writes pins only in user_property_pins, and the
--- frozen properties.pinned_at column answers nothing. The write survives
--- only because the schema CHECK (properties_pinned_at_check) still forbids
--- a pinned archived row; the contract migration (#1311) drops the CHECK
--- together with the column and this write goes with them. Personal pin rows
--- are never touched here (D16): unarchiving returns the property with the
--- participants' pins.
-UPDATE properties SET status = 'archived', pinned_at = NULL
+-- The archive touches no pin state: pins are personal rows — the contract
+-- migration (#1311) dropped the global properties.pinned_at column with its
+-- CHECK, and personal pin rows are never touched here (D16): unarchiving
+-- returns the property with the participants' pins.
+UPDATE properties SET status = 'archived'
 WHERE id = $1 AND owner_id = $2
 RETURNING *;
 

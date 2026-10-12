@@ -25,14 +25,10 @@ type Querier interface {
 	// The time-travel twin of AppendSubscriptionTransition: identical columns plus
 	// the shifted created_at (the plain append always stamps now()).
 	AppendSubscriptionTransitionWithCreatedAt(ctx context.Context, arg AppendSubscriptionTransitionWithCreatedAtParams) error
-	// The pin write here is dead scaffolding, not state: the personal-pin
-	// cutover (#1307) reads and writes pins only in user_property_pins, and the
-	// frozen properties.pinned_at column answers nothing. The write survives
-	// only because the schema CHECK (properties_pinned_at_check) still forbids
-	// a pinned archived row; the contract migration (#1311) drops the CHECK
-	// together with the column and this write goes with them. Personal pin rows
-	// are never touched here (D16): unarchiving returns the property with the
-	// participants' pins.
+	// The archive touches no pin state: pins are personal rows — the contract
+	// migration (#1311) dropped the global properties.pinned_at column with its
+	// CHECK, and personal pin rows are never touched here (D16): unarchiving
+	// returns the property with the participants' pins.
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
 	// «Удалить операцию» (решение владельца): tombstone-статус cancelled —
 	// строка остаётся с ключом (payment_id, date) и не воскресает на тике,
@@ -416,10 +412,10 @@ type Querier interface {
 	// actor's role); the nested path payment→property is enforced in the WHERE
 	// clause. The materialization tick lives in payments_tick.sql, operations in
 	// payments_operations.sql. The favorite star is a personal state (the
-	// cutover #1308, D12): it lives in user_payment_favorites, the frozen
-	// payments.is_favorite/favorite_order columns are never read or written
-	// here — the actor's rows overlay the actor-facing reads, the star writes
-	// are this file's insert/delete pair.
+	// cutover #1308, D12): it lives in user_payment_favorites — the global
+	// payments.is_favorite/favorite_order columns went with the contract
+	// migration #1311; the actor's rows overlay the actor-facing reads, the
+	// star writes are this file's insert/delete pair.
 	// One rule by id within the owner's scope on the given property, with the
 	// user category's current name resolved for the CategoryView.
 	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)

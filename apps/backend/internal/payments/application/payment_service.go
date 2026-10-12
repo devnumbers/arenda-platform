@@ -535,9 +535,9 @@ func (s *PaymentService) SetPaymentFavorite(
 
 // overlayActorFavorites folds the actor's personal favorite rows into the
 // actor-facing reads (the cutover #1308, D12): the rule rows carry no
-// favorite column (the frozen one), the actor's rows travel beside them —
-// another user's star never lands in this actor's read. Mutates in place;
-// the conveyor's post-commit reread shares it.
+// favorite column (the contract #1311 dropped it), the actor's rows travel
+// beside them — another user's star never lands in this actor's read.
+// Mutates in place; the conveyor's post-commit reread shares it.
 func overlayActorFavorites(
 	ctx context.Context, payments PaymentStore, actor uuid.UUID, rules []domain.Payment,
 ) error {

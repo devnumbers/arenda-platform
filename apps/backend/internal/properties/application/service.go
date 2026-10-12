@@ -490,9 +490,9 @@ func (s *PropertyService) pinnedFirst(properties []domain.Property) []domain.Pro
 
 // overlayActorPins fills the actor's personal pins over the assembled list
 // (the cutover #1307): the lists carry pinnedAt of the actor — own and
-// shared rows alike — and pinnedFirst orders by it. The frozen
-// properties.pinned_at column answers nothing (propertyFromRow skips it);
-// the actor's user_property_pins rows are the only pin source.
+// shared rows alike — and pinnedFirst orders by it. The table carries no
+// pin column anymore (the contract #1311 dropped it); the actor's
+// user_property_pins rows are the only pin source.
 func (s *PropertyService) overlayActorPins(ctx context.Context, actor uuid.UUID, properties []domain.Property) error {
 	if len(properties) == 0 {
 		return nil
