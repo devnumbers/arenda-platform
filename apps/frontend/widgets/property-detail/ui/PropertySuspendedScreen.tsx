@@ -15,7 +15,10 @@ export function PropertySuspendedScreen(): JSX.Element {
       title="Превышен лимит объектов"
       description="Доступ к объекту приостановлен из-за лимита вашего тарифа. Он вернётся автоматически, когда освободится слот — например, после перехода на старший тариф или архивации другого объекта"
       action={
-        <NextLink href={ROUTES.profileTariffChange} className={buttonVariants({ size: 'small' })}>
+        <NextLink
+          href={ROUTES.profileTariffChange}
+          className={buttonVariants({ size: 'small', radius: 'm' })}
+        >
           Выбрать тариф
         </NextLink>
       }

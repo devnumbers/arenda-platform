@@ -31,6 +31,7 @@ import {
 } from '@/features/tasks';
 import type { Task } from '@/entities/task';
 import {
+  Button,
   ChipButton,
   CollapsibleSection,
   EmptyState,
@@ -216,14 +217,19 @@ export function TasksFeedScreen({
   return (
     <>
       {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле, поведение
-       * стандартное — в потоке на мобайле, закреплена на десктопе. */}
-      <TopNav mobileWings collapse={{ title: 'Задачи', trailing: createButton }} />
+       * стандартное — в потоке на мобайле, закреплена на десктопе.
+       * «+» на пустоте спрятан вместе с ней (анатомия 3235-74057) —
+       * создание остаётся в CTA самого состояния, как на других хабах. */}
+      <TopNav
+        mobileWings
+        collapse={{ title: 'Задачи', trailing: showEmpty ? undefined : createButton }}
+      />
 
       <PageContent>
         <HubCollapseAnchor>
           <div className="flex h-8 items-center justify-between pr-3.5">
             <HubTitle>Задачи</HubTitle>
-            {createButton}
+            {!showEmpty && createButton}
           </div>
 
           {!showEmpty && (
@@ -303,6 +309,13 @@ export function TasksFeedScreen({
               imageRounded
               title="Задач нет"
               description="Добавьте задачу — например, позвонить арендатору, вызвать мастера или проверить состояние объекта"
+              action={
+                // CTA пустого состояния — канон (3235-74057): «+» шапки
+                // на пустоте спрятан, создание остаётся здесь.
+                <Button size="small" radius="m" onClick={() => router.push(ROUTES.taskCreate)}>
+                  Добавить задачу
+                </Button>
+              }
             />
           ) : (
             sections.map((section) => (

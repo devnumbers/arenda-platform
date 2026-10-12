@@ -5,11 +5,14 @@ import Image from 'next/image';
 import { cn } from '@/shared/lib/cn';
 
 /** Пустое состояние дизайн-слоя — канон полноэкранных и внутристраничных
- * «пусто» (унификация 2026-09-04; до этого — локальные копии в задачах,
- * контактах, платежах и легаси EmptyState): WebP-иллюстрация 128 по центру,
- * заголовок H2 20/24 и серое описание 16/18 (максимум 360), опциональное
- * действие под описанием. Вертикальный отступ верха — pt-16, переопределяется
- * className (например py-16 у пустого периода операций). `imageRounded` —
+ * «пусто» (унификация 2026-09-04; анатомия по макету хаба «Объектов»
+ * 3235-74057): WebP-иллюстрация 128 по центру, заголовок H2 24/28 и серое
+ * описание 16/18 (максимум 360), опциональное действие под описанием.
+ * Отступы — верх pt-14 и бока px-8, иллюстрация→текст 24 (mt-6),
+ * заголовок→описание 8 (gap-2), текст→действие 32 (mt-8); CTA в слоте —
+ * `Button size="small" radius="m"` (44/12), как у секционных пустых (#588).
+ * Вертикальные отступы переопределяются className длинными руками
+ * (например pt-16 pb-16 у пустого периода операций). `imageRounded` —
  * круглая иллюстрация (rounded-pill + object-cover), когда исходник круга.
  * Обязательное поле одно — imageSrc: бывают пустоты без заголовка. */
 export type EmptyStateProps = {
@@ -36,7 +39,7 @@ export function EmptyState({
   className,
 }: EmptyStateProps): JSX.Element {
   return (
-    <div className={cn('flex flex-col items-center gap-4 px-6 pt-16 text-center', className)}>
+    <div className={cn('flex flex-col items-center px-8 pt-14 text-center', className)}>
       {/* sizes: слот 128 CSS — на 3x-экранах srcset отдаёт 384px-вариант
        * вместо апскейла 256 (#1002); потолок задаёт источник: меньший файл
        * Next не растягивает, 384-варианта у него нет. */}
@@ -49,24 +52,26 @@ export function EmptyState({
         quality={90}
         className={cn('h-32 w-32', imageRounded && 'rounded-pill object-cover')}
       />
-      <div className="flex flex-col items-center gap-3">
-        {title !== undefined && (
-          <h2 className="text-xl font-semibold leading-6 text-content">{title}</h2>
-        )}
-        {description !== undefined && (
-          <p
-            className={cn(
-              'max-w-[360px] text-base leading-[18px] text-content-secondary',
-              descriptionClassName,
-            )}
-          >
-            {description}
-          </p>
-        )}
-      </div>
+      {(title !== undefined || description !== undefined) && (
+        <div className="mt-6 flex flex-col items-center gap-2">
+          {title !== undefined && (
+            <h2 className="text-[24px] font-semibold leading-7 text-content">{title}</h2>
+          )}
+          {description !== undefined && (
+            <p
+              className={cn(
+                'max-w-[360px] text-base leading-[18px] text-content-secondary',
+                descriptionClassName,
+              )}
+            >
+              {description}
+            </p>
+          )}
+        </div>
+      )}
       {/* Гард ловит и false от частого «cond && <Button/>»: иначе пустой
-       * div ловит gap-4 корня — фантомные 16px, когда действия нет. */}
-      {action !== undefined && action !== false && <div>{action}</div>}
+       * div ловит mt-8 корня — фантомные 32px, когда действия нет. */}
+      {action !== undefined && action !== false && <div className="mt-8">{action}</div>}
     </div>
   );
 }

@@ -15,7 +15,10 @@ export function PropertyNotFoundScreen(): JSX.Element {
       title="Объект не найден или у вас нет к нему доступа"
       description="Проверьте ссылку или попросите владельца выдать вам доступ к объекту"
       action={
-        <NextLink href={ROUTES.properties} className={buttonVariants({ size: 'small' })}>
+        <NextLink
+          href={ROUTES.properties}
+          className={buttonVariants({ size: 'small', radius: 'm' })}
+        >
           К списку объектов
         </NextLink>
       }

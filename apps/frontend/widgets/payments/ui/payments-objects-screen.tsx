@@ -168,7 +168,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
                   title="Объектов пока нет"
                   description="Создайте объект, чтобы добавлять платежи"
                   action={
-                    <Button onClick={() => router.push(ROUTES.propertyNew)}>
+                    <Button size="small" radius="m" onClick={() => router.push(ROUTES.propertyNew)}>
                       Добавить объект
                     </Button>
                   }
@@ -225,32 +225,19 @@ function PaymentsObjectsEmpty({
     : undefined;
 
   return (
-    <div
-      data-testid="payments-objects-empty"
-      // Растягиваем блок до нижнего края видимой области: на планшете и
-      // мобилке CTA прижата книзу (216px = верх страницы и нижний резерв
-      // PageContent, как у PaymentsGlobalEmpty).
-      className="flex min-h-[calc(100dvh-216px)] flex-col px-6"
-    >
+    <div data-testid="payments-objects-empty">
       <EmptyState
         imageSrc="/images/payments/object-empty.webp"
         title="Вы пока не добавляли платежи"
         description="Добавьте платежи, чтобы не терять их из виду"
         action={
           onAddPayment !== undefined && (
-            <Button onClick={onAddPayment} className="hidden lg:inline-flex">
+            <Button size="small" radius="m" onClick={onAddPayment}>
               Добавить платёж
             </Button>
           )
         }
       />
-      {onAddPayment !== undefined && (
-        // mt-auto прижимает нижнюю кнопку к краю растянутого блока; на ПК
-        // она скрыта — там кнопка живёт в action-слоте под текстом.
-        <Button onClick={onAddPayment} className="mt-auto lg:hidden">
-          Добавить платёж
-        </Button>
-      )}
       {canAdd && (
         <PaymentsAddSheet
           propertyId={propertyId}

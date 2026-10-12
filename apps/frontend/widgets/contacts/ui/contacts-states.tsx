@@ -82,9 +82,10 @@ export function ContactsBookSkeleton(): JSX.Element {
 }
 
 /** Пустой список (1527:74479): иллюстрация 128, «Контактов нет», пояснение —
- * на каноне EmptyState дизайн-слоя. CTA «Добавить контакт» (#1004): пилюля
- * поиска и «+» ряда заголовка на пустой книге спрятаны вместе — создание
- * остаётся доступным из самого состояния. */
+ * на каноне EmptyState дизайн-слоя. CTA «Добавить контакт» — Button
+ * size="small" radius="m" (канон CTA пустых состояний, 3235-74057):
+ * пилюля поиска и «+» ряда заголовка на пустой книге спрятаны вместе —
+ * создание остаётся доступным из самого состояния. */
 export function ContactsEmptyState({
   onAdd,
 }: {
@@ -96,7 +97,11 @@ export function ContactsEmptyState({
       title="Контактов нет"
       description="Добавьте контакты арендатора, мастеров и других специалистов"
       action={
-        onAdd !== undefined && <Button onClick={onAdd}>Добавить контакт</Button>
+        onAdd !== undefined && (
+          <Button size="small" radius="m" onClick={onAdd}>
+            Добавить контакт
+          </Button>
+        )
       }
     />
   );

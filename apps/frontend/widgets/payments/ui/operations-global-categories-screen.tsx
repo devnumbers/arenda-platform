@@ -134,7 +134,7 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
             // Пустая разбивка (Figma 1518-92530, #478) — канон EmptyState.
             <EmptyState
               imageSrc="/images/payments/operations-categories.png"
-              className="py-16"
+              className="pt-16 pb-16"
               description="Категорий, по которым были операции в этот период не было. Попробуйте выбрать другой период"
             />
           ) : (

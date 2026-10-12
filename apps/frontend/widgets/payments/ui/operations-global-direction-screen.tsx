@@ -158,7 +158,7 @@ export function OperationsGlobalDirectionScreen({
         {neverHad ? (
           <OperationsNeverHad
             action={
-              <Button onClick={() => router.push(newOperationHref)}>
+              <Button size="small" radius="m" onClick={() => router.push(newOperationHref)}>
                 Добавить операцию
               </Button>
             }

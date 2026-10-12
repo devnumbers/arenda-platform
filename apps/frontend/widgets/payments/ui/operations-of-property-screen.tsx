@@ -183,6 +183,8 @@ export function OperationsOfPropertyScreen({
             action={
               canMutate ? (
                 <Button
+                  size="small"
+                  radius="m"
                   onClick={() =>
                     router.push(ROUTES.propertyOperationsNew(propertyId))
                   }

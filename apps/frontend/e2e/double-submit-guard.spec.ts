@@ -170,11 +170,12 @@ test.describe('гард двойного сабмита (#1120)', () => {
     const posts = trackPosts(page, '/tasks/rules');
     const title = `Гард-задача ${Date.now()}`;
 
-    // Вход со списка задач (клик «Создать задачу»), не прямой goto:
-    // success закрывается goBack-ом — без истории он уезжает в
-    // about:blank (грабля карты #1068, MCP-таб/прямой goto).
+    // Вход со списка задач (клик по входу в создание — «Создать задачу»
+    // непустой ленты или CTA «Добавить задачу» пустой, 3235-74057), не
+    // прямой goto: success закрывается goBack-ом — без истории он
+    // уезжает в about:blank (грабля карты #1068, MCP-таб/прямой goto).
     await page.goto('/tasks');
-    await page.getByRole('button', { name: 'Создать задачу' }).last().click();
+    await page.getByRole('button', { name: /Создать задачу|Добавить задачу/ }).last().click();
     await page.waitForURL('**/tasks/new');
     await page.getByRole('textbox', { name: 'Задача' }).fill(title);
     await page.getByRole('button', { name: 'Далее' }).click();
