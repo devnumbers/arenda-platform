@@ -29,3 +29,15 @@ export function contactValueRows(contact: Contact): ContactValueRow[] {
   }
   return rows;
 }
+
+/** Что показывает карточка «Информация» (#1334): строки заполненных полей
+ * связи, а когда пусты все три — подпись «Нет информации» вместо строк
+ * (макет 3304:76141, решение карты #1332). Карточка при любом раскладе
+ * остаётся ссылкой на правку. */
+export function contactInfoView(contact: Contact): {
+  readonly rows: ContactValueRow[];
+  readonly emptyCaption: string | null;
+} {
+  const rows = contactValueRows(contact);
+  return { rows, emptyCaption: rows.length > 0 ? null : 'Нет информации' };
+}

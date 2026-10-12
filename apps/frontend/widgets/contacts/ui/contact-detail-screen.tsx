@@ -19,7 +19,7 @@ import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { photoDisplayUrl } from '@/shared/lib/photo';
 import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
-import { contactValueRows } from '../lib/contact-detail-model';
+import { contactInfoView, type ContactValueRow } from '../lib/contact-detail-model';
 import { ContactDetailHeader } from './contact-detail-header';
 import { ContactKebabMenu } from './contact-kebab-menu';
 import { ContactSectionCard } from './contact-section-card';
@@ -30,6 +30,8 @@ import { ContactDetailSkeleton, ContactsErrorCard } from './contacts-states';
  * серый круг-аватар, ФИО крупно по центру на фоне страницы и роль под ним —
  * статичный блок без тапа на правку (решение карты #1332); строки связи —
  * в карточке «Информация» с шевроном, тап по карточке ведёт на правку;
+ * пусты все три поля связи — подпись «Нет информации» вместо строк,
+ * карточка по-прежнему тапабельна (#1334, макет 3304:76141);
  * карточка «Объект» — только когда контакт привязан (решение владельца
  * 2026-09-03), «Заметка» отдельной секцией. Кебаб шапки — только удаление,
  * тому, кому можно мутировать (как на списке: не смотрящий и не архив,
@@ -150,7 +152,7 @@ function ContactCardBody({
   readonly boundProperty: Property | undefined;
   readonly canEdit: boolean;
 }): JSX.Element {
-  const rows = contactValueRows(contact);
+  const { rows, emptyCaption } = contactInfoView(contact);
   const boundPropertyId = contact.propertyId;
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const BoundPropertyGlyph = boundProperty !== undefined ? propertyTypeIcons[boundProperty.type] : undefined;
@@ -171,7 +173,14 @@ function ContactCardBody({
       <ContactDetailHeader contact={contact} photoUrl={photoUrl} />
 
       <ContactSectionCard className="mt-8" title="Информация" href={canEdit ? editHref : undefined}>
-        {rows.length > 0 && (
+        {emptyCaption !== null ? (
+          // Пустое состояние (#1334, макет 3304:76141): Heading с подписью
+          // «Нет информации» (14/16 серым, 8 под заголовком, 24 до низа
+          // карточки); карточка остаётся ссылкой на правку.
+          <p className="mt-2 px-6 pb-6 text-sm leading-4 text-content-secondary">
+            {emptyCaption}
+          </p>
+        ) : (
           <div className="mt-4 flex flex-col pb-4">
             {rows.map((row) => (
               <ContactValueRowView key={row.key} row={row} />
@@ -237,7 +246,7 @@ function ContactCardBody({
 function ContactValueRowView({
   row,
 }: {
-  readonly row: ReturnType<typeof contactValueRows>[number];
+  readonly row: ContactValueRow;
 }): JSX.Element {
   const { copied, copy } = useCopiedHint();
   const activatorProps = useKeyboardActivation({ onSelect: () => copy(row.value) });
