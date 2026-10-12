@@ -39,7 +39,7 @@ export function SupportRequestButton(): JSX.Element {
         <>
             <Button
                 variant="white"
-                className="w-full"
+                className="w-full text-base"
                 trailingIcon={<Support />}
                 onClick={() => setSupportOpen(true)}
             >
