@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/google/uuid"
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
@@ -127,6 +128,7 @@ func WireIdentity(
 			From:     p.Cfg.SMTPFrom,
 			FromName: p.Cfg.SMTPFromName,
 			Timeout:  p.Cfg.SMTPTimeout,
+			HeloName: baseURLHost(p.Cfg.AppBaseURL),
 		})
 	case providerFake:
 		emailMailer = mailerfake.NewFakeSender(p.Logger)
@@ -235,4 +237,16 @@ func WireIdentity(
 		EmailMailer:    emailMailer,
 		PhotoStorage:   photoStorage,
 	}, nil
+}
+
+// baseURLHost extracts the host (no scheme, no port) from the absolute
+// APP_BASE_URL — the domain the SMTP client greets relays with (smtp.Config
+// HeloName): relays reject "localhost"-greeted AUTH. An unparsable URL
+// degrades to "" and the stdlib default greeting.
+func baseURLHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }
