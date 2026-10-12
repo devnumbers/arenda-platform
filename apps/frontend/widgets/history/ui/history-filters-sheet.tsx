@@ -48,6 +48,7 @@ import {
 } from '@/features/history';
 import { dateToIsoLocal, type IsoRange } from '@/shared/lib/calendar';
 import { cn } from '@/shared/lib/cn';
+import { OWN_USER_NAME_SUFFIX } from '@/shared/lib/display-name';
 import {
   Button,
   CalendarRangePicker,
@@ -55,6 +56,7 @@ import {
   ErrorCard,
   fullscreenSurfaceClass,
   IconButton,
+  MeSuffix,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
@@ -646,7 +648,7 @@ function FilterGroupCard({
  * сепаратор #ebebeb на контейнере текста (кроме последней строки).
  * Вся строка — label: клик в любое место переключает опцию; цвет текста
  * от состояния чекбокса не зависит (макет 2050-158281: невыбранная
- * остаётся чёрной). У себя — суффикс «(Вы)» серым; перед подзаголовком —
+ * остаётся чёрной). У себя — серый суффикс MeSuffix; перед подзаголовком —
  * иконка роли 16 (#840, макет 2184-94261). Disabled (#712): чекбокс
  * серый, текст приглушён, тапы не проходят. */
 function FilterOptionRow({
@@ -674,7 +676,7 @@ function FilterOptionRow({
         checked={checked}
         disabled={disabled}
         onCheckedChange={onToggle}
-        aria-label={row.isMe === true ? `${row.label} (Вы)` : row.label}
+        aria-label={row.isMe === true ? `${row.label}${OWN_USER_NAME_SUFFIX}` : row.label}
       />
       {row.leadingSize === 'icon' && (
         <span className="ml-4 flex h-6 w-6 shrink-0 items-center justify-center text-content">
@@ -696,7 +698,7 @@ function FilterOptionRow({
           className={`truncate text-sm font-medium leading-4 ${disabled ? 'text-content-tertiary' : 'text-content'}`}
         >
           {row.label}
-          {row.isMe === true && <span className="text-content-tertiary"> (Вы)</span>}
+          {row.isMe === true && <MeSuffix />}
         </span>
         {row.subtitle !== undefined && (
           <span className="flex items-center gap-1">

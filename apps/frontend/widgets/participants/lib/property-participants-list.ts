@@ -6,7 +6,7 @@ import {
   sortByRuText,
   suspendedLimitBadge,
 } from '@/entities/participants';
-import { displayUserName } from '@/shared/lib/display-name';
+import { displayOwnUserName } from '@/shared/lib/display-name';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /** Иконка у почты в ряду (макет D6 3298-75434): полный доступ — открытый
@@ -95,9 +95,9 @@ export type PropertyParticipantRow = {
   readonly key: string;
   /** База титула по ФИО-канону D4: чужие — серверный канон
    * access.DisplayNameOf (почта — только у pending, контракт #693),
-   * своя строка — имя читателя без фамилии (макет «Даниил (Вы)»).
-   * Суффикс «(Вы)» в базе не живёт — его серым рисует вид по isMe
-   * (канон шита фильтров #710). */
+   * своя строка — displayOwnUserName, имя читателя без фамилии (макет
+   * «Даниил (Вы)»). Суффикс «(Вы)» в базе не живёт — его серым рисует
+   * MeSuffix (общий примитив, #1356). */
   readonly title: string;
   /** Путь стриминга фото профиля участника (ADR 0065, решение #1286);
    * undefined — pending или у юзера нет фото. */
@@ -116,8 +116,9 @@ export type PropertyParticipantRow = {
   /** Роль ноги: фильтр «Все роли» и сортировка. */
   readonly role: AccessRole;
   readonly isOwner: boolean;
-  /** Строка самого читателя — вид рисует серый суффикс «(Вы)» (канон
-   * #710); ряд инертный (#770; политика тапа — в доке экрана). */
+  /** Строка самого читателя — вид рисует серый суффикс «(Вы)»
+   * (MeSuffix, #1356); ряд инертный (#770; политика тапа — в доке
+   * экрана). */
   readonly isMe: boolean;
 };
 
@@ -158,14 +159,14 @@ function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined
     // пуст — memberResponse отдаёт её без обогащения).
     const isPending = member.status === 'pending';
     // ФИО-канон D4: своя строка — имя читателя из /me без фамилии
-    // серверной строки (прецедент шита фильтров #710); нет имени —
-    // «Пользователь» (даст на виде «Пользователь (Вы)»). Чужие —
+    // серверной строки (displayOwnUserName); нет имени — «Пользователь»
+    // (даст на виде «Пользователь (Вы)»). Чужие —
     // серверный канон DisplayNameOf, фронт его не пересобирает; у
     // pending юзера ещё нет («the email is the label», #693) — анонимный
     // титул #1105 ставит VM. Суффикс «(Вы)» в базе не живёт — его серым
-    // рисует вид по isMe (канон шита фильтров #710).
+    // рисует MeSuffix (общий примитив, #1356).
     const title = isMe
-      ? displayUserName(reader.name ?? '', '')
+      ? displayOwnUserName(reader.name ?? '')
       : isPending
         ? ANONYMOUS_TITLE
         : (displayName ?? (email !== '' ? email : ''));

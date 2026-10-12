@@ -2,7 +2,7 @@ import type { IsoDate, IsoRange } from '@/shared/lib/calendar';
 import type { HistoryBaseAction, HistoryKind, HistoryParticipantOption } from '@/entities/history';
 import { HISTORY_BASE_ACTIONS, HISTORY_KINDS } from '@/entities/history';
 import { formatIsoRangeChipLabel } from '@/shared/lib/date-format';
-import { displayUserName } from '@/shared/lib/display-name';
+import { displayOwnUserName } from '@/shared/lib/display-name';
 import { readCsvParam, readCsvUuidParam } from '@/shared/lib/parse-csv-uuid-param';
 import { readIsoRangeParam, type UrlParamsSource } from '@/shared/lib/parse-iso-range-param';
 import type { HistoryFeedScope } from '@/shared/api/query-keys';
@@ -201,10 +201,10 @@ export function historyPeriodChipLabel(period: IsoRange | null): string {
 }
 
 /** Заголовок строки участника шита: чужой — канон отображаемого имени,
- * себе — только имя без фамилии (макет 2067-163528: «Даниил (Вы)»;
- * суффикс «(Вы)» серым рисует сам шит); фамилия своей строки в канон
- * D4 не подмешивается — displayUserName получает пустую фамилию, и без
- * имени канон даёт «Пользователь» (#1105, аменд #1123). */
+ * себе — база своей строки displayOwnUserName (макет 2067-163528:
+ * «Даниил (Вы)»; серый суффикс рисует шит через MeSuffix, #1356).
+ * Фамилия своей строки в канон D4 не подмешивается, и без имени канон
+ * даёт «Пользователь» (#1105, аменд #1123). */
 export function historyParticipantTitle(
   participant: Pick<HistoryParticipantOption, 'name' | 'firstName'>,
   isMe: boolean,
@@ -212,7 +212,7 @@ export function historyParticipantTitle(
   if (!isMe) {
     return participant.name;
   }
-  return displayUserName(participant.firstName, '');
+  return displayOwnUserName(participant.firstName);
 }
 
 /** Секция группы «Участники» шита: подпись (undefined — секция без

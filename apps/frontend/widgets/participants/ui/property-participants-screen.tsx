@@ -49,6 +49,7 @@ import {
   SearchField,
   Skeleton,
   UserAvatar,
+  MeSuffix,
   skeletonRowWidths,
   StickyBottomBar,
   StatusIcon,
@@ -546,7 +547,7 @@ function PropertyParticipantRowView({
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">
           {row.title}
-          {row.isMe && <span className="text-content-tertiary"> (Вы)</span>}
+          {row.isMe && <MeSuffix />}
         </span>
         {/* Иконка роли — постоянная часть второй строки (макет ставит её
          * у почты; когда почта скрыта контрактом или обогащение не

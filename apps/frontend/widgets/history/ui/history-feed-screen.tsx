@@ -29,6 +29,7 @@ import {
   ErrorCard,
   InfiniteQueryHead,
   IconButton,
+  MeSuffix,
   PageContent,
   SearchField,
   TopNav,
@@ -818,7 +819,7 @@ function ActorHeader({
       <ActorFeedAvatar photoUrl={photoUrl} />
       <h3 className="min-w-0 truncate text-xs font-medium leading-[15px] text-content">
         {name}
-        {isSelf && <span className="text-content-tertiary"> (Вы)</span>}
+        {isSelf && <MeSuffix />}
       </h3>
     </>
   );
