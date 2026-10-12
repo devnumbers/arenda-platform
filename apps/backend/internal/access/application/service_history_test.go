@@ -94,7 +94,7 @@ func TestHistory_MembershipLifecycleRows(t *testing.T) {
 	if text := changed.Segments.PlainText(); text != "Участник изменён: Пётр Сидоров" {
 		t.Errorf("row text = %q, want the name snapshot", text)
 	}
-	wantRole := historydomain.DetailLines{"Роль: «Полный доступ» → «Просмотр»"}
+	wantRole := historydomain.DetailLines{"Роль: «Управление» → «Просмотр»"}
 	if len(changed.Details) != 1 || changed.Details[0] != wantRole[0] {
 		t.Errorf("details = %q, want %q", changed.Details, wantRole)
 	}
@@ -252,7 +252,7 @@ func TestHistory_InvitationRoleChangeRow(t *testing.T) {
 	if text := changed.Segments.PlainText(); text != "Участник изменён: "+testNewUserEmail {
 		t.Errorf("row text = %q, want the email snapshot", text)
 	}
-	wantRole := historydomain.DetailLines{"Роль: «Просмотр» → «Полный доступ»"}
+	wantRole := historydomain.DetailLines{"Роль: «Просмотр» → «Управление»"}
 	if len(changed.Details) != 1 || changed.Details[0] != wantRole[0] {
 		t.Errorf("details = %q, want %q", changed.Details, wantRole)
 	}

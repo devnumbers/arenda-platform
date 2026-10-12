@@ -444,7 +444,8 @@ func TestNotifyInvitationActivatedDedupStable(t *testing.T) {
 
 // TestNotifyRoleChanged checks the role-change row (карта #828, тикет #830):
 // the member learns the manager's change with the catalog's verbatim copy —
-// the display role names of the #692 chart canon («Редактирование»/«Просмотр»)
+// the display role names of the role dictionary («Управление»/«Просмотр»,
+// решение владельца 12.10.2026, #1358)
 // — the changer the actor, the change instant keying the row.
 func TestNotifyRoleChanged(t *testing.T) {
 	t.Parallel()
@@ -452,7 +453,7 @@ func TestNotifyRoleChanged(t *testing.T) {
 		role      string
 		wantLabel string
 	}{
-		{"full_access", "Редактирование"},
+		{"full_access", "Управление"},
 		{"viewer", "Просмотр"},
 	} {
 		t.Run(tc.role, func(t *testing.T) {

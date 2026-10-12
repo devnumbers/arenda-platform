@@ -157,7 +157,7 @@ test('приглашение от объекта: свой email — 400, све
 
   // Свежая почта — pending-приглашение, возврат на список с попапом.
   await emailField.fill(INVITE_EMAIL);
-  await page.getByRole('radio', { name: 'Редактирование' }).click();
+  await page.getByRole('radio', { name: 'Управление' }).click();
   try {
     await page.getByRole('button', { name: 'Пригласить' }).filter({ hasText: 'Пригласить' }).click();
 

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { ACCESS_ROLE_ICON_NAMES, ACCESS_ROLE_LABELS } from './access';
 
-/** Канон отображения ролей (решение чарта карты #692 — роли только
- * отображение): full_access читается «Редактирование», viewer —
- * «Просмотр»; иконки — Icon/S/Edit и Icon/S/Eye. */
+/** Канон отображения ролей (решение владельца 12.10.2026, #1358 — было
+ * «Редактирование» по чарту карты #692): full_access читается «Управление»,
+ * viewer — «Просмотр»; иконки — Icon/S/Edit и Icon/S/Eye. */
 describe('ACCESS_ROLE_LABELS / ACCESS_ROLE_ICON_NAMES', () => {
   it('каждой роли соответствуют и подпись, и имя иконки', () => {
     expect(ACCESS_ROLE_LABELS.viewer).toBe('Просмотр');
-    expect(ACCESS_ROLE_LABELS.full_access).toBe('Редактирование');
+    expect(ACCESS_ROLE_LABELS.full_access).toBe('Управление');
     expect(ACCESS_ROLE_ICON_NAMES.viewer).toBe('eye');
     expect(ACCESS_ROLE_ICON_NAMES.full_access).toBe('edit');
   });

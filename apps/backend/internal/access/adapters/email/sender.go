@@ -75,11 +75,13 @@ func (s *Sender) send(ctx context.Context, to, subject, template string, data ma
 	return nil
 }
 
-// roleLabel renders the sharing role in the glossary wording (CONTEXT.md).
+// roleLabel renders the sharing role in the glossary wording: full_access
+// reads «Управление» (решение владельца 12.10.2026, #1358 — было «Полный
+// доступ»), viewer «Просмотр».
 func roleLabel(role domain.Role) string {
 	switch role {
 	case domain.RoleFullAccess:
-		return "Полный доступ"
+		return "Управление"
 	case domain.RoleViewer:
 		return "Просмотр"
 	default:

@@ -305,7 +305,7 @@ test('участники: своя строка «Иван (Вы)» с замк�
     .locator('.min-h-14')
     .filter({ has: page.getByRole('checkbox', { name: 'Мария Петрова' }) });
   await expect(memberRow).toHaveCount(1);
-  await expect(memberRow.getByRole('img', { name: 'Роль: Редактирование' })).toHaveCount(1);
+  await expect(memberRow.getByRole('img', { name: 'Роль: Управление' })).toHaveCount(1);
   await expect(memberRow.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(0);
 
   // Без удалённых разделения нет (parent #1294: оно появляется только

@@ -45,7 +45,7 @@ test('страница участника: шапка, чип агрегата, 
   await expect(page.getByText('Доступные объекты')).toBeVisible();
   const apartmentRow = page.getByRole('button', { name: /Квартира на Ленина/ });
   await expect(apartmentRow).toBeVisible();
-  await expect(apartmentRow.getByText('Редактирование')).toBeVisible();
+  await expect(apartmentRow.getByText('Управление')).toBeVisible();
 
   // Кебаб шапки: приглашение, действия участника (#712) и отзыв
   // (макет 2008-48318).
@@ -119,7 +119,7 @@ test('права участника: смена роли сегментом, п�
 
   await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
   await expect(header.getByText('Права участника')).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Редактирование' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Управление' })).toBeChecked();
 
   try {
     await page.getByRole('radio', { name: 'Просмотр' }).click();
@@ -141,7 +141,7 @@ test('права участника: смена роли сегментом, п�
   }
   await page.reload();
   await expect(
-    page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование'),
+    page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Управление'),
   ).toBeVisible();
 });
 
@@ -175,7 +175,7 @@ test('пригласить в объект: мультичек гаража, ш�
 
   // Шит роли (макет 2010-131724): сегмент + кнопка «Пригласить».
   const sheet = page.getByRole('dialog');
-  await sheet.getByRole('radio', { name: 'Редактирование' }).click();
+  await sheet.getByRole('radio', { name: 'Управление' }).click();
   try {
     await sheet.getByRole('button', { name: 'Пригласить' }).click();
 
@@ -197,9 +197,9 @@ test('пригласить в объект: мультичек гаража, ш�
     ).toBeVisible();
     await expect(page.getByTestId('participant-limit-notice').getByText(/Попросите его освободить слот/)).toBeVisible();
     await expect(
-      page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Редактирование'),
+      page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Управление'),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Управление')).toBeVisible();
   } finally {
     await execE2eSql(
       `DELETE FROM property_members WHERE property_id = '${GARAGE_ID}' AND user_id = '${LIMITED_ID}'`,
@@ -331,7 +331,7 @@ test('pending-участник: deep-link по почте, бейдж «Акка
     await expect(header.getByText('Права участника')).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
 
-    await page.getByRole('radio', { name: 'Редактирование' }).click();
+    await page.getByRole('radio', { name: 'Управление' }).click();
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
     ).toBeVisible();
@@ -451,7 +451,7 @@ test('D7 owner-only: manage-участник по deep-link видит «Уча�
 
     await expect(page.getByText('Участник не найден')).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Просмотр' })).toHaveCount(0);
-    await expect(page.getByRole('radio', { name: 'Редактирование' })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: 'Управление' })).toHaveCount(0);
     await expect(page.getByTestId('participant-rights-revoke')).toHaveCount(0);
     // Назад в шапке жив (§7).
     await expect(screenHeader(page).getByRole('button', { name: 'Назад' })).toBeVisible();
