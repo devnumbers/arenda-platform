@@ -8,6 +8,7 @@ import {
   overdueDaysLine,
   overdueOperationsCountLabel,
   paymentHubAddTarget,
+  paymentHubSectionHasAllCard,
   paymentsCountLabel,
 } from './payments-global-model';
 import { makeGlobalPayment as item } from './global-payment-fixtures';
@@ -117,6 +118,17 @@ describe('globalPaymentObjectHasOverdue', () => {
         object({ autoPayRules: [{ paymentId: 'p', hasOverdue: false }] }),
       ),
     ).toBe(false);
+  });
+});
+
+describe('paymentHubSectionHasAllCard — замыкающая карточка секции хаба (#1339)', () => {
+  it.each([
+    [1, false],
+    [2, false],
+    [3, true],
+    [4, true],
+  ])('%i карточки в секции — замыкание %s', (cards, shows) => {
+    expect(paymentHubSectionHasAllCard(cards)).toBe(shows);
   });
 });
 

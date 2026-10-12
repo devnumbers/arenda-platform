@@ -44,6 +44,7 @@ import {
   overdueDaysLine,
   overdueOperationsCountLabel,
   paymentHubAddTarget,
+  paymentHubSectionHasAllCard,
   paymentsCountLabel,
 } from "../lib/payments-global-model";
 import {
@@ -68,7 +69,9 @@ const SECTION_CARDS_LIMIT = 4;
  * «к оплате» ни в контракте фида #575, ни страницы-приёмника шеврона нет) —
  * вынесена отдельным тикетом #1251, здесь не реализуется. Заголовок
  * с шевроном открывает страницу категории, замыкающая карточка «Все …»
- * ведёт туда же. Карточки платежей — канон PaymentCardButton (168.5,
+ * ведёт туда же и видна от трёх карточек секции (решение владельца
+ * #1339, единообразно для всех секций). Карточки платежей — канон
+ * PaymentCardButton (168.5,
  * горизонтальная лента): иконка категории, сумма, дата-«Ближайший» (просто
  * дата графика, без статуса; у просроченных — «N дней» красным и красный
  * (!) на иконке). Пустая секция — карточка-плейсхолдер с 3D-иллюстрацией
@@ -356,7 +359,8 @@ function PaymentsGlobalSection({
 }
 
 /** Тело секции «Избранные»: лента карточек + замыкающая «Все избранные»
- * (синяя звезда, счётчик целого скоупа) либо плейсхолдер (880:18354). */
+ * (синяя звезда, счётчик целого скоупа) от трёх карточек — решение
+ * владельца #1339, — либо плейсхолдер (880:18354). */
 function FavoritesSectionBody({
   favorites,
   favoriteCount,
@@ -392,18 +396,20 @@ function FavoritesSectionBody({
           />
         );
       })}
-      <PaymentCardButton
-        className="snap-start"
-        leading={
-          <GlobalCardIcon>
-            <BoldStar />
-          </GlobalCardIcon>
-        }
-        title="Все избранные"
-        subtitle={paymentsCountLabel(favoriteCount)}
-        accentTitle
-        onSelect={onOpenAll}
-      />
+      {paymentHubSectionHasAllCard(favorites.length) && (
+        <PaymentCardButton
+          className="snap-start"
+          leading={
+            <GlobalCardIcon>
+              <BoldStar />
+            </GlobalCardIcon>
+          }
+          title="Все избранные"
+          subtitle={paymentsCountLabel(favoriteCount)}
+          accentTitle
+          onSelect={onOpenAll}
+        />
+      )}
     </div>
   );
 }
@@ -412,7 +418,7 @@ function FavoritesSectionBody({
  * дней») и (!) на иконке; тап ведёт на страницу СТАРЕЙШЕЙ просроченной
  * операции (решение владельца 09.09), не на правило; замыкающая «Все
  * просроченные» (879:9700) считает просроченные операции целого скоупа
- * (#575). */
+ * (#575) и видна от трёх карточек (решение владельца #1339). */
 function OverdueSectionBody({
   overdue,
   overdueOperationsCount,
@@ -473,26 +479,28 @@ function OverdueSectionBody({
           />
         );
       })}
-      <PaymentCardButton
-        className="snap-start"
-        leading={
-          <GlobalCardIcon>
-            <BoldWarning />
-          </GlobalCardIcon>
-        }
-        title="Все просроченные"
-        subtitle={overdueOperationsCountLabel(overdueOperationsCount)}
-        accentTitle
-        onSelect={onOpenAll}
-      />
+      {paymentHubSectionHasAllCard(overdue.length) && (
+        <PaymentCardButton
+          className="snap-start"
+          leading={
+            <GlobalCardIcon>
+              <BoldWarning />
+            </GlobalCardIcon>
+          }
+          title="Все просроченные"
+          subtitle={overdueOperationsCountLabel(overdueOperationsCount)}
+          accentTitle
+          onSelect={onOpenAll}
+        />
+      )}
     </div>
   );
 }
 
 /** Тело секции «Платежи объектов» (879:9711): карточки объектов (белый
  * круг с фото, иначе глиф типа; красная точка при просрочке в стопках) и замыкающая
- * «Показать все» на страницу «Объекты» (#582) — больше одного объекта;
- * единственный объект ведёт сразу на свои платежи без страницы-списка. */
+ * «Показать все» на страницу «Объекты» (#582) от трёх карточек — решение
+ * владельца #1339. */
 function ObjectsSectionBody({
   objects,
   onSelectObject,
@@ -532,7 +540,7 @@ function ObjectsSectionBody({
           onSelect={() => onSelectObject(object.propertyId)}
         />
       ))}
-      {objects.length > 1 && (
+      {paymentHubSectionHasAllCard(objects.length) && (
         <PaymentCardButton
           className="snap-start"
           leading={
