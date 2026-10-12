@@ -2,22 +2,23 @@
 
 import type { JSX } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Edit, Kebab, TrashBin } from '@/shared/assets/icons';
+import { Kebab, TrashBin } from '@/shared/assets/icons';
 import { IconButton } from '@/shared/ui/design';
 
 /**
- * Кебаб-меню карточки контакта (#510, макет 1424-54725): тап по ⋮ в
- * шапке открывает привязанное к кнопке меню — белая карточка со скруглением
- * и тенью, пункты «Изменить» (Icon/R/Edit) и «Удалить» (Icon/R/TrashBin).
- * Примитив — Radix DropdownMenu (ADR 0050): клавиатура, фокус и закрытие
- * по клику вне/Escape — из коробки. Первый примитив DropdownMenu в
- * дизайн-контуре — при втором потребителе переезжает в shared/ui/design.
+ * Кебаб-меню карточки контакта (#510 → перекомпоновка #1333, макет
+ * 3304:75726): тап по ⋮ в шапке открывает привязанное к кнопке меню —
+ * белая карточка со скруглением и тенью, пункт «Удалить»
+ * (Icon/R/TrashBin). Единственный пункт — по решению карты #1332:
+ * правка переехала в тап по карточке «Информация», за кебабом — только
+ * удаление. Примитив — Radix DropdownMenu (ADR 0050): клавиатура, фокус
+ * и закрытие по клику вне/Escape — из коробки. Первый примитив
+ * DropdownMenu в дизайн-контуре — при втором потребителе переезжает в
+ * shared/ui/design.
  */
 export function ContactKebabMenu({
-  onEdit,
   onDelete,
 }: {
-  readonly onEdit: () => void;
   readonly onDelete: () => void;
 }): JSX.Element {
   return (
@@ -32,7 +33,6 @@ export function ContactKebabMenu({
           collisionPadding={24}
           className="z-50 min-w-[250px] rounded-3xl bg-white p-2 shadow-[0_8px_32px_rgba(23,26,28,0.16)] outline-none"
         >
-          <MenuItem onSelect={onEdit} icon={<Edit className="h-6 w-6" />} label="Изменить" />
           <MenuItem onSelect={onDelete} icon={<TrashBin className="h-[18px] w-[17px]" />} label="Удалить" />
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

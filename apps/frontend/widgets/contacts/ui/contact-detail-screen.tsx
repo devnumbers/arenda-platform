@@ -2,16 +2,11 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  Check,
-  Copy,
-  SmallArrowRight,
-} from '@/shared/assets/icons';
+import { ArrowLeft, Check, Copy } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { contactFullName, type Contact } from '@/entities/contact';
+import { type Contact } from '@/entities/contact';
 import type { Property } from '@/entities/property';
 import { propertyPermissions, propertyTypeIcons } from '@/entities/property';
 import {
@@ -22,20 +17,23 @@ import {
 import { useProperty } from '@/features/properties';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { photoDisplayUrl } from '@/shared/lib/photo';
-import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle, UserAvatar } from '@/shared/ui/design';
+import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactValueRows } from '../lib/contact-detail-model';
+import { ContactDetailHeader } from './contact-detail-header';
 import { ContactKebabMenu } from './contact-kebab-menu';
+import { ContactSectionCard } from './contact-section-card';
 import { ContactDetailSkeleton, ContactsErrorCard } from './contacts-states';
 
 /**
- * Экран «Контакт» (#510, макеты 1285:55112 / 1424:54725): карточка книги
- * контактов — серый круг-аватар, карточка с именем и ролью (переход на
- * правку) и контактными значениями с копированием в буфер, карточка
- * «Объект» — только когда контакт привязан (решение владельца 2026-09-03),
- * «Заметка» отдельной секцией. Правка и удаление — из кебаб-меню шапки
- * тому, кому можно мутировать (как на списке: не смотрящий и не архив);
- * удаление — через confirm дизайн-слоя (#505), после — возврат на список
- * с инвалидацией.
+ * Экран «Контакт» (перекомпоновка #1333, макеты 3304:75726 / 3304:76141):
+ * серый круг-аватар, ФИО крупно по центру на фоне страницы и роль под ним —
+ * статичный блок без тапа на правку (решение карты #1332); строки связи —
+ * в карточке «Информация» с шевроном, тап по карточке ведёт на правку;
+ * карточка «Объект» — только когда контакт привязан (решение владельца
+ * 2026-09-03), «Заметка» отдельной секцией. Кебаб шапки — только удаление,
+ * тому, кому можно мутировать (как на списке: не смотрящий и не архив,
+ * ADR 0028); удаление — через confirm дизайн-слоя (#505), после — возврат
+ * на список с инвалидацией.
  *
  * Режим книги (глобальная страница контактов, propertyId не задан):
  * мутационный вход определяется привязкой самой карточки — без объекта
@@ -101,10 +99,7 @@ export function ContactDetailScreen({
         }
         trailing={
           canMutate ? (
-            <ContactKebabMenu
-              onEdit={() => router.push(editHref)}
-              onDelete={() => setDeleteConfirmOpen(true)}
-            />
+            <ContactKebabMenu onDelete={() => setDeleteConfirmOpen(true)} />
           ) : undefined
         }
       >
@@ -139,8 +134,10 @@ export function ContactDetailScreen({
   );
 }
 
-/** Тело карточки (1285:55112): аватар, карточка «имя+роль» со строками
- * значений, «Объект» (только при привязке), «Заметка». */
+/** Тело карточки (3304:75726): шапка ФИО+роль на фоне страницы, карточка
+ * «Информация» со строками связи, «Объект» (только при привязке),
+ * «Заметка». Зазоры по макету: шапка →32, секции →16 (PageContent несёт
+ * верхние 24 сам). */
 function ContactCardBody({
   editHref,
   contact,
@@ -152,7 +149,6 @@ function ContactCardBody({
   readonly boundProperty: Property | undefined;
   readonly canEdit: boolean;
 }): JSX.Element {
-  const router = useRouter();
   const rows = contactValueRows(contact);
   const boundPropertyId = contact.propertyId;
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
@@ -167,58 +163,29 @@ function ContactCardBody({
       : null;
 
   return (
-    <div className="flex flex-col gap-6 px-6 pb-8 pt-2">
-      <div className="flex justify-center">
-        <UserAvatar size="hero" photoUrl={photoUrl} />
-      </div>
+    <div className="flex flex-col px-6 pb-8">
+      {/* Блок ФИО статичен: правка — тап по карточке «Информация»
+       * (решение карты #1332). Смотрящему шеврон не рисуется, карточка
+       * «Информация» статична (ADR 0028). */}
+      <ContactDetailHeader contact={contact} photoUrl={photoUrl} />
 
-      <section className="rounded-card bg-surface-muted px-6 py-4">
-        {/* Правка — по мутационному доступу (ADR 0028): смотрящему шеврон
-         * не рисуется, карточка имени статична. */}
-        {canEdit ? (
-          <button
-            type="button"
-            onClick={() => router.push(editHref)}
-            className="flex w-full cursor-pointer items-center gap-2 pb-6 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label={`Изменить контакт ${contactFullName(contact)}`}
-          >
-            <HeadingText contact={contact} />
-            <SmallArrowRight className="h-6 w-6 shrink-0 text-content-secondary" />
-          </button>
-        ) : (
-          <div className="flex w-full items-center gap-2 pb-6">
-            <HeadingText contact={contact} />
-          </div>
-        )}
-
+      <ContactSectionCard className="mt-8" title="Информация" href={canEdit ? editHref : undefined}>
         {rows.length > 0 && (
-          <div className="flex flex-col">
+          <div className="mt-4 flex flex-col pb-4">
             {rows.map((row) => (
               <ContactValueRowView key={row.key} row={row} />
             ))}
           </div>
         )}
-      </section>
+      </ContactSectionCard>
 
       {/* «Объект» — только у привязанного контакта (решение владельца
        * 2026-09-03): непривязанный — «общий», пункта у него нет. Вся
-       * карточка — одна зона клика, ведёт на объект (решение владельца
-       * в правке #510). */}
+       * карточка ведёт на объект (решение владельца в правке #510). */}
       {boundPropertyId !== undefined && (
-        <button
-          type="button"
-          onClick={() => router.push(ROUTES.property(boundPropertyId))}
-          aria-label="Открыть объект"
-          className="w-full cursor-pointer rounded-card bg-surface-muted px-6 py-4 text-left transition-opacity outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary active:opacity-80"
-        >
-          <span className="flex w-full items-center gap-2">
-            <span className="min-w-0 flex-1 text-xl font-semibold leading-6 text-content">
-              Объект
-            </span>
-            <SmallArrowRight className="h-6 w-6 shrink-0 text-content-secondary" />
-          </span>
+        <ContactSectionCard title="Объект" href={ROUTES.property(boundPropertyId)}>
           {boundProperty !== undefined && (
-            <span className="flex items-center gap-3 pt-2">
+            <div className="mt-2 flex items-center gap-3 pb-4 pl-6 pr-6">
               <span
                 aria-hidden
                 className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white"
@@ -241,12 +208,12 @@ function ContactCardBody({
                   {boundProperty.address}
                 </span>
               </span>
-            </span>
+            </div>
           )}
-        </button>
+        </ContactSectionCard>
       )}
 
-      <section className="flex flex-col gap-2">
+      <section className="mt-4 flex flex-col gap-2">
         <span className="text-base font-medium leading-[18px] text-content">Заметка</span>
         <div className="min-h-[92px] whitespace-pre-wrap rounded-2xl bg-surface-muted px-[18px] py-4 text-base leading-[18px] text-content">
           {contact.note}
@@ -256,9 +223,11 @@ function ContactCardBody({
   );
 }
 
-/** Строка значения с копированием (1285:55112): значение 16/500, подпись
- * 14 серым, справа кнопка копирования — иконка меняется на галочку на пару
- * секунд (канон useCopiedHint). */
+/** Строка значения в карточке «Информация» (3304:75726, Row Button):
+ * значение 16/500, подпись 14 серым, справа кнопка копирования — иконка
+ * меняется на галочку на пару секунд (канон useCopiedHint). Паддинги
+ * строки — по макету Row Button: текст 24 от края карточки, кнопка
+ * копирования 12 (правый край слота 44). */
 function ContactValueRowView({
   row,
 }: {
@@ -267,7 +236,7 @@ function ContactValueRowView({
   const { copied, copy } = useCopiedHint();
 
   return (
-    <div className="flex items-center gap-2 py-3">
+    <div className="flex items-center gap-3 py-3 pl-6 pr-3">
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">
           {row.value}
@@ -280,21 +249,5 @@ function ContactValueRowView({
         onClick={() => copy(row.value)}
       />
     </div>
-  );
-}
-
-/** Имя и роль на карточке — общий блок тапабельной и статичной версий. */
-function HeadingText({ contact }: { readonly contact: Contact }): JSX.Element {
-  return (
-    <span className="min-w-0 flex-1">
-      <span className="block text-xl font-semibold leading-6 text-content">
-        {contactFullName(contact)}
-      </span>
-      {contact.role !== '' && (
-        <span className="mt-2 block text-sm leading-4 text-content-secondary">
-          {contact.role}
-        </span>
-      )}
-    </span>
   );
 }
