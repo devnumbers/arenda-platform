@@ -1068,7 +1068,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * One property participant row (the member card)
+         * @description The same row the members list returns, read alone: the display data, the per-object role and the lifecycle status, the email included on every row the reader may see (owner decision 2026-09-20, #758). Every reader of the list reads it — the owner and the participants; a suspended membership or a stranger gets the privacy-preserving 404 (ADR 0028, D5/D7 #1304). A pending invitation row answers to its invitation id, so the «Аккаунт не создан» card reads like any other.
+         */
+        get: operations["getPropertyAccessMember"];
         put?: never;
         post?: never;
         /** Revoke a member's access */
@@ -6634,6 +6638,32 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getPropertyAccessMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                /** @description The row's addressing id from the members list: a membership id, a pending invitation id, or a user id — the synthesized owner row carries no membership id and is addressed by the owner's user id, a member row answers to its user id as well. */
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member row (the fields of the list row) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     deletePropertyAccessMember: {

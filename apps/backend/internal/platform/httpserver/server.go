@@ -339,6 +339,7 @@ func New(deps Deps) http.Handler {
 	r.With(paidSections).Patch("/properties/{propertyId}/access/invitations/{invitationId}", wrapper.UpdatePropertyAccessInvitation)
 	r.With(paidSections).Post("/properties/{propertyId}/access/invitations/{invitationId}/resend", wrapper.ResendPropertyAccessInvitation)
 	r.With(paidSections).Get("/properties/{propertyId}/access/members", wrapper.ListPropertyAccessMembers)
+	r.With(paidSections).Get("/properties/{propertyId}/access/members/{memberId}", wrapper.GetPropertyAccessMember)
 	r.With(paidSections).Post("/properties/{propertyId}/access/members", wrapper.CreatePropertyAccessMember)
 	r.With(paidSections).Delete("/properties/{propertyId}/access/members/{memberId}", wrapper.DeletePropertyAccessMember)
 	r.With(paidSections).Patch("/properties/{propertyId}/access/members/{memberId}", wrapper.UpdatePropertyAccessMember)

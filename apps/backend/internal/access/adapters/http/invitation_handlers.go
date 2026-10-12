@@ -54,6 +54,31 @@ func (h *InvitationHandlers) ListPropertyAccessMembers(w http.ResponseWriter, r 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertyAccessMembersResponse{Items: items})
 }
 
+// GetPropertyAccessMember implements GET /properties/{propertyId}/access/members/{memberId}
+// (issue #1357): one row of the list read alone — the member card of every
+// row the reader may see, pending invitation rows included; a stranger or a
+// suspended member gets the privacy-preserving 404 from the service gate.
+func (h *InvitationHandlers) GetPropertyAccessMember(
+	w http.ResponseWriter,
+	r *http.Request,
+	propertyID openapi.PropertyId,
+	memberID openapi_types.UUID,
+) {
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	member, err := h.svc.GetMember(r.Context(), actor, propertyID, memberID)
+	if err != nil {
+		h.handleError(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, memberResponse(member))
+}
+
 // CreatePropertyAccessInvitation implements POST /properties/{propertyId}/access/invitations.
 func (h *InvitationHandlers) CreatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())

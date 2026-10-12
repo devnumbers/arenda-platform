@@ -2626,6 +2626,43 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /properties/{propertyId}/access/members/{memberId}:
+    get:
+      operationId: getPropertyAccessMember
+      summary: One property participant row (the member card)
+      description: >
+        The same row the members list returns, read alone: the display data,
+        the per-object role and the lifecycle status, the email included on
+        every row the reader may see (owner decision 2026-09-20, #758). Every
+        reader of the list reads it — the owner and the participants; a
+        suspended membership or a stranger gets the privacy-preserving 404
+        (ADR 0028, D5/D7 #1304). A pending invitation row answers to its
+        invitation id, so the «Аккаунт не создан» card reads like any other.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: >
+            The row's addressing id from the members list: a membership id, a
+            pending invitation id, or a user id — the synthesized owner row
+            carries no membership id and is addressed by the owner's user id,
+            a member row answers to its user id as well.
+      responses:
+        '200':
+          description: The member row (the fields of the list row)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAccessMemberResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
     patch:
       operationId: updatePropertyAccessMember
       summary: Change a member's role
