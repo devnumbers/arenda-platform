@@ -3,7 +3,9 @@ import {
   expect,
   execE2eSql,
   openCabinetWithSeededSession,
+  openCabinetWithSessionToken,
   screenHeader,
+  seededMemberSessionToken,
   test,
 } from './fixtures';
 
@@ -345,5 +347,115 @@ test('pending-участник: deep-link по почте, бейдж «Акка
     await execE2eSql(
       `DELETE FROM property_member_invitations WHERE id = '88888888-8888-4888-8888-888888888881'`,
     );
+  }
+});
+
+// D7 #1314 (макет 3298-75576): «Права участника» для приглашённого без
+// аккаунта. Сид — собственное pending-приглашение на квартиру (id не из
+// других спек: утечка строки одного теста не подменяет данные другого).
+const PENDING_RIGHTS_INVITE_ID = '99999999-9999-4999-8999-999999999973';
+const PENDING_RIGHTS_EMAIL = 'e2e-pending-rights@example.com';
+
+function seedPendingRightsInvitation(role: 'viewer' | 'full_access'): Promise<string> {
+  return execE2eSql(
+    `INSERT INTO property_member_invitations (id, property_id, email, role, invited_by, last_sent_at) ` +
+      `VALUES ('${PENDING_RIGHTS_INVITE_ID}', '${APARTMENT_ID}', '${PENDING_RIGHTS_EMAIL}', '${role}', '11111111-1111-4111-8111-111111111111', now()) ` +
+      `ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, property_id = EXCLUDED.property_id, email = EXCLUDED.email`,
+  );
+}
+
+test('права участника без аккаунта (D7): карточка, инфо-блок, сегмент, «Отозвать доступ»; скриншот', async ({ page, seededUser }, testInfo) => {
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    // Вход — из страницы участника: pending-нога «Приглашён» → права.
+    await page.goto('/participants/e2e-pending-rights%40example.com');
+    const legRow = page.getByRole('button', { name: /Квартира на Ленина/ });
+    await expect(legRow.getByText('Приглашён')).toBeVisible();
+    await legRow.click();
+
+    const header = screenHeader(page);
+    await expect(header.getByText('Права участника')).toBeVisible();
+
+    // Карточка участника (3298-75576): анонимный титул #1105, почта,
+    // бейдж «Аккаунт не создан»; контекста объекта на экране нет.
+    const card = page.getByTestId('participant-rights-card');
+    await expect(card.getByText('Пользователь', { exact: true })).toBeVisible();
+    await expect(card.getByText(PENDING_RIGHTS_EMAIL)).toBeVisible();
+    await expect(card.getByText('Аккаунт не создан')).toBeVisible();
+    await expect(page.getByText('Квартира на Ленина')).toHaveCount(0);
+
+    // Инфо-блок: кто это и что будет после создания аккаунта.
+    const notice = page.getByTestId('participant-pending-notice');
+    await expect(notice.getByText('Пользователь еще не создал аккаунт')).toBeVisible();
+    await expect(
+      notice.getByText('После создания аккаунта он сможет пользоваться вашим объектом'),
+    ).toBeVisible();
+
+    // Сегмент роли и красная строка отзыва; «Действий участника» у
+    // pending нет (канон #712 — журнал адресуется uuid юзера).
+    await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
+    await expect(page.getByTestId('participant-rights-revoke')).toBeVisible();
+    await expect(page.getByText('Действия участника')).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'participant-rights-pending');
+  } finally {
+    await execE2eSql(`DELETE FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`);
+  }
+});
+
+test('отзыв pending-приглашения с D7-экрана: подтверждение, попап, приглашение снято; сид восстанавливается', async ({ page, seededUser }) => {
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/participants/e2e-pending-rights%40example.com');
+    await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
+    await expect(screenHeader(page).getByText('Права участника')).toBeVisible();
+
+    await page.getByTestId('participant-rights-revoke').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Уверены, что хотите отозвать доступ?')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Отозвать' }).click();
+
+    // Попап (2008-83135) на странице участника; единственная нога снята —
+    // агрегат честно отвечает «Участник не найден» (приватный 404 #693).
+    await expect(
+      page.getByRole('dialog').locator('p', {
+        hasText: 'У участника больше нет доступа к объекту',
+      }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Участник не найден')).toBeVisible();
+
+    // Серверная правда: приглашение отменено.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`,
+      ),
+    ).toBe('0');
+  } finally {
+    await seedPendingRightsInvitation('viewer');
+  }
+  await page.reload();
+  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
+});
+
+test('D7 owner-only: manage-участник по deep-link видит «Участник не найден» — мутаций нет', async ({ page }) => {
+  // Мария (full_access на чужой квартире) открывает D7-экран напрямую:
+  // агрегат GET /participants/{id} — owner-скоуп (D5 #1304), не-собственнику
+  // приватный 404; зрителя проверяет та же ветка (404 не зависит от роли).
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSessionToken(page, seededMemberSessionToken());
+    await page.goto(`/participants/e2e-pending-rights%40example.com/properties/${APARTMENT_ID}`);
+
+    await expect(page.getByText('Участник не найден')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Просмотр' })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: 'Редактирование' })).toHaveCount(0);
+    await expect(page.getByTestId('participant-rights-revoke')).toHaveCount(0);
+    // Назад в шапке жив (§7).
+    await expect(screenHeader(page).getByRole('button', { name: 'Назад' })).toBeVisible();
+  } finally {
+    await execE2eSql(`DELETE FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`);
   }
 });

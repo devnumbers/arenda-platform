@@ -20,8 +20,9 @@ export type PropertyParticipantBadge = ReturnType<typeof accountNotCreatedBadge>
 
 /** Анонимный титул строки без имени (канон карты #1105): у безымянного
  * зарегистрированного его ставит бекенд в display_name, у pending-
- * приглашения display_name на проводе пуст — лейбл ставит VM. */
-const ANONYMOUS_TITLE = 'Пользователь';
+ * приглашения display_name на проводе пуст — лейбл ставит VM. Экспорт
+ * для D7-карточки «Права участника» (3298-75576) — тот же титул. */
+export const ANONYMOUS_TITLE = 'Пользователь';
 
 /** Значение чип-фильтра «Все роли» (макет 1980-109148). */
 export type PropertyParticipantRoleFilter = 'all' | Exclude<AccessRole, 'owner'>;
