@@ -10,6 +10,7 @@ import { formatDayMonth, formatOverdueDays } from '@/shared/lib/date-format';
 import { pluralize } from '@/shared/lib/pluralize';
 import type { GlobalPayment, GlobalPaymentObject } from '@/entities/payment';
 import { globalOverdueList } from './overdue-global-model';
+import { PAYMENT_COMPLETED_LABEL } from './payment-row-subtitle';
 
 /** Цель «+» создания платежа на глобальном хабе (макет 3226-75059,
  * тикет #1235): единственный редактируемый объект — шит единого входа
@@ -71,8 +72,14 @@ export function overdueOperationsCountLabel(count: number): string {
 }
 
 /** Дата-«Ближайший» (699:9446): просто дата графика, без статуса; у правила
- * без следующего вхождения строки нет (879:17555, Show Description=false). */
+ * без следующего вхождения строки нет (879:17555, Show Description=false).
+ * Отображаемая завершённость фида (#1341) — «Полностью оплачен»: сервер
+ * разрешает исключение открытой паузы на своей стороне, флаг строки
+ * отображению точно соответствует. */
 export function nearestDateLine(item: GlobalPayment): string | undefined {
+  if (item.isCompleted) {
+    return PAYMENT_COMPLETED_LABEL;
+  }
   return item.nearestDate === null ? undefined : formatDayMonth(item.nearestDate);
 }
 

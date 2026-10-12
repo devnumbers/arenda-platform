@@ -7,26 +7,40 @@ import type { Payment } from '@/entities/payment';
  * через аренду, мутации правила дают 409), вместо «Изменить» у
  * незавершённой аренды живёт «Изменить аренду» (#1158): условия правятся
  * на экране аренды. Завершённое правило живёт без паузы (история 44 спеки
- * #453) — по клиентскому предикату isPaymentCompleted: серверный
- * isCompleted у бессрочной паузы уже «завершен» (ничего больше не
- * материализует), а пауза на экране остаётся возобновляемой. У управляемого
- * платежа решает состояние аренды (isRentalCompleted), не предикат правила:
- * «Ожидает действия» держит isCompleted-истиной при живой правке условий.
- * Чистая функция над сущностью — витест держит матрицу, живая приёмка —
- * проводку.
+ * #453) — по клиентскому предикату endedRule: серверный isCompleted у
+ * бессрочной паузы уже «завершен» (ничего больше не материализует), а
+ * пауза на экране остаётся возобновляемой. У управляемого платежа решает
+ * состояние аренды (isRentalCompleted), не предикат правила: «Ожидает
+ * действия» держит isCompleted-истиной при живой правке условий.
+ *
+ * Вычисляемая завершённость (#1341): при settled (серверный isCompleted —
+ * глоссарий «Завершённый платёж», флаг кнопки «Завершить» ДО завершения)
+ * «Оплатить» заменяется на «Завершить» — оплаты больше нечего отмечать.
+ * Исключение — открытая пауза: complete отвечает 409, пока пауза не снята,
+ * поэтому слот оплаты у паузного правила не заменяется (действие, которое
+ * сервер отвергнет, не рендерится). Гейт самой мутации на сервере шире
+ * флага (CanBeCompleted требует ещё и наступившую endDate — решение
+ * владельца «end_date в прошлом»): при досрочном исчерпании клик вернёт
+ * 409, экран зеркалит флаг по слову тикета — копирайт и поведение этого
+ * угла сверяются на приёмке #1341. Чистая функция над сущностью — витест
+ * держит матрицу, живая приёмка — проводку.
  */
-export type PaymentDetailAction = 'pause' | 'resume' | 'edit' | 'editRental' | 'pay';
+export type PaymentDetailAction = 'pause' | 'resume' | 'edit' | 'editRental' | 'pay' | 'complete';
 
 export function paymentDetailActions(
   payment: Pick<Payment, 'isRentalManaged' | 'isRentalCompleted'>,
   paused: boolean,
-  completed: boolean,
+  endedRule: boolean,
+  settled: boolean,
 ): ReadonlyArray<PaymentDetailAction> {
   if (payment.isRentalManaged) {
     return payment.isRentalCompleted ? ['pay'] : ['editRental', 'pay'];
   }
-  if (completed) {
-    return ['edit', 'pay'];
+  if (paused) {
+    return endedRule ? ['edit', 'pay'] : ['resume', 'edit', 'pay'];
   }
-  return paused ? ['resume', 'edit', 'pay'] : ['pause', 'edit', 'pay'];
+  if (endedRule) {
+    return settled ? ['edit', 'complete'] : ['edit', 'pay'];
+  }
+  return settled ? ['pause', 'edit', 'complete'] : ['pause', 'edit', 'pay'];
 }

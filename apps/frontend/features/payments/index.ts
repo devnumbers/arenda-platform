@@ -155,6 +155,7 @@ export {
   usePaymentOperationsPaged,
   useOperation,
   usePayments,
+  useCompletePayment,
   usePausePayment,
   usePayOperation,
   usePropertyOperationsPaged,

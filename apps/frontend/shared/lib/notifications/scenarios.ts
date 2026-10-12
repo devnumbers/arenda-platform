@@ -242,6 +242,9 @@ const payments = {
   resumed: ((options?) =>
     notify.success('Платеж возобновлен', options)) satisfies ScenarioFn,
   resumeError: errorScenario('Не удалось возобновить платеж'),
+  // Завершение (#1341): успеха не тостим — финальный экран и есть обратная
+  // связь (прецедент мастера аренды); тост только на ошибку.
+  completeError: errorScenario('Не удалось завершить платеж'),
   paid: ((options?) =>
     notify.success('Оплата отмечена', options)) satisfies ScenarioFn,
   payError: errorScenario('Не удалось отметить оплату'),

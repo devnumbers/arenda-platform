@@ -78,6 +78,10 @@ describe('nearestDateLine — дата «Ближайший» без стату�
   it('нет следующего вхождения (пауза/завершён) — строки нет', () => {
     expect(nearestDateLine(item({ nearestDate: null }))).toBeUndefined();
   });
+
+  it('отображаемая завершённость фида — «Полностью оплачен» вместо даты (#1341)', () => {
+    expect(nearestDateLine(item({ nearestDate: null, isCompleted: true }))).toBe('Полностью оплачен');
+  });
 });
 
 describe('overdueDaysLine', () => {

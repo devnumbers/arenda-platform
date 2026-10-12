@@ -73,6 +73,9 @@ export function mapPayment(dto: PaymentDto): Payment {
     category: mapCategoryView(dto.category),
     isFavorite: dto.isFavorite,
     isCompleted: dto.isCompleted,
+    // Штамп завершения (#1340): null («правило живо») — часть семантики,
+    // нормализуется к опциональности как остальные nullable-даты.
+    completedAt: dto.completedAt ?? undefined,
     // Не нормализуется к опциональности: явный null («нет даты» — пауза/
     // завершённый) часть семантики поля, см. доку на Payment.nearestDate.
     nearestDate: dto.nearestDate,
@@ -135,6 +138,9 @@ export function mapGlobalPayment(dto: GlobalPaymentDto): GlobalPayment {
     favoriteOrder: dto.favoriteOrder,
     today: dto.today,
     nearestDate: dto.nearestDate,
+    // Отображаемый флаг «Полностью оплачен» (#1341): исключение открытой
+    // паузы разрешено сервером — строка фида пауз не несёт.
+    isCompleted: dto.isCompleted,
     overdueOperationCount: dto.overdueOperationCount,
     overdueDays: dto.overdueDays,
     oldestOverdueOperationId: dto.oldestOverdueOperationId,

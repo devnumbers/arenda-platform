@@ -19,6 +19,7 @@ export function makeGlobalPayment(
     favoriteOrder: null,
     today: '2026-09-08',
     nearestDate: '2026-09-10',
+    isCompleted: false,
     overdueOperationCount: 0,
     overdueDays: null,
     oldestOverdueOperationId: null,

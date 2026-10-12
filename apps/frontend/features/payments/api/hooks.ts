@@ -537,6 +537,38 @@ export function useResumePayment(
 }
 
 /**
+ * Завершение платежа (#1340): явная мутация ставит хранимый штамп
+ * completedAt — терминальное состояние (read-only: пауза/правка дают 409,
+ * правило скрыто из лент и списков, страница жива прямым чтением). Гейт
+ * доступности — серверный CanBeCompleted; операции не трогаются, но
+ * инвалидируются вместе с правилами — журнал изменений платежа получил
+ * строку completed.
+ */
+export function useCompletePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<Payment, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/complete`,
+        { method: 'POST' },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      // Завершённое правило скрыто из ленты, поиска и счётчиков хаба
+      // (глоссарий «Завершённый платёж», #1340): фид перечитывается,
+      // карточки не доживают до конца staleTime.
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
  * Атомарный toggle избранного (PUT favorite c телом `{favorite}` —
  * резолюция #452, без read-modify-write через PATCH). Правило и команда
  * приходят переменными мутации: один инстанс обслуживает и звезду

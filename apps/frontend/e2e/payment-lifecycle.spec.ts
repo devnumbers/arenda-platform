@@ -355,4 +355,82 @@ test.describe('сквозная жизнь платежа', () => {
     // Ни правила, ни просрочек.
     await expect(page.getByText(title2)).toHaveCount(0);
   });
+
+  test('оплата последней операции → «Полностью оплачен» → «Завершить» → финал → скрытие из списков (#1341)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    const run = String(testInfo.retry);
+    const title = `E2E завершение платежа ${run}`;
+    // UTC-канон сидов и прогонов (#796): день выбирается в браузере (TZ
+    // прогона UTC), локальная дата узла у владельца MSK уходит вперёд в
+    // полночном окне.
+    const day = String(new Date().getUTCDate());
+    const id = await createMonthlyPaymentToday(page, seededUser, title, day);
+    const paymentUrl = `/properties/${PROPERTY}/payments/${id}`;
+    const paymentsUrl = `/properties/${PROPERTY}/payments`;
+
+    // Срочное правило: endDate = сегодня — после оплаты единственного
+    // вхождения правило исчерпано и завершаемо в тот же день (гейт
+    // CanBeCompleted #1340, «в тот же день» канон). Будущее вхождение,
+    // материализованное тиком создания ещё до endDate, снимается — за
+    // закончившимся расписанием его быть не должно (SQL-правка мимо
+    // валидации правки, которая такую endDate отвергла бы).
+    expect(await execE2eSql(`UPDATE payments SET end_date = CURRENT_DATE WHERE id = '${id}'`)).toBe(
+      'UPDATE 1',
+    );
+    expect(
+      await execE2eSql(
+        `DELETE FROM operations WHERE payment_id = '${id}' AND status = 'planned' AND date > CURRENT_DATE`,
+      ),
+    ).toBe('DELETE 1');
+
+    // Оплата единственного вхождения.
+    await page.goto(paymentsUrl);
+    await page.goto(paymentUrl);
+    await page.getByRole('button', { name: 'Оплатить' }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`),
+    );
+    await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
+    await expect(page.getByText('Платеж оплачен')).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
+
+    // Вычисляемая завершённость: блок ближайшего — «Платежей больше не
+    // будет», «Оплатить» заменена «Завершить» (#1341, макет 3249:74119).
+    await page.goto(paymentUrl);
+    await expect(page.getByText('Платежей больше не будет')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Оплатить' })).toHaveCount(0);
+    const completeButton = page.getByRole('button', { name: 'Завершить' });
+    await expect(completeButton).toBeEnabled();
+
+    // Шторка подтверждения (3249:75723) → финальный экран (3249:75665).
+    // Локатор открытия — текст описания: заголовок в шторке задвоен
+    // (sr-only DialogTitle канона Modal + видимый <p> по макету), голый
+    // getByText даёт strict-violation (#860).
+    await completeButton.click();
+    await expect(page.getByText(/Новых операций по платежу больше не будет/)).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Завершить' }).click();
+    await expect(page.getByText(`Платеж «${title}» завершен`)).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо' }).click();
+
+    // «Хорошо» — назад на список; завершённое правило скрыто (SQL-гейт
+    // completed_at, #1340), штамп виден по API.
+    await expect(page).toHaveURL(new RegExp(`${paymentsUrl}$`));
+    await expect(page.getByText(title)).toHaveCount(0);
+    const response = await page.request.get(`/api/properties/${PROPERTY}/payments`);
+    const { items } = (await response.json()) as { items: ReadonlyArray<{ id: string }> };
+    expect(items.some((payment) => payment.id === id)).toBe(false);
+
+    // Прямая ссылка жива — read-only: действий нет, история оплаченной
+    // операции на месте.
+    await page.goto(paymentUrl);
+    await expect(page.getByRole('button', { name: 'Завершить' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Оплатить' })).toHaveCount(0);
+    await expect(page.getByText('Платежей больше не будет')).toBeVisible();
+    await page.getByRole('button', { name: 'Открыть историю платежа' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
+    await expect(page.getByText(title).first()).toBeVisible();
+  });
 });

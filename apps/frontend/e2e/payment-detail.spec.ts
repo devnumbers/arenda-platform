@@ -379,7 +379,7 @@ test.describe('страница платежа', () => {
     }
   });
 
-  test('завершённое правило: без паузы, «Оплатить» отключена; скриншот', async ({
+  test('вычисляемая завершённость: «Завершить» вместо «Оплатить», блок «Платежей больше не будет»; скриншот', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -387,13 +387,72 @@ test.describe('страница платежа', () => {
     await page.goto(PAYMENT_URLS.completed);
 
     await expect(page.getByText('Техосмотр').first()).toBeVisible();
+    // Расписание закончилось (endDate в прошлом), вхождений нет — флаг
+    // сервера заменяет «Оплатить» на «Завершить» (#1341, макет 3249:74119).
     await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Оплатить' })).toBeDisabled();
-    await expect(page.getByText('Платеж завершен')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Оплатить' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Завершить' })).toBeEnabled();
+    // Блок ближайшего — подзаголовок макета без стрелки на график.
+    await expect(page.getByText('Платежей больше не будет')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Открыть график платежей' }),
+    ).toHaveCount(0);
     await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-detail-completed-mobile');
+  });
+
+  test('завершение: шторка, финал, «Хорошо» — назад, скрытие из списка, прямая ссылка read-only', async ({
+    page,
+    seededUser,
+  }) => {
+    // Сценарий приёмки #1341 на сидовом …555: шторка подтверждения →
+    // финальный экран → списки без правила → прямая ссылка жива read-only.
+    // Штамп терминален — сид возвращается SQL-ом в finally.
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(PROPERTY_PAYMENTS_URL);
+    await page.goto(PAYMENT_URLS.completed);
+
+    try {
+      // Отмена в шторке ничего не завершает. Локатор открытия — текст
+      // описания: заголовок в шторке задвоен (sr-only DialogTitle канона
+      // Modal + видимый <p> по макету), голый getByText даёт strict-
+      // violation (#860).
+      await page.getByRole('button', { name: 'Завершить' }).click();
+      await expect(
+        page.getByText(/Новых операций по платежу больше не будет/),
+      ).toBeVisible();
+      await page.getByRole('dialog').getByRole('button', { name: 'Отменить' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Завершить' })).toBeEnabled();
+
+      // Подтверждение — финальный экран (3249:75665).
+      await page.getByRole('button', { name: 'Завершить' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Завершить' }).click();
+      await expect(page.getByText('Платеж «Техосмотр» завершен')).toBeVisible();
+      await page.getByRole('button', { name: 'Хорошо' }).click();
+
+      // «Хорошо» — назад: список объекта, завершённое правило скрыто
+      // (SQL-гейт completed_at, #1340).
+      await expect(page).toHaveURL(new RegExp(`${PROPERTY_PAYMENTS_URL}$`));
+      await expect(page.getByText('Техосмотр')).toHaveCount(0);
+
+      // Прямая ссылка жива — read-only: действий нет, чтения на месте.
+      await page.goto(PAYMENT_URLS.completed);
+      await expect(page.getByText('Техосмотр').first()).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Завершить' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Оплатить' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
+      await expect(page.getByText('Платежей больше не будет')).toBeVisible();
+      await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
+    } finally {
+      await execE2eSql(`
+        UPDATE payments SET completed_at = NULL
+        WHERE id = '55555555-5555-4555-8555-555555555555'
+      `);
+    }
   });
 
   test('вход со списка платежей по строке правила', async ({ page, seededUser }) => {

@@ -7477,7 +7477,7 @@ components:
         the global «Платежи» card's data: the rule, its property label, the
         nearest schedule date and the overdue aggregates.
       type: object
-      required: [id, propertyId, propertyName, title, amountKopecks, type, category, autoPay, isFavorite, favoriteOrder, today, nearestDate, overdueOperationCount, overdueDays, oldestOverdueOperationId]
+      required: [id, propertyId, propertyName, title, amountKopecks, type, category, autoPay, isFavorite, favoriteOrder, today, nearestDate, isCompleted, overdueOperationCount, overdueDays, oldestOverdueOperationId]
       properties:
         id:
           type: string
@@ -7532,6 +7532,19 @@ components:
             today, else the rule's projection — a bare schedule order without
             a view status. Null when the schedule has no next occurrence
             (an open pause or a settled rule).
+        isCompleted:
+          type: boolean
+          description: >
+            The row's display-complete flag (ticket #1341) — the hub card's
+            «Полностью оплачен»: the computed settlement completeness
+            (CONTEXT.md, «Завершённый платёж») with the open-pause exception
+            resolved server-side. The raw computed flag answers «завершён»
+            behind an open pause's cut cursor (the glossary's exception), and
+            the feed row carries no pauses for the client to repeat the
+            resolution the payment screen does by the end date — the flag
+            ships pause-free. The stored-completed rules are hidden from the
+            feed entirely; the payment detail read carries the raw flag
+            (PaymentResponse.isCompleted).
         overdueOperationCount:
           type: integer
           description: >

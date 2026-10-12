@@ -3247,6 +3247,8 @@ export interface components {
              * @description «Ближайший»: the earliest stored planned operation on or after today, else the rule's projection — a bare schedule order without a view status. Null when the schedule has no next occurrence (an open pause or a settled rule).
              */
             nearestDate: string | null;
+            /** @description The row's display-complete flag (ticket #1341) — the hub card's «Полностью оплачен»: the computed settlement completeness (CONTEXT.md, «Завершённый платёж») with the open-pause exception resolved server-side. The raw computed flag answers «завершён» behind an open pause's cut cursor (the glossary's exception), and the feed row carries no pauses for the client to repeat the resolution the payment screen does by the end date — the flag ships pause-free. The stored-completed rules are hidden from the feed entirely; the payment detail read carries the raw flag (PaymentResponse.isCompleted). */
+            isCompleted: boolean;
             /** @description The rule's overdue operations (planned with the date before today); 0 when the rule has none. */
             overdueOperationCount: number;
             /** @description The age of the oldest overdue operation in days (today minus its date, at least 1) — the «N дней» line; null when the rule has no overdue operations. */

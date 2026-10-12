@@ -285,6 +285,7 @@ func paymentGlobalItem(item application.GlobalPaymentItem) openapi.PaymentGlobal
 		FavoriteOrder:            orderWirePtr(item.FavoriteOrder),
 		Today:                    openapi_types.Date{Time: item.Today},
 		NearestDate:              dateWirePtr(item.NearestDate),
+		IsCompleted:              item.IsCompleted,
 		OverdueOperationCount:    int(item.OverdueCount),
 		OverdueDays:              item.OverdueDays,
 		OldestOverdueOperationId: item.OldestOverdueOperationID,

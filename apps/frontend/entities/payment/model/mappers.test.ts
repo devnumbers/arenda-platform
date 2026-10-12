@@ -73,6 +73,13 @@ describe('mapPayment — DTO → entity', () => {
     expect(mapPayment({ ...paymentDto, nearestDate: null }).nearestDate).toBeNull();
   });
 
+  it('completedAt нормализуется к опциональности — штамп завершения (#1340)', () => {
+    expect(payment.completedAt).toBeUndefined();
+    const stamped = '2026-09-08T10:00:00Z';
+    expect(mapPayment({ ...paymentDto, completedAt: stamped }).completedAt).toBe(stamped);
+    expect(mapPayment({ ...paymentDto, completedAt: null }).completedAt).toBeUndefined();
+  });
+
   it('напоминание: оффсет приходит числом, null и отсутствие — «нет напоминания» (карта #822)', () => {
     expect(payment.reminderOffsetDays).toBeUndefined();
     expect(mapPayment({ ...paymentDto, reminderOffsetDays: null }).reminderOffsetDays).toBeUndefined();
@@ -157,6 +164,7 @@ const globalItemDto: components['schemas']['PaymentGlobalItem'] = {
   favoriteOrder: 1,
   today: '2026-09-09',
   nearestDate: '2026-09-15',
+  isCompleted: false,
   overdueOperationCount: 0,
   overdueDays: null,
   oldestOverdueOperationId: null,
@@ -185,6 +193,15 @@ describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #
       id: undefined,
       label: 'Арендная плата',
     });
+  });
+
+  it('isCompleted переносится как есть — «Полностью оплачен» карточки (#1341)', () => {
+    expect(search.items[0]?.isCompleted).toBe(false);
+    const settled = mapGlobalPaymentSearch({
+      ...searchDto,
+      items: [{ ...globalItemDto, isCompleted: true }],
+    });
+    expect(settled.items[0]?.isCompleted).toBe(true);
   });
 
   it('чипы — чистые категории: по одной на категорию, без направления и счётчика (#602)', () => {
