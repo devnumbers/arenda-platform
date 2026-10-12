@@ -1,7 +1,6 @@
 'use client';
 
 import { type JSX, useState } from 'react';
-import { formatCountdown } from '@/shared/lib/countdown';
 import { Support } from '@/shared/assets/icons';
 import { Button, HeaderLogo, SupportModal } from '@/shared/ui/design';
 
@@ -25,22 +24,6 @@ export function StepHeader({
                 <p className="m-0 text-base leading-[18px] text-content-secondary">{subtitle}</p>
             </div>
         </>
-    );
-}
-
-/** Кулдаун-подпись resend-канона #733 «Запросить код можно через ММ:СС» —
- * моно 14/16 tertiary по центру; вне кулдауна не рисуется. Не часть
- * ResendCodeTile: там другой текст («новый код») и композиция
- * кнопка+подпись. */
-export function CooldownNote({ secondsLeft }: { readonly secondsLeft: number }): JSX.Element | null {
-    if (secondsLeft <= 0) {
-        return null;
-    }
-
-    return (
-        <p className="m-0 text-center font-mono text-sm font-medium leading-4 text-content-tertiary">
-            Запросить код можно через {formatCountdown(secondsLeft)}
-        </p>
     );
 }
 
