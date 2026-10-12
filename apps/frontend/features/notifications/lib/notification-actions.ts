@@ -6,7 +6,8 @@
  * Продлить — secondary по макету 2316:143297 (пара аренды), остальные
  * primary (2316:143530/143588/143647, 2333:184060). Исключение —
  * open_tariffs: у №14 «Тариф изменён» макета нет, лейбл из решения
- * каталога #737 (см. комментарий у кейса).
+ * каталога #737 (см. комментарий у кейса). Лейбл open_property выбирается
+ * по паре (event_type, action) — решение владельца 12.10.2026, #1359.
  */
 
 import { ROUTES } from '@/shared/config/routes';
@@ -18,7 +19,22 @@ export type NotificationActionView = {
   readonly variant: 'primary' | 'secondary';
 };
 
+/**
+ * Лейблы open_property по паре (event_type, action) (#1359, решение
+ * владельца 12.10.2026): приглашение — «В объект» (вместо «Принять» —
+ * приглашение принимается по email-ссылке, лента лишь навигирует), смена
+ * роли — «Перейти в объект» (было «Участники» — owner-only /participants,
+ * мёртвая для участника-получателя кнопка). Каталог событий закрыт бэком,
+ * других продуцентов open_property нет; неизвестное событие — «В объект»:
+ * навигационная семантика действия.
+ */
+const OPEN_PROPERTY_LABELS: Readonly<Record<string, string>> = {
+  property_invitation: 'В объект',
+  access_role_changed: 'Перейти в объект',
+};
+
 export function notificationActionView(
+  eventType: string,
   action: NotificationActionKind,
   payload: NotificationPayload,
 ): NotificationActionView | null {
@@ -50,7 +66,7 @@ export function notificationActionView(
         : null;
     case 'open_property':
       return propertyId
-        ? { label: 'Принять', href: ROUTES.property(propertyId), variant: 'primary' }
+        ? { label: OPEN_PROPERTY_LABELS[eventType] ?? 'В объект', href: ROUTES.property(propertyId), variant: 'primary' }
         : null;
     case 'open_property_members':
       return { label: 'Участники', href: ROUTES.participants, variant: 'primary' };

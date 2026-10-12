@@ -140,6 +140,22 @@ func TestAvailableActions_EntityGates(t *testing.T) {
 	actions, err = availableActions(ctx, accessLive, feedTestUser, invitation)
 	require.NoError(t, err)
 	assert.Empty(t, actions, "объект удалён — уведомление остаётся без действий")
+
+	// Смена роли ведёт в объект (#1359, решение владельца 12.10.2026):
+	// тот же гейт доступа, что у приглашения — кнопка стоит, пока доступ
+	// жив, получателю-«Просмотру» она полагается наравне с остальными.
+	roleChanged := actionNotification(t, domain.EventAccessRoleChanged,
+		domain.Payload{Property: &domain.EntityRef{ID: propertyID}})
+	roleLive := &fakeLiveState{propertyAcc: PropertyAccess{Exists: true, Manageable: false}}
+	actions, err = availableActions(ctx, roleLive, feedTestUser, roleChanged)
+	require.NoError(t, err)
+	assert.Equal(t, []domain.ActionKind{domain.ActionOpenProperty}, actions,
+		"смена роли открывает объект — и «Просмотру» тоже")
+
+	roleLive.propertyAcc = PropertyAccess{}
+	actions, err = availableActions(ctx, roleLive, feedTestUser, roleChanged)
+	require.NoError(t, err)
+	assert.Empty(t, actions, "доступ закрыт — кнопки нет")
 }
 
 // The service categories' navigation targets are global screens — no entity

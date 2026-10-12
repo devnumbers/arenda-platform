@@ -158,7 +158,9 @@ function NotificationDetailBody({
   readonly onAction: (href: string) => void;
 }): JSX.Element {
   const actions = detail.actions
-    .map((action) => notificationActionView(action, detail.payload))
+    // Лейбл open_property — по паре (event_type, action) (#1359): один
+    // каталоговый переход у приглашения и смены роли зовётся по-разному.
+    .map((action) => notificationActionView(detail.eventType, action, detail.payload))
     .filter((view) => view !== null);
   const singleAction = actions.length === 1 ? actions[0] : undefined;
 

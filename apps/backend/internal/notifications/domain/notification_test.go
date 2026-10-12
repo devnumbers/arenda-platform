@@ -28,7 +28,10 @@ var catalogCases = []struct {
 	{EventAccessPaused, CategorySharedAccess, nil},
 	{EventAccessResumed, CategorySharedAccess, nil},
 	{EventMemberLeft, CategorySharedAccess, nil},
-	{EventAccessRoleChanged, CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},
+	// Событие access_role_changed ведёт в объект (#1359, решение владельца
+	// 12.10.2026): «Участники» — owner-only раздел, участнику-получателю
+	// кнопка там мертва.
+	{EventAccessRoleChanged, CategorySharedAccess, []ActionKind{ActionOpenProperty}},
 	{EventSubscriptionPaymentFailed, CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	{EventSubscriptionPaymentReminder, CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	{EventSubscriptionPaymentSucceeded, CategoryTariff, nil},
