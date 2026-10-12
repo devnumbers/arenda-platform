@@ -14,14 +14,15 @@ import {
 import { ParticipantRowBadge } from './participant-row-badge';
 
 /**
- * Строка участника списка «Ваши участники» (#697; Figma 2036-82971,
- * компонент Row Button 936:39348 с бейджем): аватар-круг 44 — фото профиля
- * или заглушка BoldUser (UserAvatar, решение #1286),
- * титул (имя или почта pending), подзаголовок-почта 14/16, под ним чип
- * агрегат-статуса; ведомый шеврон. Паддинг строки 12px 0 (макет), тап —
- * страница участника (#698). Каноническая строка срезов сущностей
- * (DESIGN.md §6, семейство ContactRowButton): живёт в entities, нужна
- * будет и живым экранам #719.
+ * Строка участника списка «Участники» (#697; Figma 3313-77128, компонент
+ * Row Button 936:39348): аватар-круг 44 — фото профиля или заглушка
+ * BoldUser (UserAvatar, решение #1286), титул (имя или почта pending),
+ * подзаголовок-почта 14/16, под ним статусный бейдж — ровно два статуса
+ * (D3 #1313): «Аккаунт не создан» у pending и «Превышен лимит объектов»
+ * у suspended, остальные строки без бейджа; ведомый шеврон. Паддинг
+ * строки 12px 0 (макет), тап — страница участника (#698). Каноническая
+ * строка срезов сущностей (DESIGN.md §6, семейство ContactRowButton):
+ * живёт в entities, нужна будет и живым экранам #719.
  */
 export function ParticipantRowButton({
   participant,
@@ -55,9 +56,11 @@ export function ParticipantRowButton({
         {subtitle !== undefined && (
           <span className="truncate text-sm text-content-secondary">{subtitle}</span>
         )}
-        <span>
-          <ParticipantRowBadge badge={badge} />
-        </span>
+        {badge !== null && (
+          <span>
+            <ParticipantRowBadge badge={badge} />
+          </span>
+        )}
       </span>
       <SmallArrowRight className="h-6 w-6 shrink-0 text-content-tertiary" aria-hidden />
     </div>

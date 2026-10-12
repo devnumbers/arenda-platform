@@ -163,7 +163,6 @@ func WireAccess(
 		participantRepo,
 		userLookup,
 		emailResolver,
-		memberRepo,
 		p.Logger,
 	)
 

@@ -85,6 +85,21 @@ export async function proxy(request: NextRequest) {
   ) {
     return NextResponse.redirect(new URL('/properties', request.url), 308);
   }
+  // Маршруты хаба «Совместный доступ» снесены разделом-списком (D1 #1313):
+  // /participants/list был списком «Ваших участников» — им /participants и
+  // остался; /participants/properties («Объекты пользователей») снесён без
+  // наследника — чужие объекты живут в общем списке /properties (путь
+  // выхода из чужого доступа — «Покинуть объект» на «Участниках объекта»,
+  // D6). 308 перманентный — канон /dashboard выше.
+  if (request.nextUrl.pathname === '/participants/list') {
+    return NextResponse.redirect(new URL('/participants', request.url), 308);
+  }
+  if (
+    request.nextUrl.pathname === '/participants/properties' ||
+    request.nextUrl.pathname.startsWith('/participants/properties/')
+  ) {
+    return NextResponse.redirect(new URL('/properties', request.url), 308);
+  }
   // Разведка строгой CSP: nonce на каждый запрос. Заголовок запроса Next
   // разбирает при SSR и вешает nonce на фреймворк-скрипты и инлайн-стили
   // (Report-Only он понимает так же, как блокирующий — app-render Next 16);

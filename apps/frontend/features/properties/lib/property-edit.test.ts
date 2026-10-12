@@ -49,7 +49,6 @@ const baseProperty: Property = {
   address: 'Ленина, 34, Екатеринбург',
   attributes: { area_total: 45.5, rooms: '2' },
   status: 'active',
-  members_count: 1,
   created_at: '2026-09-01T10:00:00Z',
   pinned_at: null,
 };

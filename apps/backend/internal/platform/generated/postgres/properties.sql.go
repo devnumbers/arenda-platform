@@ -293,41 +293,20 @@ func (q *Queries) GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesSta
 }
 
 const getPropertyByID = `-- name: GetPropertyByID :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
 FROM properties
 WHERE properties.id = $1
 `
-
-type GetPropertyByIDRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Name             string             `json:"name"`
-	Type             string             `json:"type"`
-	Address          string             `json:"address"`
-	Description      pgtype.Text        `json:"description"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	Attributes       []byte             `json:"attributes"`
-	PhotoKey         pgtype.Text        `json:"photo_key"`
-	PhotoContentType pgtype.Text        `json:"photo_content_type"`
-	MembersCount     int64              `json:"members_count"`
-}
 
 // Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
 // resolve the data owner for authorization before applying a scope, and by the
 // properties list to load shared properties (whose owner_id differs from the
 // actor). Read-only; callers must never leak existence to actors without a view
 // capability (the application maps "no access" to ErrNotFound to preserve
-// object privacy). members_count is the shared-access participant count
-// (membership rows of any status plus pending email invitations, issue #163).
-func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPropertyByIDRow, error) {
+// object privacy).
+func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property, error) {
 	row := q.db.QueryRow(ctx, getPropertyByID, id)
-	var i GetPropertyByIDRow
+	var i Property
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -341,7 +320,6 @@ func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPrope
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
-		&i.MembersCount,
 	)
 	return i, err
 }
@@ -393,11 +371,7 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 }
 
 const getPropertyByIDAndOwner = `-- name: GetPropertyByIDAndOwner :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2
 `
@@ -407,25 +381,9 @@ type GetPropertyByIDAndOwnerParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
-type GetPropertyByIDAndOwnerRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Name             string             `json:"name"`
-	Type             string             `json:"type"`
-	Address          string             `json:"address"`
-	Description      pgtype.Text        `json:"description"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	Attributes       []byte             `json:"attributes"`
-	PhotoKey         pgtype.Text        `json:"photo_key"`
-	PhotoContentType pgtype.Text        `json:"photo_content_type"`
-	MembersCount     int64              `json:"members_count"`
-}
-
-func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error) {
+func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error) {
 	row := q.db.QueryRow(ctx, getPropertyByIDAndOwner, arg.ID, arg.OwnerID)
-	var i GetPropertyByIDAndOwnerRow
+	var i Property
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -439,7 +397,6 @@ func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyBy
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
-		&i.MembersCount,
 	)
 	return i, err
 }
@@ -546,19 +503,14 @@ func (q *Queries) InsertActorPin(ctx context.Context, arg InsertActorPinParams) 
 }
 
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
 ORDER BY properties.updated_at DESC
 `
 
 type ListActivePropertiesByOwnerRow struct {
-	Property     Property `json:"property"`
-	MembersCount int64    `json:"members_count"`
+	Property Property `json:"property"`
 }
 
 // The main list's base order (ticket #577, the personal-pin cutover #1307):
@@ -588,7 +540,6 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 			&i.Property.Attributes,
 			&i.Property.PhotoKey,
 			&i.Property.PhotoContentType,
-			&i.MembersCount,
 		); err != nil {
 			return nil, err
 		}
@@ -601,19 +552,14 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 }
 
 const listArchivedPropertiesByOwner = `-- name: ListArchivedPropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
 ORDER BY properties.updated_at DESC
 `
 
 type ListArchivedPropertiesByOwnerRow struct {
-	Property     Property `json:"property"`
-	MembersCount int64    `json:"members_count"`
+	Property Property `json:"property"`
 }
 
 func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error) {
@@ -638,7 +584,6 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 			&i.Property.Attributes,
 			&i.Property.PhotoKey,
 			&i.Property.PhotoContentType,
-			&i.MembersCount,
 		); err != nil {
 			return nil, err
 		}
@@ -743,10 +688,6 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 
 const searchVisibleProperties = `-- name: SearchVisibleProperties :many
 SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = p.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = p.id))::bigint AS members_count,
        CASE WHEN p.owner_id = $1::uuid
             THEN 'owner'
             ELSE pm.role END::text AS access_role
@@ -788,7 +729,6 @@ type SearchVisiblePropertiesRow struct {
 	Attributes       []byte             `json:"attributes"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
-	MembersCount     int64              `json:"members_count"`
 	AccessRole       string             `json:"access_role"`
 }
 
@@ -838,7 +778,6 @@ func (q *Queries) SearchVisibleProperties(ctx context.Context, arg SearchVisible
 			&i.Attributes,
 			&i.PhotoKey,
 			&i.PhotoContentType,
-			&i.MembersCount,
 			&i.AccessRole,
 		); err != nil {
 			return nil, err

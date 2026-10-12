@@ -14,7 +14,6 @@ const base = {
   address: 'Москва, ул. Ленина, 1',
   attributes: {},
   status: 'active' as const,
-  members_count: 2,
   created_at: '2026-09-19T00:00:00Z',
   pinned_at: null,
 };

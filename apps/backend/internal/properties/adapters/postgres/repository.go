@@ -105,7 +105,7 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		}
 		return domain.Property{}, err
 	}
-	return propertyFromCountsRow(postgres.Property{
+	return propertyFromRow(postgres.Property{
 		ID:               row.ID,
 		OwnerID:          row.OwnerID,
 		Name:             row.Name,
@@ -118,7 +118,7 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		PhotoContentType: row.PhotoContentType,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
-	}, row.MembersCount), nil
+	}), nil
 }
 
 func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Property, error) {
@@ -145,7 +145,7 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		}
 		return domain.Property{}, err
 	}
-	return propertyFromCountsRow(postgres.Property{
+	return propertyFromRow(postgres.Property{
 		ID:               row.ID,
 		OwnerID:          row.OwnerID,
 		Name:             row.Name,
@@ -158,7 +158,7 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		PhotoContentType: row.PhotoContentType,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
-	}, row.MembersCount), nil
+	}), nil
 }
 
 // GetByIDForUpdate is the pessimistic-lock variant of GetByID (T3, issue #156).
@@ -174,9 +174,9 @@ func (r *PropertyRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID)
 }
 
 // The two owner list reads share one shape: sqlc.embed carries the model
-// row plus the members count, so both wrap propertyFromCountsRow — the
-// queries stay separate (their ORDER BY differs: pin-aware for the main
-// list, recency-only for the archive).
+// row, so both wrap propertyFromRow — the queries stay separate (their
+// ORDER BY differs: pin-aware for the main list, recency-only for the
+// archive).
 
 func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
 	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
@@ -185,7 +185,7 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.U
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromCountsRow(row.Property, row.MembersCount))
+		properties = append(properties, propertyFromRow(row.Property))
 	}
 	return properties, nil
 }
@@ -197,7 +197,7 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromCountsRow(row.Property, row.MembersCount))
+		properties = append(properties, propertyFromRow(row.Property))
 	}
 	return properties, nil
 }
@@ -230,7 +230,7 @@ func (r *PropertyRepository) SearchVisible(
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		p := propertyFromCountsRow(postgres.Property{
+		p := propertyFromRow(postgres.Property{
 			ID:               row.ID,
 			OwnerID:          row.OwnerID,
 			Name:             row.Name,
@@ -243,7 +243,7 @@ func (r *PropertyRepository) SearchVisible(
 			PhotoContentType: row.PhotoContentType,
 			CreatedAt:        row.CreatedAt,
 			UpdatedAt:        row.UpdatedAt,
-		}, row.MembersCount)
+		})
 		p.AccessRole = sharedpolicy.Role(row.AccessRole)
 		properties = append(properties, p)
 	}
@@ -442,12 +442,4 @@ func propertyFromRow(row postgres.Property) domain.Property {
 		// PinnedAt stays unset here by design, the global column went with
 		// the contract migration #1311.
 	}
-}
-
-// propertyFromCountsRow maps a property row plus its shared-access members
-// count projection to the domain model.
-func propertyFromCountsRow(row postgres.Property, membersCount int64) domain.Property {
-	p := propertyFromRow(row)
-	p.MembersCount = int(membersCount)
-	return p
 }

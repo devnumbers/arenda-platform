@@ -2832,9 +2832,11 @@ paths:
       description: >
         The «Ваши участники» list (issue #693): one aggregate row per person —
         a registered user or a pending email — across every non-archived
-        property the reading actor owns or manages as an active full_access
-        member. The actor themself never appears. A person's identifier (id)
-        is the registered user's uuid, or the invitee email for a pending row.
+        property the reading actor owns (owner-only scope since D8, issue
+        #1304: the section shows only the people the actor invited to their
+        own objects). The actor themself never appears. A person's identifier
+        (id) is the registered user's uuid, or the invitee email for a
+        pending row.
       security:
         - sessionCookie: []
       responses:
@@ -2873,26 +2875,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-  /participants/summary:
-    get:
-      operationId: getParticipantsSummary
-      summary: Counters of the «Совместный доступ» hub
-      description: >
-        The hub card counters (issue #693): the number of the reading actor's
-        participants (the same aggregate the list endpoint returns) and the
-        number of other people's objects the actor has access to (the active
-        shared memberships — the recipient tariff-slot counter).
-      security:
-        - sessionCookie: []
-      responses:
-        '200':
-          description: The hub counters
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ParticipantsSummaryResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
   /participants/invite:
     post:
       operationId: inviteParticipant
@@ -6742,7 +6724,7 @@ components:
 
     PropertyResponse:
       type: object
-      required: [id, name, type, address, status, members_count, attributes, created_at, updated_at, pinned_at]
+      required: [id, name, type, address, status, attributes, created_at, updated_at, pinned_at]
       properties:
         id:
           type: string
@@ -6769,13 +6751,6 @@ components:
             The property photo's same-origin streaming path (ADR 0065):
             /api/properties/{id}/photo, served with the session cookie;
             null when the object has no photo.
-        members_count:
-          type: integer
-          minimum: 0
-          description: >
-            Shared-access participants of the property: membership rows (any
-            status, owner excluded — the owner is never a membership row) plus
-            pending email invitations.
         created_at:
           type: string
           format: date-time
@@ -8217,19 +8192,6 @@ components:
             live at read; null when the property has no photo. The leg row
             is self-sufficient — the client needs no /properties join for
             the avatar (остаток #1244 п.3, решение #1286).
-
-    ParticipantsSummaryResponse:
-      type: object
-      required: [participants_count, accessible_properties_count]
-      properties:
-        participants_count:
-          type: integer
-          description: The reading actor's participants across their scope.
-        accessible_properties_count:
-          type: integer
-          description: >
-            Other people's objects the reading actor has active access to
-            (the recipient tariff-slot counter; issue #163).
 
     PropertyAccessMemberUpdateRequest:
       type: object

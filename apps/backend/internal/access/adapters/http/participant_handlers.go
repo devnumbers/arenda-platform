@@ -58,27 +58,6 @@ func (h *ParticipantHandlers) ListParticipants(w http.ResponseWriter, r *http.Re
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.ParticipantsResponse{Items: items})
 }
 
-// GetParticipantsSummary implements GET /participants/summary.
-func (h *ParticipantHandlers) GetParticipantsSummary(w http.ResponseWriter, r *http.Request) {
-	actor, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	summary, err := h.svc.Summary(r.Context(), actor)
-	if err != nil {
-		h.logger.ErrorContext(r.Context(), "access: participants summary failed", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		return
-	}
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.ParticipantsSummaryResponse{
-		ParticipantsCount:         summary.ParticipantsCount,
-		AccessiblePropertiesCount: summary.AccessiblePropertiesCount,
-	})
-}
-
 // GetParticipant implements GET /participants/{participantId}.
 func (h *ParticipantHandlers) GetParticipant(w http.ResponseWriter, r *http.Request, participantID string) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())

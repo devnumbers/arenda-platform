@@ -4,11 +4,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetPropertyByIDAndOwner :one
-SELECT properties.*,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.*
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2;
 
@@ -26,13 +22,8 @@ WHERE id = $1 AND owner_id = $2;
 -- properties list to load shared properties (whose owner_id differs from the
 -- actor). Read-only; callers must never leak existence to actors without a view
 -- capability (the application maps "no access" to ErrNotFound to preserve
--- object privacy). members_count is the shared-access participant count
--- (membership rows of any status plus pending email invitations, issue #163).
-SELECT properties.*,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+-- object privacy).
+SELECT properties.*
 FROM properties
 WHERE properties.id = $1;
 
@@ -47,21 +38,13 @@ SELECT * FROM properties WHERE id = $1 FOR UPDATE;
 -- per-actor since the cutover — the application overlays the actor's
 -- personal pins (user_property_pins) over the merged list and re-sorts
 -- (PropertyService.pinnedFirst), so the SQL pass stays out of pin ordering.
-SELECT sqlc.embed(properties),
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT sqlc.embed(properties)
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
 ORDER BY properties.updated_at DESC;
 
 -- name: ListArchivedPropertiesByOwner :many
-SELECT sqlc.embed(properties),
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT sqlc.embed(properties)
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
 ORDER BY properties.updated_at DESC;
@@ -86,10 +69,6 @@ ORDER BY properties.updated_at DESC;
 -- LEFT JOIN row is unique per (property, user) and carries the role only;
 -- the visibility verdict is the function call in the WHERE.
 SELECT p.*,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = p.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = p.id))::bigint AS members_count,
        CASE WHEN p.owner_id = sqlc.arg('actor')::uuid
             THEN 'owner'
             ELSE pm.role END::text AS access_role

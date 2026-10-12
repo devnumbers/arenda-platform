@@ -1160,7 +1160,7 @@ export interface paths {
         };
         /**
          * List the owner's participants (aggregate over all properties)
-         * @description The «Ваши участники» list (issue #693): one aggregate row per person — a registered user or a pending email — across every non-archived property the reading actor owns or manages as an active full_access member. The actor themself never appears. A person's identifier (id) is the registered user's uuid, or the invitee email for a pending row.
+         * @description The «Ваши участники» list (issue #693): one aggregate row per person — a registered user or a pending email — across every non-archived property the reading actor owns (owner-only scope since D8, issue #1304: the section shows only the people the actor invited to their own objects). The actor themself never appears. A person's identifier (id) is the registered user's uuid, or the invitee email for a pending row.
          */
         get: operations["listParticipants"];
         put?: never;
@@ -1170,26 +1170,6 @@ export interface paths {
          * @description The global «Отозвать доступ всем» action of the «Участники» section (issue #1310): one call removes every membership and cancels every pending invitation across all properties the reading actor owns — archived ones included — with a per-row audit entry and journal record, the revocation notification per removed active membership and FIFO recovery of each affected recipient's suspended accesses. No lifecycle emails are sent; legs on other owners' properties stay untouched. Idempotent: an owner with nothing left in scope succeeds as a no-op. An actor owning no property is refused: a participant of foreign objects with 403, a stranger with a privacy-preserving 404.
          */
         delete: operations["revokeAllParticipants"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/participants/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Counters of the «Совместный доступ» hub
-         * @description The hub card counters (issue #693): the number of the reading actor's participants (the same aggregate the list endpoint returns) and the number of other people's objects the actor has access to (the active shared memberships — the recipient tariff-slot counter).
-         */
-        get: operations["getParticipantsSummary"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2290,7 +2270,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Completes the rental: records the completion date (start ≤ date ≤ today in the owner's timezone — «По плану» is the UI's substitution) and stops the managed rent payment at that date — the strictly future planned operations are torn down, the due ones stay with the owner. The optional deposit return is a record, not an operation. Completing a future rental is impossible by design — a start date in the future leaves the valid window empty (400). */
+        /** @description Completes the rental: records the completion date (start ≤ date ≤ today in the owner's timezone — «По плану» is the UI's substitution) and deletes the managed rent payment in the same transaction — the planned operations from the completion date on are torn down, the overdue ones survive the payment as the property's debt and the paid ones stay in its history (their payment_id is unlinked by the FK, origin unchanged). The completed rental keeps an immutable archive of the terms for its view and answers with rentPayment.paymentId = null. The optional deposit return is a record, not an operation. Completing a future rental is impossible by design — a start date in the future leaves the valid window empty (400). */
         post: operations["completeRental"];
         delete?: never;
         options?: never;
@@ -2896,8 +2876,6 @@ export interface components {
             access?: components["schemas"]["PropertyAccessContext"];
             /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo, served with the session cookie; null when the object has no photo. */
             photo_url?: string | null;
-            /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
-            members_count: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -3582,12 +3560,6 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             /** @description The property photo's same-origin streaming path (ADR 0065), live at read; null when the property has no photo. The leg row is self-sufficient — the client needs no /properties join for the avatar (остаток #1244 п.3, решение #1286). */
             photo_url: string | null;
-        };
-        ParticipantsSummaryResponse: {
-            /** @description The reading actor's participants across their scope. */
-            participants_count: number;
-            /** @description Other people's objects the reading actor has active access to (the recipient tariff-slot counter; issue #163). */
-            accessible_properties_count: number;
         };
         PropertyAccessMemberUpdateRequest: {
             /** @enum {string} */
@@ -6855,27 +6827,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-        };
-    };
-    getParticipantsSummary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The hub counters */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ParticipantsSummaryResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
         };
     };
     inviteParticipant: {

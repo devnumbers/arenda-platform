@@ -23,9 +23,8 @@ import (
 // fakeParticipantsManager is the func-backed ParticipantsManager double
 // (ADR 0035): an unset use case fails the test loudly.
 type fakeParticipantsManager struct {
-	list    func(ctx context.Context, actor uuid.UUID) ([]accessapp.Participant, error)
-	get     func(ctx context.Context, actor uuid.UUID, id string) (accessapp.Participant, error)
-	summary func(ctx context.Context, actor uuid.UUID) (accessapp.ParticipantsSummary, error)
+	list func(ctx context.Context, actor uuid.UUID) ([]accessapp.Participant, error)
+	get  func(ctx context.Context, actor uuid.UUID, id string) (accessapp.Participant, error)
 }
 
 func (f *fakeParticipantsManager) ListParticipants(ctx context.Context, actor uuid.UUID) ([]accessapp.Participant, error) {
@@ -40,13 +39,6 @@ func (f *fakeParticipantsManager) GetParticipant(ctx context.Context, actor uuid
 		return accessapp.Participant{}, errors.New("unexpected GetParticipant call")
 	}
 	return f.get(ctx, actor, id)
-}
-
-func (f *fakeParticipantsManager) Summary(ctx context.Context, actor uuid.UUID) (accessapp.ParticipantsSummary, error) {
-	if f.summary == nil {
-		return accessapp.ParticipantsSummary{}, errors.New("unexpected Summary call")
-	}
-	return f.summary(ctx, actor)
 }
 
 // fakeParticipantMutations is the func-backed ParticipantMutations double
@@ -221,28 +213,6 @@ func TestGetParticipantHandler(t *testing.T) {
 	w = httptest.NewRecorder()
 	h.GetParticipant(w, newParticipantRequest(t, "/participants/"+participantID, nil), participantID)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-}
-
-// TestGetParticipantsSummaryHandler checks the hub counters wire.
-func TestGetParticipantsSummaryHandler(t *testing.T) {
-	t.Parallel()
-
-	actor := uuid.Must(uuid.NewV7())
-	svc := &fakeParticipantsManager{
-		summary: func(ctx context.Context, id uuid.UUID) (accessapp.ParticipantsSummary, error) {
-			assert.Equal(t, actor, id)
-			return accessapp.ParticipantsSummary{ParticipantsCount: 3, AccessiblePropertiesCount: 1}, nil
-		},
-	}
-	h := NewParticipantHandlers(svc, &fakeParticipantMutations{}, slog.New(slog.DiscardHandler))
-
-	w := httptest.NewRecorder()
-	h.GetParticipantsSummary(w, newParticipantRequest(t, "/participants/summary", &actor))
-	require.Equal(t, http.StatusOK, w.Code)
-	var body openapi.ParticipantsSummaryResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	assert.Equal(t, 3, body.ParticipantsCount)
-	assert.Equal(t, 1, body.AccessiblePropertiesCount)
 }
 
 // newParticipantMutationRequest builds a POST/DELETE request with the user

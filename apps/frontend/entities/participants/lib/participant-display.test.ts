@@ -74,36 +74,8 @@ describe('participantRowTitle / participantRowSubtitle', () => {
   });
 });
 
-describe('participantStatusBadge — чип агрегат-статуса (макеты 2036-82971, 2008-82943)', () => {
-  it('all_properties — «Доступ ко всем объектам», серый без иконки', () => {
-    expect(participantStatusBadge(participant())).toEqual({
-      tone: 'neutral',
-      label: 'Доступ ко всем объектам',
-      icon: undefined,
-    });
-  });
-
-  it('partial — «Доступно N объектов» с русской плюрализацией', () => {
-    expect(participantStatusBadge(participant({ aggregateStatus: 'partial', accessiblePropertiesCount: 3 })).label).toBe(
-      'Доступно 3 объекта',
-    );
-    expect(participantStatusBadge(participant({ aggregateStatus: 'partial', accessiblePropertiesCount: 1 })).label).toBe(
-      'Доступно 1 объект',
-    );
-    expect(participantStatusBadge(participant({ aggregateStatus: 'partial', accessiblePropertiesCount: 5 })).label).toBe(
-      'Доступно 5 объектов',
-    );
-  });
-
-  it('limit_exceeded — «Превышен лимит объектов», warning с замком', () => {
-    expect(participantStatusBadge(participant({ aggregateStatus: 'limit_exceeded' }))).toEqual({
-      tone: 'warning',
-      label: 'Превышен лимит объектов',
-      icon: 'lock',
-    });
-  });
-
-  it('pending-агрегат (юзера нет, все ноги pending) — «Приглашён», нейтральный без замка (Q11=А, #772)', () => {
+describe('participantStatusBadge — ровно два статусных бейджа (макет 3313-77128, D3 #1313)', () => {
+  it('pending-агрегат (юзера нет, все ноги pending) — «Аккаунт не создан», info с замком', () => {
     const p = participant({
       id: 'invitee@example.com',
       userId: undefined,
@@ -114,30 +86,46 @@ describe('participantStatusBadge — чип агрегат-статуса (ма�
       properties: [leg()],
     });
 
-    // «Доступно 0 объектов» читалось как отказ — приглашённому честнее
-    // «Приглашён».
     expect(participantStatusBadge(p)).toEqual({
-      tone: 'neutral',
-      label: 'Приглашён',
-      icon: undefined,
+      tone: 'info',
+      label: 'Аккаунт не создан',
+      icon: 'lock',
     });
   });
 
-  it('зарегистрированный без активных ног — чипы как прежде (детектор pending не срабатывает)', () => {
-    // На проводе не встречается (registered-бакет собирается только из
-    // memberships), но предикат не должен прятать честный счётчик.
-    expect(
-      participantStatusBadge(participant({ aggregateStatus: 'partial', accessiblePropertiesCount: 0 })).label,
-    ).toBe('Доступно 0 объектов');
+  it('limit_exceeded — «Превышен лимит объектов», warning с замком', () => {
+    expect(participantStatusBadge(participant({ aggregateStatus: 'limit_exceeded' }))).toEqual({
+      tone: 'warning',
+      label: 'Превышен лимит объектов',
+      icon: 'lock',
+    });
   });
 
-  it('pending-агрегат с активной ногой (на проводе невозможно) — считанный статус, не «Приглашён»', () => {
+  it('all_properties — без бейджа: статусы «частично/все объекты» ушли с экранов (#1313)', () => {
+    expect(participantStatusBadge(participant())).toBeNull();
+  });
+
+  it('partial — без бейджа, счётчик объектов больше не показывается (#1313)', () => {
+    expect(
+      participantStatusBadge(participant({ aggregateStatus: 'partial', accessiblePropertiesCount: 3 })),
+    ).toBeNull();
+  });
+
+  it('зарегистрированный без активных ног (на проводе не встречается) — без бейджа', () => {
+    // Registered-бакет собирается только из memberships, но предикат
+    // pending не должен выдумывать «Аккаунт не создан» зарегистрированному.
+    expect(
+      participantStatusBadge(participant({ aggregateStatus: 'partial', accessiblePropertiesCount: 0 })),
+    ).toBeNull();
+  });
+
+  it('pending-агрегат с активной ногой (на проводе невозможно) — не «Аккаунт не создан»', () => {
     const p = participant({
       aggregateStatus: 'partial',
       accessiblePropertiesCount: 1,
       properties: [leg({ status: 'active' })],
     });
 
-    expect(participantStatusBadge(p).label).toBe('Доступно 1 объект');
+    expect(participantStatusBadge(p)).toBeNull();
   });
 });

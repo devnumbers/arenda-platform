@@ -585,7 +585,7 @@ func TestParticipantRepository_FullAccessSeesNoForeignParticipants(t *testing.T)
 	}
 
 	participants := NewParticipantRepository(tx)
-	svc := application.NewParticipantService(participants, anyIDLookup{}, nil, nil, nil)
+	svc := application.NewParticipantService(participants, anyIDLookup{}, nil, nil)
 
 	// The owner's own view keeps both of their people (the full_access member
 	// is one of them).
@@ -607,12 +607,5 @@ func TestParticipantRepository_FullAccessSeesNoForeignParticipants(t *testing.T)
 	}
 	if _, err := svc.GetParticipant(ctx, member, person.String()); !errors.Is(err, domain.ErrParticipantNotFound) {
 		t.Errorf("member GetParticipant(foreign person): expected ErrParticipantNotFound, got %v", err)
-	}
-	summary, err := svc.Summary(ctx, member)
-	if err != nil {
-		t.Fatalf("member Summary: %v", err)
-	}
-	if summary.ParticipantsCount != 0 {
-		t.Errorf("member summary participants = %d, want 0", summary.ParticipantsCount)
 	}
 }

@@ -81,10 +81,6 @@ func (emptyParticipants) GetParticipant(context.Context, uuid.UUID, string) (acc
 	return accessapp.Participant{}, nil
 }
 
-func (emptyParticipants) Summary(context.Context, uuid.UUID) (accessapp.ParticipantsSummary, error) {
-	return accessapp.ParticipantsSummary{}, nil
-}
-
 // emptyHistory is the historyapp.EntryReader double: the allow-direction
 // history handlers answer from it with empty pages.
 type emptyHistory struct{}

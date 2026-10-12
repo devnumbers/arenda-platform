@@ -138,11 +138,6 @@ type Property struct {
 	PhotoContentType *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	// MembersCount is the shared-access participant count: membership rows
-	// (any status; the owner is never a membership row) plus pending email
-	// invitations (issue #163). Filled by the read queries that carry the
-	// members_count projection; zero on write-path responses (create/update).
-	MembersCount int
 	// AccessRole is the role of the requesting actor on this property
 	// (issue T11): RoleOwner for own properties, the membership role for
 	// shared ones. Empty when not populated (internal use). Filled by the

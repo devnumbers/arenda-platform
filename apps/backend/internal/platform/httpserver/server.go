@@ -357,13 +357,13 @@ func New(deps Deps) http.Handler {
 		r.With(idempotent).Post("/tasks/rules", wrapper.CreateTaskRuleWithoutProperty)
 	}
 
-	// Screen 2 (#999): the global «Участники» section — no exceptions, every
-	// consumer of the group lives inside the gated section; the self-leave
-	// route above stays the only excluded access surface.
+	// Screen 2 (#999): the global «Участники» section's API surface. The
+	// section page itself opens on basic as the upsell empty state (issue
+	// #1313, ADR 0064 revision) without calling these — the list reads stay
+	// behind the gate, the client fetches only on a paid tariff.
 	r.With(paidSections).Get("/participants", wrapper.ListParticipants)
 	r.With(paidSections).Delete("/participants", wrapper.RevokeAllParticipants)
 	r.With(paidSections).Post("/participants/invite", wrapper.InviteParticipant)
-	r.With(paidSections).Get("/participants/summary", wrapper.GetParticipantsSummary)
 	r.With(paidSections).Delete("/participants/{participantId}", wrapper.DeleteParticipant)
 	r.With(paidSections).Get("/participants/{participantId}", wrapper.GetParticipant)
 	r.With(paidSections).Post("/participants/{participantId}/properties", wrapper.AddParticipantProperties)

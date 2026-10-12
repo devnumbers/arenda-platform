@@ -19,13 +19,8 @@ import {
 
 type ParticipantsResponse = components['schemas']['ParticipantsResponse'];
 
-import {
-  participantQueryOptions,
-  participantsSummaryQueryOptions,
-  type ParticipantsSummary,
-} from './queries';
+import { participantQueryOptions } from './queries';
 
-export type { ParticipantsSummary };
 /** Строки участников проецируются в двух видах: агрегаты
  * GET /participants* и списки объекта GET /properties/{id}/access/members
  * (#700). Инвалидация обеих семей обязательна у каждой participants-мутации:
@@ -35,49 +30,35 @@ function invalidateParticipantProjections(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: accessKeys.all });
 }
 
-/** Счётчики хаба «Совместный доступ» (карта #692, тикет #696). */
-export function useParticipantsSummary(): UseQueryResult<ParticipantsSummary, ApiError> {
-  return useQuery(participantsSummaryQueryOptions());
-}
-
-/** Список «Ваши участники» (тикет #697, GET /participants #693): агрегаты
+/** Список «Участники» (экран #697, GET /participants #693): агрегаты
  * участников сцопа читающего, серверный порядок — имя ASC. Объём мал
  * (тарифные слоты) — целиком, без пагинации; поиск и сортировка
- * клиентские (entities/participants). */
-export function useParticipantsList(): UseQueryResult<Participant[], ApiError> {
+ * клиентские (entities/participants). `enabled: false` — чтение за
+ * тарифным гейтом (402 на basic): раздел на basic рендерит апселл, не
+ * спрашивая список (#1313). */
+export function useParticipantsList(
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<Participant[], ApiError> {
   return useQuery({
     queryKey: participantsKeys.list(),
     queryFn: async (): Promise<Participant[]> => {
       const response = await apiClient<ParticipantsResponse>('/participants');
       return response.items.map(mapParticipant);
     },
+    enabled: options.enabled,
   });
 }
 
-/** Итог массового отзыва (#697): число удалённых и неудалённых — частичный
- * сбой пары DELETE не должен выглядеть полным успехом. */
-export type RevokeAllParticipantsResult = {
-  readonly revoked: number;
-  readonly failed: number;
-};
-
-/** «Отозвать доступ всем» (#697): DELETE /participants/{id} (#694) по
- * каждому участнику текущего списка. Bulk-эндпоинта в контракте нет —
- * каркас партии общий с «Покинуть все объекты» (deleteBatchCounting). Кэш
- * участников инвалидируется всегда (включая summary хаба) — и после
- * успеха, и при частичном сбое. */
-export function useRevokeAllParticipants(): UseMutationResult<
-  RevokeAllParticipantsResult,
-  ApiError,
-  readonly string[]
-> {
+/** «Отозвать доступ всем» (кебаб раздела #1313): глобальный
+ * DELETE /participants (#1310) — одним вызовом снимает все членства и
+ * отменяет все pending-приглашения по всем объектам читающего,
+ * идемпотентен. Кэш участников инвалидируется всегда (onSettled) — и
+ * после успеха, и при сбое. */
+export function useRevokeAllParticipants(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
   return useGuardedMutation({
-    mutationFn: async (participantIds) => {
-      const { done, failed } = await deleteBatchCounting(
-        participantIds.map((id) => `/participants/${encodeURIComponent(id)}`),
-      );
-      return { revoked: done, failed };
+    mutationFn: async () => {
+      await apiClient<void>('/participants', { method: 'DELETE' });
     },
     onSettled: () => invalidateParticipantProjections(queryClient),
   });
@@ -100,7 +81,7 @@ export function useParticipant(
 /** «Отозвать и удалить» со страницы участника (#698, DELETE
  * /participants/{id} #694): снимает все ноги человека на объектах читающего.
  * Инвалидация всегда (onSettled, канон useRevokeAllParticipants) — и после
- * успеха, и при сбое: список/счётчики/агрегат перечитываются. */
+ * успеха, и при сбое: список/агрегат перечитываются. */
 export function useRevokeParticipant(): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();
   return useGuardedMutation({
@@ -113,46 +94,18 @@ export function useRevokeParticipant(): UseMutationResult<void, ApiError, string
   });
 }
 
-/** Итог пакетного DELETE: число исполненных и неудавшихся — частичный
- * сбой партии не должен выглядеть полным успехом (общий каркас «Отозвать
- * всех» #697 и «Покинуть все объекты» #701). */
-export type BatchDeleteResult = {
-  readonly done: number;
-  readonly failed: number;
-};
-
-/** Подсчёт исходов партии параллельных DELETE: повторный DELETE даёт
- * приватный 404 без побочных эффектов, поэтому гонка параллельных
- * запросов безопасна. */
-async function deleteBatchCounting(
-  urls: ReadonlyArray<string>,
-): Promise<BatchDeleteResult> {
-  const results = await Promise.allSettled(
-    urls.map((url) => apiClient<void>(url, { method: 'DELETE' })),
-  );
-  let done = 0;
-  let failed = 0;
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      done += 1;
-    } else {
-      failed += 1;
-    }
-  }
-  return { done, failed };
-}
-
-/** Инвалидация самовыхода (#701): проекции участников (summary хаба
- * считает чужие объекты) плюс сам список объектов с деталями — ряд уходит
- * со экрана, детали чужого объекта перестают быть доступны. */
+/** Инвалидация самовыхода (#701): проекции участников плюс сам список
+ * объектов с деталями — ряд уходит со экрана, детали чужого объекта
+ * перестают быть доступны. */
 function invalidateLeaveProjections(queryClient: QueryClient): void {
   invalidateParticipantProjections(queryClient);
   void queryClient.invalidateQueries({ queryKey: propertyKeys.all });
 }
 
-/** «Покинуть объект» со экрана «Объекты пользователей» (карта #692, тикет
- * #701; DELETE /properties/{id}/access/members/self): самовыход участника.
- * Инвалидация в onSettled — канон participants-мутаций. */
+/** «Покинуть объект» (карта #692, тикет #701; DELETE
+ * /properties/{id}/access/members/self): самовыход участника. Живёт на
+ * «Участниках объекта» (D6 #1312), странице объекта и заглушке
+ * suspended-объекта. Инвалидация в onSettled — канон participants-мутаций. */
 export function useLeaveProperty(): UseMutationResult<void, ApiError, string> {
   const queryClient = useQueryClient();
   return useGuardedMutation({
@@ -162,28 +115,6 @@ export function useLeaveProperty(): UseMutationResult<void, ApiError, string> {
         { method: 'DELETE' },
       );
     },
-    onSettled: () => invalidateLeaveProjections(queryClient),
-  });
-}
-
-/** «Покинуть все объекты» (#701, кебаб шапки): DELETE members/self по
- * каждому чужому объекту текущего списка. Bulk-эндпоинта в контракте нет;
- * повторный DELETE безопасен (см. deleteBatchCounting). Кэш инвалидируется
- * всегда (onSettled, канон useRevokeAllParticipants) — список под попапом
- * уже пуст. */
-export function useLeaveAllProperties(): UseMutationResult<
-  BatchDeleteResult,
-  ApiError,
-  readonly string[]
-> {
-  const queryClient = useQueryClient();
-  return useGuardedMutation({
-    mutationFn: (propertyIds) =>
-      deleteBatchCounting(
-        propertyIds.map(
-          (id) => `/properties/${encodeURIComponent(id)}/access/members/self`,
-        ),
-      ),
     onSettled: () => invalidateLeaveProjections(queryClient),
   });
 }
@@ -233,13 +164,13 @@ export type InviteParticipantResult = {
   readonly skipped: number;
 };
 
-/** Приглашение участника из хаба (#699): одна почта и роль на снапшот
- * выбранных объектов. granted = активные + suspended (слоты получателя) +
- * pending (письмо) — человек приглашён в любом из этих исходов; когда
- * granted=0 при выбранных объектах, все ушли в skipped_* — экран
- * показывает ошибку и остаётся на месте. Инвалидация в onSettled — канон
- * useAddParticipantProperties: успех уводит назад по истории, агрегаты и
- * счётчики перечитает целевой экран. */
+/** Приглашение участника из раздела «Участники» (#699): одна почта и роль
+ * на снапшот выбранных объектов. granted = активные + suspended (слоты
+ * получателя) + pending (письмо) — человек приглашён в любом из этих
+ * исходов; когда granted=0 при выбранных объектах, все ушли в skipped_* —
+ * экран показывает ошибку и остаётся на месте. Инвалидация в onSettled —
+ * канон useAddParticipantProperties: успех уводит назад по истории,
+ * агрегаты перечитает целевой экран. */
 export function useInviteParticipant(): UseMutationResult<
   InviteParticipantResult,
   ApiError,

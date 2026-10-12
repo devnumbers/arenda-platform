@@ -33,10 +33,12 @@ test('страница участника: шапка, чип агрегата, 
   // exact+first: в переходный момент в шапке встречается дубль-спан.
   await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
 
-  // Блок участника: имя, почта, чип агрегата (partial — активна 1 из 3).
+  // Блок участника: имя, почта; у partial-агрегата бейджа нет — статусы
+  // «частично/все объекты» ушли с экранов (D3 #1313).
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
   await expect(page.getByText('e2e-member@example.com')).toBeVisible();
-  await expect(page.getByText('Доступно 1 объект')).toBeVisible();
+  await expect(page.getByText(/Доступно \d+/)).toHaveCount(0);
+  await expect(page.getByText('Доступ ко всем объектам')).toHaveCount(0);
 
   await expect(page.getByText('Доступные объекты')).toBeVisible();
   const apartmentRow = page.getByRole('button', { name: /Квартира на Ленина/ });
@@ -78,11 +80,11 @@ test('безымянный участник: «Пользователь» — з
     await page.goto(`/participants/${NAMELESS_ID}`);
 
     // Шапка (2008-81468): имени нет — «Пользователь» H1, почта
-    // подзаголовком (не прячется), чип агрегата — «Доступно 1 объект»
-    // (активна 1 из 3).
+    // подзаголовком (не прячется); у partial-агрегата бейджа нет (D3
+    // #1313).
     await expect(page.getByRole('heading', { name: 'Пользователь' })).toBeVisible();
     await expect(page.getByText(NAMELESS_EMAIL)).toBeVisible();
-    await expect(page.getByText('Доступно 1 объект')).toBeVisible();
+    await expect(page.getByText(/Доступно \d+/)).toHaveCount(0);
     await expect(page.getByText(NAMELESS_PHONE)).toHaveCount(0);
     await expect(page.getByText(/\*{3}/)).toHaveCount(0);
 
@@ -202,7 +204,9 @@ test('пригласить в объект: мультичек гаража, ш�
     );
   }
   await page.reload();
-  await expect(page.getByText('Доступно 1 объект')).toBeVisible();
+  // Сид восстановлен (нога гаража удалена) — агрегат снова partial, бейджа
+  // лимита нет (D3 #1313: у partial бейджа нет).
+  await expect(page.getByText('Превышен лимит объектов')).toHaveCount(0);
 });
 
 test('отзыв из объекта: подтверждение, попап успеха, ряд исчезает; сид восстанавливается', async ({ page, seededUser }) => {
@@ -244,17 +248,16 @@ test('отзыв из объекта: подтверждение, попап у�
 
 test('кебаб «Отозвать доступ к объектам»: подтверждение, попап «Участник удален» на списке; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  // Путь пользователя: список → ряд Сергея (нужна история — успех
-  // возврата по канону goBack ведёт именно на список).
-  await page.goto('/participants/list');
+  // Путь пользователя: раздел «Участники» → ряд Сергея (нужна история —
+  // успех возврата по канону goBack ведёт именно на раздел).
+  await page.goto('/participants');
 
   const header = screenHeader(page);
 
   await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
-  await expect(header.getByText('Участник')).toBeVisible();
-  // Данные экрана сели до меню: триггер кебаба живёт вместе с данными, и
-  // клик в момент подгрузки списка объектов мог попасть в перемонтаж
-  // (в полном прогоне флаконило, файловом — нет).
+  // Данные экрана сели до меню (заголовок шапки не матчим: у хаба-раздела
+  // он рендерится дважды — inline и mobile-клон компакт-бара, strict
+  // violation на substring «Участник»; возврат проверяет heading ниже).
   await expect(page.getByRole('heading', { name: 'Сергей Сидоров' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
 
@@ -273,9 +276,11 @@ test('кебаб «Отозвать доступ к объектам»: подт
   try {
     await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
 
-    // Возврат на список «Участники» с попапом «Участник удален»
-    // (2008-83716); Сергей из списка исчез, Мария осталась.
-    await expect(header.getByText('Ваши участники')).toBeVisible();
+    // Возврат в раздел «Участники» с попапом «Участник удален»
+    // (2008-83716); URL с якорем конца строки отличает раздел от
+    // страницы участника (заголовок хаба не проверяем: открытая модалка
+    // прячет фон из a11y-дерева — aria-modal).
+    await expect(page).toHaveURL(/\/participants$/);
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Участник удален' }),
     ).toBeVisible();
@@ -294,7 +299,7 @@ test('кебаб «Отозвать доступ к объектам»: подт
   await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
 });
 
-test('pending-участник: deep-link по почте, бейдж «Приглашён», смена роли приглашения; сид восстанавливается', async ({ page, seededUser }) => {
+test('pending-участник: deep-link по почте, бейдж «Аккаунт не создан», смена роли приглашения; сид восстанавливается', async ({ page, seededUser }) => {
   // Pending-приглашение на гараж (гейт тикета: состояния pending на тех же
   // экранах; права уходят в PATCH/DELETE /access/invitations/{id}).
   await execE2eSql(
@@ -310,12 +315,12 @@ test('pending-участник: deep-link по почте, бейдж «Приг
     const header = screenHeader(page);
 
     await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
-    // Имени нет — почта титул (контракт: «the email is the label»); чип
-    // агрегата в шапке — «Приглашён» (#772: считанный partial/0 как
-    // «Доступно 0 объектов» читался как отказ). first(): шапка в DOM раньше
-    // списка, где у pending-ноги гаража свой такой же чип (ассерт ниже).
+    // Имени нет — почта титул (контракт: «the email is the label»); бейдж
+    // в шапке — «Аккаунт не создан» (D3 #1313: у pending-агрегата ровно
+    // этот статус). У pending-ноги гаража свой чип «Приглашён» (ассерт
+    // ниже) — он-role бейдж, не статусный.
     await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
-    await expect(page.getByText('Приглашён').first()).toBeVisible();
+    await expect(page.getByText('Аккаунт не создан')).toBeVisible();
 
     const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
     await expect(garageRow.getByText('Приглашён')).toBeVisible();

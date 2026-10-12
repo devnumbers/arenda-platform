@@ -436,11 +436,10 @@ type Querier interface {
 	// properties list to load shared properties (whose owner_id differs from the
 	// actor). Read-only; callers must never leak existence to actors without a view
 	// capability (the application maps "no access" to ErrNotFound to preserve
-	// object privacy). members_count is the shared-access participant count
-	// (membership rows of any status plus pending email invitations, issue #163).
-	GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPropertyByIDRow, error)
+	// object privacy).
+	GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property, error)
 	GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error)
-	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error)
+	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error)
 	GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error)
 	// Unscoped pessimistic-lock lookup by id, for write paths that resolve access
 	// via the policy port before applying scope = owner_id (T3, issue #156).

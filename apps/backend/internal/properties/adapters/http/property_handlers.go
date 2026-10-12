@@ -613,15 +613,14 @@ func (h *PropertyHandlers) GetAddressSuggestions(w http.ResponseWriter, r *http.
 
 func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.PropertyResponse {
 	resp := openapi.PropertyResponse{
-		Id:           property.ID,
-		Name:         property.Name,
-		Type:         openapi.PropertyType(property.Type),
-		Address:      property.Address,
-		Status:       openapi.PropertyStatus(property.Status),
-		MembersCount: property.MembersCount,
-		CreatedAt:    property.CreatedAt,
-		UpdatedAt:    property.UpdatedAt,
-		PinnedAt:     property.PinnedAt,
+		Id:        property.ID,
+		Name:      property.Name,
+		Type:      openapi.PropertyType(property.Type),
+		Address:   property.Address,
+		Status:    openapi.PropertyStatus(property.Status),
+		CreatedAt: property.CreatedAt,
+		UpdatedAt: property.UpdatedAt,
+		PinnedAt:  property.PinnedAt,
 	}
 	resp.Attributes = propertyAttributesResponse(property.Attributes)
 	// The list projections ride the list reads only (ticket #585): nil
