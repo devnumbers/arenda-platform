@@ -21,15 +21,20 @@ export type PropertyDetailKebabProps = {
   readonly status: PropertyStatus;
   /** Ролевой мутационный доступ (смотрящему — только чтение и доступ). */
   readonly canMutate: boolean;
+  /** Пункты совместного доступа тарифу доступны (D15 #1312: на basic
+   * скрываются полностью — платная функция не приманивает). */
+  readonly canUseSharing: boolean;
   readonly onAction: (key: PropertyDetailActionKey) => void;
 };
 
 /** Кебаб шапки детали (Figma 1186:44996 — активный: об объекте, изменить
  * статус, совместный доступ; 1581:52407 — архивный: об объекте, вернуть
- * из архива, совместный доступ). Канон Menu (Radix dropdown). */
+ * из архива, совместный доступ; 2235-100924 — платный состав у
+ * смотрящего). Канон Menu (Radix dropdown). */
 export function PropertyDetailKebab({
   status,
   canMutate,
+  canUseSharing,
   onAction,
 }: PropertyDetailKebabProps): JSX.Element {
   return (
@@ -38,7 +43,7 @@ export function PropertyDetailKebab({
         <IconButton icon={<Kebab className="h-6 w-6" />} label="Действия с объектом" />
       </MenuTrigger>
       <MenuContent>
-        {buildPropertyKebabItems(status, canMutate).map((item) => (
+        {buildPropertyKebabItems(status, canMutate, canUseSharing).map((item) => (
           <MenuItem
             key={item.key}
             icon={KEBAB_ICONS[item.key]}

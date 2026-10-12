@@ -4,6 +4,7 @@ import {
   expect,
   execE2eSql,
   openCabinetWithSessionToken,
+  screenHeader,
   seededMemberSessionToken,
   seededViewerSessionToken,
   SEEDED_APARTMENT_PROPERTY_ID,
@@ -162,13 +163,17 @@ test.describe('режим просмотра', () => {
     await expect(page.getByText('e2e@example.com')).toBeVisible();
     await expect(page.getByText('e2e-member@example.com')).toBeVisible();
 
-    // Manage-контролы зрителю не рисуются: кебаб и CTA приглашения.
-    await expect(
-      page.getByRole('button', { name: 'Еще — действия со списком' }),
-    ).toHaveCount(0);
+    // Manage-контролы зрителю не рисуются: CTA приглашения нет; кебаб
+    // после D6 (#1312) у приглашённого есть, но только с «Историей
+    // объекта» — управляющих пунктов нет.
     await expect(
       page.getByRole('button', { name: 'Пригласить участника' }),
     ).toHaveCount(0);
+    await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
+    await expect(page.getByRole('menuitem', { name: 'История объекта' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Пригласить участника' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Отозвать доступ всем' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
   });
 
   test('покинуть объект: отмена ничего не делает, выход сносит ногу (SQL)', async ({

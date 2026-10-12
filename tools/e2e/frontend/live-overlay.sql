@@ -13,7 +13,7 @@
 -- (tools/payment-categories/catalog.json).
 INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
                       recurrence, since, end_date, auto_pay,
-                      category_slug, is_favorite)
+                      category_slug)
 VALUES
 -- Еженедельный доход: одна суббота в неделю (0=Вс…6=Сб).
     ('55555555-5555-4555-8555-555555555561',
@@ -21,7 +21,7 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      'income', 'Аренда машиноместа', 200000,
      '{"kind": "weekly", "weekdays": [6]}',
-     CURRENT_DATE + 3, NULL, FALSE, 'parking', FALSE),
+     CURRENT_DATE + 3, NULL, FALSE, 'parking'),
 -- Доход с окончанием в будущем: «Ближайший платеж» с датой, признак
 -- завершённости ещё не наступил.
     ('55555555-5555-4555-8555-555555555562',
@@ -29,7 +29,7 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      'income', 'Компенсация ЖКУ', 350000,
      '{"kind": "monthly", "dayOfMonth": 10}',
-     CURRENT_DATE + 3, CURRENT_DATE + 90, FALSE, 'utilities-compensation', FALSE),
+     CURRENT_DATE + 3, CURRENT_DATE + 90, FALSE, 'utilities-compensation'),
 -- Еженедельный расход на два дня недели — проверка метки повторяемости
 -- вида «Каждый понедельник и четверг» (recurrenceLabel).
     ('55555555-5555-4555-8555-555555555563',
@@ -37,7 +37,7 @@ VALUES
      '33333333-3333-4333-8333-333333333333',
      'expense', 'Клининг холла', 150000,
      '{"kind": "weekly", "weekdays": [1, 4]}',
-     CURRENT_DATE + 3, NULL, FALSE, 'cleaning', FALSE)
+     CURRENT_DATE + 3, NULL, FALSE, 'cleaning')
 ON CONFLICT (id) DO UPDATE
 SET title = EXCLUDED.title,
     amount_kopecks = EXCLUDED.amount_kopecks,
@@ -45,8 +45,10 @@ SET title = EXCLUDED.title,
     since = EXCLUDED.since,
     end_date = EXCLUDED.end_date,
     auto_pay = EXCLUDED.auto_pay,
-    category_slug = EXCLUDED.category_slug,
-    is_favorite = EXCLUDED.is_favorite;
+    category_slug = EXCLUDED.category_slug;
+-- Избранность с 000158 (#1308/#1311) — личная строка user_payment_favorites:
+-- глобальной колонки is_favorite у payments больше нет, а избранных оверлей
+-- не заводит (в старой форме все три значения были FALSE).
 
 -- История «Интернета»: пара офсетных оплат для подписей строки операции
 -- (1332:61665): «Заранее на 2 дня» (paid на 2 дня раньше срока) и

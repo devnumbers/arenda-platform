@@ -40,7 +40,7 @@ describe('propertyStatusSubtitle (подзаголовок шапки детал
 
 describe('buildPropertyKebabItems (кебаб-меню детали)', () => {
   it('активный объект: об объекте, изменить статус, совместный доступ', () => {
-    expect(buildPropertyKebabItems('active', true)).toEqual([
+    expect(buildPropertyKebabItems('active', true, true)).toEqual([
       { key: 'about', label: 'Об объекте', danger: false },
       { key: 'change-status', label: 'Изменить статус', danger: false },
       { key: 'access', label: 'Совместный доступ', danger: false },
@@ -48,7 +48,7 @@ describe('buildPropertyKebabItems (кебаб-меню детали)', () => {
   });
 
   it('объект на ремонте: тот же набор', () => {
-    expect(buildPropertyKebabItems('maintenance', true).map((item) => item.key)).toEqual([
+    expect(buildPropertyKebabItems('maintenance', true, true).map((item) => item.key)).toEqual([
       'about',
       'change-status',
       'access',
@@ -56,7 +56,7 @@ describe('buildPropertyKebabItems (кебаб-меню детали)', () => {
   });
 
   it('архивный: об объекте, вернуть из архива, совместный доступ', () => {
-    expect(buildPropertyKebabItems('archived', true).map((item) => item.key)).toEqual([
+    expect(buildPropertyKebabItems('archived', true, true).map((item) => item.key)).toEqual([
       'about',
       'unarchive',
       'access',
@@ -64,13 +64,30 @@ describe('buildPropertyKebabItems (кебаб-меню детали)', () => {
   });
 
   it('смотрящему: без статусных мутаций', () => {
-    expect(buildPropertyKebabItems('active', false).map((item) => item.key)).toEqual([
+    expect(buildPropertyKebabItems('active', false, true).map((item) => item.key)).toEqual([
       'about',
       'access',
     ]);
-    expect(buildPropertyKebabItems('archived', false).map((item) => item.key)).toEqual([
+    expect(buildPropertyKebabItems('archived', false, true).map((item) => item.key)).toEqual([
       'about',
       'access',
+    ]);
+  });
+
+  it('basic-тариф (D15 #1312): пунктов совместного доступа нет ни у одной роли и в любом статусе', () => {
+    expect(buildPropertyKebabItems('active', true, false).map((item) => item.key)).toEqual([
+      'about',
+      'change-status',
+    ]);
+    expect(buildPropertyKebabItems('active', false, false).map((item) => item.key)).toEqual([
+      'about',
+    ]);
+    expect(buildPropertyKebabItems('archived', true, false).map((item) => item.key)).toEqual([
+      'about',
+      'unarchive',
+    ]);
+    expect(buildPropertyKebabItems('archived', false, false).map((item) => item.key)).toEqual([
+      'about',
     ]);
   });
 });

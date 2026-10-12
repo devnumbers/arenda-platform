@@ -7,10 +7,9 @@ import {
   ArrowLeft,
   Block,
   Cancel,
-  EditSmall,
   EyeSmall,
+  FullAccessSmall,
   Kebab,
-  LockSmall,
   Search,
   SmallArrowDown,
   SmallArrowRight,
@@ -21,15 +20,18 @@ import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
+import { goBack } from '@/shared/lib/navigation';
+import { notify } from '@/shared/lib/notifications';
 import { useMe } from '@/features/auth';
 import { useProperty } from '@/features/properties';
+import { useLeaveProperty } from '@/features/participants';
 import { propertyPermissions } from '@/entities/property';
 import {
   usePropertyAccessMembers,
   useRevokeAllPropertyAccessMembers,
   type PropertyAccessMemberRef,
 } from '@/features/access';
-import { ParticipantRowBadge, suspendedLimitBadge, sortOrderPickerGroups } from '@/entities/participants';
+import { ParticipantRowBadge, sortOrderPickerGroups } from '@/entities/participants';
 import {
   Button,
   ChipButton,
@@ -79,29 +81,33 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
 import { PropertyAccessNotFound } from './participant-fragments';
 
 const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = {
-  owner: LockSmall,
-  edit: EditSmall,
+  full: FullAccessSmall,
   eye: EyeSmall,
 };
 
 /**
- * Экран «Участники объекта» (карта #692, тикет #700; Figma 1980-107096):
- * замена легаси-модалки PropertySharingModal — вход из детали объекта
- * («Управление» → «Совместный доступ»); зритель видит тот же экран.
- * Данные — GET /properties/{id}/access/members (тот же контракт, что у
- * модалки): владелец отдельным первым рядом, участники с иконкой роли у
- * почты (замок/перо/глаз) и warning-чипом приостановленного слота.
+ * Экран «Участники объекта» (D6 #1312, макет 3298-75434): полный состав
+ * с почтами и pending-приглашениями читают все участники объекта —
+ * read-only у не-владельца. Владелец первым отдельным рядом, у каждого
+ * ряда иконка роли у почты (открытый замок Icon/S/FullAccess — владелец
+ * и full_access, глаз — просмотр), чипы статусов: «Аккаунт не создан»
+ * у pending-приглашения (инфо, лейбл #1105 в титуле) и «Превышен лимит
+ * объектов» у suspended-ноги.
  *
  * Чип «Имя» — клиентская сортировка (владелец всегда первым), чип «Все
- * роли» — клиентский фильтр (1980-109148), поиск — иконка в шапке поверх
- * экрана (1980-108531): объём мал, серверного ?search= нет (прецедент
- * #697). Выбор обоих чипов живёт в адресе (?order= и ?role=, дефолты не
- * пишутся — конвенция состояния в адресе, #785). Кебаб (1980-139712):
- * «Пригласить участника», «История объекта» (#840 — вход в ленту,
- * прибитую к этому объекту; есть и на архивном) и «Отозвать доступ
- * всем» (2035-82619 — партия DELETE members/invitations в скоупе одного
- * объекта).
- * CTA «Пригласить участника» — приглашение от объекта без выбора объектов.
+ * роли» — клиентский фильтр, поиск — иконка в шапке поверх экрана:
+ * объём мал, серверного ?search= нет (прецедент #697). Выбор обоих
+ * чипов живёт в адресе (?order= и ?role=, дефолты не пишутся —
+ * конвенция состояния в адресе, #785).
+ *
+ * Действия по ролям (D6): у владельца — кебаб «Пригласить участника» /
+ * «История объекта» (#840) / красное «Отозвать доступ всем» (2035-82619
+ * — партия DELETE members/invitations в скоупе одного объекта) и синий
+ * CTA приглашения внизу; у приглашённого (любой роли) — кебаб только с
+ * «Историей объекта» и красный CTA «Покинуть объект» (D6; самовыход
+ * #701: DELETE .../access/members/self с канон-подтверждением, возврат к
+ * объектам). На архивном объекте приглашение скрыто, отзыв, история и
+ * выход живут.
  *
  * Тап по ряду — страница участника (#698, агрегат): uuid юзера, у
  * pending — почта. Статичные ряды, без шеврона: владелец (страница
@@ -110,9 +116,7 @@ const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = 
  * /participants/{себя} отвечает 404), читающий без manage-прав
  * (404-политика #693) и архивный объект (нога участника там может быть
  * только архивной). Пока /me не разрешился, ряды статичны тоже —
- * кнопка, ведущая на 404, не рендерится вовсе. У зрителя, как в
- * модалке, скрыты и manage-контролы (кебаб, CTA), выдача на архивный
- * объект запрещена.
+ * кнопка, ведущая на 404, не рендерится вовсе.
  */
 export function PropertyParticipantsScreen({
   propertyId,
@@ -135,6 +139,7 @@ export function PropertyParticipantsScreen({
     initialRoleFilter ?? DEFAULT_PROPERTY_PARTICIPANT_ROLE_FILTER,
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
   const [showAllRevoked, setShowAllRevoked] = useState(false);
   // «Участник приглашен» (макет 2035-82202): возврат из приглашения от
   // объекта — попап рендерится здесь по staged-флагу (канон #697/#699).
@@ -155,6 +160,7 @@ export function PropertyParticipantsScreen({
     : null;
   const propertyQuery = useProperty(propertyId);
   const revokeAll = useRevokeAllPropertyAccessMembers(propertyId);
+  const leaveProperty = useLeaveProperty();
   const meQuery = useMe();
 
   const members = membersQuery.data ?? [];
@@ -162,19 +168,26 @@ export function PropertyParticipantsScreen({
   // 2026-09-20, обход #758) — обогащение не требуется.
   const rows = propertyParticipantRows(members, meQuery.data?.id);
   // Управление участниками объекта — только владелец (D8 #1304, зеркало
-  // owner-only политики: у полного доступа остаются чтение состава и
-  // «Покинуть объект», исчезают приглашение, меню и смена роли) — и на
-  // архивном объекте (отзыв разрешён), но выдача на архивный запрещена —
-  // приглашение скрыто. Центральные права объекта (#703): пока объект не
-  // загружен или не загрузился, мутации консервативно скрыты.
-  const canManage = propertyPermissions(
+  // owner-only политики: у полного доступа остаются чтение состава,
+  // «Покинуть объект» и «История объекта», исчезают приглашение и
+  // отзыв) — и на архивном объекте (отзыв разрешён), но выдача на
+  // архивный запрещена — приглашение скрыто. Центральные права объекта
+  // (#703): пока объект не загружен или не загрузился, мутации
+  // консервативно скрыты.
+  const permissions = propertyPermissions(
     propertyQuery.isSuccess ? propertyQuery.data : undefined,
-  ).canManageMembers;
+  );
+  const canManage = permissions.canManageMembers;
+  // «Покинуть объект» (D6) — у любого приглашённого; тоже консервативно
+  // ждёт загрузки объекта.
+  const canLeave = permissions.canLeave;
   const isArchived = propertyQuery.data?.status === 'archived';
 
   const participantsCount = rows.filter((row) => !row.isOwner).length;
-  // Служебные иконки шапки — только когда есть кого искать и отзывывать
-  // (§7): список из одного владельца и ошибка загрузки их прячут.
+  // Служебные иконки шапки — только когда есть кого искать (§7): список
+  // из одного владельца и ошибка загрузки их прячут; кебаб (D6) живёт
+  // при тех же условиях — у владельца с действиями управления, у
+  // приглашённого только с «Историей объекта».
   const headerActionsVisible =
     !membersQuery.isPending && !membersQuery.isError && participantsCount > 0;
   const query = search.trim();
@@ -228,6 +241,19 @@ export function PropertyParticipantsScreen({
           setShowAllRevoked(true);
         }
       },
+    });
+  };
+
+  // Самовыход (#701): канон-подтверждение, канон-тост, возврат к списку
+  // объектов — деталь чужого объекта после выхода отвечает 404.
+  const confirmLeave = (): void => {
+    leaveProperty.mutate(propertyId, {
+      onSuccess: () => {
+        setLeaveOpen(false);
+        notify.scenarios.access.leftProperty();
+        goBack(router, ROUTES.properties);
+      },
+      onError: (error) => notify.scenarios.access.leavePropertyError(error),
     });
   };
 
@@ -314,31 +340,34 @@ export function PropertyParticipantsScreen({
                   label="Поиск участников"
                   onClick={() => setSearchMode(true)}
                 />
-                {canManage && (
-                  <Menu>
-                    <MenuTrigger asChild>
-                      <IconButton icon={<Kebab />} label="Еще — действия со списком" />
-                    </MenuTrigger>
-                    <MenuContent>
-                      {!isArchived && (
-                        <MenuItem
-                          icon={<TeamAdd className="h-6 w-6" />}
-                          onSelect={() =>
-                            router.push(ROUTES.propertyParticipantsInvite(propertyId))
-                          }
-                        >
-                          Пригласить участника
-                        </MenuItem>
-                      )}
-                      {/* История объекта (#840, макет 1980-139712): вход в
-                        * ленту, прибитую к этому объекту; есть и на
-                        * архивном — журнал живёт, пока живёт объект. */}
+                {/* Кебаб (D6): у владельца — управление, у приглашённого
+                 * только «История объекта»; состав ветвят canManage и
+                 * архив (приглашение на архивный запрещено). */}
+                <Menu>
+                  <MenuTrigger asChild>
+                    <IconButton icon={<Kebab />} label="Еще — действия со списком" />
+                  </MenuTrigger>
+                  <MenuContent>
+                    {canManage && !isArchived && (
                       <MenuItem
-                        icon={<TimeHistory className="h-6 w-6" />}
-                        onSelect={() => router.push(ROUTES.historyProperty(propertyId))}
+                        icon={<TeamAdd className="h-6 w-6" />}
+                        onSelect={() =>
+                          router.push(ROUTES.propertyParticipantsInvite(propertyId))
+                        }
                       >
-                        История объекта
+                        Пригласить участника
                       </MenuItem>
+                    )}
+                    {/* История объекта (#840): вход в ленту, прибитую к
+                     * этому объекту; есть и на архивном — журнал живёт,
+                     * пока живёт объект. */}
+                    <MenuItem
+                      icon={<TimeHistory className="h-6 w-6" />}
+                      onSelect={() => router.push(ROUTES.historyProperty(propertyId))}
+                    >
+                      История объекта
+                    </MenuItem>
+                    {canManage && (
                       <MenuItem
                         icon={<Block className="h-6 w-6 text-error" />}
                         className="text-error"
@@ -346,9 +375,9 @@ export function PropertyParticipantsScreen({
                       >
                         Отозвать доступ всем
                       </MenuItem>
-                    </MenuContent>
-                  </Menu>
-                )}
+                    )}
+                  </MenuContent>
+                </Menu>
               </span>
             ) : undefined
           }
@@ -397,7 +426,7 @@ export function PropertyParticipantsScreen({
         )}
       </PageContent>
 
-      {canManage && !isArchived && (
+      {canManage && !isArchived ? (
         // CTA над видимым нижним меню (решение владельца 06.10.2026, #1166).
         <StickyBottomBar aboveTabBar>
           <Button
@@ -407,6 +436,17 @@ export function PropertyParticipantsScreen({
             Пригласить участника
           </Button>
         </StickyBottomBar>
+      ) : (
+        canLeave && (
+          // «Покинуть объект» вместо кнопки приглашения (D6, 3298-75434):
+          // красный CTA у приглашённого любой роли, включая архивный
+          // объект — самовыход там тоже открыт.
+          <StickyBottomBar aboveTabBar>
+            <Button variant="danger" className="w-full" onClick={() => setLeaveOpen(true)}>
+              Покинуть объект
+            </Button>
+          </StickyBottomBar>
+        )
       )}
 
       <ConfirmDialog
@@ -421,6 +461,22 @@ export function PropertyParticipantsScreen({
         stacked
         pending={revokeAll.isPending}
         onConfirm={confirmRevokeAll}
+      />
+
+      {/* Подтверждение самовыхода — канон #701 (2010-132970), те же тексты,
+       * что у «Покинуть объект» на детали объекта. */}
+      <ConfirmDialog
+        open={leaveOpen}
+        onOpenChange={setLeaveOpen}
+        title="Уверены, что хотите покинуть объект?"
+        titleClassName="text-[28px] leading-8"
+        description="Вы потеряете доступ к объекту пользователя. Попросить доступ можно будет снова"
+        descriptionClassName="text-base"
+        confirmLabel="Покинуть"
+        cancelLabel="Отмена"
+        confirmVariant="danger"
+        pending={leaveProperty.isPending}
+        onConfirm={confirmLeave}
       />
 
       {/* Попап «Все участники удалены» (макет 2035-82834): канон #697 —
@@ -454,10 +510,10 @@ export function PropertyParticipantsScreen({
   );
 }
 
-/** Ряд списка (макет 1980-107096, Row Button): аватар 44 — фото профиля
- * участника или заглушка BoldUser (UserAvatar, решение #1286),
- * титул (у владельца — «(Вы)» из VM), почта с иконкой роли, чип
- * приостановленного слота; шеврон — только у кликабельных рядов. */
+/** Ряд списка (макет D6 3298-75434, Row Button): аватар 44 — фото профиля
+ * участника или заглушка BoldUser (UserAvatar, решение #1286), титул (у
+ * владельца — «(Вы)» из VM), почта с иконкой роли, чип статуса из VM
+ * (suspended/pending); шеврон — только у кликабельных рядов. */
 function PropertyParticipantRowView({
   row,
   onSelect,
@@ -496,9 +552,9 @@ function PropertyParticipantRowView({
           </LiveValue>
           {row.subtitle !== undefined && <span className="truncate">{row.subtitle}</span>}
         </span>
-        {row.suspended && (
+        {row.badge && (
           <span>
-            <ParticipantRowBadge badge={suspendedLimitBadge()} />
+            <ParticipantRowBadge badge={row.badge} />
           </span>
         )}
       </span>

@@ -44,29 +44,31 @@ export function propertyStatusSubtitle(status: PropertyStatus): string | null {
   return null;
 }
 
-/** Кебаб (Figma 1186:44996 — активный, 1581:52407 — архивный). Смотрящему
- * (canMutate=false) статусные мутирующие пункты недоступны — остаются
- * чтение и совместный доступ. */
+/** Кебаб (Figma 1186:44996 — активный, 1581:52407 — архивный; платный
+ * состав у смотрящего — 2235-100924). Смотрящему (canMutate=false)
+ * статусные мутирующие пункты недоступны — остаются чтение и совместный
+ * доступ. На basic пункты совместного доступа скрыты полностью (D15
+ * #1312): платная функция не приманивает; per-object экраны остаются под
+ * paywall-редиректом (ADR 0064), так что deep-link живёт, вход из UI на
+ * basic — нет. */
 export function buildPropertyKebabItems(
   status: PropertyStatus,
   canMutate: boolean,
+  canUseSharing: boolean,
 ): ReadonlyArray<PropertyDetailAction> {
+  const sharing = canUseSharing ? [action('access', 'Совместный доступ', false)] : [];
   if (status === 'archived') {
     return canMutate
-      ? [
-          action('about', 'Об объекте', false),
-          action('unarchive', 'Вернуть из архива', false),
-          action('access', 'Совместный доступ', false),
-        ]
-      : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
+      ? [action('about', 'Об объекте', false), action('unarchive', 'Вернуть из архива', false), ...sharing]
+      : [action('about', 'Об объекте', false), ...sharing];
   }
   return canMutate
     ? [
         action('about', 'Об объекте', false),
         action('change-status', 'Изменить статус', false),
-        action('access', 'Совместный доступ', false),
+        ...sharing,
       ]
-    : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
+    : [action('about', 'Об объекте', false), ...sharing];
 }
 
 /**

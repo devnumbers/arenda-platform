@@ -15,6 +15,15 @@ export const suspendedLimitBadge = (): ParticipantRowBadge => ({
   icon: 'lock',
 });
 
+/** Info-чип pending-приглашения (D6 #1312, макет 3298-75434): голубая
+ * подложка, Icon/S/Lock, «Аккаунт не создан». Именованный конструктор —
+ * как suspendedLimitBadge: текст и тон в одном месте. */
+export const accountNotCreatedBadge = (): ParticipantRowBadge => ({
+  tone: 'info',
+  label: 'Аккаунт не создан',
+  icon: 'lock',
+});
+
 /** Титул строки списка: имя; у pending-строки (имени нет) — почта
  * (контракт #693: «the email is the label»). */
 export function participantRowTitle(participant: Participant): string {

@@ -32,5 +32,4 @@ export type {
 } from './lib/participant-invite-selection';
 export { ParticipantRowButton } from './ui/participant-row-button';
 export { ParticipantRowBadge } from './ui/participant-row-badge';
-export { suspendedLimitBadge } from './lib/participant-display';
-export { participantStatusBadge } from './lib/participant-display';
+export { accountNotCreatedBadge, participantStatusBadge, suspendedLimitBadge } from './lib/participant-display';
