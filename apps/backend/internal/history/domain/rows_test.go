@@ -409,7 +409,6 @@ func TestLegacyRows_KeepNoDetails(t *testing.T) {
 	// field stays absent and the screens render the header alone.
 	withoutDetails := []Entry{
 		PropertyCreated(uuid.Must(uuid.NewV7()), "Квартира"),
-		PropertyPinned(uuid.Must(uuid.NewV7())),
 		PropertyArchived(uuid.Must(uuid.NewV7())),
 		RentalCompleted(uuid.Must(uuid.NewV7()), "Максим"),
 		RentalDeleted(uuid.Must(uuid.NewV7()), "Максим"),

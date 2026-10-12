@@ -161,7 +161,7 @@ func TestRecord_ActorResolutionFailureFailsTheRecord(t *testing.T) {
 	writer := &fakeWriter{}
 	svc := historyapp.NewService(writer, fakeActors{err: errors.New("db down")}, nil)
 
-	entry := domain.PropertyRenamed(uuid.Must(uuid.NewV7()), "Old", "New")
+	entry := domain.PropertyArchived(uuid.Must(uuid.NewV7()))
 	entry.ActorID = &actor
 	if err := svc.Record(context.Background(), entry); err == nil {
 		t.Fatal("Record returned nil, want the actor resolution error")
