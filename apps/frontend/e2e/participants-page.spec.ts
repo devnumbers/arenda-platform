@@ -252,8 +252,18 @@ test('кебаб «Отозвать доступ к объектам»: подт
 
   await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
   await expect(header.getByText('Участник')).toBeVisible();
+  // Данные экрана сели до меню: триггер кебаба живёт вместе с данными, и
+  // клик в момент подгрузки списка объектов мог попасть в перемонтаж
+  // (в полном прогоне флаконило, файловом — нет).
+  await expect(page.getByRole('heading', { name: 'Сергей Сидоров' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
 
-  await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+  // Radix-меню под нагрузкой полного прогона может не открыться с первого
+  // клика — повторяем до появления пункта, затем выбираем его.
+  await expect(async () => {
+    await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
+  }).toPass({ timeout: 10_000 });
   await page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' }).click();
 
   const dialog = page.getByRole('dialog');
