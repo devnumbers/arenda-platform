@@ -267,7 +267,7 @@ func adminPropertyPhotoURL(propertyID uuid.UUID, key pgtype.Text) string {
 	if !key.Valid {
 		return ""
 	}
-	return "/api/v1/properties/" + propertyID.String() + "/photo"
+	return "/api/properties/" + propertyID.String() + "/photo"
 }
 
 // ListContacts implements ContactRepository.ListContacts: the property's

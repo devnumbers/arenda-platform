@@ -46,7 +46,7 @@ export type Participant = {
   readonly displayName: string | undefined;
   readonly aggregateStatus: ParticipantAggregateStatus;
   /** Путь стриминга фото профиля (ADR 0065, решение #1286):
-   * /api/v1/users/{userId}/photo; null — pending-строка или у юзера нет
+   * /api/users/{userId}/photo; null — pending-строка или у юзера нет
    * фото. Отозванный доступ отвечает 404 — onError деградирует в заглушку. */
   readonly photoUrl: string | null;
   /** Число объектов с активным доступом. */

@@ -9,7 +9,7 @@ const registeredDto: ParticipantDto = {
   user_id: '12111111-1111-4111-8111-111111111121',
   email: 'e2e-member@example.com',
   display_name: 'Мария Петрова',
-  photo_url: '/api/v1/users/12111111-1111-4111-8111-111111111121/photo',
+  photo_url: '/api/users/12111111-1111-4111-8111-111111111121/photo',
   aggregate_status: 'all_properties',
   accessible_properties_count: 1,
   properties: [
@@ -19,7 +19,7 @@ const registeredDto: ParticipantDto = {
       role: 'full_access',
       status: 'active',
       type: 'apartment',
-      photo_url: '/api/v1/properties/33333333-3333-4333-8333-333333333333/photo',
+      photo_url: '/api/properties/33333333-3333-4333-8333-333333333333/photo',
     },
   ],
 };
@@ -33,11 +33,11 @@ describe('mapParticipant — DTO → entity', () => {
     expect(participant.email).toBe('e2e-member@example.com');
     expect(participant.displayName).toBe('Мария Петрова');
     expect(participant.photoUrl).toBe(
-      '/api/v1/users/12111111-1111-4111-8111-111111111121/photo',
+      '/api/users/12111111-1111-4111-8111-111111111121/photo',
     );
     expect(participant.properties[0]).toMatchObject({
       type: 'apartment',
-      photoUrl: '/api/v1/properties/33333333-3333-4333-8333-333333333333/photo',
+      photoUrl: '/api/properties/33333333-3333-4333-8333-333333333333/photo',
     });
     expect(participant.aggregateStatus).toBe('all_properties');
     expect(participant.accessiblePropertiesCount).toBe(1);
@@ -48,7 +48,7 @@ describe('mapParticipant — DTO → entity', () => {
       role: 'full_access',
       status: 'active',
       type: 'apartment',
-      photoUrl: '/api/v1/properties/33333333-3333-4333-8333-333333333333/photo',
+      photoUrl: '/api/properties/33333333-3333-4333-8333-333333333333/photo',
     });
   });
 

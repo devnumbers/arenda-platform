@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type MePhotoStage, mePhotoDisplay } from './photo';
 
 describe('mePhotoDisplay — правило показа с летящей мутацией (мгновенное применение, решение владельца #1230)', () => {
-  const serverUrl = '/api/v1/me/photo';
+  const serverUrl = '/api/me/photo';
   const uploading: MePhotoStage = {
     kind: 'file',
     file: new File([], 'new.png', { type: 'image/png' }),

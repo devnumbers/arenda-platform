@@ -34,9 +34,9 @@ func TestAccessService_ListMembersCarriesPhotoUrl(t *testing.T) {
 
 	ownerRow, memberRow := members[0], members[1]
 	require.True(t, ownerRow.IsOwner)
-	require.True(t, strings.HasSuffix(ownerRow.PhotoURL, "/api/v1/users/"+f.owner.String()+"/photo"),
+	require.True(t, strings.HasSuffix(ownerRow.PhotoURL, "/api/users/"+f.owner.String()+"/photo"),
 		"owner photoURL = %q", ownerRow.PhotoURL)
-	require.True(t, strings.HasSuffix(memberRow.PhotoURL, "/api/v1/users/"+member.String()+"/photo"),
+	require.True(t, strings.HasSuffix(memberRow.PhotoURL, "/api/users/"+member.String()+"/photo"),
 		"member photoURL = %q", memberRow.PhotoURL)
 }
 

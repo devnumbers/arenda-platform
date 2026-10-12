@@ -131,7 +131,7 @@ type Property struct {
 	Status      PropertyStatus
 	// PhotoKey is the storage key of the object photo (ADR 0065): nil — no
 	// photo, a key — the private object streamed by
-	// GET /api/v1/properties/{id}/photo. The content type travels alongside
+	// GET /api/properties/{id}/photo. The content type travels alongside
 	// (PhotoContentType) — the sniffed value of the upload, not a client
 	// header.
 	PhotoKey         *string

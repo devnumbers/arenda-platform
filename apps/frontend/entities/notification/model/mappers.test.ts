@@ -173,13 +173,13 @@ describe('mapNotificationDetail', () => {
             id: '0194a3f8-0000-7000-8000-000000000001',
             name: 'Гараж',
             type: 'garage',
-            photo: '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+            photo: '/api/properties/0194a3f8-0000-7000-8000-000000000001/photo',
           },
         },
       }),
     );
     expect(mapped.payload.property?.photo).toBe(
-      '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+      '/api/properties/0194a3f8-0000-7000-8000-000000000001/photo',
     );
 
     const mappedGarbage = mapNotificationDetail(
@@ -202,13 +202,13 @@ describe('mapNotificationDetail', () => {
           property: {
             id: '0194a3f8-0000-7000-8000-000000000001',
             name: 'Гараж',
-            photo: '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+            photo: '/api/properties/0194a3f8-0000-7000-8000-000000000001/photo',
           },
         },
       }),
     );
     expect(mapped.payload?.property?.photo).toBe(
-      '/api/v1/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+      '/api/properties/0194a3f8-0000-7000-8000-000000000001/photo',
     );
   });
 

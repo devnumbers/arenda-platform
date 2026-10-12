@@ -54,9 +54,9 @@ describe('mapHistoryItem', () => {
 
   it('фото актёра и фото участника фильтров — same-origin путь в camelCase (решение #1286)', () => {
     const entry = mapHistoryItem(
-      itemDto({ actor_photo_url: '/api/v1/users/user-1/photo' }),
+      itemDto({ actor_photo_url: '/api/users/user-1/photo' }),
     );
-    expect(entry.actorPhotoUrl).toBe('/api/v1/users/user-1/photo');
+    expect(entry.actorPhotoUrl).toBe('/api/users/user-1/photo');
     expect(mapHistoryItem(itemDto({ actor_photo_url: null })).actorPhotoUrl).toBeNull();
 
     const options = mapHistoryFilterOptions({
@@ -66,14 +66,14 @@ describe('mapHistoryItem', () => {
           name: 'Иван Иванов',
           email: 'ivan@example.com',
           first_name: 'Иван',
-          photo_url: '/api/v1/users/user-1/photo',
+          photo_url: '/api/users/user-1/photo',
           is_owner: true,
           role: 'owner',
         },
       ],
       objects: [],
     } satisfies HistoryFiltersDto);
-    expect(options.participants[0]?.photoUrl).toBe('/api/v1/users/user-1/photo');
+    expect(options.participants[0]?.photoUrl).toBe('/api/users/user-1/photo');
   });
 
   it('фрагмент без ссылки остаётся без ссылки', () => {

@@ -17,14 +17,14 @@ describe('photoFileTooLarge — клиентский пречек капа 5 М�
 
 describe('photoDisplayUrl — бастер браузерного кэша выдачи (private max-age=300, ADR 0065)', () => {
   it('без мутаций URL канонический, без параметра', () => {
-    expect(photoDisplayUrl('/api/v1/contacts/c1/photo', 0)).toBe(
-      '/api/v1/contacts/c1/photo',
+    expect(photoDisplayUrl('/api/contacts/c1/photo', 0)).toBe(
+      '/api/contacts/c1/photo',
     );
   });
 
   it('после мутации версия едет параметром — <img> перезапрашивает байты', () => {
-    expect(photoDisplayUrl('/api/v1/contacts/c1/photo', 2)).toBe(
-      '/api/v1/contacts/c1/photo?v=2',
+    expect(photoDisplayUrl('/api/contacts/c1/photo', 2)).toBe(
+      '/api/contacts/c1/photo?v=2',
     );
   });
 });

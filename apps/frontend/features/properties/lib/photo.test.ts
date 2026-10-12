@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type PropertyPhotoStage, propertyPhotoDisplay } from './photo';
 
 describe('propertyPhotoDisplay — правило показа фото с незавершённым стейджем (решение владельца 08.10)', () => {
-  const serverUrl = '/api/v1/properties/p1/photo';
+  const serverUrl = '/api/properties/p1/photo';
   const stagedFile: PropertyPhotoStage = {
     kind: 'file',
     file: new File([], 'new.png', { type: 'image/png' }),

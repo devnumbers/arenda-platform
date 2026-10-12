@@ -529,7 +529,7 @@ func TestNotifyActorCarriesPhoto(t *testing.T) {
 	h := newAccessPublisherHarness()
 	ids := newAccessIDs()
 	h.plantProperty(ids.property, "Дом на Рублёвке", "")
-	photoed := AccessUserProfile{DisplayName: "Пётр Петров", Email: "owner@example.com", Photo: "/api/v1/users/x/photo"}
+	photoed := AccessUserProfile{DisplayName: "Пётр Петров", Email: "owner@example.com", Photo: "/api/users/x/photo"}
 	h.views.users[ids.owner] = photoed
 	h.plantUser(ids.member, "Иван Иванов", "member@example.com")
 
@@ -537,7 +537,7 @@ func TestNotifyActorCarriesPhoto(t *testing.T) {
 		ids.membership, ids.property, ids.member, ids.owner))
 	require.Len(t, h.feed.inserted, 1)
 	require.NotNil(t, h.feed.inserted[0].Payload.Actor)
-	assert.Equal(t, "/api/v1/users/x/photo", h.feed.inserted[0].Payload.Actor.Photo)
+	assert.Equal(t, "/api/users/x/photo", h.feed.inserted[0].Payload.Actor.Photo)
 
 	// A profile without a photo keeps the actor card photoless.
 	h2 := newAccessPublisherHarness()

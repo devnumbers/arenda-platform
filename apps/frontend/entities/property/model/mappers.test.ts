@@ -23,10 +23,10 @@ function makeDto(
 describe('mapPropertyResponse photoUrl', () => {
   it('maps photo_url onto the entity (the same-origin streaming path, ADR 0065)', () => {
     const property = mapPropertyResponse(
-      makeDto({ photo_url: '/api/v1/properties/property-1/photo' }),
+      makeDto({ photo_url: '/api/properties/property-1/photo' }),
     );
 
-    expect(property.photoUrl).toBe('/api/v1/properties/property-1/photo');
+    expect(property.photoUrl).toBe('/api/properties/property-1/photo');
   });
 
   it('null without a photo', () => {
