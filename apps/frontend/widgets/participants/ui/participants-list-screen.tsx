@@ -353,9 +353,10 @@ export function ParticipantsListScreen({
 
 /** Пустота раздела (D2 #1313, макеты 3313-78626/3315-79334): иллюстрация,
  * «Участников нет / Пригласите пользователей в свои объекты и управляйте
- * вместе» и CTA «Пригласить». Одна анатомия у обоих состояний — апселл
- * basic и пустой список платного тарифа различаются только адресатом CTA
- * (оформление тарифа или форма приглашения). */
+ * вместе» и CTA «Пригласить» — Button size="small" radius="m", канон CTA
+ * пустых состояний (анатомия 3235-74057). Одна анатомия у обоих состояний —
+ * апселл basic и пустой список платного тарифа различаются только адресатом
+ * CTA (оформление тарифа или форма приглашения). */
 function SectionEmptyState({
   ctaTestId,
   onCta,
@@ -368,9 +369,8 @@ function SectionEmptyState({
       imageSrc="/images/tariff/tariff-about-sharing.png"
       title="Участников нет"
       description="Пригласите пользователей в свои объекты и управляйте вместе"
-      className="mt-16"
       action={
-        <Button data-testid={ctaTestId} onClick={onCta}>
+        <Button size="small" radius="m" data-testid={ctaTestId} onClick={onCta}>
           Пригласить
         </Button>
       }
