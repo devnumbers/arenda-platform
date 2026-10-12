@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -119,6 +120,12 @@ func TestPropertyService_RestoreGraceArchivedProperties_RestoresUnderLimit(t *te
 	}
 	if len(slots.enforcedOnUnarchive) != 1 || slots.enforcedOnUnarchive[0] != archivedAID {
 		t.Errorf("unarchive enforcement = %v, want the restored property", slots.enforcedOnUnarchive)
+	}
+	// The owner's own pool growth is re-enforced with the grace_restore trigger
+	// (D13): the restored object re-entered the owner's own recipient pool.
+	wantGrowth := []poolGrowthCall{{recipient: ownerID, trigger: "grace_restore"}}
+	if !slices.Equal(slots.poolGrowthCalls, wantGrowth) {
+		t.Errorf("pool growth calls = %v, want %v", slots.poolGrowthCalls, wantGrowth)
 	}
 	// The over-limit id is the debt remainder, not lost.
 	if len(restored) != 1 || restored[0] != archivedBID {

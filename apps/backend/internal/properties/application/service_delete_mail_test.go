@@ -47,6 +47,16 @@ func (f *fakeSharedDeleteFlow) RecoverSuspended(context.Context, transaction.Tx,
 	return nil, nil
 }
 
+func (f *fakeSharedDeleteFlow) EnforceRecipientPoolGrowth(
+	context.Context, transaction.Tx, uuid.UUID, string,
+) ([]accessdomain.Membership, error) {
+	return nil, nil
+}
+
+func (f *fakeSharedDeleteFlow) RecipientPoolFull(context.Context, transaction.Tx, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
 func (f *fakeSharedDeleteFlow) CollectFormerMemberEmails(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]string, error) {
 	f.events = append(f.events, "collect")
 	return f.emails, nil

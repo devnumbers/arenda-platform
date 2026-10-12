@@ -4,7 +4,7 @@ import { useState, type JSX } from 'react';
 import { BoldObjects, Cancel, Check, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, CircleIcon, IconButton, PageContent, Skeleton, StickyBottomBar, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { filterEditableProperties, propertyTypeIcons, type PropertyType } from '@/entities/property';
+import { filterEditableProperties, filterOwnedProperties, propertyTypeIcons, type PropertyType } from '@/entities/property';
 
 /**
  * Страница «Выбрать объект» (макет 1539:83846, #509/#510): отдельная
@@ -13,21 +13,28 @@ import { filterEditableProperties, propertyTypeIcons, type PropertyType } from '
  * отбрасывает. Первая строка — «Общий контакт / Не привязан к объектам»
  * (тексты 1:1 из макета), объекты — имя и адрес, с фото-аватаром или
  * серым домом. Объекты — только с правом правки (#703): привязка своего
- * контакта к зрительскому объекту закрыла бы её правку.
+ * контакта к зрительскому объекту закрыла бы её правку. Режим правки
+ * (ownedOnly, D10 #1309) сужает список до собственных объектов читателя:
+ * перепривязка — власть собственника, выбор чужого объекта упёрся бы в 403.
  */
 export function ContactObjectSelectPage({
   draft,
   onDraftChange,
   onApply,
   onDismiss,
+  ownedOnly = false,
 }: {
   readonly draft: string | null;
   readonly onDraftChange: (propertyId: string | null) => void;
   readonly onApply: () => void;
   readonly onDismiss: () => void;
+  /** Правка карточки: только собственные объекты (D10 #1309). */
+  readonly ownedOnly?: boolean;
 }): JSX.Element {
   const propertiesQuery = useProperties();
-  const properties = filterEditableProperties(propertiesQuery.data ?? []);
+  const properties = ownedOnly
+    ? filterOwnedProperties(propertiesQuery.data ?? [])
+    : filterEditableProperties(propertiesQuery.data ?? []);
 
   return (
     <>

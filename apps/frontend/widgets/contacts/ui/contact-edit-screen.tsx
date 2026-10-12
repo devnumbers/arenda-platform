@@ -109,6 +109,18 @@ export function ContactEditScreen({
         : contact.propertyId !== undefined
           ? propertyPermissions(boundProperty).canEdit
           : true;
+  // Перепривязка — власть собственника (D10 #1309): сервер отвечает 403 на
+  // смену объекта не-собственником, инпут глушится до попытки сохранить.
+  // Роль — через центральный селектор (canLifecycle — зеркало owner-only
+  // политики): на объекте — роль на нём; в книге привязанная карточка —
+  // роль на привязке, безобъектная — книга самого актёра (пикер правки
+  // всё равно показывает только собственные объекты).
+  const canRebind =
+    propertyId !== undefined
+      ? propertyPermissions(contextProperty).canLifecycle
+      : contact?.propertyId === undefined
+        ? true
+        : propertyPermissions(boundProperty).canLifecycle;
 
   if (loading) {
     return (
@@ -171,7 +183,7 @@ export function ContactEditScreen({
     );
   }
 
-  return <ContactEditForm backHref={backHref} contact={contact} />;
+  return <ContactEditForm backHref={backHref} contact={contact} canRebind={canRebind} />;
 }
 
 /** Шапка правки без ✓: пока карточка грузится, отправлять нечего. */
@@ -190,13 +202,19 @@ function EditHeader({ onBack }: { readonly onBack: () => void }): JSX.Element {
  * решение владельца 08.10 с #1228): применяются кнопками сохранения
  * вместе с полями — PATCH карточки и фото-эндпоинты (ADR 0065, тикет
  * #1229) уходят параллельно, у каждого сбоя свой сигнал, применённая
- * часть гасит свою грязь; назад — только когда сохранено всё. */
+ * часть гасит свою грязь; назад — только когда сохранено всё.
+ * Перепривязка — власть собственника (D10 #1309): не-собственнику инпут
+ * объекта глухой, пикер правки показывает только собственные объекты. */
 function ContactEditForm({
   backHref,
   contact,
+  canRebind,
 }: {
   readonly backHref: string;
   readonly contact: Contact;
+  /** Смена объекта доступна (роль собственника на привязке; безобъектная
+   * карточка — своя книга). */
+  readonly canRebind: boolean;
 }): JSX.Element {
   const router = useRouter();
   const updateContact = useUpdateContact(contact.id);
@@ -319,6 +337,7 @@ function ContactEditForm({
     return (
       <ContactObjectSelectPage
         draft={propertyIdDraft}
+        ownedOnly
         onDraftChange={setPropertyIdDraft}
         onApply={() => {
           update('propertyId', propertyIdDraft);
@@ -366,6 +385,7 @@ function ContactEditForm({
             setPropertyIdDraft(form.propertyId);
             setObjectSelectOpen(true);
           }}
+          objectSelectDisabled={!canRebind}
           onSubmit={handleSubmit}
         />
       </PageContent>

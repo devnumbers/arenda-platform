@@ -424,7 +424,9 @@ func bindRealtimePublisher(
 ) {
 	paymentsMod.PaymentService.SetRealtimePublisher(p)
 	paymentsMod.OperationService.SetRealtimePublisher(p)
-	paymentsMod.GlobalPayments.SetRealtimePublisher(p)
+	// The global payments surface carries no realtime frames (D18): the
+	// favorites star and order are personal states — other tabs of the
+	// actor re-read on their next load (the cutover #1308).
 	tasksMod.RuleService.SetRealtimePublisher(p)
 	tasksMod.TaskService.SetRealtimePublisher(p)
 	contactsMod.ContactService.SetRealtimePublisher(p)

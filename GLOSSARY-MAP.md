@@ -51,10 +51,15 @@ Terms shared across contexts, documented once here:
 
 **Property access roles** (defined in shared/policy, consumed by Access + Properties + Billing):
 
-- **Property Owner / Владелец объекта** — the user a property belongs to; sole lifecycle control (archive, delete); access cannot be revoked by members.
-- **Full Access / Полный доступ** — member role: full data operations + member management.
+- **Property Owner / Владелец объекта** — the user a property belongs to; sole lifecycle control (archive, delete), sole member management (invite, change role, revoke — D8 #1304) and sole cross-object rebinding of entities (moving a contact card onto another property — D10 #1309); access cannot be revoked by members.
+- **Full Access / Полный доступ** — member role: full in-object data operations, deletions included (payment rules, rentals — D9 #1309). Since D8 of the sharing effort (#1304) member management is the owner's: full access neither invites, nor changes roles, nor revokes; since D10 (#1309) it does not rebind entities across properties either.
 - **Viewer / Просмотр** — member role: read-only access to all property data.
 - **Suspended Access / Приостановленный доступ** — shared access hidden due to recipient tariff limit exhaustion.
+
+**Personal states** (личные связи читателя с сущностью, спека #1302; строка есть = состояние — право просмотра, не мутация):
+
+- **Основной объект / Primary Property** — личный пин объекта пользователем (`user_property_pins`, cutover #1307, D11): порядок «наверху списков» — читательский, чужой пин мой экран не меняет. Архивация личные строки не трогает (D16); в «Историю действий» личное состояние не пишется (D17) и realtime-фреймом не публикуется (D18, ADR 0062). Канонический дом: `internal/properties/GLOSSARY.md`; контракт остаётся `pinned_at` / `PUT /properties/{id}/pin`.
+- **Избранный платёж / Favorite Payment** — личная звезда и личный порядок платежа (`user_payment_favorites`, cutover #1308, D12; амендмент ADR 0049): избранное — рабочий набор читателя, чужая звезда и чужой порядок мой экран не меняют; счётчик «Все избранные» — личный. Право — просмотр (зритель наравне с владельцем). Архивация личные строки не трогает (D16); в «Истории действий» не пишется (D17), realtime-фреймов нет (D18). Канонический дом: `internal/payments/GLOSSARY.md`; контракты остаются `isFavorite`/`favoriteOrder` / `PUT .../payments/{paymentId}/favorite` / `PUT /payments/favorites/order`.
 
 **Money vocabularies** (ADR 0036, updated by ADR 0046 and ADR 0047) — never mix them:
 

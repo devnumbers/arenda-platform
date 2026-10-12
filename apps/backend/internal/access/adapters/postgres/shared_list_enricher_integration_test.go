@@ -72,7 +72,7 @@ func (f *accessLifecycleFixture) backdateMember(t *testing.T, id uuid.UUID) {
 // hides suspended legs behind the archive, issue #163).
 func (f *accessLifecycleFixture) archiveProperty(t *testing.T, id uuid.UUID) {
 	t.Helper()
-	if _, err := f.tx.Exec(f.bg(), `UPDATE properties SET status = 'archived', pinned_at = NULL WHERE id = $1`, pgUUID(id)); err != nil {
+	if _, err := f.tx.Exec(f.bg(), `UPDATE properties SET status = 'archived' WHERE id = $1`, pgUUID(id)); err != nil {
 		t.Fatalf("archive property: %v", err)
 	}
 }

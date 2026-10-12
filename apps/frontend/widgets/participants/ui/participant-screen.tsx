@@ -92,7 +92,7 @@ export function ParticipantScreen({
     <>
       <SubScreenShell
         title="Участник"
-        fallbackHref={ROUTES.participantsList}
+        fallbackHref={ROUTES.participants}
         trailing={
           kebabVisible ? (
             <span className="flex items-center pr-3.5">
@@ -191,7 +191,7 @@ export function ParticipantScreen({
               // Источник страницы — список: возврат по канону истории,
               // попап «Участник удален» рендерит список (2008-83716).
               stageParticipantPopup('deleted');
-              goBack(router, ROUTES.participantsList);
+              goBack(router, ROUTES.participants);
             },
           });
         }}
@@ -213,14 +213,17 @@ export function ParticipantScreen({
   );
 }
 
-/** Блок «аватар — имя — почта — чип» (макет 2008-81468): аватар 96 — фото
+/** Блок «аватар — имя — почта — бейдж» (макет 2008-81468): аватар 96 — фото
  * профиля или заглушка BoldUser (UserAvatar hero), имя H1 28/32 SemiBold,
  * почта 14/16 —
- * всё по центру; у pending-участника имени нет — почта уже титул. */
+ * всё по центру; у pending-участника имени нет — почта уже титул. Бейдж —
+ * из двух статусных (D3 #1313): «Аккаунт не создан» у pending, «Превышен
+ * лимит объектов» у suspended; остальные без бейджа. */
 function ParticipantHeader({ participant }: { readonly participant: Participant }): JSX.Element {
   const title = participant.displayName ?? participant.email ?? '';
   const email =
     participant.displayName !== undefined ? participant.email : undefined;
+  const badge = participantStatusBadge(participant);
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -231,9 +234,11 @@ function ParticipantHeader({ participant }: { readonly participant: Participant 
       {email !== undefined && (
         <p className="text-center text-sm leading-4 text-content-secondary">{email}</p>
       )}
-      <div className="pt-2">
-        <ParticipantRowBadge badge={participantStatusBadge(participant)} />
-      </div>
+      {badge !== null && (
+        <div className="pt-2">
+          <ParticipantRowBadge badge={badge} />
+        </div>
+      )}
     </div>
   );
 }

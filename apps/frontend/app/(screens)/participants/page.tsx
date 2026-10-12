@@ -1,30 +1,19 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { ParticipantsHubLoading, ParticipantsHubScreen } from '@/widgets/participants';
-import { participantsSummaryQueryOptions } from '@/features/participants';
-import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
-import { serverApiClient } from '@/shared/api/server-client';
+import { ParticipantsListScreen, parseParticipantsListOrderParams } from '@/widgets/participants';
 
-/**
- * Хаб «Совместный доступ» (карта #692, тикет #696): пункт навбара
- * «Участники» перестаёт быть заглушкой #559 — живой раздел с карточками
- * «Ваши участники» и «Объекты пользователей»; второй вход — строка в
- * профиле.
- */
+/** Раздел «Участники» — единая страница списка (D1–D4 #1313): хаб-карточки
+ * и «Объекты пользователей» снесены, /participants — сам список. Состояние
+ * сортировки живёт в адресе (?order=, #785) — стартовое значение парсится
+ * здесь, на сервере. */
 export const metadata: Metadata = {
-  title: 'Совместный доступ — Рентли',
+  title: 'Участники — Рентли',
 };
 
-export default function ParticipantsRoutePage() {
-  return (
-    <Suspense fallback={<ParticipantsHubLoading />}>
-      <ServerPrefetchBoundary
-        prefetch={(queryClient) => {
-          void queryClient.prefetchQuery(participantsSummaryQueryOptions(serverApiClient));
-        }}
-      >
-        <ParticipantsHubScreen />
-      </ServerPrefetchBoundary>
-    </Suspense>
-  );
+export default async function ParticipantsRoutePage({
+  searchParams,
+}: PageProps<'/participants'>) {
+  const resolved = await searchParams;
+  const initialOrder = parseParticipantsListOrderParams(resolved.order);
+
+  return <ParticipantsListScreen initialOrder={initialOrder} />;
 }

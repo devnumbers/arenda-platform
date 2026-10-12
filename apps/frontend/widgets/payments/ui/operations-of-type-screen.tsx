@@ -204,7 +204,7 @@ export function OperationsOfTypeScreen({
           <OperationsNeverHad
             action={
               canMutate ? (
-                <Button onClick={() => router.push(newOperationHref)}>
+                <Button size="small" radius="m" onClick={() => router.push(newOperationHref)}>
                   Добавить операцию
                 </Button>
               ) : undefined

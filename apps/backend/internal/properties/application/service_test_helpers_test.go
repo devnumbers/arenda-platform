@@ -16,6 +16,10 @@ const (
 	// Имена пары сверхлимитных объектов в тестах биллинг-архива.
 	excessNameA = "Excess A"
 	excessNameB = "Excess B"
+	// Имена объектов слотовых сценариев D13: свой объект получателя и новый
+	// объект создания.
+	testOwnPropertyName = "Своя квартира"
+	testNewPropertyName = "Новая квартира"
 )
 
 // newPropertyTestFactory builds the txStoreFactory for the property service

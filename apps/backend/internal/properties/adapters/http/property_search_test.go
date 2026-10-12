@@ -95,6 +95,22 @@ func (r *searchWireRepo) CountByOwnerAndType(_ context.Context, _ uuid.UUID, _ d
 
 func (r *searchWireRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
 
+func (r *searchWireRepo) ActorPin(context.Context, uuid.UUID, uuid.UUID) (*time.Time, error) {
+	return nil, nil
+}
+
+func (r *searchWireRepo) InsertActorPin(_ context.Context, _, _ uuid.UUID, at time.Time) (time.Time, error) {
+	return at, nil
+}
+
+func (r *searchWireRepo) DeleteActorPin(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (r *searchWireRepo) ActorPins(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	return map[uuid.UUID]time.Time{}, nil
+}
+
 func (r *searchWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
 	return domain.Property{}, nil
 }

@@ -11,15 +11,24 @@ import (
 )
 
 type Querier interface {
+	// The actor's personal pin on the property (the cutover #1307, D11): no row
+	// — not pinned, the row's pinned_at — pinned since then. The view
+	// capability is resolved by the application before the call.
+	ActorPin(ctx context.Context, arg ActorPinParams) (pgtype.Timestamptz, error)
+	// The actor's personal pins for the listed properties — the list overlay's
+	// batch (the main list and the search carry pinnedAt of the actor over own
+	// and shared rows alike).
+	ActorPins(ctx context.Context, arg ActorPinsParams) ([]ActorPinsRow, error)
 	// The transition log is append-only (enforced by trigger, ADR 0037); the first
 	// transition of a subscription has no prior status or tariff.
 	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
 	// The time-travel twin of AppendSubscriptionTransition: identical columns plus
 	// the shifted created_at (the plain append always stamps now()).
 	AppendSubscriptionTransitionWithCreatedAt(ctx context.Context, arg AppendSubscriptionTransitionWithCreatedAtParams) error
-	// Archiving clears the pin in the same UPDATE: the schema CHECK
-	// (properties_pinned_at_check) demands it, and an unarchived object returns
-	// unpinned (ticket #577).
+	// The archive touches no pin state: pins are personal rows — the contract
+	// migration (#1311) dropped the global properties.pinned_at column with its
+	// CHECK, and personal pin rows are never touched here (D16): unarchiving
+	// returns the property with the participants' pins.
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
 	// «Удалить операцию» (решение владельца): tombstone-статус cancelled —
 	// строка остаётся с ключом (payment_id, date) и не воскресает на тике,
@@ -29,11 +38,15 @@ type Querier interface {
 	// not-found: отменённая операция для всех чтений больше не существует.
 	CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error)
 	CleanupExpiredIdempotencyKeys(ctx context.Context) (int64, error)
-	// The favorites order save's full-replacement pass (ticket #576): the
-	// visible favorites OUTSIDE the submitted list lose their positions —
-	// they fall to the end of the reading order («новое избранное — в конец»),
-	// so duplicate positions never survive a save. '' keeps the empty list
-	// working (a save of nothing clears the whole visible order).
+	// The favorites order save's full-replacement pass (ticket #576; the
+	// personal cutover #1308): the actor's favorites OUTSIDE the submitted list
+	// lose their positions — they fall to the end of the reading order («новое
+	// избранное — в конец»), so duplicate positions never survive a save. The
+	// pass only ever touches the actor's own rows (the personal set, D12) and
+	// keeps the feed's visibility and archive cuts: a favorite on an archived
+	// property keeps its position through the save — unarchiving returns the
+	// rule with its order intact (D16). '' keeps the empty list working (a save
+	// of nothing clears the whole visible personal order).
 	ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error)
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)).
@@ -198,6 +211,9 @@ type Querier interface {
 	CreateTaskRule(ctx context.Context, arg CreateTaskRuleParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
+	// The unpin: the personal row goes; unpinning an unpinned property deletes
+	// nothing and succeeds (the PUT's idempotency).
+	DeleteActorPin(ctx context.Context, arg DeleteActorPinParams) error
 	// «Удалить все» (решение #737): soft-deletes every feed row of the user in
 	// one statement; the result is the number of rows hidden.
 	DeleteAllNotifications(ctx context.Context, userID pgtype.UUID) (int64, error)
@@ -254,6 +270,10 @@ type Querier interface {
 	// origin='payment' AND payment_id IS NULL (ticket #446). Planned operations
 	// are removed by the caller per keep_overdue before this runs.
 	DeletePayment(ctx context.Context, arg DeletePaymentParams) (int64, error)
+	// Unfavoriting (the cutover #1308): the actor's row goes — the order
+	// position leaves with it, a re-star lands at the end (a fresh NULL row).
+	// An absent row deletes nothing and succeeds.
+	DeletePaymentFavorite(ctx context.Context, arg DeletePaymentFavoriteParams) error
 	// The edit invalidation of the future planned (date > today, strictly): the
 	// mutation deletes it and the in-transaction tick stands it again with fresh
 	// snapshots (spec: "правка пересоздаёт будущее planned"). Today's occurrence
@@ -386,12 +406,16 @@ type Querier interface {
 	// calendar date in the property owner's timezone. NOT NULL with the
 	// 'Europe/Moscow' default (migration 000088); IANA-validated on write.
 	GetOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
-	// Payments context queries: payment rule CRUD, pause/resume and the favorite
-	// flag (ADR 0049 §4; tickets #457, #461). Reads and writes are scoped by the
-	// data owner (ADR 0028: SQL filters by scope, the policy port has already
-	// resolved the actor's role); the nested path payment→property is enforced in
-	// the WHERE clause. The materialization tick lives in payments_tick.sql,
-	// operations in payments_operations.sql.
+	// Payments context queries: payment rule CRUD and pause/resume (ADR 0049 §4;
+	// tickets #457, #461). Reads and writes are scoped by the data owner (ADR
+	// 0028: SQL filters by scope, the policy port has already resolved the
+	// actor's role); the nested path payment→property is enforced in the WHERE
+	// clause. The materialization tick lives in payments_tick.sql, operations in
+	// payments_operations.sql. The favorite star is a personal state (the
+	// cutover #1308, D12): it lives in user_payment_favorites — the global
+	// payments.is_favorite/favorite_order columns went with the contract
+	// migration #1311; the actor's rows overlay the actor-facing reads, the
+	// star writes are this file's insert/delete pair.
 	// One rule by id within the owner's scope on the given property, with the
 	// user category's current name resolved for the CategoryView.
 	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
@@ -412,11 +436,10 @@ type Querier interface {
 	// properties list to load shared properties (whose owner_id differs from the
 	// actor). Read-only; callers must never leak existence to actors without a view
 	// capability (the application maps "no access" to ErrNotFound to preserve
-	// object privacy). members_count is the shared-access participant count
-	// (membership rows of any status plus pending email invitations, issue #163).
-	GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPropertyByIDRow, error)
+	// object privacy).
+	GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property, error)
 	GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error)
-	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error)
+	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error)
 	GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error)
 	// Unscoped pessimistic-lock lookup by id, for write paths that resolve access
 	// via the policy port before applying scope = owner_id (T3, issue #156).
@@ -599,6 +622,14 @@ type Querier interface {
 	// untouched on the conflict branch because the window is not being reset.
 	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
 	InsertActionJournal(ctx context.Context, arg InsertActionJournalParams) (pgtype.UUID, error)
+	// The pin's «строка есть = состояние» write (the cutover #1307, the model
+	// #1299): one atomic statement — a re-pin keeps the original pin time (the
+	// PUT's idempotency, the order among the pinned never shifts), a fresh pin
+	// takes the moment from the application's clock. The conflicting row's time
+	// stands: DO UPDATE writes the same value back purely so RETURNING delivers
+	// the effective pinned_at (DO NOTHING would return no row) — the stored
+	// value never changes.
+	InsertActorPin(ctx context.Context, arg InsertActorPinParams) (pgtype.Timestamptz, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
 	InsertContact(ctx context.Context, arg InsertContactParams) (Contact, error)
 	InsertEmailChangeGrant(ctx context.Context, arg InsertEmailChangeGrantParams) error
@@ -636,6 +667,15 @@ type Querier interface {
 	// created_at is the database's. Empty changes (pause/resume) travel as the
 	// literal [] — the application layer normalizes nil.
 	InsertPaymentChangeLog(ctx context.Context, arg InsertPaymentChangeLogParams) error
+	// The personal favorite star (PUT favorite, the cutover #1308, D12): one
+	// row of the actor's user_payment_favorites — «строка есть = состояние».
+	// The atomic insert (no read-modify-write): a re-star keeps the stored row
+	// (the order position among the actor's favorites never shifts), a fresh
+	// star takes a NULL position — the new-favorite-at-the-end rule (ticket
+	// #576). created_at is the row's bookkeeping stamp (the schema default,
+	// nothing reads it today). Existence is already proven inside the same
+	// transaction under the property lock.
+	InsertPaymentFavorite(ctx context.Context, arg InsertPaymentFavoriteParams) error
 	// The open-ended pause [from, ∞): exactly one may exist per rule — the
 	// partial unique index (to_date IS NULL) makes a double pause a constraint
 	// violation even past the application check.
@@ -705,11 +745,11 @@ type Querier interface {
 	// archived properties are excluded: an archived object does not occupy a
 	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
-	// The main list's order (ticket #577): the pinned first — among themselves
-	// by the pin time (the first pin stays on top, a re-pin never shifts the
-	// order), then the unpinned by updated_at DESC. The application re-applies
-	// the same rule over the merged list (shared properties arrive appended),
-	// so keep the two passes in sync (PropertyService.pinnedFirst).
+	// The main list's base order (ticket #577, the personal-pin cutover #1307):
+	// the unpinned incoming order is updated_at DESC. The pinned-first rule is
+	// per-actor since the cutover — the application overlays the actor's
+	// personal pins (user_property_pins) over the merged list and re-sorts
+	// (PropertyService.pinnedFirst), so the SQL pass stays out of pin ordering.
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
 	// The active tasks (uncompleted) of the property: the screen's main
 	// sections. Due order with the undated last — the client buckets sections
@@ -799,13 +839,14 @@ type Querier interface {
 	// stacks (ticket #575); the rules of each stack arrive on the feed query's
 	// rows and the application layer groups them. The search ('' = no filter)
 	// is a case-insensitive substring over the name and the address — it
-	// filters the objects, never their stacks. The order is the global pin's
-	// (ticket #577): the pinned first — among themselves by the pin time —
-	// then the rest by name. pinned_at travels to the cards for the pin mark,
-	// photo_url is the card avatar (ticket #582): with the private photos
-	// (ADR 0065, #1227) one image per object, streamed by the backend — the
-	// same-origin path, or NULL without a photo; type picks the avatar's
-	// placeholder glyph (карта #1217, #1244).
+	// filters the objects, never their stacks. The order is the actor's
+	// personal pin's (ticket #577, the cutover #1307): the pinned first — among
+	// themselves by the pin time — then the rest by name. pinned_at travels
+	// from the actor's row in user_property_pins (the LEFT JOIN) to the cards
+	// for the pin mark, photo_url is the card avatar (ticket #582): with the
+	// private photos (ADR 0065, #1227) one image per object, streamed by the
+	// backend — the same-origin path, or NULL without a photo; type picks the
+	// avatar's placeholder glyph (карта #1217, #1244).
 	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
 	// Payments context queries: the global surface of the payment rules
 	// (tickets #575, #576) — the merged «Платежи» feed, the search with its
@@ -855,6 +896,9 @@ type Querier interface {
 	// loads never duplicate or drop. The property name is deliberately not a
 	// sort key — a rename would move rows across the window. Both cursor args
 	// travel together; NULL (no cursor) reads from the beginning.
+	// The actor's personal favorite (the cutover #1308, D12): the star and the
+	// order position are the reading actor's own — a join, not the frozen
+	// payments columns; absent row = not a favorite of this actor.
 	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
 	// Объекты области для шита фильтров: те же свойства, что отдаёт лента,
 	// плюс фото-аватар карточки (канон #582). С приватными фото (ADR 0065,
@@ -872,11 +916,22 @@ type Querier interface {
 	// строк остаются в самом журнале. Обезличенные актёры (пользователь удалён)
 	// не фильтруемы по определению. Отображаемое имя собирает адаптер по канону
 	// access.DisplayNameOf («Пользователь» вместо имени — карта #1105, аменд #1123).
+	//
+	// Область двух родов (D14 изоляции, спека #1302, аудит #1298, тикет #1305;
+	// CTE scope_property — единая трёхногая область UNION'а):
+	// глобальная лента (property_ids = '') — только МОИ объекты читателя
+	// (p.owner_id = actor, архивный срез тот же, что у владельческой ноги
+	// канона 000142: свои архивные объекты остаются); получателю shared-доступа
+	// владелец и соучастники чужого объекта в глобальном фильтре не раскрыты.
+	// Суженная лента (property_ids задан — per-object фильтр /history/
+	// properties/{id} и страница пары #841) — канон actor_can_read_property по
+	// запрошенным id: собственник и соучастники остаются (D6 — без изменений).
+	//
 	// is_owner (#711, макет 2067-163528): замок владельца — пользователь —
 	// владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
-	// UNION'а); приглашённый без своих объектов флага не получает. first_name —
-	// имя без фамилии (u.name) для строки «(Вы)»; '' у безымянных (тогда
-	// имя в чипе — «Пользователь»).
+	// UNION'а); в глобальной области это сам читатель, в суженной — владелец
+	// суженных объектов. first_name — имя без фамилии (u.name) для строки
+	// «(Вы)»; '' у безымянных (тогда имя в чипе — «Пользователь»).
 	// role (#840, макет 2184-94261): иконка роли строки шита — максимальный
 	// доступ в области (MIN ранга: 0 owner, 1 full_access, 2 viewer); живая
 	// нога property_members сильнее снимка журнала (actor_role) — она и есть
@@ -957,6 +1012,7 @@ type Querier interface {
 	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
 	ListParticipantInvitationsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantInvitationsByPropertiesRow, error)
 	ListParticipantInvitationsForRemoval(ctx context.Context, arg ListParticipantInvitationsForRemovalParams) ([]ListParticipantInvitationsForRemovalRow, error)
+	ListParticipantInvitationsForRemovalByOwner(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantInvitationsForRemovalByOwnerRow, error)
 	ListParticipantMembershipsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantMembershipsByPropertiesRow, error)
 	// The mutation side of the owner's participant aggregate (issue #694):
 	// «Отозвать и удалить» enumerates one person's legs within the acting
@@ -966,24 +1022,33 @@ type Querier interface {
 	// would silently reappear on unarchive. The scope predicate is the
 	// authorization: rows outside it never leave the database.
 	ListParticipantMembershipsForRemoval(ctx context.Context, arg ListParticipantMembershipsForRemovalParams) ([]ListParticipantMembershipsForRemovalRow, error)
+	// The global «Отозвать доступ всем» (issue #1310) walks the same removal
+	// scope without the per-person filter: every membership and every pending
+	// invitation on the acting owner's properties, archived included (issue
+	// #163). The scope predicate stays the authorization: rows outside it never
+	// leave the database.
+	ListParticipantMembershipsForRemovalByOwner(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantMembershipsForRemovalByOwnerRow, error)
 	// The «Участник (владельца)» read model (issue #693): an aggregate over
 	// property_members ∪ property_member_invitations with no table of its own
 	// (chart decision of map #692). The reading actor's scope is the set of
-	// non-archived properties the actor owns or manages as an active full_access
-	// member; archived properties stay invisible like everywhere else on the
-	// platform (issue #163). The scope doubles as the authorization: rows outside
-	// it never leave the database.
+	// non-archived properties the actor owns; since the D8 decision of the
+	// sharing effort (issue #1304) member management — and with it the hub — is
+	// the owner's prerogative, so a full_access member of a foreign object sees
+	// none of its owner's participants; archived properties stay invisible like
+	// everywhere else on the platform (issue #163). The scope doubles as the
+	// authorization: rows outside it never leave the database.
 	//
-	// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner OR active
-	// full_access is the authorization of the three scope queries in this file
-	// (read scope + both removal listings; the two ByProperties listings filter
-	// by the already-scoped id list). The predicate lives in one place — the SQL
-	// function actor_can_manage
-	// (migration 000135, issue #794) — which the queries below call; before #794
-	// sqlc could not share the text between query bodies, so the predicate was
-	// kept as three byte-identical copies pinned by the matrix test.
+	// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner-only
+	// since D8 (issue #1304; migration 000157) is the authorization of the five
+	// scope queries in this file (read scope, both per-person removal listings,
+	// both owner-wide removal listings of the global revoke #1310; the two
+	// ByProperties listings filter by the already-scoped id list). The predicate
+	// lives in one place — the SQL function actor_can_manage (migration 000135,
+	// issue #794) — which the queries below call; before #794 sqlc could not
+	// share the text between query bodies, so the predicate was kept as three
+	// byte-identical copies pinned by the matrix test.
 	// TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
-	// verdict across all three queries and stays the gate: semantic drift of the
+	// verdict across these queries and stays the gate: semantic drift of the
 	// function fails there instead of opening a silent privacy hole.
 	// The scope rows carry the leg avatar pair (решение #1286, остаток #1244
 	// п.3): the property type — the placeholder glyph's key — and the photo's
@@ -1295,15 +1360,20 @@ type Querier interface {
 	// rentals responses report.
 	ListUnfinishedRentalsByPropertyIDs(ctx context.Context, propertyIds []pgtype.UUID) ([]ListUnfinishedRentalsByPropertyIDsRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
-	// The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
-	// on the submitted rules — the caller passes the ids sorted, the ORDER BY
-	// keeping the lock order deadlock-safe — restricted to the actor's visible
-	// non-archived rules (the feed's visibility predicate). An id that does not
-	// come back is unknown, foreign or invisible; the application layer folds
-	// the three into one privacy-preserving 404. Every row carries the actor's
-	// role on the rule's property — the save's write gate is the favorite
-	// star's (#461, Full Access+), resolved per row beside the data. Ids
-	// travel as the file's csv list; an empty list never reaches the query.
+	// The favorites order save's lock pass (ticket #576; the personal cutover
+	// #1308): FOR UPDATE row locks on the submitted ids' rows of the ACTOR —
+	// the caller passes the ids sorted, the ORDER BY keeping the lock order
+	// deadlock-safe — restricted to the actor's visible non-archived rules (the
+	// feed's visibility predicate). The lock runs on both the actor's
+	// user_payment_favorites row (the pass's write target) and the payment row
+	// (the archive/delete serialization the global mutations share). An id that
+	// does not come back is unknown, foreign, invisible, archived or simply not
+	// a favorite of this actor — the personal rows fold the old «visible
+	// non-favorite» case into the same privacy-preserving 404 the application
+	// layer answers. Every row carries the actor's role on the rule's property
+	// — resolved per row beside the data (the star's right is the view one,
+	// D12). Ids travel as the file's csv list; an empty list never reaches the
+	// query.
 	// The role's row only — the visibility is the function call in the WHERE:
 	// the join's active-status condition is the membership snapshot's, not a
 	// second copy of the predicate.
@@ -1361,6 +1431,12 @@ type Querier interface {
 	// nils. The nested payment→property path is enforced in the WHERE clause;
 	// an empty id list never reaches the query.
 	NearestDateInputsOfPayments(ctx context.Context, arg NearestDateInputsOfPaymentsParams) ([]NearestDateInputsOfPaymentsRow, error)
+	// The gate probes of the global revoke (issue #1310): with no target id the
+	// endpoint conditions on bare existence. The ownership probe counts any
+	// status — archived objects still hold revocable legs; the membership probe
+	// splits the non-owner refusal into the participant's loud 403 and the
+	// stranger's privacy-404.
+	OwnerOwnsAnyProperty(ctx context.Context, ownerID pgtype.UUID) (bool, error)
 	// «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
 	// timezone). The planned guard is belt-and-suspenders over the application's
 	// loaded check: rows affected = 0 means already paid or gone.
@@ -1372,6 +1448,11 @@ type Querier interface {
 	// гриллингу #1167): «автоплатёж исполнен» смотрит только на тиковые
 	// гашения — ручная оплата молчит.
 	PayOperationDueToday(ctx context.Context, arg PayOperationDueTodayParams) (int64, error)
+	// The subset of the listed rules the actor has starred — the personal-state
+	// overlay of the actor-facing reads (the property pin's ActorPins
+	// precedent): the rule rows carry no favorite column (frozen, #1308), the
+	// actor's rows travel beside them and the application layer folds them in.
+	PaymentFavoriteIDs(ctx context.Context, arg PaymentFavoriteIDsParams) ([]pgtype.UUID, error)
 	// The horizon leg of «Удалить все выполненные» (ADR 0051 as amended
 	// 2026-10-01): every live rule of the property with completed rows about to
 	// be cleared gets its history horizon raised to max(deleted due)+1 — the
@@ -1426,16 +1507,10 @@ type Querier interface {
 	// UpdateContact field. Existence and the edit capability are proven by the
 	// caller; the scope is the book owner (ADR 0028).
 	SetContactPhoto(ctx context.Context, arg SetContactPhotoParams) (Contact, error)
-	// Atomic PUT favorite (no read-modify-write): the flag is set in one UPDATE.
-	// Existence is already proven inside the same transaction under the property
-	// lock; :execrows keeps the store honest independently of that ordering.
-	// Unfavoriting clears the manual order with the flag — the schema CHECK
-	// (favorite_order IS NULL OR is_favorite) demands it, and re-favoriting
-	// lands at the end (NULL, ticket #576).
-	SetPaymentFavorite(ctx context.Context, arg SetPaymentFavoriteParams) (int64, error)
-	// One rule's 1-based favorite position (ticket #576); the id match alone is
-	// the guard — the lock pass has already proven existence and visibility in
-	// the same transaction. :execrows keeps that ordering honest.
+	// One rule's 1-based favorite position in the actor's personal order
+	// (ticket #576; the cutover #1308); the id match alone is the guard — the
+	// lock pass has already proven the actor's row and its visibility in the
+	// same transaction. :execrows keeps that ordering honest.
 	SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error)
 	// The object photo write (ADR 0065, ticket #1227): the key and the sniffed
 	// content type move together; a NULL key clears the photo — one image per
@@ -1444,13 +1519,6 @@ type Querier interface {
 	// (plus the archived-object guard) are proven by the caller under the row
 	// lock.
 	SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoParams) (Property, error)
-	// Atomic PUT pin (ticket #577, the PUT favorite's canon #461: no
-	// read-modify-write). The value — a moment or NULL — is resolved by the
-	// application under the row lock (a re-pin keeps the original pin time);
-	// existence and the edit capability are proven there too. The scope is the
-	// property's owner: the actor may be the full-access member. The updated
-	// row travels back for the response.
-	SetPropertyPin(ctx context.Context, arg SetPropertyPinParams) (Property, error)
 	// The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
 	// content type move together; a NULL key clears the photo. Existence and the
 	// self-only access are proven by the caller under the row lock.
@@ -1462,10 +1530,13 @@ type Querier interface {
 	// before the shift.
 	ShiftSubscriptionPaymentsCreatedAt(ctx context.Context, arg ShiftSubscriptionPaymentsCreatedAtParams) (int64, error)
 	// The main screen's two counters over the whole visible scope (ticket
-	// #575): the favorite rules — the «Все избранные (N)» card — and the
+	// #575): the actor's favorite rules — the «Все избранные (N)» card, the
+	// personal set of the reading actor (the cutover #1308, D12) — and the
 	// overdue operations summed across the feed's rules — the «Все
 	// просроченные (N)» card. Neither is narrowed by a search: the counters
 	// describe the scope, the search screens' rows are the feed query's.
+	// The personal favorite join (the cutover #1308): COUNT over the actor's
+	// joined rows — a stranger's star never lands in the actor's counter.
 	SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPaymentCountersParams) (SumGlobalPaymentCountersRow, error)
 	// The matched categories of the payment rules search (ticket #575): one
 	// row per category present among the matched rules — the search screen's
@@ -1527,7 +1598,8 @@ type Querier interface {
 	UpdateEmailChangeGrantEmail(ctx context.Context, arg UpdateEmailChangeGrantEmailParams) error
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set (since is never among it — server-set,
-	// prototype decision №17). The favorite star has its own atomic UPDATE.
+	// prototype decision №17). The favorite star is a personal state (the
+	// cutover #1308) with its own insert/delete pair.
 	UpdatePayment(ctx context.Context, arg UpdatePaymentParams) error
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
@@ -1585,6 +1657,7 @@ type Querier interface {
 	// желаемое состояние явно, дефолт omitted-категорий — все ВКЛ. Мастер-состояние
 	// устройства — само существование строки: строка есть = включено.
 	UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) (PushSubscription, error)
+	UserHoldsAnyMembership(ctx context.Context, userID pgtype.UUID) (bool, error)
 	// The gate of the foreign profile-photo read (ADR 0065, решение владельца
 	// #1286 — «показ участникам»): the two users are connected when at least
 	// one property is readable by both sides (ADR 0028 derived read,

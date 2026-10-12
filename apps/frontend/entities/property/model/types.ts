@@ -59,7 +59,6 @@ export type Property = {
    * бэкенд; null — фото нет. */
   readonly photoUrl?: string | null;
   readonly access?: PropertyAccess;
-  readonly members_count: number;
   /** Момент создания (ISO date-time) — сортировка «По дате создания» (#586). */
   readonly created_at: string;
   /**

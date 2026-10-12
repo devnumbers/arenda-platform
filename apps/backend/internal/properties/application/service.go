@@ -315,17 +315,8 @@ func (s *PropertyService) CreateProperty(ctx context.Context, actor uuid.UUID, c
 
 	var created domain.Property
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		limit, err := stores.limiter.ActivePropertyLimit(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("get active property limit: %w", err)
-		}
-
-		count, err := stores.repo.CountActiveByOwner(ctx, actor)
-		if err != nil {
-			return fmt.Errorf("count active properties: %w", err)
-		}
-		if count >= limit {
-			return ErrLimitExceeded
+		if err := s.ensureCreationSlot(ctx, stores, actor); err != nil {
+			return err
 		}
 
 		created, err = stores.repo.Create(ctx, actor, property)
@@ -402,6 +393,12 @@ func (s *PropertyService) ListProperties(ctx context.Context, actor uuid.UUID) (
 		return PropertiesPage{}, err
 	}
 
+	// The actor's personal pins ride the assembled list (the cutover
+	// #1307): the order below is the actor's, never another participant's.
+	if err := s.overlayActorPins(ctx, actor, properties); err != nil {
+		return PropertiesPage{}, err
+	}
+
 	items := s.pinnedFirst(properties)
 	return PropertiesPage{Items: items, Today: today, ArchivedCount: archivedCount, SuspendedShared: suspended}, nil
 }
@@ -471,8 +468,8 @@ func (s *PropertyService) listSuspendedShared(ctx context.Context, actor uuid.UU
 // #577): among themselves by the pin time — the first pin stays on top, a
 // re-pin never shifts the order; the unpinned keep the incoming order
 // (the repository's updated_at DESC, the shared properties at their end).
-// Stable so equal pins never swap. The SQL list already orders by the pin
-// (ListActivePropertiesByOwner); this re-sort extends the same rule over
+// Stable so equal pins never swap. The rows carry the actor's personal
+// pinnedAt (the overlay below); this re-sort extends the same rule over
 // the merged list, whose shared rows were appended after the SQL pass.
 func (s *PropertyService) pinnedFirst(properties []domain.Property) []domain.Property {
 	slices.SortStableFunc(properties, func(a, b domain.Property) int {
@@ -489,6 +486,60 @@ func (s *PropertyService) pinnedFirst(properties []domain.Property) []domain.Pro
 		return 0
 	})
 	return properties
+}
+
+// overlayActorPins fills the actor's personal pins over the assembled list
+// (the cutover #1307): the lists carry pinnedAt of the actor — own and
+// shared rows alike — and pinnedFirst orders by it. The table carries no
+// pin column anymore (the contract #1311 dropped it); the actor's
+// user_property_pins rows are the only pin source.
+func (s *PropertyService) overlayActorPins(ctx context.Context, actor uuid.UUID, properties []domain.Property) error {
+	if len(properties) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(properties))
+	for i := range properties {
+		ids[i] = properties[i].ID
+	}
+	pins, err := s.repo.ActorPins(ctx, actor, ids)
+	if err != nil {
+		return fmt.Errorf("read actor pins: %w", err)
+	}
+	for i := range properties {
+		if at, ok := pins[properties[i].ID]; ok {
+			properties[i].PinnedAt = &at
+		}
+	}
+	return nil
+}
+
+// overlayActorPin fills the actor's personal pin on a single property read
+// (the cutover #1307): the detail carries pinnedAt of the actor.
+func (s *PropertyService) overlayActorPin(ctx context.Context, actor uuid.UUID, property *domain.Property) error {
+	at, err := s.repo.ActorPin(ctx, actor, property.ID)
+	if err != nil {
+		return fmt.Errorf("read actor pin: %w", err)
+	}
+	property.PinnedAt = at
+	return nil
+}
+
+// overlayActorPinDegrading fills the actor's personal pin on a mutation
+// response (the cutover #1307): by the time it runs the mutation is
+// committed and its frame published — a failed pin read degrades to an
+// unpinned answer (the reader's other surfaces re-read the truth on the
+// published frame) instead of failing the answered call. The read paths
+// keep the strict overlayActorPin: there the pin state is the answer.
+func (s *PropertyService) overlayActorPinDegrading(ctx context.Context, actor uuid.UUID, property *domain.Property) {
+	at, err := s.repo.ActorPin(ctx, actor, property.ID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to overlay actor pin on mutation response",
+			slog.String("property_id", property.ID.String()),
+			slog.String("error", sanitizeError(err)),
+		)
+		return
+	}
+	property.PinnedAt = at
 }
 
 // appendSharedProperties appends the properties shared with the actor to the
@@ -655,6 +706,12 @@ func (s *PropertyService) SearchProperties(
 	if err != nil {
 		return nil, "", fmt.Errorf("search visible properties: %w", err)
 	}
+	// The search rows carry the actor's personal pins (the cutover #1307) —
+	// the cards render the same pin mark the hub list does. The keyset walk
+	// stays untouched: the cursor travels (name, id), not the pin order.
+	if err := s.overlayActorPins(ctx, actor, properties); err != nil {
+		return nil, "", err
+	}
 	// A full page answers with the last row's continuation; a short one has
 	// walked the matches to the end — the empty cursor stops the scroll.
 	nextCursor := ""
@@ -688,12 +745,30 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 		}
 		return domain.Property{}, fmt.Errorf("get property: %w", err)
 	}
+	// The detail carries the actor's personal pin (the cutover #1307): the
+	// pin mark and the «Убрать из основных» action read the actor's row.
+	if err := s.overlayActorPin(ctx, actor, &property); err != nil {
+		return domain.Property{}, err
+	}
 
 	// The actor's access context for the sharing banner (issue T11): the role
-	// is always reported; the owner's public display name is resolved only for
-	// recipients, and a resolver failure degrades to an empty name.
+	// is always reported; the owner's public contacts resolve only for
+	// recipients.
 	property.AccessRole = role
-	if role != sharedpolicy.RoleOwner && s.ownerNames != nil {
+	s.resolveOwnerContacts(ctx, role, &property)
+
+	return property, nil
+}
+
+// resolveOwnerContacts fills the owner's display name, account email and
+// photo path on the detail read — recipients only (issue T11, Figma
+// 2200-97365, ADR 0065 решение #1286); every resolver is optional and
+// failure-degrading, a failed lookup leaves the field empty.
+func (s *PropertyService) resolveOwnerContacts(ctx context.Context, role sharedpolicy.Role, property *domain.Property) {
+	if role == sharedpolicy.RoleOwner {
+		return
+	}
+	if s.ownerNames != nil {
 		name, err := s.ownerNames.DisplayName(ctx, property.OwnerID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to resolve owner display name",
@@ -704,9 +779,7 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 			property.OwnerName = name
 		}
 	}
-	// The owner's account email for the detail's owner contact row (Figma
-	// 2200-97365): recipients only, degrading to empty like the name.
-	if role != sharedpolicy.RoleOwner && s.ownerEmails != nil {
+	if s.ownerEmails != nil {
 		email, err := s.ownerEmails.GetEmail(ctx, property.OwnerID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to resolve owner email",
@@ -717,9 +790,7 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 			property.OwnerEmail = email
 		}
 	}
-	// The owner's photo path (ADR 0065, решение #1286): recipients only,
-	// degrading to empty like the name.
-	if role != sharedpolicy.RoleOwner && s.ownerPhotos != nil {
+	if s.ownerPhotos != nil {
 		photoURL, err := s.ownerPhotos.GetPhotoURL(ctx, property.OwnerID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to resolve owner photo",
@@ -730,8 +801,6 @@ func (s *PropertyService) GetProperty(ctx context.Context, actor, id uuid.UUID) 
 			property.OwnerPhotoURL = photoURL
 		}
 	}
-
-	return property, nil
 }
 
 func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUID, cmd UpdatePropertyCommand) (domain.Property, error) {
@@ -743,7 +812,7 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 	var updated domain.Property
 	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		property, err := lockEditableProperty(ctx, stores.repo, id)
+		property, err := lockPropertyForWrite(ctx, stores.repo, id)
 		if err != nil {
 			return err
 		}
@@ -795,6 +864,10 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 	}
 	s.publishChanged(ctx, actor, id, journaled)
 
+	// The response carries the actor's personal pin (the cutover #1307) —
+	// the edit did not touch it, the reader's row is the truth.
+	s.overlayActorPinDegrading(ctx, actor, &updated)
+
 	updated.AccessRole = role
 	return updated, nil
 }
@@ -824,40 +897,41 @@ func (s *PropertyService) recordMaintenanceHistory(
 	return true, nil
 }
 
-// SetPropertyPin writes the global pin atomically (PUT pin, ticket #577, the
-// PUT favorite's canon #461): one UPDATE inside the transaction under the
-// edit capability — Owner and Full Access (ADR 0028 CanEdit), a viewer is
-// ErrForbidden, no access is ErrNotFound, an archived property is
-// ErrArchivedProperty. A re-pin keeps the original pin time (the PUT's
-// idempotency — the order among the pinned never shifts); unpinning clears
-// it. The pin is a pure read-order flag: no re-read is asked for — the row
-// resolved under the property lock travels out through the response.
+// SetPropertyPin writes the actor's personal pin (PUT pin, ticket #577; the
+// personal cutover #1307, D11): one insert/delete of the actor's
+// user_property_pins row inside the transaction under the view capability —
+// Owner, Full Access and Viewer alike; no access and a suspended membership
+// are ErrNotFound, an archived property is ErrArchivedProperty. A re-pin
+// keeps the original pin time (the PUT's idempotency — the order among the
+// pinned never shifts); unpinning deletes the row. The pin is a personal
+// state: no history row is written (D17) and no realtime frame is published
+// (D18) — the actor's other tabs re-read on their next load; the admin
+// audit keeps recording the PUT.
 func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUID, pinned bool) (domain.Property, error) {
-	role, err := s.resolveEditableProperty(ctx, actor, id)
+	role, err := s.resolveViewableProperty(ctx, actor, id)
 	if err != nil {
 		return domain.Property{}, err
 	}
 
 	var updated domain.Property
-	var journaled bool
 	err = s.runInTx(ctx, func(stores *txStores) error {
-		property, err := lockEditableProperty(ctx, stores.repo, id)
+		property, err := lockPropertyForWrite(ctx, stores.repo, id)
 		if err != nil {
 			return err
 		}
 
-		pinnedAt := resolvedPinnedAt(property.PinnedAt, pinned, s.clock.Now())
-
-		// The journal records a state change, not an idempotent re-pin: a
-		// PUT that keeps the pin (or the absence) writes no history row.
-		pinChanged := pinned != (property.PinnedAt != nil)
-
-		updated, err = stores.repo.SetPin(ctx, id, property.OwnerID, pinnedAt)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNotFound
+		var pinnedAt *time.Time
+		if pinned {
+			// The atomic personal-pin insert: a re-pin keeps the original
+			// pin time, a fresh pin takes the clock's now — the statement
+			// returns the effective one either way.
+			at, err := stores.repo.InsertActorPin(ctx, actor, id, s.clock.Now())
+			if err != nil {
+				return fmt.Errorf("insert actor pin: %w", err)
 			}
-			return fmt.Errorf("set property pin: %w", err)
+			pinnedAt = &at
+		} else if err := stores.repo.DeleteActorPin(ctx, actor, id); err != nil {
+			return fmt.Errorf("delete actor pin: %w", err)
 		}
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
@@ -870,26 +944,34 @@ func (s *PropertyService) SetPropertyPin(ctx context.Context, actor, id uuid.UUI
 		}); err != nil {
 			return fmt.Errorf("record audit: %w", err)
 		}
-		if pinChanged {
-			entry := historydomain.PropertyPinned(id)
-			if !pinned {
-				entry = historydomain.PropertyUnpinned(id)
-			}
-			if err := historyapp.RecordScoped(ctx, stores.history, id, actor,
-				sharedpolicy.HistoryActorRole(role), entry); err != nil {
-				return err
-			}
-			journaled = true
-		}
+
+		updated = property
+		updated.PinnedAt = pinnedAt
 		return nil
 	})
 	if err != nil {
 		return domain.Property{}, err
 	}
-	s.publishChanged(ctx, actor, id, journaled)
 
 	updated.AccessRole = role
 	return updated, nil
+}
+
+// resolveViewableProperty authorizes the personal pin write (SetPropertyPin,
+// the cutover #1307): the actor needs the view capability — a viewer pins
+// their own order (D11). No access and a suspended membership both map to
+// ErrNotFound so the existence of an object is never revealed (issue #156,
+// T3): unlike the detail read, the pin endpoint carries no suspended signal
+// — a PUT reveals nothing and answers the privacy 404.
+func (s *PropertyService) resolveViewableProperty(ctx context.Context, actor, id uuid.UUID) (sharedpolicy.Role, error) {
+	role, err := s.policy.RoleForProperty(ctx, actor, id)
+	if err != nil {
+		return "", fmt.Errorf("resolve role: %w", err)
+	}
+	if !sharedpolicy.CanView(role) {
+		return "", ErrNotFound
+	}
+	return role, nil
 }
 
 // resolveEditableProperty authorizes a property write (UpdateProperty,
@@ -936,10 +1018,12 @@ func autoName(
 	return domain.AutoPropertyName(propertyType, count), nil
 }
 
-// lockEditableProperty loads the property row for update inside a write
+// lockPropertyForWrite loads the property row for update inside a write
 // transaction and rejects archived objects: an archived property is read-only
-// history.
-func lockEditableProperty(ctx context.Context, repo PropertyRepository, id uuid.UUID) (domain.Property, error) {
+// history. The personal pin write rides the same guard (the cutover #1307):
+// the right to write differs — pin needs only the view capability, resolved
+// by resolveViewableProperty — but the archived verdict is common.
+func lockPropertyForWrite(ctx context.Context, repo PropertyRepository, id uuid.UUID) (domain.Property, error) {
 	property, err := repo.GetByIDForUpdate(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -1455,8 +1539,9 @@ func (s *PropertyService) ArchiveExcessProperties(
 // limit is unlimited. The ids restore in the given (restoration-priority)
 // order; an id gone or already active since the snapshot is skipped as
 // settled. Every restoration mirrors a manual unarchive: the audit entry
-// names the grace_restore trigger and the recipient slots are re-enforced for
-// the property. Returns the ids it could not restore — the debt remainder
+// names the grace_restore trigger, the recipient slots are re-enforced for
+// the property and the owner's own pool growth is re-enforced with the same
+// trigger (D13). Returns the ids it could not restore — the debt remainder
 // still archived beyond the limit, in the given order (nil when everything
 // settled).
 func (s *PropertyService) RestoreGraceArchivedProperties(
@@ -1512,6 +1597,14 @@ func (s *PropertyService) RestoreGraceArchivedProperties(
 		if s.slots != nil {
 			if _, err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
 				return nil, fmt.Errorf("enforce recipient slot on grace restore: %w", err)
+			}
+			// The owner's own pool grew too — the restored object re-entered it
+			// (D13, #1297): the full pool is re-enforced (the excess shared
+			// memberships suspended, the restored own objects stay). The legs
+			// are dropped for the same reason as above: a background billing
+			// phase publishes nothing.
+			if _, err := s.slots.EnforceRecipientPoolGrowth(ctx, tx, scope, "grace_restore"); err != nil {
+				return nil, fmt.Errorf("enforce recipient pool growth on grace restore: %w", err)
 			}
 		}
 	}
@@ -1574,6 +1667,19 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 				return fmt.Errorf("enforce recipient slot on unarchive: %w", err)
 			}
 			suspended = append(suspended, legs...)
+			// The actor's OWN pool grew too — the unarchived object re-entered it
+			// (D13, #1297): the owner is never a member row of their own object,
+			// so the per-property entry above does not visit them as a recipient.
+			// The full pool is re-enforced: the excess shared memberships beyond
+			// the limit are suspended (the oldest first, the returning own object
+			// stays), never the own candidates. The legs ride the same post-commit
+			// dispatch — a suspended shared object is exactly the blur-card state
+			// the recipient's clients must refetch.
+			legs, err = s.slots.EnforceRecipientPoolGrowth(ctx, stores.tx, actor, "unarchive")
+			if err != nil {
+				return fmt.Errorf("enforce recipient pool growth on unarchive: %w", err)
+			}
+			suspended = append(suspended, legs...)
 		}
 		return nil
 	})
@@ -1582,6 +1688,10 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 	}
 	s.publishChanged(ctx, actor, id, true)
 	s.publishSlotAccess(ctx, actor, suspended)
+
+	// D16: the personal pins survived the archive untouched — the returned
+	// object carries the actor's pin again (the cutover #1307).
+	s.overlayActorPinDegrading(ctx, actor, &unarchived)
 
 	unarchived.AccessRole = role
 	return unarchived, nil
@@ -1618,6 +1728,28 @@ func ensureActivePropertySlot(ctx context.Context, stores *txStores, owner uuid.
 		return fmt.Errorf("count active properties: %w", err)
 	}
 	if count >= limit {
+		return ErrLimitExceeded
+	}
+	return nil
+}
+
+// ensureCreationSlot is CreateProperty's limit gate — the honest refusal of
+// #1300 Q2 (D13): the budget is the recipient's FULL pool (own active objects
+// plus the active shared memberships they hold), and a full pool refuses the
+// creation outright with ErrLimitExceeded — creation returns nothing, so
+// silently suspending someone else's active access to fit the new object in is
+// less predictable than an honest «лимит превышен». The full-pool predicate
+// lives in the slot policy; without it wired (pre-T4 behaviour) the own-count
+// check is the fallback.
+func (s *PropertyService) ensureCreationSlot(ctx context.Context, stores *txStores, actor uuid.UUID) error {
+	if s.slots == nil {
+		return ensureActivePropertySlot(ctx, stores, actor)
+	}
+	full, err := s.slots.RecipientPoolFull(ctx, stores.tx, actor)
+	if err != nil {
+		return fmt.Errorf("check recipient pool: %w", err)
+	}
+	if full {
 		return ErrLimitExceeded
 	}
 	return nil
@@ -1712,7 +1844,7 @@ func (s *PropertyService) SetPropertyPhoto(
 	)
 	err = s.runInTx(ctx, func(stores *txStores) error {
 		var err error
-		property, err = lockEditableProperty(ctx, stores.repo, propertyID)
+		property, err = lockPropertyForWrite(ctx, stores.repo, propertyID)
 		if err != nil {
 			return err
 		}
@@ -1754,6 +1886,10 @@ func (s *PropertyService) SetPropertyPhoto(
 		s.cleanupPropertyPhoto(ctx, *oldKey)
 	}
 	s.publishChanged(ctx, actor, propertyID, true)
+
+	// The response carries the actor's personal pin (the cutover #1307) —
+	// the photo write did not touch it, the reader's row is the truth.
+	s.overlayActorPinDegrading(ctx, actor, &property)
 
 	return property, nil
 }
@@ -1825,6 +1961,10 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 	}
 	s.publishChanged(ctx, actor, propertyID, true)
 
+	// The response carries the actor's personal pin (the cutover #1307) —
+	// the photo write did not touch it, the reader's row is the truth.
+	s.overlayActorPinDegrading(ctx, actor, &property)
+
 	return property, nil
 }
 
@@ -1891,19 +2031,6 @@ func updatedPropertyFields(cmd UpdatePropertyCommand) []string {
 		fields = append(fields, "status")
 	}
 	return fields
-}
-
-// resolvedPinnedAt computes the pin timestamp a PUT pin writes: a re-pin
-// keeps the original pin time (the PUT's idempotency), a fresh pin takes the
-// clock's now, an unpin clears it.
-func resolvedPinnedAt(current *time.Time, pinned bool, now time.Time) *time.Time {
-	if !pinned {
-		return nil
-	}
-	if current != nil {
-		return current
-	}
-	return &now
 }
 
 // propertyUpdateHistoryEntry composes the action journal entry for an edit

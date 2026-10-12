@@ -2,9 +2,9 @@
 
 import { type ChangeEvent, type JSX } from "react";
 import { formatPhoneInput, isPhoneValid } from "@/shared/lib/phone";
-import { Button, TextField } from "@/shared/ui/design";
+import { Button, ResendCodeTile, TextField } from "@/shared/ui/design";
 import { ROUTES } from "@/shared/config/routes";
-import { CooldownNote, StepHeader, SupportRequestButton } from "../step-chrome";
+import { StepHeader, SupportRequestButton } from "../step-chrome";
 
 export type PhoneStepProps = {
     phone: string;
@@ -23,8 +23,11 @@ export type PhoneStepProps = {
  * + Primary-кнопка (зазор 16); юртекст 16/18 tertiary с подчёркнутыми
  * ссылками; «Написать в поддержку» — White-пилюля с Icon/R/Support.
  * Кнопка в покое погашена (disabled 50% = #95BFFF макета). Кулдаун
- * 429/retryAfter — кнопка погашена + подпись в лексике resend-канона
- * (#733) «Запросить код можно через ММ:СС» (моно 14/16, tertiary). Юрссылки
+ * 429/retryAfter и возврат с код-шага с живым таймером — кнопка шага
+ * меняется на плитку resend-канона (#733) ResendCodeTile: Secondary
+ * «Отправить новый код», погашенная, с двухстрочной подписью
+ * «Запросить новый код можно / через ММ:СС» (решение владельца 12.10,
+ * макеты 2349:67594/67633); по истечении — снова Primary. Юрссылки
  * ведут на лендинг (/privacy, /terms) в новой вкладке — самих страниц пока
  * нет, 404 лендинга не блокирует (решение владельца 18.09). «Написать в
  * поддержку» открывает модалку «Связаться с нами» (#766). Кнопка погашена
@@ -45,6 +48,12 @@ export function PhoneStep({
 
     const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
+        // В кулдауне сабмитной кнопки в форме нет (плитка — type="button"),
+        // а однофилдовая форма сабмитится по Enter и без неё: гард держит
+        // старое поведение — вместо заведомого 429 Enter в кулдауне молчит.
+        if (isWaiting) {
+            return;
+        }
         onSendPhone(phone);
     };
 
@@ -72,15 +81,25 @@ export function PhoneStep({
                     disabled ?? loading, и явный disabled без || не даёт
                     loading диспейблить кнопку — на время отправки она
                     оставалась активной (#1099). */}
-                <Button
-                    type="submit"
-                    loading={isLoading}
-                    disabled={!isPhoneValid(phone) || isWaiting || isLoading}
-                >
-                    Войти
-                </Button>
-
-                <CooldownNote secondsLeft={resendTimer} />
+                {/* В кулдауне слот кнопки занимает плитка канона: она видна
+                    только погашенной (isWaiting true весь её жизнь — на нуле
+                    слот возвращается Primary), а Enter в кулдауне гасится
+                    гардом handleSubmit — заведомого 429 нет. */}
+                {isWaiting ? (
+                    <ResendCodeTile
+                        remainingSeconds={resendTimer}
+                        loading={isLoading}
+                        onResend={() => onSendPhone(phone)}
+                    />
+                ) : (
+                    <Button
+                        type="submit"
+                        loading={isLoading}
+                        disabled={!isPhoneValid(phone) || isLoading}
+                    >
+                        Войти
+                    </Button>
+                )}
             </form>
 
             <p className="m-0 text-base leading-[18px] text-content-tertiary">

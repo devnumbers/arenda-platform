@@ -40,7 +40,6 @@ type paymentRowFields struct {
 	UserCategoryName pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
-	IsFavorite       bool
 	TitleIsManual    bool
 }
 
@@ -70,7 +69,6 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		UserCategoryName: row.UserCategoryName,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
-		IsFavorite:       row.IsFavorite,
 		TitleIsManual:    row.TitleIsManual,
 	}
 }
@@ -88,7 +86,6 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		UserCategoryName: row.UserCategoryName,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
-		IsFavorite:       row.IsFavorite,
 		TitleIsManual:    row.TitleIsManual,
 	}
 }
@@ -121,9 +118,8 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 			UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
 			UserCategoryName: pgconv.TextToPtrString(row.UserCategoryName),
 		},
-		CreatedAt:  pgconv.TimestamptzToTime(row.CreatedAt),
-		UpdatedAt:  pgconv.TimestamptzToTime(row.UpdatedAt),
-		IsFavorite: row.IsFavorite,
+		CreatedAt: pgconv.TimestamptzToTime(row.CreatedAt),
+		UpdatedAt: pgconv.TimestamptzToTime(row.UpdatedAt),
 
 		// The manual-title marker rides the CRUD reads; the tick's rows do
 		// not select it — the tick never reads (nor writes) it.

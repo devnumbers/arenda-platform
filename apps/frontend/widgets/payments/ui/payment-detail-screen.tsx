@@ -122,8 +122,13 @@ export function PaymentDetailScreen({
   const payment = paymentQuery.isSuccess ? paymentQuery.data : undefined;
 
   // Единый предикат мутационного входа страницы: смотрящий читает без кнопок
-  // (история 47), архив финансово read-only (#446).
+  // правки (история 47), архив финансово read-only (#446).
   const canMutate = propertyPermissions(property).canEdit;
+
+  // Звезда — личное состояние читателя (D12 #1308): гейт по праву просмотра,
+  // не мутации, — зритель ведёт своё избранное наравне с владельцем; архив
+  // гасит (сервер отвечает 409, канон пина #1307).
+  const canFavorite = propertyPermissions(property).canView && property?.status !== 'archived';
 
   const loading = paymentQuery.isPending || propertyQuery.isPending;
   const failed = paymentQuery.isError || propertyQuery.isError;
@@ -143,7 +148,7 @@ export function PaymentDetailScreen({
             <FavoriteStarButton
               propertyId={propertyId}
               payment={payment}
-              enabled={canMutate}
+              enabled={canFavorite}
             />
           )
         }
@@ -682,8 +687,9 @@ function HistoryPreviewRow({
   );
 }
 
-/** Звезда избранного в шапке (резолюция #452): toggle для Full Access+,
- * у смотрящего видима, но неактивна. */
+/** Звезда избранного в шапке (резолюция #452; личный cutover #1308):
+ * toggle по праву просмотра — зритель ставит наравне с владельцем и полным
+ * доступом (D12); архив гасит. */
 function FavoriteStarButton({
   propertyId,
   payment,

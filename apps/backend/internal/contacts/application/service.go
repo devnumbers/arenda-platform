@@ -322,8 +322,8 @@ func (s *ContactService) ListContacts(
 }
 
 // UpdateContact applies a diff-patch to the card: omitted fields are left
-// unchanged. Moving the card onto another property gates the target's edit
-// capability too — the source gate alone must not authorize a cross-property
+// unchanged. Moving the card onto another property is a rebind — owner-only
+// (D10 #1309): the source edit gate alone must not authorize a cross-object
 // move. The update runs scoped by (id, owner_id), so a card deleted between
 // the pre-transaction read and the write surfaces as ErrNotFound and takes
 // the audit entry down with it.
@@ -542,11 +542,14 @@ func (s *ContactService) authorize(
 	return s.gate(ctx, actor, *contact.PropertyID, can)
 }
 
-// resolvePropertyBinding validates a patch's property move: the target needs
-// the actor's edit capability (which also hides a nonexistent or foreign
-// property behind the privacy 404). Clearing is always available to an actor
-// who already passed the card's own edit gate. The book owner never changes:
-// the card lives in one book, properties come and go.
+// resolvePropertyBinding validates a patch's property move: a move is a
+// rebind — the owner's structural power (D10 #1309, sharedpolicy.CanRebind).
+// A non-owner gets the straight 403 on any target they can see; a target
+// they cannot see stays behind the privacy 404, so the rejection never
+// reveals an object's existence. Clearing is always available to an actor
+// who already passed the card's own edit gate, and re-submitting the current
+// binding is a no-op, not a move. The book owner never changes: the card
+// lives in one book, properties come and go.
 func (s *ContactService) resolvePropertyBinding(
 	ctx context.Context, actor uuid.UUID, contact domain.Contact, upd PropertyIDUpdate,
 ) (*uuid.UUID, bool, error) {
@@ -559,7 +562,7 @@ func (s *ContactService) resolvePropertyBinding(
 	case contact.PropertyID != nil && *upd.Value == *contact.PropertyID:
 		return contact.PropertyID, false, nil
 	default:
-		if _, err := s.gate(ctx, actor, *upd.Value, sharedpolicy.CanEdit); err != nil {
+		if _, err := s.gate(ctx, actor, *upd.Value, sharedpolicy.CanRebind); err != nil {
 			return nil, false, err
 		}
 		return upd.Value, true, nil

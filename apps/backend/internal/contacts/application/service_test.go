@@ -791,7 +791,9 @@ func TestUpdateContactMoveForbiddenForViewerOnTarget(t *testing.T) {
 	t.Parallel()
 
 	// The member holds Full Access on the source property but only a viewer's
-	// role on the target: the move must fail forbidden.
+	// role on the target: the move fails forbidden (D10 #1309 makes it
+	// owner-only outright, so this target role no longer matters — the test
+	// pins the visible-target rejection).
 	h := newServiceHarnessWithPolicy(t, func(h *serviceHarness) sharedpolicy.Policy {
 		return matrixPolicy{roles: map[uuid.UUID]map[uuid.UUID]sharedpolicy.Role{
 			h.member: {h.property: sharedpolicy.RoleFullAccess, h.otherProp: sharedpolicy.RoleViewer},
@@ -805,12 +807,47 @@ func TestUpdateContactMoveForbiddenForViewerOnTarget(t *testing.T) {
 	}
 }
 
+func TestUpdateContactMoveInvisibleTargetIsPrivacy404(t *testing.T) {
+	t.Parallel()
+
+	// The member holds Full Access on the source property and no access at
+	// all to the target: the rejection never reveals the object — the move
+	// dies with the privacy 404 (D10 #1309).
+	h := newServiceHarnessWithPolicy(t, func(h *serviceHarness) sharedpolicy.Policy {
+		return matrixPolicy{roles: map[uuid.UUID]map[uuid.UUID]sharedpolicy.Role{
+			h.member: {h.property: sharedpolicy.RoleFullAccess},
+		}}
+	})
+	id := h.seedBoundContact(h.property)
+	if _, err := h.svc.UpdateContact(t.Context(), h.member, id, UpdateContactCommand{
+		PropertyID: &PropertyIDUpdate{Value: &h.otherProp},
+	}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestUpdateContactMoveForbiddenForFullAccess(t *testing.T) {
+	t.Parallel()
+
+	// D10 #1309: the rebind is the owner's structural power. Full access
+	// edits every card field but cannot move the card — not even onto a
+	// property it could edit (the harness stub grants the role on both
+	// properties).
+	h := newServiceHarness(t, sharedpolicy.RoleFullAccess)
+	id := h.seedBoundContact(h.property)
+	if _, err := h.svc.UpdateContact(t.Context(), h.member, id, UpdateContactCommand{
+		PropertyID: &PropertyIDUpdate{Value: &h.otherProp},
+	}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("want ErrForbidden, got %v", err)
+	}
+}
+
 func TestUpdateContactMoveLands(t *testing.T) {
 	t.Parallel()
 
-	h := newServiceHarness(t, sharedpolicy.RoleFullAccess)
+	h := newServiceHarness(t, sharedpolicy.RoleOwner)
 	id := h.seedBoundContact(h.property)
-	updated, err := h.svc.UpdateContact(t.Context(), h.member, id, UpdateContactCommand{
+	updated, err := h.svc.UpdateContact(t.Context(), h.owner, id, UpdateContactCommand{
 		PropertyID: &PropertyIDUpdate{Value: &h.otherProp},
 	})
 	if err != nil {

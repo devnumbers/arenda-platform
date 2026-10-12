@@ -61,14 +61,18 @@ test.describe('создание задачи — навигация между �
   test('«Закрыть» с шага 1 закрывает', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/tasks');
-    // На хабе кнопка живёт дважды (trailing компакт-шапки + ряд HubTitle) —
-    // обе ведут в /tasks/new, спеке всё равно какая.
-    await page.getByRole('button', { name: 'Создать задачу' }).last().click();
+    // Вход в создание с хаба: на непустой ленте «Создать задачу» живёт
+    // дважды (trailing компакт-шапки + ряд HubTitle), на пустой — одна CTA
+    // состояния «Добавить задачу» (анатомия 3235-74057): «+» шапки на
+    // пустоте спрятан. Спеке всё равно какая — все ведут в /tasks/new.
+    await page.getByRole('button', { name: /Создать задачу|Добавить задачу/ }).last().click();
     await page.waitForURL('**/tasks/new');
     await expect(page.getByRole('textbox', { name: 'Задача' })).toBeVisible();
 
     await screenHeader(page).getByRole('button', { name: 'Закрыть' }).click();
     await expect(page).toHaveURL(/\/tasks$/);
-    await expect(page.getByRole('button', { name: 'Создать задачу' }).last()).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /Создать задачу|Добавить задачу/ }).last(),
+    ).toBeVisible();
   });
 });

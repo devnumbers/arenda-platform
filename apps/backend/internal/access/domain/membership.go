@@ -106,4 +106,11 @@ var (
 	// to an archived property. Existing members keep working: revoking and role
 	// changes stay available on archived objects (issue #163).
 	ErrPropertyArchived = errors.New("cannot add members to an archived property")
+	// ErrNotPropertyOwner is returned when an actor with no properties of
+	// their own calls the global «Отозвать доступ всем» (issue #1310): the
+	// action closes the sharing of one's own objects, so a participant of
+	// foreign objects is refused loudly (the HTTP layer maps it to 403) —
+	// unlike the privacy-preserving ErrParticipantNotFound for a stranger
+	// with no relation to sharing at all.
+	ErrNotPropertyOwner = errors.New("actor does not own any property")
 )

@@ -141,9 +141,18 @@ type PaymentStore interface {
 	// operations (date > today): the edit invalidation whose in-transaction
 	// tick then stands the single future planned again with fresh snapshots.
 	DeleteFuturePlanned(ctx context.Context, paymentID uuid.UUID, today time.Time) error
-	// SetFavorite writes the favorite star in one atomic UPDATE (PUT favorite,
-	// ticket #461 — never a read-modify-write through the full rule update).
-	SetFavorite(ctx context.Context, id, scope uuid.UUID, favorite bool) error
+	// InsertFavorite writes the actor's personal favorite row in one atomic
+	// INSERT (PUT favorite, the cutover #1308, D12 — never a read-modify-
+	// write through the full rule update): a re-star keeps the stored row,
+	// a fresh star takes a NULL position (the new-favorite-at-the-end rule).
+	InsertFavorite(ctx context.Context, actor, paymentID uuid.UUID) error
+	// DeleteFavorite removes the actor's personal favorite row — the order
+	// position leaves with it; an absent row deletes nothing.
+	DeleteFavorite(ctx context.Context, actor, paymentID uuid.UUID) error
+	// FavoriteIDs returns the subset of the listed rules the actor has
+	// starred — the personal-state overlay of the actor-facing reads (the
+	// rule rows themselves carry no favorite column, the cutover #1308).
+	FavoriteIDs(ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID) (map[uuid.UUID]bool, error)
 	WithTx(tx transaction.Tx) (PaymentStore, error)
 }
 
@@ -524,43 +533,47 @@ type GlobalPaymentReader interface {
 }
 
 // GlobalPaymentFavoriteLock is one locked row of the favorites order save
-// (ticket #576): the rule's id, its favorite flag at lock time and the
-// actor's role on the rule's property — the write gate's raw material (the
-// favorite star's matrix, #461: Full Access+).
+// (ticket #576; the personal cutover #1308): the rule's id and the actor's
+// role on the rule's property — the audit role's raw material. The row's
+// mere presence is the favorite state: the lock runs over the actor's own
+// user_payment_favorites rows, so an id back means the actor starred it and
+// can see it on a live property.
 type GlobalPaymentFavoriteLock struct {
-	ID uuid.UUID
-	// PropertyID is the rule's object — the realtime carrier's frame anchor
-	// (карта #714, #716): the order save dirties the `payments` view of
-	// every touched rule's property.
-	PropertyID uuid.UUID
-	IsFavorite bool
-	Role       sharedpolicy.Role
+	ID   uuid.UUID
+	Role sharedpolicy.Role
 }
 
 // GlobalPaymentOrderStore is the write side of the favorites manual order
-// (ticket #576) — the global payments' first cross-property mutation. The
-// visibility predicate and the per-row role live in the lock's SQL (the
-// global reads' rule, ticket #521): a submitted id the actor cannot see
-// never returns from the lock, which keeps the foreign case the
-// privacy-preserving 404; the write capability itself is the favorite
-// star's (#461, Full Access+) and is resolved per row beside the data.
+// (ticket #576) — the global payments' first cross-property mutation, and
+// since the personal cutover (#1308, D12) a purely personal one: the order
+// lives on the actor's own user_payment_favorites rows. The lock's SQL
+// keeps the visibility and archive cuts (the global reads' rule, ticket
+// #521): a submitted id the actor cannot see — or has not starred, the old
+// «visible non-favorite» case folded in — never returns from the lock,
+// which keeps every degenerate id the privacy-preserving 404. The write
+// capability itself is the favorite star's, the view one (D12: a viewer
+// orders their own set), resolved per row beside the data.
 // Every method runs inside the caller's transaction.
 type GlobalPaymentOrderStore interface {
 	// LockVisibleFavorites takes FOR UPDATE row locks on the submitted
-	// rules — in the given order, the caller's sorted ids being the
-	// deadlock-safety — and returns the rows visible to the actor on
-	// non-archived properties with the actor's per-row role. A matched set
-	// smaller than the submission means an unknown, foreign or invisible
-	// id.
+	// ids' rows of the actor — in the given order, the caller's sorted ids
+	// being the deadlock-safety — and returns the rows visible to the actor
+	// on non-archived properties with the actor's per-row role. A matched
+	// set smaller than the submission means a degenerate id (unknown,
+	// foreign, invisible, archived or not the actor's favorite).
 	LockVisibleFavorites(ctx context.Context, actor uuid.UUID, ids []uuid.UUID) ([]GlobalPaymentFavoriteLock, error)
-	// SaveFavoritePosition writes one rule's 1-based order position and
-	// must affect exactly one row: the lock has already proven existence
-	// and visibility inside the same transaction.
-	SaveFavoritePosition(ctx context.Context, id uuid.UUID, position int64) error
-	// ClearFavoriteOrdersOutside drops the positions of the actor's visible
-	// favorites outside the submitted list (the save's full-replacement
-	// pass: what the save does not place falls to the end of the reading
-	// order). KeepIDs travels as the list of placed ids, '' meaning none.
+	// SaveFavoritePosition writes one rule's 1-based position in the
+	// actor's personal order and must affect exactly one row: the lock has
+	// already proven the actor's row and its visibility inside the same
+	// transaction.
+	SaveFavoritePosition(ctx context.Context, actor, id uuid.UUID, position int64) error
+	// ClearFavoriteOrdersOutside drops the positions of the actor's
+	// personal favorites outside the submitted list (the save's
+	// full-replacement pass: what the save does not place falls to the end
+	// of the reading order). Only the actor's rows are touched and the
+	// feed's visibility and archive cuts hold: an archived property's
+	// favorite keeps its position through the save (D16). KeepIDs travels
+	// as the list of placed ids, '' meaning none.
 	ClearFavoriteOrdersOutside(ctx context.Context, actor uuid.UUID, keepIDs []uuid.UUID) error
 	WithTx(tx transaction.Tx) (GlobalPaymentOrderStore, error)
 }

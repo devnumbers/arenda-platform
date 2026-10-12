@@ -169,10 +169,10 @@ func NewAccessService(
 	}
 }
 
-// AddMember grants a registered user a role on a property. Any participant with
-// the manage-members capability (owner or full) may add anyone, including
-// another full member — full members are equal in member management. Adding a
-// member to an archived property is rejected (issue #163).
+// AddMember grants a registered user a role on a property. Member management
+// is owner-only since D8 (issue #1304): a full_access member's attempt is
+// refused like a stranger's. Adding a member to an archived property is
+// rejected (issue #163).
 func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID uuid.UUID, role domain.Role) (domain.Membership, error) {
 	_, actorRole, err := s.authorizeNewMember(ctx, actor, propertyID, userID)
 	if err != nil {

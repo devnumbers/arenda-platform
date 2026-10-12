@@ -13,11 +13,11 @@ import (
 )
 
 // ParticipantScopeProperty is one property of the reading actor's participant
-// scope (issue #693): a non-archived property the actor owns or manages as an
-// active full_access member. The scope is the authorization: every aggregate
+// scope (issue #693): a non-archived property the actor owns — owner-only
+// since D8 (issue #1304). The scope is the authorization: every aggregate
 // the participant read model returns is built exclusively from these rows, so
-// a full_access member of one object sees only the legs they manage and never
-// the rest of the owner's portfolio.
+// nobody — a full_access member of a foreign object included — ever sees
+// another owner's participants.
 type ParticipantScopeProperty struct {
 	ID      uuid.UUID
 	OwnerID uuid.UUID
@@ -58,14 +58,6 @@ type ParticipantReadModel interface {
 	ListInvitationsByProperties(ctx context.Context, propertyIDs []uuid.UUID) ([]ParticipantInvitationRow, error)
 }
 
-// AccessiblePropertiesCounter reports the number of active shared memberships
-// a user holds — the «объекты пользователей» count of the participants hub
-// summary (issue #693). Implemented by the membership repository's
-// CountActiveByUser (the recipient tariff-slot counter, issue #163).
-type AccessiblePropertiesCounter interface {
-	CountActiveByUser(ctx context.Context, userID uuid.UUID) (int, error)
-}
-
 // ParticipantProperty is one leg of a participant's access: the property with
 // its per-object role and lifecycle status (active/suspended/pending). Type
 // and PhotoUrl make the leg self-sufficient for the avatar (решение #1286) —
@@ -103,46 +95,34 @@ type Participant struct {
 	Properties []ParticipantProperty
 }
 
-// ParticipantsSummary carries the participants hub counters (issue #693): the
-// number of the actor's participants and the number of other people's objects
-// the actor has access to.
-type ParticipantsSummary struct {
-	ParticipantsCount         int
-	AccessiblePropertiesCount int
-}
-
 // ParticipantsManager is the use-case interface the HTTP adapters consume
 // (ADR 0035 func-backed test doubles); *ParticipantService implements it.
 type ParticipantsManager interface {
 	ListParticipants(ctx context.Context, actor uuid.UUID) ([]Participant, error)
 	GetParticipant(ctx context.Context, actor uuid.UUID, participantID string) (Participant, error)
-	Summary(ctx context.Context, actor uuid.UUID) (ParticipantsSummary, error)
 }
 
 // ParticipantService builds the owner's participant read model (issue #693).
 // It is read-only: membership mutations stay on AccessService.
 type ParticipantService struct {
-	read       ParticipantReadModel
-	users      UserLookup
-	emails     UserEmailResolver
-	accessible AccessiblePropertiesCounter
-	logger     *slog.Logger
+	read   ParticipantReadModel
+	users  UserLookup
+	emails UserEmailResolver
+	logger *slog.Logger
 }
 
 // NewParticipantService creates a ParticipantService. Emails may be nil to
-// skip the registered users' email resolution; accessible may be nil to skip
-// the hub summary's shared-objects count.
+// skip the registered users' email resolution.
 func NewParticipantService(
 	read ParticipantReadModel,
 	users UserLookup,
 	emails UserEmailResolver,
-	accessible AccessiblePropertiesCounter,
 	logger *slog.Logger,
 ) *ParticipantService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &ParticipantService{read: read, users: users, emails: emails, accessible: accessible, logger: logger}
+	return &ParticipantService{read: read, users: users, emails: emails, logger: logger}
 }
 
 // ListParticipants returns every person holding (or offered, when pending)
@@ -174,23 +154,6 @@ func (s *ParticipantService) GetParticipant(ctx context.Context, actor uuid.UUID
 		return Participant{}, domain.ErrParticipantNotFound
 	}
 	return participants[0], nil
-}
-
-// Summary returns the participants hub counters (issue #693).
-func (s *ParticipantService) Summary(ctx context.Context, actor uuid.UUID) (ParticipantsSummary, error) {
-	participants, err := s.buildParticipants(ctx, actor, "")
-	if err != nil {
-		return ParticipantsSummary{}, err
-	}
-	summary := ParticipantsSummary{ParticipantsCount: len(participants)}
-	if s.accessible != nil {
-		count, err := s.accessible.CountActiveByUser(ctx, actor)
-		if err != nil {
-			return ParticipantsSummary{}, fmt.Errorf("count accessible properties: %w", err)
-		}
-		summary.AccessiblePropertiesCount = count
-	}
-	return summary, nil
 }
 
 // scopeMeta is the scope properties' display data: the title every leg

@@ -333,7 +333,7 @@ func TestHistory_ParticipantRemovedRows(t *testing.T) {
 	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, history), nil)
 	svc := NewParticipantMutationService(access, owners, nil, lookup, emails, policy,
-		nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, history), nil, nil)
 
 	ctx := context.Background()

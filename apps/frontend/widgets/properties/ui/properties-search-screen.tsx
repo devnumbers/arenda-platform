@@ -86,13 +86,13 @@ export function PropertiesSearchScreen(): JSX.Element {
         ) : !searching ? (
           <EmptyState
             imageSrc="/images/payments/payments-objects-search.png"
-            className="py-16"
+            className="pt-16 pb-16"
             description="Введите название или адрес объекта"
           />
         ) : properties.length === 0 ? (
           <EmptyState
             imageSrc="/images/payments/payments-objects-search.png"
-            className="py-16"
+            className="pt-16 pb-16"
             description="Такого объекта нет"
           />
         ) : (
@@ -175,7 +175,7 @@ export function PropertiesSearchLoading(): JSX.Element {
       <PageContent>
         <EmptyState
           imageSrc="/images/payments/payments-objects-search.png"
-          className="py-16"
+          className="pt-16 pb-16"
           description="Введите название или адрес объекта"
         />
       </PageContent>

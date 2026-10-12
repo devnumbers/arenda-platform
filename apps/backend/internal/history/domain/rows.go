@@ -217,29 +217,6 @@ func PropertyCreated(entityID uuid.UUID, name string) Entry {
 // PropertyDescriptionChanged и PropertyAttributesChanged — решение 12.10;
 // их идентификаторы живут в entry.go как словарь легаси-строк.
 
-// PropertyPinned builds the pin row (a re-pin of an already pinned object is
-// not an action and never reaches the journal).
-func PropertyPinned(entityID uuid.UUID) Entry {
-	return Entry{
-		Kind:       KindProperty,
-		Action:     ActionPropertyPinned,
-		BaseAction: BaseChanged,
-		Segments:   Segments{{Text: "Объект закреплён", Link: entityLink(KindProperty, entityID)}},
-		Context:    map[string]any{},
-	}
-}
-
-// PropertyUnpinned builds the unpin row.
-func PropertyUnpinned(entityID uuid.UUID) Entry {
-	return Entry{
-		Kind:       KindProperty,
-		Action:     ActionPropertyUnpinned,
-		BaseAction: BaseChanged,
-		Segments:   Segments{{Text: "Объект откреплён", Link: entityLink(KindProperty, entityID)}},
-		Context:    map[string]any{},
-	}
-}
-
 // PropertyArchived builds the archive row.
 func PropertyArchived(entityID uuid.UUID) Entry {
 	return Entry{

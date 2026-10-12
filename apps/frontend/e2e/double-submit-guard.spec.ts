@@ -138,28 +138,34 @@ test.describe('гард двойного сабмита (#1120)', () => {
     await openCabinetWithSeededSession(page, seededUser);
     const posts = trackPosts(page, '/operations');
     const title = `Гард-операция ${Date.now()}`;
+    // Уборка обязательна (вне-тикетная догонка #1312): операция живёт на
+    // сидовой квартире, а спеки операций (alphabetical: дальше по списку)
+    // держат точные суммы сводки — лишние 600 ₽ роняют их в полном прогоне.
+    try {
+      await page.goto('/operations/new');
+      await page.getByRole('textbox', { name: 'Сумма' }).fill('600');
+      await page.getByRole('radio', { name: 'Расход' }).click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      await page.getByRole('textbox').fill(title);
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      const rows = page.locator('div.flex.flex-col.pt-6').getByRole('button');
+      await expect(rows.last()).toHaveAccessibleName('Другое');
+      await rows.last().click();
+      await page.getByRole('button', { name: 'Продолжить' }).click();
+      // Строки объектов шага 4 — радио-карточки «Row Button» (#525).
+      await page.getByRole('radio', { name: PROPERTY_BUTTON }).click();
 
-    await page.goto('/operations/new');
-    await page.getByRole('textbox', { name: 'Сумма' }).fill('600');
-    await page.getByRole('radio', { name: 'Расход' }).click();
-    await page.getByRole('button', { name: 'Продолжить' }).click();
-    await page.getByRole('textbox').fill(title);
-    await page.getByRole('button', { name: 'Продолжить' }).click();
-    const rows = page.locator('div.flex.flex-col.pt-6').getByRole('button');
-    await expect(rows.last()).toHaveAccessibleName('Другое');
-    await rows.last().click();
-    await page.getByRole('button', { name: 'Продолжить' }).click();
-    // Строки объектов шага 4 — радио-карточки «Row Button» (#525).
-    await page.getByRole('radio', { name: PROPERTY_BUTTON }).click();
-
-    const release = await holdLatency(page, 600);
-    const submit = page.getByRole('button', { name: 'Добавить операцию' });
-    await doubleClickInOneTask(submit);
-    await expect(submit).toBeDisabled();
-    await expect(page.getByRole('heading', { name: title })).toBeVisible();
-    await release();
-    expect(posts).toHaveLength(1);
-    expect(await sqlCount('operations', title)).toBe(1);
+      const release = await holdLatency(page, 600);
+      const submit = page.getByRole('button', { name: 'Добавить операцию' });
+      await doubleClickInOneTask(submit);
+      await expect(submit).toBeDisabled();
+      await expect(page.getByRole('heading', { name: title })).toBeVisible();
+      await release();
+      expect(posts).toHaveLength(1);
+      expect(await sqlCount('operations', title)).toBe(1);
+    } finally {
+      await execE2eSql(`DELETE FROM operations WHERE title = '${title}'`);
+    }
   });
 
   test('создание задачи: двойной клик одним таском — ровно один POST', async ({
@@ -170,11 +176,12 @@ test.describe('гард двойного сабмита (#1120)', () => {
     const posts = trackPosts(page, '/tasks/rules');
     const title = `Гард-задача ${Date.now()}`;
 
-    // Вход со списка задач (клик «Создать задачу»), не прямой goto:
-    // success закрывается goBack-ом — без истории он уезжает в
-    // about:blank (грабля карты #1068, MCP-таб/прямой goto).
+    // Вход со списка задач (клик по входу в создание — «Создать задачу»
+    // непустой ленты или CTA «Добавить задачу» пустой, 3235-74057), не
+    // прямой goto: success закрывается goBack-ом — без истории он
+    // уезжает в about:blank (грабля карты #1068, MCP-таб/прямой goto).
     await page.goto('/tasks');
-    await page.getByRole('button', { name: 'Создать задачу' }).last().click();
+    await page.getByRole('button', { name: /Создать задачу|Добавить задачу/ }).last().click();
     await page.waitForURL('**/tasks/new');
     await page.getByRole('textbox', { name: 'Задача' }).fill(title);
     await page.getByRole('button', { name: 'Далее' }).click();

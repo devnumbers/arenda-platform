@@ -23,7 +23,7 @@ const APARTMENT = SEEDED_APARTMENT_PROPERTY_ID;
 const GARAGE = SEEDED_GARAGE_PROPERTY_ID;
 
 async function archiveProperty(id: string): Promise<void> {
-  await execE2eSql(`UPDATE properties SET status = 'archived', pinned_at = NULL WHERE id = '${id}'`);
+  await execE2eSql(`UPDATE properties SET status = 'archived' WHERE id = '${id}'`);
 }
 
 async function restoreProperty(id: string): Promise<void> {

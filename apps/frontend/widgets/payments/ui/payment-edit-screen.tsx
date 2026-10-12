@@ -156,8 +156,10 @@ export function PaymentEditScreen({
   // такого платежа не существует вовсе (RESTRICT FK, честный 409).
   const managed = payment?.isRentalManaged === true;
   const editable = canEdit && !managed;
-  // Удаление — только владелец (история 49 спеки #453).
-  const canDelete = property?.access?.role === 'owner';
+  // Удаление едет правом редактирования (D9 #1309, зеркало сервера:
+  // был только владелец по истории 49 спеки #453) — архив глушит тем же
+  // флагом, кнопок, которые нельзя сделать, быть не должно (#757).
+  const canDelete = canEdit;
 
   // Переход вместо тупика (#988): карточка недоступности ведёт в условия
   // аренды — найдём её по связи rentPayment.paymentId (ADR 0053 §4);
@@ -346,7 +348,8 @@ function PaymentEditForm({
 }: {
   readonly propertyId: string;
   readonly payment: Payment;
-  /** Удаление — только владелец; у полного доступа кнопки и модалки нет. */
+  /** Удаление — право редактирования (D9 #1309); у зрителя кнопки и
+   * модалки нет, у архивного объекта флаг глухой (canEdit). */
   readonly canDelete: boolean;
 }): JSX.Element {
   const router = useRouter();

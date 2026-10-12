@@ -14,27 +14,12 @@
 import { isStandaloneMode } from '@/shared/lib/pwa/standalone';
 export { isStandaloneMode };
 
-/** `window.MSStream` is the legacy IE/Edge UA spoofing guard for iPadOS. */
-type WindowWithMSStream = Window & {
-    readonly MSStream?: unknown;
-};
-
-/**
- * Detects iOS / iPadOS devices. iPadOS 13+ spoofs desktop Safari — its UA
- * string is byte-identical to desktop macOS Safari (down to the `Macintosh`
- * token), so the Mac signature is read from the UA itself, alongside the
- * classic iDevice tokens, with touch events separating a spoofed iPad from a
- * real desktop Mac. `navigator.platform` — the previous Mac signal — is
- * deprecated and is deliberately not read. The `MSStream` guard stops
- * Edge / IE from false-matching.
- */
-export function isIosDevice(): boolean {
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
-    const ua = navigator.userAgent;
-    const hasIosToken = /iPad|iPhone|iPod/.test(ua) || (/macintosh|macintel/i.test(ua) && 'ontouchend' in document);
-    const isMsStream = (window as WindowWithMSStream).MSStream !== undefined;
-    return hasIosToken && !isMsStream;
-}
+// iOS device detection moved to the shared layer (12.10.2026): the
+// pull-to-refresh gate in shared/ui needs it too (ADR 0031), and shared/ui
+// cannot import from a feature. Not re-exported: within this slice only
+// requiresInstallOnIos() consumes it, and the slice exports only what other
+// elements actually import.
+import { isIosDevice } from '@/shared/lib/pwa/ios';
 
 /**
  * True when the current browser exposes everything Web Push needs: an active

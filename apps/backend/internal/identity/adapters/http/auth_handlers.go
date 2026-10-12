@@ -334,8 +334,9 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 	// profiles (Caddy logged the POST at 6–7 ms while the client-side fetch
 	// stayed pending the whole purge; POST duration grows with cache entries:
 	// 0 → 15–26 ms, 2000 → 1.1 s, 5000 → 2.8 s). The purge protected nothing:
-	// API responses carry no Cache-Control/validators so the browser never
-	// reuses them from cache, and static assets are immutable and public.
+	// API responses are uncached by the backend since #1330
+	// (Cache-Control: no-store on every response, photos override with
+	// their private max-age), and static assets are immutable and public.
 	// The auth boundary stays on the frontend hard navigation (#1098), the
 	// bfcache guard, the session deletion above and the proxy /me gate.
 	w.WriteHeader(http.StatusNoContent)

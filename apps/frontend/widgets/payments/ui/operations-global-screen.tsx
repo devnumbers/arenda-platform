@@ -167,7 +167,7 @@ export function OperationsGlobalScreen(): JSX.Element {
           <OperationsNeverHad
             action={
               canCreateSomewhere ? (
-                <Button onClick={() => router.push(ROUTES.operationsNew)}>
+                <Button size="small" radius="m" onClick={() => router.push(ROUTES.operationsNew)}>
                   Добавить операцию
                 </Button>
               ) : undefined

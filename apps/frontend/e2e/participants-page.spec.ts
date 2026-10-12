@@ -3,7 +3,9 @@ import {
   expect,
   execE2eSql,
   openCabinetWithSeededSession,
+  openCabinetWithSessionToken,
   screenHeader,
+  seededMemberSessionToken,
   test,
 } from './fixtures';
 
@@ -33,10 +35,12 @@ test('страница участника: шапка, чип агрегата, 
   // exact+first: в переходный момент в шапке встречается дубль-спан.
   await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
 
-  // Блок участника: имя, почта, чип агрегата (partial — активна 1 из 3).
+  // Блок участника: имя, почта; у partial-агрегата бейджа нет — статусы
+  // «частично/все объекты» ушли с экранов (D3 #1313).
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
   await expect(page.getByText('e2e-member@example.com')).toBeVisible();
-  await expect(page.getByText('Доступно 1 объект')).toBeVisible();
+  await expect(page.getByText(/Доступно \d+/)).toHaveCount(0);
+  await expect(page.getByText('Доступ ко всем объектам')).toHaveCount(0);
 
   await expect(page.getByText('Доступные объекты')).toBeVisible();
   const apartmentRow = page.getByRole('button', { name: /Квартира на Ленина/ });
@@ -78,11 +82,11 @@ test('безымянный участник: «Пользователь» — з
     await page.goto(`/participants/${NAMELESS_ID}`);
 
     // Шапка (2008-81468): имени нет — «Пользователь» H1, почта
-    // подзаголовком (не прячется), чип агрегата — «Доступно 1 объект»
-    // (активна 1 из 3).
+    // подзаголовком (не прячется); у partial-агрегата бейджа нет (D3
+    // #1313).
     await expect(page.getByRole('heading', { name: 'Пользователь' })).toBeVisible();
     await expect(page.getByText(NAMELESS_EMAIL)).toBeVisible();
-    await expect(page.getByText('Доступно 1 объект')).toBeVisible();
+    await expect(page.getByText(/Доступно \d+/)).toHaveCount(0);
     await expect(page.getByText(NAMELESS_PHONE)).toHaveCount(0);
     await expect(page.getByText(/\*{3}/)).toHaveCount(0);
 
@@ -202,7 +206,9 @@ test('пригласить в объект: мультичек гаража, ш�
     );
   }
   await page.reload();
-  await expect(page.getByText('Доступно 1 объект')).toBeVisible();
+  // Сид восстановлен (нога гаража удалена) — агрегат снова partial, бейджа
+  // лимита нет (D3 #1313: у partial бейджа нет).
+  await expect(page.getByText('Превышен лимит объектов')).toHaveCount(0);
 });
 
 test('отзыв из объекта: подтверждение, попап успеха, ряд исчезает; сид восстанавливается', async ({ page, seededUser }) => {
@@ -244,16 +250,25 @@ test('отзыв из объекта: подтверждение, попап у�
 
 test('кебаб «Отозвать доступ к объектам»: подтверждение, попап «Участник удален» на списке; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  // Путь пользователя: список → ряд Сергея (нужна история — успех
-  // возврата по канону goBack ведёт именно на список).
-  await page.goto('/participants/list');
+  // Путь пользователя: раздел «Участники» → ряд Сергея (нужна история —
+  // успех возврата по канону goBack ведёт именно на раздел).
+  await page.goto('/participants');
 
   const header = screenHeader(page);
 
   await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
-  await expect(header.getByText('Участник')).toBeVisible();
+  // Данные экрана сели до меню (заголовок шапки не матчим: у хаба-раздела
+  // он рендерится дважды — inline и mobile-клон компакт-бара, strict
+  // violation на substring «Участник»; возврат проверяет heading ниже).
+  await expect(page.getByRole('heading', { name: 'Сергей Сидоров' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
 
-  await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+  // Radix-меню под нагрузкой полного прогона может не открыться с первого
+  // клика — повторяем до появления пункта, затем выбираем его.
+  await expect(async () => {
+    await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
+  }).toPass({ timeout: 10_000 });
   await page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' }).click();
 
   const dialog = page.getByRole('dialog');
@@ -263,9 +278,11 @@ test('кебаб «Отозвать доступ к объектам»: подт
   try {
     await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
 
-    // Возврат на список «Участники» с попапом «Участник удален»
-    // (2008-83716); Сергей из списка исчез, Мария осталась.
-    await expect(header.getByText('Ваши участники')).toBeVisible();
+    // Возврат в раздел «Участники» с попапом «Участник удален»
+    // (2008-83716); URL с якорем конца строки отличает раздел от
+    // страницы участника (заголовок хаба не проверяем: открытая модалка
+    // прячет фон из a11y-дерева — aria-modal).
+    await expect(page).toHaveURL(/\/participants$/);
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Участник удален' }),
     ).toBeVisible();
@@ -284,7 +301,7 @@ test('кебаб «Отозвать доступ к объектам»: подт
   await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
 });
 
-test('pending-участник: deep-link по почте, бейдж «Приглашён», смена роли приглашения; сид восстанавливается', async ({ page, seededUser }) => {
+test('pending-участник: deep-link по почте, бейдж «Аккаунт не создан», смена роли приглашения; сид восстанавливается', async ({ page, seededUser }) => {
   // Pending-приглашение на гараж (гейт тикета: состояния pending на тех же
   // экранах; права уходят в PATCH/DELETE /access/invitations/{id}).
   await execE2eSql(
@@ -300,12 +317,12 @@ test('pending-участник: deep-link по почте, бейдж «Приг
     const header = screenHeader(page);
 
     await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
-    // Имени нет — почта титул (контракт: «the email is the label»); чип
-    // агрегата в шапке — «Приглашён» (#772: считанный partial/0 как
-    // «Доступно 0 объектов» читался как отказ). first(): шапка в DOM раньше
-    // списка, где у pending-ноги гаража свой такой же чип (ассерт ниже).
+    // Имени нет — почта титул (контракт: «the email is the label»); бейдж
+    // в шапке — «Аккаунт не создан» (D3 #1313: у pending-агрегата ровно
+    // этот статус). У pending-ноги гаража свой чип «Приглашён» (ассерт
+    // ниже) — он-role бейдж, не статусный.
     await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
-    await expect(page.getByText('Приглашён').first()).toBeVisible();
+    await expect(page.getByText('Аккаунт не создан')).toBeVisible();
 
     const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
     await expect(garageRow.getByText('Приглашён')).toBeVisible();
@@ -330,5 +347,115 @@ test('pending-участник: deep-link по почте, бейдж «Приг
     await execE2eSql(
       `DELETE FROM property_member_invitations WHERE id = '88888888-8888-4888-8888-888888888881'`,
     );
+  }
+});
+
+// D7 #1314 (макет 3298-75576): «Права участника» для приглашённого без
+// аккаунта. Сид — собственное pending-приглашение на квартиру (id не из
+// других спек: утечка строки одного теста не подменяет данные другого).
+const PENDING_RIGHTS_INVITE_ID = '99999999-9999-4999-8999-999999999973';
+const PENDING_RIGHTS_EMAIL = 'e2e-pending-rights@example.com';
+
+function seedPendingRightsInvitation(role: 'viewer' | 'full_access'): Promise<string> {
+  return execE2eSql(
+    `INSERT INTO property_member_invitations (id, property_id, email, role, invited_by, last_sent_at) ` +
+      `VALUES ('${PENDING_RIGHTS_INVITE_ID}', '${APARTMENT_ID}', '${PENDING_RIGHTS_EMAIL}', '${role}', '11111111-1111-4111-8111-111111111111', now()) ` +
+      `ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, property_id = EXCLUDED.property_id, email = EXCLUDED.email`,
+  );
+}
+
+test('права участника без аккаунта (D7): карточка, инфо-блок, сегмент, «Отозвать доступ»; скриншот', async ({ page, seededUser }, testInfo) => {
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    // Вход — из страницы участника: pending-нога «Приглашён» → права.
+    await page.goto('/participants/e2e-pending-rights%40example.com');
+    const legRow = page.getByRole('button', { name: /Квартира на Ленина/ });
+    await expect(legRow.getByText('Приглашён')).toBeVisible();
+    await legRow.click();
+
+    const header = screenHeader(page);
+    await expect(header.getByText('Права участника')).toBeVisible();
+
+    // Карточка участника (3298-75576): анонимный титул #1105, почта,
+    // бейдж «Аккаунт не создан»; контекста объекта на экране нет.
+    const card = page.getByTestId('participant-rights-card');
+    await expect(card.getByText('Пользователь', { exact: true })).toBeVisible();
+    await expect(card.getByText(PENDING_RIGHTS_EMAIL)).toBeVisible();
+    await expect(card.getByText('Аккаунт не создан')).toBeVisible();
+    await expect(page.getByText('Квартира на Ленина')).toHaveCount(0);
+
+    // Инфо-блок: кто это и что будет после создания аккаунта.
+    const notice = page.getByTestId('participant-pending-notice');
+    await expect(notice.getByText('Пользователь еще не создал аккаунт')).toBeVisible();
+    await expect(
+      notice.getByText('После создания аккаунта он сможет пользоваться вашим объектом'),
+    ).toBeVisible();
+
+    // Сегмент роли и красная строка отзыва; «Действий участника» у
+    // pending нет (канон #712 — журнал адресуется uuid юзера).
+    await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
+    await expect(page.getByTestId('participant-rights-revoke')).toBeVisible();
+    await expect(page.getByText('Действия участника')).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'participant-rights-pending');
+  } finally {
+    await execE2eSql(`DELETE FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`);
+  }
+});
+
+test('отзыв pending-приглашения с D7-экрана: подтверждение, попап, приглашение снято; сид восстанавливается', async ({ page, seededUser }) => {
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/participants/e2e-pending-rights%40example.com');
+    await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
+    await expect(screenHeader(page).getByText('Права участника')).toBeVisible();
+
+    await page.getByTestId('participant-rights-revoke').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Уверены, что хотите отозвать доступ?')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Отозвать' }).click();
+
+    // Попап (2008-83135) на странице участника; единственная нога снята —
+    // агрегат честно отвечает «Участник не найден» (приватный 404 #693).
+    await expect(
+      page.getByRole('dialog').locator('p', {
+        hasText: 'У участника больше нет доступа к объекту',
+      }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Участник не найден')).toBeVisible();
+
+    // Серверная правда: приглашение отменено.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`,
+      ),
+    ).toBe('0');
+  } finally {
+    await seedPendingRightsInvitation('viewer');
+  }
+  await page.reload();
+  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
+});
+
+test('D7 owner-only: manage-участник по deep-link видит «Участник не найден» — мутаций нет', async ({ page }) => {
+  // Мария (full_access на чужой квартире) открывает D7-экран напрямую:
+  // агрегат GET /participants/{id} — owner-скоуп (D5 #1304), не-собственнику
+  // приватный 404; зрителя проверяет та же ветка (404 не зависит от роли).
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSessionToken(page, seededMemberSessionToken());
+    await page.goto(`/participants/e2e-pending-rights%40example.com/properties/${APARTMENT_ID}`);
+
+    await expect(page.getByText('Участник не найден')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Просмотр' })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: 'Редактирование' })).toHaveCount(0);
+    await expect(page.getByTestId('participant-rights-revoke')).toHaveCount(0);
+    // Назад в шапке жив (§7).
+    await expect(screenHeader(page).getByRole('button', { name: 'Назад' })).toBeVisible();
+  } finally {
+    await execE2eSql(`DELETE FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`);
   }
 });

@@ -2,6 +2,8 @@ import {
   captureScreen,
   expect,
   openCabinetWithSeededSession,
+  openCabinetWithSessionToken,
+  seededMemberSessionToken,
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
 } from './fixtures';
@@ -103,5 +105,38 @@ test.describe('жизненный цикл контакта', () => {
 
     await expect(page).toHaveURL(/\/contacts$/);
     await expect(page.getByText(contactName)).toHaveCount(0);
+  });
+});
+
+test.describe('граница прав на перепривязке (D10 #1309)', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('полный доступ: инпут объекта в правке карточки глухой', async ({ page }) => {
+    await openCabinetWithSessionToken(page, seededMemberSessionToken());
+
+    // Привязанная карточка API-вызовом от сессии участника: привязка при
+    // создании — правомерна, в отличие от перепривязки (D10 #1309).
+    const created = await page.request.post('/api/contacts', {
+      data: {
+        firstName: 'Сантехник от участника',
+        role: 'сантехник',
+        propertyId: SEEDED_APARTMENT_PROPERTY_ID,
+      },
+    });
+    expect(created.ok(), 'создание привязанной карточки полным доступом').toBe(true);
+    const contact = (await created.json()) as { id: string };
+
+    await page.goto(`/contacts/${contact.id}/edit`);
+    await expect(page.getByText('Изменить контакт', { exact: true })).toBeVisible();
+    // Граница прав видна до попытки сохранить: инпут глухой, страницу
+    // выбора объект-пикера участнику форма не открывает.
+    const objectSelect = page.getByRole('button', { name: /Привязанный объект/ });
+    await expect(objectSelect).toBeDisabled();
+    await expect(page.getByText('Выбрать объект', { exact: true })).toHaveCount(0);
+
+    // Уборка: карточка уходит из книги владельца квартиры (удаление —
+    // правом редактирования, участнику доступно).
+    const deleted = await page.request.delete(`/api/contacts/${contact.id}`);
+    expect(deleted.ok(), 'уборка карточки').toBe(true);
   });
 });

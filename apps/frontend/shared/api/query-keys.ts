@@ -64,10 +64,7 @@ export const contactKeys = {
 // features/participants — «Совместный доступ» (карта #692)
 export const participantsKeys = {
   all: ['participants'] as const,
-  /** Счётчики хаба GET /participants/summary (#693): участники читающего
-   * и чужие объекты с активным доступом. */
-  summary: ['participants', 'summary'] as const,
-  /** Список «Ваши участники» GET /participants (#693, экран #697). */
+  /** Список «Участники» GET /participants (#693, экран #697). */
   list: () => [...participantsKeys.all, 'list'] as const,
   /** Страница участника GET /participants/{id} (#693, экран #698);
    * id — uuid юзера либо pending-почта (encodeURIComponent на потребителе). */
@@ -416,8 +413,12 @@ export const historyKeys = {
       scope.propertyIds?.join(',') ?? '',
       scope.q ?? '',
     ] as const,
-  /** Опции шита фильтров GET /history/filters (#708, экран #711). */
-  filters: () => [...historyKeys.all, 'filters'] as const,
+  /** Опции шита фильтров GET /history/filters (#708, экран #711): без
+   * property_ids — глобальная область (участники только моих объектов,
+   * D14 #1305), с property_ids — суженная область прибитой объектом
+   * страницы (#840/#841); сужение — часть ключа. */
+  filters: (propertyIds?: ReadonlyArray<string>) =>
+    [...historyKeys.all, 'filters', propertyIds?.join(',') ?? ''] as const,
 };
 
 // features/subscription

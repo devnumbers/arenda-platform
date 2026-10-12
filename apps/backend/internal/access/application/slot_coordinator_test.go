@@ -770,3 +770,281 @@ func TestSlotCoordinator_RecoverSuspended_RecipientFreesOwnSlot(t *testing.T) {
 	}
 	f.assertStatus(t, mShared, pShared, domain.MemberStatusActive, "suspended reactivated once own slot freed")
 }
+
+// Scenario P (D13, #1297): EnforceRecipientPoolGrowth — the recipient's own
+// object re-entered the pool (an unarchive of their own object or a billing
+// grace restore). The pool (own newest + shared older) strictly exceeds the
+// limit, so the oldest shared membership is suspended, the own candidate is
+// untouched, and the suspended leg — reloaded with its fresh suspended_at —
+// rides the return for the caller's realtime dispatch.
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_SuspendsExcessShared(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7()) // Foreign owner of the shared object.
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New) // Own just re-entered = newest = stays.
+	f.limiter.set(recipient, 1)              // Pool = own(1) + shared(1) = 2 > 1 → 1 excess.
+
+	suspended, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "oldest shared membership suspended")
+	// The own candidate has no membership row to suspend — untouched by design.
+	if got := f.ownedProps.byOwner[recipient]; len(got) != 1 {
+		t.Errorf("own pool changed: %v, want the re-entered own object left alone", got)
+	}
+
+	// The leg: the reloaded row carries the suspended status and the fresh
+	// suspended_at the FIFO recovery queue orders by.
+	if len(suspended) != 1 || suspended[0].ID != mShared || suspended[0].PropertyID != pShared {
+		t.Fatalf("suspended legs = %+v, want the shared membership %s on %s", suspended, mShared, pShared)
+	}
+	if suspended[0].Status != domain.MemberStatusSuspended {
+		t.Errorf("leg status = %q, want suspended", suspended[0].Status)
+	}
+	if suspended[0].SuspendedAt == nil || !suspended[0].SuspendedAt.After(t2New) {
+		t.Errorf("leg SuspendedAt = %v, want a fresh stamp after the scenario instants", suspended[0].SuspendedAt)
+	}
+}
+
+// Scenario P boundary: a pool exactly at the limit is not over — nothing is
+// suspended and no legs come back (the strict-excess rule).
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_PoolAtLimitSuspendsNothing(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New)
+	f.limiter.set(recipient, 2) // Pool = 2 == limit → fits.
+
+	suspended, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	if len(suspended) != 0 {
+		t.Errorf("suspended legs = %+v, want none at exactly the limit", suspended)
+	}
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusActive, "shared membership stays active at exactly the limit")
+}
+
+// Scenario P boundary: an unlimited tariff (limit < 0) suspends nothing.
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_UnlimitedSuspendsNothing(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, uuid.Must(uuid.NewV7()), t2New)
+	f.limiter.set(recipient, -1) // Unlimited.
+
+	suspended, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "grace_restore")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	if len(suspended) != 0 {
+		t.Errorf("suspended legs = %+v, want none on an unlimited tariff", suspended)
+	}
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusActive, "shared membership stays active on an unlimited tariff")
+}
+
+// Scenario P: an excess of two suspends the two oldest shared memberships (the
+// own candidates stay), both legs returned in eviction order.
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_SuspendsTwoOldest(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pOld := uuid.Must(uuid.NewV7())
+	pMid := uuid.Must(uuid.NewV7())
+	pNew := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mOld := uuid.Must(uuid.NewV7())
+	mMid := uuid.Must(uuid.NewV7())
+	mNew := uuid.Must(uuid.NewV7())
+
+	// Pool of four (3 shared + 1 own), limit 2 → 2 excess: the two oldest
+	// shared (mOld, mMid) go, the newest shared and the own object stay.
+	f.addActiveMember(t, mOld, pOld, owner, recipient, t1Old)
+	f.addActiveMember(t, mMid, pMid, owner, recipient, t1Old.Add(30*time.Minute))
+	f.addActiveMember(t, mNew, pNew, owner, recipient, t2New)
+	f.ownedProps.add(recipient, pOwn, t2New.Add(time.Hour))
+	f.limiter.set(recipient, 2)
+
+	suspended, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	if len(suspended) != 2 {
+		t.Fatalf("suspended legs = %d, want 2 (got %+v)", len(suspended), suspended)
+	}
+	gotIDs := []uuid.UUID{suspended[0].ID, suspended[1].ID}
+	wantIDs := []uuid.UUID{mMid, mOld} // Eviction order: worse (older) first.
+	if !slices.Equal(gotIDs, wantIDs) {
+		t.Errorf("suspended legs = %v, want %v (the two oldest shared)", gotIDs, wantIDs)
+	}
+	f.assertStatus(t, mNew, pNew, domain.MemberStatusActive, "newest shared membership stays active")
+}
+
+// Scenario P: a repeat call is a no-op — the already-suspended membership sits
+// outside the active pool, is never re-suspended and keeps its original
+// suspended_at (idempotency).
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_RepeatDoesNotRetouchSuspended(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New)
+	f.limiter.set(recipient, 1)
+
+	if _, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive"); err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth (first): %v", err)
+	}
+	first := f.repo.mustGet(t, mShared, pShared)
+	if first.SuspendedAt == nil {
+		t.Fatalf("first call did not suspend the membership")
+	}
+
+	if _, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive"); err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth (repeat): %v", err)
+	}
+	again := f.repo.mustGet(t, mShared, pShared)
+	if again.SuspendedAt == nil || !again.SuspendedAt.Equal(*first.SuspendedAt) {
+		t.Errorf("repeat call re-stamped the suspended membership: SuspendedAt = %v, want %v unchanged", again.SuspendedAt, first.SuspendedAt)
+	}
+}
+
+// Scenario P (accepted side effect, #1300 Q1): the fresh suspended_at of a
+// newly suspended leg puts it at the TAIL of the FIFO recovery queue — when a
+// slot later frees, an older suspended membership recovers first, not the one
+// the growth enforcement just suspended.
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_FreshSuspensionTailsFIFOQueue(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pOlderSuspended := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mOlder := uuid.Must(uuid.NewV7())  // Suspended long before this scenario.
+	mShared := uuid.Must(uuid.NewV7()) // Active; the growth enforcement suspends it.
+
+	f.addSuspendedMember(t, mOlder, pOlderSuspended, owner, recipient, t1Old, t1Old)
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t2New)
+	f.ownedProps.add(recipient, pOwn, t2New) // Own re-entered → pool = 2 > limit 1.
+	f.limiter.set(recipient, 1)
+
+	if _, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive"); err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "excess shared membership suspended")
+
+	// A slot frees (the recipient archives their own object again): the FIFO
+	// recovery must take the OLDER suspended membership, proving the fresh
+	// suspended_at queued the new one at the tail.
+	f.ownedProps.byOwner[recipient] = nil
+	recovered, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient)
+	if err != nil {
+		t.Fatalf("RecoverSuspended: %v", err)
+	}
+	if len(recovered) != 1 || recovered[0].ID != mOlder {
+		t.Fatalf("recovered = %+v, want the older suspended membership %s (FIFO head)", recovered, mOlder)
+	}
+	f.assertStatus(t, mOlder, pOlderSuspended, domain.MemberStatusActive, "older suspended membership recovered first")
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "freshly suspended membership waits at the FIFO tail")
+}
+
+// RecipientPoolFull (D13, #1300 Q2): the predicate counts the FULL pool — own
+// active properties plus active shared memberships — so at the limit it
+// reports true (the honest refusal of CreateProperty) even though the own
+// count alone would fit; suspended memberships occupy nothing, and a negative
+// (unlimited) limit is never full — the SelectForEviction convention.
+func TestSlotCoordinator_RecipientPoolFull_CountsOwnAndShared(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, member, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New)
+
+	cases := []struct {
+		name     string
+		limit    int
+		suspend  bool
+		wantFull bool
+	}{
+		{
+			name:     "own+shared at limit is full",
+			limit:    2, // Own(1) + shared(1) = 2 — full though the own count alone fits.
+			wantFull: true,
+		},
+		{
+			name:     "headroom below limit is not full",
+			limit:    3,
+			wantFull: false,
+		},
+		{
+			// The pool is just the own object once the shared row is suspended.
+			name:     "suspended shared occupies no slot",
+			limit:    2,
+			suspend:  true,
+			wantFull: false,
+		},
+		{
+			// A negative limit is the unlimited-tariff convention
+			// (SelectForEviction) — never full.
+			name:     "unlimited limit is never full",
+			limit:    -1,
+			suspend:  true,
+			wantFull: false,
+		},
+	}
+	// Plain sequential loop, no t.Run: the cases share one fixture and mutate
+	// it (limiter + suspend), and the paralleltest linter reads subtest
+	// parallelism into a matrix otherwise — the participant matrix precedent.
+	for _, tc := range cases {
+		if tc.suspend {
+			if err := f.repo.Suspend(context.Background(), member, pShared); err != nil {
+				t.Fatalf("Suspend the shared membership: %v", err)
+			}
+		}
+		f.limiter.set(recipient, tc.limit)
+		full, err := f.coordinator.RecipientPoolFull(context.Background(), noopTx{}, recipient)
+		if err != nil {
+			t.Fatalf("%s: RecipientPoolFull: %v", tc.name, err)
+		}
+		if full != tc.wantFull {
+			t.Errorf("%s: RecipientPoolFull = %v, want %v", tc.name, full, tc.wantFull)
+		}
+	}
+}

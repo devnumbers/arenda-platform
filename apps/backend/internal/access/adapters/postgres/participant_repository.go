@@ -10,12 +10,10 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
 
-// Static conformance assertions for the consumer-declared ports this adapter
-// serves (issue #693): the participant read model and the hub summary's
-// accessible-properties counter (CountActiveByUser on the membership repo).
+// Static conformance assertion for the consumer-declared port this adapter
+// serves (issue #693): the participant read model.
 var (
-	_ application.ParticipantReadModel        = (*ParticipantRepository)(nil)
-	_ application.AccessiblePropertiesCounter = (*MembershipRepository)(nil)
+	_ application.ParticipantReadModel = (*ParticipantRepository)(nil)
 )
 
 // ParticipantRepository reads the raw rows of the «Участник (владельца)»

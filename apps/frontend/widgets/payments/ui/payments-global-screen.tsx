@@ -576,37 +576,26 @@ function PaymentsGlobalPlaceholder({
 
 /** Глобальное пустое состояние (1041-51463 ПК / 1041-51460 планшет /
  * 1036-37530 мобилка): иллюстрация, заголовок и описание прижаты к верху —
- * канон EmptyState (pt-16), без вертикального центрирования. CTA «Добавить
- * объект» раздвоена по ярусам: на ПК (≥1024) — под текстом в action-слоте,
- * на планшете и мобилке — прижата к низу страницы во всю ширину. */
+ * канон EmptyState, без вертикального центрирования. CTA «Добавить
+ * объект» — одна, под текстом в action-слоте (анатомия 3235-74057);
+ * раздвоение по ярусам с нижней кнопкой снято решением владельца 12.10. */
 function PaymentsGlobalEmpty({
   onAddProperty,
 }: {
   readonly onAddProperty: () => void;
 }): JSX.Element {
   return (
-    <div
-      data-testid="payments-global-empty"
-      // Растягиваем блок до нижнего края видимой области: на планшете и
-      // мобилке CTA прижата книзу. 216px = верх страницы (TopNav + отступ
-      // контента) и нижний резерв PageContent под TabBar (pb-[136px]).
-      className="flex min-h-[calc(100dvh-216px)] flex-col px-6"
-    >
+    <div data-testid="payments-global-empty">
       <EmptyState
         imageSrc="/images/payments/payments-empty.png"
         title="Вы пока не добавляли платежи"
         description="Создайте объект, чтобы добавлять платежи"
         action={
-          <Button onClick={onAddProperty} className="hidden lg:inline-flex">
+          <Button size="small" radius="m" onClick={onAddProperty}>
             Добавить объект
           </Button>
         }
       />
-      {/* mt-auto прижимает нижнюю кнопку к краю растянутого блока; на ПК
-       * она скрыта — там кнопка живёт в action-слоте под текстом. */}
-      <Button onClick={onAddProperty} className="mt-auto lg:hidden">
-        Добавить объект
-      </Button>
     </div>
   );
 }

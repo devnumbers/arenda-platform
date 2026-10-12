@@ -642,8 +642,25 @@ test.describe('экран правки — роли', () => {
     await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
   });
 
-  test('полный доступ: правит, но удаления нет', async ({ page }) => {
+  test('полный доступ: правит и удаляет (D9 #1309)', async ({ page }) => {
     await openCabinetWithSessionToken(page, seededMemberSessionToken());
+
+    // Одноразовое правило API-вызовом от сессии участника (сид не мутируем —
+    // прецедент createPaymentPaidWithEdit payment-subscreens): сидовые
+    // платежи квартиры живут для следующих спек.
+    const created = await page.request.post(`/api/properties/${PROPERTY}/payments`, {
+      data: {
+        type: 'expense',
+        title: 'Клининг от участника',
+        amountKopecks: 150_000,
+        recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
+        categorySlug: 'other',
+        autoPay: false,
+      },
+    });
+    expect(created.ok(), 'создание правила полным доступом').toBe(true);
+    const disposable = (await created.json()) as { id: string };
+
     await page.goto(URLS.insurance);
     await expect(page.getByRole('button', { name: 'Изменить' })).toBeVisible();
     await page.getByRole('button', { name: 'Изменить' }).click();
@@ -651,7 +668,6 @@ test.describe('экран правки — роли', () => {
 
     // Сумма уже правлена мобильным тестом выше (файл идёт по порядку).
     await expect(page.getByRole('textbox', { name: 'Сумма' })).toHaveValue(/4\s?000/);
-    await expect(page.getByRole('button', { name: 'Удалить платеж' })).toHaveCount(0);
     await expect(stickySaveButton(page)).toBeDisabled();
 
     // Сохранение доступно после правки и работает под полным доступом.
@@ -660,6 +676,18 @@ test.describe('экран правки — роли', () => {
     await stickySaveButton(page).click();
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
     await expect(page.getByText('Страхование квартиры').first()).toBeVisible();
+
+    // Удаление едет правом редактирования (D9 #1309): кнопка и модалка на
+    // месте, одноразовое правило сносится начисто — просрочек нет, чекбокса
+    // нет, долг не остаётся.
+    await page.goto(`/properties/${PROPERTY}/payments/${disposable.id}/edit`);
+    await page.getByRole('button', { name: 'Удалить платеж' }).click();
+    await expect(page.getByText('Удалить платеж?')).toBeVisible();
+    await expect(page.getByText('Удалить просроченные операции')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+    await expect(page.getByText('Платеж удален')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/payments$`));
+    await expect(page.getByText('Клининг от участника')).toHaveCount(0);
   });
 });
 

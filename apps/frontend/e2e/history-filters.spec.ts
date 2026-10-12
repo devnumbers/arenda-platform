@@ -6,9 +6,12 @@ import {
   expect,
   memberTaskEntry,
   openCabinetWithSeededSession,
+  openCabinetWithSessionToken,
   paymentCreatedEntry,
+  SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
+  seededMemberSessionToken,
   test,
   todayAt,
   type SeededUser,
@@ -44,6 +47,8 @@ async function seedHistory(user: SeededUser): Promise<void> {
     user,
   );
   await seedJournalEntry(memberTaskEntry('b0000000-0000-4000-8000-000000000003', 2), user);
+  // Легаси-строка property.pinned (тип снесён #1307, D17; строки остаются
+  // в журнале и рендерятся из сохранённых сегментов).
   await seedJournalEntry(
     {
       id: 'b0000000-0000-4000-8000-000000000004',
@@ -429,6 +434,46 @@ test('безымянный участник в чипах: «Пользоват�
         `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
     );
   }
+});
+
+test('изоляция D14 (#1305): глобальный фильтр получателя пуст — чужие участники не раскрыты; per-object фильтр несёт собственника (D6)', async ({ page, seededUser }) => {
+  await seedHistory(seededUser);
+  // Глазами приглашённой участницы квартиры (full_access, своих объектов
+  // нет): лента читает чужой объект, но глобальный фильтр «Участники» —
+  // только участники МОИХ объектов.
+  await openCabinetWithSessionToken(page, seededMemberSessionToken());
+  await page.goto('/history');
+  await expect(page.getByText('Платёж создан: Аренда за сентябрь')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const dialog = sheet(page);
+  await dialog.getByRole('button', { name: 'Участники' }).click();
+
+  // Группа пуста — один мастер-чекбокс без строк: ни владелец Иван, ни
+  // соучастники квартиры в глобальных опциях получателя не видны.
+  const group = page.locator('section').filter({ has: page.getByRole('button', { name: 'Участники' }) });
+  await expect(group.getByRole('checkbox')).toHaveCount(1);
+  await expect(dialog.getByText('Иван Иванов')).toHaveCount(0);
+  await expect(dialog.getByText('Сергей Сидоров')).toHaveCount(0);
+
+  // Контраст: «Объекты» глобальной области остаются — поделённая квартира
+  // читается получателем (D14 не трогает объектные опции).
+  await dialog.getByRole('button', { name: 'Объекты' }).click();
+  await expect(dialog.getByRole('checkbox', { name: 'Квартира на Ленина' })).toHaveCount(1);
+  await dialog.getByRole('button', { name: 'Закрыть фильтры' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // Per-object фильтр той же получательницы («История объекта» #840,
+  // property_ids-сужение опций): собственник и соучастники остаются (D6 —
+  // поведение без изменений), своя строка — «Мария (Вы)».
+  await page.goto(`/history/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
+  await expect(page.getByText('Платёж создан: Аренда за сентябрь')).toBeVisible();
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const objectDialog = sheet(page);
+  await objectDialog.getByRole('button', { name: 'Участники' }).click();
+  await expect(objectDialog.getByRole('checkbox', { name: 'Иван Иванов' })).toHaveCount(1);
+  await expect(objectDialog.getByRole('checkbox', { name: 'Мария (Вы)' })).toHaveCount(1);
+  await expect(objectDialog.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(1);
 });
 
 test('прямая ссылка с фильтром (?kinds=task) открывает отфильтрованную ленту', async ({ page, seededUser }) => {

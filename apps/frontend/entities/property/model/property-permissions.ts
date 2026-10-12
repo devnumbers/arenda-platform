@@ -9,13 +9,23 @@ export type PropertyPermissions = {
    * контактов, аренд): роль сильнее зрителя и объект не в архиве
    * (ADR 0028, финансовая история #446). Наследник canMutateProperty
    * (#703) — тот снесён. Create-CTA пустых секций детали на одном этом
-   * флаге не держится: видимость — canManageMembers, глухота — здесь
-   * (#774, шов propertySectionCta). */
+   * флаге не держится: видимость — canMutate (архив глушит, а не прячет,
+   * канон #589/#773), глухота — здесь (#774, шов propertySectionCta;
+   * D8 #1304 отвязал CTA от canManageMembers — тот стал owner-only). */
   readonly canEdit: boolean;
-  /** Совместный доступ: владелец или полный доступ — «Совместный доступ»
-   * и билдеры кебаба/«Управления» (их ролевой `canMutate` — тот же
-   * предикат, архив билдер ветвит сам). Архив не гасит: отзыв на
-   * архивном объекте разрешён (#700). */
+  /** Чтение объекта (зеркало sharedpolicy.CanView): любая известная роль —
+   * владелец, полный доступ, зритель. Гейтит личные действия по праву
+   * просмотра — «Основной объект» (D11 #1307): пин — личное состояние
+   * читателя, не мутация чужого объекта. */
+  readonly canView: boolean;
+  /** Ролевой мутационный доступ: роль сильнее зрителя, архив не гасит —
+   * билдеры «Управления»/кебаба ветвят архив сами (#703). Наследник
+   * прежнего смысла canManageMembers: до D8 тот был «роль сильнее
+   * зрителя», пока не стал зеркалом owner-only политики участников. */
+  readonly canMutate: boolean;
+  /** Совместный доступ: только собственник (зеркало owner-only политики
+   * участников, D8 #1304) — приглашение, меню, смена роли, отзыв. Архив
+   * не гасит: отзыв на архивном объекте разрешён (#700). */
   readonly canManageMembers: boolean;
   /** Участник чужого объекта — «Покинуть объект» (не для владельца).
    * Архив не гасит: выйти можно и из архивного (канон выхода #701). */
@@ -29,6 +39,8 @@ export type PropertyPermissions = {
 
 const DENIED: PropertyPermissions = {
   canEdit: false,
+  canView: false,
+  canMutate: false,
   canManageMembers: false,
   canLeave: false,
   canLifecycle: false,
@@ -54,7 +66,9 @@ export function propertyPermissions(
   }
   return {
     canEdit: role !== 'viewer' && property.status !== 'archived',
-    canManageMembers: role !== 'viewer',
+    canView: true,
+    canMutate: role !== 'viewer',
+    canManageMembers: role === 'owner',
     canLeave: role !== 'owner',
     canLifecycle: role === 'owner',
   };
@@ -67,4 +81,17 @@ export function filterEditableProperties<T extends Pick<Property, 'access' | 'st
   properties: ReadonlyArray<T>,
 ): ReadonlyArray<T> {
   return properties.filter((property) => propertyPermissions(property).canEdit);
+}
+
+/** Строки справочника, где читатель — собственник: перепривязка сущности
+ * на другой объект (контакт, D10 #1309) — власть собственника, перенос
+ * не-собственником сервер отвечает 403. Живой архив гасится как в пикере
+ * правки — канон #589. */
+export function filterOwnedProperties<T extends Pick<Property, 'access' | 'status'>>(
+  properties: ReadonlyArray<T>,
+): ReadonlyArray<T> {
+  return properties.filter((property) => {
+    const permissions = propertyPermissions(property);
+    return permissions.canLifecycle && permissions.canEdit;
+  });
 }

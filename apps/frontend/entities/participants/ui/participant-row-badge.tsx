@@ -18,9 +18,10 @@ function RowBadgeIcon({ icon }: { readonly icon: ParticipantRowBadgeIcon }): JSX
  * Чип строки участника — общая анатомия «Row Button Bage» (Figma
  * 2036:83107): пилюля radius 8, паддинг 4×8, зазор 4, текст 14/16
  * Regular; warning — жёлтая подложка (канон --color-warning-bg; макет
- * несёт близкий #FFB900@10% — §12/§13: токен сильнее цвета макета).
- * Рендерит и агрегат-чип строки (#697), и чип ноги доступа (#698):
- * различалась только иконка. Иконки — контурный S-стиль 16×16
+ * несёт близкий #FFB900@10% — §12/§13: токен сильнее цвета макета),
+ * info — голубая (--color-surface-info; бейдж «Аккаунт не создан»,
+ * D6 #1312). Рендерит и агрегат-чип строки (#697), и чип ноги доступа
+ * (#698): различалась только иконка. Иконки — контурный S-стиль 16×16
  * currentColor.
  */
 export function ParticipantRowBadge({ badge }: { readonly badge: ParticipantRowBadge }): JSX.Element {
@@ -28,7 +29,9 @@ export function ParticipantRowBadge({ badge }: { readonly badge: ParticipantRowB
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm leading-4 text-content',
-        badge.tone === 'warning' ? 'bg-warning-bg' : 'bg-surface-muted',
+        badge.tone === 'warning' && 'bg-warning-bg',
+        badge.tone === 'info' && 'bg-surface-info',
+        badge.tone === 'neutral' && 'bg-surface-muted',
       )}
     >
       {badge.icon !== undefined && (

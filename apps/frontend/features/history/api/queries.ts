@@ -8,6 +8,7 @@ import { historyKeys, type HistoryFeedScope } from '@/shared/api/query-keys';
 
 import {
   historyFeedUrl,
+  historyFiltersUrl,
   type HistoryFeedPageParam,
 } from './history-url';
 
@@ -81,21 +82,26 @@ export function historyFeedQueryOptions({
 }
 
 /** Чистый fetch опций шита фильтров — общее горло хука и серверного
- * префетча #887. */
+ * префетча #887; URL и семантика сужения — historyFiltersUrl. */
 export async function fetchHistoryFilters(
+  propertyIds?: ReadonlyArray<string>,
   transport: ApiTransport = apiClient,
 ): Promise<HistoryFilterOptions> {
-  const response = await transport<HistoryFiltersDto>('/history/filters');
+  const response = await transport<HistoryFiltersDto>(historyFiltersUrl(propertyIds));
   return mapHistoryFilterOptions(response);
 }
 
 /** Опции шита фильтров (канон #887): один источник ключ+fetch для хука
- * и серверного префетча. */
-export function historyFiltersQueryOptions(
-  transport: ApiTransport = apiClient,
-): UseQueryOptions<HistoryFilterOptions, ApiError, HistoryFilterOptions, ReturnType<typeof historyKeys.filters>> {
+ * и серверного префетча; дефолтный срез — глобальная область. */
+export function historyFiltersQueryOptions({
+  propertyIds,
+  transport,
+}: {
+  readonly propertyIds?: ReadonlyArray<string>;
+  readonly transport?: ApiTransport;
+} = {}): UseQueryOptions<HistoryFilterOptions, ApiError, HistoryFilterOptions, ReturnType<typeof historyKeys.filters>> {
   return queryOptions({
-    queryKey: historyKeys.filters(),
-    queryFn: () => fetchHistoryFilters(transport),
+    queryKey: historyKeys.filters(propertyIds),
+    queryFn: () => fetchHistoryFilters(propertyIds, transport),
   });
 }

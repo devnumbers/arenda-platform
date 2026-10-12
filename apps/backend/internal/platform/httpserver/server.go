@@ -153,6 +153,22 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 	}
 }
 
+// noStoreCache keeps session-scoped API responses out of the browser's
+// heuristic HTTP cache (#1330): without validators or explicit freshness
+// Chrome reuses a stale 200 — observed on #1312, a revoked object kept
+// showing in the properties hub after the leave because the SPA refetch was
+// served from cache. Handlers that want caching override the header after
+// the middleware — the private photo endpoints (ADR 0065) set their own
+// private, max-age=300 + ETag.
+func noStoreCache() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // crossOriginProtection is the second CSRF layer beside SameSite=Lax
 // (ADR 0056): non-safe cross-origin browser requests are rejected with 403
 // by the stdlib Fetch-Metadata/Origin check. The bypassed paths are the
@@ -188,6 +204,7 @@ func New(deps Deps) http.Handler {
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(clientErrorsBodyLimitMiddleware)
 	r.Use(securityHeaders(deps.CookieSecure))
+	r.Use(noStoreCache())
 	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.SessionLoader, deps.CookieSecure, deps.Clock))
 	r.Use(crossOriginProtection())
 	r.Use(httpsupport.ReadonlyMiddleware(deps.ReadonlyGate, deps.Logger))
@@ -340,12 +357,13 @@ func New(deps Deps) http.Handler {
 		r.With(idempotent).Post("/tasks/rules", wrapper.CreateTaskRuleWithoutProperty)
 	}
 
-	// Screen 2 (#999): the global «Участники» section — no exceptions, every
-	// consumer of the group lives inside the gated section; the self-leave
-	// route above stays the only excluded access surface.
+	// Screen 2 (#999): the global «Участники» section's API surface. The
+	// section page itself opens on basic as the upsell empty state (issue
+	// #1313, ADR 0064 revision) without calling these — the list reads stay
+	// behind the gate, the client fetches only on a paid tariff.
 	r.With(paidSections).Get("/participants", wrapper.ListParticipants)
+	r.With(paidSections).Delete("/participants", wrapper.RevokeAllParticipants)
 	r.With(paidSections).Post("/participants/invite", wrapper.InviteParticipant)
-	r.With(paidSections).Get("/participants/summary", wrapper.GetParticipantsSummary)
 	r.With(paidSections).Delete("/participants/{participantId}", wrapper.DeleteParticipant)
 	r.With(paidSections).Get("/participants/{participantId}", wrapper.GetParticipant)
 	r.With(paidSections).Post("/participants/{participantId}/properties", wrapper.AddParticipantProperties)

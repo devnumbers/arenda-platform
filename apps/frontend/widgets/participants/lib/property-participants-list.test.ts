@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACCESS_ROLE_LABELS, type PropertyAccessMember } from '@/entities/access';
+import { accountNotCreatedBadge, suspendedLimitBadge } from '@/entities/participants';
 import {
   filterPropertyParticipantsByQuery,
   parsePropertyParticipantOrderParams,
@@ -85,12 +86,15 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
     expect(rows[0]?.isMe).toBe(false);
   });
 
-  it('почта — подзаголовок; у pending-строки почта уже титул, без дубля', () => {
+  it('pending-приглашение: титул «Пользователь», почта подзаголовком, info-бейдж «Аккаунт не создан» (D6)', () => {
+    // Бекенд pending-строку displayName не наполняет (ранний return в
+    // memberResponse) — анонимный лейбл #1105 ставит VM.
     const rows = propertyParticipantRows([maria, pending], OWNER_READER);
 
     expect(rows[0]?.subtitle).toBe('maria@example.com');
-    expect(rows[1]?.title).toBe('invitee@example.com');
-    expect(rows[1]?.subtitle).toBeUndefined();
+    expect(rows[1]?.title).toBe('Пользователь');
+    expect(rows[1]?.subtitle).toBe('invitee@example.com');
+    expect(rows[1]?.badge).toEqual(accountNotCreatedBadge());
   });
 
   it('безымянный зарегистрированный: «Пользователь» в титуле, почта подзаголовком (канон карты #1105, аменд #1123)', () => {
@@ -124,7 +128,7 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
     expect(rows[0]?.isMe).toBe(true);
   });
 
-  it('иконка у почты: владелец — замок, full_access — перо, viewer — глаз', () => {
+  it('иконка у почты: владелец и full_access — полный доступ (открытый замок), viewer — глаз (D6, 3298-75434)', () => {
     const rows = propertyParticipantRows(
       [
         maria,
@@ -134,16 +138,17 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
       OWNER_READER,
     );
 
-    expect(rows.map((row) => row.emailIcon)).toEqual(['owner', 'eye', 'edit']);
+    // Владелец первым (замок «полный доступ»), дальше в порядке входа.
+    expect(rows.map((row) => row.emailIcon)).toEqual(['full', 'eye', 'full']);
   });
 
-  it('suspended-чип только у приостановленного; participantId — uuid, у pending — почта', () => {
+  it('suspended-бейдж «Превышен лимит объектов» только у приостановленного; participantId — uuid, у pending — почта', () => {
     const rows = propertyParticipantRows([maria, suspended, pending], OWNER_READER);
     const byKey = new Map(rows.map((row) => [row.key, row]));
 
-    expect(byKey.get('member-1')?.suspended).toBe(false);
+    expect(byKey.get('member-1')?.badge).toBeUndefined();
     expect(byKey.get('member-1')?.participantId).toBeUndefined(); // userId неизвестен
-    expect(byKey.get('member-3')?.suspended).toBe(true);
+    expect(byKey.get('member-3')?.badge).toEqual(suspendedLimitBadge());
     expect(byKey.get('invitation-1')?.participantId).toBe('invitee@example.com');
   });
 
@@ -167,9 +172,9 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
 
     expect(byKey.get('m-registered')?.subtitle).toBe('maria@example.com');
     expect(byKey.get('m-owner')?.subtitle).toBe('ivan@example.com');
-    expect(byKey.get('invitation-1')?.title).toBe('invitee@example.com');
-    // Почта pending уже титул — не дублируется.
-    expect(byKey.get('invitation-1')?.subtitle).toBeUndefined();
+    // Pending-строка: лейбл «Пользователь» в титуле, почта подзаголовком.
+    expect(byKey.get('invitation-1')?.title).toBe('Пользователь');
+    expect(byKey.get('invitation-1')?.subtitle).toBe('invitee@example.com');
   });
 
   it('без почты подзаголовок не рендерится (пустой строки с иконкой нет)', () => {

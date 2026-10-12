@@ -10,11 +10,14 @@ import {
   test,
 } from './fixtures';
 
-// Экран «Участники объекта» (карта #692, тикет #700): замена легаси-
-// модалки PropertySharingModal — список с владельцем отдельным рядом,
-// поиск, чип-фильтр ролей, кебаб «Отозвать доступ всем», CTA приглашения
-// от объекта. Сид: владелец «Квартиры на Ленина» (33333333-…) Иван Иванов
-// с двумя участниками — Мария Петрова (full_access, member …931) и Сергей
+// Экран «Участники объекта» (D6 #1312, макет 3298-75434): полный состав
+// с почтами и pending-приглашениями — read-only всем; у владельца кебаб
+// «Пригласить/История/Отозвать доступ всем» и синий CTA приглашения, у
+// приглашённого — кебаб только с «Историей объекта» и красный CTA
+// «Покинуть объект»; бейджи «Аккаунт не создан»/«Превышен лимит
+// объектов»; D15 — на basic кебаб объекта без пунктов шаринга. Сид:
+// владелец «Квартиры на Ленина» (33333333-…) Иван Иванов с двумя
+// участниками — Мария Петрова (full_access, member …931) и Сергей
 // Сидоров (viewer, member …932); их собственные сессии — E2E_MEMBER_/
 // E2E_VIEWER_SESSION_TOKEN. Разрушающие тесты восстанавливают сид через
 // execE2eSql (workers=1).
@@ -61,9 +64,10 @@ test('тап по ряду — страница участника агрега�
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
 });
 
-test('manage-участник: своя строка «(Вы)» инертная, чужие ряды ведут на агрегат (#770)', async ({ page }) => {
-  // Мария — full_access на чужой «Квартире на Ленина»: manage-права есть,
-  // но своей ноги в её manage-скоупе нет — /participants/{себя} был бы 404.
+test('manage-участник (D8): состав read-only — своя строка «(Вы)» и чужие ряды инертные; CTA выхода на месте', async ({ page }) => {
+  // Мария — full_access на чужой «Квартире на Ленина»: D8 (#1304) забрал у
+  // неё member-management (canManageMembers — только владелец), D6 оставил
+  // чтение состава, «Историю объекта» и «Покинуть объект».
   await openCabinetWithSessionToken(page, seededMemberSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
   const header = screenHeader(page);
@@ -81,10 +85,13 @@ test('manage-участник: своя строка «(Вы)» инертная
   await expect(page.getByText('Участник не найден')).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT_ID}/participants$`));
 
-  // Чужие ряды manage-скоупа кликабельны, как и раньше.
-  await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
-  await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Сергей Сидоров' })).toBeVisible();
+  // D8: чужие ряды тоже статичные — страницы участника вне скоупа
+  // не-владельца (404-политика #693).
+  await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
+
+  // D6: у приглашённого вместо приглашения — красный CTA выхода (кебаб
+  // «История объекта» покрыт зрительским тестом).
+  await expect(page.getByRole('button', { name: 'Покинуть объект' })).toBeVisible();
 });
 
 test('поиск: подсказка пустого, находка по имени/почте, «Участник не найден»', async ({ page, seededUser }) => {
@@ -159,7 +166,14 @@ test('приглашение от объекта: свой email — 400, све
       page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
     ).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(page.getByText(INVITE_EMAIL).first()).toBeVisible();
+
+    // Pending-строка по D6 (3298-75434): титул «Пользователь» (бекенд
+    // display_name pending не наполняет — лейбл #1105 ставит VM), почта
+    // подзаголовком, info-бейдж «Аккаунт не создан».
+    const pendingRow = page.getByRole('button', { name: 'Пользователь' });
+    await expect(pendingRow).toBeVisible();
+    await expect(pendingRow.getByText(INVITE_EMAIL)).toBeVisible();
+    await expect(pendingRow.getByText('Аккаунт не создан')).toBeVisible();
 
     // Серверная правда: приглашение именно на этот объект с выбранной ролью.
     expect(
@@ -233,6 +247,15 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
+  // Отзыв снимает и pending-приглашения: садим одно SQL-ом рядом с
+  // членствами (AC #1312 — «все членства и приглашения объекта»).
+  await execE2eSql(
+    `INSERT INTO property_member_invitations (id, property_id, email, role, invited_by, last_sent_at) ` +
+      `VALUES ('99999999-9999-4999-8999-999999999971', '${APARTMENT_ID}', '${INVITE_EMAIL}', 'viewer', '11111111-1111-4111-8111-111111111111', now()) ` +
+      `ON CONFLICT (property_id, lower(email)) DO NOTHING`,
+  );
+  await page.reload();
+
   await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
   await page.getByRole('menuitem', { name: 'Отозвать доступ всем' }).click();
 
@@ -251,11 +274,17 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
     await expect(page.getByText('Иван (Вы)')).toBeVisible();
     await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
+    await expect(page.getByText(INVITE_EMAIL)).toHaveCount(0);
 
-    // Серверная правда: членовств на объекте нет; сид возвращается.
+    // Серверная правда: членств и приглашений на объекте нет; сид возвращается.
     expect(
       await execE2eSql(
         `SELECT count(*) FROM property_members WHERE property_id = '${APARTMENT_ID}'`,
+      ),
+    ).toBe('0');
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE property_id = '${APARTMENT_ID}'`,
       ),
     ).toBe('0');
   } finally {
@@ -268,7 +297,7 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
   }
 });
 
-test('зритель: список без manage-контролов, свой ряд с «(Вы)»', async ({ page }) => {
+test('зритель: состав read-only, кебаб только с «Историей объекта», красный CTA «Покинуть объект» (D6)', async ({ page }, testInfo) => {
   await openCabinetWithSessionToken(page, seededViewerSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
   const header = screenHeader(page);
@@ -282,7 +311,88 @@ test('зритель: список без manage-контролов, свой р
   await expect(
     page.getByRole('button', { name: 'Пригласить участника' }).filter({ hasText: 'Пригласить участника' }),
   ).toHaveCount(0);
+
+  // Кебаб приглашённого (D6): только «История объекта».
+  await header.getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await expect(page.getByRole('menuitem', { name: 'История объекта' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Пригласить участника' })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: 'Отозвать доступ всем' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // «Покинуть объект» вместо кнопки приглашения.
+  await expect(page.getByRole('button', { name: 'Покинуть объект' })).toBeVisible();
+
+  // Скриншот-сверка вида приглашённого (AC #1312: captureScreen).
+  await captureScreen(page, testInfo, 'property-participants-invited');
+});
+
+test('«Покинуть объект» (D6): подтверждение, самовыход, серверная правда; сид восстанавливается', async ({ page }) => {
+  await openCabinetWithSessionToken(page, seededViewerSessionToken());
+  await page.goto(`/properties/${APARTMENT_ID}/participants`);
+
+  await page.getByRole('button', { name: 'Покинуть объект' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Уверены, что хотите покинуть объект?')).toBeVisible();
   await expect(
-    header.getByRole('button', { name: 'Еще — действия со списком' }),
-  ).toHaveCount(0);
+    dialog.getByText('Вы потеряете доступ к объекту пользователя. Попросить доступ можно будет снова'),
+  ).toBeVisible();
+  try {
+    await dialog.getByRole('button', { name: 'Покинуть', exact: true }).click();
+
+    // Возврат с экрана (канон #701) и серверная правда: нога Сергея снята.
+    await expect(page).not.toHaveURL(new RegExp(`/properties/${APARTMENT_ID}/participants`));
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_members WHERE property_id = '${APARTMENT_ID}' AND user_id = '${SERGEY_ID}'`,
+      ),
+    ).toBe('0');
+  } finally {
+    await execE2eSql(
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+        `VALUES ('${SERGEY_MEMBER_ID}', '${APARTMENT_ID}', '${SERGEY_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+        `ON CONFLICT (id) DO NOTHING`,
+    );
+  }
+});
+
+test('D15: на basic кебаб объекта без «Совместного доступа», paywall-редирект экрана жив; сид восстанавливается', async ({ page, seededUser }) => {
+  const OWNER_SUBSCRIPTION_ID = '99999999-9999-4999-8999-999999999901';
+  // Перевод владельца на basic (не удаление подписки: «подписки нет» —
+  // 404 → null, и optimistic-умолчание фронта считает это платным).
+  // Прежний тариф запоминаем — восстановление честное, не литерал 'pro'.
+  const previousTariff = await execE2eSql(
+    `SELECT t.name FROM user_subscriptions s JOIN tariffs t ON t.id = s.tariff_id WHERE s.id = '${OWNER_SUBSCRIPTION_ID}'`,
+  );
+  await execE2eSql(
+    `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = 'basic') ` +
+      `WHERE id = '${OWNER_SUBSCRIPTION_ID}'`,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/properties/${APARTMENT_ID}`);
+
+    // /subscription разрешился basic'ом: секция «Управление» отрисована,
+    // строка пина скрыта (canPin=false) — кебаб считается тем же isPaid,
+    // гонки нет.
+    await expect(page.getByRole('button', { name: 'Редактировать объект' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Сделать основным' })).toHaveCount(0);
+
+    // Кебаб владельца на basic: статусные мутации живы, шаринг скрыт
+    // полностью (2235-100924 минус пункты шаринга).
+    await screenHeader(page).getByRole('button', { name: 'Действия с объектом' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Об объекте' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Изменить статус' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Совместный доступ' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    // Paywall-редиректы per-object экранов остаются как есть (ADR 0064):
+    // deep-link на «Участники объекта» ведёт на выбор тарифа.
+    await page.goto(`/properties/${APARTMENT_ID}/participants`);
+    await expect(page).toHaveURL(/\/profile\/tariff\/change/);
+  } finally {
+    await execE2eSql(
+      `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = '${previousTariff}') ` +
+        `WHERE id = '${OWNER_SUBSCRIPTION_ID}'`,
+    );
+  }
 });

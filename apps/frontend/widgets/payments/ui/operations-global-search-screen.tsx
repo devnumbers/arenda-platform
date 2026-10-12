@@ -138,7 +138,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
         {emptyQuery && (
           <EmptyState
             imageSrc="/images/payments/operations-search.png"
-            className="py-16"
+            className="pt-16 pb-16"
             description="Введите название операции, сумму, категорию"
           />
         )}
@@ -171,7 +171,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
           (operations.length === 0 ? (
             <EmptyState
               imageSrc="/images/payments/operations-search.png"
-              className="py-16"
+              className="pt-16 pb-16"
               description="Такой операции нет"
             />
           ) : (

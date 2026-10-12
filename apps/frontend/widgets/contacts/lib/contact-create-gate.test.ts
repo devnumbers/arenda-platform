@@ -10,7 +10,6 @@ function property(partial: Partial<Property> & { readonly id: string }): Propert
     address: 'Москва, ул. Ленина, 1',
     attributes: {},
     status: 'active',
-    members_count: 0,
     created_at: '2026-09-01T10:00:00Z',
     pinned_at: null,
     ...partial,

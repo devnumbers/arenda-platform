@@ -113,8 +113,9 @@ type PaymentService struct {
 	txStoreFactory
 	policy    sharedpolicy.Policy
 	calendar  OwnerCalendar
-	writeGate gateFunc // Full Access+: create/edit/pause/resume/favorite.
-	delGate   gateFunc // Owner alone: deletion.
+	writeGate gateFunc // Full Access+: create/edit/pause/resume.
+	favGate   gateFunc // View+: the personal favorite star (the cutover #1308, D12).
+	delGate   gateFunc // Full Access+: deletion (D9 #1309; was owner alone).
 	// Realtime is the late-bound carrier the mutations' frames dispatch
 	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
 	// pre-#716 silence.
@@ -132,7 +133,8 @@ func NewPaymentService(factory txStoreFactory, calendar OwnerCalendar, policy sh
 		policy:         policy,
 		calendar:       calendar,
 		writeGate:      newCapabilityGate(policy, sharedpolicy.CanEdit),
-		delGate:        newCapabilityGate(policy, sharedpolicy.CanLifecycle),
+		favGate:        newCapabilityGate(policy, sharedpolicy.CanView),
+		delGate:        newCapabilityGate(policy, sharedpolicy.CanEdit),
 	}
 }
 
@@ -244,6 +246,9 @@ func (s *PaymentService) ListPayments(
 	if err != nil {
 		return nil, fmt.Errorf("list payments: %w", err)
 	}
+	if err := overlayActorFavorites(ctx, s.payments, actor, payments); err != nil {
+		return nil, err
+	}
 	items := make([]PaymentListItem, len(payments))
 	if len(payments) == 0 {
 		return items, nil
@@ -283,7 +288,11 @@ func (s *PaymentService) GetPayment(
 	if err != nil {
 		return domain.Payment{}, err
 	}
-	return payment, nil
+	overlaid := []domain.Payment{payment}
+	if err := overlayActorFavorites(ctx, s.payments, actor, overlaid); err != nil {
+		return domain.Payment{}, err
+	}
+	return overlaid[0], nil
 }
 
 // UpdatePayment applies a diff-patch to the rule: omitted fields are left
@@ -367,9 +376,10 @@ func (s *PaymentService) UpdatePayment(
 // DeletePayment removes the rule. Planned operations from today on always go
 // with it; the overdue planned debt goes too when keepOverdue is false, and
 // paid operations stay in history marked «платёж удалён» (payment_id set to
-// NULL by the FK, origin unchanged — ticket #446). Deletion is Owner-only
-// (the ADR 0028 matrix) and its verdict states Tick=false explicitly: the
-// rule is gone and its plan was resolved by the change step itself.
+// NULL by the FK, origin unchanged — ticket #446). Deletion rides the edit
+// capability (the ADR 0028 matrix; D9 #1309) and its verdict states
+// Tick=false explicitly: the rule is gone and its plan was resolved by the
+// change step itself.
 func (s *PaymentService) DeletePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool,
 ) error {
@@ -491,19 +501,30 @@ func (s *PaymentService) ResumePayment(
 		})
 }
 
-// SetPaymentFavorite writes the rule's favorite star atomically (PUT
-// favorite, ticket #461): one UPDATE inside the conveyor's transaction —
-// never a read-modify-write through the full PATCH. The star is a pure read-side
-// flag: generation is unaffected, so the verdict states Tick=false explicitly
-// and asks for no re-read — the rule resolved under the property lock travels
-// out through Response. Full Access and Owner may favorite.
+// SetPaymentFavorite writes the actor's personal favorite star (PUT
+// favorite, ticket #461; the personal cutover #1308, D12): one insert or
+// delete of the actor's user_payment_favorites row inside the conveyor's
+// transaction — never a read-modify-write through the full PATCH. The star
+// is the actor's own working-set mark and the right to place it is the view
+// one: a viewer stars on par with the owner and Full Access; no access and
+// a suspended membership are the privacy ErrNotFound, an archived property
+// stays the conveyor's ErrArchivedProperty. A re-star keeps the stored row
+// (the order position never shifts); unstarring deletes it — a re-star
+// lands at the end of the actor's order (a fresh NULL row). The star is a
+// pure personal state: generation is unaffected (Tick=false explicitly), no
+// history row, no change-log row and — since D18 — no realtime frame; the
+// admin audit keeps recording the PUT.
 func (s *PaymentService) SetPaymentFavorite(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool,
 ) (domain.Payment, error) {
-	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
+	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.favGate,
 		func(ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, _ time.Time) (mutationOutcome[domain.Payment], error) {
-			if err := stores.payments.SetFavorite(ctx, rule.ID, scope, favorite); err != nil {
-				return mutationOutcome[domain.Payment]{}, fmt.Errorf("set payment favorite: %w", err)
+			if favorite {
+				if err := stores.payments.InsertFavorite(ctx, actor, rule.ID); err != nil {
+					return mutationOutcome[domain.Payment]{}, fmt.Errorf("insert payment favorite: %w", err)
+				}
+			} else if err := stores.payments.DeleteFavorite(ctx, actor, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("delete payment favorite: %w", err)
 			}
 			rule.IsFavorite = favorite
 			return mutationOutcome[domain.Payment]{
@@ -511,9 +532,33 @@ func (s *PaymentService) SetPaymentFavorite(
 				Audit:         auditdomain.ActionPaymentUpdated,
 				AuditEntityID: &rule.ID,
 				AuditCtx:      map[string]any{auditFieldsKey: []string{"favorite"}},
-				Changed:       []realtimedom.Change{realtimedom.On(realtimedom.EntityPayments, propertyID)},
 			}, nil
 		})
+}
+
+// overlayActorFavorites folds the actor's personal favorite rows into the
+// actor-facing reads (the cutover #1308, D12): the rule rows carry no
+// favorite column (the contract #1311 dropped it), the actor's rows travel
+// beside them — another user's star never lands in this actor's read.
+// Mutates in place; the conveyor's post-commit reread shares it.
+func overlayActorFavorites(
+	ctx context.Context, payments PaymentStore, actor uuid.UUID, rules []domain.Payment,
+) error {
+	if len(rules) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(rules))
+	for i, rule := range rules {
+		ids[i] = rule.ID
+	}
+	favorites, err := payments.FavoriteIDs(ctx, actor, ids)
+	if err != nil {
+		return fmt.Errorf("overlay actor favorites: %w", err)
+	}
+	for i := range rules {
+		rules[i].IsFavorite = favorites[rules[i].ID]
+	}
+	return nil
 }
 
 // The change log page bounds (канон #597/#633, as the action journal's): a

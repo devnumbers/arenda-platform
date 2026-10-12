@@ -159,7 +159,7 @@ type RentalService struct {
 	calendar  paymentsapp.OwnerCalendar
 	viewGate  gateFunc // Viewer reads.
 	writeGate gateFunc // Full Access+: create/edit/complete.
-	delGate   gateFunc // Owner alone: deletion.
+	delGate   gateFunc // Full Access+: deletion (D9 #1309; was owner alone).
 	// Realtime is the late-bound carrier the mutations' frames dispatch
 	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
 	// pre-#716 silence.
@@ -188,7 +188,7 @@ func NewRentalService(
 		calendar:       calendar,
 		viewGate:       newCapabilityGate(policy, sharedpolicy.CanView),
 		writeGate:      newCapabilityGate(policy, sharedpolicy.CanEdit),
-		delGate:        newCapabilityGate(policy, sharedpolicy.CanLifecycle),
+		delGate:        newCapabilityGate(policy, sharedpolicy.CanEdit),
 	}
 }
 
@@ -546,7 +546,8 @@ func (s *RentalService) CompleteRental(
 // goes with it: the rentals row goes first (the RESTRICT FK releases the
 // payment only afterwards), the overdue planned stays as debt (the
 // keep_overdue=true semantics). A completed rental's payment died with the
-// completion — the link is nil and only the row goes. Deletion is Owner-only.
+// completion — the link is nil and only the row goes. Deletion rides the
+// edit capability (the ADR 0028 matrix; D9 #1309).
 func (s *RentalService) DeleteRental(
 	ctx context.Context, actor, propertyID, rentalID uuid.UUID,
 ) error {

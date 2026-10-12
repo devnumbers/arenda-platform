@@ -28,6 +28,10 @@ type Config struct {
 	From     string
 	FromName string
 	Timeout  time.Duration
+	// HeloName is the domain the client greets the relay with (EHLO). Empty
+	// keeps the stdlib default "localhost", which relays may reject at AUTH
+	// with 455 4.4.5 (Yandex does since 2026-10-12).
+	HeloName string
 }
 
 // Sender delivers email messages over SMTP.
@@ -85,6 +89,15 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) (err error) {
 			err = fmt.Errorf("close smtp client: %w", closeErr)
 		}
 	}()
+
+	// Greet with our own domain before Auth's lazy hello falls back to the
+	// stdlib "localhost": relays answer localhost-greeted AUTH with 455 and
+	// drop the connection, which the client reports as EOF.
+	if s.cfg.HeloName != "" {
+		if err := client.Hello(s.cfg.HeloName); err != nil {
+			return fmt.Errorf("smtp hello: %w", err)
+		}
+	}
 
 	if err := s.startTLSAndAuth(client); err != nil {
 		return err

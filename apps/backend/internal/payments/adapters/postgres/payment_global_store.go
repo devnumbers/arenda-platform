@@ -286,22 +286,23 @@ func (s *GlobalPaymentStore) LockVisibleFavorites(
 	out := make([]application.GlobalPaymentFavoriteLock, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, application.GlobalPaymentFavoriteLock{
-			ID:         pgconv.UUIDFromPgtype(row.ID),
-			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
-			IsFavorite: row.IsFavorite,
-			Role:       sharedpolicy.Role(row.ActorRole),
+			ID:   pgconv.UUIDFromPgtype(row.ID),
+			Role: sharedpolicy.Role(row.ActorRole),
 		})
 	}
 	return out, nil
 }
 
-// SaveFavoritePosition writes one rule's 1-based favorite position and
-// requires exactly one affected row — the lock pass has already proven
-// existence and visibility inside the same transaction, so a mismatch is a
-// wiring defect, not a runtime condition.
-func (s *GlobalPaymentStore) SaveFavoritePosition(ctx context.Context, id uuid.UUID, position int64) error {
+// SaveFavoritePosition writes one rule's 1-based position in the actor's
+// personal order and requires exactly one affected row — the lock pass has
+// already proven the actor's row and its visibility inside the same
+// transaction, so a mismatch is a wiring defect, not a runtime condition.
+func (s *GlobalPaymentStore) SaveFavoritePosition(
+	ctx context.Context, actor, id uuid.UUID, position int64,
+) error {
 	rows, err := s.q().SetPaymentFavoriteOrder(ctx, postgres.SetPaymentFavoriteOrderParams{
-		ID:            pgconv.UUIDToPgtype(id),
+		UserID:        pgconv.UUIDToPgtype(actor),
+		PaymentID:     pgconv.UUIDToPgtype(id),
 		FavoriteOrder: pgconv.Int8PtrToPgtype(&position),
 	})
 	if err != nil {
@@ -313,9 +314,10 @@ func (s *GlobalPaymentStore) SaveFavoritePosition(ctx context.Context, id uuid.U
 	return nil
 }
 
-// ClearFavoriteOrdersOutside drops the positions of the actor's visible
+// ClearFavoriteOrdersOutside drops the positions of the actor's personal
 // favorites outside the submitted list — the save's full-replacement pass;
-// an empty keep list clears the whole visible order.
+// the set is the actor's own, an empty keep list clears the whole personal
+// order.
 func (s *GlobalPaymentStore) ClearFavoriteOrdersOutside(ctx context.Context, actor uuid.UUID, keepIDs []uuid.UUID) error {
 	if _, err := s.q().ClearGlobalPaymentFavoriteOrders(ctx, postgres.ClearGlobalPaymentFavoriteOrdersParams{
 		KeepIds: joinPropertyIDs(keepIDs),

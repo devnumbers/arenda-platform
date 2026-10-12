@@ -83,9 +83,13 @@ const (
 	// ActionPropertyUpdated records any edit of the object: the unified
 	// change row «Объект изменён: [новое имя]» with the per-field diffs in
 	// the details — single-field edits included (решение 12.10).
-	ActionPropertyUpdated    Action = "property.updated"
-	ActionPropertyPinned     Action = "property.pinned"
-	ActionPropertyUnpinned   Action = "property.unpinned"
+	ActionPropertyUpdated Action = "property.updated"
+	// ActionPropertyArchived and ActionPropertyUnarchived close the
+	// property's lifecycle ids. The pin actions (property.pinned/unpinned)
+	// are gone since the personal pin cutover (#1307, D17): the pin is a
+	// personal state, the shared feed tells nothing about it. Rows of the
+	// removed types written before the cutover stay in the journal and
+	// render their stored segments.
 	ActionPropertyArchived   Action = "property.archived"
 	ActionPropertyUnarchived Action = "property.unarchived"
 	// ActionPropertyMaintenanceStarted/Finished record the active↔maintenance

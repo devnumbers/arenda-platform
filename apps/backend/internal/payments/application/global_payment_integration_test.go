@@ -63,7 +63,10 @@ func (h *paymentsHarness) globalSvc() *paymentsapp.GlobalPaymentService {
 }
 
 // seedGlobalRule inserts a payment rule on any property with any owner —
-// the row-level twin of seedGlobalProperty for multi-book fixtures.
+// the row-level twin of seedGlobalProperty for multi-book fixtures. The
+// isFavorite flag seeds the owner's personal favorite row (the cutover
+// #1308: the favorite state lives only in user_payment_favorites — the
+// global column is gone since the contract #1311).
 func (h *paymentsHarness) seedGlobalRule(
 	propertyID, ownerID uuid.UUID,
 	title, typ string, amountKopecks int64,
@@ -80,13 +83,30 @@ func (h *paymentsHarness) seedGlobalRule(
 	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, auto_pay, category_slug, user_category_id, is_favorite)
-		 VALUES ($1, $2, $3, $4, $5, $6, '{"kind":"monthly","daysOfMonth":[1]}'::jsonb, '2026-07-01', $7, $8, $9, $10)`,
-		id, ownerID, propertyID, typ, title, amountKopecks, autoPay, slugArg, userCategoryID, isFavorite,
+		                       recurrence, since, auto_pay, category_slug, user_category_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, '{"kind":"monthly","daysOfMonth":[1]}'::jsonb, '2026-07-01', $7, $8, $9)`,
+		id, ownerID, propertyID, typ, title, amountKopecks, autoPay, slugArg, userCategoryID,
 	); err != nil {
 		h.t.Fatalf("seed rule %s: %v", title, err)
 	}
+	if isFavorite {
+		h.seedFavorite(ownerID, id, nil)
+	}
 	return id
+}
+
+// seedFavorite inserts one personal favorite row of the given actor — the
+// starred fixture with its manual order position (nil = the end of the
+// order).
+func (h *paymentsHarness) seedFavorite(userID, paymentID uuid.UUID, order *int64) {
+	h.t.Helper()
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO user_payment_favorites (user_id, payment_id, favorite_order)
+		 VALUES ($1, $2, $3)`,
+		userID, paymentID, order,
+	); err != nil {
+		h.t.Fatalf("seed favorite of user %s for payment %s: %v", userID, paymentID, err)
+	}
 }
 
 // seedRuleOperation inserts one operation bound to a rule on any property —
@@ -452,9 +472,9 @@ func TestListGlobalPaymentObjects(t *testing.T) {
 	}
 }
 
-// The global pin orders the «Объекты» cards (ticket #577): the pinned first
-// — among themselves by the pin time — then the rest by name; the pin time
-// travels onto the card.
+// The actor's personal pin orders the «Объекты» cards (ticket #577; the
+// cutover #1307): the pinned first — among themselves by the pin time —
+// then the rest by name; the pin time travels onto the card.
 func TestListGlobalPaymentObjects_PinOrder(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
@@ -465,18 +485,22 @@ func TestListGlobalPaymentObjects_PinOrder(t *testing.T) {
 	pinnedEarly := h.seedGlobalProperty(h.owner, "Бекон", "active")
 
 	// Direct seed: the properties context owns the pin writes; this read
-	// only consumes the column.
+	// only consumes the actor's personal rows (user_property_pins).
 	pinA := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
 	pinB := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
-	if _, err := h.pool.Exec(h.ctx(),
-		`UPDATE properties SET pinned_at = $1 WHERE id = $2`, pinB, pinnedLate,
-	); err != nil {
-		t.Fatalf("seed pin B: %v", err)
-	}
-	if _, err := h.pool.Exec(h.ctx(),
-		`UPDATE properties SET pinned_at = $1 WHERE id = $2`, pinA, pinnedEarly,
-	); err != nil {
-		t.Fatalf("seed pin A: %v", err)
+	for _, tc := range []struct {
+		at time.Time
+		id uuid.UUID
+	}{
+		{pinB, pinnedLate},
+		{pinA, pinnedEarly},
+	} {
+		if _, err := h.pool.Exec(h.ctx(),
+			`INSERT INTO user_property_pins (user_id, property_id, pinned_at)
+			 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, h.owner, tc.id, tc.at,
+		); err != nil {
+			t.Fatalf("seed pin %s: %v", tc.id, err)
+		}
 	}
 
 	cards, err := svc.ListGlobalPaymentObjects(h.ctx(), h.owner, "")

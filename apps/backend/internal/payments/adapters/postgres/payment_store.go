@@ -223,18 +223,57 @@ func (s *PaymentStore) DeleteFuturePlanned(ctx context.Context, paymentID uuid.U
 	return nil
 }
 
-// SetFavorite writes the favorite star in one atomic UPDATE (PUT favorite,
-// ticket #461); rows affected is not checked — the conveyor has already
-// proven the rule's existence inside the same transaction and lock.
-func (s *PaymentStore) SetFavorite(ctx context.Context, id, scope uuid.UUID, favorite bool) error {
-	if _, err := s.q().SetPaymentFavorite(ctx, postgres.SetPaymentFavoriteParams{
-		ID:         pgconv.UUIDToPgtype(id),
-		OwnerID:    pgconv.UUIDToPgtype(scope),
-		IsFavorite: favorite,
+// InsertFavorite writes the actor's personal favorite row (PUT favorite,
+// the cutover #1308, D12); a re-star keeps the stored row — the order
+// position among the actor's favorites never shifts. Rows affected is not
+// checked — the conveyor has already proven the rule's existence inside the
+// same transaction and lock, and a re-star inserting nothing is the honest
+// idempotent outcome.
+func (s *PaymentStore) InsertFavorite(ctx context.Context, actor, paymentID uuid.UUID) error {
+	if err := s.q().InsertPaymentFavorite(ctx, postgres.InsertPaymentFavoriteParams{
+		UserID:    pgconv.UUIDToPgtype(actor),
+		PaymentID: pgconv.UUIDToPgtype(paymentID),
 	}); err != nil {
-		return fmt.Errorf("set favorite of payment %s: %w", id, err)
+		return fmt.Errorf("insert favorite of payment %s: %w", paymentID, err)
 	}
 	return nil
+}
+
+// DeleteFavorite removes the actor's personal favorite row (the cutover
+// #1308) — the order position leaves with it; an absent row deletes nothing
+// and succeeds.
+func (s *PaymentStore) DeleteFavorite(ctx context.Context, actor, paymentID uuid.UUID) error {
+	if err := s.q().DeletePaymentFavorite(ctx, postgres.DeletePaymentFavoriteParams{
+		UserID:    pgconv.UUIDToPgtype(actor),
+		PaymentID: pgconv.UUIDToPgtype(paymentID),
+	}); err != nil {
+		return fmt.Errorf("delete favorite of payment %s: %w", paymentID, err)
+	}
+	return nil
+}
+
+// FavoriteIDs returns the subset of the listed rules the actor has starred —
+// the personal-state overlay of the actor-facing reads (the property pin's
+// ActorPins precedent, the cutover #1308). An empty list never reaches the
+// query.
+func (s *PaymentStore) FavoriteIDs(
+	ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID,
+) (map[uuid.UUID]bool, error) {
+	if len(paymentIDs) == 0 {
+		return map[uuid.UUID]bool{}, nil
+	}
+	rows, err := s.q().PaymentFavoriteIDs(ctx, postgres.PaymentFavoriteIDsParams{
+		UserID:     pgconv.UUIDToPgtype(actor),
+		PaymentIds: joinPropertyIDs(paymentIDs),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("favorite ids of actor %s: %w", actor, err)
+	}
+	favorites := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		favorites[pgconv.UUIDFromPgtype(row)] = true
+	}
+	return favorites, nil
 }
 
 // attachPausesAsSlice loads the pause intervals of the given rules over the

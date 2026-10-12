@@ -83,7 +83,7 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
         {emptyQuery && (
           <EmptyState
             imageSrc="/images/payments/payments-objects-search.png"
-            className="py-16"
+            className="pt-16 pb-16"
             description="Введите название или адрес объекта"
           />
         )}
@@ -122,7 +122,7 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
           (items.length === 0 ? (
             <EmptyState
               imageSrc="/images/payments/payments-objects-search.png"
-              className="py-16"
+              className="pt-16 pb-16"
               description="Такого объекта нет"
             />
           ) : (

@@ -2,6 +2,7 @@
 
 import type { JSX } from 'react';
 import {
+    Button,
     EmptyState,
     InfiniteQueryHead,
     InfiniteQueryTail,
@@ -37,15 +38,21 @@ export function EmptyStateSection(): JSX.Element {
         <div className={styles.group}>
             <h3 className={styles.groupTitle}>EmptyState · пустое состояние</h3>
             <p className={styles.groupTitle}>
-                Иллюстрация 128 + заголовок + серое описание (максимум 360) и действие.
-                Полноэкранные «пусто» — задачи, контакты, операции (Figma 1535-75363,
-                1527:74479, 1510-77308).
+                Иллюстрация 128 + заголовок 24/28 + серое описание 16/18 (максимум 360)
+                и действие — Button size=&quot;small&quot; radius=&quot;m&quot; (анатомия
+                3235-74057). Полноэкранные «пусто» — объекты, задачи, контакты, операции
+                (Figma 3235-74057, 1535-75363, 1527:74479, 1510-77308).
             </p>
             <div className={styles.grid}>
                 <EmptyState
                     imageSrc="/images/contacts/empty-contacts.webp"
                     title="Контактов нет"
                     description="Добавьте контакты арендатора, мастеров и других специалистов"
+                    action={
+                        <Button size="small" radius="m" onClick={() => undefined}>
+                            Добавить контакт
+                        </Button>
+                    }
                 />
             </div>
         </div>

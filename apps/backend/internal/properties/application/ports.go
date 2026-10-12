@@ -165,24 +165,33 @@ type RentalDeletionGuard interface {
 // no slot policy runs (pre-T4 behaviour). RecoverSuspendedForProperty is called
 // when the owner archives a shared object (a slot freed for each recipient);
 // EnforceOnUnarchiveForProperty is called when the owner unarchives a shared
-// object (the object re-enters the recipients' pool); RecoverAfterPropertyDelete
-// is called before the owner deletes a shared object (the memberships are
-// dropped and the freed slots recovered FIFO). RecoverSuspended is called when
-// an owner frees one of their OWN tariff slots (archive/delete of an own object,
-// or the billing auto-archive): the owner is never a member row of their own
-// object, so the per-property entries above do not visit them as a recipient —
-// this per-recipient entry reactivates the owner's own suspended shared queue
-// FIFO. The recoveries return the reactivated membership rows — the caller
-// may collect their access pairs for the realtime dispatch (карта #714,
-// #716; ADR 0062). EnforceOnUnarchiveForProperty returns the memberships it
-// suspended — the mirror image of the recoveries: a re-entered pool suspends
-// the over-limit legs, and the suspended legs dirty their objects'
-// participants views the same way. See issue #158 (T4).
+// object (the object re-enters the recipients' pool);
+// RecoverAfterPropertyDelete is called before the owner deletes a shared
+// object (the memberships are dropped and the freed slots recovered FIFO).
+// RecoverSuspended is called when an owner frees one of their OWN tariff slots
+// (archive/delete of an own object, or the billing auto-archive): the owner is
+// never a member row of their own object, so the per-property entries above do
+// not visit them as a recipient — this per-recipient entry reactivates the
+// owner's own suspended shared queue FIFO. EnforceRecipientPoolGrowth is the
+// per-recipient mirror on the growth side (D13, #1297): the recipient's own
+// object re-entered their pool (unarchive, grace restore), and the excess
+// shared memberships beyond the limit are suspended by the single eviction
+// rule — the oldest shared first, own candidates untouched. RecipientPoolFull
+// is the honest-refusal predicate of CreateProperty (#1300 Q2): the full pool
+// (own + shared) already occupies every slot, so the creation is refused
+// instead of silently suspending someone else's active access. The recoveries
+// and the growth enforcement return the affected membership rows — the caller
+// may collect their access pairs for the realtime dispatch (карта #714, #716;
+// ADR 0062). See issue #158 (T4).
 type RecipientSlotPolicy interface {
 	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
 	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
 	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
 	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) ([]accessdomain.Membership, error)
+	EnforceRecipientPoolGrowth(
+		ctx context.Context, tx transaction.Tx, recipientID uuid.UUID, trigger string,
+	) ([]accessdomain.Membership, error)
+	RecipientPoolFull(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) (bool, error)
 }
 
 // SharedMembersDeleteMailer bridges the property deletion flow to the access
@@ -233,11 +242,24 @@ type PropertyRepository interface {
 	// shared ones.
 	SearchVisible(ctx context.Context, actor uuid.UUID, q PropertySearchQuery) ([]domain.Property, error)
 	Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
-	// SetPin writes the global pin in one atomic UPDATE (ticket #577, the
-	// PUT favorite's canon): nil clears it, a moment pins the property since
-	// then. The scope is the property's owner — the edit capability (Owner,
-	// Full Access) is resolved by the service's policy before the call.
-	SetPin(ctx context.Context, id, scope uuid.UUID, pinnedAt *time.Time) (domain.Property, error)
+	// ActorPin reads the actor's personal pin on the property (the cutover
+	// #1307, D11): nil — not pinned by this actor, a moment — pinned since
+	// then. A personal state: the value is scoped to the reader, never to
+	// the property.
+	ActorPin(ctx context.Context, actor, propertyID uuid.UUID) (*time.Time, error)
+	// InsertActorPin pins the property for the actor at the given moment and
+	// returns the effective pin time: one atomic statement — a re-pin keeps
+	// the original time (the PUT's idempotency), a fresh pin takes the
+	// moment it was given. The view capability is resolved by the service's
+	// policy before the call.
+	InsertActorPin(ctx context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error)
+	// DeleteActorPin unpins the property for the actor: the row goes;
+	// unpinning an unpinned property is a no-op.
+	DeleteActorPin(ctx context.Context, actor, propertyID uuid.UUID) error
+	// ActorPins reads the actor's personal pins for the listed properties —
+	// the batch overlay behind the list reads (the lists carry pinnedAt of
+	// the actor, own and shared rows alike).
+	ActorPins(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
 	// SetPropertyPhoto writes the photo columns in one atomic UPDATE (ADR
 	// 0065): nil clears the photo. The scope is the property's owner — the
 	// edit capability is resolved by the service's policy before the call.

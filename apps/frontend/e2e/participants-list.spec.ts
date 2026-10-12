@@ -7,72 +7,82 @@ import {
   test,
 } from './fixtures';
 
-// Экран «Ваши участники» (карта #692, тикет #697): список агрегатов
-// GET /participants, чипы агрегат-статуса, клиентские поиск и сортировка
-// «Имя», кебаб-трио «Пригласить участника» / «История действий» /
-// «Отозвать доступ всем» (#843, макет 2008-47514). Сид: владелец
-// «Квартиры на Ленина»
-// с тремя участниками — Анна Лимитова (full_access), Мария Петрова
-// (full_access) и Сергей Сидоров (viewer), все active на одном объекте
-// из трёх в скоупе владельца → агрегат-статус partial, чип «Доступно
-// 1 объект». Анна — свободный сид-юзер suspended/slot-сценариев
-// (у Марии и Сергея подписки pro для гейтов #997).
+// Раздел «Участники» — единая страница списка (D1–D4 #1313; макеты
+// 3313-77128/3313-78626/3315-79334): ряды агрегатов GET /participants с
+// бейджами ровно двух статусов, пилюля поиска, клиентская сортировка
+// «Имя», кебаб раздела «Пригласить участника» / «История действий» /
+// «Отозвать доступ всем» (глобальный DELETE /participants, #1310).
+// Сид: владелец «Квартиры на Ленина» с тремя участниками — Анна Лимитова
+// (full_access), Мария Петрова (full_access) и Сергей Сидоров (viewer),
+// все active на одном объекте из трёх в скоупе владельца. Анна —
+// свободный сид-юзер suspended/slot-сценариев (у Марии и Сергея подписки
+// pro для гейтов #997).
 
-test('список участников: ряды сида с чипами статусов, чип «Имя», CTA', async ({ page, seededUser }, testInfo) => {
+const SECTION_KEBAB = 'participants-section-kebab-row';
+
+test('снесённые маршруты хаба — 308 на живые экраны (канон /dashboard, #975)', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/participants/list');
 
-  const header = screenHeader(page);
-  await expect(header.getByText('Ваши участники')).toBeVisible();
+  // /participants/list был списком «Ваших участников» — им /participants
+  // и остался (D1 #1313). goto следует за 308 — статус проверяем у
+  // финального ответа, как в каноне /dashboard (#975).
+  const list = await page.goto('/participants/list');
+  expect(list?.status()).toBe(200);
+  await expect(page).toHaveURL(/\/participants$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Участники' })).toBeVisible();
 
-  // Ряды агрегатов: имя + почта + чип «Доступно 1 объект» (у обоих
-  // активный доступ к одному объекту из трёх в скоупе — partial).
+  // «Объекты пользователей» снесены без наследника — чужие объекты живут
+  // в общем списке.
+  const props = await page.goto('/participants/properties');
+  expect(props?.status()).toBe(200);
+  await expect(page).toHaveURL(/\/properties$/);
+});
+
+test('список участников: ряды сида без счётчиков, чип «Имя», пилюля, кебаб', async ({ page, seededUser }, testInfo) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/participants');
+
+  // Заголовок раздела в ряду хаб-шапки.
+  await expect(page.getByRole('heading', { name: 'Участники' })).toBeVisible();
+
+  // Ряды агрегатов: имя + почта; статусы «частично/все объекты» и
+  // счётчики объектов ушли (D3 #1313) — у активных участников бейджа нет.
   const mariaRow = page.getByRole('button', { name: /Мария Петрова/ });
   await expect(mariaRow).toBeVisible();
   await expect(mariaRow.getByText('e2e-member@example.com')).toBeVisible();
-  await expect(mariaRow.getByText('Доступно 1 объект')).toBeVisible();
+  await expect(page.getByText(/Доступно \d+/)).toHaveCount(0);
+  await expect(page.getByText('Доступ ко всем объектам')).toHaveCount(0);
 
   const sergeyRow = page.getByRole('button', { name: /Сергей Сидоров/ });
   await expect(sergeyRow).toBeVisible();
   await expect(sergeyRow.getByText('e2e-viewer@example.com')).toBeVisible();
-  await expect(sergeyRow.getByText('Доступно 1 объект')).toBeVisible();
 
   // Сервер отдаёт name ASC — Анна первая.
   const names = page.getByRole('button', { name: /@example\.com/ });
   await expect(names).toHaveCount(3);
   await expect(names.first()).toContainText('Анна Лимитова');
 
-  // Чип сортировки и служебные иконки шапки.
+  // Пилюля поиска и чип сортировки; кебаб — в ряду заголовка (в шапке
+  // его больше нет — хаб-паттерн).
+  await expect(page.getByTestId('participants-search-pill')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Имя' })).toBeVisible();
-  await expect(header.getByRole('button', { name: 'Поиск участников' })).toBeVisible();
-  await expect(header.getByRole('button', { name: 'Еще — действия со списком' })).toBeVisible();
-
-  // CTA нижней панели — текстовая кнопка (вне шапки).
-  await expect(
-    page
-      .getByRole('button', { name: 'Пригласить участника' })
-      .filter({ hasText: 'Пригласить участника' }),
-  ).toBeVisible();
+  await expect(page.getByTestId(SECTION_KEBAB).getByRole('button', { name: 'Еще — действия со списком' })).toBeVisible();
 
   await captureScreen(page, testInfo, 'participants-list');
 });
 
-test('поиск: фильтрует по имени и почте, пустой результат, выход из поиска', async ({ page, seededUser }) => {
+test('поиск: пилюля ведёт на /participants/search, фильтр, пустой результат, выход', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/participants/list');
+  await page.goto('/participants');
 
-  const header = screenHeader(page);
-  await header.getByRole('button', { name: 'Поиск участников' }).click();
+  await page.getByTestId('participants-search-pill').click();
+  await page.waitForURL('**/participants/search');
 
   const searchField = page.getByRole('searchbox', { name: 'Поиск участников' });
   await expect(searchField).toBeFocused();
 
-  // Чип сортировки в режиме поиска спрятан (макет 2008-84003).
-  await expect(page.getByRole('button', { name: 'Имя' })).toHaveCount(0);
-
   await searchField.fill('сер');
-  const sergeyRow = page.getByRole('button', { name: /Сергей Сидоров/ });
-  await expect(sergeyRow).toBeVisible();
+  await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
 
   await searchField.fill('example.com');
@@ -81,15 +91,16 @@ test('поиск: фильтрует по имени и почте, пустой
   await searchField.fill('александр');
   await expect(page.getByText('Участник не найден')).toBeVisible();
 
-  // Выход из поиска возвращает список целиком.
-  await header.getByRole('button', { name: 'Закрыть поиск' }).click();
+  // Выход из поиска возвращает раздел целиком.
+  await screenHeader(page).getByRole('button', { name: 'Закрыть поиск' }).click();
+  await page.waitForURL('**/participants');
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
 });
 
 test('сортировка «Имя»: «Убывание» переворачивает список', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/participants/list');
+  await page.goto('/participants');
 
   await page.getByRole('button', { name: 'Имя' }).click();
   // Сюит гоняется на десктопном вьюпорте — PickerMenu открывает меню
@@ -101,14 +112,14 @@ test('сортировка «Имя»: «Убывание» переворачи
   await expect(rows.first()).toContainText('Сергей Сидоров');
 });
 
-test('кебаб: трио пунктов по макету 2008-47514, «История действий» ведёт в ленту', async ({ page, seededUser }) => {
+test('кебаб: трио пунктов по макету 3313-78243, «История действий» ведёт в ленту', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/participants/list');
+  await page.goto('/participants');
 
-  await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await page.getByTestId(SECTION_KEBAB).getByRole('button', { name: 'Еще — действия со списком' }).click();
 
-  // Состав кебаба (#843): «Пригласить участника», «История действий» и
-  // красное «Отозвать доступ всем» — анатомия макета 2008-47514.
+  // Состав кебаба (D4 #1313): «Пригласить участника», «История действий»
+  // и красное «Отозвать доступ всем».
   await expect(page.getByRole('menuitem', { name: 'Пригласить участника' })).toBeVisible();
   const historyItem = page.getByRole('menuitem', { name: 'История действий' });
   await expect(historyItem).toBeVisible();
@@ -138,7 +149,7 @@ test('безымянный участник: «Пользователь» в т�
   );
   try {
     await openCabinetWithSeededSession(page, seededUser);
-    await page.goto('/participants/list');
+    await page.goto('/participants');
 
     // Титул ряда — «Пользователь», почта — подзаголовком под ним; безымянный
     // в списке один — ряд уникален по титулу.
@@ -160,9 +171,9 @@ test('безымянный участник: «Пользователь» в т�
 
 test('кебаб: «Отозвать доступ всем» открывает подтверждение, «Отмена» ничего не делает', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/participants/list');
+  await page.goto('/participants');
 
-  await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await page.getByTestId(SECTION_KEBAB).getByRole('button', { name: 'Еще — действия со списком' }).click();
   await page.getByRole('menuitem', { name: 'Отозвать доступ всем' }).click();
 
   const dialog = page.getByRole('dialog');
@@ -177,12 +188,11 @@ test('кебаб: «Отозвать доступ всем» открывает 
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
 });
 
-test('«Отозвать и удалить»: ряды исчезают, попап успеха; сид восстанавливается', async ({ page, seededUser }) => {
+test('«Отозвать и удалить»: глобальный отзыв, попап успеха, пустое состояние с CTA; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/participants/list');
+  await page.goto('/participants');
 
-  const header = screenHeader(page);
-  await header.getByRole('button', { name: 'Еще — действия со списком' }).click();
+  await page.getByTestId(SECTION_KEBAB).getByRole('button', { name: 'Еще — действия со списком' }).click();
   await page.getByRole('menuitem', { name: 'Отозвать доступ всем' }).click();
 
   const dialog = page.getByRole('dialog');
@@ -198,9 +208,14 @@ test('«Отозвать и удалить»: ряды исчезают, поп�
     await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
 
     await page.keyboard.press('Escape');
-    // Пустой список: служебные иконки шапки спрятаны, иллюстрация на месте.
-    await expect(page.getByText('Участников пока нет')).toBeVisible();
-    await expect(header.getByRole('button', { name: 'Поиск участников' })).toHaveCount(0);
+    // Пустой список платного тарифа (макет 3313-78626): CTA «Пригласить»
+    // в форме, кебаб остаётся — но без красного пункта (макет 3314-79248).
+    await expect(page.getByText('Участников нет')).toBeVisible();
+    await expect(page.getByTestId('participants-empty-cta')).toBeVisible();
+    await expect(page.getByTestId('participants-search-pill')).toHaveCount(0);
+    await page.getByTestId(SECTION_KEBAB).getByRole('button', { name: 'Еще — действия со списком' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Пригласить участника' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Отозвать доступ всем' })).toHaveCount(0);
   } finally {
     // Восстановление сида (воркеры=1 — позже по сюиту сид нужен
     // payment-edit-delete: кабинет сид-участников).
@@ -215,4 +230,42 @@ test('«Отозвать и удалить»: ряды исчезают, поп�
   await page.reload();
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
+});
+
+test('basic: апселл-пустота, кебаб и пилюля скрыты, CTA ведёт на оформление тарифа; тариф восстанавливается', async ({ page, seededUser }) => {
+  const OWNER_SUBSCRIPTION_ID = '99999999-9999-4999-8999-999999999901';
+  // Перевод владельца на basic (не удаление подписки: «подписки нет» —
+  // 404 → null, и optimistic-умолчание фронта считает это платным).
+  const previousTariff = await execE2eSql(
+    `SELECT t.name FROM user_subscriptions s JOIN tariffs t ON t.id = s.tariff_id WHERE s.id = '${OWNER_SUBSCRIPTION_ID}'`,
+  );
+  await execE2eSql(
+    `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = 'basic') ` +
+      `WHERE id = '${OWNER_SUBSCRIPTION_ID}'`,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/participants');
+
+    // Пустое состояние-апселл (D2 #1313, макет 3315-79334): список скрыт
+    // до оплаты — даже с живыми участниками сида (downgrade-семантика),
+    // данные не пропадают.
+    await expect(page.getByText('Участников нет')).toBeVisible();
+    await expect(page.getByText('Пригласите пользователей в свои объекты и управляйте вместе')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
+
+    // Кебаб раздела скрыт целиком, пилюли и чипа нет.
+    await expect(page.getByTestId(SECTION_KEBAB).getByRole('button', { name: 'Еще — действия со списком' })).toHaveCount(0);
+    await expect(page.getByTestId('participants-search-pill')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Имя' })).toHaveCount(0);
+
+    // CTA «Пригласить» — на оформление тарифа.
+    await page.getByTestId('participants-upsell-cta').click();
+    await page.waitForURL('**/profile/tariff/change');
+  } finally {
+    await execE2eSql(
+      `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = '${previousTariff}') ` +
+        `WHERE id = '${OWNER_SUBSCRIPTION_ID}'`,
+    );
+  }
 });

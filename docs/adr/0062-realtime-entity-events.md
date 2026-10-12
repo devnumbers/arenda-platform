@@ -20,6 +20,10 @@ events ride a dedicated endpoint instead, so the notifications stream
 contract stays frozen. The §2 precise-consumer extension (ticket #718) is
 amended in place with the code that introduced it. The §2 owner-book
 null-propertyId frames (`InOwnerBook`) are amended in place likewise.
+Revised 2026-10-09 (the sharing effort, spec #1302, cutover #1307): personal
+states of a reader — the property pin since its personal cutover (D11), the
+payment favorite likewise — publish no frames at all (D18); §3 records the
+silence and its rationale.
 
 ## Context
 
@@ -111,6 +115,17 @@ across the same pipelines.
    publication from the pipelines that own the facts. The publisher port
    lives in the realtime context's application layer; publisher contexts
    depend on the port, the hub-facing adapter computes delivery.
+
+   Personal states of a reader publish no frames (D18, revised 2026-10-09,
+   spec #1302): the property pin — a `user_property_pins` row scoped to the
+   actor since the personal cutover #1307 — and the payment favorite
+   (#1308) dirty nobody's view but the actor's own, and even their other
+   tabs re-read on the next load instead of an invalidation. An addressed
+   «only to the actor» delivery on top of the per-property audience would
+   build a second addressing scheme for one silent case — rejected; the
+   mutation seam simply dispatches nothing. The same silence covers the
+   action journal: a personal state writes no history row (D17), so no
+   history anchor piggybacks either.
 
    Scheduled system materialization (the hourly zone sweep and the tick
    materialization) publishes no frames — recorded out-of-v1 (#716): those

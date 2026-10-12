@@ -50,7 +50,7 @@ func TestCreatePropertyPublishesPropertyAndHistoryFrames(t *testing.T) {
 	created, err := svc.CreateProperty(ctx, ownerID, CreatePropertyCommand{
 		Name:    searchName,
 		Type:    string(domain.PropertyTypeApartment),
-		Address: "Москва, Тверская 1",
+		Address: renamedAddress,
 	})
 	require.NoError(t, err)
 
@@ -143,6 +143,9 @@ type recoverySlotPolicy struct {
 	// ForRecipient legs of the owner's own suspended queue — returned on
 	// every RecoverSuspended call, as the real queue would be.
 	forRecipient []accessdomain.Membership
+	// OnPoolGrowth legs keyed by the recipient of the own-pool growth
+	// enforcement (D13) — the memberships the growth enforcement suspends.
+	onPoolGrowth map[uuid.UUID][]accessdomain.Membership
 }
 
 func (p *recoverySlotPolicy) RecoverSuspendedForProperty(
@@ -165,6 +168,16 @@ func (p *recoverySlotPolicy) RecoverAfterPropertyDelete(
 
 func (p *recoverySlotPolicy) RecoverSuspended(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
 	return p.forRecipient, nil
+}
+
+func (p *recoverySlotPolicy) EnforceRecipientPoolGrowth(
+	_ context.Context, _ transaction.Tx, recipientID uuid.UUID, _ string,
+) ([]accessdomain.Membership, error) {
+	return p.onPoolGrowth[recipientID], nil
+}
+
+func (p *recoverySlotPolicy) RecipientPoolFull(context.Context, transaction.Tx, uuid.UUID) (bool, error) {
+	return false, nil
 }
 
 var _ RecipientSlotPolicy = (*recoverySlotPolicy)(nil)
@@ -223,7 +236,7 @@ func TestUnarchivePropertyPublishesFrames(t *testing.T) {
 	created, err := svc.CreateProperty(ctx, ownerID, CreatePropertyCommand{
 		Name:    searchName,
 		Type:    string(domain.PropertyTypeApartment),
-		Address: "Москва, Тверская 1",
+		Address: renamedAddress,
 	})
 	require.NoError(t, err)
 	_, err = svc.ArchiveProperty(ctx, ownerID, created.ID)
@@ -250,6 +263,101 @@ func TestUnarchivePropertyPublishesFrames(t *testing.T) {
 			"access:" + foreign.String(),
 		},
 		realtime.Pairs())
+}
+
+// TestUnarchivePropertyPublishesPoolGrowthAccessPairs closes the D13 dispatch
+// (#1297): unarchiving one's OWN object re-enforces the owner's own recipient
+// pool, and the shared memberships that enforcement suspends dispatch their
+// access pairs post-commit on the same slot-access publication — the suspended
+// shared object is exactly the blur-card state the recipient's clients must
+// refetch (карта #714, #716; ADR 0062 §3).
+func TestUnarchivePropertyPublishesPoolGrowthAccessPairs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.Must(uuid.NewV7())
+	foreign := uuid.Must(uuid.NewV7()) // The owner's shared object the growth enforcement suspends.
+
+	repo := newFakePropertyRepo()
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 100}),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	created, err := svc.CreateProperty(ctx, ownerID, CreatePropertyCommand{
+		Name:    searchName,
+		Type:    string(domain.PropertyTypeApartment),
+		Address: renamedAddress,
+	})
+	require.NoError(t, err)
+	_, err = svc.ArchiveProperty(ctx, ownerID, created.ID)
+	require.NoError(t, err)
+
+	realtime := bindPropertyRealtime(t, svc)
+	svc.SetRecipientSlotPolicy(&recoverySlotPolicy{
+		onPoolGrowth: map[uuid.UUID][]accessdomain.Membership{
+			ownerID: {suspendedLegOn(foreign)},
+		},
+	})
+
+	_, err = svc.UnarchiveProperty(ctx, ownerID, created.ID)
+	require.NoError(t, err)
+
+	require.Len(t, realtime.Publications, 2)
+	assert.Equal(t,
+		[]string{
+			"property:" + created.ID.String(),
+			"history:" + created.ID.String(),
+			"access:" + foreign.String(),
+		},
+		realtime.Pairs())
+}
+
+// TestRestoreGraceArchivedPropertiesPublishesNothing pins the deliberate
+// silence of the grace restore (D13): the restore runs on the billing phase of
+// the background worker, outside the v1 realtime boundary (ADR 0062 §3, #716)
+// — even when the pool-growth enforcement hands back suspended legs, nothing
+// is published; the owner learns the participants state through the next
+// reread of the screen.
+func TestRestoreGraceArchivedPropertiesPublishesNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.Must(uuid.NewV7())
+	archived := uuid.Must(uuid.NewV7())
+	foreign := uuid.Must(uuid.NewV7())
+
+	repo := newFakePropertyRepo(domain.Property{
+		ID: archived, OwnerID: ownerID, Name: testPropertyName, Address: testPropertyAddress,
+		Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
+	})
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetRecipientSlotPolicy(&recoverySlotPolicy{
+		onUnarchive: map[uuid.UUID][]accessdomain.Membership{
+			archived: {suspendedLegOn(foreign)},
+		},
+		onPoolGrowth: map[uuid.UUID][]accessdomain.Membership{
+			ownerID: {suspendedLegOn(foreign)},
+		},
+	})
+	realtime := bindPropertyRealtime(t, svc)
+
+	remaining, err := svc.RestoreGraceArchivedProperties(ctx, &fakePropertyTx{}, ownerID, []uuid.UUID{archived}, 1)
+	require.NoError(t, err)
+	require.Empty(t, remaining)
+
+	assert.Empty(t, realtime.Publications, "the background grace restore must publish nothing")
 }
 
 // TestArchivePropertyPublishesRecoveryAccessPairs extends the archive
