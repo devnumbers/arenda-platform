@@ -3,7 +3,7 @@
 import type { JSX } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MenuLines, NotificationDot } from '@/shared/assets/icons';
+import { MenuLines } from '@/shared/assets/icons';
 import { getActiveMobileTab } from '@/shared/config/get-active-nav-item';
 import { navSectionById, type NavSection } from '@/shared/config/navigation';
 import { cn } from '@/shared/lib/cn';
@@ -32,11 +32,13 @@ export type TabBarRowProps = {
   readonly onMoreSelect: () => void;
   /** Тап по табу-ссылке; внутри шита закрывает его перед переходом. */
   readonly onNavigate?: () => void;
-  /** Есть непрочитанные уведомления — точка на табе «Уведомления»
-   * (Figma 1721:64793 Navigation Button, Show Notification: красная точка
-   * 6px с белым кантом на правом-верхнем углу иконки). Число в таб не
-   * влезает — число живёт в пилюле десктопа; шит «Еще» точку не рисует
-   * (макета нет). */
+  /** Есть непрочитанные уведомления — точка на табе «Уведомления»:
+   * канон Notification Dot (Figma 1721:64018, макет 1721:57183) — красное
+   * ядро 6px с белым кантом 2.5px, итого 11px, правый-верхний угол иконки
+   * 24 со сдвигом −4px; в контексте шита «Еще» макет рисует ту же точку на
+   * барном ряду — шит дубликат ряда не рендерит (модель 22.09), точку там
+   * даёт настоящий TabBar. Число в таб не влезает — число живёт в пилюле
+   * десктопа. */
   readonly notificationsUnread?: boolean;
 };
 
@@ -164,9 +166,15 @@ function TabLabel({
       <span className="relative">
         <Icon className="h-6 w-6 shrink-0" aria-hidden />
         {unreadDot && (
-          // Канон NotificationDot 14px уже несёт белый кант (2px в SVG);
-          // позиция — правый-верх иконки 24 (Figma 1721:64018, x:22 y:-4).
-          <NotificationDot className="absolute -right-[5px] -top-[5px] h-3.5 w-3.5" aria-hidden />
+          // Канон Notification Dot (Figma 1721:64018, макет 1721:57183):
+          // ядро 6px + белый кант 2.5px = 11px (border-box), правый-верх
+          // иконки 24 со сдвигом −4px. Рамкой, не общим NotificationDot:
+          // тот 14px с кантом 2px — канон аватаров и строк уведомлений,
+          // таб по решению владельца 12.10 не трогает.
+          <span
+            className="absolute -right-1 -top-1 h-[11px] w-[11px] rounded-full border-[2.5px] border-surface bg-danger"
+            aria-hidden
+          />
         )}
       </span>
       {/* Подпись 13/15 (Mobile/Text/S/500, Figma 1721:64793) — общая для
