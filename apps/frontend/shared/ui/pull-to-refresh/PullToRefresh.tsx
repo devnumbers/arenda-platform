@@ -10,9 +10,20 @@ import {
     type RefObject,
 } from 'react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
+import { animate, type AnimationPlaybackControls } from 'framer-motion';
 import clsx from 'clsx';
 import { isIosDevice } from '@/shared/lib/pwa/ios';
 import { useStandalone } from '@/shared/lib/hooks/useStandalone';
+import {
+    PTR_PIN_PX,
+    PTR_THRESHOLD_PX,
+    SPRING_DAMPING,
+    SPRING_STIFFNESS,
+    createVelocityTracker,
+    flickTriggersRefresh,
+    rubberBandOffset,
+    spinnerReveal,
+} from './pull-math';
 import styles from './PullToRefresh.module.css';
 
 /**
@@ -20,17 +31,28 @@ import styles from './PullToRefresh.module.css';
  *
  * WebKit disables the OS pull-to-refresh for `display: standalone/fullscreen`
  * home-screen apps with no way to re-enable it, so on iOS this component
- * reproduces the iOS `UIRefreshControl` feel: pulling down moves the page
- * content itself (not an overlay), a thin grey spinner scales up and
- * accumulates rotation above the content, and on release past the threshold
- * the content stays pinned while the spinner spins until the refresh settles.
+ * reproduces the iOS `UIRefreshControl` feel with the platform's own math
+ * (ADR 0031, rotated 12.10.2026; research/ios-ptr-native-feel.md):
+ *
+ * - The pull tracks the finger through the reverse-engineered UIScrollView
+ *   rubber band `(1 − 1/(x·0.55/H + 1))·H` — resistance grows with distance,
+ *   no hard clamp (pull-math.ts).
+ * - The spinner is a system-style 12-spoke activity indicator. During the
+ *   pull it only *reveals* (opacity/scale ramp over the first half of the
+ *   threshold); native UIRefreshControl does not rotate it until the
+ *   refreshing phase starts.
+ * - Release runs a real spring with the finger's release velocity fed in
+ *   (framer-motion `animate`, stiffness/damping from pull-math): a fast flick
+ *   overshoots past the threshold and triggers the refresh — the native
+ *   path, decided analytically by `flickTriggersRefresh`.
+ * - On trigger the content springs to a 60px pin while queries refetch,
+ *   then springs back.
  *
  * On every other platform the component stays inactive on purpose (owner
  * decision 12.10.2026 — ADR 0031): an installed standalone WebAPK on Android
  * keeps the browser's native pull-to-refresh (a full document reload — the
  * T-Bank PWA experience), and binding our own listeners would suppress that
- * system gesture (non-passive `touchmove` + the overscroll guard are both
- * native-PTR killers).
+ * system gesture.
  *
  * The gesture triggers a *soft* refresh — `queryClient.invalidateQueries()` —
  * not a page reload. Pulling in new *code* (a new deploy) is owned by the
@@ -46,18 +68,12 @@ import styles from './PullToRefresh.module.css';
  * move.
  */
 
-/** Real drag distance (after resistance) that arms the refresh. */
-const THRESHOLD_PX = 70;
-/** Visual pull = real drag × RESISTANCE (0–1). Lower = stiffer. */
-const RESISTANCE = 0.5;
 /** Hard cap on how long the spinner can stay up, regardless of fetch state. */
 const MAX_REFRESH_MS = 3000;
-/** Content offset pinned while a refresh is in flight. */
-const REFRESHING_OFFSET_PX = 60;
-/** CSS back-out curve with a light overshoot — rubber-band snap-back feel. */
-const SNAP_BACK_TRANSITION = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-/** Degrees of spinner rotation per pixel of pull — "winding" feel. */
-const ROTATE_DEG_PER_PX = 2;
+/** `invalidateQueries()` registers refetches asynchronously — the first
+ *  `refreshing` render can still see `isFetching === 0`. Without this grace
+ *  the spinner would dismiss before the refetches even start. */
+const REFETCH_GRACE_MS = 120;
 /** Class toggled on <html> during the gesture — fallback overscroll guard
  *  (see PullToRefresh.module.css). */
 const OVERSCROLL_SUPPRESS_CLASS = 'ptr-suppress-overscroll';
@@ -88,23 +104,63 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
     // bind once and are never recreated mid-gesture (a recreated listener
     // would miss the in-flight `touchmove` stream).
     const startYRef = useRef<number | null>(null);
+    const viewportRef = useRef<number>(0);
     const trackingRef = useRef(false);
     const phaseRef = useRef<Phase>(phase);
+    const pullRef = useRef<number>(pullY);
+    // Latest visual offset actually applied to the content node — the pull
+    // and every spring write through `applyContentTransform`, so this is the
+    // truthful "where the content is now" (a pin spring can still be in
+    // flight with overshoot when the refresh settles).
+    const offsetRef = useRef<number>(0);
+    // Release/pin spring in flight (framer-motion); stopped on a new gesture
+    // or phase change so animations never fight each other.
+    const animRef = useRef<AnimationPlaybackControls | null>(null);
     useEffect(() => {
         phaseRef.current = phase;
     }, [phase]);
+    useEffect(() => {
+        pullRef.current = pullY;
+    }, [pullY]);
 
     // Deadline caps spinner visibility so a hung backend can't trap the user.
     const refreshDeadlineRef = useRef<number | null>(null);
 
     const applyContentTransform = useCallback(
-        (offsetPx: number, withTransition: boolean): void => {
+        (offsetPx: number): void => {
+            offsetRef.current = offsetPx;
             const el = contentRef.current;
             if (!el) return;
+            // Springs drive the value per frame — no CSS transition ever
+            // participates; during the pull the same call follows the finger.
+            el.style.transition = '';
             el.style.transform = offsetPx === 0 ? '' : `translateY(${offsetPx}px)`;
-            el.style.transition = withTransition ? SNAP_BACK_TRANSITION : '';
         },
         [contentRef],
+    );
+
+    const stopAnimation = useCallback((): void => {
+        animRef.current?.stop();
+        animRef.current = null;
+    }, []);
+
+    /** Spring the content from `from` to `to` with the release velocity. */
+    const springTo = useCallback(
+        (from: number, to: number, velocityPxPerS: number, onDone?: () => void): void => {
+            stopAnimation();
+            animRef.current = animate(from, to, {
+                type: 'spring',
+                stiffness: SPRING_STIFFNESS,
+                damping: SPRING_DAMPING,
+                velocity: velocityPxPerS,
+                onUpdate: (latest: number) => applyContentTransform(latest),
+                onComplete: () => {
+                    animRef.current = null;
+                    onDone?.();
+                },
+            });
+        },
+        [applyContentTransform, stopAnimation],
     );
 
     // Fallback overscroll guard: toggled on <html> while a pull is in flight.
@@ -114,36 +170,44 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         document.documentElement.classList.toggle(OVERSCROLL_SUPPRESS_CLASS, active);
     }, []);
 
-    const beginRefresh = useCallback((): void => {
-        setPhase('refreshing');
-        refreshDeadlineRef.current = Date.now() + MAX_REFRESH_MS;
-        applyContentTransform(REFRESHING_OFFSET_PX, true);
-        // Fire-and-forget: invalidate marks all active queries stale and
-        // triggers their refetch. Spinner visibility is bound to
-        // `useIsFetching()` below, not to this promise.
-        void queryClient.invalidateQueries();
-    }, [applyContentTransform, queryClient]);
-
-    const reset = useCallback(
-        (withTransition: boolean): void => {
-            setPhase('idle');
-            setPullY(0);
-            applyContentTransform(0, withTransition);
-            setOverscrollGuard(false);
+    const beginRefresh = useCallback(
+        (velocityPxPerS: number): void => {
+            setPhase('refreshing');
+            refreshDeadlineRef.current = Date.now() + MAX_REFRESH_MS;
+            // The release overshoot carries into the pin: the same spring
+            // settles the content at the pin offset.
+            springTo(pullRef.current, PTR_PIN_PX, velocityPxPerS);
+            // Fire-and-forget: invalidate marks all active queries stale and
+            // triggers their refetch. Spinner visibility is bound to
+            // `useIsFetching()` below, not to this promise.
+            void queryClient.invalidateQueries();
         },
-        [applyContentTransform, setOverscrollGuard],
+        [queryClient, springTo],
     );
+
+    const reset = useCallback((): void => {
+        setPhase('idle');
+        setPullY(0);
+        setOverscrollGuard(false);
+    }, [setOverscrollGuard]);
 
     // Resolve the spinner once fetches settle OR the deadline elapses.
     useEffect(() => {
         if (phase !== 'refreshing') return;
 
         const deadline = refreshDeadlineRef.current;
-        const finish = (): void => reset(true);
+        const finish = (): void => {
+            // From the offset the content is actually at right now — the pin
+            // spring may still be in flight past/before the pin value.
+            springTo(offsetRef.current, 0, 0, reset);
+        };
 
         if (isFetching === 0) {
-            finish();
-            return;
+            // Refetches may not have registered yet — dismiss only after the
+            // grace window (cancelled if `isFetching` flips to > 0 in between,
+            // which re-runs this effect and clears the timer below).
+            const grace = window.setTimeout(finish, REFETCH_GRACE_MS);
+            return (): void => window.clearTimeout(grace);
         }
 
         if (deadline !== null) {
@@ -153,11 +217,14 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         }
         // No deadline recorded for this refresh cycle — nothing to clean up.
         return undefined;
-    }, [phase, isFetching, reset]);
+    }, [phase, isFetching, reset, springTo]);
 
     // Bind touch listeners on `window` once per active state.
     useEffect(() => {
         if (!isActive) return;
+        // The velocity tracker lives with the listeners: nothing outside
+        // this effect reads it.
+        const velocity = createVelocityTracker();
 
         const onTouchStart = (event: TouchEvent): void => {
             // Only single-finger gestures qualify; ignore multi-touch.
@@ -170,7 +237,10 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             if (phaseRef.current === 'refreshing') return;
             // Gesture begins only when the page is pinned to the top.
             if (window.scrollY > 0) return;
+            stopAnimation();
             startYRef.current = touch.clientY;
+            viewportRef.current = window.innerHeight;
+            velocity.reset();
             trackingRef.current = true;
             setOverscrollGuard(true);
         };
@@ -183,17 +253,21 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             // Downward pull is positive. An upward drag aborts tracking.
             if (deltaY <= 0) {
                 if (phaseRef.current !== 'refreshing') {
-                    reset(false);
+                    stopAnimation();
+                    applyContentTransform(0);
+                    reset();
                 }
                 return;
             }
 
-            const resisted = deltaY * RESISTANCE;
-            const clamped = Math.min(resisted, THRESHOLD_PX * 1.8);
-            setPullY(clamped);
-            setPhase(clamped >= THRESHOLD_PX ? 'armed' : 'pulling');
-            // Content follows the finger with no transition during the pull.
-            applyContentTransform(clamped, false);
+            // Native rubber band: resistance grows with distance, no clamp.
+            const visual = rubberBandOffset(deltaY, viewportRef.current);
+            velocity.add(event.timeStamp, visual);
+            pullRef.current = visual;
+            setPullY(visual);
+            setPhase(visual >= PTR_THRESHOLD_PX ? 'armed' : 'pulling');
+            // Content follows the finger frame-by-frame.
+            applyContentTransform(visual);
 
             // Suppress native overscroll bounce only while actively pulling at
             // the top of the page.
@@ -202,22 +276,35 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             }
         };
 
-        const endTracking = (): void => {
+        const onTouchEnd = (): void => {
             if (!trackingRef.current) return;
             trackingRef.current = false;
             startYRef.current = null;
-            if (phaseRef.current === 'armed') {
-                beginRefresh();
-                // Guard stays on: content is pinned at the refresh offset and
-                // we still don't want native overscroll fighting it.
-            } else if (phaseRef.current !== 'refreshing') {
-                // Released below threshold — snap content back with overshoot.
-                reset(true);
+            const releaseVelocity = velocity.velocityPxPerS();
+            if (phaseRef.current === 'armed' || flickTriggersRefresh(pullRef.current, releaseVelocity)) {
+                // Armed release or a flick whose spring overshoots the
+                // threshold — the release velocity carries into the pin.
+                beginRefresh(releaseVelocity);
+                // Guard stays on: content is pinned and we still don't want
+                // native overscroll fighting the spring.
+            } else {
+                // Released below threshold — spring back with the release
+                // velocity; a fast release overshoots further, natively.
+                setOverscrollGuard(false);
+                springTo(pullRef.current, 0, releaseVelocity, reset);
             }
         };
 
-        const onTouchEnd = (): void => endTracking();
-        const onTouchCancel = (): void => endTracking();
+        const onTouchCancel = (): void => {
+            if (!trackingRef.current) return;
+            trackingRef.current = false;
+            startYRef.current = null;
+            if (phaseRef.current !== 'refreshing') {
+                stopAnimation();
+                setOverscrollGuard(false);
+                springTo(pullRef.current, 0, 0, reset);
+            }
+        };
 
         // `passive: false` on touchmove is required for `preventDefault()`.
         window.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -231,36 +318,56 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             window.removeEventListener('touchend', onTouchEnd);
             window.removeEventListener('touchcancel', onTouchCancel);
         };
-    }, [isActive, applyContentTransform, beginRefresh, reset, setOverscrollGuard]);
+    }, [isActive, applyContentTransform, beginRefresh, reset, setOverscrollGuard, springTo, stopAnimation]);
 
-    // Clean up the inline transform and overscroll guard if the component
-    // unmounts mid-gesture.
+    // Clean up the inline transform, running animation and overscroll guard
+    // if the component unmounts mid-gesture.
     useEffect(() => {
         return (): void => {
-            applyContentTransform(0, false);
+            stopAnimation();
+            applyContentTransform(0);
             setOverscrollGuard(false);
         };
-    }, [applyContentTransform, setOverscrollGuard]);
+    }, [applyContentTransform, setOverscrollGuard, stopAnimation]);
 
     if (!isActive) return null;
 
-    // Progressive spinner transform during the pull: scale ramps 0→1 as the
-    // pull approaches the threshold; rotation accumulates for a "winding"
-    // feel. `translate(-50%, 0)` keeps the spinner horizontally centered and
-    // must be preserved by every transform variant.
-    const ratio = Math.min(pullY / THRESHOLD_PX, 1);
+    // Progressive spinner reveal during the pull: opacity and scale ramp
+    // together over the first half of the threshold (native
+    // UIRefreshControl reveals; it does not rotate until refreshing).
+    // `translate(-50%, 0)` keeps the spinner horizontally centered and
+    // must be preserved by the inline transform.
+    const reveal = spinnerReveal(pullY);
     const spinnerStyle: CSSProperties =
         phase === 'refreshing'
             ? {}
             : {
-                  transform: `translate(-50%, 0) rotate(${pullY * ROTATE_DEG_PER_PX}deg) scale(${ratio})`,
+                  opacity: reveal,
+                  transform: `translate(-50%, 0) scale(${reveal})`,
               };
 
-    const spinnerClass = clsx(
-        styles.spinner,
-        phase === 'refreshing' && styles.refreshing,
-        (phase === 'pulling' || phase === 'armed') && styles[phase],
-    );
+    const spinnerClass = clsx(styles.spinner, phase === 'refreshing' && styles.refreshing);
 
-    return <div className={spinnerClass} style={spinnerStyle} aria-hidden="true" />;
+    return (
+        <span className={spinnerClass} style={spinnerStyle} aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none">
+                {Array.from({ length: 12 }, (_, spoke) => (
+                    <line
+                        key={spoke}
+                        x1="12"
+                        y1="1.2"
+                        x2="12"
+                        y2="4.4"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        transform={`rotate(${spoke * 30} 12 12)`}
+                        // Graduated spoke opacity — the system activity
+                        // indicator's trailing fade, animated by the spin.
+                        opacity={1 - (spoke / 11) * 0.75}
+                    />
+                ))}
+            </svg>
+        </span>
+    );
 }
