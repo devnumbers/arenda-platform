@@ -1196,7 +1196,9 @@ func TestReadStore_DetailsAndLiveActorLegs(t *testing.T) {
 
 	base := time.Unix(1000, 0)
 	// Новая строка: билдер с деталями.
-	newEntry := domain.PropertyRenamed(property, "Old Name", "Новое имя")
+	newEntry := domain.PropertyUpdated(property, "Новое имя", []domain.AttributeChange{
+		{Key: "name", Label: "Название", Old: "Old Name", New: "Новое имя"},
+	})
 	newEntry.PropertyID = property
 	newEntry.ActorID = &owner
 	newEntry.ActorRole = domain.ActorRoleOwner
@@ -1236,7 +1238,7 @@ func TestReadStore_DetailsAndLiveActorLegs(t *testing.T) {
 	for _, e := range page.Items {
 		byAction[e.Action] = e
 	}
-	assertRenamedRowDetails(t, byAction[domain.ActionPropertyRenamed])
+	assertRenamedRowDetails(t, byAction[domain.ActionPropertyUpdated])
 	assertLegacyRowLegs(t, byAction[domain.ActionTaskCompleted])
 }
 

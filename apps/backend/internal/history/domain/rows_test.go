@@ -1,13 +1,13 @@
 package domain
 
-// The new row template (карта #1324, решение #1317 §2): the header is the
-// action with the linked entity («Название объекта изменено: [новое]»), the
-// diffs moved from the header into the details — the ready gray lines built
-// at write time and rendered by the frontend verbatim. Rows recorded before
-// the template carry no details (nil) — the frontend renders them as the
-// header alone. Точные формулировки каталога утверждает walkthrough экранов;
-// здешние тесты закрепляют механику: ссылка в заголовке, диффы и периоды —
-// в деталях, детали без ссылок и без сумм (§5).
+// Единые change-строки (решение владельца 12.10, карта #1324; аменда D1):
+// заголовок — «<Сущность> изменён(а): [значение-ссылка]» со снапшотом нового
+// значения, диффы — по серой строке на каждое изменившееся поле, полных
+// реальных значений (PII и суммы — аменда §5). Полевых заголовков больше нет:
+// гранулярные билдеры объекта снесены, их идентификаторы остаются словарём
+// легаси-строк. Точные формулировки каталога утверждает walkthrough экранов;
+// здешние тесты закрепляют механику: ссылка в заголовке, диффы — в деталях,
+// детали без ссылок.
 
 import (
 	"strings"
@@ -21,6 +21,13 @@ func at2(y int, m time.Month, d int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
+// Константы повторяющихся ожиданий таблиц (goconst).
+const (
+	wantRentalHeaderCreated = "Добавлена аренда: 11 месяцев"
+	detailLabelAddress      = "Адрес"
+	detailLabelName         = "Название"
+)
+
 // assertNoLinksInDetails pins the detail canon: the gray lines render
 // verbatim — no links inside, the row's single link lives in the header.
 func assertNoLinksInDetails(t *testing.T, e Entry) {
@@ -32,130 +39,125 @@ func assertNoLinksInDetails(t *testing.T, e Entry) {
 	}
 }
 
-func TestPropertyRenamed_DetailsCarryTheDiff(t *testing.T) {
+func TestPropertyUpdated_UnifiedHeaderAndDetails(t *testing.T) {
 	t.Parallel()
 	id := uuid.Must(uuid.NewV7())
-	e := PropertyRenamed(id, "Old Name", "Новое имя")
+	changes := []AttributeChange{
+		{Key: ctxKeyName, Label: detailLabelName, Old: "Моя квартира", New: "Квартира №124"},
+	}
+	e := PropertyUpdated(id, "Квартира №124", changes)
 
-	want := "Название объекта изменено: Новое имя"
-	if got := e.Segments.PlainText(); got != want {
-		t.Errorf("header = %q, want %q", got, want)
+	if got := e.Segments.PlainText(); got != "Объект изменён: Квартира №124" {
+		t.Errorf("header = %q, want %q", got, "Объект изменён: Квартира №124")
+	}
+	if e.Action != ActionPropertyUpdated || e.BaseAction != BaseChanged {
+		t.Errorf("action/base = %s/%s, want property.updated/changed", e.Action, e.BaseAction)
 	}
 	if len(e.Segments) != 2 || e.Segments[1].Link == nil ||
 		e.Segments[1].Link.Kind != KindProperty || e.Segments[1].Link.ID != id {
 		t.Errorf("segments = %+v, want the linked new-name run", e.Segments)
 	}
-	wantDetails := DetailLines{`Название: «Old Name» → «Новое имя»`}
-	if len(e.Details) != 1 || e.Details[0] != wantDetails[0] {
-		t.Errorf("details = %q, want %q", e.Details, wantDetails)
-	}
-	assertNoLinksInDetails(t, e)
-	if v, ok := e.Context["old_name"]; !ok || v != "Old Name" {
-		t.Errorf("context old_name = %v, want the snapshot", v)
-	}
-}
-
-func TestPropertyAddressChanged_DetailsByBranch(t *testing.T) {
-	t.Parallel()
-	id := uuid.Must(uuid.NewV7())
-
-	t.Run("addition", func(t *testing.T) {
-		t.Parallel()
-		e := PropertyAddressChanged(id, "", "Москва, Тверская 1")
-		if got := e.Segments.PlainText(); got != "Добавлен адрес объекта: Москва, Тверская 1" {
-			t.Errorf("header = %q", got)
-		}
-		want := DetailLines{`Адрес: «Москва, Тверская 1»`}
-		if len(e.Details) != 1 || e.Details[0] != want[0] {
-			t.Errorf("details = %q, want %q", e.Details, want)
-		}
-		assertNoLinksInDetails(t, e)
-	})
-	t.Run("removal", func(t *testing.T) {
-		t.Parallel()
-		e := PropertyAddressChanged(id, "Москва, Тверская 1", "")
-		if got := e.Segments.PlainText(); got != "Удалён адрес объекта" {
-			t.Errorf("header = %q", got)
-		}
-		want := DetailLines{"Адрес удалён"}
-		if len(e.Details) != 1 || e.Details[0] != want[0] {
-			t.Errorf("details = %q, want %q", e.Details, want)
-		}
-	})
-	t.Run("change", func(t *testing.T) {
-		t.Parallel()
-		e := PropertyAddressChanged(id, "Старая", "Новая")
-		if got := e.Segments.PlainText(); got != "Адрес объекта изменён: Новая" {
-			t.Errorf("header = %q", got)
-		}
-		want := DetailLines{`Адрес: «Старая» → «Новая»`}
-		if len(e.Details) != 1 || e.Details[0] != want[0] {
-			t.Errorf("details = %q, want %q", e.Details, want)
-		}
-		assertNoLinksInDetails(t, e)
-	})
-}
-
-func TestPropertyAttributesChanged_LinePerAttribute(t *testing.T) {
-	t.Parallel()
-	id := uuid.Must(uuid.NewV7())
-	changes := []AttributeChange{
-		{Key: "balcony", Label: "Балкон", Old: "none", New: "balcony"},
-		{Key: "floor", Label: "Этаж", Old: nil, New: 5.0},
-	}
-	e := PropertyAttributesChanged(id, changes)
-
-	if got := e.Segments.PlainText(); got != "Изменены характеристики объекта" {
-		t.Errorf("header = %q", got)
-	}
-	want := DetailLines{`Балкон: «none» → «balcony»`, `Этаж: «5»`}
-	if len(e.Details) != 2 || e.Details[0] != want[0] || e.Details[1] != want[1] {
+	want := DetailLines{`Название: «Моя квартира» → «Квартира №124»`}
+	if len(e.Details) != 1 || e.Details[0] != want[0] {
 		t.Errorf("details = %q, want %q", e.Details, want)
 	}
 	assertNoLinksInDetails(t, e)
-	// The context keeps the raw changes (the future read model), not the
-	// detail lines.
 	if _, ok := e.Context["attributes"]; !ok {
-		t.Error("context must keep the raw attribute changes")
+		t.Error("context must keep the raw changes")
 	}
 }
 
-func TestPropertyMaintenanceRows(t *testing.T) {
+func TestPropertyUpdated_LinePerField(t *testing.T) {
+	t.Parallel()
+	// Один ручной PATCH — одна строка: по пояснению на каждое изменившееся
+	// поле, в порядке вызова (название, адрес, описание, тип, характеристики).
+	id := uuid.Must(uuid.NewV7())
+	changes := []AttributeChange{
+		{Key: ctxKeyName, Label: detailLabelName, Old: "Старое", New: "Новое"},
+		{Key: "address", Label: "Адрес", Old: "Ленина 5", New: "Ленина 7"},
+		{Key: "description", Label: "Описание", Old: "было", New: "стало"},
+		{Key: "type", Label: "Тип", Old: "Квартира", New: "Дом"},
+		{Key: "area", Label: "Общая площадь", Old: "45,5 м²", New: "50 м²"},
+	}
+	e := PropertyUpdated(id, "Новое", changes)
+
+	want := DetailLines{
+		`Название: «Старое» → «Новое»`,
+		`Адрес: «Ленина 5» → «Ленина 7»`,
+		`Описание: «было» → «стало»`,
+		`Тип: «Квартира» → «Дом»`,
+		`Общая площадь: «45,5 м²» → «50 м²»`,
+	}
+	if len(e.Details) != len(want) {
+		t.Fatalf("details = %q, want %q", e.Details, want)
+	}
+	for i := range want {
+		if e.Details[i] != want[i] {
+			t.Errorf("details[%d] = %q, want %q", i, e.Details[i], want[i])
+		}
+	}
+	assertNoLinksInDetails(t, e)
+}
+
+func TestPropertyUpdated_AdditionsAndRemovals(t *testing.T) {
 	t.Parallel()
 	id := uuid.Must(uuid.NewV7())
+	changes := []AttributeChange{
+		{Key: "address", Label: detailLabelAddress, Old: nil, New: "Москва, Тверская 1"},
+		{Key: "address2", Label: detailLabelAddress, Old: "Москва, Тверская 1", New: ""},
+		{Key: "area", Label: "Общая площадь", Old: "45,5 м²", New: nil},
+	}
+	e := PropertyUpdated(id, "Квартира", changes)
 
-	started := PropertyMaintenanceStarted(id)
-	if got := started.Segments.PlainText(); got != "Объект на ремонте" {
-		t.Errorf("started header = %q", got)
+	want := DetailLines{
+		`Адрес: «Москва, Тверская 1»`,
+		"Адрес: удалено",
+		"Общая площадь: удалено",
 	}
-	if started.Action != ActionPropertyMaintenanceStarted || started.BaseAction != BaseChanged {
-		t.Errorf("started action/base = %s/%s, want maintenance_started/changed", started.Action, started.BaseAction)
+	if len(e.Details) != len(want) {
+		t.Fatalf("details = %q, want %q", e.Details, want)
 	}
-	if len(started.Segments) != 1 || started.Segments[0].Link == nil ||
-		started.Segments[0].Link.Kind != KindProperty || started.Segments[0].Link.ID != id {
-		t.Errorf("started segments = %+v, want the single linked run", started.Segments)
+	for i := range want {
+		if e.Details[i] != want[i] {
+			t.Errorf("details[%d] = %q, want %q", i, e.Details[i], want[i])
+		}
 	}
-	if started.Details != nil {
-		t.Errorf("started details = %q, want nil", started.Details)
-	}
+}
 
-	finished := PropertyMaintenanceFinished(id)
-	if got := finished.Segments.PlainText(); got != "Ремонт завершён" {
-		t.Errorf("finished header = %q", got)
+func TestPropertyPhotosChanged_FoldedIntoChangeRow(t *testing.T) {
+	t.Parallel()
+	// Фото свёрнуты в единую строку изменения (решение владельца 12.10):
+	// «Объект изменён: [имя]» + «Фото: добавлено / удалено» — отдельных
+	// фото-строк и их групп ➕/🗑 больше нет.
+	id := uuid.Must(uuid.NewV7())
+
+	added := PropertyPhotosChanged(id, "Квартира", true)
+	if got := added.Segments.PlainText(); got != "Объект изменён: Квартира" {
+		t.Errorf("added header = %q", got)
 	}
-	if finished.Action != ActionPropertyMaintenanceFinished || finished.BaseAction != BaseCompleted {
-		t.Errorf("finished action/base = %s/%s, want maintenance_finished/completed", finished.Action, finished.BaseAction)
+	if added.Action != ActionPropertyUpdated || added.BaseAction != BaseChanged {
+		t.Errorf("added action/base = %s/%s, want property.updated/changed", added.Action, added.BaseAction)
 	}
-	if finished.Details != nil {
-		t.Errorf("finished details = %q, want nil", finished.Details)
+	want := DetailLines{"Фото: добавлено"}
+	if len(added.Details) != 1 || added.Details[0] != want[0] {
+		t.Errorf("added details = %q, want %q", added.Details, want)
+	}
+	assertNoLinksInDetails(t, added)
+
+	removed := PropertyPhotosChanged(id, "Квартира", false)
+	if got := removed.Segments.PlainText(); got != "Объект изменён: Квартира" {
+		t.Errorf("removed header = %q", got)
+	}
+	want = DetailLines{"Фото: удалено"}
+	if len(removed.Details) != 1 || removed.Details[0] != want[0] {
+		t.Errorf("removed details = %q, want %q", removed.Details, want)
 	}
 }
 
 // Константы повторяющихся ожиданий таблиц аренды (goconst).
 const (
-	wantRentalHeaderCreated = "Добавлена аренда: 11 месяцев"
-	wantTenantLine          = `Арендатор: «Максим»`
-	wantPeriodLine          = "Период: с 1 ноября 2026 по 30 сентября 2027"
+	wantTenantLine = `Арендатор: «Максим»`
+	wantPeriodLine = "Период: с 1 ноября 2026 по 30 сентября 2027"
 )
 
 func TestRentalCreated_OpenEndedReadsTheDate(t *testing.T) {
@@ -215,26 +217,84 @@ func TestRentalCreated_UnnamedTenantKeepsHeader(t *testing.T) {
 	}
 }
 
-func TestRentalUpdated_SymmetricToCreated(t *testing.T) {
+func TestRentalUpdated_CarriesTheDiffs(t *testing.T) {
 	t.Parallel()
+	// Правка условий: заголовок читает НОВЫЙ срок, пояснения — диффы
+	// арендатора и периода (период в кавычках, формат D3 внутри).
 	id := uuid.Must(uuid.NewV7())
-	e := RentalUpdated(id, "Максим", at2(2026, time.November, 1), at2(2027, time.September, 30))
-	if got := e.Segments.PlainText(); got != "Условия аренды изменены: 11 месяцев" {
-		t.Errorf("header = %q", got)
+	e := RentalUpdated(id,
+		"Иван", "Пётр",
+		at2(2026, time.November, 1), at2(2027, time.September, 30),
+		at2(2026, time.December, 1), at2(2027, time.November, 30),
+	)
+
+	if got := e.Segments.PlainText(); got != "Аренда изменена: 12 месяцев" {
+		t.Errorf("header = %q, want %q", got, "Аренда изменена: 12 месяцев")
 	}
-	if e.BaseAction != BaseChanged || e.Action != ActionRentalUpdated {
+	if e.Action != ActionRentalUpdated || e.BaseAction != BaseChanged {
 		t.Errorf("action/base = %s/%s", e.Action, e.BaseAction)
 	}
-	want := DetailLines{wantTenantLine, wantPeriodLine}
-	if len(e.Details) != 2 || e.Details[0] != want[0] || e.Details[1] != want[1] {
+	want := DetailLines{
+		`Арендатор: «Иван» → «Пётр»`,
+		`Период: «с 1 ноября 2026 по 30 сентября 2027» → «с 1 декабря 2026 по 30 ноября 2027»`,
+	}
+	if len(e.Details) != len(want) {
+		t.Fatalf("details = %q, want %q", e.Details, want)
+	}
+	for i := range want {
+		if e.Details[i] != want[i] {
+			t.Errorf("details[%d] = %q, want %q", i, e.Details[i], want[i])
+		}
+	}
+	assertNoLinksInDetails(t, e)
+}
+
+func TestRentalUpdated_OnlyChangedFields(t *testing.T) {
+	t.Parallel()
+	// Неб changed — пояснения только по изменившимся полям: у периода
+	// дифф, арендатор не пишется.
+	id := uuid.Must(uuid.NewV7())
+	from := at2(2026, time.November, 1)
+	e := RentalUpdated(id, "Максим", "Максим", from, at2(2027, time.September, 30), from, time.Time{})
+
+	if got := e.Segments.PlainText(); got != "Аренда изменена: 1 ноября" {
+		t.Errorf("header = %q, want %q", got, "Аренда изменена: 1 ноября")
+	}
+	want := DetailLines{
+		`Период: «с 1 ноября 2026 по 30 сентября 2027» → «с 1 ноября 2026»`,
+	}
+	if len(e.Details) != 1 || e.Details[0] != want[0] {
 		t.Errorf("details = %q, want %q", e.Details, want)
 	}
 }
 
-func TestPaymentUpdated_DetailsCarryTheTitleDiff(t *testing.T) {
+func TestRentalUpdated_NoDiffNoDetails(t *testing.T) {
 	t.Parallel()
+	// Правка мимо полей аренды (аренда не изменилась) — строка без
+	// пояснений, заголовок читает текущий срок.
 	id := uuid.Must(uuid.NewV7())
-	e := PaymentUpdated(id, "Электричество", "Электричество и вода")
+	from := at2(2026, time.November, 1)
+	to := at2(2027, time.September, 30)
+	e := RentalUpdated(id, "Максим", "Максим", from, to, from, to)
+
+	if got := e.Segments.PlainText(); got != "Аренда изменена: 11 месяцев" {
+		t.Errorf("header = %q, want %q", got, "Аренда изменена: 11 месяцев")
+	}
+	if e.Details != nil {
+		t.Errorf("details = %q, want nil", e.Details)
+	}
+}
+
+func TestPaymentUpdated_FieldDiffs(t *testing.T) {
+	t.Parallel()
+	// Пояснения несут все изменения, значения реальные: суммы форматом
+	// «5 000 ₽» (аменда §5, слово владельца 12.10).
+	id := uuid.Must(uuid.NewV7())
+	changes := []AttributeChange{
+		{Key: "title", Label: detailLabelName, Old: "Электричество", New: "Электричество и вода"},
+		{Key: "amount_kopecks", Label: "Сумма", Old: "5 000 ₽", New: "6 000 ₽"},
+	}
+	e := PaymentUpdated(id, "Электричество и вода", changes)
 
 	if got := e.Segments.PlainText(); got != "Платёж изменён: Электричество и вода" {
 		t.Errorf("header = %q", got)
@@ -242,25 +302,113 @@ func TestPaymentUpdated_DetailsCarryTheTitleDiff(t *testing.T) {
 	if len(e.Segments) != 2 || e.Segments[1].Link == nil || e.Segments[1].Link.Kind != KindPayment {
 		t.Errorf("segments = %+v, want the linked new-title run", e.Segments)
 	}
-	want := DetailLines{`Название: «Электричество» → «Электричество и вода»`}
+	want := DetailLines{
+		`Название: «Электричество» → «Электричество и вода»`,
+		`Сумма: «5 000 ₽» → «6 000 ₽»`,
+	}
+	if len(e.Details) != len(want) {
+		t.Fatalf("details = %q, want %q", e.Details, want)
+	}
+	for i := range want {
+		if e.Details[i] != want[i] {
+			t.Errorf("details[%d] = %q, want %q", i, e.Details[i], want[i])
+		}
+	}
+	assertNoLinksInDetails(t, e)
+	if v, ok := e.Context["title"]; !ok || v != "Электричество и вода" {
+		t.Errorf("context title = %v, want the snapshot", v)
+	}
+}
+
+func TestContactUpdated_PerFieldDiffs(t *testing.T) {
+	t.Parallel()
+	// Пояснения несут полные значения, PII включительно (аменда §5, слово
+	// владельца 12.10): телефон, почта, мессенджер — реальными значениями.
+	id := uuid.Must(uuid.NewV7())
+	changes := []AttributeChange{
+		{Key: "full_name", Label: "ФИО", Old: "Пётр", New: "Пётр Иванов"},
+		{Key: "phone", Label: "Телефон", Old: "+79123456789", New: "+79211112233"},
+		{Key: ctxKeyEmail, Label: "Email", Old: nil, New: "petrov@mail.ru"},
+	}
+	e := ContactUpdated(id, "Пётр Иванов", changes)
+
+	if got := e.Segments.PlainText(); got != "Контакт изменён: Пётр Иванов" {
+		t.Errorf("header = %q", got)
+	}
+	if len(e.Segments) != 2 || e.Segments[1].Link == nil || e.Segments[1].Link.Kind != KindContact {
+		t.Errorf("segments = %+v, want the linked new-ФИО run", e.Segments)
+	}
+	want := DetailLines{
+		`ФИО: «Пётр» → «Пётр Иванов»`,
+		`Телефон: «+79123456789» → «+79211112233»`,
+		`Email: «petrov@mail.ru»`,
+	}
+	if len(e.Details) != len(want) {
+		t.Fatalf("details = %q, want %q", e.Details, want)
+	}
+	for i := range want {
+		if e.Details[i] != want[i] {
+			t.Errorf("details[%d] = %q, want %q", i, e.Details[i], want[i])
+		}
+	}
+	assertNoLinksInDetails(t, e)
+}
+
+func TestTaskRuleUpdated_DetailsCarryTitleAndDate(t *testing.T) {
+	t.Parallel()
+	// Макет 3258-77019: «Задача изменена: [название]» + «Название» и
+	// «Дата» в пояснениях, точечные даты дд.мм.гггг.
+	id := uuid.Must(uuid.NewV7())
+	changes := []AttributeChange{
+		{Key: "title", Label: detailLabelName, Old: "Моя квартира", New: "Квартира №124"},
+		{Key: "due_date", Label: "Дата", Old: "19.02.2026", New: "20.03.2027"},
+	}
+	e := TaskRuleUpdated(id, "Квартира №124", changes)
+
+	if got := e.Segments.PlainText(); got != "Задача изменена: Квартира №124" {
+		t.Errorf("header = %q", got)
+	}
+	want := DetailLines{
+		`Название: «Моя квартира» → «Квартира №124»`,
+		`Дата: «19.02.2026» → «20.03.2027»`,
+	}
+	if len(e.Details) != len(want) {
+		t.Fatalf("details = %q, want %q", e.Details, want)
+	}
+	for i := range want {
+		if e.Details[i] != want[i] {
+			t.Errorf("details[%d] = %q, want %q", i, e.Details[i], want[i])
+		}
+	}
+	assertNoLinksInDetails(t, e)
+}
+
+func TestMemberRoleChanged_DetailsCarryTheDiff(t *testing.T) {
+	t.Parallel()
+	// «Участник изменён: [имя]» + роль в пояснениях (было «Роль участника
+	// изменена» с диффом в заголовке).
+	id := uuid.Must(uuid.NewV7())
+	e := MemberRoleChanged(id, "Иван Иванов", ActorRoleViewer, ActorRoleFullAccess)
+
+	if got := e.Segments.PlainText(); got != "Участник изменён: Иван Иванов" {
+		t.Errorf("header = %q, want %q", got, "Участник изменён: Иван Иванов")
+	}
+	if e.Action != ActionMemberRoleChanged || e.BaseAction != BaseChanged {
+		t.Errorf("action/base = %s/%s", e.Action, e.BaseAction)
+	}
+	want := DetailLines{`Роль: «Просмотр» → «Полный доступ»`}
 	if len(e.Details) != 1 || e.Details[0] != want[0] {
 		t.Errorf("details = %q, want %q", e.Details, want)
 	}
 	assertNoLinksInDetails(t, e)
-	if v, ok := e.Context["old_title"]; !ok || v != "Электричество" {
-		t.Errorf("context old_title = %v, want the snapshot", v)
-	}
 }
 
 func TestLegacyRows_KeepNoDetails(t *testing.T) {
 	t.Parallel()
-	// Actions outside the new template's first wave record no details —
-	// the wire field stays absent and the screens render the header alone.
+	// Actions outside the change-row family record no details — the wire
+	// field stays absent and the screens render the header alone.
 	withoutDetails := []Entry{
 		PropertyCreated(uuid.Must(uuid.NewV7()), "Квартира"),
-		PropertyDescriptionChanged(uuid.Must(uuid.NewV7()), "было", "стало"),
-		PropertyUpdated(uuid.Must(uuid.NewV7()), []string{"название", "адрес"}),
-		PropertyPhotoAdded(uuid.Must(uuid.NewV7())),
 		PropertyPinned(uuid.Must(uuid.NewV7())),
 		PropertyArchived(uuid.Must(uuid.NewV7())),
 		RentalCompleted(uuid.Must(uuid.NewV7()), "Максим"),
@@ -269,11 +417,9 @@ func TestLegacyRows_KeepNoDetails(t *testing.T) {
 		PaymentDeleted(uuid.Must(uuid.NewV7()), "Электричество"),
 		OperationCreated(uuid.Must(uuid.NewV7()), "Аренда", at2(2026, time.November, 1)),
 		ContactCreated(uuid.Must(uuid.NewV7()), "Пётр Иванов"),
-		ContactUpdated(uuid.Must(uuid.NewV7()), "Пётр", "Пётр Иванов"),
 		TaskRuleCreated(uuid.Must(uuid.NewV7()), "Задача"),
 		TaskCompleted(uuid.Must(uuid.NewV7()), "Задача", at2(2026, time.November, 1)),
 		MemberAdded(uuid.Must(uuid.NewV7()), "Иван Иванов"),
-		MemberRoleChanged(uuid.Must(uuid.NewV7()), "Иван Иванов", ActorRoleViewer, ActorRoleFullAccess),
 		MemberRemoved("Иван Иванов"),
 	}
 	for _, e := range withoutDetails {
@@ -297,8 +443,8 @@ func TestRentalRows_EmptyTenantLabel(t *testing.T) {
 		e    Entry
 		text string
 	}{
-		{"created", RentalCreated(id, "", from, to), "Добавлена аренда: 11 месяцев"},
-		{"updated", RentalUpdated(id, "", from, to), "Условия аренды изменены: 11 месяцев"},
+		{"created", RentalCreated(id, "", from, to), wantRentalHeaderCreated},
+		{"updated", RentalUpdated(id, "", "", from, to, from, to), "Аренда изменена: 11 месяцев"},
 		{"completed", RentalCompleted(id, ""), "Аренда завершена"},
 		{"deleted", RentalDeleted(id, ""), "Аренда удалена"},
 	} {
@@ -345,7 +491,7 @@ func TestContactRebindRows(t *testing.T) {
 	// cross-property move speaks of both ends — «на другой объект» from the
 	// source, «с другого объекта» at the destination — the bind and the
 	// unbind own a single end. All four are «changed», carry the linked ФИО
-	// snapshot (never the phone, §5) and the name in the context.
+	// snapshot and the name in the context.
 	id := uuid.Must(uuid.NewV7())
 	cases := []struct {
 		name string

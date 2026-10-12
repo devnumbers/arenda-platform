@@ -65,22 +65,29 @@ const (
 type Action string
 
 const (
-	ActionPropertyCreated            Action = "property.created"
-	ActionPropertyRenamed            Action = "property.renamed"
+	ActionPropertyCreated Action = "property.created"
+
+	// ActionPropertyAddressChanged, ActionPropertyDescriptionChanged,
+	// ActionPropertyAttributesChanged, ActionPropertyRenamed and the photo
+	// pair below are LEGACY-ONLY ids since the unified change-row decision
+	// (решение владельца 12.10, карта #1324): new writes carry
+	// property.updated for every edit, photos included; the ids stay in the
+	// vocabulary because the rows recorded before it keep them — an action
+	// id is API surface (ADR 0061 §4), not a copy tweak.
 	ActionPropertyAddressChanged     Action = "property.address_changed"
 	ActionPropertyDescriptionChanged Action = "property.description_changed"
 	ActionPropertyAttributesChanged  Action = "property.attributes_changed"
-	// ActionPropertyUpdated records a mutation that touched several field
-	// groups at once (rename + address in one PATCH); single-group edits get
-	// their precise ids above.
-	ActionPropertyUpdated Action = "property.updated"
-
-	ActionPropertyPhotoAdded   Action = "property.photo_added"
-	ActionPropertyPhotoDeleted Action = "property.photo_deleted"
-	ActionPropertyPinned       Action = "property.pinned"
-	ActionPropertyUnpinned     Action = "property.unpinned"
-	ActionPropertyArchived     Action = "property.archived"
-	ActionPropertyUnarchived   Action = "property.unarchived"
+	ActionPropertyRenamed            Action = "property.renamed"
+	ActionPropertyPhotoAdded         Action = "property.photo_added"
+	ActionPropertyPhotoDeleted       Action = "property.photo_deleted"
+	// ActionPropertyUpdated records any edit of the object: the unified
+	// change row «Объект изменён: [новое имя]» with the per-field diffs in
+	// the details — single-field edits included (решение 12.10).
+	ActionPropertyUpdated    Action = "property.updated"
+	ActionPropertyPinned     Action = "property.pinned"
+	ActionPropertyUnpinned   Action = "property.unpinned"
+	ActionPropertyArchived   Action = "property.archived"
+	ActionPropertyUnarchived Action = "property.unarchived"
 	// ActionPropertyMaintenanceStarted/Finished record the active↔maintenance
 	// status flip (карта #1324, протокол D2 — решение отменяет прежний §3
 	// «silent no-op», ADR 0061): start → changed, finish → completed.

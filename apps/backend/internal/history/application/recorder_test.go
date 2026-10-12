@@ -102,13 +102,15 @@ func TestRecord_SearchableIncludesDetails(t *testing.T) {
 	writer := &fakeWriter{}
 	svc := historyapp.NewService(writer, fakeActors{snap: domain.ActorSnapshot{Name: "Максим", Email: "max@example.com"}}, nil)
 
-	entry := domain.PropertyRenamed(property, "Old Name", "Новое имя")
+	entry := domain.PropertyUpdated(property, "Новое имя", []domain.AttributeChange{
+		{Key: "name", Label: "Название", Old: "Old Name", New: "Новое имя"},
+	})
 	entry.PropertyID = property
 	entry.ActorID = &actor
 	if err := svc.Record(context.Background(), entry); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	want := "Название объекта изменено: Новое имя Название: «Old Name» → «Новое имя» Максим max@example.com"
+	want := "Объект изменён: Новое имя Название: «Old Name» → «Новое имя» Максим max@example.com"
 	if got := writer.entries[0].Searchable; got != want {
 		t.Errorf("Searchable = %q, want %q", got, want)
 	}

@@ -80,3 +80,44 @@ func TestHistory_RentalDeletedKeepsLabelWithoutLink(t *testing.T) {
 		}
 	}
 }
+
+func TestHistory_RentalUpdatedCarriesTheDiffs(t *testing.T) {
+	t.Parallel()
+	// Единая строка изменения (решение владельца 12.10, карта #1324):
+	// «Аренда изменена: [новый срок]», пояснение — дифф периода; арендатор
+	// не менялся — его строки нет.
+	h := newHarness(t)
+	contact := uuid.Must(uuid.NewV7())
+	cmd := createCmd()
+	cmd.ContactID = &contact
+
+	view, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+	if err != nil {
+		t.Fatalf("CreateRental: %v", err)
+	}
+
+	newEnd := mustDate("2027-10-01")
+	if _, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, view.Rental.ID,
+		UpdateRentalCommand{PlannedEndDate: &DateUpdate{Value: &newEnd}}); err != nil {
+		t.Fatalf("UpdateRental: %v", err)
+	}
+
+	if len(h.history.Entries) != 2 {
+		t.Fatalf("journal entries = %d, want 2", len(h.history.Entries))
+	}
+	e := h.history.Entries[1]
+	if e.Action != historydomain.ActionRentalUpdated {
+		t.Fatalf("action = %s, want rental.updated", e.Action)
+	}
+	// Новый срок 04.09.2026 → 01.10.2027: 12 полных месяцев (до 04.09.27)
+	// и 28 дней остатка — канон formatTerm.
+	if want := "Аренда изменена: 12 месяцев 28 дней"; e.Segments.PlainText() != want {
+		t.Errorf("row text = %q, want %q", e.Segments.PlainText(), want)
+	}
+	wantDetails := historydomain.DetailLines{
+		`Период: «с 4 сентября 2026 по 1 сентября 2027» → «с 4 сентября 2026 по 1 октября 2027»`,
+	}
+	if len(e.Details) != 1 || e.Details[0] != wantDetails[0] {
+		t.Errorf("details = %q, want %q", e.Details, wantDetails)
+	}
+}

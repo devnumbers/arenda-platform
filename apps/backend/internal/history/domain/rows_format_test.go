@@ -110,3 +110,37 @@ func TestFormatPeriodLine(t *testing.T) {
 		t.Errorf("formatPeriodLine (open-ended) = %q", got)
 	}
 }
+
+func TestFormatRubles(t *testing.T) {
+	t.Parallel()
+	// Канон денег пояснений (аменда §5, слово владельца 12.10): зеркало
+	// formatMoneyKopecks фронта — NBSP-тысячи, копейки только у неполных
+	// сумм (toLocaleString('ru-RU') не пишет «,00»).
+	cases := []struct {
+		kopecks int64
+		want    string
+	}{
+		{500000, "5\u00A0000 ₽"},
+		{1234567, "12\u00A0345,67 ₽"},
+		{100, "1 ₽"},
+		{99, "0,99 ₽"},
+		{0, "0 ₽"},
+		{123456789, "1\u00A0234\u00A0567,89 ₽"},
+	}
+	for _, tc := range cases {
+		if got := FormatRubles(tc.kopecks); got != tc.want {
+			t.Errorf("FormatRubles(%d) = %q, want %q", tc.kopecks, got, tc.want)
+		}
+	}
+}
+
+func TestFormatDateDotted(t *testing.T) {
+	t.Parallel()
+	// Точечные даты пояснений — дд.мм.гггг (макет 3258-77019).
+	if got := FormatDateDotted(at(2026, time.February, 19)); got != "19.02.2026" {
+		t.Errorf("FormatDateDotted = %q, want %q", got, "19.02.2026")
+	}
+	if got := FormatDateDotted(at(2027, time.March, 20)); got != "20.03.2027" {
+		t.Errorf("FormatDateDotted = %q, want %q", got, "20.03.2027")
+	}
+}

@@ -22,6 +22,20 @@ const (
 	TypeExpense PaymentType = "expense"
 )
 
+// PaymentTypeLabel is the RU display label of a rule's direction — the diff
+// value of the action journal's «Тип» line (карта #1324: значения пояснений
+// форматирует вызывающий модуль).
+func PaymentTypeLabel(t PaymentType) string {
+	switch t {
+	case TypeIncome:
+		return "Доход"
+	case TypeExpense:
+		return "Расход"
+	default:
+		return string(t)
+	}
+}
+
 // OperationStatus is the stored status of an operation. "Overdue" is not a
 // status: it is computed (planned with a date before today) and never stored
 // (prototype decision №2).

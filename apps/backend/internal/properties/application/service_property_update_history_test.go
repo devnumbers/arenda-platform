@@ -1,15 +1,14 @@
 package application
 
-// The pure composition of the edit's journal row (карта #704, ADR 0061 §4):
-// propertyUpdateHistoryEntry picks the precise action id for a single changed
-// field group, falls back to the generic property.updated with the ordered RU
-// label list for several at once, and stays silent (ok=false) when no
-// journalable group moved — the status is not in the journal dictionary, and
-// equal attribute maps diff to nothing.
+// The pure composition of the edit's journal row (карта #704, ADR 0061 §4;
+// единые change-строки — решение владельца 12.10, карта #1324):
+// propertyUpdateHistoryEntry строит одну строку «Объект изменён: [новое
+// имя]» с пояснением на каждое изменившееся поле и молчит (ok=false), когда
+// ни одно журналируемое поле не сдвинулось — статус не в словаре истории,
+// равные карты характеристик не дают диффа.
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -34,20 +33,15 @@ func historyEntryProperty(mutate func(p *domain.Property)) domain.Property {
 }
 
 // propertyUpdateCase is one row of the propertyUpdateHistoryEntry table: the
-// before/after pair, the expected verdict, and the pinned context payloads.
+// before/after pair, the expected verdict, and the pinned details.
 type propertyUpdateCase struct {
-	name       string
-	before     domain.Property
-	after      domain.Property
-	wantOK     bool
-	wantAction historydomain.Action
-	// The wantLabels field pins Context["fields"] of the generic
-	// property.updated row, including the RU label order; nil for the
-	// precise-action rows.
-	wantLabels []string
-	// The wantAttrs field pins Context["attributes"] of the
-	// attributes_changed row.
-	wantAttrs []historydomain.AttributeChange
+	name   string
+	before domain.Property
+	after  domain.Property
+	wantOK bool
+	// The wantDetails field pins the gray diff lines in order; the header
+	// text is pinned separately in the assert helper.
+	wantDetails historydomain.DetailLines
 }
 
 func TestPropertyUpdateHistoryEntry(t *testing.T) {
@@ -57,53 +51,58 @@ func TestPropertyUpdateHistoryEntry(t *testing.T) {
 
 	tests := []propertyUpdateCase{
 		{
-			name:   "single_group_rename",
-			before: historyEntryProperty(nil),
-			after:  historyEntryProperty(func(p *domain.Property) { p.Name = renamedName }),
-			wantOK: true, wantAction: historydomain.ActionPropertyRenamed,
+			name:        "single_group_rename",
+			before:      historyEntryProperty(nil),
+			after:       historyEntryProperty(func(p *domain.Property) { p.Name = renamedName }),
+			wantOK:      true,
+			wantDetails: historydomain.DetailLines{`Название: «` + fixtureOldName + `» → «` + renamedName + `»`},
 		},
 		{
-			name:   "single_group_address",
-			before: historyEntryProperty(nil),
-			after:  historyEntryProperty(func(p *domain.Property) { p.Address = renamedAddress }),
-			wantOK: true, wantAction: historydomain.ActionPropertyAddressChanged,
+			name:        "single_group_address",
+			before:      historyEntryProperty(nil),
+			after:       historyEntryProperty(func(p *domain.Property) { p.Address = renamedAddress }),
+			wantOK:      true,
+			wantDetails: historydomain.DetailLines{`Адрес: «` + fixtureOldAddress + `» → «` + renamedAddress + `»`},
 		},
 		{
-			name:   "single_group_description",
-			before: historyEntryProperty(nil),
-			after:  historyEntryProperty(func(p *domain.Property) { p.Description = "Тихий двор, рядом метро" }),
-			wantOK: true, wantAction: historydomain.ActionPropertyDescriptionChanged,
+			name:        "single_group_description",
+			before:      historyEntryProperty(nil),
+			after:       historyEntryProperty(func(p *domain.Property) { p.Description = "Тихий двор, рядом метро" }),
+			wantOK:      true,
+			wantDetails: historydomain.DetailLines{`Описание: «Тихий двор, рядом метро»`},
 		},
 		{
 			name:   "single_group_attributes_changed",
 			before: historyEntryProperty(func(p *domain.Property) { p.Attributes = domain.Attributes{attrBalcony: attrBalconyLoggia} }),
 			after:  historyEntryProperty(func(p *domain.Property) { p.Attributes = domain.Attributes{attrBalcony: attrBalconyNone} }),
-			wantOK: true, wantAction: historydomain.ActionPropertyAttributesChanged,
-			wantAttrs: []historydomain.AttributeChange{{Key: attrBalcony, Label: labelBalcony, Old: attrBalconyLoggia, New: attrBalconyNone}},
+			wantOK: true,
+			wantDetails: historydomain.DetailLines{
+				`Балкон: «` + attrBalconyLoggia + `» → «` + attrBalconyNone + `»`,
+			},
 		},
 		{
-			// The type is the only group without a dedicated row id: it still
-			// reads as a change through the generic property.updated row.
-			name:       "single_group_type_is_generic_updated",
-			before:     historyEntryProperty(nil),
-			after:      historyEntryProperty(func(p *domain.Property) { p.Type = domain.PropertyTypeHouse }),
-			wantOK:     true,
-			wantAction: historydomain.ActionPropertyUpdated,
-			wantLabels: []string{"тип"},
+			// The type reads its RU label from PropertyTypeLabel in the diff.
+			name:        "single_group_type",
+			before:      historyEntryProperty(nil),
+			after:       historyEntryProperty(func(p *domain.Property) { p.Type = domain.PropertyTypeHouse }),
+			wantOK:      true,
+			wantDetails: historydomain.DetailLines{`Тип: «Квартира» → «Дом»`},
 		},
 		{
-			name:   "two_groups_generic_with_ordered_labels",
+			name:   "two_groups_ordered_lines",
 			before: historyEntryProperty(nil),
 			after: historyEntryProperty(func(p *domain.Property) {
 				p.Name = renamedName
 				p.Address = renamedAddress
 			}),
-			wantOK:     true,
-			wantAction: historydomain.ActionPropertyUpdated,
-			wantLabels: []string{"название", "адрес"},
+			wantOK: true,
+			wantDetails: historydomain.DetailLines{
+				`Название: «` + fixtureOldName + `» → «` + renamedName + `»`,
+				`Адрес: «` + fixtureOldAddress + `» → «` + renamedAddress + `»`,
+			},
 		},
 		{
-			name:   "five_groups_generic_with_full_label_list",
+			name:   "five_groups_full_line_list",
 			before: historyEntryProperty(func(p *domain.Property) { p.Attributes = domain.Attributes{attrBalcony: attrBalconyLoggia} }),
 			after: historyEntryProperty(func(p *domain.Property) {
 				p.Name = renamedName
@@ -112,9 +111,16 @@ func TestPropertyUpdateHistoryEntry(t *testing.T) {
 				p.Type = domain.PropertyTypeHouse
 				p.Attributes = domain.Attributes{attrBalcony: attrBalconyNone}
 			}),
-			wantOK:     true,
-			wantAction: historydomain.ActionPropertyUpdated,
-			wantLabels: []string{"название", "адрес", "описание", "тип", "характеристики"},
+			wantOK: true,
+			wantDetails: historydomain.DetailLines{
+				`Название: «` + fixtureOldName + `» → «` + renamedName + `»`,
+				`Адрес: «` + fixtureOldAddress + `» → «` + renamedAddress + `»`,
+				`Описание: «Тихий двор, рядом метро»`,
+				`Тип: «Квартира» → «Дом»`,
+				// Метки характеристик читаются по НОВОМУ типу: у дома нет
+				// балкона — деталь читает сырой ключ (attributeLabel).
+				`balcony: «` + attrBalconyLoggia + `» → «` + attrBalconyNone + `»`,
+			},
 		},
 		{
 			// The status is not part of the journal dictionary: a status-only
@@ -140,19 +146,17 @@ func TestPropertyUpdateHistoryEntry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assertPropertyUpdateCase(t, propertyID, tt)
+			entry, ok := propertyUpdateHistoryEntry(propertyID, tt.before, tt.after)
+			assertPropertyUpdateCase(t, tt, entry, ok)
 		})
 	}
 }
 
-// assertPropertyUpdateCase runs one table case against
-// propertyUpdateHistoryEntry and pins the entry's shape: the silent no-op
-// stays an empty entry, the row's action id, the generic row's ordered RU
-// labels with the rendered row text, and the attributes_changed diff.
-func assertPropertyUpdateCase(t *testing.T, propertyID uuid.UUID, tt propertyUpdateCase) {
+// assertPropertyUpdateCase pins one case's shape: the silent no-op stays an
+// empty entry, the row reads «Объект изменён: [новое имя]» with one detail
+// line per changed field.
+func assertPropertyUpdateCase(t *testing.T, tt propertyUpdateCase, entry historydomain.Entry, ok bool) {
 	t.Helper()
-
-	entry, ok := propertyUpdateHistoryEntry(propertyID, tt.before, tt.after)
 	if ok != tt.wantOK {
 		t.Fatalf("ok = %v, want %v (action=%s)", ok, tt.wantOK, entry.Action)
 	}
@@ -162,45 +166,24 @@ func assertPropertyUpdateCase(t *testing.T, propertyID uuid.UUID, tt propertyUpd
 		}
 		return
 	}
-	if entry.Action != tt.wantAction {
-		t.Errorf("action = %s, want %s", entry.Action, tt.wantAction)
+	// Единая строка: один action, заголовок «Объект изменён: [новое имя]»,
+	// пояснение на каждое изменившееся поле.
+	if entry.Action != historydomain.ActionPropertyUpdated {
+		t.Errorf("action = %s, want property.updated", entry.Action)
 	}
-	if tt.wantLabels != nil {
-		assertGenericRowLabels(t, entry, tt.wantLabels)
+	if want := "Объект изменён: " + tt.after.Name; entry.Segments.PlainText() != want {
+		t.Errorf("row text = %q, want %q", entry.Segments.PlainText(), want)
 	}
-	if tt.wantAttrs != nil {
-		assertAttributeChangeList(t, entry, tt.wantAttrs)
+	if len(entry.Details) != len(tt.wantDetails) {
+		t.Fatalf("details = %q, want %q", entry.Details, tt.wantDetails)
 	}
-}
-
-// assertGenericRowLabels pins the generic row's Context["fields"] list and the
-// rendered row text built from it.
-func assertGenericRowLabels(t *testing.T, entry historydomain.Entry, wantLabels []string) {
-	t.Helper()
-
-	fields, ok := entry.Context["fields"].([]string)
-	if !ok {
-		t.Fatalf("context fields = %T, want []string", entry.Context["fields"])
+	for i := range tt.wantDetails {
+		if entry.Details[i] != tt.wantDetails[i] {
+			t.Errorf("details[%d] = %q, want %q", i, entry.Details[i], tt.wantDetails[i])
+		}
 	}
-	if !reflect.DeepEqual(fields, wantLabels) {
-		t.Errorf("context fields = %v, want %v", fields, wantLabels)
-	}
-	if got, want := entry.Segments.PlainText(), "Данные объекта изменены: "+strings.Join(wantLabels, ", "); got != want {
-		t.Errorf("row text = %q, want %q", got, want)
-	}
-}
-
-// assertAttributeChangeList pins Context["attributes"] of the
-// attributes_changed row.
-func assertAttributeChangeList(t *testing.T, entry historydomain.Entry, wantAttrs []historydomain.AttributeChange) {
-	t.Helper()
-
-	changes, ok := entry.Context["attributes"].([]historydomain.AttributeChange)
-	if !ok {
-		t.Fatalf("context attributes = %T, want []historydomain.AttributeChange", entry.Context["attributes"])
-	}
-	if !reflect.DeepEqual(changes, wantAttrs) {
-		t.Errorf("context attributes = %v, want %v", changes, wantAttrs)
+	if _, ok := entry.Context["attributes"]; !ok {
+		t.Error("context must keep the raw changes")
 	}
 }
 

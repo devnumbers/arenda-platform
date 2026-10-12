@@ -15,6 +15,15 @@ import (
 // wording is approved at the screen walkthroughs; the templates are passive
 // voice («Операция оплачена», never «Платёж оплачен» for operations).
 //
+// Единые change-строки (решение владельца 12.10, карта #1324; аменда D1):
+// любая правка сущности — одна строка уровня сущности «<Сущность>
+// изменён(а): [значение-ссылка]» со снапшотом нового значения; диффы едут в
+// details — по серой строке на каждое изменившееся поле, реальными
+// значениями (PII и суммы — аменда §5). Полевых заголовков больше нет:
+// гранулярные билдеры объекта снесены, их идентификаторы (property.renamed,
+// address_changed, description_changed, attributes_changed, photo_added,
+// photo_deleted) остаются словарём легаси-строк.
+//
 // A builder returns an Entry with the kind/action/base/segments/context
 // already set; the calling module adds PropertyID, ActorID and ActorRole and
 // records it in its transaction. A deleted entity leaves a row without a
@@ -24,20 +33,16 @@ const (
 	roleLabelFullAccess = "Полный доступ"
 	roleLabelViewer     = "Просмотр"
 
-	// The arrow between the old and the new value in the change rows.
-	arrow = " → "
-
 	// The context jsonb keys (ADR 0061 §5: the structured extras).
-	ctxKeyName     = "name"
-	ctxKeyOldName  = "old_name"
-	ctxKeyNewName  = "new_name"
-	ctxKeyOldTitle = "old_title"
-	ctxKeyOldValue = "old_value"
-	ctxKeyNewValue = "new_value"
-	ctxKeyTitle    = "title"
-	ctxKeyTenant   = "tenant"
-	ctxKeyLabel    = "label"
-	ctxKeyDueDate  = "due_date"
+	ctxKeyName    = "name"
+	ctxKeyEmail   = "email"
+	ctxKeyTitle   = "title"
+	ctxKeyTenant  = "tenant"
+	ctxKeyLabel   = "label"
+	ctxKeyDueDate = "due_date"
+	// The ctxKeyChanges key carries the raw AttributeChange list of the
+	// unified change rows (the future read model).
+	ctxKeyChanges = "changes"
 )
 
 // Общее.
@@ -54,36 +59,55 @@ func RoleLabel(r ActorRole) string {
 	}
 }
 
-// AttributeChange is one changed attribute of an object: the catalog key
-// plus the old and new values. Label is the RU display label the calling
-// module fills from its attribute catalog (properties/domain owns the
-// catalog — history cannot import it); an empty label falls back to the raw
-// key in the detail line. The values travel raw in the context for the
-// future read model; enum display labels in the details are a walkthrough
-// point (карта #1324, «Not yet specified»).
+// AttributeChange is one changed field of an entity: the catalog key plus
+// the old and new values. Label is the RU display label the calling module
+// fills from its own catalog (properties/domain owns the property catalog,
+// payments/domain — the schedule and category wordings; history cannot
+// import them); an empty label falls back to the raw key in the detail
+// line. The values travel raw in the context for the future read model.
+// Values arrive display-ready (FormatRubles, FormatDateDotted, the schedule
+// labels) — the details are ready lines, the reading path carries no
+// formatting catalog.
 type AttributeChange struct {
 	Key   string
 	Label string
 	Old   any
 	New   any
+	// Removed is the custom removal wording («Напоминание: выключено»);
+	// empty falls back to «Label: удалено».
+	Removed string
 }
 
-// PropertyAttributesChanged builds the attributes row: the header stays a
-// sentence, the diffs read as one gray line per attribute (новый шаблон,
-// решение #1317 §2).
-func PropertyAttributesChanged(entityID uuid.UUID, changes []AttributeChange) Entry {
-	details := make(DetailLines, 0, len(changes))
-	for _, c := range changes {
-		label := attributeLabel(c)
-		details = append(details, detailChange(label, c.Old, c.New, label+": удалено"))
+// PropertyUpdated builds the unified change row (решение 12.10): «Объект
+// изменён: [новое имя]» with one gray diff line per changed field — the
+// name, address, description, type and attribute edits ride one row, the
+// photo edits ride PropertyPhotosChanged.
+func PropertyUpdated(entityID uuid.UUID, name string, changes []AttributeChange) Entry {
+	return Entry{
+		Kind:       KindProperty,
+		Action:     ActionPropertyUpdated,
+		BaseAction: BaseChanged,
+		Segments:   changeHeader("Объект изменён: ", name, entityLink(KindProperty, entityID)),
+		Details:    changeDetails(changes),
+		Context:    map[string]any{ctxKeyName: name, "attributes": changes},
+	}
+}
+
+// PropertyPhotosChanged builds the photo leg of the unified change row
+// (решение 12.10): «Объект изменён: [имя]» + «Фото: добавлено / удалено» —
+// the former photo_added/photo_deleted rows and their ➕/🗑 tones are gone.
+func PropertyPhotosChanged(entityID uuid.UUID, name string, added bool) Entry {
+	line, key := "Фото: удалено", "removed"
+	if added {
+		line, key = "Фото: добавлено", "added"
 	}
 	return Entry{
 		Kind:       KindProperty,
-		Action:     ActionPropertyAttributesChanged,
+		Action:     ActionPropertyUpdated,
 		BaseAction: BaseChanged,
-		Segments:   Segments{{Text: "Изменены характеристики объекта", Link: entityLink(KindProperty, entityID)}},
-		Details:    details,
-		Context:    map[string]any{"attributes": changes},
+		Segments:   changeHeader("Объект изменён: ", name, entityLink(KindProperty, entityID)),
+		Details:    DetailLines{line},
+		Context:    map[string]any{ctxKeyName: name, "photo": key},
 	}
 }
 
@@ -94,6 +118,25 @@ func attributeLabel(c AttributeChange) string {
 		return c.Label
 	}
 	return c.Key
+}
+
+// changeDetails builds the unified change row's gray lines: one per
+// change, in the caller's order. The removal wording is the change's own,
+// falling back to «Label: удалено».
+func changeDetails(changes []AttributeChange) DetailLines {
+	if len(changes) == 0 {
+		return nil
+	}
+	details := make(DetailLines, 0, len(changes))
+	for _, c := range changes {
+		label := attributeLabel(c)
+		removed := c.Removed
+		if removed == "" {
+			removed = label + ": удалено"
+		}
+		details = append(details, detailChange(label, c.Old, c.New, removed))
+	}
+	return details
 }
 
 // detailChange renders one gray diff line: «Название: «X» → «Y»» for the
@@ -114,8 +157,8 @@ func detailChange(label string, old, newValue any, removed string) string {
 
 // detailValue formats a detail line's value: strings verbatim, numbers
 // without trailing zeros, booleans in Russian, nil as the empty string.
-// Суммы в детали не попадают никогда (ADR 0061 §5) — денежные значения
-// билдеры сюда не передают.
+// Денежные значения и даты приходят готовыми строками (FormatRubles,
+// FormatDateDotted) — вызывающий модуль форматирует их до билдера.
 func detailValue(v any) string {
 	switch val := v.(type) {
 	case nil:
@@ -134,6 +177,16 @@ func detailValue(v any) string {
 	default:
 		return fmt.Sprint(val)
 	}
+}
+
+// changeHeader builds the unified change row's header: the action prefix
+// plus the linked new-value snapshot; an empty value reads without the
+// dangling colon and drops the link.
+func changeHeader(prefix, value string, link *Link) Segments {
+	if value == "" {
+		return Segments{{Text: strings.TrimSuffix(prefix, ": ")}}
+	}
+	return Segments{{Text: prefix}, {Text: value, Link: link}}
 }
 
 func entityLink(kind Kind, id uuid.UUID) *Link {
@@ -160,106 +213,9 @@ func PropertyCreated(entityID uuid.UUID, name string) Entry {
 	}
 }
 
-// PropertyRenamed builds the rename row by the new template (решение #1317
-// §2): the header reads the action with the NEW name's link, the old → new
-// diff moved into the details.
-func PropertyRenamed(entityID uuid.UUID, oldName, newName string) Entry {
-	return Entry{
-		Kind:       KindProperty,
-		Action:     ActionPropertyRenamed,
-		BaseAction: BaseChanged,
-		Segments: Segments{
-			{Text: "Название объекта изменено: "},
-			{Text: newName, Link: entityLink(KindProperty, entityID)},
-		},
-		Details: DetailLines{detailChange("Название", oldName, newName, "Название удалено")},
-		Context: map[string]any{ctxKeyOldName: oldName, ctxKeyNewName: newName},
-	}
-}
-
-// PropertyAddressChanged builds the address row by the new template: the
-// header keeps the per-branch wording with the new value's link, the diff
-// lives in the details; the address is optional, so an addition and a
-// removal keep their own wordings.
-func PropertyAddressChanged(entityID uuid.UUID, oldAddress, newAddress string) Entry {
-	e := Entry{
-		Kind:       KindProperty,
-		Action:     ActionPropertyAddressChanged,
-		BaseAction: BaseChanged,
-		Context:    map[string]any{ctxKeyOldValue: oldAddress, ctxKeyNewValue: newAddress},
-	}
-	switch {
-	case oldAddress == "":
-		e.Segments = Segments{
-			{Text: "Добавлен адрес объекта: "},
-			{Text: newAddress, Link: entityLink(KindProperty, entityID)},
-		}
-		e.Details = DetailLines{detailChange("Адрес", nil, newAddress, "Адрес удалён")}
-	case newAddress == "":
-		e.Segments = Segments{{Text: "Удалён адрес объекта", Link: entityLink(KindProperty, entityID)}}
-		e.Details = DetailLines{detailChange("Адрес", oldAddress, nil, "Адрес удалён")}
-	default:
-		e.Segments = Segments{
-			{Text: "Адрес объекта изменён: "},
-			{Text: newAddress, Link: entityLink(KindProperty, entityID)},
-		}
-		e.Details = DetailLines{detailChange("Адрес", oldAddress, newAddress, "Адрес удалён")}
-	}
-	return e
-}
-
-// PropertyDescriptionChanged builds the description row: the values live in
-// the context only, the text stays a sentence.
-func PropertyDescriptionChanged(entityID uuid.UUID, oldDescription, newDescription string) Entry {
-	return Entry{
-		Kind:       KindProperty,
-		Action:     ActionPropertyDescriptionChanged,
-		BaseAction: BaseChanged,
-		Segments:   Segments{{Text: "Изменено описание объекта", Link: entityLink(KindProperty, entityID)}},
-		Context:    map[string]any{ctxKeyOldValue: oldDescription, ctxKeyNewValue: newDescription},
-	}
-}
-
-// PropertyUpdated builds the several-field-groups row: «Данные объекта
-// изменены: название, адрес».
-func PropertyUpdated(entityID uuid.UUID, fieldLabels []string) Entry {
-	segments := Segments{{Text: "Данные объекта изменены: ", Link: entityLink(KindProperty, entityID)}}
-	for i, label := range fieldLabels {
-		if i > 0 {
-			segments = append(segments, Segment{Text: ", "})
-		}
-		segments = append(segments, Segment{Text: label})
-	}
-	return Entry{
-		Kind:       KindProperty,
-		Action:     ActionPropertyUpdated,
-		BaseAction: BaseChanged,
-		Segments:   segments,
-		Context:    map[string]any{"fields": fieldLabels},
-	}
-}
-
-// PropertyPhotoAdded builds the photo-added row.
-func PropertyPhotoAdded(entityID uuid.UUID) Entry {
-	return Entry{
-		Kind:       KindProperty,
-		Action:     ActionPropertyPhotoAdded,
-		BaseAction: BaseAdded,
-		Segments:   Segments{{Text: "Добавлено фото объекта", Link: entityLink(KindProperty, entityID)}},
-		Context:    map[string]any{},
-	}
-}
-
-// PropertyPhotoDeleted builds the photo-deleted row.
-func PropertyPhotoDeleted(entityID uuid.UUID) Entry {
-	return Entry{
-		Kind:       KindProperty,
-		Action:     ActionPropertyPhotoDeleted,
-		BaseAction: BaseDeleted,
-		Segments:   Segments{{Text: "Удалено фото объекта", Link: entityLink(KindProperty, entityID)}},
-		Context:    map[string]any{},
-	}
-}
+// PropertyUpdated поглотил PropertyRenamed, PropertyAddressChanged,
+// PropertyDescriptionChanged и PropertyAttributesChanged — решение 12.10;
+// их идентификаторы живут в entry.go как словарь легаси-строк.
 
 // PropertyPinned builds the pin row (a re-pin of an already pinned object is
 // not an action and never reaches the journal).
@@ -339,14 +295,30 @@ func PropertyMaintenanceFinished(entityID uuid.UUID) Entry {
 // with years moved into the details. The header value segment carries the
 // rental link — the header no longer depends on the tenant's name.
 func RentalCreated(entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
-	return rentalRow(ActionRentalCreated, BaseAdded, "Добавлена аренда: ", entityID, tenantName, from, to)
+	return Entry{
+		Kind:       KindRental,
+		Action:     ActionRentalCreated,
+		BaseAction: BaseAdded,
+		Segments:   rentalHeader("Добавлена аренда: ", entityID, from, to),
+		Details:    rentalDetails(tenantName, from, to),
+		Context:    rentalContext(tenantName, from, to),
+	}
 }
 
-// RentalUpdated builds the rental-terms row, symmetric to RentalCreated:
-// «Условия аренды изменены: 11 месяцев» (the «продление» is a UI scenario of
-// the planned-end edit, ADR 0061 §4 → changed).
-func RentalUpdated(entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
-	return rentalRow(ActionRentalUpdated, BaseChanged, "Условия аренды изменены: ", entityID, tenantName, from, to)
+// RentalUpdated builds the rental-terms row by the unified change template
+// (решение 12.10): «Аренда изменена: [новый срок / дата начала]» with the
+// tenant and period diffs in the details — only the changed fields get a
+// line (the «продление» is a UI scenario of the planned-end edit, ADR
+// 0061 §4 → changed).
+func RentalUpdated(entityID uuid.UUID, oldTenant, newTenant string, oldFrom, oldTo, newFrom, newTo time.Time) Entry {
+	return Entry{
+		Kind:       KindRental,
+		Action:     ActionRentalUpdated,
+		BaseAction: BaseChanged,
+		Segments:   rentalHeader("Аренда изменена: ", entityID, newFrom, newTo),
+		Details:    rentalChangeDetails(oldTenant, newTenant, oldFrom, oldTo, newFrom, newTo),
+		Context:    rentalContext(newTenant, newFrom, newTo),
+	}
 }
 
 // RentalCompleted builds the completion row.
@@ -385,12 +357,11 @@ func RentalDeleted(entityID uuid.UUID, tenantName string) Entry {
 	}
 }
 
-func rentalRow(action Action, base BaseAction, prefix string, entityID uuid.UUID, tenantName string, from, to time.Time) Entry {
-	// Новый шаблон: заголовок = действие + срок («11 месяцев») или, для
-	// бессрочной, дата начала («1 ноября», без года); значение заголовка —
-	// единственный связанный сегмент (страница аренды). Имя арендатора и
-	// период с годами — серые строки-пояснения; структурный снимок периода
-	// остаётся в context (аудит #876).
+// rentalHeader builds the rental rows' header: the action prefix plus the
+// term («11 месяцев») or, for an open-ended rental, the start date
+// («1 ноября», without the year); the header value is the single linked
+// segment (the rental page) and never depends on the tenant's name.
+func rentalHeader(prefix string, entityID uuid.UUID, from, to time.Time) Segments {
 	var header string
 	switch {
 	case !to.IsZero():
@@ -404,19 +375,12 @@ func rentalRow(action Action, base BaseAction, prefix string, entityID uuid.UUID
 	} else {
 		segments[0].Text = strings.TrimSuffix(prefix, ": ")
 	}
-	return Entry{
-		Kind:       KindRental,
-		Action:     action,
-		BaseAction: base,
-		Segments:   segments,
-		Details:    rentalDetails(tenantName, from, to),
-		Context:    map[string]any{ctxKeyTenant: tenantName, "period_from": formatContextDate(from), "period_to": formatContextDate(to)},
-	}
+	return segments
 }
 
-// rentalDetails builds the rental rows' gray lines: the tenant line (only
-// with a name) and the period line with the years. Годы здесь есть — в
-// отличие от заголовка (D3).
+// rentalDetails builds the rental-created row's gray lines: the tenant line
+// (only with a name) and the period line with the years. Годы здесь есть —
+// в отличие от заголовка (D3).
 func rentalDetails(tenantName string, from, to time.Time) DetailLines {
 	var details DetailLines
 	if tenantName != "" {
@@ -426,6 +390,29 @@ func rentalDetails(tenantName string, from, to time.Time) DetailLines {
 		details = append(details, "Период: "+formatPeriodLine(from, to))
 	}
 	return details
+}
+
+// rentalChangeDetails builds the rental-updated row's gray lines: the diff
+// per changed field only — the tenant (when the card moved) and the period
+// (when either bound moved), the D3 wording inside the quotes.
+func rentalChangeDetails(oldTenant, newTenant string, oldFrom, oldTo, newFrom, newTo time.Time) DetailLines {
+	var details DetailLines
+	if oldTenant != newTenant {
+		details = append(details, detailChange("Арендатор", oldTenant, newTenant, "Арендатор удалён"))
+	}
+	if !oldFrom.Equal(newFrom) || !oldTo.Equal(newTo) {
+		details = append(details,
+			"Период: «"+formatPeriodLine(oldFrom, oldTo)+"» → «"+formatPeriodLine(newFrom, newTo)+"»")
+	}
+	return details
+}
+
+func rentalContext(tenantName string, from, to time.Time) map[string]any {
+	return map[string]any{
+		ctxKeyTenant:  tenantName,
+		"period_from": formatContextDate(from),
+		"period_to":   formatContextDate(to),
+	}
 }
 
 func formatContextDate(t time.Time) string {
@@ -442,21 +429,20 @@ func PaymentCreated(entityID uuid.UUID, title string) Entry {
 	return paymentRow(ActionPaymentCreated, BaseAdded, "Добавлен платёж: ", entityID, title)
 }
 
-// PaymentUpdated builds the rule-updated row by the new template: the header
-// keeps the NEW title's snapshot with the link — the row survives future
-// renames; the old → new diff moved into the details (решение #1317 §2,
-// противоречие №4: старое название дотягивается до точки вызова).
-func PaymentUpdated(entityID uuid.UUID, oldTitle, title string) Entry {
+// PaymentUpdated builds the rule-updated row by the unified change template
+// (решение 12.10): «Платёж изменён: [новое название]» — the new title's
+// snapshot survives future renames, the diffs (название, сумма, расписание,
+// дата окончания, категория — ADR 0065's field dictionary) live in the
+// details, the values display-ready from the calling module (решение #1317
+// §2, противоречие №4: старое название дотягивается до точки вызова).
+func PaymentUpdated(entityID uuid.UUID, title string, changes []AttributeChange) Entry {
 	return Entry{
 		Kind:       KindPayment,
 		Action:     ActionPaymentUpdated,
 		BaseAction: BaseChanged,
-		Segments: Segments{
-			{Text: "Платёж изменён: "},
-			{Text: title, Link: entityLink(KindPayment, entityID)},
-		},
-		Details: DetailLines{detailChange("Название", oldTitle, title, "Название удалено")},
-		Context: map[string]any{ctxKeyTitle: title, ctxKeyOldTitle: oldTitle},
+		Segments:   changeHeader("Платёж изменён: ", title, entityLink(KindPayment, entityID)),
+		Details:    changeDetails(changes),
+		Context:    map[string]any{ctxKeyTitle: title, ctxKeyChanges: changes},
 	}
 }
 
@@ -540,8 +526,7 @@ func titledSegments(prefix, title string, link *Link) Segments {
 
 // Контакты.
 
-// ContactCreated builds the contact row: the ФИО snapshot, never the phone
-// (ADR 0061 §5).
+// ContactCreated builds the contact row: the ФИО snapshot.
 func ContactCreated(entityID uuid.UUID, fullName string) Entry {
 	return Entry{
 		Kind:       KindContact,
@@ -555,19 +540,19 @@ func ContactCreated(entityID uuid.UUID, fullName string) Entry {
 	}
 }
 
-// ContactUpdated builds the contact row with the old → new ФИО.
-func ContactUpdated(entityID uuid.UUID, oldFullName, newFullName string) Entry {
+// ContactUpdated builds the contact row by the unified change template
+// (решение 12.10): «Контакт изменён: [новое ФИО]» with the per-field diffs
+// in the details — ФИО, роль, телефон, почта, мессенджер, заметка, полными
+// реальными значениями (аменда §5: «пояснения существуют, чтобы показать,
+// что изменилось»).
+func ContactUpdated(entityID uuid.UUID, fullName string, changes []AttributeChange) Entry {
 	return Entry{
 		Kind:       KindContact,
 		Action:     ActionContactUpdated,
 		BaseAction: BaseChanged,
-		Segments: Segments{
-			{Text: "Контакт изменён: "},
-			{Text: oldFullName},
-			{Text: arrow},
-			{Text: newFullName, Link: entityLink(KindContact, entityID)},
-		},
-		Context: map[string]any{ctxKeyOldName: oldFullName, ctxKeyNewName: newFullName},
+		Segments:   changeHeader("Контакт изменён: ", fullName, entityLink(KindContact, entityID)),
+		Details:    changeDetails(changes),
+		Context:    map[string]any{ctxKeyName: fullName, ctxKeyChanges: changes},
 	}
 }
 
@@ -582,8 +567,7 @@ func ContactDeleted(entityID uuid.UUID, fullName string) Entry {
 	}
 }
 
-// ContactPhotoAdded builds the card photo row (ADR 0065): the ФИО snapshot,
-// never the phone (ADR 0061 §5).
+// ContactPhotoAdded builds the card photo row (ADR 0065): the ФИО snapshot.
 func ContactPhotoAdded(entityID uuid.UUID, fullName string) Entry {
 	return Entry{
 		Kind:       KindContact,
@@ -658,9 +642,19 @@ func TaskRuleCreated(entityID uuid.UUID, title string) Entry {
 	return taskRuleRow(ActionTaskRuleCreated, BaseAdded, "Добавлена задача: ", entityID, title)
 }
 
-// TaskRuleUpdated builds the rule-updated row.
-func TaskRuleUpdated(entityID uuid.UUID, title string) Entry {
-	return taskRuleRow(ActionTaskRuleUpdated, BaseChanged, "Задача изменена: ", entityID, title)
+// TaskRuleUpdated builds the rule-updated row by the unified change template
+// (решение 12.10): «Задача изменена: [новое название]» with the per-field
+// diffs in the details — название, дата, время, повтор, комментарий (макет
+// 3258-77019: «Дата: «19.02.2026» → «20.03.2027»»).
+func TaskRuleUpdated(entityID uuid.UUID, title string, changes []AttributeChange) Entry {
+	return Entry{
+		Kind:       KindTask,
+		Action:     ActionTaskRuleUpdated,
+		BaseAction: BaseChanged,
+		Segments:   changeHeader("Задача изменена: ", title, entityLink(KindTask, entityID)),
+		Details:    changeDetails(changes),
+		Context:    map[string]any{ctxKeyTitle: title, ctxKeyChanges: changes},
+	}
 }
 
 // TaskRuleDeleted builds the rule-deletion row — no link (rule deletion is
@@ -729,14 +723,14 @@ func TaskCompletedCleared(count int) Entry {
 // Участники.
 
 // MemberInvited builds the pending-invitation row — the invitee is known by
-// email only, so the snapshot is the email (ADR 0061 §5).
+// email only, so the snapshot is the email.
 func MemberInvited(email string) Entry {
 	return Entry{
 		Kind:       KindMember,
 		Action:     ActionMemberInvited,
 		BaseAction: BaseAdded,
 		Segments:   Segments{{Text: "Отправлено приглашение: "}, {Text: email}},
-		Context:    map[string]any{"email": email},
+		Context:    map[string]any{ctxKeyEmail: email},
 	}
 }
 
@@ -757,19 +751,18 @@ func MemberAdded(userID uuid.UUID, label string) Entry {
 	}
 }
 
-// MemberRoleChanged builds the role-change row: «Роль участника изменена:
-// Иван Иванов: Полный доступ → Просмотр».
+// MemberRoleChanged builds the role-change row by the unified change
+// template (решение 12.10): «Участник изменён: [имя]» + «Роль: «Полный
+// доступ» → «Просмотр»» in the details (было «Роль участника изменена» с
+// диффом в заголовке).
 func MemberRoleChanged(userID uuid.UUID, name string, oldRole, newRole ActorRole) Entry {
 	return Entry{
 		Kind:       KindMember,
 		Action:     ActionMemberRoleChanged,
 		BaseAction: BaseChanged,
-		Segments: Segments{
-			{Text: "Роль участника изменена: "},
-			{Text: name, Link: entityLink(KindMember, userID)},
-			{Text: ": " + RoleLabel(oldRole) + arrow + RoleLabel(newRole)},
-		},
-		Context: map[string]any{"name": name, "old_role": string(oldRole), "new_role": string(newRole)},
+		Segments:   changeHeader("Участник изменён: ", name, entityLink(KindMember, userID)),
+		Details:    DetailLines{"Роль: «" + RoleLabel(oldRole) + "» → «" + RoleLabel(newRole) + "»"},
+		Context:    map[string]any{ctxKeyName: name, "old_role": string(oldRole), "new_role": string(newRole)},
 	}
 }
 
@@ -804,7 +797,7 @@ func MemberInvitationCancelled(email string) Entry {
 		Action:     ActionMemberInvitationCancelled,
 		BaseAction: BaseDeleted,
 		Segments:   Segments{{Text: "Приглашение отменено: "}, {Text: email}},
-		Context:    map[string]any{"email": email},
+		Context:    map[string]any{ctxKeyEmail: email},
 	}
 }
 

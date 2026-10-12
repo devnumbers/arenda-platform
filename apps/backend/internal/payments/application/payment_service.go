@@ -335,7 +335,10 @@ func (s *PaymentService) UpdatePayment(
 			if err := stores.payments.DeleteFuturePlanned(ctx, rule.ID, today); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
-			updated := historydomain.PaymentUpdated(rule.ID, before.Title, rule.Title)
+			// Единая строка изменения (решение владельца 12.10, карта #1324):
+			// «Платёж изменён: [новое название]» + диффы всех сдвинувшихся
+			// полей в пояснениях, суммы включительно (аменда ADR 0061 §5).
+			updated := historydomain.PaymentUpdated(rule.ID, rule.Title, paymentHistoryChanges(before, rule))
 			updated.Context[historydomain.CtxKeyAmountKopecks] = rule.AmountKopecks
 			// A patch that moves nothing (the client re-sent the same values)
 			// is not a terms edit: no empty-diff «updated» row (ADR 0065 §4 —

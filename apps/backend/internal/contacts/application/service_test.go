@@ -241,11 +241,11 @@ func createCmd(propertyID *uuid.UUID) CreateContactCommand {
 	return CreateContactCommand{
 		PropertyID:        propertyID,
 		FirstName:         "  " + contactFirstName + "  ",
-		LastName:          "Иванов",
+		LastName:          lastNameIvanov,
 		Role:              plumberRole,
 		Phone:             "89161234567",
 		Email:             "plumber@example.ru",
-		MessengerName:     "Telegram",
+		MessengerName:     messengerTelegram,
 		MessengerUsername: "@plumber",
 		Note:              "Код домофона 1234",
 	}

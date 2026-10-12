@@ -12,6 +12,8 @@ package domain
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -35,6 +37,59 @@ func pluralRU(n int, one, few, many string) string {
 	default:
 		return many
 	}
+}
+
+// PluralRU is the exported pluralRU for the calling modules composing their
+// diff values («за 1 день», «за 3 дня») — the values arrive display-ready
+// (AttributeChange).
+func PluralRU(n int, one, few, many string) string {
+	return pluralRU(n, one, few, many)
+}
+
+// FormatRubles renders kopecks as the RU display amount the frontend's
+// formatMoneyKopecks composes («5 000 ₽», «12 345,67 ₽»): NBSP thousands,
+// comma decimals only when the kopeck part is non-zero. The money canon of
+// the unified change rows' details (ADR 0061 §5, аменда 12.10): the calling
+// module formats the diff values through it before the builder — the details
+// are ready lines.
+func FormatRubles(kopecks int64) string {
+	rubles := kopecks / 100
+	frac := kopecks % 100
+	if frac < 0 {
+		frac = -frac
+	}
+	grouped := groupThousands(strconv.FormatInt(rubles, 10))
+	if frac == 0 {
+		return grouped + " ₽"
+	}
+	return fmt.Sprintf("%s,%02d ₽", grouped, frac)
+}
+
+// groupThousands inserts the NBSP thousands separators («1234567» →
+// «1 234 567») — the ru-RU grouping of the frontend formatter.
+func groupThousands(digits string) string {
+	n := len(digits)
+	if n <= 3 {
+		return digits
+	}
+	var b strings.Builder
+	head := n % 3
+	if head > 0 {
+		b.WriteString(digits[:head])
+	}
+	for ; head < n; head += 3 {
+		if b.Len() > 0 {
+			b.WriteRune('\u00A0')
+		}
+		b.WriteString(digits[head : head+3])
+	}
+	return b.String()
+}
+
+// FormatDateDotted renders a calendar date as «19.02.2026» — the dotted
+// point-date format of the details (макет 3258-77019).
+func FormatDateDotted(t time.Time) string {
+	return t.Format("02.01.2006")
 }
 
 // formatDayMonthGenitive renders a calendar date without the year — the

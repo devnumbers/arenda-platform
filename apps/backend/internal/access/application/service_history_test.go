@@ -89,8 +89,14 @@ func TestHistory_MembershipLifecycleRows(t *testing.T) {
 	if changed.Action != historydomain.ActionMemberRoleChanged {
 		t.Fatalf("action = %s, want member.role_changed", changed.Action)
 	}
-	if text := changed.Segments.PlainText(); text != "Роль участника изменена: Пётр Сидоров: Полный доступ → Просмотр" {
-		t.Errorf("row text = %q, want the old → new role snapshot", text)
+	// Единая строка изменения (решение 12.10): «Участник изменён: [имя]»,
+	// дифф роли — в пояснениях.
+	if text := changed.Segments.PlainText(); text != "Участник изменён: Пётр Сидоров" {
+		t.Errorf("row text = %q, want the name snapshot", text)
+	}
+	wantRole := historydomain.DetailLines{"Роль: «Полный доступ» → «Просмотр»"}
+	if len(changed.Details) != 1 || changed.Details[0] != wantRole[0] {
+		t.Errorf("details = %q, want %q", changed.Details, wantRole)
 	}
 
 	if err := h.svc.RevokeMember(ctx, h.owner, h.property, h.repo.rows[0].ID); err != nil {
@@ -243,8 +249,12 @@ func TestHistory_InvitationRoleChangeRow(t *testing.T) {
 	if changed.Action != historydomain.ActionMemberRoleChanged {
 		t.Fatalf("action = %s, want member.role_changed", changed.Action)
 	}
-	if text := changed.Segments.PlainText(); text != "Роль участника изменена: "+testNewUserEmail+": Просмотр → Полный доступ" {
-		t.Errorf("row text = %q, want the old → new roles over the email snapshot", text)
+	if text := changed.Segments.PlainText(); text != "Участник изменён: "+testNewUserEmail {
+		t.Errorf("row text = %q, want the email snapshot", text)
+	}
+	wantRole := historydomain.DetailLines{"Роль: «Просмотр» → «Полный доступ»"}
+	if len(changed.Details) != 1 || changed.Details[0] != wantRole[0] {
+		t.Errorf("details = %q, want %q", changed.Details, wantRole)
 	}
 	if changed.ActorRole != historydomain.ActorRoleOwner {
 		t.Errorf("actor role = %s, want owner", changed.ActorRole)

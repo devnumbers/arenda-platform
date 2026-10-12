@@ -84,7 +84,9 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 	}
 	want := []struct{ action, text string }{
 		{string(historydomain.ActionPropertyCreated), "Добавлен объект: Новая квартира"},
-		{string(historydomain.ActionPropertyRenamed), "Название объекта изменено: Переименованная"},
+		// Единая строка изменения (решение 12.10): правка названия —
+		// property.updated с диффом в пояснениях.
+		{string(historydomain.ActionPropertyUpdated), "Объект изменён: Переименованная"},
 		{string(historydomain.ActionPropertyPinned), "Объект закреплён"},
 		{string(historydomain.ActionPropertyArchived), "Объект отправлен в архив"},
 	}
@@ -119,11 +121,16 @@ func TestHistory_RenameCarriesOldAndNew(t *testing.T) {
 	}
 
 	e := history.Entries[0]
-	if e.Action != historydomain.ActionPropertyRenamed {
-		t.Fatalf("action = %s, want property.renamed", e.Action)
+	if e.Action != historydomain.ActionPropertyUpdated {
+		t.Fatalf("action = %s, want property.updated", e.Action)
 	}
-	if e.Context["old_name"] != fixtureOldName || e.Context["new_name"] != renamedName {
-		t.Errorf("context = %v, want the old/new names", e.Context)
+	// Дифф живёт в пояснениях, снимок нового имени — в заголовке и context.
+	wantDetails := historydomain.DetailLines{"Название: «" + fixtureOldName + "» → «" + renamedName + "»"}
+	if len(e.Details) != 1 || e.Details[0] != wantDetails[0] {
+		t.Errorf("details = %q, want %q", e.Details, wantDetails)
+	}
+	if e.Context["name"] != renamedName {
+		t.Errorf("context = %v, want the new-name snapshot", e.Context)
 	}
 }
 
@@ -218,8 +225,8 @@ func TestHistory_MixedStatusPatchWritesTwoRows(t *testing.T) {
 	if len(history.Entries) != 2 {
 		t.Fatalf("journal entries = %d, want 2 (rename + maintenance_started)", len(history.Entries))
 	}
-	if history.Entries[0].Action != historydomain.ActionPropertyRenamed {
-		t.Errorf("first row = %s, want property.renamed", history.Entries[0].Action)
+	if history.Entries[0].Action != historydomain.ActionPropertyUpdated {
+		t.Errorf("first row = %s, want property.updated", history.Entries[0].Action)
 	}
 	if history.Entries[1].Action != historydomain.ActionPropertyMaintenanceStarted {
 		t.Errorf("second row = %s, want maintenance_started", history.Entries[1].Action)

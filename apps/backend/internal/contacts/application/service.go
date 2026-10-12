@@ -430,8 +430,11 @@ func recordContactJournal(
 		return source != nil || stored.PropertyID != nil, nil
 	}
 	if stored.PropertyID != nil && contactChanged(before, stored) {
+		// Единая строка изменения (решение владельца 12.10, карта #1324):
+		// «Контакт изменён: [новое ФИО]» + диффы всех сдвинувшихся полей
+		// полными значениями в пояснениях.
 		if err := record(*stored.PropertyID,
-			historydomain.ContactUpdated(stored.ID, before.FullName(), fullName)); err != nil {
+			historydomain.ContactUpdated(stored.ID, fullName, contactHistoryChanges(before, stored))); err != nil {
 			return false, err
 		}
 		return true, nil

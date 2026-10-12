@@ -38,6 +38,26 @@ func IsValidRepeat(r RepeatKind) bool {
 	}
 }
 
+// RepeatLabel is the RU display label of a repeat kind — the diff value of
+// the action journal's «Повтор» line (карта #1324: значения пояснений
+// форматирует вызывающий модуль; словесность утверждает walkthrough).
+func RepeatLabel(r RepeatKind) string {
+	switch r {
+	case RepeatOnce:
+		return "Однократно"
+	case RepeatDaily:
+		return "Ежедневно"
+	case RepeatWeekly:
+		return "Еженедельно"
+	case RepeatMonthly:
+		return "Ежемесячно"
+	case RepeatYearly:
+		return "Ежегодно"
+	default:
+		return string(r)
+	}
+}
+
 // TaskRule is the rule: a named setting that produces tasks — title
 // (required), optional comment, an optional due date and due time (the time
 // requires the date), and a repeat. A once rule produces a single task; an

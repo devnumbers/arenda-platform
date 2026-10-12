@@ -61,40 +61,41 @@ CREATE INDEX ... ON action_journal USING gin (search_tsv);
 - **Only manual user actions are recorded in MVP.** System writes are NOT recorded — including the slot coordinator's suspend/reactivate and invitation activation on registration (owner decision 2026-09-22, against the agent's recommendation; accepted cost: the member feed does not explain limit-driven disappearances). Auto-ticks (auto-payments, auto-tasks) stay excluded per the map charter.
 - **Noise excluded**: payment favorite flag, favorite-order save, invitation resend. Photo add/delete and property pin are recorded. A no-op action writes no row: an idempotent re-pin of an already pinned object, and a completed-journal clear that removed nothing.
 - **The active↔maintenance flip is recorded** (amended 2026-10-09, карта #1324, протокол D2 — the original settled MVP behavior was silence): the manual maintenance-status change (PATCH /properties/{id}, `cmd.Status`) writes one row inside the same transaction — `property.maintenance_started` («Изменение») entering maintenance, `property.maintenance_finished` («Выполнение») leaving it. The write guard is the **factual** before≠after inequality: the transition validator admits from==to (the idempotent PUT), and a no-op action still writes no row. A mixed PATCH (fields + status) writes two rows — the per-leg precedent of the rental completion pair; the SSE feed publication follows the journal (`journaled`), a status-only edit dirties the feed exactly when it wrote a row (ADR 0062). A generic `property.status_changed` id was considered and declined — the two dedicated maintenance ids carry the semantics, and the archive keeps its own ids.
-- **One row per user action**: a PATCH touching several field groups at once gets one `property.updated` row naming the groups; single-group edits get their precise ids. Amounts travel in `context` on the money rows (created/updated rules and operations), in kopecks.
+- **One row per user action (amended 2026-10-12, карта #1324 — решение владельца: единые change-строки)**: every edit of one entity is one generic change row «<Сущность> изменён(а): [значение-ссылка]» — field-level headers («Название объекта изменено», «Адрес объекта изменён») are gone; what exactly changed travels in the `details` (§6), one gray line per changed field. For the property this folds the former granular ids — `renamed` / `address_changed` / `description_changed` / `attributes_changed` — into `property.updated`, and folds `photo_added` / `photo_deleted` into the same row («Фото: добавлено / удалено»); the granular ids stop being written (legacy rows keep theirs, §6). Amounts also travel in `context` on the money rows (created/updated rules and operations), in kopecks.
 - `property.deleted` is never recorded: rows cascade with the property in the same transaction, so the row would be dead-born.
 - Identity/profile/session changes, notifications, push subscriptions, popups are not property data — out of the journal.
 
 ### 4. Dictionary
 
-Seven kinds (the mockup filter groups), stable `action` ids, base-action mapping, and the row-snapshot composition (exact Russian copy is approved at screen walkthroughs; all templates are passive voice — «Название объекта изменено: …», «Платёж оплачен» is NOT used for operations, the canon is «Операция оплачена», owner decision 2026-09-22):
+Seven kinds (the mockup filter groups), stable `action` ids, base-action mapping, and the row-snapshot composition (exact Russian copy is approved at screen walkthroughs; all templates are passive voice — «Объект изменён: …», «Платёж оплачен» is NOT used for operations, the canon is «Операция оплачена», owner decision 2026-09-22). **Amended 2026-10-12 (карта #1324): every change row reads the generic «<Сущность> изменён(а): [значение-ссылка]» header with per-field diffs in `details`; the field-level headers and the granular property ids are retired from writes** (legacy rows keep theirs and render as recorded, §6):
 
 | Kind | Action | Base | Row snapshot |
 |---|---|---|---|
 | Объект | property.created | added | название |
-| | property.renamed / address_changed | changed | новое значение в заголовке; дифф old → new — в details (новый шаблон) |
-| | property.description_changed / attributes_changed | changed | — / по строке пояснения на характеристику (details) |
+| | property.updated (any edit: название/адрес/описание/тип/характеристики/фото; absorbs renamed / address_changed / description_changed / attributes_changed / photo_added / photo_deleted) | changed | новое имя в заголовке; по строке details на каждое изменившееся поле, фото — «Фото: добавлено / удалено» |
 | | property.maintenance_started / maintenance_finished (amended #1324) | changed / completed | — |
-| | property.updated (several field groups in one edit) | changed | the changed groups' labels |
-| | property.photo_added / photo_deleted | added / deleted | — |
 | | property.pinned / unpinned | changed | — |
 | | property.archived / unarchived | changed | — |
-| Аренда | rental.created / updated (incl. extension) | added / changed | срок («11 месяцев») или дата начала («1 ноября») в заголовке; арендатор и период с годами — в details (D3) |
+| Аренда | rental.created | added | срок («11 месяцев») или дата начала («1 ноября») в заголовке; арендатор и период с годами — в details (D3) |
+| | rental.updated (incl. extension) | changed | новый срок/дата в заголовке; диффы «Арендатор» и «Период: «с … по …» → «с … по …»» — в details |
 | | rental.completed | completed | имя арендатора |
 | | rental.deleted | deleted | имя арендатора |
-| Платежи | payment.created / updated / deleted | added / changed / deleted | название (updated: новое в заголовке, дифф — в details) |
+| Платежи | payment.created / deleted | added / deleted | название |
+| | payment.updated | changed | новое название в заголовке; диффы Название/Сумма/День списания/Дата окончания/Категория — в details |
 | | payment.paused / resumed | changed | название |
 | Операции | operation.created | added | название (дата — в context) |
 | | operation.paid | completed | название (срок — в context) |
 | | operation.deleted («Отменённая операция») | deleted | название (дата — в context) |
-| Контакты | contact.created / updated / deleted | added / changed / deleted | ФИО (updated — old → new) |
+| Контакты | contact.created / deleted | added / deleted | ФИО |
+| | contact.updated | changed | новое ФИО в заголовке; диффы всех полей полными значениями (ФИО/Телефон/Email/Мессенджер/Роль/Заметка) — в details |
 | | contact.moved (cross-property move — a pair of rows, one per end) / contact.bound / contact.unbound (bind / unbind — the single existing end) | changed | ФИО |
-| Задачи | task_rule.created / updated / deleted | added / changed / deleted | название |
+| Задачи | task_rule.created / deleted | added / deleted | название |
+| | task_rule.updated | changed | новое название в заголовке; диффы Название/Дата — в details |
 | | task.completed | completed | название (срок — в context) |
 | | task.uncompleted | changed | название |
 | | task.completed_cleared (bulk) | deleted | N |
 | Участники | member.invited / member.added | added | имя или email |
-| | member.role_changed | changed | имя, роль old → new |
+| | member.role_changed | changed | имя в заголовке; «Роль: «…» → «…»» — в details |
 | | member.removed / invitation_cancelled / left / participant_removed (bulk) | deleted | имя или email |
 
 Mapping rulings: archive/unarchive, pause/resume, task uncomplete, rental extension → **changed**; operation deletion (the «Отменённая» tombstone) → **deleted**; the contact rebind family (move/bind/unbind, ticket #856) → **changed**. The rebind anchors on every object the card is bound to at action time, so §3's «an unbound card writes no rows» stays about cards without any binding: a cross-property move writes the **pair of rows** — one per end (the source's «Контакт перенесён на другой объект: » leg first, then the destination's «Контакт перенесён с другого объекта: ») — mirroring the §3 per-leg pattern; a bind or an unbind owns a single end and writes its row there. A mixed unbind + details edit (the ФИО changed in the same PATCH) folds into the one source row — one manual action, one row per object — the ФИО traveling as the action-time snapshot, not as a name delta. Link targets (ticket #713): links point at the entity's existing page, so the completed/uncompleted task occurrence rows link the **producing rule** (the only task page is the rule's edit screen; a hard-deleted rule — `RuleID` nil — leaves the row linkless, the deleted-entity rule).
@@ -102,14 +103,15 @@ Mapping rulings: archive/unarchive, pause/resume, task uncomplete, rental extens
 ### 5. Privacy and money
 
 - Recorded: entity label snapshots (names, titles, ФИО), participant names and **emails** (member emails are visible to all members since the 2026-09-20 decision, and research #705 designed email search in), attribute values, roles, periods. Amended #1324: the details' catalog labels (`AttributeChange.Label`, the RU field label the properties service resolves) travel in `context` alongside the raw values — metadata of the detail lines, not a second copy of the values.
-- Never recorded: contact phone numbers; nothing secret per the ADR 0020 PII discipline (tokens, raw payloads).
-- Amounts: never in segments and therefore never searchable; stored in `context` jsonb as kopecks integers for future use. Display formatting stays frontend (`formatMoneyKopecks`).
+- **Amended 2026-10-12, карта #1324 (решение владельца: «пояснения существуют, чтобы показать, что изменилось»)**: the `details` lines carry the **real values of every changed field** — contact PII included (телефон, email, мессенджер) and money («Сумма: «5 000 ₽» → «6 000 ₽»»). The former blanket bans («never a phone», «amounts never in segments») now hold **for the header only**: the header stays «действие + значение-ссылка» with no amounts and no PII beyond the snapshot it already carried. The exposure surface does not grow: the feed is visible to the property's participants, who can already open the contact cards and payment rules the diffs quote; the journal adds no audience, only history. Searchable folds the details in (§6) — «что видишь, то и ищешь» holds: a phone or an amount on screen is findable, by design.
+- Still never recorded: nothing secret per the ADR 0020 PII discipline (tokens, raw payloads).
+- Amounts: in the `details` as formatted rubles («5 000 ₽», the history domain's own formatter — display formatting left the frontend-only rule when the diffs moved server-side) and in `context` jsonb as kopecks integers for future use. Headers carry no amounts.
 
 ### 6. Row text = server-built segments
 
 The server is the **single source of row text**: at write time the Recorder builds `segments` — an ordered array of `{text}` runs where a run may carry `link: {kind, id}` pointing at the target entity (the blue spans in the mockups). The frontend renders segments verbatim and wraps linked runs; at mapping time it strips the bare date tails (« (срок DD.MM.YYYY)» of operations and tasks, the rental period/date tails) the backend stopped writing in audit #876 — the strip cleans rows recorded before that (`entities/history/model/date-tails.ts`, `mappers.ts`). `searchable` is their plain-text concatenation (plus actor name/email). Frontend-owned templates were rejected: they would diverge from the searchable text («ищется не то, что показано») and duplicate the copy layer.
 
-**New template (amended 2026-10-09, карта #1324, протокол D1–D3)**: the first-wave actions read «действие: [сущность]» in the header — the link rides the header value — and the diffs moved into `details` (migration 000156, jsonb, NULL at legacy rows): ready gray lines built by the same catalog builders at write time (`[]string`, rendered verbatim, no links, no amounts — §5). The reading path carries no formatting catalog: what the builder assembled is what renders. Searchable folds the details in: **segments plain text + each detail line + actor name + actor email**; legacy rows keep the old formula byte-for-byte and are **not rebuilt** — «что видишь, то и ищешь» holds for both epochs (a legacy row renders the header alone, so its honest searchable is the header + actor; rebuilding would make old rows findable by text that is not on screen). The exact Russian copy of the extended catalog is approved at screen walkthroughs.
+**New template (amended 2026-10-09, карта #1324, протокол D1–D3; change rows unified 2026-10-12)**: the rows read «действие: [сущность]» in the header — the link rides the header value — and the diffs moved into `details` (migration 000156, jsonb, NULL at legacy rows): ready gray lines built by the same catalog builders at write time (`[]string`, rendered verbatim, no links; amounts and PII allowed per the amended §5). The reading path carries no formatting catalog: what the builder assembled is what renders. Searchable folds the details in: **segments plain text + each detail line + actor name + actor email**; legacy rows keep the old formula byte-for-byte and are **not rebuilt** — «что видишь, то и ищешь» holds for both epochs (a legacy row renders the header alone, so its honest searchable is the header + actor; rebuilding would make old rows findable by text that is not on screen). The exact Russian copy of the extended catalog is approved at screen walkthroughs.
 
 The actor is never inside the row text: it is a payload field, grouped as a header by the frontend (date → object → actor; per-scope screens pin one group level).
 
