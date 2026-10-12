@@ -505,6 +505,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/{propertyId}/payments/{paymentId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Завершение платежа (тикет #1340): явная мутация ставит хранимый признак завершённости (completedAt) — терминальное состояние. Гейт доступности — вычисляемая завершённость при закончившемся расписании: все операции оплачены, дата окончания наступила, открытой паузы нет. Завершённое правило не порождает операций и скрыто из лент, списков и подсчётов; страница жива прямым чтением (read-only: pause/resume/patch отвечают 409), удаление — по общему праву редактирования, оплаченные операции остаются в «Истории платежа». */
+        post: operations["completePayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/properties/{propertyId}/payments/{paymentId}/operations": {
         parameters: {
             query?: never;
@@ -3111,6 +3128,11 @@ export interface components {
             /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
             isCompleted: boolean;
             /**
+             * Format: date-time
+             * @description Хранимый признак завершённости (тикет #1340): ставится только явной мутацией complete, никогда не выводится заново. NULL — правило живо; непустое значение — терминальное состояние: правило не порождает операций, скрыто из лент и подсчётов, read-only (pause/resume/patch — 409), удаление по общему праву редактирования. Вычисляемый isCompleted остаётся флагом кнопки «Завершить» ДО завершения и не меняется этой мутацией.
+             */
+            completedAt?: string | null;
+            /**
              * Format: date
              * @description «Следующая дата оплаты» (ticket #991, CONTEXT.md): the earliest stored planned operation on or after the owner's today (ADR 0048), else the rule's projection. Null when the schedule has no next occurrence — an open pause or a settled rule. The object payments list resolves it on every row; the single-rule reads do not compute it and always carry null.
              */
@@ -3172,7 +3194,7 @@ export interface components {
          * @description Род действия строки журнала (ADR 0065 §4).
          * @enum {string}
          */
-        PaymentChangeAction: "updated" | "paused" | "resumed";
+        PaymentChangeAction: "updated" | "paused" | "resumed" | "completed";
         /**
          * @description Один уехавший поле дифа: старое→новое значение. Значения типизированы
          *     по словарю поля (ADR 0065 §2) — никогда строки-с-форматированием:
@@ -5631,6 +5653,33 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Payment resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    completePayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment completed */
             200: {
                 headers: {
                     [name: string]: unknown;

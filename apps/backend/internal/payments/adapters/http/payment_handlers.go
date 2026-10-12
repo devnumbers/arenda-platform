@@ -35,6 +35,7 @@ type PaymentManager interface {
 	DeletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
 	PausePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	ResumePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	CompletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	SetPaymentFavorite(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 	CompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 	PaymentFlags(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed, rentalCompleted map[uuid.UUID]bool, err error)
@@ -102,6 +103,31 @@ var staticPaymentProblems = []httpsupport.ErrorProblem{
 		Err: application.ErrRentManagedPayment, Status: http.StatusConflict,
 		Title:  httpsupport.ProblemTitleConflict,
 		Detail: "Платёж управляется арендой — поставить на паузу, изменить или удалить его можно только в аренде",
+	},
+	{
+		// The completion gate's own message (тикет #1340): the sentinel is
+		// not wrapped into any other outcome, the wire names what the
+		// «Завершить» action waits for.
+		Err:    application.ErrPaymentNotCompletable,
+		Status: http.StatusConflict,
+		Title:  httpsupport.ProblemTitleConflict,
+		Detail: "Завершить можно только платёж, у которого все операции оплачены, а дата окончания уже наступила",
+	},
+	{
+		// The terminal state's own words (тикет #1340): a repeated complete
+		// is the same 409, the stored stamp never flips again.
+		Err:    application.ErrAlreadyCompleted,
+		Status: http.StatusConflict,
+		Title:  httpsupport.ProblemTitleConflict,
+		Detail: "Платёж уже завершён",
+	},
+	{
+		// The completed rule is read-only (тикет #1340): the mutations name
+		// the terminal state; the deletion and the reads stay open.
+		Err:    application.ErrPaymentCompleted,
+		Status: http.StatusConflict,
+		Title:  httpsupport.ProblemTitleConflict,
+		Detail: "Платёж завершён — поставить на паузу, возобновить или изменить его нельзя",
 	},
 }
 
@@ -300,6 +326,24 @@ func (h *PaymentHandlers) ResumePayment(w http.ResponseWriter, r *http.Request, 
 	}
 
 	payment, err := h.svc.ResumePayment(r.Context(), actor, propertyID, paymentID)
+	if err != nil {
+		h.handlePaymentError(w, r, err)
+		return
+	}
+
+	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
+}
+
+// CompletePayment implements POST /properties/{propertyId}/payments/{paymentId}/complete
+// (тикет #1340): the terminal state flip; the updated rule travels back with
+// its stored completion stamp.
+func (h *PaymentHandlers) CompletePayment(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	payment, err := h.svc.CompletePayment(r.Context(), actor, propertyID, paymentID)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
 		return
@@ -742,6 +786,7 @@ func paymentResponse(p domain.Payment, isCompleted, isRentalManaged, isRentalCom
 		ReminderOffsetDays: reminderOffsetResponse(p.ReminderOffsetDays),
 		IsFavorite:         p.IsFavorite,
 		IsCompleted:        isCompleted,
+		CompletedAt:        p.CompletedAt,
 		IsRentalManaged:    isRentalManaged,
 		IsRentalCompleted:  isRentalCompleted,
 		Pauses:             pauses,

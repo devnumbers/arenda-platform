@@ -41,6 +41,7 @@ type paymentRowFields struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	TitleIsManual    bool
+	CompletedAt      pgtype.Timestamptz
 }
 
 // paymentFieldsFromTickRow converts a tick listing row; the tick's rows carry
@@ -70,6 +71,7 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 		TitleIsManual:    row.TitleIsManual,
+		CompletedAt:      row.CompletedAt,
 	}
 }
 
@@ -87,6 +89,7 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 		TitleIsManual:    row.TitleIsManual,
+		CompletedAt:      row.CompletedAt,
 	}
 }
 
@@ -124,6 +127,10 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 		// The manual-title marker rides the CRUD reads; the tick's rows do
 		// not select it — the tick never reads (nor writes) it.
 		TitleIsManual: row.TitleIsManual,
+		// The stored completion stamp rides the CRUD reads too (тикет
+		// #1340); the tick's rows do not select it — completed rules are
+		// out of the tick's listing entirely.
+		CompletedAt: pgconv.TimestamptzToPtrTime(row.CompletedAt),
 	}, nil
 }
 

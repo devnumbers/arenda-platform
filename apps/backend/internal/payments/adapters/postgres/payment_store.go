@@ -149,6 +149,25 @@ func (s *PaymentStore) Update(ctx context.Context, p domain.Payment) error {
 	return nil
 }
 
+// MarkCompleted sets the stored completion stamp (тикет #1340) — the only
+// write that ever touches the column. Rows affected = 0 means the stamp
+// already stands (the service gate was passed in the same transaction, the
+// predicate is the race's last word) and surfaces as ErrAlreadyCompleted —
+// the terminal state never flips again.
+func (s *PaymentStore) MarkCompleted(ctx context.Context, id, scope uuid.UUID) error {
+	rows, err := s.q().MarkPaymentCompleted(ctx, postgres.MarkPaymentCompletedParams{
+		ID:      pgconv.UUIDToPgtype(id),
+		OwnerID: pgconv.UUIDToPgtype(scope),
+	})
+	if err != nil {
+		return fmt.Errorf("mark payment %s completed: %w", id, err)
+	}
+	if rows == 0 {
+		return application.ErrAlreadyCompleted
+	}
+	return nil
+}
+
 // Delete removes the rule; rows affected is not checked — the use case has
 // already proven existence inside the same transaction and lock.
 func (s *PaymentStore) Delete(ctx context.Context, id, scope uuid.UUID) error {

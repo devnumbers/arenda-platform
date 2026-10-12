@@ -186,6 +186,7 @@ JOIN properties pr ON pr.id = pay.property_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.owner_id = $1
   AND pr.status IN ('active', 'maintenance')
+  AND pay.completed_at IS NULL
 `
 
 type ListTickPaymentsByOwnerRow struct {
@@ -206,7 +207,9 @@ type ListTickPaymentsByOwnerRow struct {
 
 // The owner's payment rules on non-archived properties, with the user
 // category's current name resolved for the materialization snapshot. Pauses
-// are listed separately (ListTickPausesByPaymentIDs).
+// are listed separately (ListTickPausesByPaymentIDs). Завершённые правила
+// тик пропускает (тикет #1340): операций не порождают, future-planned
+// пересборка их не касается.
 func (q *Queries) ListTickPaymentsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickPaymentsByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listTickPaymentsByOwner, ownerID)
 	if err != nil {
@@ -247,6 +250,7 @@ FROM payments pay
 JOIN properties pr ON pr.id = pay.property_id
 JOIN users u ON u.id = pay.owner_id
 WHERE pr.status IN ('active', 'maintenance')
+  AND pay.completed_at IS NULL
 ORDER BY u.timezone, pay.owner_id
 `
 
@@ -259,7 +263,9 @@ type ListTickZonesRow struct {
 // timezones having payment rules on active/maintenance properties, with the
 // data owners of each zone. One "today" is computed per zone in Go; owners
 // without rules on such properties are not sweep targets. Stateless — every
-// run re-lists, no per-zone or per-owner tick state is kept.
+// run re-lists, no per-zone or per-owner tick state is kept. Владелец, чьи
+// правила все завершены, целью свипа не является (тикет #1340): завершённые
+// правил ничего не материализуют.
 func (q *Queries) ListTickZones(ctx context.Context) ([]ListTickZonesRow, error) {
 	rows, err := q.db.Query(ctx, listTickZones)
 	if err != nil {

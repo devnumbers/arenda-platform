@@ -149,6 +149,7 @@ SELECT pay.id,
        pay.category_slug,
        pay.user_category_id,
        pay.title_is_manual,
+       pay.completed_at,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -179,6 +180,7 @@ type GetPaymentByIDRow struct {
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	TitleIsManual      bool               `json:"title_is_manual"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	UserCategoryName   pgtype.Text        `json:"user_category_name"`
@@ -195,7 +197,9 @@ type GetPaymentByIDRow struct {
 // migration #1311; the actor's rows overlay the actor-facing reads, the
 // star writes are this file's insert/delete pair.
 // One rule by id within the owner's scope on the given property, with the
-// user category's current name resolved for the CategoryView.
+// user category's current name resolved for the CategoryView. The direct
+// read stays open on a completed rule (тикет #1340): the stored completion
+// stamp travels in the row, the read-only gate lives in the mutations.
 func (q *Queries) GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error) {
 	row := q.db.QueryRow(ctx, getPaymentByID, arg.ID, arg.OwnerID, arg.PropertyID)
 	var i GetPaymentByIDRow
@@ -215,6 +219,7 @@ func (q *Queries) GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) 
 		&i.CategorySlug,
 		&i.UserCategoryID,
 		&i.TitleIsManual,
+		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserCategoryName,
@@ -369,12 +374,14 @@ SELECT pay.id,
        pay.category_slug,
        pay.user_category_id,
        pay.title_is_manual,
+       pay.completed_at,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
 FROM payments pay
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.owner_id = $1 AND pay.property_id = $2
+  AND pay.completed_at IS NULL
   AND ($3::text = ''
        OR pay.title ILIKE '%' || $3::text || '%' ESCAPE '\')
 ORDER BY pay.created_at, pay.id
@@ -402,6 +409,7 @@ type ListPaymentsByPropertyRow struct {
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
 	TitleIsManual      bool               `json:"title_is_manual"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	UserCategoryName   pgtype.Text        `json:"user_category_name"`
@@ -410,6 +418,9 @@ type ListPaymentsByPropertyRow struct {
 // The property's rules in creation order (stable for the list response).
 // search (” = no filter) is a case-insensitive substring match on the title;
 // the application layer escapes the ILIKE metacharacters (ESCAPE '\').
+// Завершённые правила из объектного списка скрыты (тикет #1340): страница
+// завершённого жива прямым чтением (GetPaymentByID), список показывает
+// только живые правила.
 func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsByPropertyParams) ([]ListPaymentsByPropertyRow, error) {
 	rows, err := q.db.Query(ctx, listPaymentsByProperty, arg.OwnerID, arg.PropertyID, arg.Search)
 	if err != nil {
@@ -435,6 +446,7 @@ func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsBy
 			&i.CategorySlug,
 			&i.UserCategoryID,
 			&i.TitleIsManual,
+			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UserCategoryName,
@@ -447,6 +459,29 @@ func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsBy
 		return nil, err
 	}
 	return items, nil
+}
+
+const markPaymentCompleted = `-- name: MarkPaymentCompleted :execrows
+UPDATE payments
+SET completed_at = now()
+WHERE id = $1 AND owner_id = $2 AND completed_at IS NULL
+`
+
+type MarkPaymentCompletedParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+// Хранимый признак завершённости (тикет #1340): ставит только явная мутация
+// complete — «сейчас» базы, момент мутации. Предикат completed_at IS NULL —
+// повторный вызов мимо сервиса (гонка) меняет ноль строк: адаптер отвечает
+// ErrAlreadyCompleted, терминальное состояние никогда не перезаписывается.
+func (q *Queries) MarkPaymentCompleted(ctx context.Context, arg MarkPaymentCompletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markPaymentCompleted, arg.ID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const paymentFavoriteIDs = `-- name: PaymentFavoriteIDs :many
@@ -518,7 +553,9 @@ type UpdatePaymentParams struct {
 // Partial PATCH is resolved by the application layer; the statement always
 // writes the full editable set (since is never among it — server-set,
 // prototype decision №17). The favorite star is a personal state (the
-// cutover #1308) with its own insert/delete pair.
+// cutover #1308) with its own insert/delete pair; the stored completion
+// stamp (тикет #1340) is not among the editable set — a completed rule is
+// read-only at the service gate, the statement cannot touch the stamp.
 func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) error {
 	_, err := q.db.Exec(ctx, updatePayment,
 		arg.ID,

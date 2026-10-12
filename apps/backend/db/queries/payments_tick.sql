@@ -19,7 +19,9 @@ FOR UPDATE;
 -- name: ListTickPaymentsByOwner :many
 -- The owner's payment rules on non-archived properties, with the user
 -- category's current name resolved for the materialization snapshot. Pauses
--- are listed separately (ListTickPausesByPaymentIDs).
+-- are listed separately (ListTickPausesByPaymentIDs). Завершённые правила
+-- тик пропускает (тикет #1340): операций не порождают, future-planned
+-- пересборка их не касается.
 SELECT pay.id,
        pay.owner_id,
        pay.property_id,
@@ -37,7 +39,8 @@ FROM payments pay
 JOIN properties pr ON pr.id = pay.property_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.owner_id = $1
-  AND pr.status IN ('active', 'maintenance');
+  AND pr.status IN ('active', 'maintenance')
+  AND pay.completed_at IS NULL;
 
 -- name: ListTickPausesByPaymentIDs :many
 -- Pause intervals of the listed payments (ADR 0002 of the prototype: the
@@ -98,10 +101,13 @@ SELECT timezone FROM users WHERE id = $1;
 -- timezones having payment rules on active/maintenance properties, with the
 -- data owners of each zone. One "today" is computed per zone in Go; owners
 -- without rules on such properties are not sweep targets. Stateless — every
--- run re-lists, no per-zone or per-owner tick state is kept.
+-- run re-lists, no per-zone or per-owner tick state is kept. Владелец, чьи
+-- правила все завершены, целью свипа не является (тикет #1340): завершённые
+-- правил ничего не материализуют.
 SELECT DISTINCT u.timezone, pay.owner_id
 FROM payments pay
 JOIN properties pr ON pr.id = pay.property_id
 JOIN users u ON u.id = pay.owner_id
 WHERE pr.status IN ('active', 'maintenance')
+  AND pay.completed_at IS NULL
 ORDER BY u.timezone, pay.owner_id;

@@ -1325,6 +1325,48 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/payments/{paymentId}/complete:
+    post:
+      operationId: completePayment
+      security:
+        - sessionCookie: []
+      description: >-
+        Завершение платежа (тикет #1340): явная мутация ставит хранимый
+        признак завершённости (completedAt) — терминальное состояние. Гейт
+        доступности — вычисляемая завершённость при закончившемся расписании:
+        все операции оплачены, дата окончания наступила, открытой паузы нет.
+        Завершённое правило не порождает операций и скрыто из лент, списков и
+        подсчётов; страница жива прямым чтением (read-only: pause/resume/patch
+        отвечают 409), удаление — по общему праву редактирования, оплаченные
+        операции остаются в «Истории платежа».
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/payments/{paymentId}/operations:
     get:
       operationId: listPaymentOperations
@@ -7268,6 +7310,18 @@ components:
             and no occurrence beyond the last materialized date of any
             status. Never stored, never written by the client; derived on
             every read like the operation's overdue.
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Хранимый признак завершённости (тикет #1340): ставится только
+            явной мутацией complete, никогда не выводится заново. NULL —
+            правило живо; непустое значение — терминальное состояние: правило
+            не порождает операций, скрыто из лент и подсчётов, read-only
+            (pause/resume/patch — 409), удаление по общему праву
+            редактирования. Вычисляемый isCompleted остаётся флагом кнопки
+            «Завершить» ДО завершения и не меняется этой мутацией.
         nearestDate:
           type: string
           format: date
@@ -7380,6 +7434,7 @@ components:
         - updated
         - paused
         - resumed
+        - completed
 
     PaymentFieldChange:
       type: object

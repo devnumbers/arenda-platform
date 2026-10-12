@@ -417,7 +417,9 @@ type Querier interface {
 	// migration #1311; the actor's rows overlay the actor-facing reads, the
 	// star writes are this file's insert/delete pair.
 	// One rule by id within the owner's scope on the given property, with the
-	// user category's current name resolved for the CategoryView.
+	// user category's current name resolved for the CategoryView. The direct
+	// read stays open on a completed rule (тикет #1340): the stored completion
+	// stamp travels in the row, the read-only gate lives in the mutations.
 	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
@@ -866,6 +868,12 @@ type Querier interface {
 	// port — the actor-scoped read carries its visibility predicate here,
 	// beside the data.
 	//
+	// Завершённые правила из всего хаба выведены (тикет #1340): терминальное
+	// состояние (completed_at IS NOT NULL) не участвует в ленте, поиске, чипах
+	// категорий и счётчиках; страница завершённого жива прямым чтением, личная
+	// звезда читателя не ломает чтений. Будущий ридер «На оплату» наследует
+	// тот же гейт.
+	//
 	// Every per-row schedule computation (nearest date, overdue) runs against
 	// the property owner's calendar date (ADR 0048): the merged feed mixes
 	// owners, so the reads take the owner→today map as parallel csv lists —
@@ -1160,6 +1168,9 @@ type Querier interface {
 	// The property's rules in creation order (stable for the list response).
 	// search ('' = no filter) is a case-insensitive substring match on the title;
 	// the application layer escapes the ILIKE metacharacters (ESCAPE '\').
+	// Завершённые правила из объектного списка скрыты (тикет #1340): страница
+	// завершённого жива прямым чтением (GetPaymentByID), список показывает
+	// только живые правила.
 	ListPaymentsByProperty(ctx context.Context, arg ListPaymentsByPropertyParams) ([]ListPaymentsByPropertyRow, error)
 	// All pending invitations for an email, oldest first: activation at
 	// registration is FIFO across properties (T5, issue #161).
@@ -1335,7 +1346,9 @@ type Querier interface {
 	ListTickPausesByPaymentIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickPausesByPaymentIDsRow, error)
 	// The owner's payment rules on non-archived properties, with the user
 	// category's current name resolved for the materialization snapshot. Pauses
-	// are listed separately (ListTickPausesByPaymentIDs).
+	// are listed separately (ListTickPausesByPaymentIDs). Завершённые правила
+	// тик пропускает (тикет #1340): операций не порождают, future-planned
+	// пересборка их не касается.
 	ListTickPaymentsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickPaymentsByOwnerRow, error)
 	// Dedup keys of the listed rules' tasks: existence by (rule_id, due_date)
 	// for dated rows and by rule_id alone for the undated one; the completed
@@ -1350,7 +1363,9 @@ type Querier interface {
 	// timezones having payment rules on active/maintenance properties, with the
 	// data owners of each zone. One "today" is computed per zone in Go; owners
 	// without rules on such properties are not sweep targets. Stateless — every
-	// run re-lists, no per-zone or per-owner tick state is kept.
+	// run re-lists, no per-zone or per-owner tick state is kept. Владелец, чьи
+	// правила все завершены, целью свипа не является (тикет #1340): завершённые
+	// правил ничего не материализуют.
 	ListTickZones(ctx context.Context) ([]ListTickZonesRow, error)
 	// The occupancy projection of the properties list (ticket #585, резолюция
 	// #584): the unfinished rentals of the given properties in one batched read
@@ -1420,6 +1435,11 @@ type Querier interface {
 	// Marks one row read (a click, the notification page). Idempotent: an
 	// already-read or deleted row matches nothing (0 rows).
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
+	// Хранимый признак завершённости (тикет #1340): ставит только явная мутация
+	// complete — «сейчас» базы, момент мутации. Предикат completed_at IS NULL —
+	// повторный вызов мимо сервиса (гонка) меняет ноль строк: адаптер отвечает
+	// ErrAlreadyCompleted, терминальное состояние никогда не перезаписывается.
+	MarkPaymentCompleted(ctx context.Context, arg MarkPaymentCompletedParams) (int64, error)
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
 	// The stored aggregates the next payment date resolution consumes (ticket
 	// #991) in one batched read: the earliest planned operation on or after
@@ -1599,7 +1619,9 @@ type Querier interface {
 	// Partial PATCH is resolved by the application layer; the statement always
 	// writes the full editable set (since is never among it — server-set,
 	// prototype decision №17). The favorite star is a personal state (the
-	// cutover #1308) with its own insert/delete pair.
+	// cutover #1308) with its own insert/delete pair; the stored completion
+	// stamp (тикет #1340) is not among the editable set — a completed rule is
+	// read-only at the service gate, the statement cannot touch the stamp.
 	UpdatePayment(ctx context.Context, arg UpdatePaymentParams) error
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)

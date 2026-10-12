@@ -147,7 +147,16 @@ type Payment struct {
 	// IsFavorite is the rule's favorite star (ticket #461): a pure read-side
 	// flag — it never changes generation, pauses or the tick's behaviour.
 	IsFavorite bool
-	Pauses     []PauseInterval
+	// CompletedAt is the stored completion stamp (тикет #1340): only the
+	// explicit complete mutation sets it, nothing derives it — the computed
+	// IsCompleted view (view.go) stays the read-side flag the clients show
+	// «Полностью оплачен» and the «Завершить» button by. A non-nil stamp is
+	// the terminal state: the rule generates no operations (the tick and the
+	// listings skip it) and is read-only — pause/resume/update answer 409,
+	// while the deletion keeps the common edit right (D9) and the reads stay
+	// open (details, paid operations, the change log).
+	CompletedAt *time.Time
+	Pauses      []PauseInterval
 	// CreatedAt/UpdatedAt are the rule row's timestamps (updated_at is
 	// trigger-maintained on write); they exist for the CRUD read side — the
 	// tick never reads them.

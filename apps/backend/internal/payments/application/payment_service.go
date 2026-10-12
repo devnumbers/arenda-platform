@@ -316,6 +316,9 @@ func (s *PaymentService) UpdatePayment(
 			// snapshot (ADR 0065 §6 — the single content source of the
 			// «updated» entries).
 			before := rule
+			if err := ensureMutable(rule); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			applyUpdate(&rule, cmd)
 			if err := validateRule(rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -439,6 +442,9 @@ func (s *PaymentService) PausePayment(
 			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
+			if err := ensureMutable(rule); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
 			if _, active := domain.ActivePause(rule.Pauses); active {
 				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
 			}
@@ -475,6 +481,9 @@ func (s *PaymentService) ResumePayment(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
 		) (mutationOutcome[domain.Payment], error) {
 			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
+			if err := ensureMutable(rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
 			if _, active := domain.ActivePause(rule.Pauses); !active {
@@ -922,14 +931,26 @@ func (s *PaymentService) ruleCompleted(
 	return s.ruleCompletedToday(ctx, scope, today, payment)
 }
 
-// ruleCompletedToday gathers the operation aggregates the pure domain check
-// needs: any planned operation (the overdue view status included — an
-// unsettled debt keeps the rule unfinished) and the newest materialized date
-// across both stored statuses. Three bounded queries over the rule's own
-// rows; with planned present the rest is unnecessary.
+// ruleCompletedToday computes the settlement flag for a loaded rule over the
+// operation aggregates (ruleCompletionInputs).
 func (s *PaymentService) ruleCompletedToday(
 	ctx context.Context, scope uuid.UUID, today time.Time, payment domain.Payment,
 ) (bool, error) {
+	lastMaterialized, hasPlanned, err := s.ruleCompletionInputs(ctx, scope, today, payment)
+	if err != nil {
+		return false, err
+	}
+	return domain.IsCompleted(payment, today, lastMaterialized, hasPlanned), nil
+}
+
+// ruleCompletionInputs gathers the operation aggregates the pure completion
+// predicates need: any planned operation (the overdue view status included —
+// an unsettled debt keeps the rule unfinished) and the newest materialized
+// date across both stored statuses. Bounded queries over the rule's own
+// rows; with planned present the rest is unnecessary.
+func (s *PaymentService) ruleCompletionInputs(
+	ctx context.Context, scope uuid.UUID, today time.Time, payment domain.Payment,
+) (lastMaterialized *time.Time, hasPlanned bool, err error) {
 	overdue := domain.ViewStatusOverdue
 	planned := domain.ViewStatusPlanned
 	for _, status := range []*domain.OperationViewStatus{&overdue, &planned} {
@@ -939,10 +960,10 @@ func (s *PaymentService) ruleCompletedToday(
 			Today:  today,
 		})
 		if err != nil {
-			return false, fmt.Errorf("completion status check: %w", err)
+			return nil, false, fmt.Errorf("completion status check: %w", err)
 		}
 		if len(ops) > 0 {
-			return false, nil
+			return nil, true, nil
 		}
 	}
 	newest, err := s.operations.ListByPayment(ctx, scope, payment.PropertyID, payment.ID, OperationsListQuery{
@@ -950,12 +971,81 @@ func (s *PaymentService) ruleCompletedToday(
 		Today: today,
 	})
 	if err != nil {
-		return false, fmt.Errorf("completion last operation: %w", err)
+		return nil, false, fmt.Errorf("completion last operation: %w", err)
 	}
-	var lastMaterialized *time.Time
 	if len(newest) > 0 {
 		date := newest[0].Date
 		lastMaterialized = &date
 	}
-	return domain.IsCompleted(payment, today, lastMaterialized, false), nil
+	return lastMaterialized, false, nil
+}
+
+// ensureMutable is the terminal state's read-only gate (тикет #1340): a
+// completed rule accepts no pause, resume or terms edit — the one 409 the
+// three rule mutations answer before their own state checks (after the rent
+// gate, which always outranks the rule's own state).
+func ensureMutable(rule domain.Payment) error {
+	if rule.CompletedAt != nil {
+		return ErrPaymentCompleted
+	}
+	return nil
+}
+
+// CompletePayment sets the stored completion stamp (тикет #1340): the one
+// explicit write that ever touches it — the computed IsCompleted flag stays
+// the read-side view the clients show «Полностью оплачен» and the
+// «Завершить» button by. The gates, in order: the rent gate first (the
+// rule's state never outranks it, ADR 0053 — a rent payment completes with
+// its rental, never here), then the open pause (the completion waits for
+// the resume), then the stored stamp (a repeated complete is
+// ErrAlreadyCompleted), then the availability gate itself — the computed
+// settlement completeness with the schedule genuinely over
+// (domain.CanBeCompleted). From then on the rule generates nothing: the
+// tick and every listing skip the completed, so the verdict states
+// Tick=false explicitly — there is no plan to materialize. The operations
+// are not touched: the paid facts stay in the payment's history, and the
+// change step writes its own journals (the action journal row, the
+// change-log row with the completion's empty-diff action — the pause/resume
+// shape).
+func (s *PaymentService) CompletePayment(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) (domain.Payment, error) {
+	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Payment], error) {
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
+			if _, active := domain.ActivePause(rule.Pauses); active {
+				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
+			}
+			if rule.CompletedAt != nil {
+				return mutationOutcome[domain.Payment]{}, ErrAlreadyCompleted
+			}
+			lastMaterialized, hasPlanned, err := s.ruleCompletionInputs(ctx, scope, today, rule)
+			if err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
+			if !domain.CanBeCompleted(rule, today, lastMaterialized, hasPlanned) {
+				return mutationOutcome[domain.Payment]{}, ErrPaymentNotCompletable
+			}
+			if err := stores.payments.MarkCompleted(ctx, rule.ID, scope); err != nil {
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("mark payment completed: %w", err)
+			}
+			return mutationOutcome[domain.Payment]{
+				Response:      rule,
+				Audit:         auditdomain.ActionPaymentCompleted,
+				AuditEntityID: &rule.ID,
+				History:       new(historydomain.PaymentCompleted(rule.ID, rule.Title)),
+				// The completion's own log row: empty changes, the flip is
+				// the content (ADR 0065 §4).
+				ChangeLog: &ChangeLogWrite{PaymentID: rule.ID, Action: domain.ChangeCompleted},
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityPayments, propertyID),
+				},
+				Tick:            false, // The terminal rule generates nothing — no plan to materialize.
+				RereadPaymentID: &rule.ID,
+			}, nil
+		})
 }

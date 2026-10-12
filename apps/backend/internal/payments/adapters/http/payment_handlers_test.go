@@ -41,6 +41,7 @@ type fakePaymentManager struct {
 	list     func(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]application.PaymentListItem, error)
 	pause    func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	resume   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	complete func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	update   func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand,
 	) (domain.Payment, error)
@@ -164,6 +165,13 @@ func (f *fakePaymentManager) ResumePayment(ctx context.Context, actor, propertyI
 		return domain.Payment{}, errors.New("unexpected ResumePayment call")
 	}
 	return f.resume(ctx, actor, propertyID, paymentID)
+}
+
+func (f *fakePaymentManager) CompletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error) {
+	if f.complete == nil {
+		return domain.Payment{}, errors.New("unexpected CompletePayment call")
+	}
+	return f.complete(ctx, actor, propertyID, paymentID)
 }
 
 func (f *fakePaymentManager) SetPaymentFavorite(
@@ -903,6 +911,41 @@ func TestGetPayment_CarriesRentalCompleted(t *testing.T) {
 	}
 }
 
+func TestCompletePayment_MapsContract(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+	stamp := time.Date(2026, 10, 12, 9, 30, 0, 0, time.UTC)
+
+	var gotActor, gotProperty, gotPayment uuid.UUID
+	fixture := validFixturePayment()
+	fixture.CompletedAt = &stamp
+	h := NewPaymentHandlers(&fakePaymentManager{
+		complete: func(_ context.Context, a, p, id uuid.UUID) (domain.Payment, error) {
+			gotActor, gotProperty, gotPayment = a, p, id
+			return fixture, nil
+		},
+	}, nil)
+	w := httptest.NewRecorder()
+	h.CompletePayment(w, paymentRequest(t, http.MethodPost, actor, ""), propertyID, paymentID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if gotActor != actor || gotProperty != propertyID || gotPayment != paymentID {
+		t.Fatalf("service received (%s, %s, %s), want the handler's ids", gotActor, gotProperty, gotPayment)
+	}
+	var resp struct {
+		CompletedAt *time.Time `json:"completedAt"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.CompletedAt == nil || !resp.CompletedAt.Equal(stamp) {
+		t.Fatalf("completedAt = %v, want %v", resp.CompletedAt, stamp)
+	}
+}
+
 func TestDeletePayment_KeepOverdueDefault(t *testing.T) {
 	t.Parallel()
 	actor := uuid.Must(uuid.NewV7())
@@ -959,6 +1002,13 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 		{"already paused", application.ErrAlreadyPaused, http.StatusConflict, "Платёж уже на паузе"},
 		{"not paused", application.ErrNotPaused, http.StatusConflict, "Платёж не на паузе"},
 		{"rental-managed", application.ErrRentManagedPayment, http.StatusConflict, "Платёж управляется арендой"},
+		// The completion contract's own details (тикет #1340).
+		{
+			"not completable", application.ErrPaymentNotCompletable,
+			http.StatusConflict, "дата окончания уже наступила",
+		},
+		{"already completed", application.ErrAlreadyCompleted, http.StatusConflict, "Платёж уже завершён"},
+		{"completed read-only", application.ErrPaymentCompleted, http.StatusConflict, "Платёж завершён"},
 		// The schedule window's specific detail answers before the shared
 		// invalid-input table (ticket #1154).
 		{
@@ -979,6 +1029,9 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 				pause: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domain.Payment, error) {
 					return domain.Payment{}, tc.err
 				},
+				complete: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domain.Payment, error) {
+					return domain.Payment{}, tc.err
+				},
 			}, nil)
 			w := httptest.NewRecorder()
 			h.GetPayment(w, paymentRequest(t, http.MethodGet, actor, ""),
@@ -995,6 +1048,13 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 				propertyID, paymentID)
 			if w2.Code != tc.wantStatus {
 				t.Fatalf("pause: status = %d, want %d; body: %s", w2.Code, tc.wantStatus, w2.Body.String())
+			}
+
+			w3 := httptest.NewRecorder()
+			h.CompletePayment(w3, paymentRequest(t, http.MethodPost, actor, ""),
+				propertyID, paymentID)
+			if w3.Code != tc.wantStatus {
+				t.Fatalf("complete: status = %d, want %d; body: %s", w3.Code, tc.wantStatus, w3.Body.String())
 			}
 		})
 	}

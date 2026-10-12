@@ -55,3 +55,21 @@ func IsCompleted(p Payment, today time.Time, lastMaterialized *time.Time, hasPla
 	_, ok := NextOccurrenceAfter(p, ProjectionCursor(today, lastMaterialized))
 	return !ok
 }
+
+// CanBeCompleted reports whether the rule passes the «Завершить» mutation's
+// availability gate (тикет #1340): the computed settlement completeness
+// (IsCompleted) with the schedule genuinely over — the end date has arrived
+// (today or earlier; «в тот же день» canon) and no open pause stands. The
+// pause's cut occurrences make the computed completeness vacuous, and an
+// end date still ahead keeps the rule alive even when everything is already
+// paid (early exhaustion answers «завершён» to the read flag, the complete
+// action waits) — the complete decision takes both besides the flag.
+func CanBeCompleted(p Payment, today time.Time, lastMaterialized *time.Time, hasPlanned bool) bool {
+	if p.EndDate == nil || p.EndDate.After(today) {
+		return false
+	}
+	if _, active := ActivePause(p.Pauses); active {
+		return false
+	}
+	return IsCompleted(p, today, lastMaterialized, hasPlanned)
+}

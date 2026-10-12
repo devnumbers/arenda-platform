@@ -444,6 +444,12 @@ func PaymentResumed(entityID uuid.UUID, title string) Entry {
 	return paymentRow(ActionPaymentResumed, BaseChanged, "Платёж возобновлён: ", entityID, title)
 }
 
+// PaymentCompleted builds the completion row (тикет #1340): the terminal
+// state flip, «Завершение» in the base action's own word.
+func PaymentCompleted(entityID uuid.UUID, title string) Entry {
+	return paymentRow(ActionPaymentCompleted, BaseCompleted, "Платёж завершён: ", entityID, title)
+}
+
 func paymentRow(action Action, base BaseAction, prefix string, entityID uuid.UUID, title string) Entry {
 	return Entry{
 		Kind:       KindPayment,

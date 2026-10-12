@@ -14,18 +14,20 @@ import (
 )
 
 // ChangeAction is what the entry records: a terms edit («изменения» rows with
-// the field diff) or the pause/resume state flips — rows with an empty
-// changes array of their own action (решение владельца 07.10, map #1183).
-// Creation writes no entry (nothing changed yet); deletion writes none — the
-// FK CASCADE takes the history with the rule, and the «Платёж удалён»
-// tombstone stays in the action journal (ADR 0061).
+// the field diff) or the pause/resume/complete state flips — rows with an
+// empty changes array of their own action (решение владельца 07.10, map
+// #1183; complete — тикет #1340). Creation writes no entry (nothing changed
+// yet); deletion writes none — the FK CASCADE takes the history with the
+// rule, and the «Платёж удалён» tombstone stays in the action journal
+// (ADR 0061).
 type ChangeAction string
 
 // The entry actions of the change log.
 const (
-	ChangeUpdated ChangeAction = "updated"
-	ChangePaused  ChangeAction = "paused"
-	ChangeResumed ChangeAction = "resumed"
+	ChangeUpdated   ChangeAction = "updated"
+	ChangePaused    ChangeAction = "paused"
+	ChangeResumed   ChangeAction = "resumed"
+	ChangeCompleted ChangeAction = "completed"
 )
 
 // ChangeField names one field of the rule's diff — the same dictionary the
