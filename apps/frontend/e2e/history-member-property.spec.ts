@@ -7,6 +7,7 @@ import {
   openCabinetWithSeededSession,
   paymentCreatedEntry,
   propertyRenamedEntry,
+  screenHeader,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
@@ -16,11 +17,13 @@ import {
 } from './fixtures';
 
 // «Действия участника в объекте» (карта #838, тикет #841; макет
-// 2177-59620 — вход): та же лента «Истории действий», прибитая к паре
-// человек+объект — actor_ids и property_ids по одному uuid (ADR 0061 §7,
-// сервер AND'ит обе группы, бэк #708 без изменений), группы шита
-// «Участники» и «Объекты» обе прибиты серым «1/1». Вход — строка
-// «Действия участника в объекте» на «Правах участника».
+// 2177-59620 — вход; композиция ленты — 3260-77196, D7): та же лента
+// «Истории действий», прибитая к паре человек+объект — actor_ids и
+// property_ids по одному uuid (ADR 0061 §7, сервер AND'ит обе группы,
+// бэк #708 без изменений), группы шита «Участники» и «Объекты» обе
+// прибиты серым «1/1». Объект живёт в сабтайтле шапки, внутри дня —
+// одна статичная карточка актёра (человек — предмет страницы). Вход —
+// строка «Действия участника в объекте» на «Правах участника».
 
 const APARTMENT_ID = SEEDED_APARTMENT_PROPERTY_ID;
 const GARAGE_ID = SEEDED_GARAGE_PROPERTY_ID;
@@ -72,11 +75,15 @@ test('вход с «Прав участника»: лента прибита к 
   await expect(page.getByText('Платёж создан:')).toHaveCount(0);
   await expect(page.getByText('Гараж на Садовой')).toHaveCount(0);
 
-  // Шапка-карточка объекта — одна над всей лентой (зеркало #840),
-  // статична; шапки актёров статичны — человек тоже предмет страницы
-  // (зеркало #712).
-  await expect(page.getByRole('heading', { name: 'Квартира на Ленина' })).toBeVisible();
+  // Объект — предмет страницы и живёт в сабтайтле шапки (макет
+  // 3260-77196, D7), серым под заголовком; шапки-карточки объекта над
+  // лентой больше нет, имя в шапке не ссылка.
+  await expect(screenHeader(page).getByText('Квартира на Ленина')).toBeVisible();
   await expect(page.getByRole('link', { name: /Квартира на Ленина/ })).toHaveCount(0);
+
+  // Карточка актёра одна — человек предмет страницы: шапка статична
+  // (зеркало #712, без ссылки), имя живое (D5).
+  await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Мария Петрова' })).toHaveCount(0);
 
   // «Настройки» на месте (primary по контенту).
@@ -85,7 +92,7 @@ test('вход с «Прав участника»: лента прибита к 
   await captureScreen(page, testInfo, 'history-member-property-feed');
 });
 
-test('шит: «Участники» и «Объекты» обе прибиты серым «1/1»; «в ноль» без запроса, пины не пишутся в адрес', async ({ page, seededUser }, testInfo) => {
+test('шит: «Участник» и «Объект» обе прибиты серым «1/1»; «в ноль» без запроса, пины не пишутся в адрес', async ({ page, seededUser }, testInfo) => {
   await seedPairJournal(seededUser);
   const memberUuid = await execE2eSql(MEMBER_UUID_SQL);
   const scope = await trackHistoryScope(page);
@@ -95,21 +102,23 @@ test('шит: «Участники» и «Объекты» обе прибиты
 
   await page.getByRole('button', { name: 'Настройки' }).click();
   const dialog = page.getByRole('dialog', { name: 'Фильтры истории' });
-  await expect(dialog.getByText('Участники')).toBeVisible();
+  await expect(dialog.getByText('Участник', { exact: true })).toBeVisible();
 
   // Обе группы прибиты: счётчик «1/1» у каждой, мастер-чекбоксы серые
-  // (решение владельца 24.09 — зеркала #712/#840).
+  // (решение владельца 24.09 — зеркала #712/#840); подписи прибитых
+  // групп в единственном числе — «Участник» и «Объект» (решение
+  // владельца 10.10.2026, доработка #1321).
   await expect(dialog.getByText('1/1')).toHaveCount(2);
-  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Участники' })).toBeDisabled();
-  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Объекты' })).toBeDisabled();
+  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Участник' })).toBeDisabled();
+  await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Объект' })).toBeDisabled();
 
   // Внутри групп — по одному прибитому: участница и квартира, оба
   // выбраны и незабираемы.
-  await dialog.getByRole('button', { name: /Участники/ }).click();
+  await dialog.getByRole('button', { name: /Участник/ }).click();
   const pinnedMember = dialog.getByRole('checkbox', { name: 'Мария Петрова' });
   await expect(pinnedMember).toBeChecked();
   await expect(pinnedMember).toBeDisabled();
-  await dialog.getByRole('button', { name: /Объекты/ }).click();
+  await dialog.getByRole('button', { name: /Объект/ }).click();
   const pinnedProperty = dialog.getByRole('checkbox', { name: 'Квартира на Ленина' });
   await expect(pinnedProperty).toBeChecked();
   await expect(pinnedProperty).toBeDisabled();

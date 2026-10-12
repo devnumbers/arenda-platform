@@ -250,6 +250,9 @@ func (s *RuleService) UpdateRule(
 func patchRule(
 	ctx context.Context, stores *txStores, rule domain.TaskRule, cmd UpdateRuleCommand, today time.Time,
 ) (mutationOutcome[domain.TaskRule], error) {
+	// Единая строка изменения (решение владельца 12.10, карта #1324):
+	// дифф снимается до патча — пояснения несут все сдвинувшиеся поля.
+	beforeRule := rule
 	wasUndated := rule.Undated()
 	applyUpdate(&rule, cmd)
 	rule.HistoryBefore = rule.HorizonAfterEdit(wasUndated)
@@ -272,7 +275,7 @@ func patchRule(
 		Audit:         auditdomain.ActionTaskRuleUpdated,
 		AuditEntityID: &rule.ID,
 		AuditCtx:      map[string]any{"fields": updatedFields(cmd)},
-		History:       ruleHistory(historydomain.TaskRuleUpdated(rule.ID, rule.Title), rule.PropertyID),
+		History:       ruleHistory(historydomain.TaskRuleUpdated(rule.ID, rule.Title, taskRuleHistoryChanges(beforeRule, rule)), rule.PropertyID),
 		Changed:       ruleChanged(rule.PropertyID),
 		Tick:          true,
 		RereadRuleID:  &rule.ID,

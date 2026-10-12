@@ -16,11 +16,12 @@ import {
   type SeededUser,
 } from './fixtures';
 
-// «История объекта» (карта #838, тикет #840; макеты 2184-95600 /
-// 2184-94176): та же лента «Истории действий», прибитая к одному объекту —
-// property_ids = один uuid (ADR 0061 §7), поиск и фильтры переиспользуются,
-// группа «Объекты» шита прибита серым. Вход — кебаб «Участников объекта»
-// (макет 1980-139712).
+// «История объекта» (карта #1324, тикет #1321; макет 3258-76984): та же
+// лента «Истории действий», прибитая к одному объекту — property_ids =
+// один uuid (ADR 0061 §7), поиск и фильтры переиспользуются, группа
+// «Объекты» шита прибита серым. Объект — предмет страницы и живёт в
+// сабтайтле шапки; над лентой сразу плашка дня и карточки актёров. Вход —
+// кебаб «Участников объекта» (макет 1980-139712).
 
 const APARTMENT_ID = SEEDED_APARTMENT_PROPERTY_ID;
 const GARAGE_ID = SEEDED_GARAGE_PROPERTY_ID;
@@ -50,7 +51,7 @@ async function seedPropertyJournal(user: SeededUser): Promise<void> {
   );
 }
 
-test('вход из кебаба «Участников объекта»: лента только этого объекта, шапка над лентой', async ({ page, seededUser }, testInfo) => {
+test('вход из кебаба «Участников объекта»: лента только этого объекта, имя объекта в сабтайтле шапки', async ({ page, seededUser }, testInfo) => {
   await seedPropertyJournal(seededUser);
   const properties = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
@@ -73,11 +74,13 @@ test('вход из кебаба «Участников объекта»: лен
   await expect(page.getByText('Задача выполнена: Заменить кран')).toBeVisible();
   await expect(page.getByText('Платёж удалён: Аренда гаража')).toHaveCount(0);
 
-  // Шапка-карточка объекта — одна над всей лентой (макет 2184-95600),
-  // статична: объект — предмет страницы (зеркало «Действий участника»).
-  await expect(page.getByRole('heading', { name: 'Квартира на Ленина' })).toBeVisible();
-  await expect(page.getByText('Москва, ул. Ленина, 1')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Квартира на Ленина/ })).toHaveCount(0);
+  // Объект — предмет страницы и живёт в сабтайтле шапки (макет
+  // 3258-76984), серым под заголовком; шапки-карточки над лентой больше
+  // нет, имя в шапке не ссылка. Скоуп к шапке: то же имя звучит и в
+  // строке «Название объекта изменено» ленты.
+  await expect(screenHeader(page).getByText('Квартира на Ленина')).toBeVisible();
+  await expect(screenHeader(page).getByRole('link', { name: 'Квартира на Ленина' })).toHaveCount(0);
+  await expect(page.getByText('Москва, ул. Ленина, 1')).toHaveCount(0);
 
   // Группировка вырождена: внутри дня сразу карточки актёров, шапки
   // актёров кликабельны — вход в «Действия участника» (#712).
@@ -85,7 +88,7 @@ test('вход из кебаба «Участников объекта»: лен
   await page.getByRole('link', { name: 'Мария Петрова' }).first().click();
   await page.waitForURL(`**/history/participants/**`);
 
-  // «Настройки» на месте (макет 2184-95600).
+  // «Настройки» на месте (макет 3258-76984).
   await page.goBack();
   await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
 
@@ -119,7 +122,7 @@ test('поиск ищет в пределах объекта, чужой объ�
   await captureScreen(page, testInfo, 'history-property-search');
 });
 
-test('фильтры переиспользуются, «Объекты» прибита серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
+test('фильтры переиспользуются, «Объект» прибит серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
   await seedPropertyJournal(seededUser);
   const properties = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
@@ -131,13 +134,15 @@ test('фильтры переиспользуются, «Объекты» при
   await expect(dialog.getByText('Основные действия')).toBeVisible();
   await expect(dialog.getByText('Участники')).toBeVisible();
 
-  // Группа «Объекты» показывает только прибитый объект — 1/1, серым и
-  // незабираемым (#840, макет 2184-94176, решение владельца 24.09).
-  await expect(dialog.getByText('Объекты')).toBeVisible();
+  // Группа «Объект» — только прибитый объект, 1/1, серым и незабираемым
+  // (#840, макет 2184-94176, решение владельца 24.09; подпись прибитой
+  // группы в единственном числе — решение владельца 10.10.2026,
+  // доработка #1321).
+  await expect(dialog.getByText('Объект', { exact: true })).toBeVisible();
   await expect(dialog.getByText('1/1')).toBeVisible();
-  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Объекты' });
+  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Объект' });
   await expect(master).toBeDisabled();
-  await dialog.getByRole('button', { name: /Объекты/ }).click();
+  await dialog.getByRole('button', { name: /Объект/ }).click();
   const pinned = dialog.getByRole('checkbox', { name: 'Квартира на Ленина' });
   await expect(pinned).toBeChecked();
   await expect(pinned).toBeDisabled();
@@ -173,4 +178,30 @@ test('объект без действий — «Действий не было�
 
   await expect(page.getByText('Действий не было')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Поиск по истории' })).toHaveCount(0);
+});
+
+test('открытие «с конца»: последние записи объекта в вьюпорте (карта #1324, D8)', async ({ page, seededUser }) => {
+  test.setTimeout(60_000);
+  await execE2eSql('DELETE FROM action_journal;');
+  // Серия из 30 записей квартиры — лента прибитого скоупа заведомо выше
+  // вьюпорта; открытие строго на последних записях, без флэша верха.
+  for (let index = 0; index < 30; index += 1) {
+    await seedJournalEntry(
+      paymentCreatedEntry(
+        `e0000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+        60 - index,
+        `Заготовка ${index + 1}`,
+      ),
+      seededUser,
+    );
+  }
+  await openCabinetWithSeededSession(page, seededUser);
+
+  await page.goto(`/history/properties/${APARTMENT_ID}`);
+  await expect(page.getByText('Платёж создан: Заготовка 30', { exact: true })).toBeVisible();
+  const metrics = await page.evaluate(() => ({
+    distanceToBottom:
+      document.documentElement.scrollHeight - (window.scrollY + window.innerHeight),
+  }));
+  expect(metrics.distanceToBottom).toBeLessThan(120);
 });

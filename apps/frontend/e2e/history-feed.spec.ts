@@ -398,11 +398,11 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
     /\/history\/participants\//,
   );
 
-  // На прибитой странице про себя (#712) та же метка — шапка там статична
-  // (человек — предмет страницы), ссылок из шапок нет.
+  // На прибитой странице про себя (#712) карточки актёров нет —
+  // страница уже про него (D7): ни шапки с меткой, ни ссылок.
   const meId = await execE2eSql(`SELECT id FROM users WHERE email = '${seededUser.email}'`);
   await page.goto(`/history/participants/${meId}`);
-  await expect(page.getByRole('heading', { name: 'Иван Иванов (Вы)', exact: true })).toBeVisible();
+  await expect(page.getByText('Иван Иванов (Вы)', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
 
   // Глазами приглашённого — семантика Telegram: своя группа подписана
@@ -414,7 +414,130 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
   await expect(page.getByRole('heading', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
 });
 
-test('безымянный актёр: «Пользователь» в шапке группы (карта #1105, аменд #1123); старый снимок с маской не перезаписывается (Q6=А)', async ({ page, seededUser }) => {
+test('новый шаблон строки (D1): серые пояснения под заголовком, легаси — один заголовок; поиск находит пояснение', async ({ page, seededUser }, testInfo) => {
+  await execE2eSql('DELETE FROM action_journal;');
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Новая строка с пояснениями (билдеры rows.go пишут details при записи)
+  // и легаси-строка без details (до D1) — серией владельца.
+  await seedJournalEntry(
+    propertyRenamedEntry('a0000000-0000-4000-8000-000000000051', 5, 'Квартира №124', {
+      segments: '[{"text": "Название объекта изменено: "}, {"text": "Квартира №124", "link": {"kind": "property", "id": "' + SEEDED_APARTMENT_PROPERTY_ID + '"}}]',
+      details: ['Название: «Моя квартира» → «Квартира №124»'],
+      searchable: 'Название объекта изменено: Квартира №124 Название: «Моя квартира» → «Квартира №124» Иван Иванов',
+    }),
+    seededUser,
+  );
+  await seedJournalEntry(
+    paymentCreatedEntry('a0000000-0000-4000-8000-000000000052', 2, 'Аренда за сентябрь'),
+    seededUser,
+  );
+
+  await page.goto('/history');
+
+  // Заголовок с синей ссылкой-сегментом; под ним серая строка-пояснение
+  // дословно (рендер без каталога форматирования, D1).
+  await expect(page.getByText('Название объекта изменено:').first()).toBeVisible();
+  const detailLine = page.getByText('Название: «Моя квартира» → «Квартира №124»');
+  await expect(detailLine).toHaveCount(1);
+
+  // Легаси-строка (до D1) — только заголовок, пояснений нет.
+  await expect(page.getByText('Платёж создан: Аренда за сентябрь').first()).toBeVisible();
+
+  // Поиск находит по тексту пояснения новой строки (searchable покрывает
+  // details, канон «что видишь, то и ищешь»).
+  await page.getByRole('button', { name: 'Поиск по истории' }).click();
+  await page.getByPlaceholder('Поиск действий').fill('Квартира №124');
+  await expect(page.getByText('Название: «Моя квартира» → «Квартира №124»')).toBeVisible();
+
+  await captureScreen(page, testInfo, 'history-row-details');
+});
+
+test('открытие «с конца» держится всегда: «Назад» снова открывает ленту на последних записях (карта #1324, D8; реверс реставрации 10.10)', async ({ page, seededUser }) => {
+  test.setTimeout(60_000);
+  await execE2eSql('DELETE FROM action_journal;');
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Серия из 60 записей владельца (две порции keyset) — лента заведомо
+  // выше вьюпорта; запись Марии рвёт серию, шапки актёров кликабельны
+  // (#712).
+  for (let index = 0; index < 60; index += 1) {
+    await seedJournalEntry(
+      paymentCreatedEntry(
+        `c0000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+        90 - index,
+        `Заготовка ${index + 1}`,
+      ),
+      seededUser,
+    );
+  }
+  await seedJournalEntry(memberTaskEntry('c0000000-0000-4000-8000-000000000099', 0), seededUser);
+
+  await page.goto('/history');
+  await expect(page.getByText('Платёж создан: Заготовка 60', { exact: true })).toBeVisible();
+
+  // Открытие строго на последней записи (мессенджер): дно в вьюпорте.
+  const anchored = await page.evaluate(() => ({
+    y: window.scrollY,
+    distanceToBottom:
+      document.documentElement.scrollHeight - (window.scrollY + window.innerHeight),
+  }));
+  expect(anchored.distanceToBottom).toBeLessThan(120);
+
+  // Читатель поднялся к верху ленты — sentinel догружает старую порцию;
+  // тап по шапке актёра — «Действия участника» (клик по ссылке из DOM:
+  // без автоскролла Playwright).
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.getByText('Платёж создан: Заготовка 1', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    (document.querySelector('a[href^="/history/participants"]') as HTMLAnchorElement).click();
+  });
+  await page.waitForURL('**/history/participants/**');
+  // Прибитая лента открывается с конца тоже (D8): в кадре — старейшая
+  // строка первой порции (60 записей — две порции, хвост приезжает
+  // prepend'ом при прокрутке).
+  await expect(page.getByText('Платёж создан: Заготовка 11', { exact: true })).toBeVisible();
+
+  // «Назад» (goBack, кнопка шапки ведёт себя так же — history.back):
+  // реставрации позиции чтения нет (решение владельца 10.10.2026) —
+  // лента открывается заново на самых свежих записях, дно в вьюпорте.
+  await page.goBack();
+  await expect(page.getByText('Платёж создан: Заготовка 60', { exact: true })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
+  const afterBack = await page.evaluate(() => ({
+    distanceToBottom:
+      document.documentElement.scrollHeight - (window.scrollY + window.innerHeight),
+  }));
+  expect(afterBack.distanceToBottom).toBeLessThan(120);
+});
+
+test('фолбэк загрузки с хромом экрана (#1281): шапка скоупа, «Настройки» и скелетон в колонке', async ({ page, seededUser }, testInfo) => {
+  await execE2eSql('DELETE FROM action_journal;');
+  const meId = await execE2eSql(`SELECT id FROM users WHERE email = '${seededUser.email}'`);
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Медленный /api/history — pending-кадр прибитой страницы живёт долго;
+  // фолбэк Suspense-границы и pending-ветка экрана — одна композиция с
+  // хромом (#1281): шапка скоупа и «Настройки» на месте, скелетон внутри
+  // колонки PageContent, а не голый у верха вьюпорта.
+  await page.route('**/api/history*', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    await route.continue();
+  });
+  await page.goto(`/history/participants/${meId}`);
+
+  await expect(page.getByText('Действия участника').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
+  // Скелетонные бары живут внутри колонки PageContent (max-w-column),
+  // а не голым блоком у верха вьюпорта.
+  await expect(page.locator('.max-w-column .animate-pulse').first()).toBeVisible();
+  // Плашка дня скелетона — в sticky-обёртке живой плашки (паритет кадров).
+  await expect(page.locator('section.pb-6 .sticky')).toBeVisible();
+
+  await captureScreen(page, testInfo, 'history-loading-chrome');
+});
+
+test('безымянный актёр: живые ноги дают «Пользователь» (D5), снимок с маской всплывает только у обезличенной строки (Q6=А)', async ({ page, seededUser }) => {
   await execE2eSql('DELETE FROM action_journal;');
 
   // Зарегистрированный юзер без имени: канон карты #1105 («Имя Фамилия»,
@@ -435,8 +558,6 @@ test('безымянный актёр: «Пользователь» в шапк�
     // (вернувшийся актёр открывает новую серию, шапка несёт имя первой
     // строки серии): СТАРЫЙ снимок с маской maskPhone (как писалось до
     // #1106) и НОВЫЙ — «Пользователь» (как пишет рекордер после #1123).
-    // Старые снимки журнал не перезаписывает (решение Q6=А, 2026-10-05):
-    // лента отображает снимок строки как есть.
     await seedJournalEntry(
       memberTaskEntry('a0000000-0000-4000-8000-000000000041', 9, {
         actorIdSql: `(SELECT id FROM users WHERE email = '${NAMELESS_EMAIL}')`,
@@ -456,24 +577,34 @@ test('безымянный актёр: «Пользователь» в шапк�
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/history');
 
-    // Старый снимок — маска как есть (журнал историчен), новый —
-    // «Пользователь»; шапка безымянного без суффикса «(Вы)» (актёр чужой).
-    await expect(page.getByRole('heading', { name: '+7********27', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Пользователь', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Пользователь (Вы)' })).toHaveCount(0);
+    // Живые ноги актёра (D5): профиль безымянного читается при выдаче —
+    // ОБЕ шапки «Пользователь», старый снимок с маской живому актёру не
+    // показывается (снимок — фолбэк только обезличенных строк).
+    await expect(page.getByRole('heading', { name: 'Пользователь', exact: true })).toHaveCount(2);
+    await expect(page.getByRole('heading', { name: '+7********27', exact: true })).toHaveCount(0);
     // Шапка с actor_id кликабельна в «Действия участника» (#712) —
     // безымянный титул ничего не ломает.
     await expect(page.getByRole('link', { name: 'Пользователь' }).first()).toHaveAttribute(
       'href',
       new RegExp(`/history/participants/${NAMELESS_ID}`),
     );
-    // Маска на ленте ровно одна — в шапке старой серии: лента не
-    // пере-маскирует новые снимки и не переписывает старые (Q6=А).
-    await expect(page.getByText(/\*{3}/)).toHaveCount(1);
+
+    // Снапшотный фолбэк D5: пользователь удалён — записи обезличены
+    // (FK actor_id ON DELETE SET NULL), шапки групп собираются по снимку
+    // actor_name как записано (Q6=А: журнал историчен, старые снимки —
+    // в том числе с маской — не перезаписываются и показываются как есть).
+    await execE2eSql(`DELETE FROM users WHERE id = '${NAMELESS_ID}'`);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: '+7********27', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Пользователь', exact: true })).toBeVisible();
+    // Обезличенные шапки не ссылки (actor_id null).
+    await expect(page.getByRole('link', { name: 'Пользователь' })).toHaveCount(0);
   } finally {
+    // Строки обезличенного актёра — actor_id уже NULL (SET NULL): журнал
+    // чистится целиком, каждый spec этого семейства начинается с той же
+    // операции.
     await execE2eSql(
-      `DELETE FROM action_journal WHERE actor_id = '${NAMELESS_ID}'; ` +
-        `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
+      `DELETE FROM action_journal; DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
     );
   }
 });

@@ -138,6 +138,10 @@ export interface JournalEntrySeed {
   readonly text?: string;
   readonly segments?: string;
   readonly searchable?: string;
+  /** Серые пояснения нового шаблона (карта #1324, D1): детали пишутся в
+   * jsonb-колонку details; undefined — легаси-строка без пояснений
+   * (NULL, как у записей до D1). */
+  readonly details?: readonly string[];
 }
 
 /** Одна запись журнала «Истории действий» прямым INSERT'ом в
@@ -160,9 +164,13 @@ export async function seedJournalEntry(
   const searchableSql = entry.searchable === undefined
     ? `'${`${entry.text} ${entry.actorName ?? 'Иван Иванов'}`.replace(/'/g, "''")}' || ' ' || ${actorEmailSql}`
     : `'${entry.searchable.replace(/'/g, "''")}'`;
+  // details — jsonb-массив строк (D1); легаси — NULL без поля на проводе.
+  const detailsSql = entry.details === undefined
+    ? 'NULL::jsonb'
+    : `$j$${JSON.stringify(entry.details)}$j$::jsonb`;
   return execE2eSql(`
     INSERT INTO action_journal
-      (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, searchable, created_at)
+      (id, property_id, actor_id, actor_role, actor_name, actor_email, kind, action, base_action, segments, details, searchable, created_at)
     VALUES (
       '${entry.id}',
       '${entry.propertyId ?? SEEDED_APARTMENT_PROPERTY_ID}',
@@ -174,6 +182,7 @@ export async function seedJournalEntry(
       '${entry.action ?? 'payment.created'}',
       '${entry.baseAction ?? 'added'}',
       $j$${segments}$j$::jsonb,
+      ${detailsSql},
       ${searchableSql},
       ${entry.createdAtSql ?? `'${entry.createdAt}'`}
     );

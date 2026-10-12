@@ -48,6 +48,13 @@ export type HistoryEntry = {
   /** null — пользователь удалён, запись обезличена (снимки остаются). */
   readonly actorId: string | null;
   readonly actorName: string;
+  /** Живое имя актёра при чтении (карта #1324, D5, паттерн ADR 0065);
+   * '' — имени нет или запись обезличена. Сборку отображаемого имени
+   * делает фронт (хелпер D4) — сервер отдаёт части. */
+  readonly actorFirstName: string;
+  /** Живая фамилия актёра при чтении (D5); '' — фамилии нет или запись
+   * обезличена. */
+  readonly actorLastName: string;
   /** Путь стриминга фото профиля актёра (ADR 0065, решение #1286), живой
    * на чтение; null — у актёра нет фото или запись обезличена. */
   readonly actorPhotoUrl: string | null;
@@ -56,6 +63,11 @@ export type HistoryEntry = {
   /** Стабильный точечный id действия, например operation.paid. */
   readonly action: string;
   readonly segments: ReadonlyArray<HistorySegment>;
+  /** Серые строки-пояснения нового шаблона (карта #1324, D1): собраны
+   * сервером при записи, рендерятся дословно под заголовком. undefined —
+   * строка без пояснений (записанные до D1 и действия без диффов) —
+   * рендерится одним заголовком (решение владельца). */
+  readonly details?: ReadonlyArray<string>;
   /** Момент действия, ISO-instant; группировка дней — дело экрана. */
   readonly createdAt: string;
 };
@@ -64,7 +76,9 @@ export type HistoryEntry = {
  * имя без фамилии для строки «(Вы)» ('' — имени нет); isOwner — владелец
  * хотя бы одного объекта области чтения (иконка-замок, макет 2067-163528);
  * role — максимальная роль в области (иконка роли строки, макет
- * 2184-94261: owner — замок, full_access — силуэт, viewer — глаз). */
+ * 2184-94261: owner — замок, full_access — силуэт, viewer — глаз); status —
+ * живая нога в области (карта #1324, D6): current — владелец или членство
+ * (включая suspended), removed — только строки журнала (ревок/выход). */
 export type HistoryParticipantOption = {
   readonly id: string;
   readonly name: string;
@@ -75,6 +89,7 @@ export type HistoryParticipantOption = {
   readonly photoUrl: string | null;
   readonly isOwner: boolean;
   readonly role: 'owner' | 'full_access' | 'viewer';
+  readonly status: 'current' | 'removed';
 };
 
 /** Объект-вариант шита фильтров с фото-аватаром ('' — фото нет). type —

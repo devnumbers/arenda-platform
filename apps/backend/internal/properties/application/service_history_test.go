@@ -16,6 +16,8 @@ import (
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
+	"github.com/stretchr/testify/assert"
 )
 
 // The fixture names and addresses the rename assertions read back.
@@ -84,7 +86,9 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 	}
 	want := []struct{ action, text string }{
 		{string(historydomain.ActionPropertyCreated), "Добавлен объект: Новая квартира"},
-		{string(historydomain.ActionPropertyRenamed), "Название объекта изменено: Новая квартира → Переименованная"},
+		// Единая строка изменения (решение 12.10): правка названия —
+		// property.updated с диффом в пояснениях.
+		{string(historydomain.ActionPropertyUpdated), "Объект изменён: Переименованная"},
 		{string(historydomain.ActionPropertyArchived), "Объект отправлен в архив"},
 	}
 	for i, w := range want {
@@ -118,11 +122,16 @@ func TestHistory_RenameCarriesOldAndNew(t *testing.T) {
 	}
 
 	e := history.Entries[0]
-	if e.Action != historydomain.ActionPropertyRenamed {
-		t.Fatalf("action = %s, want property.renamed", e.Action)
+	if e.Action != historydomain.ActionPropertyUpdated {
+		t.Fatalf("action = %s, want property.updated", e.Action)
 	}
-	if e.Context["old_name"] != fixtureOldName || e.Context["new_name"] != renamedName {
-		t.Errorf("context = %v, want the old/new names", e.Context)
+	// Дифф живёт в пояснениях, снимок нового имени — в заголовке и context.
+	wantDetails := historydomain.DetailLines{"Название: «" + fixtureOldName + "» → «" + renamedName + "»"}
+	if len(e.Details) != 1 || e.Details[0] != wantDetails[0] {
+		t.Errorf("details = %q, want %q", e.Details, wantDetails)
+	}
+	if e.Context["name"] != renamedName {
+		t.Errorf("context = %v, want the new-name snapshot", e.Context)
 	}
 }
 
@@ -138,4 +147,114 @@ func TestHistory_FailingInsertFailsMutation(t *testing.T) {
 	}); err == nil {
 		t.Fatal("UpdateProperty returned nil, want the journal failure to fail the mutation")
 	}
+}
+
+func TestHistory_MaintenanceFlipRows(t *testing.T) {
+	t.Parallel()
+	// Протокол D2 (карта #1324, решение #1317 §6): флип active↔maintenance
+	// журналируется — started («Изменение») при входе в ремонт, finished
+	// («Выполнение») при выходе; статус-ноуп (idempotent PUT того же
+	// статуса) строки не пишет — гвард фактического неравенства обязателен,
+	// because isUpdatableStatusTransition пропускает from==to.
+	history := &historytest.CapturingRecorder{}
+	svc, owner := newHistoryTestService(t, history)
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	ctx := context.Background()
+
+	maintenance := string(domain.PropertyStatusMaintenance)
+	if _, err := svc.UpdateProperty(ctx, owner, propertyID, UpdatePropertyCommand{Status: &maintenance}); err != nil {
+		t.Fatalf("UpdateProperty (to maintenance): %v", err)
+	}
+	active := string(domain.PropertyStatusActive)
+	if _, err := svc.UpdateProperty(ctx, owner, propertyID, UpdatePropertyCommand{Status: &active}); err != nil {
+		t.Fatalf("UpdateProperty (back to active): %v", err)
+	}
+	// Idempotent PUT того же статуса — тишина (ADR 0061 §3: no-op пишет
+	// ноль строк).
+	if _, err := svc.UpdateProperty(ctx, owner, propertyID, UpdatePropertyCommand{Status: &active}); err != nil {
+		t.Fatalf("UpdateProperty (same status): %v", err)
+	}
+
+	if len(history.Entries) != 2 {
+		t.Fatalf("journal entries = %d, want 2 (started, finished; same-status silent)", len(history.Entries))
+	}
+	started, finished := history.Entries[0], history.Entries[1]
+	if started.Action != historydomain.ActionPropertyMaintenanceStarted || started.BaseAction != historydomain.BaseChanged {
+		t.Errorf("started action/base = %s/%s, want maintenance_started/changed", started.Action, started.BaseAction)
+	}
+	if got := started.Segments.PlainText(); got != "Объект на ремонте" {
+		t.Errorf("started text = %q", got)
+	}
+	if finished.Action != historydomain.ActionPropertyMaintenanceFinished || finished.BaseAction != historydomain.BaseCompleted {
+		t.Errorf("finished action/base = %s/%s, want maintenance_finished/completed", finished.Action, finished.BaseAction)
+	}
+	if got := finished.Segments.PlainText(); got != "Ремонт завершён" {
+		t.Errorf("finished text = %q", got)
+	}
+	for i, e := range history.Entries {
+		assertSingleLinkedPropertyRun(t, i, propertyID, e)
+	}
+}
+
+// assertSingleLinkedPropertyRun pins the maintenance rows' shape: one
+// segment, linked at the object's page.
+func assertSingleLinkedPropertyRun(t *testing.T, i int, propertyID uuid.UUID, e historydomain.Entry) {
+	t.Helper()
+	if len(e.Segments) != 1 || e.Segments[0].Link == nil ||
+		e.Segments[0].Link.Kind != historydomain.KindProperty || e.Segments[0].Link.ID != propertyID {
+		t.Errorf("entry %d segments = %+v, want the single linked object run", i, e.Segments)
+	}
+}
+
+func TestHistory_MixedStatusPatchWritesTwoRows(t *testing.T) {
+	t.Parallel()
+	// Смешанный PATCH (название + статус) пишет две строки — прецедент
+	// канона CompleteRental (решение #1317 §6); формулировку подтверждает
+	// walkthrough.
+	history := &historytest.CapturingRecorder{}
+	svc, owner := newHistoryTestService(t, history)
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	maintenance := string(domain.PropertyStatusMaintenance)
+	newName := "Ремонтная"
+	if _, err := svc.UpdateProperty(context.Background(), owner, propertyID, UpdatePropertyCommand{
+		Name:   &newName,
+		Status: &maintenance,
+	}); err != nil {
+		t.Fatalf("UpdateProperty: %v", err)
+	}
+	if len(history.Entries) != 2 {
+		t.Fatalf("journal entries = %d, want 2 (rename + maintenance_started)", len(history.Entries))
+	}
+	if history.Entries[0].Action != historydomain.ActionPropertyUpdated {
+		t.Errorf("first row = %s, want property.updated", history.Entries[0].Action)
+	}
+	if history.Entries[1].Action != historydomain.ActionPropertyMaintenanceStarted {
+		t.Errorf("second row = %s, want maintenance_started", history.Entries[1].Action)
+	}
+}
+
+func TestHistory_StatusOnlyEditPublishesHistoryFrame(t *testing.T) {
+	t.Parallel()
+	// Строка журнала — изменение ленты: status-only PATCH со строкой гонит
+	// history-якорь realtime-пабликации (ADR 0062), без строки — нет.
+	history := &historytest.CapturingRecorder{}
+	svc, owner := newHistoryTestService(t, history)
+	realtime := bindPropertyRealtime(t, svc)
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	ctx := context.Background()
+
+	maintenance := string(domain.PropertyStatusMaintenance)
+	if _, err := svc.UpdateProperty(ctx, owner, propertyID, UpdatePropertyCommand{Status: &maintenance}); err != nil {
+		t.Fatalf("UpdateProperty: %v", err)
+	}
+	assert.Contains(t, realtime.Pairs(), "history:"+propertyID.String())
+
+	// Повторный статус-ноуп не грязнит ленту.
+	realtime = &realtimetest.RecordingPublisher{}
+	svc.SetRealtimePublisher(realtime)
+	if _, err := svc.UpdateProperty(ctx, owner, propertyID, UpdatePropertyCommand{Status: &maintenance}); err != nil {
+		t.Fatalf("UpdateProperty (same status): %v", err)
+	}
+	assert.NotContains(t, realtime.Pairs(), "history:"+propertyID.String())
 }

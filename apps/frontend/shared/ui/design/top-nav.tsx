@@ -336,7 +336,9 @@ function TopNavCompactSlots({
 }
 
 /** Центральный блок TopNav варианта Title (Figma 934:19658): заголовок
- * 16/18 + необязательный подзаголовок 14/16 #6F787C. */
+ * 16/18 + необязательный подзаголовок 14/16 #6F787C; длинный подзаголовок
+ * обрезается с многоточием (макет 3258-76984 — «История объекта» с именем
+ * объекта в сабтайтле). */
 export type TopNavTitleProps = {
   readonly title: ReactNode;
   readonly subtitle?: ReactNode;
@@ -347,7 +349,9 @@ export function TopNavTitle({ title, subtitle, className }: TopNavTitleProps): J
   return (
     <span className={cn('flex min-w-0 flex-col items-center gap-0.5 text-center', className)}>
       <span className="truncate text-base font-medium text-content">{title}</span>
-      {subtitle !== undefined && <span className="text-sm text-content-secondary">{subtitle}</span>}
+      {subtitle !== undefined && (
+        <span className="truncate text-sm text-content-secondary">{subtitle}</span>
+      )}
     </span>
   );
 }

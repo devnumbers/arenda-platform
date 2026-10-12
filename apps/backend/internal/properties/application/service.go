@@ -849,6 +849,14 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 			}
 			journaled = true
 		}
+		// The maintenance flip journals its own row (протокол D2, карта
+		// #1324; ADR 0061 §3) — the guard is the FACTUAL inequality, and a
+		// mixed PATCH writes two rows (the CompleteRental precedent).
+		maintenanceJournaled, err := s.recordMaintenanceHistory(ctx, stores, id, actor, role, before, updated)
+		if err != nil {
+			return err
+		}
+		journaled = journaled || maintenanceJournaled
 		return nil
 	})
 	if err != nil {
@@ -862,6 +870,31 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, actor, id uuid.UUI
 
 	updated.AccessRole = role
 	return updated, nil
+}
+
+// recordMaintenanceHistory journals the active↔maintenance flip as its own
+// row (протокол D2, карта #1324; ADR 0061 §3): started on the way in,
+// finished on the way out. The guard is the FACTUAL inequality —
+// isUpdatableStatusTransition admits from==to (the idempotent PUT), and a
+// no-op action writes no row. Reports whether a row was written so the
+// caller's journaled flag (and with it the SSE feed publication) follows the
+// journal.
+func (s *PropertyService) recordMaintenanceHistory(
+	ctx context.Context, stores *txStores, propertyID, actor uuid.UUID,
+	role sharedpolicy.Role, before, after domain.Property,
+) (bool, error) {
+	if before.Status == after.Status {
+		return false, nil
+	}
+	entry := historydomain.PropertyMaintenanceFinished(propertyID)
+	if after.Status == domain.PropertyStatusMaintenance {
+		entry = historydomain.PropertyMaintenanceStarted(propertyID)
+	}
+	if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+		sharedpolicy.HistoryActorRole(role), entry); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // SetPropertyPin writes the actor's personal pin (PUT pin, ticket #577; the
@@ -1837,7 +1870,7 @@ func (s *PropertyService) SetPropertyPhoto(
 			return fmt.Errorf("record audit: %w", err)
 		}
 		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
-			sharedpolicy.HistoryActorRole(role), historydomain.PropertyPhotoAdded(propertyID)); err != nil {
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyPhotosChanged(propertyID, property.Name, true)); err != nil {
 			return err
 		}
 		return nil
@@ -1915,7 +1948,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 			return fmt.Errorf("record audit: %w", err)
 		}
 		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
-			sharedpolicy.HistoryActorRole(role), historydomain.PropertyPhotoDeleted(propertyID)); err != nil {
+			sharedpolicy.HistoryActorRole(role), historydomain.PropertyPhotosChanged(propertyID, property.Name, false)); err != nil {
 			return err
 		}
 		return nil
@@ -2001,58 +2034,55 @@ func updatedPropertyFields(cmd UpdatePropertyCommand) []string {
 }
 
 // propertyUpdateHistoryEntry composes the action journal entry for an edit
-// from the old/new property states (ADR 0061 §4): a single changed field
-// group gets its precise action id, several at once get the generic
-// property.updated with the label list. The status is not part of the
-// journal dictionary — a status-only edit yields no entry (ok=false).
+// from the old/new property states (ADR 0061 §4): the unified change row
+// (решение владельца 12.10, карта #1324) — «Объект изменён: [новое имя]»
+// with one detail line per changed field; the former granular ids
+// (renamed/address_changed/description_changed/attributes_changed) are gone.
+// The status flip is not part of this composition — UpdateProperty journals
+// it as the separate maintenance row (D2, карта #1324), so a status-only
+// edit yields no entry here (ok=false) and a mixed PATCH yields this row
+// plus the maintenance one. Equal attribute maps diff to nothing. The RU
+// labels come from the calling side's catalogs: the field names here, the
+// attribute labels from the generated catalog (attributeChanges), the type
+// labels from PropertyTypeLabel.
 func propertyUpdateHistoryEntry(propertyID uuid.UUID, before, after domain.Property) (historydomain.Entry, bool) {
-	nameChanged := before.Name != after.Name
-	addressChanged := before.Address != after.Address
-	descriptionChanged := before.Description != after.Description
-	typeChanged := before.Type != after.Type
-	attrChanges := attributeChanges(before.Attributes, after.Attributes)
-
-	labels := make([]string, 0, 5)
-	if nameChanged {
-		labels = append(labels, "название")
+	changes := make([]historydomain.AttributeChange, 0, 5)
+	if before.Name != after.Name {
+		changes = append(changes, historydomain.AttributeChange{
+			Key: "name", Label: "Название", Old: before.Name, New: after.Name,
+		})
 	}
-	if addressChanged {
-		labels = append(labels, "адрес")
+	if before.Address != after.Address {
+		changes = append(changes, historydomain.AttributeChange{Key: "address", Label: "Адрес", Old: before.Address, New: after.Address})
 	}
-	if descriptionChanged {
-		labels = append(labels, "описание")
+	if before.Description != after.Description {
+		changes = append(changes, historydomain.AttributeChange{
+			Key: "description", Label: "Описание", Old: before.Description, New: after.Description,
+		})
 	}
-	if typeChanged {
-		labels = append(labels, "тип")
+	if before.Type != after.Type {
+		changes = append(changes, historydomain.AttributeChange{
+			Key:   "type",
+			Label: "Тип",
+			Old:   domain.PropertyTypeLabel(before.Type),
+			New:   domain.PropertyTypeLabel(after.Type),
+		})
 	}
-	if len(attrChanges) > 0 {
-		labels = append(labels, "характеристики")
-	}
-
-	switch {
-	case len(labels) == 0:
+	changes = append(changes, attributeChanges(before.Attributes, after.Attributes, after.Type)...)
+	if len(changes) == 0 {
 		return historydomain.Entry{}, false
-	case len(labels) == 1:
-		switch {
-		case nameChanged:
-			return historydomain.PropertyRenamed(propertyID, before.Name, after.Name), true
-		case addressChanged:
-			return historydomain.PropertyAddressChanged(propertyID, before.Address, after.Address), true
-		case descriptionChanged:
-			return historydomain.PropertyDescriptionChanged(propertyID, before.Description, after.Description), true
-		case len(attrChanges) > 0:
-			return historydomain.PropertyAttributesChanged(propertyID, attrChanges), true
-		default: // The type field alone changed.
-			return historydomain.PropertyUpdated(propertyID, labels), true
-		}
-	default:
-		return historydomain.PropertyUpdated(propertyID, labels), true
 	}
+	return historydomain.PropertyUpdated(propertyID, after.Name, changes), true
 }
 
 // attributeChanges diffs two attribute maps over the union of their keys;
 // nil folds to an empty map so a cleared attribute set reads as removals.
-func attributeChanges(before, after domain.Attributes) []historydomain.AttributeChange {
+// The RU label comes from the generated catalog by the property's type —
+// the detail lines of the new row template read it (history cannot import
+// the catalog: направление зависимости properties → history). A PATCH that
+// changes the type and the attributes together labels by the NEW type —
+// the same type applyPropertyUpdate validated the values against.
+func attributeChanges(before, after domain.Attributes, propType domain.PropertyType) []historydomain.AttributeChange {
 	if before == nil {
 		before = domain.Attributes{}
 	}
@@ -2065,11 +2095,20 @@ func attributeChanges(before, after domain.Attributes) []historydomain.Attribute
 		if existed && reflect.DeepEqual(oldVal, newVal) {
 			continue
 		}
-		changes = append(changes, historydomain.AttributeChange{Key: key, Old: oldVal, New: newVal})
+		changes = append(changes, historydomain.AttributeChange{
+			Key:   key,
+			Label: domain.AttributeFieldLabel(propType, key),
+			Old:   oldVal,
+			New:   newVal,
+		})
 	}
 	for key, oldVal := range before {
 		if _, exists := after[key]; !exists {
-			changes = append(changes, historydomain.AttributeChange{Key: key, Old: oldVal})
+			changes = append(changes, historydomain.AttributeChange{
+				Key:   key,
+				Label: domain.AttributeFieldLabel(propType, key),
+				Old:   oldVal,
+			})
 		}
 	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Key < changes[j].Key })

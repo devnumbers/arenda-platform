@@ -81,6 +81,21 @@ func (c Contact) FullName() string {
 	return strings.Join(nonEmpty(c.FirstName, c.LastName, c.Patronymic), " ")
 }
 
+// MessengerLabel composes the messenger pair for display — «Telegram @ivan»;
+// a lone name or username reads alone. The diff value of the action
+// journal's «Мессенджер» line (карта #1324: значения пояснений форматирует
+// вызывающий модуль).
+func (c Contact) MessengerLabel() string {
+	switch {
+	case c.MessengerName != "" && c.MessengerUsername != "":
+		return c.MessengerName + " " + c.MessengerUsername
+	case c.MessengerName != "":
+		return c.MessengerName
+	default:
+		return c.MessengerUsername
+	}
+}
+
 var (
 	phoneRegex = regexp.MustCompile(`^(?:\+7|7|8)(\d{10})$`)
 	emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)

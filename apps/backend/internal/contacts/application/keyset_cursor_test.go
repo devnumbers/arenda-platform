@@ -141,7 +141,7 @@ func TestListedContactCursorKeySortName(t *testing.T) {
 		{
 			name: "full name joins non-empty parts",
 			contact: domain.Contact{
-				ID: id, FirstName: contactFirstName, LastName: "Иванов", Patronymic: "Сергеевич",
+				ID: id, FirstName: contactFirstName, LastName: lastNameIvanov, Patronymic: "Сергеевич",
 				PropertyID: &propertyID,
 			},
 			wantSort: "Пётр Иванов Сергеевич",

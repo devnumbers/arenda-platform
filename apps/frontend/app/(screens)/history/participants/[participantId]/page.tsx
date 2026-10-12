@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import type { JSX } from 'react';
 import type { Metadata } from 'next';
-import { HistoryFeedScreen, HistoryMemberFeedSkeleton } from '@/widgets/history';
+import { HistoryFeedLoading, HistoryFeedScreen } from '@/widgets/history';
 
 /** «Действия участника» (карта #704, тикет #712): та же лента «Истории
  * действий», прибитая к одному человеку — actor_ids = один uuid юзера
@@ -11,7 +11,9 @@ import { HistoryFeedScreen, HistoryMemberFeedSkeleton } from '@/widgets/history'
  * ROUTES.participant); мусорный id (не uuid) бэк отвечает 400 — экран
  * рисует канонный ErrorCard с «Повторить». Фильтры живут в
  * query-параметрах, поэтому клиентский экран со useSearchParams стоит за
- * Suspense-границей — требование App Router (прецедент /history). */
+ * Suspense-границей — требование App Router (прецедент /history). Фолбэк
+ * границы — с хромом экрана (#1281, карта #1324): скелетон без шапки
+ * «прыгал» в хром при приходе контента. */
 export const metadata: Metadata = {
   title: 'Действия участника — Рентли',
   description: 'Лента действий одного участника',
@@ -23,7 +25,7 @@ export default async function HistoryParticipantRoutePage({
   const { participantId } = await params;
 
   return (
-    <Suspense fallback={<HistoryMemberFeedSkeleton />}>
+    <Suspense fallback={<HistoryFeedLoading participantId={participantId} />}>
       <HistoryFeedScreen participantId={participantId} />
     </Suspense>
   );

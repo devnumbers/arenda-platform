@@ -41,8 +41,12 @@ func (a fakeActors) Snapshot(context.Context, uuid.UUID) (domain.ActorSnapshot, 
 
 func (a fakeActors) WithTx(transaction.Tx) historyapp.ActorSnapshotSource { return a }
 
-// actorName is the canned snapshot the fake actor source answers with.
-const actorName = "Иван Иванов"
+// actorName and actorEmail are the canned snapshot the fake actor source
+// answers with.
+const (
+	actorName  = "Иван Иванов"
+	actorEmail = "ivan@example.com"
+)
 
 type fixedClock struct{ now time.Time }
 
@@ -55,7 +59,7 @@ func TestRecord_FillsSnapshotAndSearchable(t *testing.T) {
 	property := uuid.Must(uuid.NewV7())
 	writer := &fakeWriter{}
 	now := time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
-	svc := historyapp.NewService(writer, fakeActors{snap: domain.ActorSnapshot{Name: actorName, Email: "ivan@example.com"}}, fixedClock{now})
+	svc := historyapp.NewService(writer, fakeActors{snap: domain.ActorSnapshot{Name: actorName, Email: actorEmail}}, fixedClock{now})
 
 	entry := domain.PaymentCreated(property, "Электричество")
 	entry.PropertyID = property
@@ -75,15 +79,58 @@ func TestRecord_FillsSnapshotAndSearchable(t *testing.T) {
 	if !got.CreatedAt.Equal(now) {
 		t.Errorf("CreatedAt = %v, want %v", got.CreatedAt, now)
 	}
-	if got.ActorName != actorName || got.ActorEmail != "ivan@example.com" {
+	if got.ActorName != actorName || got.ActorEmail != actorEmail {
 		t.Errorf("actor snapshot = %q/%q, want the resolved one", got.ActorName, got.ActorEmail)
 	}
-	want := "Добавлен платёж: Электричество Иван Иванов ivan@example.com"
+	want := "Добавлен платёж: Электричество Иван Иванов " + actorEmail
 	if got.Searchable != want {
 		t.Errorf("Searchable = %q, want %q", got.Searchable, want)
 	}
-	if got.Searchable != got.Segments.PlainText()+" Иван Иванов ivan@example.com" {
+	if got.Searchable != got.Segments.PlainText()+" Иван Иванов "+actorEmail {
 		t.Error("Searchable must be the segments' plain text plus the actor snapshot")
+	}
+}
+
+func TestRecord_SearchableIncludesDetails(t *testing.T) {
+	t.Parallel()
+
+	// Новый шаблон (решение #1317 §3): «что видишь, то и ищешь» —
+	// searchable покрывает заголовок, серые пояснения и актёра. Легаси-
+	// формула (без details) остаётся байт-в-байт прежней.
+	actor := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+	writer := &fakeWriter{}
+	svc := historyapp.NewService(writer, fakeActors{snap: domain.ActorSnapshot{Name: "Максим", Email: "max@example.com"}}, nil)
+
+	entry := domain.PropertyUpdated(property, "Новое имя", []domain.AttributeChange{
+		{Key: "name", Label: "Название", Old: "Old Name", New: "Новое имя"},
+	})
+	entry.PropertyID = property
+	entry.ActorID = &actor
+	if err := svc.Record(context.Background(), entry); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	want := "Объект изменён: Новое имя Название: «Old Name» → «Новое имя» Максим max@example.com"
+	if got := writer.entries[0].Searchable; got != want {
+		t.Errorf("Searchable = %q, want %q", got, want)
+	}
+}
+
+func TestRecord_SearchableLegacyFormulaUnchanged(t *testing.T) {
+	t.Parallel()
+
+	actor := uuid.Must(uuid.NewV7())
+	writer := &fakeWriter{}
+	svc := historyapp.NewService(writer, fakeActors{snap: domain.ActorSnapshot{Name: "Иван Иванов", Email: "ivan@example.com"}}, nil)
+
+	entry := domain.PropertyArchived(uuid.Must(uuid.NewV7()))
+	entry.ActorID = &actor
+	if err := svc.Record(context.Background(), entry); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	want := "Объект отправлен в архив Иван Иванов " + actorEmail
+	if got := writer.entries[0].Searchable; got != want {
+		t.Errorf("Searchable = %q, want the legacy formula %q", got, want)
 	}
 }
 

@@ -16,19 +16,21 @@ import {
   type SeededUser,
 } from './fixtures';
 
-// «Действия участника» (карта #704, тикет #712; макет 2184-94731): та же
-// лента «Истории действий», прибитая к одному человеку — actor_ids = один
-// uuid (ADR 0061 §7), группировка «день → объект → актёр» и поиск/фильтры
-// переиспользуются; группы «Участники» в шите нет — человек прибит
-// страницей. Вход — тап по актёру в общей ленте и кебаб страницы
-// участника.
+// «Действия участника» (карта #704, тикет #712; композиция D7 карты
+// #1324 — паттерн макета 3260-77196 без сабтайтла и карточки актёра):
+// та же лента «Истории действий», прибитая к одному человеку —
+// actor_ids = один uuid (ADR 0061 §7); внутри дня объекты остаются
+// секциями, строки идут без карточки актёра — страница уже про него.
+// Поиск/фильтры переиспользуются; группы «Участники» в шите нет —
+// человек прибит страницей. Вход — тап по актёру в общей ленте и кебаб
+// страницы участника.
 
 const MARIA_ID = '12111111-1111-4111-8111-111111111121';
 const GARAGE_ID = SEEDED_GARAGE_PROPERTY_ID;
 
 /** Четыре записи: две владельца (квартира) и две участницы Марии —
  * квартира и гараж, оба сегодня: на странице участницы объекты остаются
- * секциями внутри дня (макет 2184-94731). */
+ * секциями внутри дня (композиция D7). */
 async function seedMemberJournal(user: SeededUser): Promise<void> {
   await execE2eSql('DELETE FROM action_journal;');
   await seedJournalEntry(
@@ -78,15 +80,16 @@ test('вход из общей ленты по тапу на актёра: то�
   await expect(page.getByText('Платёж создан:')).toHaveCount(0);
   await expect(page.getByText('Название объекта изменено: Квартира на Ленина')).toHaveCount(0);
 
-  // Группировка переиспользована: чип дня, обе объектные секции внутри
-  // дня (макет 2184-94731), шапки объектов кликабельны.
+  // Группировка D7: чип дня, обе объектные секции внутри дня, шапки
+  // объектов кликабельны.
   await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: /Квартира на Ленина/ }).first()).toBeVisible();
   await expect(page.getByRole('link', { name: /Гараж на Садовой/ }).first()).toBeVisible();
 
-  // Шапки актёров на самой странице статичны — человек уже её предмет.
-  await expect(page.getByRole('link', { name: 'Мария Петрова' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Мария Петрова' }).first()).toBeVisible();
+  // Карточек актёров нет — страница уже про него (D7): имя человека
+  // не звучит на странице ни шапкой, ни ссылкой (exact — имя в тексте
+  // пояснений строк, «Исполнитель: „Мария Петрова“», не считается).
+  await expect(page.getByText('Мария Петрова', { exact: true })).toHaveCount(0);
 
   // «Настройки» на месте (макет 2184-94731).
   await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
@@ -143,7 +146,7 @@ test('поиск переиспользуется: сужает действия
   await captureScreen(page, testInfo, 'history-member-search');
 });
 
-test('фильтры переиспользуются, «Участники» прибит серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
+test('фильтры переиспользуются, «Участник» прибит серым; «в ноль» — пусто без запроса', async ({ page, seededUser }, testInfo) => {
   await seedMemberJournal(seededUser);
   const actors = await trackHistoryScope(page);
   await openCabinetWithSeededSession(page, seededUser);
@@ -155,13 +158,15 @@ test('фильтры переиспользуются, «Участники» п
   await expect(dialog.getByText('Виды действий')).toBeVisible();
   await expect(dialog.getByText('Объекты')).toBeVisible();
 
-  // Группа «Участники» показывает только прибитого человека — 1/1, серым
-  // и незабираемым (#712, макет 2184-92510, решение владельца 23.09).
-  await expect(dialog.getByText('Участники')).toBeVisible();
+  // Группа «Участник» — только прибитый человек, 1/1, серым и
+  // незабираемым (#712, макет 2184-92510, решение владельца 23.09;
+  // подпись прибитой группы в единственном числе — решение владельца
+  // 10.10.2026, доработка #1321).
+  await expect(dialog.getByText('Участник', { exact: true })).toBeVisible();
   await expect(dialog.getByText('1/1')).toBeVisible();
-  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Участники' });
+  const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Участник' });
   await expect(master).toBeDisabled();
-  await dialog.getByRole('button', { name: /Участники/ }).click();
+  await dialog.getByRole('button', { name: /Участник/ }).click();
   const pinned = dialog.getByRole('checkbox', { name: 'Мария Петрова' });
   await expect(pinned).toBeChecked();
   await expect(pinned).toBeDisabled();

@@ -1,6 +1,2 @@
 export { HistoryFeedScreen } from './ui/history-feed-screen';
-export {
-  HistoryFeedSkeleton,
-  HistoryMemberFeedSkeleton,
-  HistoryPropertyFeedSkeleton,
-} from './ui/history-states';
+export { HistoryFeedLoading } from './ui/history-feed-loading';

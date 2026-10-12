@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState, type JSX, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useState, type JSX, type ReactNode } from 'react';
 import type { ApiError } from '@/shared/api/errors';
 import type { UseQueryResult } from '@tanstack/react-query';
 import {
@@ -39,6 +39,7 @@ import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import { useMe } from '@/features/auth';
 import {
   DEFAULT_HISTORY_FILTERS,
+  historyParticipantSections,
   historyParticipantTitle,
   historyPeriodChipLabel,
   toggleHistoryFilterGroup,
@@ -73,7 +74,11 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
  * «Действиях участника» (#712) группа «Участники» показывает только
  * прибитого страницу человека — серым и незабираемым (disabled-чекбокс
  * канона Checkbox, макет 2184-92510, решение владельца 23.09); он не
- * часть черновика: «Сбросить»/«Применить» его не пишут. Строки —
+ * часть черновика: «Сбросить»/«Применить» его не пишут. Подпись прибитой
+ * группы — в единственном числе, «Участник»/«Объект» (решение владельца
+ * 10.10.2026, доработка #1321): правило — «прибитая группа» (не «группа
+ * из одного элемента»), мультивыборные группы остаются во множественном
+ * даже с одной опцией; счётчик «1/1» и серая строка не меняются. Строки —
  * подпись 14/16 с сепараторами #ebebeb (кроме последней), макет
  * 2067-163528; строка целиком кликабельна (label), цвет текста от
  * состояния чекбокса не зависит (аннотации макета 2050-158281), как и
@@ -97,6 +102,20 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
  * крестик закрывает без коммита, «Сбросить фильтры» возвращает черновик к
  * дефолту (все группы «все», без периода) — применением по-прежнему
  * остаётся «Применить».
+ *
+ * Группа «Участники» разделена на секции «Текущие» и «Удалённые» (D6,
+ * макет 3339-160075; закрывает #1294): статус/current-removed едет с
+ * опциями /history/filters (бекенд-слайс #1318, bool_or по живым ногам);
+ * подписи секций — Service/Text/M/400 #6F787C (content-secondary);
+ * «Удалённые» рисуется, только когда непуста, и без удалённых
+ * разделение не показывается вовсе (parent #1294: оно появляется только
+ * после удаления участника с журнальными строками). Счётчик группы и
+ * мастер-чекбокс считаются по всем участникам обеих секций; семантика
+ * выбора не меняется. Имена строк — ФИО-канон D4 (historyParticipantTitle:
+ * чужой — «Имя Фамилия», своя — «Имя (Вы)», без имени — «Пользователь»);
+ * канон-фикс сервера (access.DisplayNameOf, голая фамилия не пишется) —
+ * в этом же слайсе. Прибитый участник (#712) секций не имеет — его
+ * одиночная серая строка живёт по макету 2184-92510 без подписей.
  *
  * Период — чип над группами: без периода серый «Выбрать период ⌄», с
  * периодом синий с форматом чипа канона («1 окт — 20 дек», макет
@@ -133,6 +152,14 @@ type HistoryFilterOptionRow = {
   readonly type?: PropertyType;
   readonly isMe?: boolean;
   readonly roleIcon?: HistoryParticipantOption['role'];
+};
+
+/** Секция строк внутри группы: подпись над строками (undefined — секция
+ * без подписи) или, для участников, «Текущие»/«Удалённые» (D6, макет
+ * 3339-160075). Плоская группа — одна секция без подписи. */
+type HistoryFilterSection = {
+  readonly title?: string;
+  readonly rows: ReadonlyArray<HistoryFilterOptionRow>;
 };
 
 const BASE_ACTION_ICONS: Record<HistoryBaseAction, JSX.Element> = {
@@ -181,11 +208,14 @@ export type HistoryFiltersSheetProps = {
   /** Действия участника (#712, макет 2184-92510, решение владельца
    * 23.09): группа «Участники» показывает ТОЛЬКО прибитого человека —
    * серым (disabled-чекбокс канона Checkbox), тапы не проходят; он не
-   * часть черновика — «Сбросить» и «Применить» его не трогают. */
+   * часть черновика — «Сбросить» и «Применить» его не трогают. Подпись
+   * группы — «Участник» (решение владельца 10.10.2026, доработка
+   * #1321). */
   readonly pinnedParticipantId?: string;
   /** История объекта (#840, макет 2184-94176, решение владельца 24.09):
    * зеркало пина участника для группы «Объекты» — только прибитый
-   * объект, серым и незабираемым; не часть черновика. */
+   * объект, серым и незабираемым; не часть черновика. Подпись группы —
+   * «Объект» (зеркало пина участника, решение 10.10.2026). */
   readonly pinnedPropertyId?: string;
 };
 
@@ -266,7 +296,10 @@ export function HistoryFiltersSheet({
   // человек (группа «1/1», макет 2184-92510). Пин не нашёлся в
   // загруженных опциях (мусорный id) — группа не рисуется вовсе:
   // показывать всех участников серыми значило бы врать о прибитости
-  // (зеркало guard'а «Объектов» #840).
+  // (зеркало guard'а «Объектов» #840). Секции D6 («Текущие»/«Удалённые»,
+  // макет 3339-160075) строит historyParticipantSections: без удалённых
+  // разделения нет; прибитый одиночный row секций не получает — его
+  // макет 2184-92510 подписей не знает.
   const pinnedParticipant =
     pinnedParticipantId !== undefined
       ? (optionsQuery.data?.participants ?? []).find(
@@ -280,16 +313,26 @@ export function HistoryFiltersSheet({
         ? [pinnedParticipant]
         : (optionsQuery.data?.participants ?? []);
 
-  const participantRows: ReadonlyArray<HistoryFilterOptionRow> = participantsSource.map(
-    (participant) => ({
-      id: participant.id,
-      label: historyParticipantTitle(participant, participant.id === meId),
-      subtitle: participant.email,
-      leadingSize: 'participant',
-      participantPhotoUrl: participant.photoUrl,
-      isMe: participant.id === meId,
-      roleIcon: participant.isOwner ? 'owner' : participant.role,
-    }),
+  const participantToRow = (participant: HistoryParticipantOption): HistoryFilterOptionRow => ({
+    id: participant.id,
+    label: historyParticipantTitle(participant, participant.id === meId),
+    subtitle: participant.email,
+    leadingSize: 'participant',
+    participantPhotoUrl: participant.photoUrl,
+    isMe: participant.id === meId,
+    roleIcon: participant.isOwner ? 'owner' : participant.role,
+  });
+
+  const participantSections: ReadonlyArray<HistoryFilterSection> = historyParticipantSections(
+    participantsSource,
+  ).map((section) => ({
+    title: section.title,
+    rows: section.participants.map(participantToRow),
+  }));
+  // Плоский список секций — семантика выбора и счётчик N/M группы: по всем
+  // участникам обеих секций (D6, счётчик группы не делится).
+  const participantRows: ReadonlyArray<HistoryFilterOptionRow> = participantSections.flatMap(
+    (section) => section.rows,
   );
 
   const objectRows: ReadonlyArray<HistoryFilterOptionRow> = (
@@ -366,7 +409,7 @@ export function HistoryFiltersSheet({
 
               <FilterGroupCard
                 title="Основные действия"
-                rows={ACTION_ROWS}
+                sections={[{ rows: ACTION_ROWS }]}
                 selected={draft.actions}
                 expanded={expanded.actions}
                 onToggleExpanded={() => toggleExpanded('actions')}
@@ -384,7 +427,7 @@ export function HistoryFiltersSheet({
               />
               <FilterGroupCard
                 title="Виды действий"
-                rows={KIND_ROWS}
+                sections={[{ rows: KIND_ROWS }]}
                 selected={draft.kinds}
                 expanded={expanded.kinds}
                 onToggleExpanded={() => toggleExpanded('kinds')}
@@ -408,8 +451,11 @@ export function HistoryFiltersSheet({
                 <>
                   {(pinnedParticipantId === undefined || participantRows.length > 0) && (
                     <FilterGroupCard
-                      title="Участники"
-                      rows={participantRows}
+                      /* Прибитый участник (#712) — подпись в единственном
+                        * числе (решение владельца 10.10.2026, доработка
+                        * #1321); мультивыборная группа — множественная. */
+                      title={pinnedParticipantId !== undefined ? 'Участник' : 'Участники'}
+                      sections={participantSections}
                       selected={draft.actorIds}
                       disabled={pinnedParticipantId !== undefined}
                       expanded={expanded.actors}
@@ -429,8 +475,11 @@ export function HistoryFiltersSheet({
                   )}
                   {(pinnedPropertyId === undefined || objectsSource.length > 0) && (
                     <FilterGroupCard
-                      title="Объекты"
-                      rows={objectsSource}
+                      /* Прибитый объект (#840) — подпись в единственном
+                        * числе, зеркало «Участника» (решение владельца
+                        * 10.10.2026). */
+                      title={pinnedPropertyId !== undefined ? 'Объект' : 'Объекты'}
+                      sections={[{ rows: objectsSource }]}
                       selected={draft.propertyIds}
                       disabled={pinnedPropertyId !== undefined}
                       expanded={expanded.objects}
@@ -495,11 +544,16 @@ export function HistoryFiltersSheet({
 
 /** Карточка группы (макет 2177-60527): серый блок radius 24, шапка —
  * мастер-чекбокс 24 + кнопка раскрытия с заголовком 16/18, счётчиком N/M и
- * шевроном; в раскрытом — строки опций по 56. disabled (#712 — прибитый
+ * шевроном; в раскрытом — секции строк: у секции с подписью — серый
+ * заголовок 32 (13/16 #6F787C, «Текущие»/«Удалённые» участников, D6,
+ * макет 3339-160075), у плоской — строки сразу. Счётчик N/M и
+ * мастер-чекбокс — по всем строкам всех секций. Строки по 56, сепаратор
+ * #ebebeb между строками секции (кроме последней строки секции — разрыв
+ * секций несёт подпись или край группы). disabled (#712 — прибитый
  * участник): чекбоксы серые, тапы по ним не проходят; раскрытие работает. */
 function FilterGroupCard({
   title,
-  rows,
+  sections,
   selected,
   expanded,
   disabled = false,
@@ -508,7 +562,7 @@ function FilterGroupCard({
   onToggleOption,
 }: {
   readonly title: string;
-  readonly rows: ReadonlyArray<HistoryFilterOptionRow>;
+  readonly sections: ReadonlyArray<HistoryFilterSection>;
   readonly selected: ReadonlyArray<string> | null;
   readonly expanded: boolean;
   readonly disabled?: boolean;
@@ -516,6 +570,7 @@ function FilterGroupCard({
   readonly onToggleAll: (next: ReadonlyArray<string> | null) => void;
   readonly onToggleOption: (id: string) => void;
 }): JSX.Element {
+  const rows = sections.flatMap((section) => section.rows);
   const count = selected === null ? rows.length : selected.length;
   const masterId = useId();
   return (
@@ -559,15 +614,26 @@ function FilterGroupCard({
       </div>
       {expanded && (
         <div className="pb-1">
-          {rows.map((row, index) => (
-            <FilterOptionRow
-              key={row.id}
-              row={row}
-              last={index === rows.length - 1}
-              checked={selected === null || selected.includes(row.id)}
-              disabled={disabled}
-              onToggle={() => onToggleOption(row.id)}
-            />
+          {sections.map((section, sectionIndex) => (
+            <Fragment key={section.title ?? `section-${sectionIndex}`}>
+              {section.title !== undefined && (
+                <div className="flex min-h-8 items-center pl-11 pr-5">
+                  <span className="text-[13px] font-normal leading-4 text-content-secondary">
+                    {section.title}
+                  </span>
+                </div>
+              )}
+              {section.rows.map((row, index) => (
+                <FilterOptionRow
+                  key={row.id}
+                  row={row}
+                  last={index === section.rows.length - 1}
+                  checked={selected === null || selected.includes(row.id)}
+                  disabled={disabled}
+                  onToggle={() => onToggleOption(row.id)}
+                />
+              ))}
+            </Fragment>
           ))}
         </div>
       )}

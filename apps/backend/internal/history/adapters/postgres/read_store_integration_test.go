@@ -35,6 +35,9 @@ const (
 	ownerDisplayName = "Иван Иванов"
 	petrDisplayName  = "Пётр Петров"
 	annaDisplayName  = "Анна Сидорова"
+	// Актёр журнала без живой ноги: фильтруемый призрак глобальной области
+	// (D14) и выживший снимок обезличенного актёра.
+	ghostActorName = "Лев Призрак"
 )
 
 // participantNames собирает отображаемые имена опций «Участников».
@@ -857,7 +860,7 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 	}
 	assertParticipantNames(t, participantNames(opts.Participants),
 		[]string{ownerDisplayName, petrDisplayName, annaDisplayName, "Олег Ушёл"},
-		[]string{"Лев Призрак", "Зина Злобина"})
+		[]string{ghostActorName, "Зина Злобина"})
 
 	// Глобальный фильтр участника без своих объектов — пуст (D14, #1305):
 	// владелец и соучастники чужого объекта не раскрываются.
@@ -878,7 +881,7 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 	}
 	assertParticipantNames(t, participantNames(scopedMember.Participants),
 		[]string{ownerDisplayName, petrDisplayName, annaDisplayName, "Олег Ушёл"},
-		[]string{"Лев Призрак", "Зина Злобина"})
+		[]string{ghostActorName, "Зина Злобина"})
 
 	// Скоуп по property_ids сужает участников: журнал другого объекта
 	// не подмешивается (зовёт владелец этого объекта).
@@ -1223,5 +1226,196 @@ func TestReadStore_ArchivedScopeForOptions(t *testing.T) {
 	}
 	if len(memberIDs) != 2 || !memberIDs[member] || !memberIDs[coMember] {
 		t.Fatalf("member participants: want only the own property's people, got %+v", opts.Participants)
+	}
+}
+
+// Статус участника шита фильтров (карта #1324, протокол D6, решение
+// #1317 §5): current — живая нога в области (владелец или членство,
+// приостановленное живо), removed — только строки журнала. Повторное
+// добавление живит автоматически; мульти-скоуп читает bool_or по всем
+// объектам области, сужение property_ids — та же семантика на узкой
+// области; computed на лету, без таблицы.
+func TestReadStore_ParticipantStatus(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	suspendedOne := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	revoked := seedUser(t, pool, "Олег", "Ушёл", "+79990000004", "oleg@example.com")
+	readded := seedUser(t, pool, "Мира", "Вернувшаяся", "+79990000005", "mira@example.com")
+	journalOnly := seedUser(t, pool, "Борис", "Сторонний", "+79990000006", "boris@example.com")
+
+	propertyA := seedProperty(t, pool, owner)
+	propertyB := seedProperty(t, pool, owner)
+	seedMembership(t, pool, propertyA, member)
+	seedMembership(t, pool, propertyA, suspendedOne)
+	suspendMembership(t, pool, propertyA, suspendedOne)
+
+	base := time.Unix(1000, 0)
+	// Отзыв: членство стёрто, строки журнала остались.
+	seedMembership(t, pool, propertyA, revoked)
+	seedEntry(t, pool, revoked, propertyA, base, domain.KindRental, domain.ActionRentalCreated,
+		domain.BaseAdded, "Аренда создана")
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, propertyA, revoked,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+	// Повторное добавление: отозвали и вернули — живая нога снова есть.
+	seedMembership(t, pool, propertyA, readded)
+	seedEntry(t, pool, readded, propertyA, base.Add(time.Second), domain.KindTask, domain.ActionTaskCompleted,
+		domain.BaseCompleted, "Задача выполнена")
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, propertyA, readded,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+	seedMembership(t, pool, propertyA, readded)
+	// Журнал-only: писал в журнал, членством никогда не был.
+	seedEntry(t, pool, journalOnly, propertyA, base.Add(2*time.Second), domain.KindContact, domain.ActionContactCreated,
+		domain.BaseAdded, "Контакт создан")
+	// Мульти-скоуп: Пётр — живой участник A и отозванный B.
+	seedMembership(t, pool, propertyB, member)
+	seedEntry(t, pool, member, propertyB, base.Add(3*time.Second), domain.KindPayment, domain.ActionPaymentCreated,
+		domain.BaseAdded, "Платёж создан")
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, propertyB, member,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	statusOf := func(t *testing.T, actor uuid.UUID, propertyIDs []uuid.UUID) map[uuid.UUID]string {
+		t.Helper()
+		opts, err := svc.Filters(context.Background(), actor, propertyIDs)
+		if err != nil {
+			t.Fatalf("filters: %v", err)
+		}
+		out := map[uuid.UUID]string{}
+		for _, p := range opts.Participants {
+			out[p.ID] = p.Status
+		}
+		return out
+	}
+
+	t.Run("full scope", func(t *testing.T) {
+		t.Parallel()
+		got := statusOf(t, owner, nil)
+		for id, want := range map[uuid.UUID]string{
+			owner:        statusCurrent,
+			member:       statusCurrent, // Жив в A, отозван в B — bool_or.
+			suspendedOne: statusCurrent, // Suspend живо.
+			revoked:      statusRemoved, // Только журнал.
+			readded:      statusCurrent, // Вернулся.
+			journalOnly:  statusRemoved, // Журнал без членства.
+		} {
+			if got[id] != want {
+				t.Errorf("status of %s = %q, want %q", id, got[id], want)
+			}
+		}
+	})
+	t.Run("narrowed to property B", func(t *testing.T) {
+		t.Parallel()
+		got := statusOf(t, owner, []uuid.UUID{propertyB})
+		// Пётр в области одного B — только мёртвая нога, честно removed.
+		if got[member] != statusRemoved {
+			t.Errorf("member status in B scope = %q, want removed", got[member])
+		}
+		if got[owner] != statusCurrent {
+			t.Errorf("owner status in B scope = %q, want current", got[owner])
+		}
+	})
+}
+
+// Живые ноги актёра и details доезжают до проекции (карта #1324, решение
+// #1317 §4): имя/фамилия читаются JOIN'ом users при чтении; у обезличенной
+// строки (пользователь удалён) — пустые части при живом снимке; details
+// новой строки доходят дословно, легаси-строка (NULL) остаётся nil.
+func TestReadStore_DetailsAndLiveActorLegs(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	ghost := seedUser(t, pool, "Лев", "Призрак", "+79990000002", "ghost@example.com")
+	property := seedProperty(t, pool, owner)
+
+	base := time.Unix(1000, 0)
+	// Новая строка: билдер с деталями.
+	newEntry := domain.PropertyUpdated(property, "Новое имя", []domain.AttributeChange{
+		{Key: "name", Label: "Название", Old: "Old Name", New: "Новое имя"},
+	})
+	newEntry.PropertyID = property
+	newEntry.ActorID = &owner
+	newEntry.ActorRole = domain.ActorRoleOwner
+	newEntry.CreatedAt = base
+	if err := historypg.NewRecorder(pool).Record(context.Background(), newEntry); err != nil {
+		t.Fatalf("record new-template entry: %v", err)
+	}
+	// Легаси-строка: сегменты без details, потом актёр удалён — actor_id
+	// SET NULL, снимки остаются.
+	legacy := domain.Entry{
+		PropertyID: property,
+		ActorID:    &ghost,
+		ActorRole:  domain.ActorRoleViewer,
+		Kind:       domain.KindTask,
+		Action:     domain.ActionTaskCompleted,
+		BaseAction: domain.BaseCompleted,
+		Segments:   domain.Segments{{Text: "Задача выполнена: Поливка"}},
+		Context:    map[string]any{},
+		CreatedAt:  base.Add(time.Second),
+	}
+	if err := historypg.NewRecorder(pool).Record(context.Background(), legacy); err != nil {
+		t.Fatalf("record legacy entry: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), `DELETE FROM users WHERE id = $1`, ghost); err != nil {
+		t.Fatalf("delete ghost user: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	page, err := svc.Feed(context.Background(), owner, historyapp.FeedQuery{})
+	if err != nil {
+		t.Fatalf("feed: %v", err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("feed rows = %d, want 2", len(page.Items))
+	}
+	byAction := map[domain.Action]domain.FeedEntry{}
+	for _, e := range page.Items {
+		byAction[e.Action] = e
+	}
+	assertRenamedRowDetails(t, byAction[domain.ActionPropertyUpdated])
+	assertLegacyRowLegs(t, byAction[domain.ActionTaskCompleted])
+}
+
+// Статусы шита фильтров — словарь ожиданий (goconst).
+const (
+	statusCurrent = "current"
+	statusRemoved = "removed"
+)
+
+func assertRenamedRowDetails(t *testing.T, renamed domain.FeedEntry) {
+	t.Helper()
+	wantDetails := domain.DetailLines{`Название: «Old Name» → «Новое имя»`}
+	if len(renamed.Details) != 1 || renamed.Details[0] != wantDetails[0] {
+		t.Errorf("renamed details = %q, want %q", renamed.Details, wantDetails)
+	}
+	if renamed.ActorFirstName != "Иван" || renamed.ActorLastName != "Иванов" {
+		t.Errorf("live actor legs = %q/%q, want Иван/Иванов", renamed.ActorFirstName, renamed.ActorLastName)
+	}
+}
+
+func assertLegacyRowLegs(t *testing.T, legacyRow domain.FeedEntry) {
+	t.Helper()
+	if legacyRow.Details != nil {
+		t.Errorf("legacy details = %q, want nil", legacyRow.Details)
+	}
+	if legacyRow.ActorID != nil {
+		t.Fatalf("ghost row actor_id = %v, want nil (SET NULL)", legacyRow.ActorID)
+	}
+	if legacyRow.ActorFirstName != "" || legacyRow.ActorLastName != "" {
+		t.Errorf("anonymized live legs = %q/%q, want empty parts over the live snapshot",
+			legacyRow.ActorFirstName, legacyRow.ActorLastName)
+	}
+	if legacyRow.ActorName != ghostActorName {
+		t.Errorf("anonymized snapshot = %q, want «%s» to survive", legacyRow.ActorName, ghostActorName)
 	}
 }

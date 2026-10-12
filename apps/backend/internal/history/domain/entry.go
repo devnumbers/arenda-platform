@@ -65,18 +65,25 @@ const (
 type Action string
 
 const (
-	ActionPropertyCreated            Action = "property.created"
-	ActionPropertyRenamed            Action = "property.renamed"
+	ActionPropertyCreated Action = "property.created"
+
+	// ActionPropertyAddressChanged, ActionPropertyDescriptionChanged,
+	// ActionPropertyAttributesChanged, ActionPropertyRenamed and the photo
+	// pair below are LEGACY-ONLY ids since the unified change-row decision
+	// (решение владельца 12.10, карта #1324): new writes carry
+	// property.updated for every edit, photos included; the ids stay in the
+	// vocabulary because the rows recorded before it keep them — an action
+	// id is API surface (ADR 0061 §4), not a copy tweak.
 	ActionPropertyAddressChanged     Action = "property.address_changed"
 	ActionPropertyDescriptionChanged Action = "property.description_changed"
 	ActionPropertyAttributesChanged  Action = "property.attributes_changed"
-	// ActionPropertyUpdated records a mutation that touched several field
-	// groups at once (rename + address in one PATCH); single-group edits get
-	// their precise ids above.
+	ActionPropertyRenamed            Action = "property.renamed"
+	ActionPropertyPhotoAdded         Action = "property.photo_added"
+	ActionPropertyPhotoDeleted       Action = "property.photo_deleted"
+	// ActionPropertyUpdated records any edit of the object: the unified
+	// change row «Объект изменён: [новое имя]» with the per-field diffs in
+	// the details — single-field edits included (решение 12.10).
 	ActionPropertyUpdated Action = "property.updated"
-
-	ActionPropertyPhotoAdded   Action = "property.photo_added"
-	ActionPropertyPhotoDeleted Action = "property.photo_deleted"
 	// ActionPropertyArchived and ActionPropertyUnarchived close the
 	// property's lifecycle ids. The pin actions (property.pinned/unpinned)
 	// are gone since the personal pin cutover (#1307, D17): the pin is a
@@ -85,6 +92,11 @@ const (
 	// render their stored segments.
 	ActionPropertyArchived   Action = "property.archived"
 	ActionPropertyUnarchived Action = "property.unarchived"
+	// ActionPropertyMaintenanceStarted/Finished record the active↔maintenance
+	// status flip (карта #1324, протокол D2 — решение отменяет прежний §3
+	// «silent no-op», ADR 0061): start → changed, finish → completed.
+	ActionPropertyMaintenanceStarted  Action = "property.maintenance_started"
+	ActionPropertyMaintenanceFinished Action = "property.maintenance_finished"
 
 	ActionRentalCreated   Action = "rental.created"
 	ActionRentalUpdated   Action = "rental.updated"
@@ -156,6 +168,13 @@ type Segment struct {
 	Link *Link  `json:"link,omitempty"`
 }
 
+// DetailLines is the new template's detail lines (карта #1324, протокол D1,
+// решение #1317 §2): the ready gray lines under the header, built by the row
+// builders at write time and rendered by the frontend verbatim — the reading
+// path carries no formatting catalog. Nil means the row has no details:
+// every action recorded before the template, and the actions without diffs.
+type DetailLines []string
+
 // Segments is the ordered row text.
 type Segments []Segment
 
@@ -185,8 +204,12 @@ type Entry struct {
 	Action     Action
 	BaseAction BaseAction
 	Segments   Segments
-	// Searchable is the row's plain text plus the actor name and email —
-	// computed by the recorder service, never handed in by callers.
+	// Details carries the new template's gray lines (DetailLines doc); the
+	// recorder folds them into the searchable text.
+	Details DetailLines
+	// Searchable is the row's plain text plus the detail lines and the actor
+	// name and email — computed by the recorder service, never handed in by
+	// callers.
 	Searchable string
 	// Context carries the structured extras (amounts in kopecks, dates,
 	// old/new values) for future use; never rendered as the row text.

@@ -22,7 +22,14 @@ import (
 
 // createdContactFullName is the ФИО the canonical create fixture produces:
 // «Пётр Иванов» (the trimmed first name plus the last name).
-const createdContactFullName = contactFirstName + " " + "Иванов"
+const createdContactFullName = contactFirstName + " " + lastNameIvanov
+
+// lastNameIvanov is the shared last-name literal of the fixtures (goconst:
+// one home), the messenger name of the messenger fixtures likewise.
+const (
+	lastNameIvanov    = "Иванов"
+	messengerTelegram = "Telegram"
+)
 
 // rebindLastName is the shared rename literal of the rebind fixtures
 // (goconst: one home).
@@ -68,7 +75,9 @@ func TestHistory_BoundContactRows(t *testing.T) {
 	}
 	want := []struct{ action, text string }{
 		{string(historydomain.ActionContactCreated), "Добавлен контакт: " + createdContactFullName},
-		{string(historydomain.ActionContactUpdated), "Контакт изменён: " + createdContactFullName + " → " + reboundContactFullName},
+		// Единая строка изменения (решение 12.10): заголовок — снапшот
+		// нового ФИО, дифф — в пояснениях.
+		{string(historydomain.ActionContactUpdated), "Контакт изменён: " + reboundContactFullName},
 		{string(historydomain.ActionContactDeleted), "Контакт удалён: " + reboundContactFullName},
 	}
 	for i, w := range want {
@@ -83,7 +92,8 @@ func TestHistory_BoundContactRows(t *testing.T) {
 			t.Errorf("entry %d property = %s, want the card's binding", i, e.PropertyID)
 		}
 	}
-	// The label snapshot is the ФИО — the phone never enters the row text.
+	// Заголовок — снимок ФИО: телефон в сегментах не живёт (аменда §5
+	// разрешает PII только в пояснениях, заголовок чист).
 	for _, e := range h.history.Entries {
 		if text := e.Segments.PlainText(); strings.Contains(text, "89161234567") || strings.Contains(text, "+79161234567") {
 			t.Errorf("row text %q must never carry the phone", text)

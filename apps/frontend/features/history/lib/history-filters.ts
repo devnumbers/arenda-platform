@@ -2,6 +2,7 @@ import type { IsoDate, IsoRange } from '@/shared/lib/calendar';
 import type { HistoryBaseAction, HistoryKind, HistoryParticipantOption } from '@/entities/history';
 import { HISTORY_BASE_ACTIONS, HISTORY_KINDS } from '@/entities/history';
 import { formatIsoRangeChipLabel } from '@/shared/lib/date-format';
+import { displayUserName } from '@/shared/lib/display-name';
 import { readCsvParam, readCsvUuidParam } from '@/shared/lib/parse-csv-uuid-param';
 import { readIsoRangeParam, type UrlParamsSource } from '@/shared/lib/parse-iso-range-param';
 import type { HistoryFeedScope } from '@/shared/api/query-keys';
@@ -201,8 +202,9 @@ export function historyPeriodChipLabel(period: IsoRange | null): string {
 
 /** Заголовок строки участника шита: чужой — канон отображаемого имени,
  * себе — только имя без фамилии (макет 2067-163528: «Даниил (Вы)»;
- * суффикс «(Вы)» серым рисует сам шит); имени нет — канон
- * («Пользователь», #1105, аменд #1123). */
+ * суффикс «(Вы)» серым рисует сам шит); фамилия своей строки в канон
+ * D4 не подмешивается — displayUserName получает пустую фамилию, и без
+ * имени канон даёт «Пользователь» (#1105, аменд #1123). */
 export function historyParticipantTitle(
   participant: Pick<HistoryParticipantOption, 'name' | 'firstName'>,
   isMe: boolean,
@@ -210,7 +212,49 @@ export function historyParticipantTitle(
   if (!isMe) {
     return participant.name;
   }
-  return participant.firstName !== '' ? participant.firstName : participant.name;
+  return displayUserName(participant.firstName, '');
+}
+
+/** Секция группы «Участники» шита: подпись (undefined — секция без
+ * подписи, разделение не показывается) и строки секции. */
+export type HistoryParticipantSection = {
+  readonly title?: string;
+  readonly participants: ReadonlyArray<HistoryParticipantOption>;
+};
+
+/** Раздел «Текущие» группы «Участники» (D6, карта #1324; макет
+ * 3339-160075): живые ноги скоупа — владелец и членство (включая
+ * приостановленное). */
+const HISTORY_CURRENT_SECTION_TITLE = 'Текущие';
+
+/** Раздел «Удалённые» (D6): только строки журнала — ревок или выход;
+ * подпись живёт только при настоящем разделении (см.
+ * historyParticipantSections). */
+const HISTORY_REMOVED_SECTION_TITLE = 'Удалённые';
+
+/**
+ * Секции группы «Участники» по статусу D6 (current | removed с
+ * /history/filters, бекенд-слайс #1318). Подписанное разделение
+ * показывается, только когда есть и текущие, и удалённые (parent #1294:
+ * «после того, как участника удалили из объекта, если он что либо делал…»)
+ * — без удалённых и в оборонительном случае «только удалённые» (прибитая
+ * строка отозванного #712) одна секция без подписи. Порядок внутри секций
+ * — порядок опций сервера (алфавит SQL).
+ */
+export function historyParticipantSections(
+  participants: ReadonlyArray<HistoryParticipantOption>,
+): ReadonlyArray<HistoryParticipantSection> {
+  const removed = participants.filter((participant) => participant.status === 'removed');
+  if (removed.length === 0 || removed.length === participants.length) {
+    return participants.length === 0 ? [] : [{ participants }];
+  }
+  return [
+    {
+      title: HISTORY_CURRENT_SECTION_TITLE,
+      participants: participants.filter((participant) => participant.status !== 'removed'),
+    },
+    { title: HISTORY_REMOVED_SECTION_TITLE, participants: removed },
+  ];
 }
 
 /** Переключение группы мастер-чекбоксом шита: «все» (null) — снять всю

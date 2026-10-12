@@ -94,13 +94,17 @@ func (s *Service) Record(ctx context.Context, entry domain.Entry) error {
 }
 
 // searchableOf materializes the search text (research #705): the row's plain
-// text plus the actor name and email, so a member is findable by what they
-// did and by who they are.
+// text plus each detail line (новый шаблон, решение #1317 §3 — «что видишь,
+// то и ищешь»: ищется заголовок, пояснения и актёр) plus the actor name and
+// email. Легаси-строки (без details) дают прежнюю формулу байт-в-байт;
+// пересборка searchable у старых строк не делается — канон «ищется то, что
+// нарисовано», а нарисован у них один заголовок.
 func searchableOf(entry domain.Entry) string {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, len(entry.Details)+3)
 	if text := entry.Segments.PlainText(); text != "" {
 		parts = append(parts, text)
 	}
+	parts = append(parts, entry.Details...)
 	if entry.ActorName != "" {
 		parts = append(parts, entry.ActorName)
 	}

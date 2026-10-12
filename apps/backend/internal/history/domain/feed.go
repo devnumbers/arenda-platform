@@ -21,6 +21,15 @@ type FeedEntry struct {
 	ActorID    *uuid.UUID
 	ActorName  string
 	ActorEmail string
+	// ActorFirstName/ActorLastName are the actor's live profile parts (карта
+	// #1324, протокол D5, ADR 0065 pattern): read through the users JOIN at
+	// feed time; empty when the actor has no name/surname or the row is
+	// anonymized. The composition «Имя Фамилия» / «(Вы)» / «Пользователь»
+	// and the fallback to the ActorName snapshot (by ActorID == nil) are the
+	// frontend's D4 helper — the server ships the parts, not the assembled
+	// display name.
+	ActorFirstName string
+	ActorLastName  string
 	// ActorPhotoURL is the actor's profile photo streaming path (ADR 0065,
 	// решение #1286), live at read; empty when the actor has no photo or the
 	// row is anonymized. A revoked actor's path answers 404 and the client
@@ -31,6 +40,10 @@ type FeedEntry struct {
 	Action        Action
 	BaseAction    BaseAction
 	Segments      Segments
+	// Details carries the new template's gray detail lines (DetailLines,
+	// решение #1317 §2); nil for the rows recorded before the template —
+	// those render as the header alone.
+	Details DetailLines
 	// Context carries the structured extras (amounts in kopecks, dates,
 	// old/new values); never rendered as the row text, never searched.
 	Context   map[string]any
@@ -47,7 +60,11 @@ type FeedEntry struct {
 // IsOwner marks the owner of at least one object of the scope — the
 // owner-lock icon. Role is the widest access in the scope ('owner' /
 // 'full_access' / 'viewer', the row role icon, макет 2184-94261): the live
-// membership outranks the journal snapshot of an exited actor.
+// membership outranks the journal snapshot of an exited actor. Status is
+// the filter sheet's «Текущие»/«Удалённые» section marker (карта #1324,
+// протокол D6, решение #1317 §5): computed at read time — 'current' when
+// the user has a live leg in the scope (owner or membership, suspended
+// included), 'removed' when only journal rows remain (revoked/exited).
 type FilterParticipant struct {
 	ID        uuid.UUID
 	Name      string
@@ -58,6 +75,7 @@ type FilterParticipant struct {
 	PhotoURL string
 	IsOwner  bool
 	Role     string
+	Status   string
 }
 
 // FilterObject is one «Объекты» option of the filter sheet: the object with

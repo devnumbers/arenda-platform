@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import type { JSX } from 'react';
 import type { Metadata } from 'next';
-import { HistoryFeedScreen, HistoryPropertyFeedSkeleton } from '@/widgets/history';
+import { HistoryFeedLoading, HistoryFeedScreen } from '@/widgets/history';
 
 /** «Действия участника в объекте» (карта #838, тикет #841): та же лента
  * «Истории действий», прибитая к паре человек+объект — actor_ids и
@@ -14,7 +14,9 @@ import { HistoryFeedScreen, HistoryPropertyFeedSkeleton } from '@/widgets/histor
  * всего запроса (канон ленты задач #547) — оба состояния экран рисует
  * канонным ErrorCard с «Повторить». Фильтры живут в query-параметрах,
  * поэтому клиентский экран со useSearchParams стоит за Suspense-
- * границей — требование App Router (прецедент /history). */
+ * границей — требование App Router (прецедент /history). Фолбэк границы —
+ * с хромом экрана (#1281, карта #1324): скелетон без шапки «прыгал»
+ * в хром при приходе контента. */
 export const metadata: Metadata = {
   title: 'Действия участника в объекте — Рентли',
   description: 'Лента действий одного участника на одном объекте',
@@ -26,7 +28,7 @@ export default async function HistoryMemberPropertyRoutePage({
   const { participantId, propertyId } = await params;
 
   return (
-    <Suspense fallback={<HistoryPropertyFeedSkeleton />}>
+    <Suspense fallback={<HistoryFeedLoading participantId={participantId} propertyId={propertyId} />}>
       <HistoryFeedScreen participantId={participantId} propertyId={propertyId} />
     </Suspense>
   );

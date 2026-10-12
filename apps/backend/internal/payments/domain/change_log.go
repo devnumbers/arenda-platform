@@ -96,21 +96,21 @@ func DiffPaymentChanges(before, after Payment) []FieldChange {
 			New:   changeInt(after.AmountKopecks),
 		})
 	}
-	if beforeRec, afterRec, moved := changeRecurrenceMoved(before.Recurrence, after.Recurrence); moved {
+	if beforeRec, afterRec, moved := ChangeRecurrenceMoved(before.Recurrence, after.Recurrence); moved {
 		changes = append(changes, FieldChange{
 			Field: ChangeFieldRecurrence,
 			Old:   beforeRec,
 			New:   afterRec,
 		})
 	}
-	if !changeCategoryEqual(before.Category, after.Category) {
+	if !ChangeCategoryEqual(before.Category, after.Category) {
 		changes = append(changes, FieldChange{
 			Field: ChangeFieldCategory,
 			Old:   changeCategory(before.Category),
 			New:   changeCategory(after.Category),
 		})
 	}
-	if !changeDatesEqual(before.EndDate, after.EndDate) {
+	if !ChangeDatesEqual(before.EndDate, after.EndDate) {
 		changes = append(changes, FieldChange{
 			Field: ChangeFieldEndDate,
 			Old:   changeDate(before.EndDate),
@@ -185,18 +185,18 @@ func changeReminderOffset(days *int) json.RawMessage {
 	return changeInt(int64(*days))
 }
 
-// changeRecurrenceMoved compares two recurrences in their canonical JSON
+// ChangeRecurrenceMoved compares two recurrences in their canonical JSON
 // form — the constructors normalize the sets (sorted, unique), so equal
 // schedules marshal to equal bytes. Returns the pair's encodings.
-func changeRecurrenceMoved(before, after Recurrence) (beforeRaw, afterRaw json.RawMessage, moved bool) {
+func ChangeRecurrenceMoved(before, after Recurrence) (beforeRaw, afterRaw json.RawMessage, moved bool) {
 	beforeRaw, afterRaw = changeRecurrence(before), changeRecurrence(after)
 	return beforeRaw, afterRaw, !bytes.Equal(beforeRaw, afterRaw)
 }
 
-// changeCategoryEqual compares category references: the reference moves, the
+// ChangeCategoryEqual compares category references: the reference moves, the
 // resolved label cannot (it is re-resolved from the same reference within one
 // write's transaction).
-func changeCategoryEqual(before, after CategoryRef) bool {
+func ChangeCategoryEqual(before, after CategoryRef) bool {
 	if (before.Slug == nil) != (after.Slug == nil) {
 		return false
 	}
@@ -258,8 +258,8 @@ func changeReminderEqual(before, after *int) bool {
 	}
 }
 
-// changeDatesEqual compares two optional calendar dates.
-func changeDatesEqual(a, b *time.Time) bool {
+// ChangeDatesEqual compares two optional calendar dates.
+func ChangeDatesEqual(a, b *time.Time) bool {
 	switch {
 	case a == nil && b == nil:
 		return true

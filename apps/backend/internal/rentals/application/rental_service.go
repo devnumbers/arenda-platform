@@ -398,6 +398,14 @@ func (s *RentalService) updatedRentalOutcome(
 	if err := s.validateTermsWindow(ctx, stores, scope, propertyID, cmd, rental); err != nil {
 		return mutationOutcome{}, err
 	}
+	// Дифф снимается до патча (решение владельца 12.10, карта #1324):
+	// старый арендатор и старые границы периода едут в пояснения строки
+	// «Аренда изменена».
+	oldTenant, err := s.tenantName(ctx, scope, rental.ContactID)
+	if err != nil {
+		return mutationOutcome{}, err
+	}
+	oldFrom, oldTo := rental.StartDate, derefDate(rental.PlannedEndDate)
 	applyRentalUpdate(&rental, cmd)
 	if err := validateRentalRow(rental); err != nil {
 		return mutationOutcome{}, err
@@ -418,10 +426,8 @@ func (s *RentalService) updatedRentalOutcome(
 	if err := stores.rentals.Update(ctx, rental); err != nil {
 		return mutationOutcome{}, fmt.Errorf("update rental: %w", err)
 	}
-	if cmd.ContactID == nil || cmd.ContactID.Value == nil {
-		if tenantName, err = s.tenantName(ctx, scope, rental.ContactID); err != nil {
-			return mutationOutcome{}, err
-		}
+	if tenantName, err = s.tenantLabelAfter(ctx, scope, cmd, rental, tenantName); err != nil {
+		return mutationOutcome{}, err
 	}
 	changed := []realtimedom.Change{
 		realtimedom.On(realtimedom.EntityRentals, propertyID),
@@ -435,9 +441,10 @@ func (s *RentalService) updatedRentalOutcome(
 		RentalID: rental.ID,
 		Audit:    auditActionRentalUpdated,
 		AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
-		History:  new(historydomain.RentalUpdated(rental.ID, tenantName, rental.StartDate, derefDate(rental.PlannedEndDate))),
-		Changed:  changed,
-		Tick:     paymentChanged,
+		History: new(historydomain.RentalUpdated(
+			rental.ID, oldTenant, tenantName, oldFrom, oldTo, rental.StartDate, derefDate(rental.PlannedEndDate))),
+		Changed: changed,
+		Tick:    paymentChanged,
 	}, nil
 }
 
@@ -993,6 +1000,18 @@ func updatedRentalFields(cmd UpdateRentalCommand) []string {
 		fields = append(fields, "comment")
 	}
 	return fields
+}
+
+// tenantLabelAfter resolves the row's tenant label once the rentals row is
+// written: a patch that set the contact keeps the name its validation
+// already read (label), an unchanged contact reads the stored card.
+func (s *RentalService) tenantLabelAfter(
+	ctx context.Context, scope uuid.UUID, cmd UpdateRentalCommand, rental domain.Rental, label string,
+) (string, error) {
+	if cmd.ContactID != nil && cmd.ContactID.Value != nil {
+		return label, nil
+	}
+	return s.tenantName(ctx, scope, rental.ContactID)
 }
 
 // tenantName resolves the tenant card's display name for the action journal

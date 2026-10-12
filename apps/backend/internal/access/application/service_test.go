@@ -110,17 +110,23 @@ var _ UserLookup = fakeUserLookup{}
 // TestAccessService_DisplayName verifies the public display name used by the
 // sharing banner (issue T11): "Name Surname" when present, otherwise the
 // anonymous label «Пользователь» (карта #1105, аменд #1123: телефон больше не
-// фолбэк) — never an email. Lookup failures propagate.
+// фолбэк) — never an email. ФИО-канон D4 (карта #1324, протокол #1316):
+// пустая часть просто не пишется, имени нет — «Пользователь» независимо от
+// фамилии (голая фамилия не показывается). Lookup failures propagate.
 func TestAccessService_DisplayName(t *testing.T) {
 	t.Parallel()
 	namedID := uuid.Must(uuid.NewV7())
 	phoneOnlyID := uuid.Must(uuid.NewV7())
 	missingID := uuid.Must(uuid.NewV7())
+	surnameOnlyID := uuid.Must(uuid.NewV7())
+	nameOnlyID := uuid.Must(uuid.NewV7())
 	name, surname := "Ivan", "Petrov"
 
 	lookup := fakeUserLookup{
-		namedID:     {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789"},
-		phoneOnlyID: {ID: phoneOnlyID, Phone: "+79123456789"},
+		namedID:       {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789"},
+		phoneOnlyID:   {ID: phoneOnlyID, Phone: "+79123456789"},
+		surnameOnlyID: {ID: surnameOnlyID, Surname: &surname, Phone: "+79123456789"},
+		nameOnlyID:    {ID: nameOnlyID, Name: &name, Phone: "+79123456789"},
 	}
 	svc := NewAccessService(newMemRepo(), staticResolver{}, nil, lookup, nil, nil, nil,
 		newTestFactory(newMemRepo(), &memInvitationsRepo{}, auditapp.Noop{}), nil)
@@ -130,6 +136,12 @@ func TestAccessService_DisplayName(t *testing.T) {
 	}
 	if got, err := svc.DisplayName(t.Context(), phoneOnlyID); err != nil || got != "Пользователь" {
 		t.Errorf("phone-only user: got %q, %v; want %q, nil", got, err, "Пользователь")
+	}
+	if got, err := svc.DisplayName(t.Context(), surnameOnlyID); err != nil || got != anonymousDisplayName {
+		t.Errorf("surname-only user: got %q, %v; want %q, nil (D4: голая фамилия не пишется)", got, err, anonymousDisplayName)
+	}
+	if got, err := svc.DisplayName(t.Context(), nameOnlyID); err != nil || got != "Ivan" {
+		t.Errorf("name-only user: got %q, %v; want %q, nil", got, err, "Ivan")
 	}
 	if _, err := svc.DisplayName(t.Context(), missingID); err == nil {
 		t.Errorf("missing user: expected an error, got nil")

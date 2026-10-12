@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { HistoryFeedScreen, HistoryFeedSkeleton } from '@/widgets/history';
+import { HistoryFeedLoading, HistoryFeedScreen } from '@/widgets/history';
 import { historyFeedQueryOptions, historyFiltersQueryOptions } from '@/features/history';
 import { meQueryOptions } from '@/features/auth';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
@@ -13,7 +13,9 @@ import { serverApiClient } from '@/shared/api/server-client';
  * вверх; поиск (#710), фильтры (#711), действия участника (#712) и
  * переходы строк (#713) — свои тикеты карты. Фильтры живут в
  * query-параметрах, поэтому клиентский экран со useSearchParams стоит за
- * Suspense-границей — требование App Router (прецедент /operations). */
+ * Suspense-границей — требование App Router (прецедент /operations).
+ * Фолбэк границы — с хромом экрана (#1281, карта #1324): скелетон без
+ * шапки «прыгал» в хром при приходе контента. */
 export const metadata: Metadata = {
   title: 'История действий — Рентли',
   description: 'Лента действий по объектам',
@@ -21,7 +23,7 @@ export const metadata: Metadata = {
 
 export default function HistoryRoutePage() {
   return (
-    <Suspense fallback={<HistoryFeedSkeleton />}>
+    <Suspense fallback={<HistoryFeedLoading />}>
       <ServerPrefetchBoundary
         prefetch={(queryClient) => {
           // Дефолтный срез ленты — пустой скоуп (#709); опции шита фильтров

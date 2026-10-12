@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -867,23 +866,29 @@ func lookupLabel(ctx context.Context, users UserLookup, userID uuid.UUID, wrapTe
 // never a phone, never an email.
 const anonymousDisplayName = "Пользователь"
 
+// displayName composes the display name by the ФИО-канон D4 (карта #1324,
+// протокол #1316; поверхности: карточки ленты, чипы шита фильтров,
+// совместный доступ): «Имя Фамилия» — недостающая часть просто не пишется;
+// имени нет — «Пользователь» независимо от фамилии (голая фамилия не
+// показывается, аменд #1317 противоречие №2).
 func displayName(u MemberUser) string {
-	parts := make([]string, 0, 2)
-	if u.Name != nil && *u.Name != "" {
-		parts = append(parts, *u.Name)
+	name := ""
+	if u.Name != nil {
+		name = *u.Name
+	}
+	if name == "" {
+		return anonymousDisplayName
 	}
 	if u.Surname != nil && *u.Surname != "" {
-		parts = append(parts, *u.Surname)
+		return name + " " + *u.Surname
 	}
-	if name := strings.Join(parts, " "); name != "" {
-		return name
-	}
-	return anonymousDisplayName
+	return name
 }
 
-// DisplayNameOf composes the public display name from user fields ("Name
-// Surname" when present, otherwise the anonymous label «Пользователь» — never
-// a phone, never an email; карта #1105, аменд #1123). The exported seam for
+// DisplayNameOf composes the public display name from user fields («Имя
+// Фамилия» by the ФИО-канон D4, otherwise the anonymous label
+// «Пользователь» — never a phone, never an email; карта #1105, аменд
+// #1123). The exported seam for
 // the context's read adapters implementing
 // cross-context ports (ticket #702: the list cards' member names and the
 // suspended placeholders' owner row): the display-name rules live in one

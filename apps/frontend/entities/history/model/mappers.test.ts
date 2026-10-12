@@ -15,6 +15,8 @@ function itemDto(overrides: Partial<HistoryItemDto> = {}): HistoryItemDto {
     actor_id: 'user-1',
     actor_name: 'Иван Иванов',
     actor_email: 'ivan@example.com',
+    actor_first_name: 'Иван',
+    actor_last_name: 'Иванов',
     actor_photo_url: null,
     actor_role: 'owner',
     kind: 'payment',
@@ -52,6 +54,27 @@ describe('mapHistoryItem', () => {
     expect(entry.actorId).toBeNull();
   });
 
+  it('живые ноги актёра (D5) и пояснения (D1) доезжают в camelCase', () => {
+    const entry = mapHistoryItem(
+      itemDto({
+        actor_first_name: 'Максим',
+        actor_last_name: 'Сергеевич',
+        details: ['Название: «Моя квартира» → «Квартира №124»'],
+      }),
+    );
+    expect(entry.actorFirstName).toBe('Максим');
+    expect(entry.actorLastName).toBe('Сергеевич');
+    expect(entry.details).toEqual(['Название: «Моя квартира» → «Квартира №124»']);
+  });
+
+  it('легаси-строка без details: поле отсутствует (undefined), а не пустой массив (D1)', () => {
+    const entry = mapHistoryItem(itemDto());
+    expect(entry.details).toBeUndefined();
+    expect('details' in entry).toBe(false);
+    const empty = mapHistoryItem(itemDto({ details: [] }));
+    expect(empty.details).toEqual([]);
+  });
+
   it('фото актёра и фото участника фильтров — same-origin путь в camelCase (решение #1286)', () => {
     const entry = mapHistoryItem(
       itemDto({ actor_photo_url: '/api/users/user-1/photo' }),
@@ -69,6 +92,7 @@ describe('mapHistoryItem', () => {
           photo_url: '/api/users/user-1/photo',
           is_owner: true,
           role: 'owner',
+          status: 'current',
         },
       ],
       objects: [],
@@ -94,6 +118,7 @@ describe('mapHistoryFilterOptions', () => {
           photo_url: null,
           is_owner: true,
           role: 'owner',
+          status: 'current',
         },
         {
           id: 'user-2',
@@ -103,6 +128,7 @@ describe('mapHistoryFilterOptions', () => {
           photo_url: null,
           is_owner: false,
           role: 'viewer',
+          status: 'removed',
         },
       ],
       objects: [
@@ -119,6 +145,7 @@ describe('mapHistoryFilterOptions', () => {
         photoUrl: null,
         isOwner: true,
         role: 'owner',
+        status: 'current',
       },
       {
         id: 'user-2',
@@ -128,6 +155,7 @@ describe('mapHistoryFilterOptions', () => {
         photoUrl: null,
         isOwner: false,
         role: 'viewer',
+        status: 'removed',
       },
     ]);
     expect(options.objects).toEqual([

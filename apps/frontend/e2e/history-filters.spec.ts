@@ -307,6 +307,79 @@ test('участники: своя строка «Иван (Вы)» с замк�
   await expect(memberRow).toHaveCount(1);
   await expect(memberRow.getByRole('img', { name: 'Роль: Редактирование' })).toHaveCount(1);
   await expect(memberRow.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(0);
+
+  // Без удалённых разделения нет (parent #1294: оно появляется только
+  // после удаления участника с журнальными строками) — подписей секций
+  // нет вовсе, группа выглядит как до D6.
+  await expect(dialog.getByText('Текущие', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText('Удалённые', { exact: true })).toHaveCount(0);
+});
+
+test('удалённый участник — секции «Текущие»/«Удалённые» (D6, макет 3339-160075): подписи, счётчик по всем, строка в «Удалённых»', async ({ page, seededUser }) => {
+  // Журнальный актёр без живой ноги (ревок): остаётся опцией фильтра со
+  // статусом removed (D6, бекенд-слайс #1318 — bool_or по живым ногам),
+  // шит делит группу на «Текущих» и «Удалённых»; подписи —
+  // Service/Text/M/400 #6F787C, счётчик N/M — по всем участникам обеих
+  // секций. Повторное добавление живит участника (серверная семантика,
+  // интеграционная матрица #1318) — здесь только экран.
+  const REMOVED_ID = '16111111-1111-4111-8111-111111111173';
+  const REMOVED_EMAIL = 'e2e-removed-hfilters@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${REMOVED_ID}', '+79137654329', 'owner', 'Павел', 'Отозванный', '${REMOVED_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING`,
+  );
+  try {
+    await seedHistory(seededUser);
+    await seedJournalEntry(
+      memberTaskEntry('b0000000-0000-4000-8000-000000000005', 1, {
+        actorIdSql: `(SELECT id FROM users WHERE email = '${REMOVED_EMAIL}')`,
+        actorName: 'Павел Отозванный',
+        text: 'Задача выполнена: Заменить замок',
+      }),
+      seededUser,
+    );
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/history');
+    await expect(page.getByText('Задача выполнена: Заменить замок')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Настройки' }).click();
+    const dialog = sheet(page);
+    await dialog.getByRole('button', { name: 'Участники' }).click();
+
+    const group = page
+      .locator('section')
+      .filter({ has: page.getByRole('button', { name: 'Участники' }) });
+    // Подписи обеих секций; счётчик группы — по всем: сид даёт четыре
+    // живых (Иван, Мария, Сергей, Анна) + один отозванный = «5/5».
+    await expect(group.getByText('Текущие', { exact: true })).toBeVisible();
+    await expect(group.getByText('Удалённые', { exact: true })).toBeVisible();
+    await expect(group.getByText('5/5')).toBeVisible();
+
+    // Отозванный — строка в «Удалённых» с почтой подзаголовком; своя
+    // строка остаётся в «Текущих» по канону D4 («Иван (Вы)»).
+    const removedRow = page
+      .locator('.min-h-14')
+      .filter({ has: page.getByRole('checkbox', { name: 'Павел Отозванный' }) });
+    await expect(removedRow).toHaveCount(1);
+    await expect(removedRow.getByText(REMOVED_EMAIL)).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'Иван (Вы)' })).toBeVisible();
+
+    // Мастер-чекбокс группы правит обе секции: «все» → «ни одного»
+    // снимает всех пятерых (семантика группы не делится по секциям).
+    await dialog.getByRole('checkbox', { name: 'Выбрать все: Участники' }).click();
+    await expect(dialog.getByRole('checkbox', { name: 'Выбрать все: Участники' })).toHaveAttribute(
+      'data-state',
+      'unchecked',
+    );
+    await expect(group.getByText('0/5')).toBeVisible();
+    await expect(removedRow.getByRole('checkbox')).toHaveAttribute('data-state', 'unchecked');
+  } finally {
+    await execE2eSql(
+      `DELETE FROM action_journal WHERE actor_id = '${REMOVED_ID}'; ` +
+        `DELETE FROM users WHERE id = '${REMOVED_ID}'`,
+    );
+  }
 });
 
 test('безымянный участник в чипах: «Пользователь» титулом, почта подзаголовком (карта #1105, аменд #1123)', async ({ page, seededUser }) => {
