@@ -9,11 +9,12 @@ import { Skeleton } from '@/shared/ui/design';
  * состояние — на самом
  * экране (макет 2050-158499: только серая строка «Действий не было», без
  * иллюстрации). Скелетоны прибитых страниц — паритет их композиции
- * (решение владельца 24.09): «Действия участника» — одна группа, «История
- * объекта» (#1321, макет 3258-76984) — плашка дня и сразу карточки актёров
- * (объект — в сабтайтле шапки), пара «участник+объект» (#841) до своего
- * слайса (#1322) держит прежнюю композицию — шапка-карточка объекта над
- * лентой; общий двухгрупповый остаётся только общей ленте — прежде он
+ * (решение владельца 24.09): «Действия участника» (#712, D7) — одна
+ * группа с объектной секцией и строками без карточки актёра (страница
+ * уже про него), «История объекта» (#1321, макет 3258-76984) и пара
+ * «участник+объект» (#841, макет 3260-77196) — плашка дня и сразу
+ * карточки актёров (объект — в сабтайтле шапки); общий двухгрупповый
+ * остаётся только общей ленте — прежде он
  * стоял на всех страницах и заполнял весь viewport, схлопываясь в
  * короткую ленту. Паритет кадрам ленты (карта #1324, #1281): плашка дня
  * — в sticky-обёртке живой плашки, секции дня с pb-6, объектные группы с
@@ -21,6 +22,20 @@ import { Skeleton } from '@/shared/ui/design';
  */
 
 const ROW_WIDTHS = ['w-11/12', 'w-2/3', 'w-3/4'] as const;
+
+/** Строка ленты скелетона: полоска тона + S-иконка + текст + время —
+ * общая анатомия строки внутри карточки актёра и «голой» строки
+ * «Действий участника» (#712, D7: строки без карточки). */
+function HistoryFeedSkeletonRow({ width }: { readonly width: string }): JSX.Element {
+  return (
+    <div className="flex items-end gap-2">
+      <Skeleton className="h-4 w-[3px] shrink-0 self-stretch rounded-pill bg-surface-muted-hover" />
+      <Skeleton className="h-4 w-4 shrink-0 rounded-pill bg-surface-muted-hover" />
+      <Skeleton className={`h-[15px] bg-surface-muted-hover ${width}`} />
+      <Skeleton className="ml-auto h-[15px] w-10 shrink-0 bg-surface-muted-hover" />
+    </div>
+  );
+}
 
 function HistoryFeedSkeletonActorCard({ rows }: { readonly rows: number }): JSX.Element {
   return (
@@ -30,12 +45,7 @@ function HistoryFeedSkeletonActorCard({ rows }: { readonly rows: number }): JSX.
         <Skeleton className="h-[15px] w-28 bg-surface-muted-hover" />
       </div>
       {ROW_WIDTHS.slice(0, rows).map((width, index) => (
-        <div key={index} className="flex items-end gap-2">
-          <Skeleton className="h-4 w-[3px] shrink-0 self-stretch rounded-pill bg-surface-muted-hover" />
-          <Skeleton className="h-4 w-4 shrink-0 rounded-pill bg-surface-muted-hover" />
-          <Skeleton className={`h-[15px] bg-surface-muted-hover ${width}`} />
-          <Skeleton className="ml-auto h-[15px] w-10 shrink-0 bg-surface-muted-hover" />
-        </div>
+        <HistoryFeedSkeletonRow key={index} width={width} />
       ))}
     </div>
   );
@@ -63,17 +73,6 @@ function HistoryFeedSkeletonObjectHeader(): JSX.Element {
         <Skeleton className="h-[15px] w-36" />
         <Skeleton className="mt-1 h-[15px] w-24" />
       </div>
-    </div>
-  );
-}
-
-/** Шапка-карточка прибитого объекта скелетона («История объекта» и пара,
- * #840/#841): то же содержимое объектной шапки, но над всей лентой —
- * зеркало PinnedPropertyHeader. */
-function HistoryFeedSkeletonPinnedProperty(): JSX.Element {
-  return (
-    <div aria-hidden className="mb-3 flex min-w-0 items-center gap-2">
-      <HistoryFeedSkeletonObjectHeader />
     </div>
   );
 }
@@ -113,7 +112,9 @@ export function HistoryFeedSkeleton(): JSX.Element {
   );
 }
 
-/** Скелет «Действий участника» (#712): одна группа — в пределах одного
+/** Скелет «Действий участника» (#712, композиция D7): одна группа —
+ * объектная секция внутри дня: шапка объекта и строки без карточки
+ * актёра (страница уже про него). Группа одна — в пределах одного
  * человека день даёт одну-две объектные секции, двухгрупповый общий
  * скелетон заполнял весь viewport и схлопывался (решение владельца
  * 24.09). */
@@ -122,37 +123,29 @@ export function HistoryMemberFeedSkeleton(): JSX.Element {
     <div aria-hidden>
       <HistoryFeedSkeletonDay>
         <HistoryFeedSkeletonDayPill />
-        <HistoryFeedSkeletonGroup />
-      </HistoryFeedSkeletonDay>
-    </div>
-  );
-}
-
-/** Скелет «Истории объекта» (#840, новая композиция #1321, макет
- * 3258-76984): объект — предмет страницы и живёт в сабтайтле шапки
- * (TopNavTitle, вне фазы загрузки §7), над лентой — сразу плашка дня и
- * карточки актёров без объектной секции. */
-export function HistoryPropertyFeedSkeleton(): JSX.Element {
-  return (
-    <div aria-hidden>
-      <HistoryFeedSkeletonDay>
-        <HistoryFeedSkeletonDayPill />
-        <div className="flex flex-col gap-1.5">
-          <HistoryFeedSkeletonActorCard rows={3} />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
+            <HistoryFeedSkeletonObjectHeader />
+            <div className="flex flex-col gap-2">
+              <HistoryFeedSkeletonRow width="w-3/4" />
+              <HistoryFeedSkeletonRow width="w-3/4" />
+              <HistoryFeedSkeletonRow width="w-3/4" />
+            </div>
+          </div>
         </div>
       </HistoryFeedSkeletonDay>
     </div>
   );
 }
 
-/** Скелет «Действий участника в объекте» (#841): пара до своего слайса
- * (#1322) держит прежнюю композицию — шапка-карточка прибитого объекта
- * над лентой + одна группа без объектной секции (зеркало старой
- * «Истории объекта»). */
-export function HistoryMemberPropertyFeedSkeleton(): JSX.Element {
+/** Скелет страниц с пином объекта — «Истории объекта» (#840, макет
+ * 3258-76984) и пары «участник+объект» (#841, макет 3260-77196; D7):
+ * объект живёт в сабтайтле шапки (TopNavTitle, вне фазы загрузки §7),
+ * над лентой — сразу плашка дня и карточки актёров без объектной секции;
+ * у пары карточка одна — актёр прибит страницей. */
+export function HistoryPropertyFeedSkeleton(): JSX.Element {
   return (
     <div aria-hidden>
-      <HistoryFeedSkeletonPinnedProperty />
       <HistoryFeedSkeletonDay>
         <HistoryFeedSkeletonDayPill />
         <div className="flex flex-col gap-1.5">
@@ -172,9 +165,6 @@ export function historyFeedSkeleton(
 ): JSX.Element {
   const isMemberPage = participantId !== undefined;
   const isPropertyPage = propertyId !== undefined;
-  if (isMemberPage && isPropertyPage) {
-    return <HistoryMemberPropertyFeedSkeleton />;
-  }
   if (isPropertyPage) {
     return <HistoryPropertyFeedSkeleton />;
   }

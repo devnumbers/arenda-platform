@@ -392,11 +392,11 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
     /\/history\/participants\//,
   );
 
-  // На прибитой странице про себя (#712) та же метка — шапка там статична
-  // (человек — предмет страницы), ссылок из шапок нет.
+  // На прибитой странице про себя (#712) карточки актёров нет —
+  // страница уже про него (D7): ни шапки с меткой, ни ссылок.
   const meId = await execE2eSql(`SELECT id FROM users WHERE email = '${seededUser.email}'`);
   await page.goto(`/history/participants/${meId}`);
-  await expect(page.getByRole('heading', { name: 'Иван Иванов (Вы)', exact: true })).toBeVisible();
+  await expect(page.getByText('Иван Иванов (Вы)', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
 
   // Глазами приглашённого — семантика Telegram: своя группа подписана
