@@ -60,8 +60,8 @@ SELECT pay.id,
        pay.title,
        pay.amount_kopecks,
        pay.auto_pay,
-       pay.is_favorite,
-       pay.favorite_order,
+       (upf.payment_id IS NOT NULL)::bool AS is_favorite,
+       upf.favorite_order,
        pay.category_slug,
        pay.user_category_id,
        pay.created_at,
@@ -74,6 +74,12 @@ SELECT pay.id,
        oldest.oldest_overdue_operation_id
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
+-- The actor's personal favorite (the cutover #1308, D12): the star and the
+-- order position are the reading actor's own — a join, not the frozen
+-- payments columns; absent row = not a favorite of this actor.
+LEFT JOIN user_payment_favorites upf
+       ON upf.payment_id = pay.id
+      AND upf.user_id = sqlc.arg('actor')::uuid
 JOIN (
        SELECT unnest(string_to_array(sqlc.arg('owner_ids')::text, ',')::uuid[]) AS owner_id,
               unnest(string_to_array(sqlc.arg('todays')::text, ',')::date[]) AS today
@@ -147,11 +153,12 @@ WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
 
 -- name: SumGlobalPaymentCounters :one
 -- The main screen's two counters over the whole visible scope (ticket
--- #575): the favorite rules — the «Все избранные (N)» card — and the
+-- #575): the actor's favorite rules — the «Все избранные (N)» card, the
+-- personal set of the reading actor (the cutover #1308, D12) — and the
 -- overdue operations summed across the feed's rules — the «Все
 -- просроченные (N)» card. Neither is narrowed by a search: the counters
 -- describe the scope, the search screens' rows are the feed query's.
-SELECT COUNT(*) FILTER (WHERE pay.is_favorite)::bigint AS favorite_count,
+SELECT COUNT(upf.payment_id)::bigint AS favorite_count,
        COALESCE(SUM(agg.overdue_count), 0)::bigint AS overdue_operations_count
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
@@ -166,6 +173,11 @@ LEFT JOIN LATERAL (
       AND op.status = 'planned'
       AND op.date < t.today
 ) agg ON true
+-- The personal favorite join (the cutover #1308): COUNT over the actor's
+-- joined rows — a stranger's star never lands in the actor's counter.
+LEFT JOIN user_payment_favorites upf
+       ON upf.payment_id = pay.id
+      AND upf.user_id = sqlc.arg('actor')::uuid
 WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived';
 
@@ -200,18 +212,19 @@ ORDER BY COUNT(*) DESC, pay.category_slug NULLS LAST, pc.name NULLS LAST;
 -- stacks (ticket #575); the rules of each stack arrive on the feed query's
 -- rows and the application layer groups them. The search ('' = no filter)
 -- is a case-insensitive substring over the name and the address — it
--- filters the objects, never their stacks. The order is the global pin's
--- (ticket #577): the pinned first — among themselves by the pin time —
--- then the rest by name. pinned_at travels to the cards for the pin mark,
--- photo_url is the card avatar (ticket #582): with the private photos
--- (ADR 0065, #1227) one image per object, streamed by the backend — the
--- same-origin path, or NULL without a photo; type picks the avatar's
--- placeholder glyph (карта #1217, #1244).
+-- filters the objects, never their stacks. The order is the actor's
+-- personal pin's (ticket #577, the cutover #1307): the pinned first — among
+-- themselves by the pin time — then the rest by name. pinned_at travels
+-- from the actor's row in user_property_pins (the LEFT JOIN) to the cards
+-- for the pin mark, photo_url is the card avatar (ticket #582): with the
+-- private photos (ADR 0065, #1227) one image per object, streamed by the
+-- backend — the same-origin path, or NULL without a photo; type picks the
+-- avatar's placeholder glyph (карта #1217, #1244).
 SELECT p.id,
        p.name,
        p.address,
        p.type,
-       p.pinned_at,
+       up.pinned_at,
        -- COALESCE, not the bare column: sqlc trusts the column's NOT NULL
        -- and emits a string, while the CASE on a NULL key misses into NULL —
        -- an object without a photo would fail the scan. '' = no photo.
@@ -219,12 +232,15 @@ SELECT p.id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS photo_url
 FROM properties p
+LEFT JOIN user_property_pins up
+       ON up.property_id = p.id
+      AND up.user_id = sqlc.arg('actor')::uuid
 WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
   AND (sqlc.arg('search')::text = ''
        OR p.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR p.address ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
-ORDER BY p.pinned_at, p.name, p.id;
+ORDER BY up.pinned_at, p.name, p.id;
 
 -- name: LastOperationDatesOfPayments :many
 -- The newest materialized date across planned and paid per listed rule —
@@ -239,20 +255,24 @@ WHERE op.status <> 'cancelled'
 GROUP BY op.payment_id;
 
 -- name: LockGlobalPaymentFavorites :many
--- The favorites order save's lock pass (ticket #576): FOR UPDATE row locks
--- on the submitted rules — the caller passes the ids sorted, the ORDER BY
--- keeping the lock order deadlock-safe — restricted to the actor's visible
--- non-archived rules (the feed's visibility predicate). An id that does not
--- come back is unknown, foreign or invisible; the application layer folds
--- the three into one privacy-preserving 404. Every row carries the actor's
--- role on the rule's property — the save's write gate is the favorite
--- star's (#461, Full Access+), resolved per row beside the data. Ids
--- travel as the file's csv list; an empty list never reaches the query.
+-- The favorites order save's lock pass (ticket #576; the personal cutover
+-- #1308): FOR UPDATE row locks on the submitted ids' rows of the ACTOR —
+-- the caller passes the ids sorted, the ORDER BY keeping the lock order
+-- deadlock-safe — restricted to the actor's visible non-archived rules (the
+-- feed's visibility predicate). The lock runs on both the actor's
+-- user_payment_favorites row (the pass's write target) and the payment row
+-- (the archive/delete serialization the global mutations share). An id that
+-- does not come back is unknown, foreign, invisible, archived or simply not
+-- a favorite of this actor — the personal rows fold the old «visible
+-- non-favorite» case into the same privacy-preserving 404 the application
+-- layer answers. Every row carries the actor's role on the rule's property
+-- — resolved per row beside the data (the star's right is the view one,
+-- D12). Ids travel as the file's csv list; an empty list never reaches the
+-- query.
 SELECT pay.id,
-       pay.property_id,
-       pay.is_favorite,
        CASE WHEN pay.owner_id = sqlc.arg('actor') THEN 'owner' ELSE pm.role END::text AS actor_role
-FROM payments pay
+FROM user_payment_favorites upf
+JOIN payments pay ON pay.id = upf.payment_id
 JOIN properties p ON p.id = pay.property_id
 -- The role's row only — the visibility is the function call in the WHERE:
 -- the join's active-status condition is the membership snapshot's, not a
@@ -260,32 +280,40 @@ JOIN properties p ON p.id = pay.property_id
 LEFT JOIN property_members pm ON pm.property_id = pay.property_id
      AND pm.user_id = sqlc.arg('actor')
      AND pm.status = 'active'
-WHERE pay.id = ANY(string_to_array(sqlc.arg('ids')::text, ',')::uuid[])
+WHERE upf.user_id = sqlc.arg('actor')::uuid
+  AND pay.id = ANY(string_to_array(sqlc.arg('ids')::text, ',')::uuid[])
   AND actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
 ORDER BY pay.id
-FOR UPDATE OF pay;
+FOR UPDATE OF upf, pay;
 
 -- name: ClearGlobalPaymentFavoriteOrders :execrows
--- The favorites order save's full-replacement pass (ticket #576): the
--- visible favorites OUTSIDE the submitted list lose their positions —
--- they fall to the end of the reading order («новое избранное — в конец»),
--- so duplicate positions never survive a save. '' keeps the empty list
--- working (a save of nothing clears the whole visible order).
-UPDATE payments pay
+-- The favorites order save's full-replacement pass (ticket #576; the
+-- personal cutover #1308): the actor's favorites OUTSIDE the submitted list
+-- lose their positions — they fall to the end of the reading order («новое
+-- избранное — в конец»), so duplicate positions never survive a save. The
+-- pass only ever touches the actor's own rows (the personal set, D12) and
+-- keeps the feed's visibility and archive cuts: a favorite on an archived
+-- property keeps its position through the save — unarchiving returns the
+-- rule with its order intact (D16). '' keeps the empty list working (a save
+-- of nothing clears the whole visible personal order).
+UPDATE user_payment_favorites upf
 SET favorite_order = NULL
-FROM properties p
-WHERE pay.property_id = p.id
-  AND pay.is_favorite
-  AND pay.favorite_order IS NOT NULL
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+WHERE upf.payment_id = pay.id
+  AND upf.user_id = sqlc.arg('actor')::uuid
+  AND upf.favorite_order IS NOT NULL
   AND (sqlc.arg('keep_ids')::text = ''
-       OR pay.id <> ALL(string_to_array(sqlc.arg('keep_ids')::text, ',')::uuid[]))
+       OR upf.payment_id <> ALL(string_to_array(sqlc.arg('keep_ids')::text, ',')::uuid[]))
   AND actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived';
 
 -- name: SetPaymentFavoriteOrder :execrows
--- One rule's 1-based favorite position (ticket #576); the id match alone is
--- the guard — the lock pass has already proven existence and visibility in
--- the same transaction. :execrows keeps that ordering honest.
-UPDATE payments SET favorite_order = $2
-WHERE id = $1;
+-- One rule's 1-based favorite position in the actor's personal order
+-- (ticket #576; the cutover #1308); the id match alone is the guard — the
+-- lock pass has already proven the actor's row and its visibility in the
+-- same transaction. :execrows keeps that ordering honest.
+UPDATE user_payment_favorites
+SET favorite_order = $3
+WHERE user_id = $1 AND payment_id = $2;

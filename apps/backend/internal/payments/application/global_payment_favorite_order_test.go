@@ -1,11 +1,12 @@
 package application
 
-// The favorites manual order's unit tests (ticket #576): the save use case's
-// application-layer contract — dense positions in the list order, the
-// full-replacement clear of the unplaced favorites, the deadlock-safe lock
-// order, the duplicate/foreign/non-favorite/viewer verdicts and the audit
-// entry — against func-backed fakes; the visibility predicate, the per-row
-// role and the positions themselves are the store's (integration tests).
+// The favorites manual order's unit tests (ticket #576; the personal cutover
+// #1308): the save use case's application-layer contract — dense positions
+// in the list order, the full-replacement clear of the unplaced favorites,
+// the deadlock-safe lock order, the duplicate/degenerate/role verdicts and
+// the audit entry — against func-backed fakes; the personal-set lock (the
+// actor's rows over the visible non-archived rules) and the positions
+// themselves are the store's (integration tests).
 
 import (
 	"context"
@@ -65,7 +66,10 @@ func (f *fakeFavoriteOrderStore) LockVisibleFavorites(
 	return f.rows, nil
 }
 
-func (f *fakeFavoriteOrderStore) SaveFavoritePosition(_ context.Context, id uuid.UUID, position int64) error {
+func (f *fakeFavoriteOrderStore) SaveFavoritePosition(
+	_ context.Context, actor, id uuid.UUID, position int64,
+) error {
+	f.gotActor = actor
 	f.positions[id] = position
 	return nil
 }
@@ -99,9 +103,10 @@ func newOrderService(
 	return NewGlobalPaymentService(reader, calendar, factory), uow
 }
 
-// favoriteLock builds one locked owner-scope row.
+// favoriteLock builds one locked owner-scope row of the actor's personal
+// set.
 func favoriteLock(id uuid.UUID) GlobalPaymentFavoriteLock {
-	return GlobalPaymentFavoriteLock{ID: id, IsFavorite: true, Role: sharedpolicy.RoleOwner}
+	return GlobalPaymentFavoriteLock{ID: id, Role: sharedpolicy.RoleOwner}
 }
 
 // The happy path (ticket #576): the submitted list order becomes dense
@@ -203,10 +208,12 @@ func TestSaveFavoriteOrderRejectsDuplicates(t *testing.T) {
 	}
 }
 
-// A submitted id the lock cannot return — unknown, foreign or invisible —
-// is the privacy-preserving 404; the transaction rolls back empty (the
-// visibility answer is the lock itself) and nothing is written or leaked
-// about which of the three it was.
+// A submitted id the lock cannot return — unknown, foreign, invisible,
+// archived or simply not a favorite of this actor — is the privacy-
+// preserving 404; the personal rows fold the old «visible non-favorite»
+// 400 into the same verdict (the cutover #1308). The transaction rolls
+// back empty (the lock itself is the answer) and nothing is written or
+// leaked about which of the five it was.
 func TestSaveFavoriteOrderRejectsInvisible(t *testing.T) {
 	t.Parallel()
 
@@ -229,47 +236,43 @@ func TestSaveFavoriteOrderRejectsInvisible(t *testing.T) {
 	}
 }
 
-// A visible rule that is not a favorite cannot take a favorite position —
-// the client's list is stale; invalid input, the transaction rolls back
-// empty.
-func TestSaveFavoriteOrderRejectsNonFavorite(t *testing.T) {
+// The right to order the personal set is the star's own, the view one (the
+// cutover #1308, D12): a viewer reorders their favorites on par with the
+// owner — allowed, and the audit trail names the viewer's role.
+func TestSaveFavoriteOrderAllowsViewer(t *testing.T) {
 	t.Parallel()
 
-	favorite := uuid.Must(uuid.NewV7())
-	unstarred := uuid.Must(uuid.NewV7())
+	viewed := uuid.Must(uuid.NewV7())
 	orders := newFakeFavoriteOrderStore([]GlobalPaymentFavoriteLock{
-		favoriteLock(favorite),
-		{ID: unstarred, IsFavorite: false, Role: sharedpolicy.RoleOwner},
-	})
-	var audit capturingAudit
-	service, uow := newOrderService(&fakeGlobalReader{}, orders, &audit)
-
-	err := service.SaveFavoriteOrder(t.Context(), uuid.Must(uuid.NewV7()), []uuid.UUID{favorite, unstarred})
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("err = %v, want ErrInvalidInput", err)
-	}
-	if len(orders.positions) != 0 || len(audit.entries) != 0 || orders.cleared {
-		t.Errorf("side effects = (%d positions, %d audit, cleared %v), want none",
-			len(orders.positions), len(audit.entries), orders.cleared)
-	}
-	if uow.runs != 1 {
-		t.Errorf("tx runs = %d, want 1 (rolled back empty)", uow.runs)
-	}
-}
-
-// The write gate is the favorite star's (#461, Full Access+): a viewer may
-// read the favorites feed but not reorder it — forbidden.
-func TestSaveFavoriteOrderRejectsViewer(t *testing.T) {
-	t.Parallel()
-
-	visible := uuid.Must(uuid.NewV7())
-	orders := newFakeFavoriteOrderStore([]GlobalPaymentFavoriteLock{
-		{ID: visible, IsFavorite: true, Role: sharedpolicy.RoleViewer},
+		{ID: viewed, Role: sharedpolicy.RoleViewer},
 	})
 	var audit capturingAudit
 	service, _ := newOrderService(&fakeGlobalReader{}, orders, &audit)
 
-	err := service.SaveFavoriteOrder(t.Context(), uuid.Must(uuid.NewV7()), []uuid.UUID{visible})
+	actor := uuid.Must(uuid.NewV7())
+	if err := service.SaveFavoriteOrder(t.Context(), actor, []uuid.UUID{viewed}); err != nil {
+		t.Fatalf("SaveFavoriteOrder: %v", err)
+	}
+	if got := orders.positions[viewed]; got != 1 {
+		t.Errorf("position of %s = %d, want 1", viewed, got)
+	}
+	assertOrderAudit(t, audit.entries, actor, sharedpolicy.AuditActorRole(sharedpolicy.RoleViewer))
+}
+
+// A row the lock returned with a role that fails the view capability cannot
+// pass — unreachable through the SQL's visibility predicate today, the
+// structural gate keeps the capability beside the data it guards.
+func TestSaveFavoriteOrderRejectsRoleWithoutView(t *testing.T) {
+	t.Parallel()
+
+	row := uuid.Must(uuid.NewV7())
+	orders := newFakeFavoriteOrderStore([]GlobalPaymentFavoriteLock{
+		{ID: row, Role: sharedpolicy.RoleNone},
+	})
+	var audit capturingAudit
+	service, _ := newOrderService(&fakeGlobalReader{}, orders, &audit)
+
+	err := service.SaveFavoriteOrder(t.Context(), uuid.Must(uuid.NewV7()), []uuid.UUID{row})
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("err = %v, want ErrForbidden", err)
 	}
@@ -280,7 +283,8 @@ func TestSaveFavoriteOrderRejectsViewer(t *testing.T) {
 }
 
 // A save over the actor's own rules and a shared Full Access rule acts in
-// the membership's role in the audit trail — not the owner's.
+// the membership's strongest shared bucket in the audit trail — not the
+// owner's.
 func TestSaveFavoriteOrderMixedScopesAuditRole(t *testing.T) {
 	t.Parallel()
 
@@ -288,7 +292,7 @@ func TestSaveFavoriteOrderMixedScopesAuditRole(t *testing.T) {
 	shared := uuid.Must(uuid.NewV7())
 	orders := newFakeFavoriteOrderStore([]GlobalPaymentFavoriteLock{
 		favoriteLock(own),
-		{ID: shared, IsFavorite: true, Role: sharedpolicy.RoleFullAccess},
+		{ID: shared, Role: sharedpolicy.RoleFullAccess},
 	})
 	var audit capturingAudit
 	service, _ := newOrderService(&fakeGlobalReader{}, orders, &audit)

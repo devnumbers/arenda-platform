@@ -44,8 +44,8 @@ type memInvitationsRepo struct {
 	rows []domain.Invitation
 	// The manage-scope predicate for ListForRemovalByEmail (issue #694). The
 	// fixture wires it to the shared membership repo's inManageScope so the
-	// in-memory predicate matches the SQL one (owner or active full_access
-	// member, archived included).
+	// in-memory predicate matches the SQL one (owner-only since D8, issue
+	// #1304; archived included).
 	removalScope func(propertyID, actorID uuid.UUID) bool
 }
 
@@ -112,6 +112,22 @@ func (r *memInvitationsRepo) ListForRemovalByEmail(_ context.Context, email stri
 	var out []domain.Invitation
 	for _, e := range r.rows {
 		if strings.EqualFold(e.Email, email) && (r.removalScope == nil || r.removalScope(e.PropertyID, actorID)) {
+			out = append(out, e)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Invitation) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// ListForRemovalByOwner mirrors the SQL owner-wide removal scope (issue
+// #1310): every pending invitation on properties inside the actor's manage
+// scope, oldest first.
+func (r *memInvitationsRepo) ListForRemovalByOwner(_ context.Context, actorID uuid.UUID) ([]domain.Invitation, error) {
+	var out []domain.Invitation
+	for _, e := range r.rows {
+		if r.removalScope == nil || r.removalScope(e.PropertyID, actorID) {
 			out = append(out, e)
 		}
 	}

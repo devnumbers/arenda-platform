@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -86,33 +87,54 @@ func (f *accessFakeLimiter) WithTx(_ transaction.Tx) (accessapp.RecipientLimiter
 	return f, nil
 }
 
-// accessNoOwnedProps reports no own active properties.
-type accessNoOwnedProps struct{}
-
-func (accessNoOwnedProps) ListActiveWithMeta(context.Context, uuid.UUID) ([]accessapp.OwnedPropertyMeta, error) {
-	return nil, nil
+// accessOwnedProps is an in-memory OwnedActivePropertiesPort: each owner maps
+// to their own active properties with the UpdatedAt the eviction comparator
+// reads. Seeded empty by the fixture — the pre-D13 tests keep seeing no own
+// properties; the D13 scenarios (issue #1297) add the recipient's own objects
+// as the coordinator's own-pool view of the transaction state.
+type accessOwnedProps struct {
+	byOwner map[uuid.UUID][]accessapp.OwnedPropertyMeta
 }
 
-func (accessNoOwnedProps) WithTx(_ transaction.Tx) (accessapp.OwnedActivePropertiesPort, error) {
-	return accessNoOwnedProps{}, nil
+func (f *accessOwnedProps) add(ownerID, propertyID uuid.UUID, updatedAt time.Time) {
+	f.byOwner[ownerID] = append(f.byOwner[ownerID], accessapp.OwnedPropertyMeta{ID: propertyID, UpdatedAt: updatedAt})
 }
 
-var (
-	_ accessapp.RecipientLimiter          = (*accessFakeLimiter)(nil)
-	_ accessapp.OwnedActivePropertiesPort = accessNoOwnedProps{}
-)
+func (f *accessOwnedProps) drop(ownerID, propertyID uuid.UUID) {
+	kept := f.byOwner[ownerID][:0]
+	for _, m := range f.byOwner[ownerID] {
+		if m.ID != propertyID {
+			kept = append(kept, m)
+		}
+	}
+	f.byOwner[ownerID] = kept
+}
+
+func (f *accessOwnedProps) ListActiveWithMeta(_ context.Context, ownerID uuid.UUID) ([]accessapp.OwnedPropertyMeta, error) {
+	out := make([]accessapp.OwnedPropertyMeta, len(f.byOwner[ownerID]))
+	copy(out, f.byOwner[ownerID])
+	return out, nil
+}
+
+func (f *accessOwnedProps) WithTx(_ transaction.Tx) (accessapp.OwnedActivePropertiesPort, error) {
+	return f, nil
+}
+
+var _ accessapp.OwnedActivePropertiesPort = (*accessOwnedProps)(nil)
 
 // accessLifecycleFixture bundles the real access services wired to the test
 // transaction.
 type accessLifecycleFixture struct {
-	tx       pgx.Tx
-	q        *genpostgres.Queries
-	limiter  *accessFakeLimiter
-	nonce    string
-	access   *accessapp.AccessService
-	invites  *accessapp.InvitationService
-	slots    *accessapp.SlotCoordinator
-	userRepo *identitypg.UserRepository
+	tx         pgx.Tx
+	q          *genpostgres.Queries
+	limiter    *accessFakeLimiter
+	ownedProps *accessOwnedProps
+	nonce      string
+	access     *accessapp.AccessService
+	invites    *accessapp.InvitationService
+	slots      *accessapp.SlotCoordinator
+	mutations  *accessapp.ParticipantMutationService
+	userRepo   *identitypg.UserRepository
 }
 
 // bg returns a background context (kept out of the struct per containedctx).
@@ -150,19 +172,24 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 	policy := accessapp.NewMembershipPolicy(ownerResolver, memberRepo)
 
 	limiter := &accessFakeLimiter{limits: map[uuid.UUID]int{}}
+	ownedProps := &accessOwnedProps{byOwner: map[uuid.UUID][]accessapp.OwnedPropertyMeta{}}
 	beginner := accessBeginner{tx: tx}
 
 	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter,
-		accessNoOwnedProps{}, nil, auditapp.Noop{}, beginner, nil, nil)
+		ownedProps, nil, auditapp.Noop{}, beginner, nil, nil)
 	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, historyapp.Noop{}, accessUoW{beginner})
 	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, nil, factory, nil)
 	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver,
 		userLookup, policy, slots, nil, nil, ownerResolver, factory, nil, nil, emailResolver)
+	// The mutation side with the real SQL revoke-scope gate (issue #1310);
+	// no mailer/events — the integration tests assert state, not publications.
+	mutations := accessapp.NewParticipantMutationService(access, ownerResolver, ownerResolver, userLookup,
+		emailResolver, policy, NewRevokeAllScope(tx), slots, nil, nil, ownerResolver, factory, nil, nil)
 
 	return &accessLifecycleFixture{
 		tx: tx, q: genpostgres.New(tx),
-		limiter: limiter, nonce: nonce.String(),
-		access: access, invites: invites, slots: slots,
+		limiter: limiter, ownedProps: ownedProps, nonce: nonce.String(),
+		access: access, invites: invites, slots: slots, mutations: mutations,
 		userRepo: userRepo,
 	}
 }

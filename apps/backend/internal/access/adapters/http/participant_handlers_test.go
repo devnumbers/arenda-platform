@@ -23,9 +23,8 @@ import (
 // fakeParticipantsManager is the func-backed ParticipantsManager double
 // (ADR 0035): an unset use case fails the test loudly.
 type fakeParticipantsManager struct {
-	list    func(ctx context.Context, actor uuid.UUID) ([]accessapp.Participant, error)
-	get     func(ctx context.Context, actor uuid.UUID, id string) (accessapp.Participant, error)
-	summary func(ctx context.Context, actor uuid.UUID) (accessapp.ParticipantsSummary, error)
+	list func(ctx context.Context, actor uuid.UUID) ([]accessapp.Participant, error)
+	get  func(ctx context.Context, actor uuid.UUID, id string) (accessapp.Participant, error)
 }
 
 func (f *fakeParticipantsManager) ListParticipants(ctx context.Context, actor uuid.UUID) ([]accessapp.Participant, error) {
@@ -42,13 +41,6 @@ func (f *fakeParticipantsManager) GetParticipant(ctx context.Context, actor uuid
 	return f.get(ctx, actor, id)
 }
 
-func (f *fakeParticipantsManager) Summary(ctx context.Context, actor uuid.UUID) (accessapp.ParticipantsSummary, error) {
-	if f.summary == nil {
-		return accessapp.ParticipantsSummary{}, errors.New("unexpected Summary call")
-	}
-	return f.summary(ctx, actor)
-}
-
 // fakeParticipantMutations is the func-backed ParticipantMutations double
 // (ADR 0035): an unset use case fails the test loudly.
 type fakeParticipantMutations struct {
@@ -56,7 +48,8 @@ type fakeParticipantMutations struct {
 		role domain.Role, ids []uuid.UUID) ([]accessapp.ParticipantGrantResult, error)
 	addProperties func(ctx context.Context, actor uuid.UUID, id string,
 		role domain.Role, ids []uuid.UUID) ([]accessapp.ParticipantGrantResult, error)
-	remove func(ctx context.Context, actor uuid.UUID, id string) error
+	remove    func(ctx context.Context, actor uuid.UUID, id string) error
+	revokeAll func(ctx context.Context, actor uuid.UUID) error
 }
 
 func (f *fakeParticipantMutations) Invite(
@@ -82,6 +75,13 @@ func (f *fakeParticipantMutations) Remove(ctx context.Context, actor uuid.UUID, 
 		return errors.New("unexpected Remove call")
 	}
 	return f.remove(ctx, actor, id)
+}
+
+func (f *fakeParticipantMutations) RevokeAll(ctx context.Context, actor uuid.UUID) error {
+	if f.revokeAll == nil {
+		return errors.New("unexpected RevokeAll call")
+	}
+	return f.revokeAll(ctx, actor)
 }
 
 // participantFixtureUser is the registered-user fixture of the wire tests.
@@ -213,28 +213,6 @@ func TestGetParticipantHandler(t *testing.T) {
 	w = httptest.NewRecorder()
 	h.GetParticipant(w, newParticipantRequest(t, "/participants/"+participantID, nil), participantID)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-}
-
-// TestGetParticipantsSummaryHandler checks the hub counters wire.
-func TestGetParticipantsSummaryHandler(t *testing.T) {
-	t.Parallel()
-
-	actor := uuid.Must(uuid.NewV7())
-	svc := &fakeParticipantsManager{
-		summary: func(ctx context.Context, id uuid.UUID) (accessapp.ParticipantsSummary, error) {
-			assert.Equal(t, actor, id)
-			return accessapp.ParticipantsSummary{ParticipantsCount: 3, AccessiblePropertiesCount: 1}, nil
-		},
-	}
-	h := NewParticipantHandlers(svc, &fakeParticipantMutations{}, slog.New(slog.DiscardHandler))
-
-	w := httptest.NewRecorder()
-	h.GetParticipantsSummary(w, newParticipantRequest(t, "/participants/summary", &actor))
-	require.Equal(t, http.StatusOK, w.Code)
-	var body openapi.ParticipantsSummaryResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	assert.Equal(t, 3, body.ParticipantsCount)
-	assert.Equal(t, 1, body.AccessiblePropertiesCount)
 }
 
 // newParticipantMutationRequest builds a POST/DELETE request with the user
@@ -442,5 +420,50 @@ func TestDeleteParticipantHandler(t *testing.T) {
 	w = httptest.NewRecorder()
 	h.DeleteParticipant(w, newParticipantMutationRequest(t, http.MethodDelete,
 		"/participants/"+participantID, nil, nil), participantID)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// TestRevokeAllParticipantsHandler pins the HTTP contract of the global
+// «Отозвать доступ всем» (issue #1310): success is a bare 204 (including the
+// idempotent no-op), the non-owner participant gets the loud 403, the
+// stranger the privacy-preserving 404, and the session is required.
+func TestRevokeAllParticipantsHandler(t *testing.T) {
+	t.Parallel()
+
+	actor := uuid.Must(uuid.NewV7())
+	mutations := &fakeParticipantMutations{
+		revokeAll: func(ctx context.Context, got uuid.UUID) error {
+			assert.Equal(t, actor, got)
+			return nil
+		},
+	}
+	h := NewParticipantHandlers(&fakeParticipantsManager{}, mutations, slog.New(slog.DiscardHandler))
+
+	w := httptest.NewRecorder()
+	h.RevokeAllParticipants(w, newParticipantMutationRequest(t, http.MethodDelete,
+		"/participants", &actor, nil))
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	notOwner := &fakeParticipantMutations{
+		revokeAll: func(context.Context, uuid.UUID) error { return domain.ErrNotPropertyOwner },
+	}
+	h2 := NewParticipantHandlers(&fakeParticipantsManager{}, notOwner, slog.New(slog.DiscardHandler))
+	w = httptest.NewRecorder()
+	h2.RevokeAllParticipants(w, newParticipantMutationRequest(t, http.MethodDelete,
+		"/participants", &actor, nil))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	stranger := &fakeParticipantMutations{
+		revokeAll: func(context.Context, uuid.UUID) error { return domain.ErrParticipantNotFound },
+	}
+	h3 := NewParticipantHandlers(&fakeParticipantsManager{}, stranger, slog.New(slog.DiscardHandler))
+	w = httptest.NewRecorder()
+	h3.RevokeAllParticipants(w, newParticipantMutationRequest(t, http.MethodDelete,
+		"/participants", &actor, nil))
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	w = httptest.NewRecorder()
+	h.RevokeAllParticipants(w, newParticipantMutationRequest(t, http.MethodDelete,
+		"/participants", nil, nil))
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }

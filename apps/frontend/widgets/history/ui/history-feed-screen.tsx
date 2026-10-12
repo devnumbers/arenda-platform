@@ -279,7 +279,12 @@ export function HistoryFeedScreen({
   useEffect(() => {
     feedScopeRef.current = feedScope;
   });
-  const filtersQuery = useHistoryFilters();
+  // Опции шита: прибитая объектом страница (#840, и пара #841) сужает
+  // запрос своим объектом — участники шита остаются собственником и
+  // соучастниками объекта (D6); глобальная лента и «Действия участника»
+  // (#712) читают глобальную область, где с D14 (#1305) участники —
+  // только люди моих объектов.
+  const filtersQuery = useHistoryFilters(isPropertyPage ? [propertyId] : undefined);
   // Свой актор (решение владельца 24.09): узнаём по id сессии — канон
   // шита фильтров (#710); серый суффикс «(Вы)» у своей шапки.
   const meQuery = useMe();

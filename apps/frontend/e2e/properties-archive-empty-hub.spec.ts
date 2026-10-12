@@ -38,7 +38,7 @@ async function setAllPropertiesStatus(status: 'archived' | 'active'): Promise<vo
   for (const id of SEEDED_PROPERTY_IDS) {
     await execE2eSql(
       status === 'archived'
-        ? `UPDATE properties SET status = 'archived', pinned_at = NULL WHERE id = '${id}'`
+        ? `UPDATE properties SET status = 'archived' WHERE id = '${id}'`
         : `UPDATE properties SET status = 'active' WHERE id = '${id}'`,
     );
   }

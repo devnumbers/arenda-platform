@@ -593,6 +593,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /** @description Sets or clears the actor's personal pin on the property (ticket #577, the personal cutover #1307): «строка есть = состояние» — a re-pin keeps the original pin time, an unpin deletes the row. Any reader may pin (the view right); no access and a suspended membership are the privacy 404, an archived property is the 409. The personal state writes no history row and publishes no realtime frame. */
         put: operations["setPropertyPin"];
         post?: never;
         delete?: never;
@@ -911,7 +912,7 @@ export interface paths {
         get?: never;
         /**
          * Save the manual order of the actor's favorite payment rules
-         * @description The favorites edit mode's «Сохранить» (map #573, ticket #576): the request lists the actor's visible favorite rules in their new order and the server rebuilds the stored positions in one transaction — dense 1-based positions in the list order. The save is a full replacement: favorites outside the list lose their positions and fall to the end of the reading order, so an empty list resets the whole order. Every listed id must be a favorite rule visible to the actor (own plus active-membership properties, archived excluded): an unknown, foreign or otherwise invisible id is the privacy-preserving 404, a visible non-favorite or a duplicate id is a 400. The write capability is the favorite star's (PUT favorite, Full Access and Owner) — a viewer's 403. A rule without a position — new and legacy favorites, their favoriteOrder is null — sorts last (new-favorite-at-the-end), and PUT favorite maintains that invariant atomically: unfavoriting clears the position, re-favoriting lands at the end. The manual order is the favorites screens' sort key (the feed's own order is unchanged); a pure order write — nothing ticks.
+         * @description The favorites edit mode's «Сохранить» (map #573, ticket #576; the personal cutover #1308): the request lists the actor's favorite rules in their new order and the server rebuilds the positions in one transaction — dense 1-based positions in the list order. The favorites are personal (D12): the star and the order are the acting user's own working set, one user's save never moves another user's rows. The save is a full replacement within the actor's set: favorites outside the list lose their positions and fall to the end of the reading order, so an empty list resets the actor's whole order (a favorite on an archived property keeps its position — unarchiving returns the rule with its order intact). Every listed id must be a rule the actor has starred on a property visible to them (own plus active-membership properties, archived excluded): any degenerate id — unknown, foreign, invisible, archived or simply not starred by this actor — is the privacy-preserving 404, a duplicate id is a 400. The right to order the personal set is the favorite star's, the view capability (D12 — a viewer orders their favorites on par with Full Access and Owner). A rule without a position — a fresh favorite, its favoriteOrder is null — sorts last (new-favorite-at-the-end), and PUT favorite maintains that invariant atomically: unfavoriting removes the actor's row (the position with it), re-favoriting lands at the end. The manual order is the favorites screens' sort key (the feed's own order is unchanged); a pure order write — nothing ticks, and no realtime frame is published (D18, personal state).
          */
         put: operations["saveGlobalPaymentFavoritesOrder"];
         post?: never;
@@ -1159,32 +1160,16 @@ export interface paths {
         };
         /**
          * List the owner's participants (aggregate over all properties)
-         * @description The «Ваши участники» list (issue #693): one aggregate row per person — a registered user or a pending email — across every non-archived property the reading actor owns or manages as an active full_access member. The actor themself never appears. A person's identifier (id) is the registered user's uuid, or the invitee email for a pending row.
+         * @description The «Ваши участники» list (issue #693): one aggregate row per person — a registered user or a pending email — across every non-archived property the reading actor owns (owner-only scope since D8, issue #1304: the section shows only the people the actor invited to their own objects). The actor themself never appears. A person's identifier (id) is the registered user's uuid, or the invitee email for a pending row.
          */
         get: operations["listParticipants"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/participants/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
         /**
-         * Counters of the «Совместный доступ» hub
-         * @description The hub card counters (issue #693): the number of the reading actor's participants (the same aggregate the list endpoint returns) and the number of other people's objects the actor has access to (the active shared memberships — the recipient tariff-slot counter).
+         * Revoke shared access from every participant of the actor's properties
+         * @description The global «Отозвать доступ всем» action of the «Участники» section (issue #1310): one call removes every membership and cancels every pending invitation across all properties the reading actor owns — archived ones included — with a per-row audit entry and journal record, the revocation notification per removed active membership and FIFO recovery of each affected recipient's suspended accesses. No lifecycle emails are sent; legs on other owners' properties stay untouched. Idempotent: an owner with nothing left in scope succeeds as a no-op. An actor owning no property is refused: a participant of foreign objects with 403, a stranger with a privacy-preserving 404.
          */
-        get: operations["getParticipantsSummary"];
-        put?: never;
-        post?: never;
-        delete?: never;
+        delete: operations["revokeAllParticipants"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1309,14 +1294,19 @@ export interface paths {
         };
         /**
          * Опции шита фильтров «Истории действий»
-         * @description Опции фильтров ленты в области чтения читателя (ADR 0061 §7): те же
-         *     правила доступа, что у GET /history. «Участники» — владелец и
-         *     участники области сейчас ∪ все актёры, встречающиеся в журнале
-         *     области (отозванные и вышедшие остаются фильтруемыми — их записи
-         *     переживают отзыв). «Объекты» — объекты области с названием, адресом
-         *     и фото-аватаром (первое по времени фото, #582). property_ids сужает
-         *     область (история одного объекта); та же дисциплина privacy-404, что
-         *     у ленты: один невидимый или неизвестный id — 404 всего запроса.
+         * @description Опции фильтров ленты (ADR 0061 §7). Область «Участников» двух родов
+         *     (изоляция D14, спека #1302, тикет #1305): без property_ids
+         *     (глобальная лента) — только участники МОИХ объектов читателя,
+         *     включая его архивные (владельческая нога канона 000142); получателю
+         *     shared-доступа владелец и соучастники чужого объекта в глобальном
+         *     фильтре не раскрыты. С property_ids (история одного объекта) —
+         *     собственник и участники запрошенной области ∪ все актёры,
+         *     встречающиеся в её журнале (отозванные и вышедшие остаются
+         *     фильтруемыми — их записи переживают отзыв; D6 — без изменений).
+         *     «Объекты» — объекты области чтения с названием, адресом
+         *     и фото-аватаром (первое по времени фото, #582); та же дисциплина
+         *     privacy-404, что у ленты: один невидимый или неизвестный id —
+         *     404 всего запроса.
          *     Счётчики N/M групп чекбоксов клиент считает сам; сами группы
          *     (4 основных действия, 7 видов) — статический словарь экрана
          *     (ADR 0061 §4).
@@ -2280,7 +2270,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Completes the rental: records the completion date (start ≤ date ≤ today in the owner's timezone — «По плану» is the UI's substitution) and stops the managed rent payment at that date — the strictly future planned operations are torn down, the due ones stay with the owner. The optional deposit return is a record, not an operation. Completing a future rental is impossible by design — a start date in the future leaves the valid window empty (400). */
+        /** @description Completes the rental: records the completion date (start ≤ date ≤ today in the owner's timezone — «По плану» is the UI's substitution) and deletes the managed rent payment in the same transaction — the planned operations from the completion date on are torn down, the overdue ones survive the payment as the property's debt and the paid ones stay in its history (their payment_id is unlinked by the FK, origin unchanged). The completed rental keeps an immutable archive of the terms for its view and answers with rentPayment.paymentId = null. The optional deposit return is a record, not an operation. Completing a future rental is impossible by design — a start date in the future leaves the valid window empty (400). */
         post: operations["completeRental"];
         delete?: never;
         options?: never;
@@ -2886,15 +2876,13 @@ export interface components {
             access?: components["schemas"]["PropertyAccessContext"];
             /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo, served with the session cookie; null when the object has no photo. */
             photo_url?: string | null;
-            /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
-            members_count: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
             /**
              * Format: date-time
-             * @description The global pin (ticket #577): null — not pinned, a moment — pinned since then. The lists order the pinned first, among themselves by this time. Archiving clears the pin. The domain language calls the concept «основной объект / primary property» (резолюция #584); the contract keeps the pin name.
+             * @description The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The lists order the pinned first, among themselves by this time — the actor's own order, never another participant's. The pin is a personal state: any reader may pin (the view right), and it survives archiving. The domain language calls the concept «основной объект / primary property» (резолюция #584); the contract keeps the pin name.
              */
             pinned_at: string | null;
             occupancy?: components["schemas"]["PropertyOccupancy"];
@@ -3106,7 +3094,7 @@ export interface components {
              * @enum {integer|null}
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
-            /** @description The rule's favorite star (PUT favorite); returned in the reads and the lists. */
+            /** @description The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12) — returned in the reads and the lists; another user's star never lands in this actor's read. */
             isFavorite: boolean;
             /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
             isCompleted: boolean;
@@ -3211,9 +3199,9 @@ export interface components {
             type: "income" | "expense";
             category: components["schemas"]["CategoryView"];
             autoPay: boolean;
-            /** @description The rule's favorite star (PUT favorite). */
+            /** @description The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12). */
             isFavorite: boolean;
-            /** @description The rule's manual favorite order (ticket #576): the 1-based position the favorites edit mode's save assigned. Null when the rule has never been in a saved order — the favorites screens sort by favoriteOrder with nulls last (the new-favorite-at-the-end rule); the feed's own order is unchanged. */
+            /** @description The rule's position in the reading actor's personal favorite order (ticket #576; the personal cutover #1308, D12): the 1-based position the favorites edit mode's save assigned. Null when the actor has never placed the rule in their saved order — the favorites screens sort by favoriteOrder with nulls last (the new-favorite-at-the-end rule); the feed's own order is unchanged. */
             favoriteOrder: number | null;
             /**
              * Format: date
@@ -3238,7 +3226,7 @@ export interface components {
         /** @description The global «Платежи» feed (ticket #575) with the main screen's counters. Money is integer kopecks (ADR 0008). */
         PaymentsGlobalResponse: {
             items: components["schemas"]["PaymentGlobalItem"][];
-            /** @description The favorite rules of the whole visible scope — the «Все избранные (N)» card; never narrowed by a search. */
+            /** @description The reading actor's favorite rules across the whole visible scope — the «Все избранные (N)» card; never narrowed by a search (the personal cutover #1308, D12). */
             favoriteCount: number;
             /** @description The overdue operations summed across the whole visible scope — the «Все просроченные (N)» card; never narrowed by a search. */
             overdueOperationsCount: number;
@@ -3275,7 +3263,7 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             /**
              * Format: date-time
-             * @description The object's global pin (ticket #577): null — not pinned, a moment — pinned since then. The cards order the pinned first.
+             * @description The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The cards order the pinned first — the actor's own order, never another participant's.
              */
             pinnedAt: string | null;
             /** @description The card avatar's photo — the object's first (oldest) photo (ticket #582); with the private photos (ADR 0065) one image per object, streamed by the backend; null when the object has no photo. */
@@ -3572,12 +3560,6 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             /** @description The property photo's same-origin streaming path (ADR 0065), live at read; null when the property has no photo. The leg row is self-sufficient — the client needs no /properties join for the avatar (остаток #1244 п.3, решение #1286). */
             photo_url: string | null;
-        };
-        ParticipantsSummaryResponse: {
-            /** @description The reading actor's participants across their scope. */
-            participants_count: number;
-            /** @description Other people's objects the reading actor has active access to (the recipient tariff-slot counter; issue #163). */
-            accessible_properties_count: number;
         };
         PropertyAccessMemberUpdateRequest: {
             /** @enum {string} */
@@ -6826,7 +6808,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
-    getParticipantsSummary: {
+    revokeAllParticipants: {
         parameters: {
             query?: never;
             header?: never;
@@ -6835,16 +6817,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The hub counters */
-            200: {
+            /** @description The actor's sharing is closed — every leg revoked, or nothing left to revoke (the idempotent no-op). */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ParticipantsSummaryResponse"];
-                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     inviteParticipant: {

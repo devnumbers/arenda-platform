@@ -117,10 +117,11 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 	realtime := &realtimetest.RecordingPublisher{}
 	svc := paymentsapp.NewPaymentService(factory, calendar, policy)
 	ops := paymentsapp.NewOperationService(factory, calendar, policy)
+	// The global surface carries no realtime frames (D18, #1308): the
+	// favorites star and order are personal states — no publisher binding.
 	global := paymentsapp.NewGlobalPaymentService(favoriteOrders, calendar, factory)
 	svc.SetRealtimePublisher(realtime)
 	ops.SetRealtimePublisher(realtime)
-	global.SetRealtimePublisher(realtime)
 
 	return &paymentsHarness{
 		t:        t,
@@ -167,7 +168,6 @@ func newPaymentsHarnessWithRealPolicy(t *testing.T) *paymentsHarness {
 	h.global = paymentsapp.NewGlobalPaymentService(paymentspg.NewGlobalPaymentStore(h.pool), calendar, factory)
 	h.svc.SetRealtimePublisher(h.realtime)
 	h.ops.SetRealtimePublisher(h.realtime)
-	h.global.SetRealtimePublisher(h.realtime)
 	return h
 }
 

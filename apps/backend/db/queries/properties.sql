@@ -4,11 +4,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetPropertyByIDAndOwner :one
-SELECT properties.*,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.*
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2;
 
@@ -26,13 +22,8 @@ WHERE id = $1 AND owner_id = $2;
 -- properties list to load shared properties (whose owner_id differs from the
 -- actor). Read-only; callers must never leak existence to actors without a view
 -- capability (the application maps "no access" to ErrNotFound to preserve
--- object privacy). members_count is the shared-access participant count
--- (membership rows of any status plus pending email invitations, issue #163).
-SELECT properties.*,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+-- object privacy).
+SELECT properties.*
 FROM properties
 WHERE properties.id = $1;
 
@@ -42,26 +33,18 @@ WHERE properties.id = $1;
 SELECT * FROM properties WHERE id = $1 FOR UPDATE;
 
 -- name: ListActivePropertiesByOwner :many
--- The main list's order (ticket #577): the pinned first — among themselves
--- by the pin time (the first pin stays on top, a re-pin never shifts the
--- order), then the unpinned by updated_at DESC. The application re-applies
--- the same rule over the merged list (shared properties arrive appended),
--- so keep the two passes in sync (PropertyService.pinnedFirst).
-SELECT sqlc.embed(properties),
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+-- The main list's base order (ticket #577, the personal-pin cutover #1307):
+-- the unpinned incoming order is updated_at DESC. The pinned-first rule is
+-- per-actor since the cutover — the application overlays the actor's
+-- personal pins (user_property_pins) over the merged list and re-sorts
+-- (PropertyService.pinnedFirst), so the SQL pass stays out of pin ordering.
+SELECT sqlc.embed(properties)
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
-ORDER BY properties.pinned_at, properties.updated_at DESC;
+ORDER BY properties.updated_at DESC;
 
 -- name: ListArchivedPropertiesByOwner :many
-SELECT sqlc.embed(properties),
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT sqlc.embed(properties)
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
 ORDER BY properties.updated_at DESC;
@@ -86,10 +69,6 @@ ORDER BY properties.updated_at DESC;
 -- LEFT JOIN row is unique per (property, user) and carries the role only;
 -- the visibility verdict is the function call in the WHERE.
 SELECT p.*,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = p.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = p.id))::bigint AS members_count,
        CASE WHEN p.owner_id = sqlc.arg('actor')::uuid
             THEN 'owner'
             ELSE pm.role END::text AS access_role
@@ -116,10 +95,11 @@ WHERE id = $1 AND owner_id = $2
 RETURNING *;
 
 -- name: ArchiveProperty :one
--- Archiving clears the pin in the same UPDATE: the schema CHECK
--- (properties_pinned_at_check) demands it, and an unarchived object returns
--- unpinned (ticket #577).
-UPDATE properties SET status = 'archived', pinned_at = NULL
+-- The archive touches no pin state: pins are personal rows — the contract
+-- migration (#1311) dropped the global properties.pinned_at column with its
+-- CHECK, and personal pin rows are never touched here (D16): unarchiving
+-- returns the property with the participants' pins.
+UPDATE properties SET status = 'archived'
 WHERE id = $1 AND owner_id = $2
 RETURNING *;
 
@@ -144,17 +124,40 @@ WHERE owner_id = $1 AND status = 'archived';
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND type = $2;
 
--- name: SetPropertyPin :one
--- Atomic PUT pin (ticket #577, the PUT favorite's canon #461: no
--- read-modify-write). The value — a moment or NULL — is resolved by the
--- application under the row lock (a re-pin keeps the original pin time);
--- existence and the edit capability are proven there too. The scope is the
--- property's owner: the actor may be the full-access member. The updated
--- row travels back for the response.
-UPDATE properties
-SET pinned_at = sqlc.arg('pinned_at')::timestamptz
-WHERE id = sqlc.arg('id')::uuid AND owner_id = sqlc.arg('owner_id')::uuid
-RETURNING *;
+-- name: ActorPin :one
+-- The actor's personal pin on the property (the cutover #1307, D11): no row
+-- — not pinned, the row's pinned_at — pinned since then. The view
+-- capability is resolved by the application before the call.
+SELECT pinned_at FROM user_property_pins
+WHERE user_id = sqlc.arg('actor')::uuid AND property_id = sqlc.arg('id')::uuid;
+
+-- name: InsertActorPin :one
+-- The pin's «строка есть = состояние» write (the cutover #1307, the model
+-- #1299): one atomic statement — a re-pin keeps the original pin time (the
+-- PUT's idempotency, the order among the pinned never shifts), a fresh pin
+-- takes the moment from the application's clock. The conflicting row's time
+-- stands: DO UPDATE writes the same value back purely so RETURNING delivers
+-- the effective pinned_at (DO NOTHING would return no row) — the stored
+-- value never changes.
+INSERT INTO user_property_pins (user_id, property_id, pinned_at)
+VALUES (sqlc.arg('actor')::uuid, sqlc.arg('id')::uuid, sqlc.arg('pinned_at')::timestamptz)
+ON CONFLICT (user_id, property_id)
+DO UPDATE SET pinned_at = user_property_pins.pinned_at
+RETURNING pinned_at;
+
+-- name: DeleteActorPin :exec
+-- The unpin: the personal row goes; unpinning an unpinned property deletes
+-- nothing and succeeds (the PUT's idempotency).
+DELETE FROM user_property_pins
+WHERE user_id = sqlc.arg('actor')::uuid AND property_id = sqlc.arg('id')::uuid;
+
+-- name: ActorPins :many
+-- The actor's personal pins for the listed properties — the list overlay's
+-- batch (the main list and the search carry pinnedAt of the actor over own
+-- and shared rows alike).
+SELECT property_id, pinned_at FROM user_property_pins
+WHERE user_id = sqlc.arg('actor')::uuid
+  AND property_id = ANY(sqlc.arg('property_ids')::uuid[]);
 
 -- name: ListPropertiesAdmin :many
 SELECT p.*, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted

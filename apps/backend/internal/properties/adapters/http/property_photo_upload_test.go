@@ -73,8 +73,20 @@ func (r *photoWireRepo) Update(_ context.Context, _ uuid.UUID, p domain.Property
 	return p, nil
 }
 
-func (r *photoWireRepo) SetPin(_ context.Context, _, _ uuid.UUID, _ *time.Time) (domain.Property, error) {
-	return r.property, nil
+func (r *photoWireRepo) ActorPin(context.Context, uuid.UUID, uuid.UUID) (*time.Time, error) {
+	return nil, nil
+}
+
+func (r *photoWireRepo) InsertActorPin(_ context.Context, _, _ uuid.UUID, at time.Time) (time.Time, error) {
+	return at, nil
+}
+
+func (r *photoWireRepo) DeleteActorPin(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (r *photoWireRepo) ActorPins(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	return map[uuid.UUID]time.Time{}, nil
 }
 
 func (r *photoWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {

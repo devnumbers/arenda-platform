@@ -159,11 +159,22 @@ LIMIT sqlc.arg('page_limit')::int;
 -- строк остаются в самом журнале. Обезличенные актёры (пользователь удалён)
 -- не фильтруемы по определению. Отображаемое имя собирает адаптер по канону
 -- access.DisplayNameOf («Пользователь» вместо имени — карта #1105, аменд #1123).
+--
+-- Область двух родов (D14 изоляции, спека #1302, аудит #1298, тикет #1305;
+-- CTE scope_property — единая трёхногая область UNION'а):
+-- глобальная лента (property_ids = '') — только МОИ объекты читателя
+-- (p.owner_id = actor, архивный срез тот же, что у владельческой ноги
+-- канона 000142: свои архивные объекты остаются); получателю shared-доступа
+-- владелец и соучастники чужого объекта в глобальном фильтре не раскрыты.
+-- Суженная лента (property_ids задан — per-object фильтр /history/
+-- properties/{id} и страница пары #841) — канон actor_can_read_property по
+-- запрошенным id: собственник и соучастники остаются (D6 — без изменений).
+--
 -- is_owner (#711, макет 2067-163528): замок владельца — пользователь —
 -- владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
--- UNION'а); приглашённый без своих объектов флага не получает. first_name —
--- имя без фамилии (u.name) для строки «(Вы)»; '' у безымянных (тогда
--- имя в чипе — «Пользователь»).
+-- UNION'а); в глобальной области это сам читатель, в суженной — владелец
+-- суженных объектов. first_name — имя без фамилии (u.name) для строки
+-- «(Вы)»; '' у безымянных (тогда имя в чипе — «Пользователь»).
 -- role (#840, макет 2184-94261): иконка роли строки шита — максимальный
 -- доступ в области (MIN ранга: 0 owner, 1 full_access, 2 viewer); живая
 -- нога property_members сильнее снимка журнала (actor_role) — она и есть
@@ -172,28 +183,28 @@ LIMIT sqlc.arg('page_limit')::int;
 -- full_access).
 --
 -- name: ListHistoryFilterParticipants :many
-WITH scope_participant(user_id, is_owner, role_rank) AS (
+WITH scope_property(id) AS (
+    SELECT p.id
+    FROM properties p
+    WHERE CASE WHEN sqlc.arg('property_ids')::text = ''
+               THEN p.owner_id = sqlc.arg('actor')::uuid
+               ELSE p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+                    AND actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
+          END
+), scope_participant(user_id, is_owner, role_rank) AS (
     SELECT p.owner_id, TRUE, 0
     FROM properties p
-    WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
-      AND (sqlc.arg('property_ids')::text = ''
-           OR p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+    JOIN scope_property sp ON sp.id = p.id
     UNION
     SELECT m.user_id, FALSE, CASE WHEN m.role = 'full_access' THEN 1 ELSE 2 END
     FROM property_members m
-    JOIN properties p ON p.id = m.property_id
-    WHERE actor_can_read_property(m.property_id, sqlc.arg('actor')::uuid)
-      AND (sqlc.arg('property_ids')::text = ''
-           OR m.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+    JOIN scope_property sp ON sp.id = m.property_id
     UNION
     SELECT aj.actor_id, FALSE,
            CASE aj.actor_role WHEN 'owner' THEN 0 WHEN 'full_access' THEN 1 ELSE 2 END
     FROM action_journal aj
-    JOIN properties p ON p.id = aj.property_id
-    WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
-      AND (sqlc.arg('property_ids')::text = ''
-           OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
-      AND aj.actor_id IS NOT NULL
+    JOIN scope_property sp ON sp.id = aj.property_id
+    WHERE aj.actor_id IS NOT NULL
 )
 SELECT u.id, u.name, u.surname, u.phone, u.email,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL

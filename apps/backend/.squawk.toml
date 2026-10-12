@@ -58,6 +58,7 @@ excluded_paths = [
   "*000150_rental_completion_payment_delete.up.sql", # ban-drop-not-null: свой смысл миграции — ссылка rentals.payment_id становится необязательной, Завершение аренды удаляет Платёж (ревизия ADR 0053 #1161); дюральный жизненный цикл ссылки держат новые CHECK'и того же файла; прецедент 000121
   "*000154_entity_photo_columns.up.sql",             # ban-drop-table: осознанный снос property_photos вместе со старым контрактом до-10-фото — строк нет, данные не переносятся (ADR 0065, карта #1217, решение #1220; прецеденты 000119/000132)
   "*000155_email_change_grant_addressless.up.sql",   # ban-drop-not-null: свой смысл миграции — адрес гранта смены email становится опциональным: грант рождается на проверке текущего адреса (verify-current), адрес привязывается следующим шагом (request-new-email-code), протокол #1202, тикет #1203; безадресный грант в домен не течёт — его гасит грант-сим liveBoundGrant; прецедент 000121
+  "*000158_personal_pins_favorites_contract.up.sql", # ban-drop-column ×3: осознанный contract-снос замороженных глобальных колонок пина и звезды — cutover'ы #1307/#1308 переключили все чтения/записи на user_property_pins/user_payment_favorites, данные перевезены бэкфиллом 000156 (спека #1302, тикет #1311; прецедент 000102)
 ]
 
 excluded_rules = [

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowDown, ArrowLeft, Block, Cancel, Kebab, Search, TeamAdd, TimeHistory } from '@/shared/assets/icons';
+import { ArrowDown, Block, Cancel, Kebab, TeamAdd, TimeHistory } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
+import { isPaidTariff } from '@/entities/user';
 import {
-  filterParticipantsByQuery,
   ParticipantRowButton,
   sortParticipantsByName,
   type ParticipantSortOrder,
@@ -16,12 +16,15 @@ import {
   useParticipantsList,
   useRevokeAllParticipants,
 } from '@/features/participants';
+import { useSubscription } from '@/features/subscription';
 import {
   Button,
   ChipButton,
   ConfirmDialog,
   EmptyState,
   ErrorCard,
+  HubCollapseAnchor,
+  HubTitle,
   IconButton,
   Menu,
   MenuContent,
@@ -31,12 +34,9 @@ import {
   ModalContent,
   PageContent,
   PickerMenu,
-  SearchField,
+  SearchPill,
   StatusIcon,
-  StickyBottomBar,
   TopNav,
-  TopNavBackButton,
-  TopNavTitle,
 } from '@/shared/ui/design';
 import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
 import {
@@ -48,35 +48,45 @@ import { ParticipantsListSkeleton } from './participants-list-skeletons';
 import { ParticipantSuccessPopup } from './participant-success-popup';
 
 /**
- * Экран «Ваши участники» (карта #692, тикет #697; Figma 2036-82971):
- * ряды участников-агрегатов (#693) с чипом агрегат-статуса, чип-сортировка
- * «Имя» (сервер приходит name ASC — направление из меню применяется
- * клиентски; выбор живёт в адресе ?order=, дефолт «А→Я» не пишется —
- * конвенция состояния в адресе, #785). Кебаб действий — в шапке
- * (trailing-слот TopNav), в постоянной нижней панели — только CTA
- * «Пригласить участника» (макет держит панель во всех состояниях).
+ * Раздел «Участники» — единая страница списка (D1–D4 #1313; Figma
+ * 3313-77128): хаб-шапка нового хрома (#565, крылья + компакт-бар), ряд
+ * заголовка с кебабом, пилюля поиска (канон SearchPill — тап открывает
+ * отдельную поисковую страницу /participants/search, как у книги
+ * контактов), чип-сортировка «Имя» (сервер приходит name ASC —
+ * направление из меню применяется клиентски; выбор живёт в адресе
+ * ?order=, дефолт «А→Я» не пишется — конвенция состояния в адресе,
+ * #785) и ряды участников. Хаб-карточки и «Объекты пользователей»
+ * снесены тем же тикетом: раздел — только свои приглашённые.
  *
- * Кебаб шапки — трио по макету 2008-47514 (#843): «Пригласить участника»
- * (`TeamAdd`), «История действий» (`TimeHistory` — вход в общую ленту
- * журнала; строка-вход с хаба снята тем же тикетом) и красное «Отозвать
- * доступ всем» (`Block`) — канон кебабов #698/#840. При пустом списке
- * кебаб скрыт по §7 — решение владельца 24.09: у читателя без
- * участников входа в общую ленту нет.
+ * Строка — имя + почта и ровно два статусных бейджа (D3): «Аккаунт не
+ * создан» у pending и «Превышен лимит объектов» у suspended; счётчики
+ * объектов и статусы «частично/все объекты» ушли с экрана.
  *
- * Поиск — иконка в шапке, поверх этого же экрана (макеты 2008-84003 /
- * 2010-134629: шапка сменяется поисковой, чип сортировки прячется):
- * клиентская фильтрация — объём мал (тарифные слоты), список GET
- * /participants приходит целиком без пагинации, серверного ?search= в
- * контракте #693 нет (канон серверного поиска #601 — про большие ленты);
- * пустой результат — «Участник не найден» по центру (2010-134629).
+ * Кебаб раздела (макеты 3314-79166/3313-78243, D4): «Пригласить
+ * участника» (`TeamAdd`), «История действий» (`TimeHistory` — вход в
+ * общую ленту журнала) и красное «Отозвать доступ всем» (`Block`) —
+ * только при непустом списке (на пустоте отзывать нечего, макет
+ * 3314-79248 держит два пункта). На basic кебаб скрыт целиком (D2).
  *
- * «Отозвать доступ всем» (макет 2008-82943) — ConfirmDialog канона #629:
- * крупный заголовок, кнопки столбиком, «Отозвать и удалить» (danger).
- * DELETE /participants/{id} уходит по каждому участнику списка; частичный
- * сбой не выглядит успехом — диалог закрывается, список перечитывается
- * (кто остался — виден), «Отозвать всех» можно повторить на остатке.
- * Успех — попап по макету 2008-84101 (StatusIcon good 48 + зелёный
- * текст, на мобайле закрытие свайпом/оверлеем).
+ * «Отозвать доступ всем» — ConfirmDialog канона #629: крупный заголовок,
+ * кнопки столбиком, «Отозвать и удалить» (danger). Один вызов глобального
+ * DELETE /participants (#1310): все членства и pending-приглашения по
+ * всем объектам, идемпотентно. Успех — попап по макету 2008-84101
+ * (StatusIcon good 48 + зелёный текст, на мобайле закрытие
+ * свайпом/оверлеем).
+ *
+ * Поиск — клиентская фильтрация на поисковой странице (объём мал —
+ * тарифные слоты, список приходит целиком без пагинации; канон
+ * серверного поиска #601 — про большие ленты).
+ *
+ * Тариф (D2): на basic раздел открыт пустым состоянием-апселлом
+ * «Участников нет / Пригласите пользователей в свои объекты и управляйте
+ * вместе» (макет 3315-79334) — список скрыт до оплаты и на пустой
+ * истории подписки (downgrade с живыми участниками — то же состояние,
+ * данные не пропадают), CTA «Пригласить» ведёт на оформление тарифа;
+ * пилюля, чип и кебаб скрыты. Чтение списка на basic не вызывается —
+ * эндпоинт за тарифным гейтом (ADR 0064). На платном тарифе та же
+ * пустота (макет 3313-78626) — с CTA в форму приглашения.
  *
  * Тап по ряду — страница участника (#698).
  */
@@ -88,8 +98,6 @@ export function ParticipantsListScreen({
   const router = useRouter();
   const { write } = useUrlParams();
 
-  const [searchMode, setSearchMode] = useState(false);
-  const [search, setSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<ParticipantSortOrder>(
     initialOrder ?? DEFAULT_PARTICIPANTS_LIST_ORDER,
   );
@@ -98,37 +106,38 @@ export function ParticipantsListScreen({
   // «Участник удален» (макет 2008-83716): отзыв одного участника со
   // страницы участника (#698) возвращается на список по канону истории
   // (goBack) — попап рендерится здесь по staged-флагу. «Участник
-  // приглашен» (2010-134458, #699) — тот же механизм из приглашения хаба;
-  // вход туда есть и у хаба, поэтому попап рисует и он.
+  // приглашен» (2010-134458, #699) — тот же механизм из приглашения
+  // раздела.
   const stagedPopup = useParticipantPopup();
   const deletedPopup = stagedPopup === 'deleted';
   const invitedPopup = stagedPopup === 'invited';
 
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  // Открытие поиска сразу делает поле активным (программный фокус —
-  // устоявшийся a11y-паттерн поисковых шапок).
-  useEffect(() => {
-    if (searchMode) {
-      searchInputRef.current?.focus();
-    }
-  }, [searchMode]);
+  // Тариф решает, список или апселл (D2): null-подписка — базовый тариф
+  // (канон paid-sections), сбой чтения подписки — платный фолбэк канона
+  // детали объекта (деградация видима на списке, не молчит). Чтение
+  // списка стартует только после разрешения подписки — обречённого 402
+  // на basic холодного входа нет (ревизия ADR 0064 #1313).
+  const subscriptionQuery = useSubscription();
+  const isPaid = subscriptionQuery.data
+    ? isPaidTariff(subscriptionQuery.data.tariff.name)
+    : true;
+  const subscriptionResolved =
+    subscriptionQuery.isSuccess || subscriptionQuery.isError;
 
-  const participantsQuery = useParticipantsList();
+  const participantsQuery = useParticipantsList({
+    enabled: subscriptionResolved && isPaid,
+  });
   const revokeAll = useRevokeAllParticipants();
 
   const participants = participantsQuery.data ?? [];
-  // Служебные иконки шапки — только когда данные загружены и есть что
-  // искать и отзывать: пустой список (§7) и ошибка загрузки их прячут.
-  const headerActionsVisible =
-    !participantsQuery.isPending && !participantsQuery.isError && participants.length > 0;
-  const query = search.trim();
-  const searching = searchMode && query.length > 0;
-  const visible = sortParticipantsByName(filterParticipantsByQuery(participants, search), sortOrder);
-
-  const closeSearch = (): void => {
-    setSearchMode(false);
-    setSearch('');
-  };
+  const listPending = isPaid && subscriptionResolved && participantsQuery.isPending;
+  const listError = isPaid && participantsQuery.isError;
+  const hasParticipants = !listPending && !listError && participants.length > 0;
+  // Пилюля поиска: с данными и в фазах загрузки (гейт подписки, сам
+  // список) — контент встаёт на её место без сдвига (паритет чипа
+  // сортировки, §7); на подтверждённой пустоте (#1004), апселле basic и
+  // ошибке скрыта.
+  const showSearch = hasParticipants || listPending || !subscriptionResolved;
 
   // Направление сортировки живёт в адресе (?order=, дефолт «А→Я» не
   // пишется — конвенция состояния в адресе, #785), переживает перезагрузку.
@@ -140,160 +149,151 @@ export function ParticipantsListScreen({
   };
 
   const confirmRevokeAll = (): void => {
-    // Гард двойной защиты: кебаб скрыт и при ошибке, и на пустом списке,
-    // но без этого гарда пустая партия вернула бы {failed: 0} — ложный
-    // попап успеха «Все участники удалены».
-    if (participants.length === 0) {
-      setConfirmOpen(false);
-      return;
-    }
-    revokeAll.mutate(participants.map((participant) => participant.id), {
-      onSuccess: (result) => {
+    revokeAll.mutate(undefined, {
+      onSuccess: () => {
         setConfirmOpen(false);
-        if (result.failed === 0) {
-          setShowSuccess(true);
-        }
+        setShowSuccess(true);
       },
     });
   };
 
+  // Кебаб раздела — один узел в трёх слотах (ряд заголовка и хвост
+  // компакт-бара; testid у обёрток — слоты рендерят узел дважды, общий
+  // testid давал бы строгую неоднозначность в e2e). На basic и на ошибке
+  // не рисуется вовсе (D2, §7).
+  const kebab = (
+    <Menu>
+      <MenuTrigger asChild>
+        <IconButton icon={<Kebab />} label="Еще — действия со списком" />
+      </MenuTrigger>
+      <MenuContent>
+        <MenuItem
+          icon={<TeamAdd className="h-6 w-6" />}
+          onSelect={() => router.push(ROUTES.participantsInvite)}
+        >
+          Пригласить участника
+        </MenuItem>
+        <MenuItem
+          icon={<TimeHistory className="h-6 w-6" />}
+          onSelect={() => router.push(ROUTES.history)}
+        >
+          История действий
+        </MenuItem>
+        {/* «Отозвать доступ всем» — только там, где есть что отзывать
+         * (макет 3314-79248: на пустоте меню без красного пункта). */}
+        {hasParticipants && (
+          <MenuItem
+            icon={<Block className="h-6 w-6 text-error" />}
+            className="text-error"
+            onSelect={() => setConfirmOpen(true)}
+          >
+            Отозвать доступ всем
+          </MenuItem>
+        )}
+      </MenuContent>
+    </Menu>
+  );
+
   const sortChip = (
     <PickerMenu title="Сортировать" groups={sortOrderPickerGroups('Имя', sortOrder, changeOrder)}>
-      <ChipButton
-        trailingIcon={
-          <ArrowDown className={sortOrder === 'desc' ? 'rotate-180' : undefined} />
-        }
-      >
+      <ChipButton trailingIcon={<ArrowDown className={sortOrder === 'desc' ? 'rotate-180' : undefined} />}>
         Имя
       </ChipButton>
     </PickerMenu>
   );
 
-  const rows = (
-    <div className="flex flex-col px-6">
-      {visible.map((participant) => (
-        <ParticipantRowButton
-          key={participant.id}
-          participant={participant}
-          onSelect={() => router.push(ROUTES.participant(participant.id))}
-        />
-      ))}
-    </div>
-  );
-
   return (
     <>
-      {searchMode ? (
-        <TopNav
-          variant="search"
-          leading={
-            <IconButton
-              icon={<ArrowLeft />}
-              label="Закрыть поиск"
-              onClick={closeSearch}
-            />
-          }
-        >
-          <SearchField
-            ref={searchInputRef}
-            aria-label="Поиск участников"
-            placeholder="Найти участника"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            onClear={() => setSearch('')}
-          />
-        </TopNav>
-      ) : (
-        <TopNav
-          leading={<TopNavBackButton fallbackHref={ROUTES.participants} />}
-          trailing={
-            headerActionsVisible ? (
-              <span className="flex items-center gap-1 pr-3.5">
-                <IconButton
-                  icon={<Search />}
-                  label="Поиск участников"
-                  onClick={() => setSearchMode(true)}
-                />
-                <Menu>
-                  <MenuTrigger asChild>
-                    <IconButton icon={<Kebab />} label="Еще — действия со списком" />
-                  </MenuTrigger>
-                  <MenuContent>
-                    <MenuItem
-                      icon={<TeamAdd className="h-6 w-6" />}
-                      onSelect={() => router.push(ROUTES.participantsInvite)}
-                    >
-                      Пригласить участника
-                    </MenuItem>
-                    {/* История действий (#843, макет 2008-47514): вход в
-                      * общую ленту журнала; строка с хаба снята тем же
-                      * тикетом — кебабы списков заменили её. */}
-                    <MenuItem
-                      icon={<TimeHistory className="h-6 w-6" />}
-                      onSelect={() => router.push(ROUTES.history)}
-                    >
-                      История действий
-                    </MenuItem>
-                    <MenuItem
-                      icon={<Block className="h-6 w-6 text-error" />}
-                      className="text-error"
-                      onSelect={() => setConfirmOpen(true)}
-                    >
-                      Отозвать доступ всем
-                    </MenuItem>
-                  </MenuContent>
-                </Menu>
-              </span>
-            ) : undefined
-          }
-        >
-          <TopNavTitle title="Ваши участники" />
-        </TopNav>
-      )}
+      <TopNav
+        mobileWings
+        collapse={{
+          title: 'Участники',
+          search: showSearch
+            ? { href: ROUTES.participantsSearch, label: 'Найти участника' }
+            : undefined,
+          trailing: isPaid && !listError ? (
+            <span data-testid="participants-section-kebab-compact">{kebab}</span>
+          ) : undefined,
+        }}
+      />
 
-      <PageContent aboveTabBarFooter>
-        {participantsQuery.isPending ? (
+      <PageContent>
+        <HubCollapseAnchor>
+          {/* Строка заголовка h-8 (паттерн хабов «Контактов»/«Объектов»):
+           * кебаб справа, на basic и на ошибке скрыт (§7, D2). */}
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Участники</HubTitle>
+            {isPaid && !listError && (
+              <span data-testid="participants-section-kebab-row">{kebab}</span>
+            )}
+          </div>
+
+          {/* Пилюля поиска — канон SearchPill; видима с данными и в фазе
+           * загрузки, на подтверждённой пустоте и апселле прячется
+           * (#1004, §7: искать нечего). */}
+          {showSearch && (
+            <div className="mt-4 px-6">
+              <SearchPill
+                testId="participants-search-pill"
+                label="Найти участника"
+                onOpenSearch={() => router.push(ROUTES.participantsSearch)}
+              />
+            </div>
+          )}
+        </HubCollapseAnchor>
+
+        {!subscriptionResolved ? (
+          /* Подписка решает, список или апселл (D2) — до её разрешения
+           * нейтральный скелетон, без флэша пустоты (гейт чтения списка —
+           * ADR 0064 ревизия #1313). */
+          <>
+            <div className="mt-4 px-6">{sortChip}</div>
+            <ParticipantsListSkeleton />
+          </>
+        ) : listPending ? (
           <>
             {/* Чип сортировки реальный — вне фазы загрузки (§7, прецедент
              * книги контактов): контент встаёт на его место без сдвига. */}
-            <div className="mb-4 px-6">{sortChip}</div>
+            <div className="mt-4 px-6">{sortChip}</div>
             <ParticipantsListSkeleton />
           </>
-        ) : participantsQuery.isError ? (
+        ) : !isPaid ? (
+          /* Апселл базового тарифа (D2, макет 3315-79334): список скрыт до
+           * оплаты — и на пустом шаринге, и после downgrade с живыми
+           * участниками; кебаба и пилюли нет. */
+          <SectionEmptyState
+            ctaTestId="participants-upsell-cta"
+            onCta={() => router.push(ROUTES.profileTariffChange)}
+          />
+        ) : listError ? (
           <ErrorCard
             title="Не удалось загрузить участников"
             onRetry={() => void participantsQuery.refetch()}
             className="mt-6"
           />
         ) : participants.length === 0 ? (
-          /* Совсем пустой список: служебный чип и иконки шапки спрятаны
-           * вместе с ним (§7); приглашение — CTA нижней панели. */
-          <EmptyState
-            imageSrc="/images/tariff/tariff-about-sharing.png"
-            title="Участников пока нет"
-            description="Пригласите пользователей — и дайте им доступ к выбранным объектам"
+          /* Пустой список платного тарифа (макет 3313-78626): та же пустота,
+           * что у апселла, но приглашение ведёт в форму, а кебаб раздела
+           * остаётся (без красного пункта). */
+          <SectionEmptyState
+            ctaTestId="participants-empty-cta"
+            onCta={() => router.push(ROUTES.participantsInvite)}
           />
-        ) : searching && visible.length === 0 ? (
-          <p className="px-6 pt-16 text-center text-base leading-[18px] text-content-secondary">
-            Участник не найден
-          </p>
-        ) : searchMode ? (
-          rows
         ) : (
           <>
-            <div className="mb-4 px-6">{sortChip}</div>
-            {rows}
+            <div className="mb-4 mt-4 px-6">{sortChip}</div>
+            <div className="flex flex-col px-6" data-testid="participants-list">
+              {sortParticipantsByName(participants, sortOrder).map((participant) => (
+                <ParticipantRowButton
+                  key={participant.id}
+                  participant={participant}
+                  onSelect={() => router.push(ROUTES.participant(participant.id))}
+                />
+              ))}
+            </div>
           </>
         )}
       </PageContent>
-
-      {/* CTA над видимым нижним меню (решение владельца 06.10.2026,
-        * #1166): раздел участников — не глушим TabBar. */}
-      <StickyBottomBar aboveTabBar>
-        <Button className="w-full" onClick={() => router.push(ROUTES.participantsInvite)}>
-          Пригласить участника
-        </Button>
-      </StickyBottomBar>
 
       <ConfirmDialog
         open={confirmOpen}
@@ -348,5 +348,32 @@ export function ParticipantsListScreen({
         </Modal>
       )}
     </>
+  );
+}
+
+/** Пустота раздела (D2 #1313, макеты 3313-78626/3315-79334): иллюстрация,
+ * «Участников нет / Пригласите пользователей в свои объекты и управляйте
+ * вместе» и CTA «Пригласить». Одна анатомия у обоих состояний — апселл
+ * basic и пустой список платного тарифа различаются только адресатом CTA
+ * (оформление тарифа или форма приглашения). */
+function SectionEmptyState({
+  ctaTestId,
+  onCta,
+}: {
+  readonly ctaTestId: string;
+  readonly onCta: () => void;
+}): JSX.Element {
+  return (
+    <EmptyState
+      imageSrc="/images/tariff/tariff-about-sharing.png"
+      title="Участников нет"
+      description="Пригласите пользователей в свои объекты и управляйте вместе"
+      className="mt-16"
+      action={
+        <Button data-testid={ctaTestId} onClick={onCta}>
+          Пригласить
+        </Button>
+      }
+    />
   );
 }

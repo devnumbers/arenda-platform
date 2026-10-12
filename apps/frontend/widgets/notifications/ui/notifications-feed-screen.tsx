@@ -166,8 +166,8 @@ export function NotificationsFeedScreen({
     <>
       {/* Хаб-шапка по макетам 3178 (#1170): «крылья» и на мобайле, кебаб —
        * в строке HubTitle и в компакт-баре при сворачивании (канон хабов —
-       * PropertiesPage/participants-hub). Шестерёнка пустого состояния
-       * занимает тот же слот. */}
+       * PropertiesPage, с #1313 и раздел «Участники»). Шестерёнка пустого
+       * состояния занимает тот же слот. */}
       <TopNav mobileWings collapse={{ title: 'Уведомления', trailing }} />
 
       <PageContent>

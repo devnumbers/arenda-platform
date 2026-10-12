@@ -84,7 +84,15 @@ func (noopPaymentStore) DeleteFuturePlanned(context.Context, uuid.UUID, time.Tim
 	panic("unused")
 }
 
-func (noopPaymentStore) SetFavorite(context.Context, uuid.UUID, uuid.UUID, bool) error {
+func (noopPaymentStore) InsertFavorite(context.Context, uuid.UUID, uuid.UUID) error {
+	panic("unused")
+}
+
+func (noopPaymentStore) DeleteFavorite(context.Context, uuid.UUID, uuid.UUID) error {
+	panic("unused")
+}
+
+func (noopPaymentStore) FavoriteIDs(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]bool, error) {
 	panic("unused")
 }
 

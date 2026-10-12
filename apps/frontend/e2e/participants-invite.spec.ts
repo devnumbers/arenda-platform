@@ -1,9 +1,9 @@
+import type { Page } from '@playwright/test';
 import {
   captureScreen,
   execE2eSql,
   expect,
   openCabinetWithSeededSession,
-  screenHeader,
   test,
 } from './fixtures';
 
@@ -114,12 +114,11 @@ test('пикер «Выбрать объект»: tri-state «Все объек�
 test('приглашение незарегистрированной почты: все объекты, попап «Участник приглашен», pending-ряд на списке; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
 
-  // Путь пользователя: список → CTA (нужна история — возврат goBack ведёт
-  // на список с попапом).
-  await page.goto('/participants/list');
-  await page.getByRole('button', { name: 'Пригласить участника' })
-    .filter({ hasText: 'Пригласить участника' })
-    .click();
+  // Путь пользователя: раздел → кебаб → «Пригласить участника» (CTA
+  // нижней панели снесена с хабом, D1 #1313; нужна история — возврат
+  // goBack ведёт на раздел с попапом).
+  await page.goto('/participants');
+  await openSectionInvite(page);
   await expect(page.getByRole('heading', { name: 'Пригласите участника' })).toBeVisible();
 
   await page.getByRole('textbox', { name: 'Электронная почта' }).fill(INVITEE_EMAIL);
@@ -129,18 +128,21 @@ test('приглашение незарегистрированной почты
       .filter({ hasText: 'Пригласить' })
       .click();
 
-    // Попап «Участник приглашен» (2010-134458) на списке «Ваши участники».
-    await expect(screenHeader(page).getByText('Ваши участники')).toBeVisible();
+    // Попап «Участник приглашен» (2010-134458) на разделе «Участники»;
+    // URL с якорем конца строки отличает раздел от вложенных маршрутов
+    // (заголовок хаба не проверяем: открытая модалка прячет фон из
+    // a11y-дерева — aria-modal).
+    await expect(page).toHaveURL(/\/participants$/);
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
     ).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Pending-ряд появился: почта — титул, чип «Приглашён» (#772: считанный
-    // partial/0 как «Доступно 0 объектов» читался как отказ).
+    // Pending-ряд появился: почта — титул, бейдж «Аккаунт не создан»
+    // (D3 #1313: у pending-агрегата ровно этот статус).
     const inviteeRow = page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) });
     await expect(inviteeRow).toBeVisible();
-    await expect(inviteeRow.getByText('Приглашён')).toBeVisible();
+    await expect(inviteeRow.getByText('Аккаунт не создан')).toBeVisible();
 
     // Серверная правда: pending-приглашения на все 3 объекта снапшота.
     expect(
@@ -155,18 +157,18 @@ test('приглашение незарегистрированной почты
   await expect(page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) })).toHaveCount(0);
 });
 
-test('хаб-приёмник: приглашение из хаба → возврат на /participants → попап «Участник приглашен» (цикл ×3); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+test('приёмник-раздел: приглашение из раздела → возврат на /participants → попап «Участник приглашен» (цикл ×3); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
   await openCabinetWithSeededSession(page, seededUser);
   // Мобильная канва — условия обхода #759: попап здесь рисует vaul-шит,
   // и именно на ней #771 поймал «невидимый» попап (шит за сгибом).
   await page.setViewportSize({ width: 375, height: 667 });
 
-  // P2-хвост #759 / #771: вход во флоу — с хаба «Совместный доступ»
-  // (CTA нижней панели), возврат goBack ведёт на хаб — попап рисует И
-  // список, И хаб (#699). Раньше спека покрывала только список; на хабе
-  // была поймана редкая потеря попапа (1 из 8 прогонов). Цикл повторов —
-  // регрессионная сетка нестабильности; у каждого цикла своя почта,
-  // иначе повторное приглашение уходит в granted=0 без попапа.
+  // P2-хвост #759 / #771: вход во флоу — из раздела «Участники» (кебаб;
+  // CTA нижней панели снесена с хабом, D1 #1313), возврат goBack ведёт на
+  // раздел — попап рисует список (D3). На приёмнике была поймана редкая
+  // потеря попапа (1 из 8 прогонов). Цикл повторов — регрессионная сетка
+  // нестабильности; у каждого цикла своя почта, иначе повторное
+  // приглашение уходит в granted=0 без попапа.
   await page.goto('/participants');
 
   // Самозаживление: провал предыдущего прогона до очистки оставил бы
@@ -177,9 +179,7 @@ test('хаб-приёмник: приглашение из хаба → возв
   for (let cycle = 1; cycle <= 3; cycle++) {
     const email = `e2e-invite-hub-${cycle}@example.com`;
 
-    await page.getByRole('button', { name: 'Пригласить участника' })
-      .filter({ hasText: 'Пригласить участника' })
-      .click();
+    await openSectionInvite(page);
     await expect(page.getByRole('heading', { name: 'Пригласите участника' })).toBeVisible();
 
     await page.getByRole('textbox', { name: 'Электронная почта' }).fill(email);
@@ -239,10 +239,8 @@ test('хаб-приёмник: приглашение из хаба → возв
 test('приглашение зарегистрированной почты на один объект: suspended-слот, чип «Превышен лимит объектов»; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
 
-  await page.goto('/participants/list');
-  await page.getByRole('button', { name: 'Пригласить участника' })
-    .filter({ hasText: 'Пригласить участника' })
-    .click();
+  await page.goto('/participants');
+  await openSectionInvite(page);
 
   await page.getByRole('textbox', { name: 'Электронная почта' }).fill(LIMITED_EMAIL);
 
@@ -300,3 +298,17 @@ test('своя почта — ошибка бэка «Нельзя добави�
   await expect(page.getByText('Нельзя добавить себя участником')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Пригласите участника' })).toBeVisible();
 });
+
+/** Вход в форму приглашения из раздела «Участники»: кебаб → «Пригласить
+ * участника» (D1 #1313 — CTA нижней панели снесена с хабом). Radix-меню
+ * под нагрузкой может не открыться с первого клика — ретраим до пункта. */
+async function openSectionInvite(page: Page): Promise<void> {
+  await expect(async () => {
+    await page
+      .getByTestId('participants-section-kebab-row')
+      .getByRole('button', { name: 'Еще — действия со списком' })
+      .click();
+    await expect(page.getByRole('menuitem', { name: 'Пригласить участника' })).toBeVisible();
+  }).toPass({ timeout: 10_000 });
+  await page.getByRole('menuitem', { name: 'Пригласить участника' }).click();
+}

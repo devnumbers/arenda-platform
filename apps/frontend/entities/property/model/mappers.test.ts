@@ -12,7 +12,6 @@ function makeDto(
     address: 'Москва, ул. Ленина, 1',
     attributes: {},
     status: 'active',
-    members_count: 0,
     pinned_at: null,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',

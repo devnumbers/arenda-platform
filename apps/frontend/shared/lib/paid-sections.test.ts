@@ -22,16 +22,21 @@ describe('paidSectionGateRedirect', () => {
         ).toBeNull();
     });
 
-    it('gates the global participants section on the basic tariff', () => {
-        expect(paidSectionGateRedirect('/participants', 'basic')).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
+    it('opens the section page itself on the basic tariff (D2 #1313: upsell empty state)', () => {
+        expect(paidSectionGateRedirect('/participants', 'basic')).toBeNull();
     });
 
-    it('gates deep routes of the global participants section, including the invite form', () => {
-        expect(paidSectionGateRedirect('/participants/list', 'basic')).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
-        expect(paidSectionGateRedirect('/participants/properties', 'basic')).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
+    it('gates deep routes of the global participants section, including search and the invite form', () => {
+        expect(paidSectionGateRedirect('/participants/search', 'basic')).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
         expect(paidSectionGateRedirect('/participants/invite', 'basic')).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
         expect(
             paidSectionGateRedirect('/participants/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001', 'basic'),
+        ).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
+        expect(
+            paidSectionGateRedirect(
+                '/participants/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0002',
+                'basic',
+            ),
         ).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
     });
 
@@ -55,6 +60,7 @@ describe('paidSectionGateRedirect', () => {
     });
 
     it('passes a paid tariff through', () => {
+        expect(paidSectionGateRedirect('/participants', 'pro')).toBeNull();
         expect(
             paidSectionGateRedirect('/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/participants', 'pro'),
         ).toBeNull();
@@ -71,6 +77,7 @@ describe('paidSectionGateRedirect', () => {
         expect(
             paidSectionGateRedirect('/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/participants', null),
         ).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
+        expect(paidSectionGateRedirect('/participants/search', null)).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
         expect(paidSectionGateRedirect('/history', null)).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
     });
 

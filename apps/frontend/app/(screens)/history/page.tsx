@@ -29,7 +29,7 @@ export default function HistoryRoutePage() {
           void queryClient.prefetchInfiniteQuery(historyFeedQueryOptions({
             transport: serverApiClient,
           }));
-          void queryClient.prefetchQuery(historyFiltersQueryOptions(serverApiClient));
+          void queryClient.prefetchQuery(historyFiltersQueryOptions({ transport: serverApiClient }));
           void queryClient.prefetchQuery(meQueryOptions(serverApiClient));
         }}
       >

@@ -38,6 +38,7 @@ export function ContactForm({
   errorOf,
   onFieldChange,
   onOpenObjectSelect,
+  objectSelectDisabled = false,
   onSubmit,
 }: {
   readonly form: ContactFormFields;
@@ -59,6 +60,11 @@ export function ContactForm({
     (key: Exclude<keyof ContactFormFields, 'propertyId'>, value: string): void;
   };
   readonly onOpenObjectSelect: () => void;
+  /** Правка карточки не-собственником (D10 #1309): инпут объекта глухой —
+   * перепривязка отвергается сервером (403), граница прав видна до
+   * попытки сохранить. Создание не глушится: привязка при создании —
+   * не перепривязка. */
+  readonly objectSelectDisabled?: boolean;
   /** Сабмит формы (Enter в поле); сама форма отправку не выполняет. */
   readonly onSubmit?: (event: SubmitEvent<HTMLFormElement>) => void;
 }): JSX.Element {
@@ -209,7 +215,8 @@ export function ContactForm({
           type="button"
           aria-label={`Привязанный объект: ${selectedObjectLabel || 'не выбран'}`}
           onClick={onOpenObjectSelect}
-          className="flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)] focus-visible:ring-2 focus-visible:ring-primary"
+          disabled={objectSelectDisabled}
+          className="flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 text-left transition-shadow outline-none hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)] focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
         >
           <span className="min-w-0 flex-1 truncate text-base leading-[18px] text-content">
             {selectedObjectLabel}

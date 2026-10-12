@@ -12,7 +12,6 @@ import {
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
   seedJournalEntry,
-  screenHeader,
   seededMemberSessionToken,
   test,
   todayAt,
@@ -41,9 +40,12 @@ test('вход с кебаба «Ваших участников», пустая
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
-  // Точка входа — кебаб «Ваших участников» (#843, макет 2008-47514).
-  await page.goto('/participants/list');
-  await screenHeader(page).getByRole('button', { name: 'Еще — действия со списком' }).click();
+  // Точка входа — кебаб раздела «Участники» (D4 #1313).
+  await page.goto('/participants');
+  await page
+    .getByTestId('participants-section-kebab-row')
+    .getByRole('button', { name: 'Еще — действия со списком' })
+    .click();
   await page.getByRole('menuitem', { name: 'История действий' }).click();
   await page.waitForURL('**/history');
 
@@ -72,6 +74,10 @@ test('лента из сида: чипы дней, группы «объект �
     }),
     seededUser,
   );
+  // Легаси-строка: action property.pinned снесён cutoverом #1307 (D17 —
+  // личный пин в журнал больше не пишется); до-каунтовые строки остаются в
+  // журнале и рендерятся из сохранённых сегментов — спека держит этот
+  // обратный рендер.
   await seedJournalEntry(
     {
       id: 'a0000000-0000-4000-8000-000000000003',

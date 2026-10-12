@@ -147,6 +147,26 @@ func (r *InvitationRepository) ListForRemovalByEmail(ctx context.Context, email 
 	return out, nil
 }
 
+// ListForRemovalByOwner returns every pending invitation on the properties
+// the actor owns — the whole removal scope of «Отозвать доступ всем» (issue
+// #1310), archived included like the per-email listing. The SQL scope is the
+// authorization.
+func (r *InvitationRepository) ListForRemovalByOwner(ctx context.Context, actorID uuid.UUID) ([]domain.Invitation, error) {
+	rows, err := r.q().ListParticipantInvitationsForRemovalByOwner(ctx, pgconv.UUIDToPgtype(actorID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Invitation, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.Invitation{
+			ID:         pgconv.UUIDFromPgtype(row.ID),
+			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+			Email:      row.Email,
+		})
+	}
+	return out, nil
+}
+
 // UpdateRole changes the role of a pending invitation.
 func (r *InvitationRepository) UpdateRole(ctx context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Invitation, error) {
 	row, err := r.q().UpdatePropertyMemberInvitationRole(ctx, postgres.UpdatePropertyMemberInvitationRoleParams{

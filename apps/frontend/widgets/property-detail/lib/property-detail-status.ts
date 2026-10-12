@@ -44,29 +44,31 @@ export function propertyStatusSubtitle(status: PropertyStatus): string | null {
   return null;
 }
 
-/** Кебаб (Figma 1186:44996 — активный, 1581:52407 — архивный). Смотрящему
- * (canMutate=false) статусные мутирующие пункты недоступны — остаются
- * чтение и совместный доступ. */
+/** Кебаб (Figma 1186:44996 — активный, 1581:52407 — архивный; платный
+ * состав у смотрящего — 2235-100924). Смотрящему (canMutate=false)
+ * статусные мутирующие пункты недоступны — остаются чтение и совместный
+ * доступ. На basic пункты совместного доступа скрыты полностью (D15
+ * #1312): платная функция не приманивает; per-object экраны остаются под
+ * paywall-редиректом (ADR 0064), так что deep-link живёт, вход из UI на
+ * basic — нет. */
 export function buildPropertyKebabItems(
   status: PropertyStatus,
   canMutate: boolean,
+  canUseSharing: boolean,
 ): ReadonlyArray<PropertyDetailAction> {
+  const sharing = canUseSharing ? [action('access', 'Совместный доступ', false)] : [];
   if (status === 'archived') {
     return canMutate
-      ? [
-          action('about', 'Об объекте', false),
-          action('unarchive', 'Вернуть из архива', false),
-          action('access', 'Совместный доступ', false),
-        ]
-      : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
+      ? [action('about', 'Об объекте', false), action('unarchive', 'Вернуть из архива', false), ...sharing]
+      : [action('about', 'Об объекте', false), ...sharing];
   }
   return canMutate
     ? [
         action('about', 'Об объекте', false),
         action('change-status', 'Изменить статус', false),
-        action('access', 'Совместный доступ', false),
+        ...sharing,
       ]
-    : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
+    : [action('about', 'Об объекте', false), ...sharing];
 }
 
 /**
@@ -176,10 +178,13 @@ export type PropertyManageInput = {
    * Удалить, идёт → Завершить. */
   readonly rentalState: RentalActionState;
   readonly isPinned: boolean;
-  /** Мутационный доступ — ролевой canManageMembers (#703); архив его
+  /** Мутационный доступ — ролевой canMutate (#703; до D8 #1304 эту роль
+   * играл canManageMembers, пока тот не стал owner-only); архив его
    * не гасит, билдер ветвит архив сам. */
   readonly canMutate: boolean;
-  /** «Основной объект» доступен тарифу (платный, канон резолюции #584). */
+  /** «Основной объект» доступен тарифу (платный, канон резолюции #584);
+   * с D11 #1307 право пина — просмотр (личное состояние читателя), так что
+   * флаг больше не намекает на роль — роль ветвит canMutate. */
   readonly canPin: boolean;
   /** Участник чужого объекта (#703): строка «Покинуть объект». */
   readonly canLeave: boolean;
@@ -190,14 +195,25 @@ export type PropertyManageInput = {
   readonly canLifecycle: boolean;
 };
 
+/** Строка пина: закреплённый объект предлагает «Убрать из основных»,
+ * закреплённому не предложение «Сделать основным» (шит подтверждения
+ * открывается только на pin, #630). Обе ветки билдера — зрителя и
+ * мутантная — держат одну форму (D11 #1307). */
+function pinAction(isPinned: boolean): PropertyDetailAction {
+  return isPinned
+    ? action('unpin', 'Убрать из основных', false)
+    : action('pin', 'Сделать основным', false);
+}
+
 /** Секция «Управление» (Figma 1554:98469, активный): контекстный список
  * действий по статусу, аренде и пину. Без «Экспортировать объект» —
  * решение владельца 10.09. Архив/удаление — только владельцу
  * (canLifecycle; участнику 403 — приёмка #757). Архивный владелец
  * (read-only, ADR 0028): вернуть из архива, совместный доступ, удаление.
- * Смотрящий (макет 2235-100370, тикет #703): об объекте, совместный
- * доступ, покинуть объект — без «Сделать основным» из макета (мутация
- * чужого объекта; расхождение макета с тикетом — вопрос приёмки).
+ * Смотрящий (макет 2235-100370, тикет #703): об объекте, «Основной
+ * объект» (D11 #1307 вернул строку из макета — пин стал личным состоянием
+ * читателя по праву просмотра, не мутацией чужого объекта; архив его
+ * гасит), совместный доступ, покинуть объект.
  * `canMutate` здесь РОЛЕВОЙ (владелец/участник против смотрящего) — в
  * отличие от propertyPermissions().canEdit, архив его не гасит. */
 export function buildPropertyManageActions(
@@ -207,14 +223,16 @@ export function buildPropertyManageActions(
 
   if (!canMutate) {
     // Смотрящий без контекста доступа — страховка «только чтение»,
-    // строка выхода не рисуется.
-    return canLeave
-      ? [
-          action('about', 'Об объекте', false),
-          action('access', 'Совместный доступ', false),
-          action('leave', 'Покинуть объект', true),
-        ]
-      : [action('about', 'Об объекте', false), action('access', 'Совместный доступ', false)];
+    // строка выхода не рисуется. Личный пин — по праву просмотра (D11
+    // #1307): строка есть у зрителя, архив её гасит (архивный объект
+    // не закрепляется — бек отвечает 409).
+    const items: PropertyDetailAction[] = [action('about', 'Об объекте', false)];
+    if (canPin && status !== 'archived') {
+      items.push(pinAction(isPinned));
+    }
+    items.push(action('access', 'Совместный доступ', false));
+    if (canLeave) items.push(action('leave', 'Покинуть объект', true));
+    return items;
   }
 
   if (status === 'archived') {
@@ -239,11 +257,7 @@ export function buildPropertyManageActions(
 
   const items: PropertyDetailAction[] = [action('edit', 'Редактировать объект', false)];
   if (canPin) {
-    items.push(
-      isPinned
-        ? action('unpin', 'Убрать из основных', false)
-        : action('pin', 'Сделать основным', false),
-    );
+    items.push(pinAction(isPinned));
   }
   // Ремонт срезает арендную строку (карта #1047, тикет #1050, решение
   // владельца 2Б): на ремонте мутации незавершённой аренды запрещены

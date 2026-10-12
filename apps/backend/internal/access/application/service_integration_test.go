@@ -233,19 +233,28 @@ func (r *memRepo) ListForRemovalByUser(_ context.Context, personID, actorID uuid
 	return out, nil
 }
 
-// inManageScope is the in-memory twin of the SQL manage-scope predicate: the
-// actor owns the property or holds an active full_access membership on it.
-func (r *memRepo) inManageScope(propertyID, actorID uuid.UUID) bool {
-	if r.owners[propertyID] == actorID {
-		return true
-	}
+// ListForRemovalByOwner mirrors the SQL owner-wide removal scope (issue
+// #1310): every membership (any status, archived included) on properties
+// the actor owns.
+func (r *memRepo) ListForRemovalByOwner(_ context.Context, actorID uuid.UUID) ([]domain.Membership, error) {
+	var out []domain.Membership
 	for _, m := range r.rows {
-		if m.PropertyID == propertyID && m.UserID == actorID &&
-			m.Status == domain.MemberStatusActive && m.Role == domain.RoleFullAccess {
-			return true
+		if r.inManageScope(m.PropertyID, actorID) {
+			out = append(out, m)
 		}
 	}
-	return false
+	slices.SortFunc(out, func(a, b domain.Membership) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// inManageScope is the in-memory twin of the SQL manage-scope predicate:
+// owner-only since the D8 decision (issue #1304) — the actor owns the
+// property. Member management is the owner's prerogative; a full_access
+// member of a foreign object is out of the scope.
+func (r *memRepo) inManageScope(propertyID, actorID uuid.UUID) bool {
+	return r.owners[propertyID] == actorID
 }
 
 func (r *memRepo) CreateWithStatus(_ context.Context, m domain.Membership) (domain.Membership, error) {
@@ -374,9 +383,16 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 		t.Errorf("add owner: expected ErrCannotAddOwner, got %v", err)
 	}
 
-	// Self-add is rejected.
-	if _, err := svc.AddMember(context.Background(), member, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrCannotAddSelf) {
-		t.Errorf("self add: expected ErrCannotAddSelf, got %v", err)
+	// A member's self-add is refused like every member-management attempt:
+	// owner-only since D8 (issue #1304), the privacy-preserving not-found
+	// fires before the self-add argument check.
+	if _, err := svc.AddMember(context.Background(), member, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("self add by member: expected ErrMemberNotFound, got %v", err)
+	}
+	// The owner's self-add stays the argument-level ErrCannotAddOwner (the
+	// owner gate outranks the self gate for the same person).
+	if _, err := svc.AddMember(context.Background(), owner, property, owner, domain.RoleViewer); !errors.Is(err, domain.ErrCannotAddOwner) {
+		t.Errorf("owner self add: expected ErrCannotAddOwner, got %v", err)
 	}
 
 	// Policy resolves roles correctly for allow/deny reasoning.

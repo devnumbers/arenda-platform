@@ -2,8 +2,9 @@ package application
 
 // The action journal of the property mutations (карта #704, тикет #707,
 // ADR 0061): every manual action writes its row inside the transaction with
-// the row-text catalog's action id, the idempotent re-pin writes nothing,
-// and a failing journal insert fails the mutation (fail-safe).
+// the row-text catalog's action id; the personal pin journals nothing since
+// the cutover #1307 (D17), and a failing journal insert fails the mutation
+// (fail-safe).
 
 import (
 	"context"
@@ -57,7 +58,7 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := svc.CreateProperty(ctx, owner, CreatePropertyCommand{
-		Name: "Новая квартира", Address: renamedAddress, Type: "apartment",
+		Name: testNewPropertyName, Address: renamedAddress, Type: "apartment",
 	})
 	if err != nil {
 		t.Fatalf("CreateProperty: %v", err)
@@ -66,10 +67,11 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 	if _, err := svc.UpdateProperty(ctx, owner, created.ID, UpdatePropertyCommand{Name: &newName}); err != nil {
 		t.Fatalf("UpdateProperty: %v", err)
 	}
+	// The personal pin writes no row since the cutover #1307 (D17): the pin
+	// and its idempotent re-pin leave the journal untouched.
 	if _, err := svc.SetPropertyPin(ctx, owner, created.ID, true); err != nil {
 		t.Fatalf("SetPropertyPin: %v", err)
 	}
-	// The idempotent re-pin keeps the pin time and writes no row.
 	if _, err := svc.SetPropertyPin(ctx, owner, created.ID, true); err != nil {
 		t.Fatalf("SetPropertyPin (re-pin): %v", err)
 	}
@@ -77,13 +79,12 @@ func TestHistory_PropertyMutationRows(t *testing.T) {
 		t.Fatalf("ArchiveProperty: %v", err)
 	}
 
-	if len(history.Entries) != 4 {
-		t.Fatalf("journal entries = %d, want 4 (create, rename, pin, archive; re-pin silent)", len(history.Entries))
+	if len(history.Entries) != 3 {
+		t.Fatalf("journal entries = %d, want 3 (create, rename, archive; the pin silent, D17)", len(history.Entries))
 	}
 	want := []struct{ action, text string }{
 		{string(historydomain.ActionPropertyCreated), "Добавлен объект: Новая квартира"},
 		{string(historydomain.ActionPropertyRenamed), "Название объекта изменено: Новая квартира → Переименованная"},
-		{string(historydomain.ActionPropertyPinned), "Объект закреплён"},
 		{string(historydomain.ActionPropertyArchived), "Объект отправлен в архив"},
 	}
 	for i, w := range want {

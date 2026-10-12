@@ -635,8 +635,21 @@ func TestOperationsRoleMatrix_ViewerReadsButDoesNotAct(t *testing.T) {
 	_, err := viewer.ops.PayOperation(viewer.ctx(), viewer.owner, viewer.propID, opID)
 	wantAppError(t, err, paymentsapp.ErrForbidden)
 
-	_, err = viewer.svc.SetPaymentFavorite(viewer.ctx(), viewer.owner, viewer.propID, seeding, true)
-	wantAppError(t, err, paymentsapp.ErrForbidden)
+	// The favorite star is the view-capability write (the cutover #1308,
+	// D12): a viewer stars their own working set on par with everyone.
+	starred, err := viewer.svc.SetPaymentFavorite(viewer.ctx(), viewer.owner, viewer.propID, seeding, true)
+	if err != nil {
+		t.Fatalf("viewer favorite: %v", err)
+	}
+	if !starred.IsFavorite {
+		t.Fatal("viewer favorite returned a non-starred rule")
+	}
+	if !favoriteReadback(t, viewer, seeding) {
+		t.Fatal("viewer's star did not survive the readback")
+	}
+	if _, err := viewer.svc.SetPaymentFavorite(viewer.ctx(), viewer.owner, viewer.propID, seeding, false); err != nil {
+		t.Fatalf("viewer unstar: %v", err)
+	}
 
 	if _, err := viewer.ops.GetOperation(viewer.ctx(), viewer.owner, viewer.propID, opID); err != nil {
 		t.Fatalf("viewer operation read: %v", err)

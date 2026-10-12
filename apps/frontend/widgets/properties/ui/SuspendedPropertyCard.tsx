@@ -43,7 +43,6 @@ export function SuspendedPropertyCard({
     address: placeholder.address,
     attributes: {},
     status: 'active' as const,
-    members_count: 0,
     created_at: '',
     pinned_at: null,
     access: { role: placeholder.accessRole, ownerName: placeholder.ownerName },

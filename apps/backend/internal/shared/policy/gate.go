@@ -20,9 +20,9 @@ const (
 )
 
 // GateFor maps a resolved role onto the gate decision for a capability
-// predicate (CanView, CanEdit, CanLifecycle): none and suspended never pass
-// (object privacy), a role without the capability is forbidden, otherwise
-// allow. The ADR 0028 matrix in one place.
+// predicate (CanView, CanEdit, CanLifecycle, CanRebind): none and suspended
+// never pass (object privacy), a role without the capability is forbidden,
+// otherwise allow. The ADR 0028 matrix in one place.
 func GateFor(r Role, can func(Role) bool) GateDecision {
 	switch r {
 	case RoleNone:

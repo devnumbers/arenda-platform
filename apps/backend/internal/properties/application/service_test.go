@@ -56,6 +56,7 @@ func (fakePropertyTxBeginner) Begin(_ context.Context) (transaction.Tx, error) {
 type lockingFakePropertyRepo struct {
 	lock *sync.Mutex
 	data map[uuid.UUID]domain.Property
+	pins map[actorPinKey]time.Time
 	tx   *fakePropertyTx
 }
 
@@ -67,6 +68,7 @@ func newLockingFakePropertyRepo(properties ...domain.Property) *lockingFakePrope
 	return &lockingFakePropertyRepo{
 		lock: &sync.Mutex{},
 		data: data,
+		pins: make(map[actorPinKey]time.Time),
 	}
 }
 
@@ -147,15 +149,37 @@ func (r *lockingFakePropertyRepo) Update(_ context.Context, _ uuid.UUID, propert
 	return property, nil
 }
 
-func (r *lockingFakePropertyRepo) SetPin(_ context.Context, id, _ uuid.UUID, pinnedAt *time.Time) (domain.Property, error) {
-	// The caller already holds the lock via GetByIDForUpdate.
-	p, ok := r.data[id]
-	if !ok {
-		return domain.Property{}, ErrNotFound
+func (r *lockingFakePropertyRepo) ActorPin(_ context.Context, actor, propertyID uuid.UUID) (*time.Time, error) {
+	if at, ok := r.pins[actorPinKey{actor: actor, property: propertyID}]; ok {
+		at := at
+		return &at, nil
 	}
-	p.PinnedAt = pinnedAt
-	r.data[id] = p
-	return p, nil
+	return nil, nil
+}
+
+func (r *lockingFakePropertyRepo) InsertActorPin(_ context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error) {
+	key := actorPinKey{actor: actor, property: propertyID}
+	if existing, ok := r.pins[key]; ok {
+		// The conflict keeps the original pin time (the PUT's idempotency).
+		return existing, nil
+	}
+	r.pins[key] = pinnedAt
+	return pinnedAt, nil
+}
+
+func (r *lockingFakePropertyRepo) DeleteActorPin(_ context.Context, actor, propertyID uuid.UUID) error {
+	delete(r.pins, actorPinKey{actor: actor, property: propertyID})
+	return nil
+}
+
+func (r *lockingFakePropertyRepo) ActorPins(_ context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	out := make(map[uuid.UUID]time.Time, len(propertyIDs))
+	for _, id := range propertyIDs {
+		if at, ok := r.pins[actorPinKey{actor: actor, property: id}]; ok {
+			out[id] = at
+		}
+	}
+	return out, nil
 }
 
 func (r *lockingFakePropertyRepo) Archive(_ context.Context, id, _ uuid.UUID) error {
@@ -222,6 +246,7 @@ func (r *lockingFakePropertyRepo) WithTx(tx transaction.Tx) PropertyRepository {
 	return &lockingFakePropertyRepo{
 		lock: r.lock,
 		data: r.data,
+		pins: r.pins,
 		tx:   ftx,
 	}
 }
@@ -563,6 +588,14 @@ func TestPropertyService_ListArchivedProperties(t *testing.T) {
 // that do not exercise concurrency.
 type fakePropertyRepo struct {
 	data map[uuid.UUID]domain.Property
+	pins map[actorPinKey]time.Time
+}
+
+// actorPinKey is the personal pin's identity (the cutover #1307): the pair
+// (actor, property) — a personal state, never a property flag.
+type actorPinKey struct {
+	actor    uuid.UUID
+	property uuid.UUID
 }
 
 func newFakePropertyRepo(properties ...domain.Property) *fakePropertyRepo {
@@ -570,7 +603,13 @@ func newFakePropertyRepo(properties ...domain.Property) *fakePropertyRepo {
 	for _, p := range properties {
 		data[p.ID] = p
 	}
-	return &fakePropertyRepo{data: data}
+	return &fakePropertyRepo{data: data, pins: make(map[actorPinKey]time.Time)}
+}
+
+// seedPin plants the actor's personal pin row directly (the re-pin and
+// list-overlay tests read the row without passing through the service).
+func (r *fakePropertyRepo) seedPin(actor, propertyID uuid.UUID, at time.Time) {
+	r.pins[actorPinKey{actor: actor, property: propertyID}] = at
 }
 
 func (r *fakePropertyRepo) Create(_ context.Context, _ uuid.UUID, property domain.Property) (domain.Property, error) {
@@ -643,14 +682,37 @@ func (r *fakePropertyRepo) Update(_ context.Context, _ uuid.UUID, property domai
 	return property, nil
 }
 
-func (r *fakePropertyRepo) SetPin(_ context.Context, id, _ uuid.UUID, pinnedAt *time.Time) (domain.Property, error) {
-	p, ok := r.data[id]
-	if !ok {
-		return domain.Property{}, ErrNotFound
+func (r *fakePropertyRepo) ActorPin(_ context.Context, actor, propertyID uuid.UUID) (*time.Time, error) {
+	if at, ok := r.pins[actorPinKey{actor: actor, property: propertyID}]; ok {
+		at := at
+		return &at, nil
 	}
-	p.PinnedAt = pinnedAt
-	r.data[id] = p
-	return p, nil
+	return nil, nil
+}
+
+func (r *fakePropertyRepo) InsertActorPin(_ context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error) {
+	key := actorPinKey{actor: actor, property: propertyID}
+	if existing, ok := r.pins[key]; ok {
+		// The conflict keeps the original pin time (the PUT's idempotency).
+		return existing, nil
+	}
+	r.pins[key] = pinnedAt
+	return pinnedAt, nil
+}
+
+func (r *fakePropertyRepo) DeleteActorPin(_ context.Context, actor, propertyID uuid.UUID) error {
+	delete(r.pins, actorPinKey{actor: actor, property: propertyID})
+	return nil
+}
+
+func (r *fakePropertyRepo) ActorPins(_ context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	out := make(map[uuid.UUID]time.Time, len(propertyIDs))
+	for _, id := range propertyIDs {
+		if at, ok := r.pins[actorPinKey{actor: actor, property: id}]; ok {
+			out[id] = at
+		}
+	}
+	return out, nil
 }
 
 func (r *fakePropertyRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
@@ -895,6 +957,17 @@ type recordingSlotPolicy struct {
 	recovered           []uuid.UUID
 	recoveredRecipients []uuid.UUID
 	enforcedOnUnarchive []uuid.UUID
+	// Recorded (recipient, trigger) pairs of the own-pool growth enforcement
+	// (D13); poolFullFor answers RecipientPoolFull for the seeded recipients
+	// (absent → false).
+	poolGrowthCalls []poolGrowthCall
+	poolFullFor     map[uuid.UUID]bool
+}
+
+// poolGrowthCall is one recorded EnforceRecipientPoolGrowth invocation.
+type poolGrowthCall struct {
+	recipient uuid.UUID
+	trigger   string
 }
 
 func (p *recordingSlotPolicy) RecoverSuspendedForProperty(
@@ -920,6 +993,17 @@ func (p *recordingSlotPolicy) RecoverSuspended(
 ) ([]accessdomain.Membership, error) {
 	p.recoveredRecipients = append(p.recoveredRecipients, recipientID)
 	return nil, nil
+}
+
+func (p *recordingSlotPolicy) EnforceRecipientPoolGrowth(
+	_ context.Context, _ transaction.Tx, recipientID uuid.UUID, trigger string,
+) ([]accessdomain.Membership, error) {
+	p.poolGrowthCalls = append(p.poolGrowthCalls, poolGrowthCall{recipient: recipientID, trigger: trigger})
+	return nil, nil
+}
+
+func (p *recordingSlotPolicy) RecipientPoolFull(_ context.Context, _ transaction.Tx, recipientID uuid.UUID) (bool, error) {
+	return p.poolFullFor[recipientID], nil
 }
 
 var _ RecipientSlotPolicy = (*recordingSlotPolicy)(nil)
@@ -1702,7 +1786,7 @@ func TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient(t *t
 
 	repo := newFakePropertyRepo(
 		domain.Property{
-			ID: propertyID, OwnerID: ownerID, Name: "Своя квартира", Address: testPropertyAddress,
+			ID: propertyID, OwnerID: ownerID, Name: testOwnPropertyName, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 		},
 	)
@@ -1752,7 +1836,7 @@ func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *te
 
 	repo := newFakePropertyRepo(
 		domain.Property{
-			ID: propertyID, OwnerID: ownerID, Name: "Своя квартира", Address: testPropertyAddress,
+			ID: propertyID, OwnerID: ownerID, Name: testOwnPropertyName, Address: testPropertyAddress,
 			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
 		},
 	)
@@ -1780,5 +1864,129 @@ func TestPropertyService_DeleteProperty_RecoversSuspendedForOwnerRecipient(t *te
 
 	if !slices.Contains(slots.recoveredRecipients, ownerID) {
 		t.Errorf("expected RecoverSuspended(ownerID) for the deleting owner, got recoveredRecipients = %v", slots.recoveredRecipients)
+	}
+}
+
+// TestPropertyService_UnarchiveProperty_EnforcesOwnerPoolGrowth verifies the
+// D13 wiring (#1297): unarchiving one's OWN object grows the owner's own
+// recipient pool, so UnarchiveProperty must re-enforce it — the owner is never
+// a member row of their own object, the per-property entry alone never visits
+// them as a recipient. The growth-side mirror of
+// TestPropertyService_ArchiveProperty_RecoversSuspendedForOwnerRecipient.
+func TestPropertyService_UnarchiveProperty_EnforcesOwnerPoolGrowth(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	repo := newFakePropertyRepo(
+		domain.Property{
+			ID: propertyID, OwnerID: ownerID, Name: testOwnPropertyName, Address: testPropertyAddress,
+			Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusArchived,
+		},
+	)
+	slots := &recordingSlotPolicy{}
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 10}),
+		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetRecipientSlotPolicy(slots)
+
+	if _, err := svc.UnarchiveProperty(ctx, ownerID, propertyID); err != nil {
+		t.Fatalf("UnarchiveProperty: %v", err)
+	}
+
+	// The per-property enforcement runs (for the unarchived object's members)...
+	if len(slots.enforcedOnUnarchive) != 1 || slots.enforcedOnUnarchive[0] != propertyID {
+		t.Errorf("unarchive enforcement = %v, want the unarchived property", slots.enforcedOnUnarchive)
+	}
+	// ...AND the owner's own pool growth is re-enforced with the unarchive
+	// trigger — the honest-slot invariant of D13.
+	want := []poolGrowthCall{{recipient: ownerID, trigger: "unarchive"}}
+	if !slices.Equal(slots.poolGrowthCalls, want) {
+		t.Errorf("pool growth calls = %v, want %v", slots.poolGrowthCalls, want)
+	}
+}
+
+// TestPropertyService_CreateProperty_FullPoolRefusedHonestly verifies the
+// honest refusal of #1300 Q2 (D13): when the recipient's FULL pool (own +
+// shared) already occupies every tariff slot, the creation is refused with
+// ErrLimitExceeded — nothing is silently suspended to fit the new object in
+// (creation returns nothing, so nobody else's access may be touched).
+func TestPropertyService_CreateProperty_FullPoolRefusedHonestly(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	repo := newFakePropertyRepo()
+	slots := &recordingSlotPolicy{poolFullFor: map[uuid.UUID]bool{ownerID: true}}
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 100}),
+		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetRecipientSlotPolicy(slots)
+
+	_, err := svc.CreateProperty(ctx, ownerID, CreatePropertyCommand{
+		Name:    testNewPropertyName,
+		Type:    string(domain.PropertyTypeApartment),
+		Address: testPropertyAddress,
+	})
+	if !errors.Is(err, ErrLimitExceeded) {
+		t.Fatalf("CreateProperty error = %v, want ErrLimitExceeded", err)
+	}
+
+	// Nothing was created...
+	if properties, listErr := repo.ListActiveByOwner(ctx, ownerID); listErr != nil || len(properties) != 0 {
+		t.Errorf("active properties after refusal = %v (err %v), want none", properties, listErr)
+	}
+	// ...and no foreign access was silently suspended.
+	if len(slots.poolGrowthCalls) != 0 {
+		t.Errorf("pool growth calls = %v, want none (refusal must not suspend)", slots.poolGrowthCalls)
+	}
+}
+
+// TestPropertyService_CreateProperty_FreePoolCreates proves the limit check
+// switched from the own count to the full recipient pool (#1300 Q2): with the
+// slot policy wired, a pool with a free slot creates the object even though the
+// own-count limiter alone (limit 0) would have refused — the budget is own +
+// shared now, and the policy owns the answer.
+func TestPropertyService_CreateProperty_FreePoolCreates(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+	repo := newFakePropertyRepo()
+	slots := &recordingSlotPolicy{} // No poolFullFor entry → the pool has room.
+	svc := NewPropertyService(
+		repo,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, fakeSubscriptionLimiter{limit: 0}),
+		fakePropertyClock{now: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)},
+		testOwnerPolicy{},
+		nil,
+	)
+	svc.SetRecipientSlotPolicy(slots)
+
+	created, err := svc.CreateProperty(ctx, ownerID, CreatePropertyCommand{
+		Name:    testNewPropertyName,
+		Type:    string(domain.PropertyTypeApartment),
+		Address: testPropertyAddress,
+	})
+	if err != nil {
+		t.Fatalf("CreateProperty: %v", err)
+	}
+	if created.Status != domain.PropertyStatusActive {
+		t.Errorf("created property status = %q, want active", created.Status)
 	}
 }

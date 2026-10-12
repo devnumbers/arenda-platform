@@ -30,6 +30,67 @@ import (
 // kindPayment is the wire's payment kind — the filters test's constant.
 const kindPayment = "payment"
 
+// Отображаемые имена сидов опций фильтров — константы тестов ниже.
+const (
+	ownerDisplayName = "Иван Иванов"
+	petrDisplayName  = "Пётр Петров"
+	annaDisplayName  = "Анна Сидорова"
+)
+
+// participantNames собирает отображаемые имена опций «Участников».
+func participantNames(participants []domain.FilterParticipant) map[string]bool {
+	names := map[string]bool{}
+	for _, p := range participants {
+		names[p.Name] = true
+	}
+	return names
+}
+
+// assertParticipantNames фиксирует состав опций: каждое wanted имя в
+// списке, каждого banned — нет.
+func assertParticipantNames(t *testing.T, names map[string]bool, want, banned []string) {
+	t.Helper()
+	for _, w := range want {
+		if !names[w] {
+			t.Errorf("participants: want %q in %+v", w, names)
+		}
+	}
+	for _, b := range banned {
+		if names[b] {
+			t.Errorf("participants: %q must not be listed", b)
+		}
+	}
+}
+
+// participantFlags собирает id участников и владельческие замки опций —
+// ассерты изоляции области ниже.
+func participantFlags(participants []domain.FilterParticipant) (ids, owners map[uuid.UUID]bool) {
+	ids = map[uuid.UUID]bool{}
+	owners = map[uuid.UUID]bool{}
+	for _, p := range participants {
+		ids[p.ID] = true
+		if p.IsOwner {
+			owners[p.ID] = true
+		}
+	}
+	return ids, owners
+}
+
+// assertScopedOwnership фиксирует суженную область опций: точный набор
+// участников и их владельческие замки (замок — владелец объектов скоупа).
+func assertScopedOwnership(t *testing.T, participants []domain.FilterParticipant, wantOwners map[uuid.UUID]bool) {
+	t.Helper()
+	ids, owners := participantFlags(participants)
+	if len(ids) != len(wantOwners) {
+		t.Fatalf("scoped participants: want exactly %d, got %+v", len(wantOwners), participants)
+	}
+	for id, wantOwner := range wantOwners {
+		if !ids[id] || owners[id] != wantOwner {
+			t.Errorf("scoped participant %s: want owner=%v, got %+v", id, wantOwner, participants)
+		}
+	}
+}
+
 // newReadStack builds the service over the real store and the real
 // membership policy — the same wiring as the composition root.
 func newReadStack(pool *pgxpool.Pool) *historyapp.HistoryReadService {
@@ -787,31 +848,41 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 	suspendMembership(t, pool, property, viewer)
 
 	svc := newReadStack(pool)
-	opts, err := svc.Filters(context.Background(), member, nil)
+
+	// Глобальный фильтр владельца: вся его область — suspended и отозванные
+	// остаются фильтруемыми, призрак и чужие — нет.
+	opts, err := svc.Filters(t.Context(), owner, nil)
 	if err != nil {
 		t.Fatalf("filters: %v", err)
 	}
-	// Зритель-читатель видит: владельца, участника-себя, приостановленную
-	// Анну и отозванного Олега; призрак удалён — не фильтруем; Зина на
-	// чужом объекте — нет.
-	names := map[string]bool{}
-	for _, p := range opts.Participants {
-		names[p.Name] = true
+	assertParticipantNames(t, participantNames(opts.Participants),
+		[]string{ownerDisplayName, petrDisplayName, annaDisplayName, "Олег Ушёл"},
+		[]string{"Лев Призрак", "Зина Злобина"})
+
+	// Глобальный фильтр участника без своих объектов — пуст (D14, #1305):
+	// владелец и соучастники чужого объекта не раскрываются.
+	memberOpts, err := svc.Filters(t.Context(), member, nil)
+	if err != nil {
+		t.Fatalf("member filters: %v", err)
 	}
-	for _, want := range []string{"Иван Иванов", "Пётр Петров", "Анна Сидорова", "Олег Ушёл"} {
-		if !names[want] {
-			t.Errorf("participants: want %q in %+v", want, names)
-		}
+	if len(memberOpts.Participants) != 0 {
+		t.Fatalf("member global participants: want none (D14), got %+v", memberOpts.Participants)
 	}
-	for _, banned := range []string{"Лев Призрак", "Зина Злобина"} {
-		if names[banned] {
-			t.Errorf("participants: %q must not be listed", banned)
-		}
+
+	// Per-object фильтр того же участника (D6 — без изменений): собственник
+	// и соучастники суженной области остаются — включая приостановленную
+	// Анну и отозванного Олега; призрак и чужой объект — нет.
+	scopedMember, err := svc.Filters(t.Context(), member, []uuid.UUID{property})
+	if err != nil {
+		t.Fatalf("member scoped filters: %v", err)
 	}
+	assertParticipantNames(t, participantNames(scopedMember.Participants),
+		[]string{ownerDisplayName, petrDisplayName, annaDisplayName, "Олег Ушёл"},
+		[]string{"Лев Призрак", "Зина Злобина"})
 
 	// Скоуп по property_ids сужает участников: журнал другого объекта
 	// не подмешивается (зовёт владелец этого объекта).
-	scopedOpts, err := svc.Filters(context.Background(), stranger, []uuid.UUID{otherProperty})
+	scopedOpts, err := svc.Filters(t.Context(), stranger, []uuid.UUID{otherProperty})
 	if err != nil {
 		t.Fatalf("scoped filters: %v", err)
 	}
@@ -820,8 +891,54 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 	}
 }
 
+// Изоляция глобального фильтра «Участники» (D14 спеки #1302, аудит #1298,
+// тикет #1305): получатель shared-доступа в глобальной ленте видит только
+// участников СВОИХ объектов — владелец и соучастники чужого объекта не
+// раскрываются. Per-object фильтр (property_ids) ведёт себя по D6 —
+// собственник и соучастники суженной области остаются: фиксация поведения
+// «без изменений».
+func TestReadStore_GlobalFilterParticipantsIsolation(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	recipient := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
+	ownMember := seedUser(t, pool, "Сергей", "Сидоров", "+79990000003", "sergey@example.com")
+
+	sharedProperty := seedProperty(t, pool, owner)
+	ownProperty := seedProperty(t, pool, recipient)
+	seedMembership(t, pool, sharedProperty, recipient)
+	seedMembership(t, pool, ownProperty, ownMember)
+	seedEntry(t, pool, owner, sharedProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+
+	// Глобальный фильтр получателя: только участники его объекта — сама
+	// Мария (владелец, замок) и Сергей; Иван из чужого объекта не виден.
+	opts, err := svc.Filters(t.Context(), recipient, nil)
+	if err != nil {
+		t.Fatalf("recipient global filters: %v", err)
+	}
+	ids, owners := participantFlags(opts.Participants)
+	if len(ids) != 2 || !ids[recipient] || !ids[ownMember] {
+		t.Fatalf("global participants: want only the own property's people, got %+v", opts.Participants)
+	}
+	if !owners[recipient] {
+		t.Errorf("recipient own row: want is_owner (замок владельца), got %+v", opts.Participants)
+	}
+
+	// Per-object фильтр того же получателя (история чужого объекта, D6):
+	// собственник и соучастники остаются — поведение не изменилось; замок —
+	// у владельца суженного объекта, не у читателя.
+	scoped, err := svc.Filters(t.Context(), recipient, []uuid.UUID{sharedProperty})
+	if err != nil {
+		t.Fatalf("recipient scoped filters: %v", err)
+	}
+	assertScopedOwnership(t, scoped.Participants, map[uuid.UUID]bool{owner: true, recipient: false})
+}
+
 // Владелец-замок считается по любому объекту скоупа, а не по роли на
-// конкретном: приглашённый, владеющий вторым объектом той же области
+// конкретному: приглашённый, владеющий вторым объектом той же области
 // чтения, помечен is_owner; приглашённый без своих объектов — нет.
 // Замок у того, кто пригласил (#711, макет 2067-163528). First_name —
 // имя без фамилии; у пользователя без имени — пусто (name — полный
@@ -829,10 +946,7 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	const (
-		namelessPhone    = "+79990000009"
-		ownerDisplayName = "Иван Иванов"
-	)
+	const namelessPhone = "+79990000009"
 	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
 	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
 	invited := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
@@ -846,7 +960,7 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 	seedMembership(t, pool, ownProperty, owner) // Иван читает оба объекта.
 
 	svc := newReadStack(pool)
-	opts, err := svc.Filters(context.Background(), owner, nil)
+	opts, err := svc.Filters(t.Context(), owner, nil)
 	if err != nil {
 		t.Fatalf("filters: %v", err)
 	}
@@ -857,9 +971,11 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 	for _, p := range opts.Participants {
 		byID[p.ID] = p
 	}
-	// Замок по любому объекту скоупа: Пётр на первом объекте участник, но
-	// владелец второго. First_name — имя без фамилии; у пользователя без
-	// имени — пусто, name — «Пользователь» (#1105, аменд #1123).
+	// Глобальная область — только объекты читателя (D14, #1305): замок у
+	// самого Ивана; Пётр — участник, его собственный объект в глобальную
+	// область Ивана не входит. First_name — имя без фамилии; у
+	// пользователя без имени — пусто, name — «Пользователь» (#1105,
+	// аменд #1123).
 	tests := []struct {
 		name      string
 		p         domain.FilterParticipant
@@ -868,7 +984,7 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 		wantName  string
 	}{
 		{"owner", byID[owner], true, "Иван", ownerDisplayName},
-		{"member owning the second object", byID[member], true, "Пётр", "Пётр Петров"},
+		{"member owning a property outside the global scope", byID[member], false, "Пётр", petrDisplayName},
 		{"invited without own objects", byID[invited], false, "Анна", "Анна Сидорова"},
 		{"nameless", byID[nameless], false, "", ""},
 	}
@@ -890,11 +1006,20 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 		t.Errorf("nameless name: want the anonymous label (аменд #1123), got %q", name)
 	}
 
+	// Суженная область — объект Петра, где Иван участник (D6): замок
+	// владельца у Петра, Иван — без замка; замок считается по объектам
+	// скоупа, а не по глобальной области.
+	scopedOwn, err := svc.Filters(t.Context(), owner, []uuid.UUID{ownProperty})
+	if err != nil {
+		t.Fatalf("scoped own filters: %v", err)
+	}
+	assertScopedOwnership(t, scopedOwn.Participants, map[uuid.UUID]bool{member: true, owner: false})
+
 	// Скоуп по property_ids: единственный участник — владелец суженной
 	// области, замок и first_name доходят и в суженном запросе.
 	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
 	foreignProperty := seedProperty(t, pool, stranger)
-	scopedOpts, err := svc.Filters(context.Background(), stranger, []uuid.UUID{foreignProperty})
+	scopedOpts, err := svc.Filters(t.Context(), stranger, []uuid.UUID{foreignProperty})
 	if err != nil {
 		t.Fatalf("scoped filters: %v", err)
 	}
@@ -976,7 +1101,7 @@ func TestReadStore_FilterOptionsParticipantRoles(t *testing.T) {
 	}
 
 	svc := newReadStack(pool)
-	opts, err := svc.Filters(context.Background(), owner, nil)
+	opts, err := svc.Filters(t.Context(), owner, nil)
 	if err != nil {
 		t.Fatalf("filters: %v", err)
 	}
@@ -1035,7 +1160,7 @@ func TestReadStore_FilterOptionsObjects(t *testing.T) {
 	}
 
 	svc := newReadStack(pool)
-	opts, err := svc.Filters(context.Background(), owner, nil)
+	opts, err := svc.Filters(t.Context(), owner, nil)
 	if err != nil {
 		t.Fatalf("filters: %v", err)
 	}
@@ -1053,8 +1178,14 @@ func TestReadStore_ArchivedScopeForOptions(t *testing.T) {
 	pool := testdb.Setup(t)
 	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
 	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	coMember := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
 	property := seedProperty(t, pool, owner)
+	// Свой живой объект участника с соучастником: глобальный фильтр
+	// participant-скипа D14 непуст — архивная нога чужого объекта видна
+	// на его фоне.
+	ownProperty := seedProperty(t, pool, member)
 	seedMembership(t, pool, property, member)
+	seedMembership(t, pool, ownProperty, coMember)
 	seedEntry(t, pool, owner, property, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
 		domain.BaseCompleted, "Операция оплачена")
 	if _, err := pool.Exec(t.Context(),
@@ -1064,7 +1195,7 @@ func TestReadStore_ArchivedScopeForOptions(t *testing.T) {
 	}
 
 	svc := newReadStack(pool)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Владелец: архивный объект остаётся в опциях вместе с историей.
 	opts, err := svc.Filters(ctx, owner, nil)
@@ -1075,12 +1206,22 @@ func TestReadStore_ArchivedScopeForOptions(t *testing.T) {
 		t.Fatalf("owner objects: archived stays visible, got %+v", opts.Objects)
 	}
 
-	// Участник: архив ничего не добавляет (канон невидимости архива, #163).
+	// Участник: архив ничего не добавляет (канон невидимости архива, #163)
+	// — чужой архивный объект в объектах не виден, остаётся только свой
+	// живой; участники глобального фильтра — только люди его собственного
+	// объекта, владелец архивного не раскрыт (D14, #1305).
 	opts, err = svc.Filters(ctx, member, nil)
 	if err != nil {
 		t.Fatalf("member filters: %v", err)
 	}
-	if len(opts.Objects) != 0 || len(opts.Participants) != 0 {
-		t.Fatalf("member options: archived contributes nothing, got %+v / %+v", opts.Objects, opts.Participants)
+	if len(opts.Objects) != 1 || opts.Objects[0].ID != ownProperty {
+		t.Fatalf("member objects: want only the own live property, got %+v", opts.Objects)
+	}
+	memberIDs := map[uuid.UUID]bool{}
+	for _, p := range opts.Participants {
+		memberIDs[p.ID] = true
+	}
+	if len(memberIDs) != 2 || !memberIDs[member] || !memberIDs[coMember] {
+		t.Fatalf("member participants: want only the own property's people, got %+v", opts.Participants)
 	}
 }

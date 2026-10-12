@@ -106,7 +106,7 @@ func TestStore_InsertRoundTrip(t *testing.T) {
 		t.Fatalf("read journal row: %v", err)
 	}
 
-	if actorRole != "owner" || actorName != "Иван Иванов" || actorEmail != "ivan@example.com" {
+	if actorRole != "owner" || actorName != ownerDisplayName || actorEmail != "ivan@example.com" {
 		t.Errorf("actor columns = %s/%s/%s", actorRole, actorName, actorEmail)
 	}
 	if kind != "operation" || action != "operation.paid" || baseAction != "completed" {

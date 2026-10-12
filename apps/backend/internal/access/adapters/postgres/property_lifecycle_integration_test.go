@@ -458,3 +458,229 @@ func TestPropertyLifecycle_DeleteDropsMembershipsAndRecoversFIFO(t *testing.T) {
 		t.Errorf("pending invitations after delete = %d, want 0 (FK cascade)", len(invitations))
 	}
 }
+
+// pinMembershipUpdatedAt pins a membership row's updated_at — the eviction
+// recency comparator reads it, and Create stamps now() (the transaction start),
+// which would tie with the own property seeded at the same moment.
+func pinMembershipUpdatedAt(t *testing.T, tx pgx.Tx, memberID, propertyID uuid.UUID, ts time.Time) {
+	t.Helper()
+	tag, err := tx.Exec(context.Background(),
+		"UPDATE property_members SET updated_at = $3 WHERE id = $1 AND property_id = $2",
+		pgUUID(memberID), pgUUID(propertyID), ts)
+	if err != nil {
+		t.Fatalf("pin updated_at: %v", err)
+	}
+	if tag.RowsAffected() != 1 {
+		t.Fatalf("pin updated_at: expected 1 row, got %d", tag.RowsAffected())
+	}
+}
+
+// unarchiveOwnObjectScenario seeds the D13 fixture — a recipient holding an
+// active shared membership on a foreign owner's object plus their OWN object —
+// walks the own object through archive→unarchive, mirrors the unarchived state
+// in the coordinator's own-pool view, and runs both slot-enforcement steps of
+// PropertyService.UnarchiveProperty in their order (the per-property entry,
+// then the recipient's own pool growth). The shared membership is
+// seeded older than the own object, so the eviction rule deterministically
+// keeps the own one.
+func unarchiveOwnObjectScenario(
+	t *testing.T, limit int,
+) (repo *MembershipRepository, recipient, shared uuid.UUID, legs []domain.Membership) {
+	t.Helper()
+	f := newAccessLifecycleFixture(t)
+	ctx := f.bg()
+	repo = NewMembershipRepository(f.tx)
+
+	foreignOwner := f.addUserWithEmail(t, f.email("foreign"))
+	recipient = f.addUserWithEmail(t, f.email("recipient"))
+	shared = f.addProperty(t, foreignOwner, "Чужая квартира")
+	own := f.addProperty(t, recipient, "Своя квартира")
+
+	f.limiter.set(recipient, limit)
+	member := addMembership(t, repo, shared, recipient, foreignOwner)
+	pinMembershipUpdatedAt(t, f.tx, member.ID, shared, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+
+	// The recipient's own object goes to the archive and comes back.
+	if _, err := f.q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(own), OwnerID: pgUUID(recipient)}); err != nil {
+		t.Fatalf("ArchiveProperty: %v", err)
+	}
+	if _, err := f.q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(own), OwnerID: pgUUID(recipient)}); err != nil {
+		t.Fatalf("UnarchiveProperty: %v", err)
+	}
+	// The own-pool view the coordinator reads inside the transaction: the
+	// unarchived own object is active again (the fake mirrors what the
+	// tx-bound properties read would now return).
+	f.ownedProps.add(recipient, own, time.Now())
+
+	// The production order: the per-property entry first (no memberships on
+	// the recipient's own object — a no-op here), then the recipient's own
+	// pool growth.
+	if _, err := f.slots.EnforceOnUnarchiveForProperty(ctx, accessNoCommitTx{f.tx}, own); err != nil {
+		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+	legs, err := f.slots.EnforceRecipientPoolGrowth(ctx, accessNoCommitTx{f.tx}, recipient, "unarchive")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	return repo, recipient, shared, legs
+}
+
+// TestPropertyLifecycle_UnarchiveOwnObjectEnforcesRecipientPoolGrowth covers
+// the D13 acceptance (issue #1297, #1300): a recipient over their tariff limit
+// because their OWN object re-entered the pool (the unarchive of an own
+// archived object) gets the over-limit shared membership suspended — the
+// full pool is re-enforced, the returning own object stays, and the suspended
+// legs ride the coordinator's return for the properties-side realtime
+// dispatch. The slot-significant steps of PropertyService.UnarchiveProperty in
+// their production order, on the real repositories.
+func TestPropertyLifecycle_UnarchiveOwnObjectEnforcesRecipientPoolGrowth(t *testing.T) {
+	t.Parallel()
+
+	t.Run("over limit suspends the shared membership", func(t *testing.T) {
+		t.Parallel()
+		// One slot: the recipient holds it with an active shared membership,
+		// and the unarchived own object re-enters over the limit.
+		repo, recipient, shared, legs := unarchiveOwnObjectScenario(t, 1)
+
+		// The shared membership is suspended with a fresh suspended_at, and its
+		// leg rides the return — the properties service dispatches this leg's
+		// access pair post-commit.
+		m, err := repo.GetByPropertyAndUser(context.Background(), shared, recipient)
+		if err != nil {
+			t.Fatalf("GetByPropertyAndUser: %v", err)
+		}
+		if m.Status != domain.MemberStatusSuspended {
+			t.Errorf("shared membership status = %q, want suspended (the own object re-entered the full pool)", m.Status)
+		}
+		pinned := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+		if m.SuspendedAt == nil || !m.SuspendedAt.After(pinned) {
+			t.Errorf("suspended_at = %v, want a fresh stamp after %v", m.SuspendedAt, pinned)
+		}
+		if len(legs) != 1 || legs[0].PropertyID != shared || legs[0].Status != domain.MemberStatusSuspended {
+			t.Fatalf("suspended legs = %+v, want one suspended leg on the shared property %s", legs, shared)
+		}
+		// The recipient occupies no active shared slot anymore.
+		if got := activePropertyIDs(t, repo, recipient); len(got) != 0 {
+			t.Errorf("active shared slots after the growth enforcement = %v, want none", got)
+		}
+	})
+
+	t.Run("free pool keeps the shared membership active", func(t *testing.T) {
+		t.Parallel()
+		// Two slots: own + shared both fit.
+		repo, recipient, shared, legs := unarchiveOwnObjectScenario(t, 2)
+
+		if len(legs) != 0 {
+			t.Errorf("suspended legs = %+v, want none (the pool fits)", legs)
+		}
+		m, err := repo.GetByPropertyAndUser(context.Background(), shared, recipient)
+		if err != nil {
+			t.Fatalf("GetByPropertyAndUser: %v", err)
+		}
+		if m.Status != domain.MemberStatusActive {
+			t.Errorf("shared membership status = %q, want active (the pool fits)", m.Status)
+		}
+	})
+}
+
+// TestPropertyLifecycle_PoolGrowthSuspensionTailsFIFOQueue pins the accepted
+// side effect of the single eviction rule (#1300 Q1): the membership the pool
+// growth suspends gets a FRESH suspended_at and lands at the tail of the FIFO
+// recovery queue — when a slot later frees, an older suspended membership
+// recovers first, not the one just suspended.
+func TestPropertyLifecycle_PoolGrowthSuspensionTailsFIFOQueue(t *testing.T) {
+	t.Parallel()
+	f := newAccessLifecycleFixture(t)
+	ctx := f.bg()
+	repo := NewMembershipRepository(f.tx)
+
+	foreignOwner := f.addUserWithEmail(t, f.email("foreign"))
+	recipient := f.addUserWithEmail(t, f.email("recipient"))
+	shared := f.addProperty(t, foreignOwner, "Чужая квартира")  // Active; suspended by the growth.
+	older := f.addProperty(t, foreignOwner, "Старый suspended") // Suspended long before.
+	own := f.addProperty(t, recipient, "Своя квартира")
+
+	f.limiter.set(recipient, 1)
+	base := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+	addSuspendedMembership(t, repo, f.tx, older, recipient, foreignOwner, base)
+	sharedMember := addMembership(t, repo, shared, recipient, foreignOwner)
+	pinMembershipUpdatedAt(t, f.tx, sharedMember.ID, shared, base)
+
+	if _, err := f.q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(own), OwnerID: pgUUID(recipient)}); err != nil {
+		t.Fatalf("UnarchiveProperty: %v", err)
+	}
+	f.ownedProps.add(recipient, own, time.Now())
+
+	if _, err := f.slots.EnforceRecipientPoolGrowth(ctx, accessNoCommitTx{f.tx}, recipient, "unarchive"); err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+
+	// The slot frees again — the recipient archives their own object. The FIFO
+	// recovery must take the OLDER suspended membership; the freshly suspended
+	// one waits at the tail.
+	if _, err := f.q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(own), OwnerID: pgUUID(recipient)}); err != nil {
+		t.Fatalf("ArchiveProperty: %v", err)
+	}
+	f.ownedProps.drop(recipient, own)
+	if _, err := f.slots.RecoverSuspended(ctx, accessNoCommitTx{f.tx}, recipient); err != nil {
+		t.Fatalf("RecoverSuspended: %v", err)
+	}
+
+	olderM, err := repo.GetByPropertyAndUser(ctx, older, recipient)
+	if err != nil {
+		t.Fatalf("GetByPropertyAndUser older: %v", err)
+	}
+	if olderM.Status != domain.MemberStatusActive {
+		t.Errorf("older suspended membership status = %q, want active (FIFO head recovers first)", olderM.Status)
+	}
+	sharedM, err := repo.GetByPropertyAndUser(ctx, shared, recipient)
+	if err != nil {
+		t.Fatalf("GetByPropertyAndUser shared: %v", err)
+	}
+	if sharedM.Status != domain.MemberStatusSuspended {
+		t.Errorf("freshly suspended membership status = %q, want suspended (FIFO tail waits)", sharedM.Status)
+	}
+}
+
+// TestPropertyLifecycle_RecipientPoolFull verifies the honest-refusal
+// predicate of CreateProperty (#1300 Q2, D13) against the real repositories:
+// the pool counts own active properties AND active shared memberships — a
+// recipient whose own count alone has room but whose full pool does not is
+// full; a suspended membership occupies nothing.
+func TestPropertyLifecycle_RecipientPoolFull(t *testing.T) {
+	t.Parallel()
+	f := newAccessLifecycleFixture(t)
+	ctx := f.bg()
+	repo := NewMembershipRepository(f.tx)
+
+	foreignOwner := f.addUserWithEmail(t, f.email("foreign"))
+	recipient := f.addUserWithEmail(t, f.email("recipient"))
+	shared := f.addProperty(t, foreignOwner, "Чужая квартира")
+	own := f.addProperty(t, recipient, "Своя квартира")
+
+	f.limiter.set(recipient, 2)
+	f.ownedProps.add(recipient, own, time.Now())
+	member := addMembership(t, repo, shared, recipient, foreignOwner)
+
+	// Own(1) + shared(1) = 2 = limit → full: the creation must be refused even
+	// though the own count alone (1 < 2) has room.
+	full, err := f.slots.RecipientPoolFull(ctx, accessNoCommitTx{f.tx}, recipient)
+	if err != nil {
+		t.Fatalf("RecipientPoolFull (at limit): %v", err)
+	}
+	if !full {
+		t.Errorf("RecipientPoolFull = false at own+shared == limit, want true")
+	}
+
+	// Once the shared membership is suspended it occupies no slot — room again.
+	if err := repo.Suspend(ctx, member.ID, shared); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+	full, err = f.slots.RecipientPoolFull(ctx, accessNoCommitTx{f.tx}, recipient)
+	if err != nil {
+		t.Fatalf("RecipientPoolFull (suspended excluded): %v", err)
+	}
+	if full {
+		t.Errorf("RecipientPoolFull = true with the shared membership suspended, want false")
+	}
+}

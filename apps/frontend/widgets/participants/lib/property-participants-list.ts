@@ -1,11 +1,28 @@
 import type { AccessRole, PropertyAccessMember } from '@/entities/access';
 import { ACCESS_ROLE_LABELS } from '@/entities/access';
-import { filterByRuQuery, sortByRuText } from '@/entities/participants';
+import {
+  accountNotCreatedBadge,
+  filterByRuQuery,
+  sortByRuText,
+  suspendedLimitBadge,
+} from '@/entities/participants';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
-/** Иконка у почты в ряду (макет 1980-107096): владелец — замок,
- * full_access — перо, viewer — глаз. */
-export type PropertyParticipantEmailIcon = 'owner' | 'edit' | 'eye';
+/** Иконка у почты в ряду (макет D6 3298-75434): полный доступ — открытый
+ * замок Icon/S/FullAccess (и у владельца, и у full_access), просмотр —
+ * глаз. */
+export type PropertyParticipantEmailIcon = 'full' | 'eye';
+
+/** Чип статуса ноги в ряду — форма конструкторов entities/participants
+ * (прецедент UserPropertyBadge): тип не экспортируется из индекса,
+ * чтобы не спорить с компонентом ParticipantRowBadge. */
+export type PropertyParticipantBadge = ReturnType<typeof accountNotCreatedBadge>;
+
+/** Анонимный титул строки без имени (канон карты #1105): у безымянного
+ * зарегистрированного его ставит бекенд в display_name, у pending-
+ * приглашения display_name на проводе пуст — лейбл ставит VM. Экспорт
+ * для D7-карточки «Права участника» (3298-75576) — тот же титул. */
+export const ANONYMOUS_TITLE = 'Пользователь';
 
 /** Значение чип-фильтра «Все роли» (макет 1980-109148). */
 export type PropertyParticipantRoleFilter = 'all' | Exclude<AccessRole, 'owner'>;
@@ -79,11 +96,14 @@ export type PropertyParticipantRow = {
   /** Путь стриминга фото профиля участника (ADR 0065, решение #1286);
    * undefined — pending или у юзера нет фото. */
   readonly photoUrl: string | undefined;
-  /** Почта; у pending-строки почта уже титул — дважды не повторяется. */
+  /** Почта; у pending-строки почта уходит в подзаголовок под титулом
+   * «Пользователь» (D6, 3298-75434). */
   readonly subtitle: string | undefined;
   readonly emailIcon: PropertyParticipantEmailIcon;
-  /** Приостановленный доступ — warning-чип «Превышен лимит объектов». */
-  readonly suspended: boolean;
+  /** Чип статуса ноги: suspended — «Превышен лимит объектов» (warning),
+   * pending — «Аккаунт не создан» (info, D6 3298-75434); undefined —
+   * строки без чипа. */
+  readonly badge: PropertyParticipantBadge | undefined;
   /** Цель тапа — агрегат /participants/{id}: uuid юзера, у pending —
    * почта (контракт #693); undefined — строка без идентификатора. */
   readonly participantId: string | undefined;
@@ -118,16 +138,24 @@ function toPropertyParticipantRow(currentUserId: string | undefined) {
     const email = member.email ?? '';
     const displayName = member.displayName !== '' ? member.displayName : undefined;
     const isMe = currentUserId !== undefined && member.userId === currentUserId;
-    const title = [displayName ?? (email !== '' ? email : undefined), isMe ? '(Вы)' : undefined]
-      .filter(Boolean)
-      .join(' ');
+    // Pending-приглашение (D6): юзера ещё нет — титул «Пользователь»,
+    // почта уходит в подзаголовок (у бекенда display_name pending-строки
+    // пуст — memberResponse отдаёт её без обогащения).
+    const isPending = member.status === 'pending';
+    const nameTitle = isPending ? ANONYMOUS_TITLE : displayName ?? (email !== '' ? email : undefined);
+    const title = [nameTitle, isMe ? '(Вы)' : undefined].filter(Boolean).join(' ');
     return {
       key: member.id ?? member.userId ?? (email !== '' ? email : 'unknown'),
       title,
       photoUrl: member.photoUrl ?? undefined,
-      subtitle: displayName !== undefined && email !== '' ? email : undefined,
-      emailIcon: member.isOwner ? 'owner' : member.role === 'full_access' ? 'edit' : 'eye',
-      suspended: member.status === 'suspended',
+      subtitle:
+        (isPending || displayName !== undefined) && email !== '' ? email : undefined,
+      emailIcon: member.role === 'viewer' ? 'eye' : 'full',
+      badge: isPending
+        ? accountNotCreatedBadge()
+        : member.status === 'suspended'
+          ? suspendedLimitBadge()
+          : undefined,
       participantId:
         member.userId ?? (member.status === 'pending' && email !== '' ? email : undefined),
       role: member.role,

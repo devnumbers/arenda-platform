@@ -322,6 +322,27 @@ func (r *MembershipRepository) ListForRemovalByUser(ctx context.Context, personI
 	return out, nil
 }
 
+// ListForRemovalByOwner returns every membership (any status, with ids) on
+// the properties the actor owns — the whole removal scope of «Отозвать
+// доступ всем» (issue #1310), archived included like the per-person listing.
+// The SQL scope is the authorization.
+func (r *MembershipRepository) ListForRemovalByOwner(ctx context.Context, actorID uuid.UUID) ([]domain.Membership, error) {
+	rows, err := r.q().ListParticipantMembershipsForRemovalByOwner(ctx, pgconv.UUIDToPgtype(actorID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Membership, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.Membership{
+			ID:         pgconv.UUIDFromPgtype(row.ID),
+			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+			UserID:     pgconv.UUIDFromPgtype(row.UserID),
+			Status:     domainMemberStatus(row.Status),
+		})
+	}
+	return out, nil
+}
+
 func membershipFromRow(row postgres.PropertyMember) domain.Membership {
 	return domain.Membership{
 		ID:          pgconv.UUIDFromPgtype(row.ID),

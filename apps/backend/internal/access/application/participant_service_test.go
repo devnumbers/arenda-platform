@@ -61,14 +61,6 @@ func (f *fakeParticipantEmails) GetEmail(ctx context.Context, userID uuid.UUID) 
 	return f.emails[userID], nil
 }
 
-type fakeAccessibleCounter struct {
-	count int
-}
-
-func (f *fakeAccessibleCounter) CountActiveByUser(ctx context.Context, userID uuid.UUID) (int, error) {
-	return f.count, nil
-}
-
 // participantFixture wires a service over two scoped properties of owner O:
 // U1 holds active access to both, U2 is suspended on P1, E is a pending
 // invitation to P2.
@@ -126,7 +118,6 @@ func newParticipantFixture(t *testing.T) *participantFixture {
 		f.read,
 		f.users,
 		&fakeParticipantEmails{emails: map[uuid.UUID]string{f.u1: "u1@x.ru"}},
-		&fakeAccessibleCounter{count: 1},
 		slog.New(slog.DiscardHandler),
 	)
 	return f
@@ -367,24 +358,5 @@ func TestGetParticipant(t *testing.T) {
 	}
 	if byEmail.UserID != f.u1 {
 		t.Errorf("by-email = %+v, want u1", byEmail)
-	}
-}
-
-// TestParticipantsSummary checks the hub counters: the participants count from
-// the aggregates and the shared-properties count from the recipient-slot
-// counter of the reading actor.
-func TestParticipantsSummary(t *testing.T) {
-	t.Parallel()
-	f := newParticipantFixture(t)
-
-	got, err := f.svc.Summary(context.Background(), f.owner)
-	if err != nil {
-		t.Fatalf("Summary: %v", err)
-	}
-	if got.ParticipantsCount != 3 {
-		t.Errorf("ParticipantsCount = %d, want 3", got.ParticipantsCount)
-	}
-	if got.AccessiblePropertiesCount != 1 {
-		t.Errorf("AccessiblePropertiesCount = %d, want 1", got.AccessiblePropertiesCount)
 	}
 }

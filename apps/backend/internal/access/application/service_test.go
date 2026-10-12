@@ -241,10 +241,10 @@ func TestAccessService_SuspendedLeaveCarriesTheRealRole(t *testing.T) {
 	}
 }
 
-// TestAccessService_ManageAuditActorRole verifies that member-management
-// actions performed by a full-access member are attributed with the full
-// role, while the owner's own actions stay attributed as owner (issue #166
-// follow-up).
+// TestAccessService_ManageAuditActorRole verifies the audit attribution of the
+// member-management actions. Since D8 (issue #1304) they are owner-only: every
+// executed action carries the owner role, and a refused full_access attempt
+// writes nothing at all (issue #166 follow-up).
 func TestAccessService_ManageAuditActorRole(t *testing.T) {
 	t.Parallel()
 	owner := uuid.Must(uuid.NewV7())
@@ -262,17 +262,36 @@ func TestAccessService_ManageAuditActorRole(t *testing.T) {
 	if _, err := svc.AddMember(t.Context(), owner, property, full, domain.RoleFullAccess); err != nil {
 		t.Fatalf("AddMember full: %v", err)
 	}
+	if entry := audit.entries[0]; entry.ActorRole != auditdomain.ActorRoleOwner {
+		t.Errorf("grant entry actor role: want owner, got %q", entry.ActorRole)
+	}
 	audit.entries = nil
 
-	created, err := svc.AddMember(t.Context(), full, property, member, domain.RoleViewer)
+	// The refused full_access attempts write no audit entries.
+	if _, err := svc.AddMember(t.Context(), full, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("AddMember by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if _, err := svc.ChangeMemberRole(t.Context(), full, property, uuid.Must(uuid.NewV7()),
+		domain.RoleFullAccess); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("ChangeMemberRole by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if err := svc.RevokeMember(t.Context(), full, property, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("RevokeMember by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if len(audit.entries) != 0 {
+		t.Fatalf("refused attempts must write no audit entries, got %d", len(audit.entries))
+	}
+
+	// The owner's own member-management actions stay owner-attributed.
+	created, err := svc.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
 	if err != nil {
-		t.Fatalf("AddMember by full: %v", err)
+		t.Fatalf("AddMember by owner: %v", err)
 	}
-	if _, err := svc.ChangeMemberRole(t.Context(), full, property, created.ID, domain.RoleFullAccess); err != nil {
-		t.Fatalf("ChangeMemberRole by full: %v", err)
+	if _, err := svc.ChangeMemberRole(t.Context(), owner, property, created.ID, domain.RoleFullAccess); err != nil {
+		t.Fatalf("ChangeMemberRole by owner: %v", err)
 	}
-	if err := svc.RevokeMember(t.Context(), full, property, created.ID); err != nil {
-		t.Fatalf("RevokeMember by full: %v", err)
+	if err := svc.RevokeMember(t.Context(), owner, property, created.ID); err != nil {
+		t.Fatalf("RevokeMember by owner: %v", err)
 	}
 
 	wantActions := []auditdomain.Action{
@@ -288,8 +307,8 @@ func TestAccessService_ManageAuditActorRole(t *testing.T) {
 		if entry.Action != want {
 			t.Errorf("entry %d action: want %q, got %q", i, want, entry.Action)
 		}
-		if entry.ActorRole != auditdomain.ActorRoleFullAccess {
-			t.Errorf("entry %d actor role: want %q, got %q", i, auditdomain.ActorRoleFullAccess, entry.ActorRole)
+		if entry.ActorRole != auditdomain.ActorRoleOwner {
+			t.Errorf("entry %d actor role: want %q, got %q", i, auditdomain.ActorRoleOwner, entry.ActorRole)
 		}
 	}
 }
@@ -320,5 +339,79 @@ func TestChangeMemberRoleNoOpStaysSilent(t *testing.T) {
 	}
 	if got := f.events.count(kindMembershipRoleChanged); got != 0 {
 		t.Errorf("a same-role no-op publishes no %s event, got %d", kindMembershipRoleChanged, got)
+	}
+}
+
+// TestAccessService_MemberManagementOwnerOnly is the D8 role matrix (issue
+// #1304): every mutating member-management endpoint — member add, member role
+// change, member revoke, invite by email, invitation role change, invitation
+// cancel, invitation resend — refuses a full_access member with the
+// privacy-preserving not-found, exactly like a stranger. Self-leave is not
+// member management and stays with every participant.
+func TestAccessService_MemberManagementOwnerOnly(t *testing.T) {
+	t.Parallel()
+	f := newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	manager := uuid.Must(uuid.NewV7())
+	viewer := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+	f.owners[property] = owner
+	f.repo.SetOwner(property, owner)
+	f.limiter.set(manager, 5)
+
+	// The owner grants full access and seeds the manage targets: a viewer
+	// membership and a pending email invitation.
+	if _, err := f.access.AddMember(t.Context(), owner, property, manager, domain.RoleFullAccess); err != nil {
+		t.Fatalf("AddMember manager: %v", err)
+	}
+	member, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember viewer: %v", err)
+	}
+	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+	if outcome.Invitation == nil {
+		t.Fatalf("InviteByEmail: want a pending invitation, got %+v", outcome)
+	}
+	invitationID := outcome.Invitation.ID
+
+	// Full access is refused everywhere, with the same privacy-preserving
+	// signal a stranger gets.
+	if _, err := f.access.AddMember(t.Context(), manager, property, stranger, domain.RoleViewer); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("AddMember by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if _, err := f.access.ChangeMemberRole(t.Context(), manager, property, member.ID,
+		domain.RoleFullAccess); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("ChangeMemberRole by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if err := f.access.RevokeMember(t.Context(), manager, property, member.ID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("RevokeMember by full: expected ErrMemberNotFound, got %v", err)
+	}
+	_, err = f.svc.InviteByEmail(t.Context(), manager, property, testMemberEmail, domain.RoleViewer)
+	if !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("InviteByEmail by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if _, err := f.svc.ChangeInvitationRole(t.Context(), manager, property, invitationID,
+		domain.RoleFullAccess); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("ChangeInvitationRole by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if err := f.svc.CancelInvitation(t.Context(), manager, property, invitationID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("CancelInvitation by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if err := f.svc.ResendInvitation(t.Context(), manager, property, invitationID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("ResendInvitation by full: expected ErrMemberNotFound, got %v", err)
+	}
+
+	// The owner keeps every mutation (sanity on the same fixture).
+	if _, err := f.access.ChangeMemberRole(t.Context(), owner, property, member.ID, domain.RoleFullAccess); err != nil {
+		t.Errorf("ChangeMemberRole by owner: %v", err)
+	}
+
+	// Self-leave stays with the participants — full_access included.
+	if err := f.access.LeaveProperty(t.Context(), manager, property); err != nil {
+		t.Errorf("LeaveProperty by full: self-exit must stay available, got %v", err)
 	}
 }

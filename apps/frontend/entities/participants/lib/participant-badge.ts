@@ -1,6 +1,7 @@
 /** Тон чипа строки участника — общий для агрегат-чипа (#697) и чипа
- * ноги (#698): warning — жёлтая подложка, neutral — серая. */
-export type ParticipantRowBadgeTone = 'neutral' | 'warning';
+ * ноги (#698): warning — жёлтая подложка, info — голубая (pending,
+ * D6 #1312), neutral — серая. */
+export type ParticipantRowBadgeTone = 'neutral' | 'warning' | 'info';
 
 /** Иконка чипа: Edit («Редактирование»), Eye («Просмотр»), Lock
  * (warning-чип лимита); undefined — без иконки. */

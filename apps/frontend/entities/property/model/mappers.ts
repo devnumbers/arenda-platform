@@ -22,7 +22,6 @@ export function mapPropertyResponse(
           ownerPhotoUrl: dto.access.owner_photo_url ?? null,
         }
       : undefined,
-    members_count: dto.members_count,
     created_at: dto.created_at,
     pinned_at: dto.pinned_at,
     occupancy: dto.occupancy
