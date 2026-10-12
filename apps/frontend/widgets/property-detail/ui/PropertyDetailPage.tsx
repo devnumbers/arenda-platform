@@ -61,7 +61,7 @@ import {propertySectionCta} from '../lib/property-section-cta';
 import {operationsSectionTitle} from '../lib/operations-section';
 import {propertyDetailTasks} from '../lib/detail-tasks';
 import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
-import {TopNav, TopNavBackButton, TopNavTitle, PageContent, ConfirmDialog} from '@/shared/ui/design';
+import {TopNav, TopNavTitle, PageContent, ConfirmDialog} from '@/shared/ui/design';
 import {PropertyMediaBlock} from './PropertyMediaBlock';
 import {
   PropertyRentalBlock,
@@ -80,6 +80,7 @@ import {
   PropertyStatusSheet,
 } from './PropertyDetailActions';
 import {PropertyDetailKebab} from './PropertyDetailKebab';
+import {PropertyDetailBackButton} from './PropertyDetailBackButton';
 import {PropertyAccessPill} from './PropertyAccessPill';
 import {PropertyArchivedPill} from './PropertyArchivedPill';
 import {propertyHeaderPills} from '../lib/property-header-pills';
@@ -592,7 +593,7 @@ export function PropertyDetailPage(): JSX.Element {
              * макет 3225-77427; прямых заходов режим «деталь = лендинг
              * таба» больше не создаёт). Кебаб — в trailing. */}
             <TopNav
-                leading={<TopNavBackButton fallbackHref={ROUTES.properties}/>}
+                leading={<PropertyDetailBackButton/>}
                 trailing={
                     status !== undefined && propertyErrorKind === null ? (
                         <PropertyDetailKebab
