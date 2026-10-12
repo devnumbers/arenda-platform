@@ -99,7 +99,7 @@ export function TabBar({
     <>
       <nav
         aria-label="Нижняя навигация"
-        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 w-full bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans desktop:hidden"
+        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 w-full bg-white font-sans desktop:hidden"
       >
         {/* Табы во всю ширину вьюпорта — футер существует только там, где
          * нет ПК-хрома (1023 и уже), кап-колонка не нужна. Фолбэк 12px в
