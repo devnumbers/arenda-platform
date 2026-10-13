@@ -42,6 +42,7 @@ import {
 } from '@/shared/lib/calendar';
 import { formatRangeBound } from '@/shared/lib/date-format';
 import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
+import { compensatedScrollTop } from './calendar-feed-anchor';
 import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '@/shared/ui/design/month-grid';
 
 /** Полноэкранный пикер даты (общий компонент дизайн-слоя, вырос из пикера
@@ -430,8 +431,13 @@ function MonthJumpChip({
   );
 }
 
-/** Порог дорисовки назад: до верха контейнера осталось меньше этого. */
-const RANGE_PREPEND_THRESHOLD_PX = 32;
+/** Порог дорисовки назад: до верха контейнера осталось ~два месяца
+ * прокрутки. Порция обязана отрисоваться задолго до стены: прежний порог
+ * 32px срабатывал вплотную к краю, и пока React рисовал 6 месячных сеток
+ * (40–110мс под нагрузкой), флик доезжал до scrollTop 0 — прокрутка
+ * зажималась о край и дёргалась (#1428, замер живой приёмки: триггер
+ * снимал высоту ленты на scrollTop 0–9px из 5 дорисовок). */
+const RANGE_PREPEND_THRESHOLD_PX = 800;
 /** Сколько месяцев дорисовывается назад за одно дотягивание к верху. */
 const RANGE_PREPEND_CHUNK = 6;
 
@@ -528,7 +534,14 @@ export function CalendarRangePicker({
   useLayoutEffect(() => {
     const container = scrollRef.current;
     if (container !== null && anchorRef.current !== null) {
-      container.scrollTop += container.scrollHeight - anchorRef.current;
+      // Кадр не телепортируется: позиция от фактического места скролла
+      // плюс прирост высоты (calendar-feed-anchor — возврат к снимку на
+      // триггере прыгал бы назад на дрейф инерции за время рендера).
+      container.scrollTop = compensatedScrollTop(
+        container,
+        anchorRef.current,
+        container.scrollHeight,
+      );
       anchorRef.current = null;
     }
     const jump = pendingJumpRef.current;
