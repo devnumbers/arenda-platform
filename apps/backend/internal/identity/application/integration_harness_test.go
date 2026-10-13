@@ -203,7 +203,6 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 		phone: identityapp.NewPhoneChangeService(factory, identityapp.PhoneChangeServiceConfig{
 			LoginCodes: loginCodes,
 			Clock:      clk,
-			Hasher:     enc,
 			Logger:     logger,
 		}),
 		email: identityapp.NewEmailChangeService(factory, identityapp.EmailChangeServiceConfig{
@@ -224,6 +223,21 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 
 // ctx returns a background context for the harness.
 func (h *integrationHarness) ctx() context.Context { return context.Background() }
+
+// openSecondSession logs the user in a second time and returns the fresh raw
+// token — the "other device" of the session-retention tests: a contact change
+// must leave it alive (решение #1380).
+func (h *integrationHarness) openSecondSession(t *testing.T, phone domain.Phone, email domain.Email) string {
+	t.Helper()
+	if err := h.auth.SendCode(h.ctx(), phone, email, domain.LoginCodePurposeLogin); err != nil {
+		t.Fatalf("SendCode for second session: %v", err)
+	}
+	raw, _, err := h.auth.VerifyCode(h.ctx(), phone, &email, h.sender.lastCode(t), nil, identityapp.DeviceContext{})
+	if err != nil {
+		t.Fatalf("VerifyCode for second session: %v", err)
+	}
+	return raw.Token
+}
 
 // mustPhone parses a raw phone, failing the test on error.
 func mustPhone(t *testing.T, raw string) domain.Phone {

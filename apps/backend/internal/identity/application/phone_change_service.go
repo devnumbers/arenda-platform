@@ -17,13 +17,14 @@ import (
 // reuses LoginCodeService with purpose = phone_change instead of duplicating the
 // login-code flow (ADR 0033, migration step 5). Code issuance runs through
 // LoginCodeService.Send; verification runs inside this service's runInTx so
-// verify → mark-used → update-phone → session/code cleanup → audit share one
-// commit.
+// verify → mark-used → update-phone → code cleanup → audit share one commit.
+// Other sessions survive the change (решение #1380, разворот #1207): a
+// contact change is not a security event for already-authenticated devices —
+// the change letter to the email is the notification channel.
 type PhoneChangeService struct {
 	txStoreFactory
 	loginCodes *LoginCodeService
 	clock      clock.Clock
-	hasher     TokenHasher
 	logger     *slog.Logger
 }
 
@@ -33,7 +34,6 @@ type PhoneChangeService struct {
 type PhoneChangeServiceConfig struct {
 	LoginCodes *LoginCodeService
 	Clock      clock.Clock
-	Hasher     TokenHasher
 	Logger     *slog.Logger
 }
 
@@ -56,7 +56,6 @@ func NewPhoneChangeService(
 		txStoreFactory: factory,
 		loginCodes:     cfg.LoginCodes,
 		clock:          cfg.Clock,
-		hasher:         cfg.Hasher,
 		logger:         logger,
 	}
 }
@@ -90,14 +89,14 @@ func (s *PhoneChangeService) SendChangeCode(ctx context.Context, userID uuid.UUI
 }
 
 // ChangePhone verifies the code and updates the user's phone number.
-// The currentToken is the raw session token of the current session; it is
-// used to keep the current session alive when deleting all other sessions.
+// Other sessions are not touched (решение #1380, разворот #1207): the change
+// no longer logs other devices out.
 //
 // The whole flow runs inside a single runInTx (the success path lives in
-// changePhoneInTx): verify → mark-used → update-phone → delete other sessions
-// → clear codes/attempts → audit. A verification failure rolls back, then a
-// separate short runInTx records the failed attempt so rate-limiting survives
-// the rollback — mirroring AuthenticationService.
+// changePhoneInTx): verify → mark-used → update-phone → clear codes/attempts
+// → audit. A verification failure rolls back, then a separate short runInTx
+// records the failed attempt so rate-limiting survives the rollback —
+// mirroring AuthenticationService.
 //
 // The not-blocked check is not duplicated here: LoginCodeService.Verify runs
 // inside the runInTx below and authoritatively returns ErrUserBlocked for a
@@ -106,13 +105,13 @@ func (s *PhoneChangeService) ChangePhone(
 	ctx context.Context,
 	userID uuid.UUID,
 	newPhone domain.Phone,
-	code, currentToken string,
+	code string,
 ) (domain.User, error) {
 	var updated domain.User
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		var err error
-		updated, err = s.changePhoneInTx(ctx, stores, userID, newPhone, code, currentToken)
+		updated, err = s.changePhoneInTx(ctx, stores, userID, newPhone, code)
 		return err
 	})
 
@@ -154,14 +153,14 @@ func (s *PhoneChangeService) ChangePhone(
 
 // changePhoneInTx runs the success path of ChangePhone inside the caller's
 // transaction: lock and validate the user, verify and burn the phone-change
-// code, apply the new phone with the session cleanup, clear the login state,
-// and record the audit entry — one commit covers the whole change (ADR 0033).
+// code, apply the new phone, clear the login state, and record the audit
+// entry — one commit covers the whole change (ADR 0033).
 func (s *PhoneChangeService) changePhoneInTx(
 	ctx context.Context,
 	stores *txStores,
 	userID uuid.UUID,
 	newPhone domain.Phone,
-	code, currentToken string,
+	code string,
 ) (domain.User, error) {
 	user, email, err := userForPhoneChange(ctx, stores, userID, newPhone)
 	if err != nil {
@@ -177,9 +176,9 @@ func (s *PhoneChangeService) changePhoneInTx(
 		return domain.User{}, fmt.Errorf("mark code used: %w", err)
 	}
 
-	updated, err := s.applyPhoneChange(ctx, stores, userID, newPhone, currentToken)
+	updated, err := stores.users.UpdatePhone(ctx, userID, newPhone)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("update phone: %w", err)
 	}
 
 	if err := clearLoginState(ctx, stores, userID, user.Phone, newPhone); err != nil {
@@ -242,26 +241,6 @@ func userForPhoneChange(
 		return domain.User{}, domain.Email{}, err
 	}
 	return user, email, nil
-}
-
-// applyPhoneChange persists the new phone and closes every session except the
-// current one, identified by the hashed currentToken.
-func (s *PhoneChangeService) applyPhoneChange(
-	ctx context.Context,
-	stores *txStores,
-	userID uuid.UUID,
-	newPhone domain.Phone,
-	currentToken string,
-) (domain.User, error) {
-	updated, err := stores.users.UpdatePhone(ctx, userID, newPhone)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("update phone: %w", err)
-	}
-
-	if _, err := stores.sessions.DeleteByUserIDExcept(ctx, userID, s.hasher.HashToken(currentToken)); err != nil {
-		return domain.User{}, fmt.Errorf("delete other sessions: %w", err)
-	}
-	return updated, nil
 }
 
 // clearLoginState removes the user's outstanding login codes and resets the

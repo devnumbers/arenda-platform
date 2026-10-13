@@ -13,9 +13,9 @@ import (
 
 // TestPhoneChangeIntegration_HappyPath proves the full phone-change flow against
 // real PostgreSQL: SendChangeCode → ChangePhone. After the change, the user's
-// phone is updated, the change code is marked used, all other sessions are
-// deleted (the current session survives), and the phone-changed audit entry is
-// recorded — all in one transaction (ADR 0033).
+// phone is updated, the change code is marked used, every session survives
+// untouched (решение #1380, разворот #1207), and the phone-changed audit entry
+// is recorded — all in one transaction (ADR 0033).
 func TestPhoneChangeIntegration_HappyPath(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
@@ -25,27 +25,19 @@ func TestPhoneChangeIntegration_HappyPath(t *testing.T) {
 	token, user := h.registerAndLogin(t, oldPhone, email)
 	ctx := h.ctx()
 
-	// Issue a second session so we can prove ChangePhone deletes the others.
-	if err := h.auth.SendCode(ctx, oldPhone, email, domain.LoginCodePurposeLogin); err != nil {
-		t.Fatalf("SendCode for second session: %v", err)
-	}
-	token2Raw, _, err := h.auth.VerifyCode(ctx, oldPhone, &email, h.sender.lastCode(t), nil, application.DeviceContext{})
-	if err != nil {
-		t.Fatalf("VerifyCode for second session: %v", err)
-	}
-	token2 := token2Raw.Token
+	// Issue a second session so we can prove ChangePhone leaves it alive.
+	secondToken := h.openSecondSession(t, oldPhone, email)
 	if n := h.countSessionsForUser(t, user.ID); n != 2 {
 		t.Fatalf("sessions before change = %d, want 2", n)
 	}
 
-	// Drive the phone change using token2 as the current session: ChangePhone
-	// keeps the current session and deletes every other session for the user.
+	// Drive the phone change: ChangePhone leaves every session alive.
 	if err := h.phone.SendChangeCode(ctx, user.ID, newPhone); err != nil {
 		t.Fatalf("SendChangeCode: %v", err)
 	}
 	changeCode := h.sender.lastCode(t)
 
-	updated, err := h.phone.ChangePhone(ctx, user.ID, newPhone, changeCode, token2)
+	updated, err := h.phone.ChangePhone(ctx, user.ID, newPhone, changeCode)
 	if err != nil {
 		t.Fatalf("ChangePhone: %v", err)
 	}
@@ -66,15 +58,15 @@ func TestPhoneChangeIntegration_HappyPath(t *testing.T) {
 		t.Fatalf("GetByPhone old phone error = %v, want ErrNotFound", err)
 	}
 
-	// Only the current session (token2) survives.
-	if n := h.countSessionsForUser(t, user.ID); n != 1 {
-		t.Fatalf("sessions after change = %d, want 1 (current only)", n)
+	// Both sessions survive (решение #1380): the change touches neither.
+	if n := h.countSessionsForUser(t, user.ID); n != 2 {
+		t.Fatalf("sessions after change = %d, want 2 (untouched)", n)
 	}
-	if _, _, err := h.sessionsvc.Load(ctx, token, h.clock.Now()); err == nil {
-		t.Fatal("old session token still resolves, want it deleted")
+	if _, _, err := h.sessionsvc.Load(ctx, token, h.clock.Now()); err != nil {
+		t.Fatalf("first session token did not survive: %v", err)
 	}
-	if _, _, err := h.sessionsvc.Load(ctx, token2, h.clock.Now()); err != nil {
-		t.Fatalf("current session token did not survive: %v", err)
+	if _, _, err := h.sessionsvc.Load(ctx, secondToken, h.clock.Now()); err != nil {
+		t.Fatalf("second session token did not survive: %v", err)
 	}
 
 	// The phone-changed audit was recorded through the real UoW.
@@ -158,7 +150,7 @@ func TestPhoneChangeIntegration_WrongCodeRecordsAttempt(t *testing.T) {
 		t.Fatalf("SendChangeCode: %v", err)
 	}
 
-	_, err := h.phone.ChangePhone(ctx, user.ID, newPhone, "000000", "")
+	_, err := h.phone.ChangePhone(ctx, user.ID, newPhone, "000000")
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("ChangePhone wrong code error = %v, want ErrLoginCodeInvalid", err)
 	}

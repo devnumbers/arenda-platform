@@ -109,21 +109,21 @@ type SessionLister interface {
 // PhoneChanger handles phone-number change for authenticated users.
 type PhoneChanger interface {
 	SendChangeCode(ctx context.Context, userID uuid.UUID, newPhone domain.Phone) error
-	ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code, currentToken string) (domain.User, error)
+	ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code string) (domain.User, error)
 }
 
 // EmailChanger handles confirmed email change for authenticated users
 // (issue #721, protocol #1202): a code to the current address, its server
 // verification issuing the one-time grant, the new address bound to that
 // grant with a code sent to it, a resend of that code (#732), and the change
-// itself — which revokes every session except the current one (решение
-// #1207), so the change carries the current session's raw token.
+// itself — which leaves every session untouched (решение #1380, разворот
+// #1207).
 type EmailChanger interface {
 	SendCurrentEmailCode(ctx context.Context, userID uuid.UUID) error
 	VerifyCurrentEmail(ctx context.Context, userID uuid.UUID, code string) (string, error)
 	RequestNewEmailCode(ctx context.Context, userID uuid.UUID, grant string, newEmail domain.Email) error
 	ResendNewEmailCode(ctx context.Context, userID uuid.UUID, grant string) error
-	ChangeEmail(ctx context.Context, userID uuid.UUID, code, grant, currentToken string) (domain.User, error)
+	ChangeEmail(ctx context.Context, userID uuid.UUID, code, grant string) (domain.User, error)
 }
 
 // Profiler provides the current user's profile and updates it.
@@ -503,13 +503,6 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := httpsupport.SessionTokenFromRequest(r, h.cookieSecure)
-	if token == "" {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
 	var body openapi.ChangePhoneRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
@@ -531,7 +524,7 @@ func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.phoneChange.ChangePhone(r.Context(), userID, phone, body.Code, token)
+	user, err := h.phoneChange.ChangePhone(r.Context(), userID, phone, body.Code)
 	if err != nil {
 		if writeSharedIdentityError(w, r, err, "Неверный код") {
 			return
@@ -731,20 +724,11 @@ func (h *AuthHandlers) ResendEmailCode(w http.ResponseWriter, r *http.Request) {
 }
 
 // ChangeEmail implements POST /me/email/change — the final step: verify the
-// code from the new email against the grant and apply the change. The change
-// revokes every session except the current one (решение #1207), so the raw
-// session token rides the request like on the phone change: no cookie, no
-// change.
+// code from the new email against the grant and apply the change. Sessions
+// are not touched (решение #1380, разворот #1207).
 func (h *AuthHandlers) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	token := httpsupport.SessionTokenFromRequest(r, h.cookieSecure)
-	if token == "" {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
 			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
@@ -758,7 +742,7 @@ func (h *AuthHandlers) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.emailChange.ChangeEmail(r.Context(), userID, body.Code, body.Grant, token)
+	user, err := h.emailChange.ChangeEmail(r.Context(), userID, body.Code, body.Grant)
 	if err != nil {
 		if writeEmailChangeError(w, r, err) {
 			return
