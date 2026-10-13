@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import {
   captureScreen,
   expect,
@@ -150,6 +151,78 @@ test('права участника: смена роли сегментом, п�
   await expect(
     page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Управление'),
   ).toBeVisible();
+});
+
+/** CDP-задержка сети: полёт мутации удлиняется — погашенное состояние
+ * переключателя роли наблюдаемо (канон double-submit-guard; route-задержка
+ * ненадёжна — грабля #1113). Возвращает функцию снятия эмуляции. */
+async function holdNetworkLatency(page: Page, latencyMs: number): Promise<() => Promise<void>> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: latencyMs,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  });
+  return async () => {
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    });
+  };
+}
+
+test('переключатель роли: курсор-пойнтер на кнопках, клип тени капсулы (#1395); в полёте мутации курсор default, сид восстанавливается', async ({ page, seededUser }) => {
+  test.setTimeout(120_000);
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${MARIA_ID}`);
+
+  await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
+  await expect(page.getByRole('radio', { name: 'Управление' })).toBeChecked();
+
+  // Курсор переключателю задаёт глобальное base-правило
+  // button:not(:disabled) (#1395): сам сегмент локального cursor-класса
+  // не несёт, поэтому снятие base-правила валит этот ассерт — радио и есть
+  // канарейка глобальности.
+  const manage = page.getByRole('radio', { name: 'Управление' });
+  const view = page.getByRole('radio', { name: 'Просмотр' });
+  await expect(manage).toHaveCSS('cursor', 'pointer');
+  await expect(view).toHaveCSS('cursor', 'pointer');
+
+  // Тень активной пилюли не выходит за капсулу: «Clip content» макета
+  // 3298-75577, тот же CSS-аналог, что на тарифах лендинга (#1010).
+  await expect(
+    page.getByRole('radiogroup', { name: 'Роль участника на объекте' }),
+  ).toHaveCSS('overflow', 'clip');
+
+  // Погашенный сегмент в полёте мутации — курсор остаётся default:
+  // base-правило с оговоркой :not(:disabled) (слово владельца).
+  const releaseLatency = await holdNetworkLatency(page, 2000);
+  try {
+    await view.click();
+    await expect(view).toBeDisabled();
+    await expect(view).toHaveCSS('cursor', 'default');
+  } finally {
+    await releaseLatency();
+  }
+
+  await expect(
+    page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  try {
+    // Сид восстанавливается — тот же член ряда, что в сценарии смены роли.
+    await execE2eSql(
+      `UPDATE property_members SET role = 'full_access' WHERE id = '99999999-9999-4999-8999-999999999931'`,
+    );
+  } finally {
+    await page.reload();
+  }
+  await expect(manage).toBeChecked();
 });
 
 test('пригласить в объект: мультичек гаража, шит роли, «Доступ выдан»; сид восстанавливается', async ({ page, seededUser }) => {
