@@ -225,6 +225,39 @@ test('переключатель роли: курсор-пойнтер на кн
   await expect(manage).toBeChecked();
 });
 
+test('страница участника: отступы шапки по макету 2036-84861, h1 без легаси-маржина (#1402)', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${LIMITED_ID}`);
+
+  const h1 = page.getByRole('heading', { name: 'Анна Лимитова' });
+
+  // Легаси-маржин h1 (0.67em ≈ 18.76px на кегле 28) снесён глобально
+  // (#1402, слово владельца): без этого base-правила ассерт красный.
+  await expect(h1).toHaveCSS('margin-top', '0px');
+  await expect(h1).toHaveCSS('margin-bottom', '0px');
+
+  // Геометрия шапки: аватар / имя+почта / (чип) с зазорами 24 и 8 внутри
+  // блока; контент страницы разнесён на 48 (2036-84861). Канарейка
+  // глобальности маржина — сам h1: локального margin-класса он не несёт.
+  // Ассерт 48 жив, пока сида Анны partial (бейджа и notice в шапке нет —
+  // при дрейфе сида между почтой и секцией встанут чип+карточка).
+  const avatar = page.locator('.h-24.rounded-pill').first();
+  const email = page.getByText('e2e-limited@example.com');
+  const section = page.getByRole('heading', { name: 'Доступные объекты' });
+  const [avatarBox, h1Box, emailBox, sectionBox] = await Promise.all([
+    avatar.boundingBox(),
+    h1.boundingBox(),
+    email.boundingBox(),
+    section.boundingBox(),
+  ]);
+  if (!avatarBox || !h1Box || !emailBox || !sectionBox) {
+    throw new Error('боксы шапки не измерились');
+  }
+  expect(Math.round(h1Box.y - avatarBox.y - avatarBox.height)).toBe(24);
+  expect(Math.round(emailBox.y - h1Box.y - h1Box.height)).toBe(8);
+  expect(Math.round(sectionBox.y - emailBox.y - emailBox.height)).toBe(48);
+});
+
 test('пригласить в объект: мультичек гаража, шит роли, «Доступ выдан»; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   // Приглашаем Анну (без подписки — тарифный слот превышен, сценарий
@@ -403,6 +436,15 @@ test('pending-участник: deep-link по почте, бейдж «Акка
     // ниже) — он-role бейдж, не статусный.
     await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
     await expect(page.getByText('Аккаунт не создан')).toBeVisible();
+
+    // Чип шапки pending-участника: титул → 24 + 6 внутреннего паддинга
+    // инстанса бейджа (#1402, 2036-84861).
+    const h1Box = await page.getByRole('heading', { name: 'e2e-pending@example.com' }).boundingBox();
+    const chipBox = await page.getByText('Аккаунт не создан').boundingBox();
+    if (!h1Box || !chipBox) {
+      throw new Error('боксы титула и чипа не измерились');
+    }
+    expect(Math.round(chipBox.y - h1Box.y - h1Box.height)).toBe(30);
 
     const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
     await expect(garageRow.getByText('Приглашён')).toBeVisible();

@@ -4,17 +4,21 @@ import { Skeleton, skeletonRowWidths, type SkeletonRowWidths } from '@/shared/ui
 /**
  * Скелетон страницы участника (#698, паритет — §7 DESIGN.md): центр-блок
  * «аватар 96 — имя 32 — почта 16 — чип 24» и ряды «Доступных объектов»
- * (аватар 44, титул 18, адрес 16, бейдж 24, чеврон). Ширины —
- * детерминированный цикл, как у списка #697.
+ * (аватар 44, титул 18, адрес 16, бейдж 24, чеврон). Отступы — по макету
+ * 2036-84861 и паритету шапки (#1402): аватар → блок 24, имя → почта 8,
+ * чип +6, контент разнесён на 48. Ширины — детерминированный цикл, как у
+ * списка #697.
  */
 export function ParticipantScreenSkeleton(): JSX.Element {
   return (
-    <div aria-hidden className="flex flex-col gap-6 pt-4">
-      <div className="flex flex-col items-center gap-2">
+    <div aria-hidden className="flex flex-col gap-12 pt-4">
+      <div className="flex flex-col items-center gap-6">
         <Skeleton className="h-24 w-24 rounded-pill" />
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-4 w-48" />
-        <Skeleton className="mt-2 h-6 w-44 rounded-lg" />
+        <div className="flex flex-col items-center gap-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <Skeleton className="mt-1.5 h-6 w-44 rounded-lg" />
       </div>
       <Skeleton className="h-6 w-48" />
       <div className="flex flex-col">

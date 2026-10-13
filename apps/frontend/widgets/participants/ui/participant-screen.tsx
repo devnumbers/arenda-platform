@@ -132,7 +132,7 @@ export function ParticipantScreen({
             />
           )
         ) : (
-          <div className="flex flex-col gap-6 pb-2">
+          <div className="flex flex-col gap-12 pb-2">
             <ParticipantHeader participant={participantQuery.data} />
             {participantQuery.data.aggregateStatus === 'limit_exceeded' && (
               <ParticipantLimitNotice />
@@ -200,12 +200,15 @@ export function ParticipantScreen({
   );
 }
 
-/** Блок «аватар — имя — почта — бейдж» (макет 2008-81468): аватар 96 — фото
- * профиля или заглушка BoldUser (UserAvatar hero), имя H1 28/32 SemiBold,
- * почта 14/16 —
- * всё по центру; у pending-участника имени нет — почта уже титул. Бейдж —
- * из двух статусных (D3 #1313): «Аккаунт не создан» у pending, «Превышен
- * лимит объектов» у suspended; остальные без бейджа. */
+/** Блок «аватар — имя — почта — бейдж» (макеты 2008-81468, 2036-84861):
+ * аватар 96 — фото профиля или заглушка BoldUser (UserAvatar hero), имя
+ * H1 28/32 SemiBold, почта 14/16 — зазоры: аватар → блок 24, имя → почта
+ * 8, блок → бейдж 24 + 6 внутреннего паддинга инстанса бейджа (pt-1.5);
+ * всё по центру. Маржин h1 глобально снесён (#1402) — зазор тут явный
+ * gap-2, легаси-плюс 18.76px больше не вспухает. У pending-участника
+ * имени нет — почта уже титул. Бейдж — из двух статусных (D3 #1313):
+ * «Аккаунт не создан» у pending, «Превышен лимит объектов» у suspended;
+ * остальные без бейджа. */
 function ParticipantHeader({ participant }: { readonly participant: Participant }): JSX.Element {
   const title = participant.displayName ?? participant.email ?? '';
   const email =
@@ -213,16 +216,18 @@ function ParticipantHeader({ participant }: { readonly participant: Participant 
   const badge = participantStatusBadge(participant);
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-6">
       <UserAvatar size="hero" photoUrl={participant.photoUrl} />
-      <h1 className="text-center text-[28px] font-semibold leading-8 text-content">
-        {title}
-      </h1>
-      {email !== undefined && (
-        <p className="text-center text-sm leading-4 text-content-secondary">{email}</p>
-      )}
+      <div className="flex flex-col items-center gap-2">
+        <h1 className="text-center text-[28px] font-semibold leading-8 text-content">
+          {title}
+        </h1>
+        {email !== undefined && (
+          <p className="text-center text-sm leading-4 text-content-secondary">{email}</p>
+        )}
+      </div>
       {badge !== null && (
-        <div className="pt-2">
+        <div className="pt-1.5">
           <ParticipantRowBadge badge={badge} />
         </div>
       )}
