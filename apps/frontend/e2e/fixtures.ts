@@ -501,18 +501,28 @@ export async function mockEmailCategoryShortcut(page: Page): Promise<{
 }
 
 /**
+ * Секция месяца в ленте канонного календаря: опознаётся по заголовку
+ * «Месяц, год». Scope — контейнер ленты (диалог пикера или страница):
+ * фильтр «has» прикоренён к странице, потому что внутренний локатор
+ * с цепочкой-предком (диалог) внутри секции не матчится.
+ */
+export function calendarMonthSection(scope: Locator, date: Date): Locator {
+  const monthLabel = date
+    .toLocaleDateString('ru-RU', { month: 'long' })
+    .replace(/^./, (ch) => ch.toUpperCase());
+  return scope
+    .locator('section')
+    .filter({ has: scope.page().getByRole('heading', { name: `${monthLabel}, ${date.getFullYear()}` }) });
+}
+
+/**
  * Тап по дню в канонном бесконечном календаре (04.09): секция месяца
  * опознаётся по заголовку «Месяц, год» — в ленте остаются и прошлые
  * месяцы, где тот же день был бы disabled. Сам тап только кладёт черновик;
  * коммит — отдельная кнопка «Выбрать» диалога.
  */
 export async function pickCalendarDay(page: Page, date: Date): Promise<void> {
-  const monthLabel = date
-    .toLocaleDateString('ru-RU', { month: 'long' })
-    .replace(/^./, (ch) => ch.toUpperCase());
-  const section = page
-    .locator('section')
-    .filter({ has: page.getByRole('heading', { name: `${monthLabel}, ${date.getFullYear()}` }) });
+  const section = calendarMonthSection(page.locator('body'), date);
   await section.getByRole('button', { name: String(date.getDate()), exact: true }).click();
 }
 

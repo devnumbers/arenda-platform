@@ -115,6 +115,10 @@ export function CalendarDatePickerSection(): JSX.Element {
     const [datePickerMaxValue, setDatePickerMaxValue] = useState<string | null>(null);
     const [datePickerAllowPastOpen, setDatePickerAllowPastOpen] = useState(false);
     const [datePickerAllowPastValue, setDatePickerAllowPastValue] = useState<string | null>(null);
+    const [datePickerEndlessPastOpen, setDatePickerEndlessPastOpen] = useState(false);
+    const [datePickerEndlessPastValue, setDatePickerEndlessPastValue] = useState<string | null>(
+        null,
+    );
 
     return (
         <div className={styles.group}>
@@ -230,6 +234,28 @@ export function CalendarDatePickerSection(): JSX.Element {
                     onConfirm={(date) => {
                         setDatePickerAllowPastValue(date);
                         setDatePickerAllowPastOpen(false);
+                    }}
+                />
+            )}
+            <div className={styles.column}>
+                <Button onClick={() => setDatePickerEndlessPastOpen(true)}>
+                    Открыть пикер (allowPast без minDate: задним числом без пола)
+                </Button>
+                {datePickerEndlessPastValue !== null && (
+                    <p className="px-6 text-base text-content-secondary">
+                        Выбрано: {datePickerEndlessPastValue}
+                    </p>
+                )}
+            </div>
+            {datePickerEndlessPastOpen && (
+                <CalendarDatePicker
+                    allowPast
+                    today={dateToIso(new Date())}
+                    value={datePickerEndlessPastValue}
+                    onClose={() => setDatePickerEndlessPastOpen(false)}
+                    onConfirm={(date) => {
+                        setDatePickerEndlessPastValue(date);
+                        setDatePickerEndlessPastOpen(false);
                     }}
                 />
             )}

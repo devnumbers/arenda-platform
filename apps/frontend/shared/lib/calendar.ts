@@ -150,15 +150,19 @@ export function calendarFeedStart(
 /** Пол прошлого пикера дат: до какой черты прошедшие дни закрыты. По
  * умолчанию — сегодня (задним числом даты не создаются, #498); пикер с
  * allowPast (дата завершения бывает задним числом, ADR 0053 §3 — #805)
- * опускает черту до minDate. */
+ * опускает черту до minDate; allowPast без minDate — режима «задним
+ * числом без пола» (#1393): черты нет (null), прошедшие дни открыты
+ * без ограничения. */
 export function calendarPastFloor(
   today: IsoDate, minDate: IsoDate | undefined, allowPast: boolean,
-): IsoDate {
-  return allowPast && minDate !== undefined ? minDate : today;
+): IsoDate | null {
+  return allowPast ? (minDate ?? null) : today;
 }
 
-/** Погашен ли день в пикере дат: до пола прошлого (значение-якорь остаётся
- * тапабельным — правка #502), раньше minDate, позже maxDate. */
+/** Погашен ли день в пикере дат: до пола прошлого, если он есть (null —
+ * режима «без пола» #1393: прошлое открыто без ограничения; значение-якорь
+ * остаётся тапабельным и под полом — правка #502), раньше minDate, позже
+ * maxDate. */
 export function calendarDayDisabled(args: {
   readonly iso: IsoDate;
   readonly today: IsoDate;
@@ -169,7 +173,7 @@ export function calendarDayDisabled(args: {
 }): boolean {
   const floor = calendarPastFloor(args.today, args.minDate, args.allowPast);
   return (
-    (cmp(args.iso, floor) < 0 && args.iso !== args.value)
+    (floor !== null && cmp(args.iso, floor) < 0 && args.iso !== args.value)
     || (args.minDate !== undefined && cmp(args.iso, args.minDate) < 0)
     || (args.maxDate !== undefined && cmp(args.iso, args.maxDate) > 0)
   );

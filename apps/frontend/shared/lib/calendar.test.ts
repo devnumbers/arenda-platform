@@ -269,8 +269,9 @@ describe('calendar: пикер завершения — прошлое откр�
   it('пол прошлого: сегодня по умолчанию, minDate при allowPast', () => {
     expect(calendarPastFloor(today, undefined, false)).toBe(today);
     expect(calendarPastFloor(today, '2026-01-23', false)).toBe(today);
-    expect(calendarPastFloor(today, undefined, true)).toBe(today);
     expect(calendarPastFloor(today, '2026-01-23', true)).toBe('2026-01-23');
+    // allowPast без minDate — не этот режим: пол снимается целиком (#1393),
+    // см. describe «задним числом без пола».
   });
 
   it('allowPast: период [minDate, today] тапабелен, края погашены', () => {
@@ -298,5 +299,56 @@ describe('calendar: пикер завершения — прошлое откр�
     expect(calendarFeedStart(today, '2026-03-10', floor)).toEqual({ year: 2026, month0: 0 });
     expect(calendarFeedStart(today, '2025-12-01', floor)).toEqual({ year: 2025, month0: 11 });
     expect(calendarFeedStart(today, null)).toEqual({ year: 2026, month0: 8 });
+  });
+});
+
+describe('calendar: задним числом без пола (#1393)', () => {
+  const today = '2026-10-13';
+
+  it('allowPast без minDate — пола нет: calendarPastFloor отдаёт null', () => {
+    expect(calendarPastFloor(today, undefined, true)).toBeNull();
+  });
+
+  it('без пола весь прошедший тапабелен, будущее гасит maxDate', () => {
+    const day = (iso: string) =>
+      calendarDayDisabled({
+        iso,
+        today,
+        value: null,
+        minDate: undefined,
+        maxDate: today,
+        allowPast: true,
+      });
+    expect(day('2026-10-12')).toBe(false);
+    expect(day('2020-01-01')).toBe(false);
+    expect(day('1999-12-31')).toBe(false);
+    expect(day(today)).toBe(false);
+    expect(day('2026-10-14')).toBe(true);
+  });
+
+  it('без пола и без maxDate закрытых дней нет вовсе', () => {
+    const day = (iso: string) =>
+      calendarDayDisabled({
+        iso,
+        today,
+        value: null,
+        minDate: undefined,
+        maxDate: undefined,
+        allowPast: true,
+      });
+    expect(day('2026-10-12')).toBe(false);
+    expect(day('2000-02-29')).toBe(false);
+    expect(day('2026-10-14')).toBe(false);
+  });
+
+  it('старт ленты без пола — месяц today; якорь значения в прошлом уводит старт к себе', () => {
+    expect(calendarFeedStart(today, null)).toEqual({ year: 2026, month0: 9 });
+    expect(calendarFeedStart(today, '2020-03-05')).toEqual({ year: 2020, month0: 2 });
+    // Якорь глубже любого технического пола — лента открывается у значения,
+    // назад дорисуется по доскроллу.
+    expect(calendarFeedStart(today, '2020-03-05', { year: 2021, month0: 5 })).toEqual({
+      year: 2020,
+      month0: 2,
+    });
   });
 });
