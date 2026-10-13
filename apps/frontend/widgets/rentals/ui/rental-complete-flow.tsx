@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Calendar, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import type { IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
@@ -491,8 +490,11 @@ export function RentalCompleteFlow({
   }
 
   function finishFlow(): void {
-    // Поток завершён — история назад (прецедент «Хорошо» визарда #530).
-    goBack(router, ROUTES.property(rental.propertyId));
+    // Поток завершён — явная карточка объекта, не история назад (#1388,
+    // канон #1079): завершение открывается поверх визара создания аренды
+    // (пуш «Завершить»), back выбрасывал на его шаг. Крестик финала —
+    // тот же обработчик.
+    router.replace(ROUTES.property(rental.propertyId));
   }
 
   function openRental(): void {

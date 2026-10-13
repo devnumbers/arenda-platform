@@ -192,6 +192,54 @@ test.describe('машина «Действий аренды» на страни�
     await captureScreen(page, testInfo, 'rental-page-active');
   });
 
+  test('идёт: финал мастера завершения — «Хорошо» на карточку объекта, не назад по истории (#1388)', async ({
+    page,
+    seededUser,
+  }) => {
+    await seedProperty();
+    await seedRental(-60, 305); // старт 60 дней назад — active
+    // Форма истории репро владельца: объект → визард создания аренды →
+    // мастер завершения (пуш уведомления «Завершить» ложится поверх так
+    // же). goto кладёт записи так же, как push; визард создания заново
+    // аренду не создаёт — наблюдаемое поведение задаёт только форма
+    // истории (прецедент #1079).
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/properties/${PROPERTY_ID}`);
+    await page.goto(`/properties/${PROPERTY_ID}/rentals/new`);
+    await page.goto(`/properties/${PROPERTY_ID}/rentals/complete`);
+
+    // Шаги мастера: подтверждение → сегодня → комментарий (залога в сиде
+    // нет — шаг без полей суммы, #1384) → итоги → завершение.
+    await expect(page.getByRole('heading', { name: 'Завершить аренду?' })).toBeVisible();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Сегодня' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(page.getByRole('heading', { name: 'Добавьте комментарий' })).toBeVisible();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Подвести итоги' }).click();
+    // Мутация однокликом — предмет спеки навигация; гвард двойного сабмита
+    // канон-спекой double-submit-guard.spec.ts.
+    await page.getByRole('button', { name: 'Завершить аренду' }).click();
+    await expect(page.getByRole('button', { name: 'Хорошо' })).toBeVisible();
+
+    // Server-truth: completed_date = сегодня (POST /complete прошёл).
+    const completedDate = await execE2eSql(
+      `SELECT completed_date FROM rentals WHERE property_id = '${PROPERTY_ID}'`,
+    );
+    expect(completedDate).toBeTruthy();
+
+    // «Хорошо» — явная карточка объекта, а не назад по истории: назад под
+    // мастером лежит визард создания аренды. Крестик финала — тот же
+    // обработчик finishFlow.
+    await page.getByRole('button', { name: 'Хорошо' }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY_ID}$`));
+
+    // Записи мастера в истории нет: back уводит на визард создания, не
+    // в завершение (router.replace, канон #1079).
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`/rentals/new$`));
+  });
+
   test('смотрящему: ни одной мутирующей строки, чтение аренды цело', async ({ page }) => {
     await seedProperty();
     // Зритель сида (Сергей, #467) получает viewer-членство на объекте
