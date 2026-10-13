@@ -47,12 +47,13 @@ test('страница участника: шапка, чип агрегата, 
   await expect(apartmentRow).toBeVisible();
   await expect(apartmentRow.getByText('Управление')).toBeVisible();
 
-  // Кебаб шапки: приглашение, действия участника (#712) и отзыв
-  // (макет 2008-48318).
+  // Кебаб шапки: приглашение и отзыв (макет 2008-48318); пункта
+  // «Действия участника» больше нет (#1361 — глобальная лента по одному
+  // человеку снята).
   await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
   await expect(page.getByRole('menuitem', { name: 'Пригласить в объект' })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toHaveCount(0);
   await page.keyboard.press('Escape');
 
   await captureScreen(page, testInfo, 'participant-page');
@@ -392,8 +393,9 @@ test('права участника без аккаунта (D7): карточк
       notice.getByText('После создания аккаунта он сможет пользоваться вашим объектом'),
     ).toBeVisible();
 
-    // Сегмент роли и красная строка отзыва; «Действий участника» у
-    // pending нет (канон #712 — журнал адресуется uuid юзера).
+    // Сегмент роли и красная строка отзыва; строки «Действия участника
+    // в объекте» у pending нет — журнал адресуется uuid юзера (actor_id),
+    // которого у приглашённого ещё не существует.
     await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
     await expect(page.getByTestId('participant-rights-revoke')).toBeVisible();
     await expect(page.getByText('Действия участника')).toHaveCount(0);

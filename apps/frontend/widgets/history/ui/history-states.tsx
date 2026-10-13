@@ -9,10 +9,8 @@ import { Skeleton } from '@/shared/ui/design';
  * состояние — на самом
  * экране (макет 2050-158499: только серая строка «Действий не было», без
  * иллюстрации). Скелетоны прибитых страниц — паритет их композиции
- * (решение владельца 24.09): «Действия участника» (#712, D7) — одна
- * группа с объектной секцией и строками без карточки актёра (страница
- * уже про него), «История объекта» (#1321, макет 3258-76984) и пара
- * «участник+объект» (#841, макет 3260-77196) — плашка дня и сразу
+ * (решение владельца 24.09): «История объекта» (#1321, макет 3258-76984)
+ * и пара «участник+объект» (#841, макет 3260-77196) — плашка дня и сразу
  * карточки актёров (объект — в сабтайтле шапки); общий двухгрупповый
  * остаётся только общей ленте — прежде он
  * стоял на всех страницах и заполнял весь viewport, схлопываясь в
@@ -24,8 +22,7 @@ import { Skeleton } from '@/shared/ui/design';
 const ROW_WIDTHS = ['w-11/12', 'w-2/3', 'w-3/4'] as const;
 
 /** Строка ленты скелетона: полоска тона + S-иконка + текст + время —
- * общая анатомия строки внутри карточки актёра и «голой» строки
- * «Действий участника» (#712, D7: строки без карточки). */
+ * анатомия строки внутри карточки актёра. */
 function HistoryFeedSkeletonRow({ width }: { readonly width: string }): JSX.Element {
   return (
     <div className="flex items-end gap-2">
@@ -63,8 +60,8 @@ function HistoryFeedSkeletonDayPill(): JSX.Element {
   );
 }
 
-/** Шапка объекта внутри группы скелетона (общая лента и «Действия
- * участника»: аватар 24 + название + адрес). */
+/** Шапка объекта внутри группы скелетона (общая лента: аватар 24 +
+ * название + адрес). */
 function HistoryFeedSkeletonObjectHeader(): JSX.Element {
   return (
     <div className="flex items-center gap-2">
@@ -112,32 +109,6 @@ export function HistoryFeedSkeleton(): JSX.Element {
   );
 }
 
-/** Скелет «Действий участника» (#712, композиция D7): одна группа —
- * объектная секция внутри дня: шапка объекта и строки без карточки
- * актёра (страница уже про него). Группа одна — в пределах одного
- * человека день даёт одну-две объектные секции, двухгрупповый общий
- * скелетон заполнял весь viewport и схлопывался (решение владельца
- * 24.09). */
-export function HistoryMemberFeedSkeleton(): JSX.Element {
-  return (
-    <div aria-hidden>
-      <HistoryFeedSkeletonDay>
-        <HistoryFeedSkeletonDayPill />
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3">
-            <HistoryFeedSkeletonObjectHeader />
-            <div className="flex flex-col gap-2">
-              <HistoryFeedSkeletonRow width="w-3/4" />
-              <HistoryFeedSkeletonRow width="w-3/4" />
-              <HistoryFeedSkeletonRow width="w-3/4" />
-            </div>
-          </div>
-        </div>
-      </HistoryFeedSkeletonDay>
-    </div>
-  );
-}
-
 /** Скелет страниц с пином объекта — «Истории объекта» (#840, макет
  * 3258-76984) и пары «участник+объект» (#841, макет 3260-77196; D7):
  * объект живёт в сабтайтле шапки (TopNavTitle, вне фазы загрузки §7),
@@ -158,18 +129,11 @@ export function HistoryPropertyFeedSkeleton(): JSX.Element {
 
 /** Выбор скелетона по скоупу страницы — одна точка для живого экрана и
  * фолбэка Suspense-границы (#1281): хром фолбэка не разъезжается с
- * хромом экрана (канон screen-chrome). */
-export function historyFeedSkeleton(
-  participantId?: string,
-  propertyId?: string,
-): JSX.Element {
-  const isMemberPage = participantId !== undefined;
-  const isPropertyPage = propertyId !== undefined;
-  if (isPropertyPage) {
+ * хромом экрана (канон screen-chrome); выбор ведёт пин объекта —
+ * прибитые страницы (объект #840, пара #841) против общей ленты. */
+export function historyFeedSkeleton(propertyId?: string): JSX.Element {
+  if (propertyId !== undefined) {
     return <HistoryPropertyFeedSkeleton />;
-  }
-  if (isMemberPage) {
-    return <HistoryMemberFeedSkeleton />;
   }
   return <HistoryFeedSkeleton />;
 }
@@ -177,8 +141,8 @@ export function historyFeedSkeleton(
 /**
  * Скелет шита «Настройки» (#711): паритет финального лейаута (макет
  * 2177-60527 — чип периода, четыре свёрнутые карточки групп, «Сбросить
- * фильтры»); рендерится, пока опции /history/filters в пути. На «Действиях
- * участника» (#712) группа «Участники» тоже рисуется (прибитый человек,
+ * фильтры»); рендерится, пока опции /history/filters в пути. На странице
+ * пары (#841) группа «Участники» тоже рисуется (прибитый человек,
  * макет 2184-92510) — четыре карточки в обоих режимах.
  */
 export function HistoryFiltersSheetSkeleton(): JSX.Element {
