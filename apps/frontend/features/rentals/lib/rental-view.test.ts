@@ -8,7 +8,6 @@ import {
   rentalOverdueLine,
   rentalPaidTitle,
   rentalProgressPercent,
-  rentalRemainingLine,
   rentalTeaserRows,
   rentalTermsRows,
   rentalTenantTitle,
@@ -151,22 +150,6 @@ describe('rentalOverdueLine', () => {
   });
 });
 
-describe('rentalRemainingLine', () => {
-  it('остаток месяцев со склонением', () => {
-    expect(rentalRemainingLine(23)).toBe('Осталось 23 месяца аренды');
-    expect(rentalRemainingLine(1)).toBe('Остался 1 месяц аренды');
-    expect(rentalRemainingLine(5)).toBe('Осталось 5 месяцев аренды');
-    expect(rentalRemainingLine(21)).toBe('Остался 21 месяц аренды');
-    expect(rentalRemainingLine(11)).toBe('Осталось 11 месяцев аренды');
-    expect(rentalRemainingLine(101)).toBe('Остался 101 месяц аренды');
-    expect(rentalRemainingLine(111)).toBe('Осталось 111 месяцев аренды');
-  });
-
-  it('бессрочная аренда — строки остатка нет', () => {
-    expect(rentalRemainingLine(null)).toBeUndefined();
-  });
-});
-
 describe('rentAmountPerMonth', () => {
   it('канонический money-формат с периодом', () => {
     expect(rentAmountPerMonth(5_600_000)).toBe(`${formatMoneyKopecks(5_600_000)} в месяц`);
@@ -298,37 +281,63 @@ describe('rentalTenantTitle', () => {
   });
 });
 
+/** Аренда фикстуры без будущего вхождения платежа — общая заготовка
+ * кейсов hasProgressCard «в последние недели срока». */
+const noNextPayment = {
+  paymentId: '0198f6a1-7c1a-7d0f-9f4f-6f3c1e2b4a88',
+  amountKopecks: 5_600_000,
+  paymentDay: 10,
+  autoPay: false,
+  reminderOffsetDays: null,
+  nextPayment: null,
+};
+
 describe('hasProgressCard', () => {
   it('со следующим платежом карточка видима (1232:61259)', () => {
-    const rental = rentalFixture();
-    expect(hasProgressCard(rental.rentPayment.nextPayment, rental.progress)).toBe(true);
+    expect(hasProgressCard(rentalFixture())).toBe(true);
   });
 
-  it('F1: день планового окончания и «Ожидает действия» — карточка скрыта целиком', () => {
+  it('F1: день планового окончания без платежа — карточка скрыта целиком', () => {
     const rental = rentalFixture({
+      plannedEndDate: '2026-09-05', // день плана: == today фикстуры, days = 0
       progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },
+      rentPayment: { ...noNextPayment },
     });
-    expect(hasProgressCard(null, rental.progress)).toBe(false);
+    expect(hasProgressCard(rental)).toBe(false);
   });
 
   it('#817: просрочка — содержимое карточки: жива и без синей строки и остатка', () => {
     const rental = rentalFixture({
       progress: { paidMonths: 4, totalMonths: 24, monthsRemaining: 0, overdueMonths: 2 },
+      rentPayment: { ...noNextPayment },
     });
-    expect(hasProgressCard(null, rental.progress)).toBe(true);
+    expect(hasProgressCard(rental)).toBe(true);
+  });
+
+  it('#1387: платежей больше нет, до конца несколько дней — карточка жива ради строки дней', () => {
+    const rental = rentalFixture({
+      plannedEndDate: '2026-09-10', // 5 дней от today фикстуры
+      progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },
+      rentPayment: { ...noNextPayment },
+    });
+    expect(hasProgressCard(rental)).toBe(true);
   });
 
   it('без платежа, но с остатком — карточка остаётся ради строки «Осталось N»', () => {
     const rental = rentalFixture({
+      plannedEndDate: '2026-12-05', // 3 полных месяца от today фикстуры
       progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 3, overdueMonths: null },
+      rentPayment: { ...noNextPayment },
     });
-    expect(hasProgressCard(null, rental.progress)).toBe(true);
+    expect(hasProgressCard(rental)).toBe(true);
   });
 
   it('бессрочная без платежа — карточка остаётся ради «Прошло N месяцев»', () => {
     const rental = rentalFixture({
+      plannedEndDate: null,
       progress: { paidMonths: 0, totalMonths: null, monthsRemaining: null, overdueMonths: null },
+      rentPayment: { ...noNextPayment },
     });
-    expect(hasProgressCard(null, rental.progress)).toBe(true);
+    expect(hasProgressCard(rental)).toBe(true);
   });
 });

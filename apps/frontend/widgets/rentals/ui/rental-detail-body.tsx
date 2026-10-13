@@ -87,13 +87,10 @@ export function RentalDetailBody({
   const nextPayment = rental.rentPayment.nextPayment;
   const indefinite = rental.progress.totalMonths === null;
   const percent = rentalProgressPercent(rental.progress);
+  // Остаток срочной — общая метка #1387: месяцы, в последние недели — дни.
   const progressLine = indefinite
     ? rentalElapsedLine(rental.startDate, rental.today)
-    : rentalRemainingLine(
-        rental.progress.monthsRemaining !== null && rental.progress.monthsRemaining > 0
-          ? rental.progress.monthsRemaining
-          : null,
-      );
+    : rentalRemainingLine(rental.today, rental.plannedEndDate);
   const tenant = rental.tenant;
   // Фото арендатора — из его карточки контакта (ADR 0065, решение #1286);
   // без арендатора запрос спит (enabled: Boolean(contactId)).
@@ -210,7 +207,7 @@ export function RentalDetailBody({
               планового окончания и в «Ожидает действия» прячется целиком —
               пустого контейнера макеты не рисуют (F1, решение 23.09), но
               задолженность (#817) — содержимое: карточка снова жива. */}
-          {hasProgressCard(nextPayment, rental.progress) && (
+          {hasProgressCard(rental) && (
             <section className="mx-6 rounded-card bg-surface-muted p-6">
               <div className="flex flex-col gap-5">
                 {/* Красная строка просрочки (#817, решение владельца 23.09):

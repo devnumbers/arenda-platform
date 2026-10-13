@@ -11,6 +11,7 @@ import {
   dateToIso,
   dateToIsoLocal,
   daysOverdue,
+  daysUntil,
   fromIso,
   fullMonthsBetween,
   inclusiveDays,
@@ -74,6 +75,12 @@ describe('calendar: сравнение и арифметика', () => {
     expect(daysOverdue('2026-08-14', '2026-08-17')).toBe(3);
     expect(daysOverdue('2026-08-17', '2026-08-17')).toBe(0);
     expect(daysOverdue('2026-08-20', '2026-08-17')).toBe(-3);
+  });
+
+  it('daysUntil — дни до даты, зеркало серверного daysUntil (ADR 0053 §2)', () => {
+    expect(daysUntil('2026-08-17', '2026-08-20')).toBe(3);
+    expect(daysUntil('2026-08-17', '2026-08-17')).toBe(0);
+    expect(daysUntil('2026-08-20', '2026-08-17')).toBe(-3);
   });
 });
 

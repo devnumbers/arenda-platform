@@ -3,7 +3,7 @@ import type { Property } from '@/entities/property';
 import {
   hasPropertyAttentionDot,
   propertyBadges,
-  rentalMonthsLeftLabel,
+  rentalRemainingLabel,
 } from './property-badges';
 
 const TODAY = '2026-09-10';
@@ -21,19 +21,23 @@ function makeProperty(overrides: Partial<Property> & { id: string }): Property {
   };
 }
 
-describe('rentalMonthsLeftLabel', () => {
+describe('rentalRemainingLabel', () => {
   it('полные месяцы до планового окончания', () => {
-    expect(rentalMonthsLeftLabel('2026-09-10', '2027-09-10')).toBe('Осталось 12 месяцев аренды');
+    expect(rentalRemainingLabel('2026-09-10', '2027-09-10')).toBe('Осталось 12 месяцев аренды');
   });
 
   it('склоняет месяцы: 1 месяц, 2 месяца, 5 месяцев', () => {
-    expect(rentalMonthsLeftLabel('2026-09-10', '2026-10-10')).toBe('Остался 1 месяц аренды');
-    expect(rentalMonthsLeftLabel('2026-09-10', '2026-11-10')).toBe('Осталось 2 месяца аренды');
-    expect(rentalMonthsLeftLabel('2026-09-10', '2027-02-10')).toBe('Осталось 5 месяцев аренды');
+    expect(rentalRemainingLabel('2026-09-10', '2026-10-10')).toBe('Остался 1 месяц аренды');
+    expect(rentalRemainingLabel('2026-09-10', '2026-11-10')).toBe('Осталось 2 месяца аренды');
+    expect(rentalRemainingLabel('2026-09-10', '2027-02-10')).toBe('Осталось 5 месяцев аренды');
   });
 
-  it('N=0 — «Осталось меньше месяца» (резолюция #584)', () => {
-    expect(rentalMonthsLeftLabel('2026-09-10', '2026-09-25')).toBe('Осталось меньше месяца');
+  it('N=0 — календарные дни (#1387; до этого — «Осталось меньше месяца», резолюция #584)', () => {
+    expect(rentalRemainingLabel('2026-09-10', '2026-09-25')).toBe('Осталось 15 дней аренды');
+  });
+
+  it('план сегодня — «Заканчивается сегодня»', () => {
+    expect(rentalRemainingLabel('2026-09-10', '2026-09-10')).toBe('Заканчивается сегодня');
   });
 });
 
@@ -55,6 +59,16 @@ describe('propertyBadges', () => {
     });
     expect(propertyBadges(property, TODAY)).toEqual([
       { key: 'rental-months', label: 'Осталось 12 месяцев аренды', tone: 'accent' },
+    ]);
+  });
+
+  it('активная с остатком меньше месяца — бейдж в днях (#1387)', () => {
+    const property = makeProperty({
+      id: '17',
+      occupancy: { status: 'active', start_date: '2025-09-01', planned_end_date: '2026-09-25' },
+    });
+    expect(propertyBadges(property, TODAY)).toEqual([
+      { key: 'rental-months', label: 'Осталось 15 дней аренды', tone: 'accent' },
     ]);
   });
 

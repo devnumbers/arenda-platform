@@ -51,6 +51,13 @@ export function daysOverdue(dueIso: IsoDate, today: IsoDate): number {
   return Math.round((fromIso(today).getTime() - fromIso(dueIso).getTime()) / MS_PER_DAY);
 }
 
+/** Дни до даты, зеркало серверного daysUntil (ADR 0053 §2): сколько
+ * календарных дней осталось от `from` до `to`, отрицательное — дата
+ * прошла. Симметрично daysOverdue. */
+export function daysUntil(from: IsoDate, to: IsoDate): number {
+  return Math.round((fromIso(to).getTime() - fromIso(from).getTime()) / MS_PER_DAY);
+}
+
 export function lastDayOfMonth(year: number, monthIndex0: number): number {
   return new Date(Date.UTC(year, monthIndex0 + 1, 0)).getUTCDate();
 }

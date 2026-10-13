@@ -38,7 +38,9 @@ export function makeRental(overrides: Partial<Rental> = {}): Rental {
         daysUntil: 150,
       },
     },
-    progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 23, overdueMonths: null },
+    // 18 полных месяцев от today (2026-09-11) до планового конца
+    // (2028-04-01) — канон метки остатка #1387 считается от дат.
+    progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 18, overdueMonths: null },
     today: '2026-09-11',
     createdAt: '2026-04-01T00:00:00Z',
     ...overrides,

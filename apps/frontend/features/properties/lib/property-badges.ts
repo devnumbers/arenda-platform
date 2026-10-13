@@ -1,7 +1,7 @@
 import type { IsoDate } from '@/shared/lib/calendar';
-import { fullMonthsBetween, isoYear } from '@/shared/lib/calendar';
+import { isoYear } from '@/shared/lib/calendar';
 import { formatDayMonthDotted, formatDottedDate } from '@/shared/lib/date-format';
-import { monthsWord } from '@/shared/lib/months-word';
+import { rentalRemainingLine } from '@/shared/lib/rental-remaining-line';
 import type { Property } from '@/entities/property';
 
 /**
@@ -28,21 +28,16 @@ export type PropertyBadge = {
   readonly tone: PropertyBadgeTone;
 };
 
-/** «Осталось N месяцев аренды»; N — полных месяцев от «сегодня владельца»
- * до планового окончания; при N=0 — «Осталось меньше месяца» (резолюция #584).
- * Грамматика единственного числа — как в строках аренды («Остался 1 месяц»). */
-export function rentalMonthsLeftLabel(
+/** Бейдж списка — общая метка остатка (#1387): месяцы, при остатке меньше
+ * месяца — дни (текст «Осталось меньше месяца» резолюции #584 уходит), в
+ * сам день плана — «Заканчивается сегодня». Активная аренда с прошедшим
+ * планом сервером не отдаётся (это уже needs_attention), поэтому фолбэк
+ * недостижим и назван завершённым текстом. */
+export function rentalRemainingLabel(
   today: IsoDate,
   plannedEndDate: IsoDate,
 ): string {
-  const months = fullMonthsBetween(today, plannedEndDate);
-  if (months <= 0) {
-    return 'Осталось меньше месяца';
-  }
-  if (months === 1) {
-    return 'Остался 1 месяц аренды';
-  }
-  return `Осталось ${months} ${monthsWord(months)} аренды`;
+  return rentalRemainingLine(today, plannedEndDate) ?? 'Аренда завершена';
 }
 
 /** Арендный бейдж по приоритету резолюции #584; без аренды или у активной
@@ -62,7 +57,7 @@ function rentalBadge(property: Property, today: IsoDate | undefined): PropertyBa
       if (!occupancy.planned_end_date || today === undefined) return null;
       return {
         key: 'rental-months',
-        label: rentalMonthsLeftLabel(today, occupancy.planned_end_date),
+        label: rentalRemainingLabel(today, occupancy.planned_end_date),
         tone: 'accent',
       };
     case 'upcoming':
