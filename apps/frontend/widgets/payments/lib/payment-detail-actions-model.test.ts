@@ -60,24 +60,29 @@ describe('paymentDetailActions — вычисляемая завершённос
   });
 });
 
-describe('paymentDetailActions — архивный объект (#1342)', () => {
-  it('архив + пауза: только «Возобновить» (рендер дизейблит с пояснением), мутации не рендерятся', () => {
+describe('paymentDetailActions — архивный объект (#1342, правка владельца 13.10)', () => {
+  it('архив + системная автопауза: строка пуста — ни кнопок, ни пояснения (состояние несут бейдж карточки и списки)', () => {
     expect(paymentDetailActions({ isRentalManaged: false, isRentalCompleted: false }, true, false, false, true))
-      .toStrictEqual(['resume']);
+      .toStrictEqual([]);
   });
 
-  it('архив без паузы (расписание закончилось): строка пуста — рендерится только пояснение кнопок не показывает', () => {
+  it('архив без паузы (расписание закончилось): строка пуста', () => {
     expect(paymentDetailActions({ isRentalManaged: false, isRentalCompleted: false }, false, true, false, true))
       .toStrictEqual([]);
   });
 
-  it('архив + завершённый флаг при открытой паузе: слот не заменяется, «Возобновить» остаётся', () => {
-    expect(paymentDetailActions({ isRentalManaged: false, isRentalCompleted: false }, true, false, true, true))
-      .toStrictEqual(['resume']);
+  it('архив + активное правило: строка пуста', () => {
+    expect(paymentDetailActions({ isRentalManaged: false, isRentalCompleted: false }, false, false, false, true))
+      .toStrictEqual([]);
   });
 
-  it('архив + управляемый арендой платёж: пауза состояния — «Возобновить», арендный гейт не при чём', () => {
+  it('архив + ручная пауза: строка пуста и здесь — ручная пауза переживает архив, возобновлять можно только после возврата', () => {
+    expect(paymentDetailActions({ isRentalManaged: false, isRentalCompleted: false }, true, true, true, true))
+      .toStrictEqual([]);
+  });
+
+  it('архив + управляемый арендой платёж: строка пуста — на архивном объекте состав не зависит от аренды', () => {
     expect(paymentDetailActions({ isRentalManaged: true, isRentalCompleted: false }, true, false, false, true))
-      .toStrictEqual(['resume']);
+      .toStrictEqual([]);
   });
 });

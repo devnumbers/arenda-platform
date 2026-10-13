@@ -11,9 +11,10 @@ import {
 // только её. e2e ведёт мутацию по-настоящему — API-архивация сидовой
 // квартиры под сессией владельца, затем возврат тем же маршрутом в
 // finally: сид восстанавливается сам (мост закрывает свои автопаузы),
-// workers=1 — соседи не читают объект в этот момент. Проверяется кнопка
-// «Возобновить» страницы платежа: задизейблена с пояснением, пока объект
-// в архиве, жива после возврата.
+// workers=1 — соседи не читают объект в этот момент. Проверяется страница
+// платежа (правка владельца 13.10): на архивном объекте строки действий нет
+// вовсе — ни «Возобновить», ни пояснения; состояние паузы несёт бейдж
+// карточки «• На паузе», после возврата кнопки возвращаются.
 
 const PROPERTY = SEEDED_APARTMENT_PROPERTY_ID;
 const RENT_PAYMENT_URL = `/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555551`;
@@ -35,7 +36,7 @@ async function cleanupArchiveTrace(): Promise<void> {
 test.describe('автопауза платежей при архивации #1342', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('архивация: «Возобновить» задизейблена с пояснением; возврат: кнопка жива', async ({
+  test('архивация: строки действий нет вовсе (бейдж «На паузе»); возврат: кнопки вернулись', async ({
     page,
     seededUser,
   }) => {
@@ -47,16 +48,15 @@ test.describe('автопауза платежей при архивации #13
     expect(archived.ok()).toBeTruthy();
 
     try {
-      // Страница платежа: «Возобновить» видна (пауза стоит) и задизейблена,
-      // под рядом — пояснение с путём выхода.
+      // Страница платежа: строки действий нет вовсе — ни «Возобновить»,
+      // ни пояснения (правка владельца 13.10); пауза видна бейджем карточки.
       await page.goto(RENT_PAYMENT_URL);
-      const resume = page.getByRole('button', { name: 'Возобновить' });
-      await expect(resume).toBeVisible();
-      await expect(resume).toBeDisabled();
+      await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'На паузу' })).toHaveCount(0);
       await expect(
         page.getByText('Платеж на паузе, пока объект в архиве', { exact: false }),
-      ).toBeVisible();
-
+      ).toHaveCount(0);
+      await expect(page.getByText('Расход • На паузе')).toBeVisible();
     } finally {
       // Возврат из архива тем же маршрутом: мост закрывает только свои
       // автопаузы; журнальные строки догоняет SQL-очистка.
@@ -65,13 +65,10 @@ test.describe('автопауза платежей при архивации #13
       await cleanupArchiveTrace();
     }
 
-    // После возврата пауза снята мостом: правило снова активно —
-    // «На паузу» вместо «Возобновить», пояснения нет.
+    // После возврата пауза снята мостом: строка действий вернулась —
+    // «На паузу» на активном правиле.
     await page.goto(RENT_PAYMENT_URL);
     await expect(page.getByRole('button', { name: 'На паузу' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Возобновить' })).toHaveCount(0);
-    await expect(
-      page.getByText('Платеж на паузе, пока объект в архиве', { exact: false }),
-    ).toHaveCount(0);
   });
 });

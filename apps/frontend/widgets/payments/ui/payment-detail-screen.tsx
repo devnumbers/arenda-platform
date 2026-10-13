@@ -138,11 +138,8 @@ export function PaymentDetailScreen({
   const payment = paymentQuery.isSuccess ? paymentQuery.data : undefined;
 
   // Единый предикат мутационного входа страницы: смотрящий читает без кнопок
-  // правки (история 47), архив финансово read-only (#446). canMutateByRole —
-  // только роль: архив её не гасит, им живёт исключение «Возобновить» (#1342).
-  const permissions = propertyPermissions(property);
-  const canMutate = permissions.canEdit;
-  const canMutateByRole = permissions.canMutate;
+  // правки (история 47), архив финансово read-only (#446).
+  const canMutate = propertyPermissions(property).canEdit;
 
   // Объект в архиве (#1342): «Возобновить» задизейблена с пояснением —
   // мутации правила архивного объекта сервер отвечает 409.
@@ -230,7 +227,6 @@ export function PaymentDetailScreen({
               propertyId={propertyId}
               payment={payment}
               canMutate={canMutate}
-              canMutateByRole={canMutateByRole}
               propertyArchived={propertyArchived}
               onCompleted={setCompletedResult}
             />
@@ -247,14 +243,12 @@ function PaymentDetailBody({
   propertyId,
   payment,
   canMutate,
-  canMutateByRole,
   propertyArchived,
   onCompleted,
 }: {
   readonly propertyId: string;
   readonly payment: Payment;
   readonly canMutate: boolean;
-  readonly canMutateByRole: boolean;
   readonly propertyArchived: boolean;
   readonly onCompleted: (completed: Payment) => void;
 }): JSX.Element {
@@ -275,12 +269,12 @@ function PaymentDetailBody({
   // живы (деталь, секции), звезда — личное состояние читателя.
   const storedCompleted = payment.completedAt !== undefined;
 
-  // Состав кнопок держит модель (#818, #1341, #1342): у архивного объекта —
-  // только «Возобновить» (рендер дизейблит с пояснением), у смотрящего
-  // строки нет; исключение «Возобновить» живёт на роли, не на архиве.
+  // Состав кнопок держит модель (#818, #1341, #1342; правка владельца
+  // 13.10): на архивном объекте строка не рендерится вовсе — кнопок и
+  // пояснения нет, состояние несут бейдж карточки и списки; у смотрящего
+  // строки тоже нет.
   const actions = paymentDetailActions(payment, paused, endedRule, settled, propertyArchived);
-  const showActions =
-    !storedCompleted && actions.length > 0 && (canMutate || (propertyArchived && canMutateByRole));
+  const showActions = !storedCompleted && actions.length > 0 && canMutate;
 
   // undefined — списки ещё грузятся, кнопка без состояния; null — гасить
   // нечего (завершённое правило без долга), «Оплатить» отключена.
@@ -305,7 +299,6 @@ function PaymentDetailBody({
             propertyId={propertyId}
             payment={payment}
             actions={actions}
-            propertyArchived={propertyArchived}
             payable={payable}
             onCompleted={onCompleted}
           />
@@ -420,14 +413,12 @@ function PaymentActionsRow({
   propertyId,
   payment,
   actions,
-  propertyArchived,
   payable,
   onCompleted,
 }: {
   readonly propertyId: string;
   readonly payment: Payment;
   readonly actions: ReadonlyArray<PaymentDetailAction>;
-  readonly propertyArchived: boolean;
   readonly payable: PaymentOperation | null | undefined;
   readonly onCompleted: (completed: Payment) => void;
 }): JSX.Element {
@@ -488,7 +479,6 @@ function PaymentActionsRow({
           <RoundActionButton
             icon={<Play />}
             caption="Возобновить"
-            disabled={propertyArchived}
             loading={resumePayment.isPending}
             onClick={() => void resume()}
           />
@@ -542,16 +532,6 @@ function PaymentActionsRow({
           />
         )}
       </div>
-
-      {/* Пояснение дизейбла при архивном объекте (#1342): пауза стоит,
-       * пока объект в архиве — возврат из архива снимает системную
-       * автопаузу сам; кнопка без пояснения выглядела бы сломанной. */}
-      {propertyArchived && actions.includes('resume') && (
-        <p className="m-0 text-center text-base leading-[18px] text-content-secondary">
-          Платеж на паузе, пока объект в архиве. Верните объект из архива,
-          чтобы возобновить его.
-        </p>
-      )}
 
       {/* Confirm-шторка паузы (тексты — резолюция #452): случайное нажатие
        * не должно останавливать обязательство (история 21). Возобновление
