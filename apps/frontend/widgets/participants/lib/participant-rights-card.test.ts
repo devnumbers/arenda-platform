@@ -58,13 +58,13 @@ describe('pendingParticipantRightsCard', () => {
     });
   });
 
-  it('pending-строка с ролью full_access — иконка полного доступа', () => {
+  it('pending-строка с ролью full_access — иконка карандаша («Управление», #1389)', () => {
     const card = pendingParticipantRightsCard(
       pendingParticipant,
       memberOf({ role: 'full_access' }),
     );
 
-    expect(card?.emailIcon).toBe('full');
+    expect(card?.emailIcon).toBe('edit');
   });
 
   it('зарегистрированный участник — не D7-кейс (макет 2177-59620 остаётся)', () => {
@@ -103,8 +103,8 @@ describe('pendingMemberRightsCard — карточка pending в member-реж�
     });
   });
 
-  it('pending-строка с ролью full_access — иконка полного доступа', () => {
-    expect(pendingMemberRightsCard(memberOf({ role: 'full_access' }))?.emailIcon).toBe('full');
+  it('pending-строка с ролью full_access — иконка карандаша («Управление», #1389)', () => {
+    expect(pendingMemberRightsCard(memberOf({ role: 'full_access' }))?.emailIcon).toBe('edit');
   });
 
   it('не-pending строка — не карточка (зарегистрированный остаётся на макете объекта)', () => {

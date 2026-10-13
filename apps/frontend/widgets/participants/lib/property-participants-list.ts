@@ -1,5 +1,5 @@
 import type { AccessRole, PropertyAccessMember } from '@/entities/access';
-import { ACCESS_ROLE_LABELS } from '@/entities/access';
+import { ACCESS_ROLE_ICON_NAMES, ACCESS_ROLE_LABELS } from '@/entities/access';
 import {
   accountNotCreatedBadge,
   filterByRuQuery,
@@ -9,14 +9,19 @@ import {
 import { displayOwnUserName } from '@/shared/lib/display-name';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
-/** Иконка у почты в ряду (макет D6 3298-75434): полный доступ — открытый
- * замок Icon/S/FullAccess (и у владельца, и у full_access), просмотр —
- * глаз. Единственная точка дискриминации роли для иконки — её читают и
- * билдеры карточек «Прав участника» (participant-rights-card). */
-export type PropertyParticipantEmailIcon = 'full' | 'eye';
+/** Иконка у почты в ряду (макет 1980-107096, решение владельца 13.10.2026
+ * #1389): владелец — открытый замок Icon/S/FullAccess; общие роли — канон
+ * словаря ACCESS_ROLE_ICON_NAMES (#698): «Управление» — карандаш
+ * Icon/S/Edit, «Просмотр» — глаз. Дискриминация здесь — только владелец:
+ * словарь роль→глиф общих ролей один, в shared/model/access; его значение
+ * читают и билдеры карточек «Прав участника» (participant-rights-card). */
+export type PropertyParticipantEmailIcon = 'full' | 'edit' | 'eye';
 
 export function emailRoleIcon(role: AccessRole): PropertyParticipantEmailIcon {
-  return role === 'viewer' ? 'eye' : 'full';
+  if (role === 'owner') {
+    return 'full';
+  }
+  return ACCESS_ROLE_ICON_NAMES[role];
 }
 
 /** Чип статуса ноги в ряду — форма конструкторов entities/participants

@@ -83,8 +83,9 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * Экран «Участники объекта» (D6 #1312, макет 3298-75434): полный состав
  * с почтами и pending-приглашениями читают все участники объекта —
  * read-only у не-владельца. Владелец первым отдельным рядом, у каждого
- * ряда иконка роли у почты (открытый замок Icon/S/FullAccess — владелец
- * и full_access, глаз — просмотр), чипы статусов: «Аккаунт не создан»
+ * ряда иконка роли у почты (открытый замок Icon/S/FullAccess — владелец,
+ * карандаш Icon/S/Edit — «Управление», глаз — «Просмотр»; решение
+ * владельца 13.10.2026 #1389), чипы статусов: «Аккаунт не создан»
  * у pending-приглашения (инфо, лейбл #1105 в титуле) и «Превышен лимит
  * объектов» у suspended-ноги.
  *
@@ -591,7 +592,14 @@ function PropertyParticipantRowView({
          * не нужен: вспышка играется самой сменой значения. */}
         <span className="flex min-w-0 items-center gap-1 text-sm text-content-secondary">
           <LiveValue valueKey={row.emailIcon} mode="flash">
-            <EmailIcon className="h-4 w-4 shrink-0" aria-hidden />
+            {/* testid с родом глифа — ассерт иконки роли в e2e (прецедент
+             * property-access-pill #1358): декоративный svg по-другому не
+             * различить. */}
+            <EmailIcon
+              className="h-4 w-4 shrink-0"
+              aria-hidden
+              data-testid={`participant-role-icon-${row.emailIcon}`}
+            />
           </LiveValue>
           {row.subtitle !== undefined && <span className="truncate">{row.subtitle}</span>}
         </span>

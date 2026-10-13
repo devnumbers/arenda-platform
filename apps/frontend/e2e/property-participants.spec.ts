@@ -50,6 +50,13 @@ test('вход из детали объекта: «Управление» → «
   await expect(sergeyRow).toBeVisible();
   await expect(sergeyRow.getByText('e2e-viewer@example.com')).toBeVisible();
 
+  // Иконка роли у почты (#1389, макет 1980-107096): открытый замок —
+  // только владелец, карандаш — «Управление» (Мария и Анна — у обеих
+  // full_access), глаз — «Просмотр» (Сергей).
+  await expect(page.getByTestId('participant-role-icon-full')).toHaveCount(1);
+  await expect(page.getByTestId('participant-role-icon-edit')).toHaveCount(2);
+  await expect(page.getByTestId('participant-role-icon-eye')).toHaveCount(1);
+
   // CTA приглашения от объекта — постоянная нижняя панель.
   await expect(
     page.getByRole('button', { name: 'Пригласить участника' }).filter({ hasText: 'Пригласить участника' }),

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, EyeSmall, FullAccessSmall, Minus } from '@/shared/assets/icons';
+import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, EditSmall, EyeSmall, FullAccessSmall, Minus } from '@/shared/assets/icons';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { type PropertyType } from '@/entities/property';
@@ -9,13 +9,15 @@ import { propertyTypeIcons } from '@/entities/property';
 import { cn } from '@/shared/lib/cn';
 import { buttonVariants, CircleIcon, EmptyState } from '@/shared/ui/design';
 
-/** Иконка роли у почты в рядах и карточках участников (D6, 3298-75434):
- * полный доступ — открытый замок, просмотр — глаз; ключ —
- * PropertyParticipantEmailIcon. Одна карта на три поверхности
- * (ряды «Участников объекта», D7-карточка владельческого экрана,
- * member-режим прав #1362) — копий дискриминации нет. */
+/** Иконка роли у почты в рядах и карточках участников (макет 1980-107096,
+ * решение владельца 13.10.2026 #1389): владелец — открытый замок,
+ * «Управление» — карандаш, «Просмотр» — глаз; ключ —
+ * PropertyParticipantEmailIcon (глиф выбирает emailRoleIcon, здесь только
+ * имя → компонент). Одна карта на три поверхности (ряды «Участников
+ * объекта», D7-карточка владельческого экрана, member-режим прав #1362). */
 export const EMAIL_ROLE_ICONS = {
   full: FullAccessSmall,
+  edit: EditSmall,
   eye: EyeSmall,
 } as const;
 

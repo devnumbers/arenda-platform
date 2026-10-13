@@ -128,7 +128,7 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
     expect(rows[0]?.isMe).toBe(true);
   });
 
-  it('иконка у почты: владелец и full_access — полный доступ (открытый замок), viewer — глаз (D6, 3298-75434)', () => {
+  it('иконка у почты: владелец — открытый замок, full_access («Управление») — карандаш, viewer — глаз (#1389, 1980-107096)', () => {
     const rows = propertyParticipantRows(
       [
         maria,
@@ -138,8 +138,8 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
       OWNER_READER,
     );
 
-    // Владелец первым (замок «полный доступ»), дальше в порядке входа.
-    expect(rows.map((row) => row.emailIcon)).toEqual(['full', 'eye', 'full']);
+    // Владелец первым (открытый замок), дальше в порядке входа.
+    expect(rows.map((row) => row.emailIcon)).toEqual(['full', 'eye', 'edit']);
   });
 
   it('suspended-бейдж «Превышен лимит объектов» только у приостановленного; participantId — uuid, у pending — почта', () => {
