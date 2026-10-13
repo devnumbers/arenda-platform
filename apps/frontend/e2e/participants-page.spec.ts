@@ -122,6 +122,12 @@ test('права участника: смена роли сегментом, п�
   await expect(header.getByText('Права участника')).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Управление' })).toBeChecked();
 
+  // Карточка объекта — ссылка на объект и у владельца (амендмент
+  // владельца 13.10.2026, общий с member-режимом #1362; без шеврона).
+  const objectCard = page.getByRole('link', { name: /Квартира на Ленина/ });
+  await expect(objectCard).toBeVisible();
+  await expect(objectCard).toHaveAttribute('href', `/properties/${APARTMENT_ID}`);
+
   try {
     await page.getByRole('radio', { name: 'Просмотр' }).click();
 

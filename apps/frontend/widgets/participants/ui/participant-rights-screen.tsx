@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import { cn } from '@/shared/lib/cn';
 import { Block, Info, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
@@ -60,6 +61,8 @@ const OWN_CHANGE_WINDOW_MS = 3000;
  * (actor_id журнала) ещё не существует) — и красная строка «Отозвать
  * доступ к объекту»;
  * обе строки — Row Button макета с ведущим слотом-кругом 44 под иконку 24.
+ * Карточка объекта — ссылка на сам объект (амендмент владельца
+ * 13.10.2026, общий с member-режимом #1362): вид прежний, без шеврона.
  *
  * D7 — приглашённый без аккаунта (#1314, #1264; макет 3298-75576): вместо
  * карточки объекта — карточка участника (анонимный титул «Пользователь»,
@@ -232,7 +235,14 @@ export function ParticipantRightsScreen({
   } else {
     content = (
       <div className="flex flex-col gap-6">
-        <section className={cn(PARTICIPANT_ROW_BASE_CLASS, 'cursor-default')}>
+        {/* Карточка объекта — ссылка на сам объект (амендмент владельца
+          * 13.10.2026, общий с member-режимом #1362): вид прежний, без
+          * шеврона — курсор и ховер канонного кликабельного ряда. */}
+        <NextLink
+          href={ROUTES.property(propertyId)}
+          className={PARTICIPANT_ROW_BASE_CLASS}
+          data-testid="participant-rights-object-card"
+        >
           <ObjectAvatarGlyph photoUrl={leg?.photoUrl ?? property?.photoUrl ?? undefined} type={leg?.type ?? property?.type} />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="truncate text-base font-medium leading-[18px] text-content">
@@ -259,7 +269,7 @@ export function ParticipantRightsScreen({
               </span>
             )}
           </span>
-        </section>
+        </NextLink>
 
         <ParticipantRoleSegmented
           value={member.role === 'full_access' ? 'full_access' : 'viewer'}

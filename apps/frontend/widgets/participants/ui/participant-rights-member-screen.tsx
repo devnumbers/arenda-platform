@@ -2,6 +2,7 @@
 
 import { type JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import { cn } from '@/shared/lib/cn';
 import { TimeHistory } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -37,7 +38,9 @@ import { ParticipantRightsMemberSkeleton } from './participants-skeletons';
  * бейдж «Владелец», журнал его действий тоже жив). Список ведёт сюда и
  * на архивном объекте: чтение строки живёт тем же гейтом, что и список
  * (участники, история и выход на архивном сохраняются) — ветка
- * isArchived владельческого тапа сюда не переносится.
+ * isArchived владельческого тапа сюда не переносится. Карточка объекта —
+ * ссылка на сам объект (амендмент владельца 13.10.2026, тот же на
+ * владельческом экране): вид прежний, без шеврона.
  *
  * Pending-ряд («Аккаунт не создан») — карточка приглашения, строк
  * действий нет: uuid юзера (actor_id журнала) ещё не существует, роли
@@ -120,7 +123,14 @@ export function ParticipantRightsMemberScreen({
   } else if (member !== undefined) {
     content = (
       <div className="flex flex-col gap-6">
-        <section className={cn(PARTICIPANT_ROW_BASE_CLASS, 'cursor-default')}>
+        {/* Карточка объекта — ссылка на сам объект (амендмент владельца
+          * 13.10.2026, общий с владельческим экраном): вид прежний, без
+          * шеврона — курсор и ховер канонного кликабельного ряда. */}
+        <NextLink
+          href={ROUTES.property(propertyId)}
+          className={PARTICIPANT_ROW_BASE_CLASS}
+          data-testid="participant-rights-object-card"
+        >
           <ObjectAvatarGlyph
             photoUrl={property?.photoUrl ?? undefined}
             type={property?.type}
@@ -143,7 +153,7 @@ export function ParticipantRightsMemberScreen({
               </LiveValue>
             </span>
           </span>
-        </section>
+        </NextLink>
 
         <div className="flex flex-col">
           {actionsUserId !== undefined && (

@@ -146,6 +146,25 @@ test('pending-ряд: карточка «Аккаунт не создан» бе
   }
 });
 
+test('карточка объекта — ссылка на объект (амендмент владельца 13.10.2026): тап ведёт в хаб объекта, вид прежний', async ({ page }, testInfo) => {
+  await openCabinetWithSessionToken(page, seededMemberSessionToken());
+  await page.goto(`/properties/${APARTMENT_ID}/participants/${SERGEY_MEMBER_ID}`);
+
+  await expect(screenHeader(page).getByText('Права участника')).toBeVisible();
+
+  // Карточка объекта — настоящая ссылка на хаб объекта (без шеврона:
+  // решение владельца — вид карточки не меняется).
+  const card = page.getByRole('link', { name: /Квартира на Ленина/ });
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('href', `/properties/${APARTMENT_ID}`);
+  await expect(card.getByText('Просмотр', { exact: true })).toBeVisible();
+  await captureScreen(page, testInfo, 'participant-rights-member-card-link');
+
+  await card.click();
+  await page.waitForURL(`**/properties/${APARTMENT_ID}`);
+  await expect(page.locator('header')).toBeVisible();
+});
+
 test('мусорный memberId при читаемом объекте — «Участник не найден»', async ({ page }) => {
   await openCabinetWithSessionToken(page, seededMemberSessionToken());
   await page.goto(
