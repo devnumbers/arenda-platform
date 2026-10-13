@@ -182,6 +182,26 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
 
     expect(rows[0]?.subtitle).toBeUndefined();
   });
+
+  it('memberAddressId — адресующий id чтения строки (#1357, #1362): membership id, invitation id, у владельца user_id', () => {
+    // Строка владельца — как на проводе: синтезированная, membership id
+    // нулевой (контракт #1357).
+    const ownerRow = member({
+      id: null,
+      userId: OWNER_ID,
+      email: 'ivan@example.com',
+      role: 'owner',
+      isOwner: true,
+      displayName: 'Иван Иванов',
+    });
+    const rows = propertyParticipantRows([maria, ownerRow, pending], OWNER_READER);
+    const byKey = new Map(rows.map((row) => [row.key, row]));
+
+    expect(byKey.get('member-1')?.memberAddressId).toBe('member-1');
+    // Синтезированная строка владельца читается по user_id владельца.
+    expect(byKey.get(OWNER_ID)?.memberAddressId).toBe(OWNER_ID);
+    expect(byKey.get('invitation-1')?.memberAddressId).toBe('invitation-1');
+  });
 });
 
 describe('своя строка читателя — isMe (тикет #770)', () => {

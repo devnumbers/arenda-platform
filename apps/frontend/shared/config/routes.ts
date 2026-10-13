@@ -169,6 +169,16 @@ export const ROUTES = {
   /** Экран «Права участника» (#698): роль и отзыв на одном объекте. */
   participantRights: (participantId: string, propertyId: string) =>
     `/participants/${encodeURIComponent(participantId)}/properties/${propertyId}`,
+  /** «Права участника» в member-режиме (#1362): тот же экран read-only
+   * для приглашённых — карточка объекта с ролью и строка «Действия
+   * участника в объекте», без сегмента роли и отзыва (мутации остаются
+   * у владельца на participantRights). Идентификатор — адресующий id
+   * строки чтения GET /properties/{id}/access/members/{memberId}
+   * (контракт #1357, клиентское правило `row.id ?? row.user_id`):
+   * membership id, invitation id у pending или user_id у ряда владельца —
+   * deep-link и refresh участника работают по построению. */
+  propertyParticipantRights: (propertyId: string, memberId: string) =>
+    `/properties/${propertyId}/participants/${encodeURIComponent(memberId)}`,
   /** Экран «Пригласить в объект» (#698): мультичек объектов читающего
    * для существующего участника (не путать с participantsInvite —
    * приглашением нового человека, #699). */

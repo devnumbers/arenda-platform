@@ -7,8 +7,6 @@ import {
   ArrowLeft,
   Block,
   Cancel,
-  EyeSmall,
-  FullAccessSmall,
   Kebab,
   Search,
   SmallArrowDown,
@@ -72,20 +70,14 @@ import {
   serializePropertyParticipantOrderToParams,
   serializePropertyParticipantRoleFilterToParams,
   sortPropertyParticipantsByTitle,
-  type PropertyParticipantEmailIcon,
   type PropertyParticipantRoleFilter,
   type PropertyParticipantRow,
   type PropertyParticipantSortOrder,
 } from '../lib/property-participants-list';
 import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
 import { resolvePropertyParticipantsError } from '../lib/property-participants-error';
+import { EMAIL_ROLE_ICONS, PropertyAccessNotFound } from './participant-fragments';
 import { ParticipantSuccessPopup } from './participant-success-popup';
-import { PropertyAccessNotFound } from './participant-fragments';
-
-const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = {
-  full: FullAccessSmall,
-  eye: EyeSmall,
-};
 
 /**
  * Экран «Участники объекта» (D6 #1312, макет 3298-75434): полный состав
@@ -114,16 +106,18 @@ const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = 
  * 13.10.2026: действия в объекте были — вход в ленту нужен; проверка
  * лёгким limit=1-запросом ленты); без действий иконки нет, поиск скрыт.
  *
- * Тап по ряду — страница участника (#698, агрегат): uuid юзера, у
- * pending — почта. Статичные ряды, без шеврона: владелец (страница
- * участника про выданные доступы, своих ног у владельца нет), своя
- * строка «Имя (Вы)» (ФИО-канон D4: имя читателя без фамилии, серый
- * суффикс — канон шита фильтров #710; #770 — своей ноги в
- * manage-скоупе читателя нет, /participants/{себя} отвечает 404),
- * читающий без manage-прав (404-политика #693) и архивный объект (нога
- * участника там может быть только архивной). Пока /me не разрешился,
- * ряды статичны тоже — кнопка, ведущая на 404, не рендерится вовсе.
- * У зрителя, как в модалке, скрыты и manage-контролы (кебаб, CTA),
+ * Тап по ряду — по ветке читателя (решение владельца 12.10.2026, #1362).
+ * Владелец: страница участника агрегата (#698) — все ряды, кроме своей
+ * строки (ФИО-канон D4: имя читателя без фамилии, серый суффикс — канон
+ * шита фильтров #710; #770 — своей ноги в manage-скоупе читателя нет,
+ * /participants/{себя} отвечает 404); ряды архивного объекта статичны
+ * (нога участника там может быть только архивной). Приглашённый
+ * (canManage=false при загрузившемся объекте): member-режим прав #1362 —
+ * read-only страница прав любого ряда по адресу reading id строки
+ * (контракт #1357), включая свою строку (быстрый переход в историю) и
+ * ряд владельца; статичен ряд без адресующего id. Пока /me или объект не
+ * разрешились, ряды статичны тоже — кнопка, ведущая на 404, не рендерится
+ * вовсе. У зрителя, как в модалке, скрыты и manage-контролы (кебаб, CTA),
  * выдача на архивный объект запрещена.
  */
 export function PropertyParticipantsScreen({
@@ -303,24 +297,39 @@ export function PropertyParticipantsScreen({
       {roleFilterChip}
     </div>
   );
+  // Разводка тапа по ряду (решение владельца 12.10.2026, #1362):
+  // владелец — агрегат /participants/{id} (#698), все ряды, кроме своей
+  // строки (архивный держит ряды статичными — нога там может быть только
+  // архивной); приглашённый при загрузившемся объекте — member-режим прав
+  // (#1362), read-only страница любого ряда, включая свою (быстрый
+  // переход в историю) и ряд владельца; ряд без адресующего id статичен.
+  // Пока /me или объект не разрешились — ряды статичны: ветка читателя
+  // ещё не известна, кнопка, ведущая на 404, не рендерится вовсе.
+  const resolveRowSelect = (row: PropertyParticipantRow): (() => void) | undefined => {
+    if (!meQuery.isSuccess || !propertyQuery.isSuccess) {
+      return undefined;
+    }
+    if (canManage) {
+      const target = row.participantId;
+      return !isArchived && !row.isOwner && !row.isMe && target !== undefined
+        ? () => router.push(ROUTES.participant(target))
+        : undefined;
+    }
+    const memberTarget = row.memberAddressId;
+    return memberTarget !== undefined
+      ? () => router.push(ROUTES.propertyParticipantRights(propertyId, memberTarget))
+      : undefined;
+  };
+
   const rowsBlock = (
     <div className="flex flex-col px-6">
       {visible.map((row) => {
-        // Тап ведёт на агрегат /participants/{id} (#698) только в скоупе
-        // читателя — полная политика в доке экрана.
-        const target =
-          canManage && !isArchived && meQuery.isSuccess && !row.isOwner && !row.isMe
-            ? row.participantId
-            : undefined;
+        // Полная политика тапа — в доке resolveRowSelect.
         return (
           <PropertyParticipantRowView
             key={row.key}
             row={row}
-            onSelect={
-              target === undefined
-                ? undefined
-                : () => router.push(ROUTES.participant(target))
-            }
+            onSelect={resolveRowSelect(row)}
           />
         );
       })}

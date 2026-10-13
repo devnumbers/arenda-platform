@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PropertyAccessMember } from '@/entities/access';
 import type { Participant } from '@/entities/participants';
-import { pendingParticipantRightsCard } from './participant-rights-card';
+import { pendingMemberRightsCard, pendingParticipantRightsCard } from './participant-rights-card';
 
 const pendingParticipant: Participant = {
   id: 'maksim%40yandex.ru',
@@ -87,6 +87,30 @@ describe('pendingParticipantRightsCard', () => {
       pendingParticipantRightsCard(
         pendingParticipant,
         memberOf({ status: 'active' }),
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe('pendingMemberRightsCard — карточка pending в member-режиме прав (#1362)', () => {
+  it('pending-строка — та же анатомия карточки D7: анонимный титул, почта, иконка роли, бейдж; фото у pending не бывает', () => {
+    expect(pendingMemberRightsCard(memberOf({ role: 'viewer' }))).toStrictEqual({
+      title: 'Пользователь',
+      email: 'maksim@yandex.ru',
+      emailIcon: 'eye',
+      badge: { tone: 'info', label: 'Аккаунт не создан', icon: 'lock' },
+      photoUrl: undefined,
+    });
+  });
+
+  it('pending-строка с ролью full_access — иконка полного доступа', () => {
+    expect(pendingMemberRightsCard(memberOf({ role: 'full_access' }))?.emailIcon).toBe('full');
+  });
+
+  it('не-pending строка — не карточка (зарегистрированный остаётся на макете объекта)', () => {
+    expect(
+      pendingMemberRightsCard(
+        memberOf({ status: 'active', userId: '12111111-1111-4111-8111-111111111121' }),
       ),
     ).toBeUndefined();
   });

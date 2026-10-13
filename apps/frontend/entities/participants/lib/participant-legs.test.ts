@@ -48,10 +48,18 @@ describe('participantLegBadge — чип ноги доступа (макеты 2
   });
 
   it('suspended viewer — роль «Просмотр», серый, иконка Eye', () => {
-    expect(participantLegBadge(leg({ status: 'suspended', role: 'viewer' }))).toEqual({
+    expect(participantLegBadge(leg({ role: 'viewer' }))).toEqual({
       tone: 'neutral',
       label: 'Просмотр',
       icon: 'eye',
+    });
+  });
+
+  it('owner — «Владелец» с замком: member-режим прав (#1362) рисует бейдж и для строки владельца — он не membership, словаря ног не знает', () => {
+    expect(participantLegBadge({ status: 'active', role: 'owner' })).toEqual({
+      tone: 'neutral',
+      label: 'Владелец',
+      icon: 'lock',
     });
   });
 });

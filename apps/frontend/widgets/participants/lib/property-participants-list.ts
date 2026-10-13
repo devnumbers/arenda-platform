@@ -11,8 +11,13 @@ import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /** Иконка у почты в ряду (макет D6 3298-75434): полный доступ — открытый
  * замок Icon/S/FullAccess (и у владельца, и у full_access), просмотр —
- * глаз. */
+ * глаз. Единственная точка дискриминации роли для иконки — её читают и
+ * билдеры карточек «Прав участника» (participant-rights-card). */
 export type PropertyParticipantEmailIcon = 'full' | 'eye';
+
+export function emailRoleIcon(role: AccessRole): PropertyParticipantEmailIcon {
+  return role === 'viewer' ? 'eye' : 'full';
+}
 
 /** Чип статуса ноги в ряду — форма конструкторов entities/participants
  * (прецедент UserPropertyBadge): тип не экспортируется из индекса,
@@ -113,6 +118,12 @@ export type PropertyParticipantRow = {
   /** Цель тапа — агрегат /participants/{id}: uuid юзера, у pending —
    * почта (контракт #693); undefined — строка без идентификатора. */
   readonly participantId: string | undefined;
+  /** Адресующий id чтения строки (контракт #1357, клиентское правило
+   * `row.id ?? row.user_id`): membership id, invitation id у pending,
+   * user_id у синтезированного ряда владельца. Цель тапа member-режима
+   * «Прав участника» (#1362, read-only); undefined — обе опоры пусты,
+   * строка чтению не адресуется (ряд остаётся статичным). */
+  readonly memberAddressId: string | undefined;
   /** Роль ноги: фильтр «Все роли» и сортировка. */
   readonly role: AccessRole;
   readonly isOwner: boolean;
@@ -176,7 +187,7 @@ function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined
       photoUrl: member.photoUrl ?? undefined,
       subtitle:
         (isPending || displayName !== undefined) && email !== '' ? email : undefined,
-      emailIcon: member.role === 'viewer' ? 'eye' : 'full',
+      emailIcon: emailRoleIcon(member.role),
       badge: isPending
         ? accountNotCreatedBadge()
         : member.status === 'suspended'
@@ -184,6 +195,7 @@ function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined
           : undefined,
       participantId:
         member.userId ?? (member.status === 'pending' && email !== '' ? email : undefined),
+      memberAddressId: member.id ?? member.userId ?? undefined,
       role: member.role,
       isOwner: member.isOwner,
       isMe,

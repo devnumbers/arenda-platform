@@ -10,6 +10,12 @@ export const accessKeys = {
   all: ['property-access'] as const,
   list: (propertyId: string) =>
     [...accessKeys.all, 'list', propertyId] as const,
+  /** Строка участника GET /properties/{id}/access/members/{memberId}
+   * (#1357, экран member-режима прав #1362): вложена под list того же
+   * объекта — инвалидация accessKeys.list (канон invalidateAccessProjections)
+   * префиксом снимает и её. */
+  member: (propertyId: string, memberId: string) =>
+    [...accessKeys.list(propertyId), 'member', memberId] as const,
 };
 
 // features/auth

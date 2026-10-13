@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/shared/lib/cn';
-import { Block, EyeSmall, FullAccessSmall, Info, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
+import { Block, Info, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -33,23 +33,16 @@ import { resolvePropertyParticipantsError } from '../lib/property-participants-e
 import { pendingParticipantRightsCard, type ParticipantRightsCard } from '../lib/participant-rights-card';
 import {
   ObjectAvatarGlyph,
+  EMAIL_ROLE_ICONS,
   PARTICIPANT_ROW_BASE_CLASS,
   ParticipantNotFound,
   PropertyAccessNotFound,
+  RIGHTS_ROW_ACTION_CLASS,
 } from './participant-fragments';
 import { stageParticipantPopup } from '../lib/participant-popups';
 import { ParticipantSuccessPopup } from './participant-success-popup';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantRightsSkeleton } from './participants-skeletons';
-
-/** Row Button нижних строк макета 2177-59620: ведущий слот-круг 44 под
- * иконку 24, подпись 16/18 Medium; высота строки 52 (44 + py 4). Общая
- * для «Действий участника в объекте» и красного отзыва — иконки обеих
- * строк стоят на одной оси. */
-const RIGHTS_ROW_ACTION_CLASS = cn(
-  'flex w-full cursor-pointer items-center rounded-button py-1 text-left text-base font-medium outline-none',
-  'transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80',
-);
 
 /** Окно «своего» изменения бейджа роли после локальной мутации (мс):
  * инвалидация onSettled приносит перечитывание с уже новым значением —
@@ -338,14 +331,6 @@ export function ParticipantRightsScreen({
   );
 }
 
-/** Иконка роли у почты D7-карточки — та же дискриминация, что в рядах
- * «Участников объекта» (D6, 3298-75434): полный доступ — открытый замок,
- * просмотр — глаз. */
-const PENDING_EMAIL_ICONS = {
-  full: FullAccessSmall,
-  eye: EyeSmall,
-} as const;
-
 /**
  * Контент «Права участника» без аккаунта (D7 #1314, макет 3298-75576):
  * карточка участника (Row Button — аватар, анонимный титул «Пользователь»,
@@ -375,7 +360,7 @@ function ParticipantRightsPending({
   readonly onRevoke: () => void;
   readonly onOpenParticipant: () => void;
 }): JSX.Element {
-  const EmailIcon = PENDING_EMAIL_ICONS[card.emailIcon];
+  const EmailIcon = EMAIL_ROLE_ICONS[card.emailIcon];
 
   return (
     <div className="flex flex-col gap-6">

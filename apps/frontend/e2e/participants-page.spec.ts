@@ -446,6 +446,10 @@ test('D7 owner-only: manage-участник по deep-link видит «Уча�
   // Мария (full_access на чужой квартире) открывает D7-экран напрямую:
   // агрегат GET /participants/{id} — owner-скоуп (D5 #1304), не-собственнику
   // приватный 404; зрителя проверяет та же ветка (404 не зависит от роли).
+  // #1362 открыл участнику страницы прав по member-маршруту
+  // /properties/{id}/participants/{memberId} (контракт чтения строки
+  // #1357, спек participant-rights-member.spec.ts) — агрегатный маршрут
+  // владельческого экрана остаётся owner-only, этот лок стоит.
   await seedPendingRightsInvitation('viewer');
   try {
     await openCabinetWithSessionToken(page, seededMemberSessionToken());

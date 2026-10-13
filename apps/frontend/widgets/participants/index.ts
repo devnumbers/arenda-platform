@@ -4,6 +4,7 @@ export { ParticipantsListScreen } from './ui/participants-list-screen';
 export { ParticipantsSearchScreen } from './ui/participants-search-screen';
 export { ParticipantScreen } from './ui/participant-screen';
 export { ParticipantRightsScreen } from './ui/participant-rights-screen';
+export { ParticipantRightsMemberScreen } from './ui/participant-rights-member-screen';
 export { ParticipantInviteScreen } from './ui/participant-invite-screen';
 export { ParticipantsInviteScreen } from './ui/participants-invite-screen';
 export { PropertyParticipantsScreen } from './ui/property-participants-screen';

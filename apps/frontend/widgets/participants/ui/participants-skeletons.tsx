@@ -40,10 +40,12 @@ function LegRowSkeleton({ widths }: { readonly widths: SkeletonRowWidths }): JSX
   );
 }
 
-/** Скелетон экрана «Права участника» (#698, паритет — §7 DESIGN.md): строка
- * объекта с бейджем роли, сегмент роли (высота контейнера 52 = кнопки 48 +
- * паддинг капсулы 2×2) и оба ряда действий («Действия участника в объекте»
- * есть у зарегистрированных — обычный случай; «Отозвать» — всегда). */
+/** Скелетон владелецского экрана «Права участника» (#698, паритет — §7
+ * DESIGN.md): строка объекта с бейджем роли, сегмент роли (высота
+ * контейнера 52 = кнопки 48 + паддинг капсулы 2×2) и оба ряда действий
+ * («Действия участника в объекте» есть у зарегистрированных — обычный
+ * случай; «Отозвать» — всегда у владельца). Member-режиму (#1362) чужой:
+ * сегмента и отзыва там не бывает — свой ParticipantRightsMemberSkeleton. */
 export function ParticipantRightsSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-6">
@@ -64,6 +66,31 @@ export function ParticipantRightsSkeleton(): JSX.Element {
         <span className="flex w-full items-center rounded-button py-1">
           <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
           <Skeleton className="ml-1 h-[18px] w-48" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Скелетон «Прав участника» в member-режиме (#1362, паритет — §7
+ * DESIGN.md): read-only экран — карточка объекта с бейджем роли и одна
+ * строка действий; у pending-ряда строка заменится карточкой приглашения
+ * (загрузка→контент без сегмента и отзыва, которых здесь никогда нет). */
+export function ParticipantRightsMemberSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-6">
+      <span className="flex w-full items-center gap-3 py-3">
+        <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <Skeleton className="h-[18px] w-2/5" />
+          <Skeleton className="h-4 w-3/5" />
+          <Skeleton className="h-6 w-40 rounded-lg" />
+        </span>
+      </span>
+      <div className="flex flex-col">
+        <span className="flex w-full items-center rounded-button py-1">
+          <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
+          <Skeleton className="ml-1 h-[18px] w-56" />
         </span>
       </div>
     </div>

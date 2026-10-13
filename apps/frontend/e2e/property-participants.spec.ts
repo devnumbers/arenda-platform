@@ -67,33 +67,40 @@ test('тап по ряду — страница участника агрега�
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
 });
 
-test('manage-участник (D8): состав read-only — своя строка «(Вы)» и чужие ряды инертные; CTA выхода на месте', async ({ page }) => {
+test('manage-участник (D8): своя строка и чужие ряды ведут на read-only права #1362; CTA выхода на месте', async ({ page }) => {
   // Мария — full_access на чужой «Квартире на Ленина»: D8 (#1304) забрал у
   // неё member-management (canManageMembers — только владелец), D6 оставил
-  // чтение состава, «Историю объекта» и «Покинуть объект».
+  // чтение состава, «Историю объекта» и «Покинуть объект»; #1362 (решение
+  // владельца 12.10.2026) открыл ей страницы прав всех рядов — read-only
+  // по контракту чтения строки #1357 (детали экрана —
+  // participant-rights-member.spec.ts).
   await openCabinetWithSessionToken(page, seededMemberSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
   const header = screenHeader(page);
 
   await expect(header.getByText('Участники объекта')).toBeVisible();
 
-  // Своя строка «Имя (Вы)» (ФИО-канон D4) — статичный ряд: не
-  // role=button, без шеврона.
+  // Своя строка «Имя (Вы)» (ФИО-канон D4) — тап ведёт на member-режим
+  // прав: быстрый переход к истории своей строки.
   await expect(page.getByText('Мария (Вы)')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Мария \(Вы\)/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /Мария \(Вы\)/ }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/properties/${APARTMENT_ID}/participants/${MARIA_MEMBER_ID}$`),
+  );
+  await expect(header.getByText('Права участника')).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Управление' })).toHaveCount(0);
+  await expect(page.getByText('Отозвать доступ')).toHaveCount(0);
 
-  // Тап по своей строке никуда не ведёт — экран остаётся на месте.
-  await page.getByText('Мария (Вы)').click();
+  // Чужой ряд — туда же: member-маршрут чтения строки (агрегат
+  // /participants/{id} ответил бы не-владельцу приватным 404, #693).
+  await page.goBack();
   await expect(header.getByText('Участники объекта')).toBeVisible();
-  await expect(page.getByText('Участник не найден')).toHaveCount(0);
-  await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT_ID}/participants$`));
-
-  // D8: чужие ряды тоже статичные — страницы участника вне скоупа
-  // не-владельца (404-политика #693).
-  await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
+  await expect(header.getByText('Права участника')).toBeVisible();
 
   // D6: у приглашённого вместо приглашения — красный CTA выхода (кебаб
   // «История объекта» покрыт зрительским тестом).
+  await page.goBack();
   await expect(page.getByRole('button', { name: 'Покинуть объект' })).toBeVisible();
 });
 
@@ -357,8 +364,9 @@ test('зритель: состав read-only, кебаб только с «Ис�
   const header = screenHeader(page);
 
   await expect(header.getByText('Участники объекта')).toBeVisible();
-  // Ряды без manage-прав статичные (страница участника вне скоупа
-  // зрителя) — проверяем текстами, не role=button.
+  // Ряды читаются зрителю целиком (решение #758); тап любого ряда ведёт
+  // на member-режим прав #1362 (навигация покрыта там же и в
+  // participant-rights-member.spec.ts), здесь — состав и хром зрителя.
   await expect(page.getByText('Иван Иванов')).toBeVisible();
   // Зритель видит себя «Имя (Вы)» (ФИО-канон D4); manage-контролов нет.
   await expect(page.getByText('Сергей (Вы)')).toBeVisible();
