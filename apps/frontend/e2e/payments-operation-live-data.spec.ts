@@ -2,6 +2,7 @@ import {
   execE2eSql,
   expect,
   openCabinetWithSeededSession,
+  passOperationDateStep,
   SEEDED_APARTMENT_PROPERTY_ID,
   stickySaveButton,
   test,
@@ -163,6 +164,9 @@ test.describe('данные операции на странице операц�
     await expect(page.getByText('Добавить операцию')).toBeVisible();
     await page.getByRole('textbox', { name: 'Сумма' }).fill('1200');
     await page.getByRole('button', { name: 'Продолжить' }).click();
+    // Шаг даты (#1394): «Продолжить» пикера коммитит предвыбранное
+    // «сегодня владельца».
+    await passOperationDateStep(page);
     await expect(page.getByRole('heading', { name: 'Что хотите добавить?' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Название операции' }).fill(title);
     await page.getByRole('button', { name: 'Продолжить' }).click();

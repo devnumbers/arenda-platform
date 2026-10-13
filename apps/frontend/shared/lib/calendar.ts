@@ -191,6 +191,36 @@ export function clampMonthToMax(max: CalendarMonthRef, year: number, month0: num
   return year === max.year ? Math.min(month0, max.month0) : month0;
 }
 
+/** Платформенный пояс по умолчанию — тот же, что ставит бекенд пустой
+ * колонке users.timezone (ADR 0048, миграция 000088). */
+export const DEFAULT_TIMEZONE = 'Europe/Moscow';
+
+/** «Сегодня» календаря в заданном IANA-поясе (ADR 0048): клиентский дефолт
+ * шага даты визарда операции (#1394). Авторитет «сегодня» — сервер
+ * (мутация считает по поясу владельца объекта и отклоняет будущее 400-й) —
+ * здесь только предвыбор и закрытие будущих дней. Без пояса — платформенный
+ * дефолт; невалидный пояс не роняет рендер — локальная дата устройства
+ * (dateToIsoLocal), расхождение ограничено краевыми часами суток. */
+export function isoTodayInTimezone(
+  timezone: string | null | undefined,
+  now: Date = new Date(),
+): IsoDate {
+  const zone = timezone ?? DEFAULT_TIMEZONE;
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const value = (type: string): string =>
+      parts.find((part) => part.type === type)?.value ?? '';
+    return `${value('year')}-${value('month')}-${value('day')}`;
+  } catch {
+    return dateToIsoLocal(now);
+  }
+}
+
 /** Диапазон дат с включительными границами (пикер периода операций). */
 export type IsoRange = {
   readonly from: IsoDate;

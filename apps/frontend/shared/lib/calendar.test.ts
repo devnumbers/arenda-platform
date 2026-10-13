@@ -15,6 +15,7 @@ import {
   fullMonthsBetween,
   inclusiveDays,
   isoDateOf,
+  isoTodayInTimezone,
   isoDayOfMonth,
   isoMonthNumber,
   isoYear,
@@ -350,5 +351,37 @@ describe('calendar: задним числом без пола (#1393)', () => {
       year: 2020,
       month0: 2,
     });
+  });
+});
+
+describe('calendar: «сегодня» в поясе профиля (#1394)', () => {
+  it('считает календарную дату момента в заданном IANA-поясе', () => {
+    // UTC 12:00 13-го — на Камчатке (UTC+12) уже 00:00 14-го.
+    expect(isoTodayInTimezone('UTC', new Date('2026-10-13T12:00:00Z'))).toBe('2026-10-13');
+    expect(
+      isoTodayInTimezone('Asia/Kamchatka', new Date('2026-10-13T12:00:00Z')),
+    ).toBe('2026-10-14');
+    // UTC 06:00 13-го — в Лос-Анджелесе (UTC-7) ещё 23:00 12-го.
+    expect(
+      isoTodayInTimezone('America/Los_Angeles', new Date('2026-10-13T06:00:00Z')),
+    ).toBe('2026-10-12');
+    // Москва (UTC+3): граница суток в 21:00 UTC.
+    expect(isoTodayInTimezone('Europe/Moscow', new Date('2026-10-13T20:59:00Z'))).toBe(
+      '2026-10-13',
+    );
+    expect(isoTodayInTimezone('Europe/Moscow', new Date('2026-10-13T21:00:00Z'))).toBe(
+      '2026-10-14',
+    );
+  });
+
+  it('без пояса — платформенный дефолт Europe/Moscow (ADR 0048)', () => {
+    const now = new Date('2026-10-13T21:00:00Z');
+    expect(isoTodayInTimezone(null, now)).toBe('2026-10-14');
+    expect(isoTodayInTimezone(undefined, now)).toBe(isoTodayInTimezone('Europe/Moscow', now));
+  });
+
+  it('невалидный пояс не роняет рендер — локальная дата устройства', () => {
+    const now = new Date('2026-10-13T12:00:00Z');
+    expect(isoTodayInTimezone('Not/AZone', now)).toBe(dateToIsoLocal(now));
   });
 });

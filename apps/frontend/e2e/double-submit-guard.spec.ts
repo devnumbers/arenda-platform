@@ -3,6 +3,7 @@ import {
   execE2eSql,
   expect,
   openCabinetWithSeededSession,
+  passOperationDateStep,
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
 } from './fixtures';
@@ -146,6 +147,9 @@ test.describe('гард двойного сабмита (#1120)', () => {
       await page.getByRole('textbox', { name: 'Сумма' }).fill('600');
       await page.getByRole('radio', { name: 'Расход' }).click();
       await page.getByRole('button', { name: 'Продолжить' }).click();
+      // Шаг даты (#1394): «Продолжить» пикера коммитит предвыбранное
+      // «сегодня владельца».
+      await passOperationDateStep(page);
       await page.getByRole('textbox').fill(title);
       await page.getByRole('button', { name: 'Продолжить' }).click();
       const rows = page.locator('div.flex.flex-col.pt-6').getByRole('button');

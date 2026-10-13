@@ -2,6 +2,7 @@ import {
   captureScreen,
   expect,
   openCabinetWithSeededSession,
+  passOperationDateStep,
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
 } from './fixtures';
@@ -16,9 +17,11 @@ import {
 // клиентский useState (черновика у операции нет, карта #1052 Q2=В) —
 // спека данных не создаёт. Шаг 3 «Категория» остаётся на прежнем
 // заголовке H3 + подзаголовок: H1 #1152 владелец оставил только платежу
-// (решение 06.10 — откат операции).
+// (решение 06.10 — откат операции). С 13.10 между суммой и названием —
+// шаг даты: экран целиком CalendarDatePicker (#1394), проход через него
+// — «Продолжить» пикера с предвыбранным «сегодня владельца».
 
-/** Глобальный вход в визард (шаг «Выбрать объект» — четвёртый, шаг 1
+/** Глобальный вход в визард (шаг «Выбрать объект» — пятый, шаг 1
  * суммы доступен сразу). */
 const WIZARD_URL = '/operations/new';
 
@@ -66,14 +69,20 @@ test.describe('визард операции — шаг суммы', () => {
     expect(widths.column).toBeGreaterThan(500);
     expect(Math.abs(widths.column - 48 - widths.segment)).toBeLessThan(1);
 
-    // Сумма и направление едут в шаг 2 и возвращаются «Назад» (состояние
-    // шагов живёт в useState, пока смонтирован поток).
+    // Сумма и направление едут в шаг 2 (экран даты) и возвращаются
+    // «Назад» пикера (состояние шагов живёт в useState, пока смонтирован
+    // поток); «Продолжить» пикера коммитит предвыбранное «сегодня».
     await page.getByRole('radio', { name: 'Доход' }).click();
     await next.click();
-    await expect(page.getByText('Операция', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Назад' }).click();
+    const calendar = page.getByRole('dialog', { name: 'Выберите дату' });
+    await expect(calendar).toBeVisible();
+    await calendar.getByRole('button', { name: 'Назад' }).click();
     await expect(amount).toHaveValue(/2\s?500/);
     await expect(page.getByRole('radio', { name: 'Доход' })).toBeChecked();
+
+    await next.click();
+    await passOperationDateStep(page);
+    await expect(page.getByText('Операция', { exact: true })).toBeVisible();
 
     await captureScreen(page, testInfo, 'operation-wizard-step1-amount-desktop');
   });
@@ -126,10 +135,11 @@ test.describe('визард операции — шаг категории', () 
     await page.goto(WIZARD_URL);
     await expect(page.getByText('Добавить операцию')).toBeVisible();
 
-    // Шаги 1–2: сумма (гейт кнопки) и название (необязательно — «Продолжить»
-    // доступно сразу).
+    // Шаги 1–3: сумма (гейт кнопки), дата («Продолжить» пикера) и
+    // название (необязательно — «Продолжить» доступно сразу).
     await page.getByRole('textbox', { name: 'Сумма' }).fill('2500');
     await page.getByRole('button', { name: 'Продолжить' }).click();
+    await passOperationDateStep(page);
     await expect(page.getByRole('heading', { name: 'Что хотите добавить?' })).toBeVisible();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
@@ -175,9 +185,10 @@ test.describe('визард операции — шаг категории', () 
     await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/operations/new`);
     await expect(page.getByText('Добавить операцию')).toBeVisible();
 
-    // Шаги 1–2 до категории.
+    // Шаги 1–3 до категории: сумма, дата (проход пикером), название.
     await page.getByRole('textbox', { name: 'Сумма' }).fill('1200');
     await page.getByRole('button', { name: 'Продолжить' }).click();
+    await passOperationDateStep(page);
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
     // Компонент шага общий — заголовок одинаков у обоих входов.

@@ -221,6 +221,16 @@ export function monthlyDayOnOrAfter(day: number, fromIso: string): string {
   return first.toISOString().slice(0, 10);
 }
 
+/** Проход шага «Выберите дату» визарда операции (#1394): «Продолжить»
+ * пикера коммитит предвыбранное «сегодня владельца» — шаг обязателен в
+ * обоих входах, спеки потоков операции идут через него одним движением. */
+export async function passOperationDateStep(page: Page): Promise<void> {
+  await page
+    .getByRole('dialog', { name: 'Выберите дату' })
+    .getByRole('button', { name: 'Продолжить' })
+    .click();
+}
+
 /** Типовые записи дневной серии: сиды history-спек собраны из трёх
  * канонных строк, спека передаёт свой префикс id, минуты от 9:00 и
  * вариации (propertyId, segments со ссылками, другой текст). */
