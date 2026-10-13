@@ -38,14 +38,14 @@ import {
  * Space/Escape — семантика стрелок иная; в режиме loop стрелки заворачивают
  * по кругу (решение владельца #810), без loop — упираются в края.
  *
- * Режим loop (#810: часы, минуты, месяцы — «как у Apple»): логический цикл
- * items отрисован 31 раз (wheel-loop.ts), у края лента молча перепрыгивает
- * на полспана — прыжок невидим (содержимое периодично) и не прерывает
- * инерцию: запас до зоны прыжка недостижим одним жестом. Скринридерам
- * показан только средний (якорный) цикл: role=option и стабильные id там,
- * повторы aria-hidden; aria-activedescendant всегда указывает на якорную
- * копию выбранного значения. При min/max цикл составляют только разрешённые
- * значения (MonthYearPicker режет месяц-колесо) — закольцовка не открывает
+ * Режим loop (#810: часы, минуты — «как у Apple»): логический цикл
+ * items отрисован WHEEL_LOOP_CYCLES раз (wheel-loop.ts), у края лента молча
+ * перепрыгивает на полспана — прыжок невидим (содержимое периодично) и не
+ * прерывает инерцию: запас до зоны прыжка недостижим одним жестом.
+ * Скринридерам показан только средний (якорный) цикл: role=option и
+ * стабильные id там, повторы aria-hidden; aria-activedescendant всегда
+ * указывает на якорную копию выбранного значения. При min/max цикл
+ * составляют только разрешённые значения — закольцовка не открывает
  * запрещённые. Годы остаются линейными: ось времени не замыкается. */
 
 /** Высота ряда (px); окно колеса — 5 рядов. */
@@ -287,6 +287,13 @@ export function WheelPicker({
           className="pointer-events-none absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 bg-surface-muted"
         />
       )}
+      {/* data-vaul-no-drag: жест, начавшийся внутри колеса, никогда не
+          отбирается vaul-дравером шита. Раньше у верхнего края ленты
+          (scrollTop 0 — январь конечных месяцев, min-год) vaul решал
+          «скроллер на верхнем крае → крутят шит» и тащил шит к закрытию
+          тем же жестом; теперь колесо владеет своим жестом целиком — шит
+          закрывается ручкой, свайпом вне колёс, кнопками и тапом по
+          оверлею (решение владельца 2026-10-13). */}
       <ul
         ref={listRef}
         role="listbox"
@@ -296,7 +303,8 @@ export function WheelPicker({
         onScroll={handleScroll}
         onKeyDown={handleKeyDown}
         onClick={handleClick}
-        className="relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
+        data-vaul-no-drag=""
+        className="wheel-cascade relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
       >
         {Array.from({ length: rowCount }, (_, row) => {
           const logical = loop ? modRows(row, items.length) : row;

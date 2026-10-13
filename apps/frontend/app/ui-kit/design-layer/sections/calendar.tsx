@@ -76,11 +76,11 @@ export function MonthYearPickerSection(): JSX.Element {
 
     return (
         <div className={styles.group}>
-            <h3 className={styles.groupTitle}>MonthYearPicker · кольцо месяцев при min/max</h3>
+            <h3 className={styles.groupTitle}>MonthYearPicker · конечные месяцы при min/max</h3>
             <p className={styles.groupTitle}>
-                Колесо месяцев замкнуто (#810), но при границах кольцо идёт по дуге
-                разрешённых: здесь март–сентябрь 2026 — сентябрь докручивается в март,
-                закрытые месяцы не открываются. Годы линейны: за 2026 ничего нет.
+                Месяцы — конечная лента (отмена кольца #810 для месяцев, решение
+                владельца 2026-10-13): здесь март–сентябрь 2026, за границы не
+                докрутить. Годы линейны: за 2026 ничего нет.
             </p>
             <div className={styles.column}>
                 <ChipButton trailingIcon={<ArrowDown />} onClick={() => setBoundedWheelOpen(true)}>

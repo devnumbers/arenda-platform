@@ -15,22 +15,23 @@ import {
   WheelPickerSheet,
   type WheelPickerSheetAction,
 } from './wheel-picker-sheet';
+import { initialYearsWindow } from './years-window';
 
 /** Шит выбора месяца и года двумя колёсами (Figma 848:8720, редизайн
  * 2026-09-04 на общий WheelPickerSheet по Figma 1539-82659). Колёса меняют
  * черновик, кнопки коммитят/закрывают разом: экран перелистывается на блок
  * с выбранным месяцем только по «Выбрать», «Отменить» закрывает без
  * изменений (пара кнопок — по макету 1539-82659, решение владельца).
- * Колесо месяцев замкнуто в кольцо (#810, решение владельца 2026-09-23
- * «как у Apple»): декабрь докручивается в январь. При min/max цикл
- * составляют только разрешённые месяцы — в граничном году кольцо идёт по
- * дуге разрешённых и запрещённые не открывает (решение #810, DESIGN.md §5).
- * Границы независимы: min закрывает прошлое (пикер даты задач), max —
- * будущее (пикер периода операций, решение владельца 2026-09-04); без
- * границ — годы ±3 вокруг выбранного. Годы остаются линейными — ось
- * времени не замыкается; у края без границы колесо годов
- * удлиняется на 10 лет (onNearEnd вперёд, onNearStart назад). Черновик
- * живёт, пока шит смонтирован: при open=false шит не рендерится. */
+ * Месяцы — конечная лента январь…декабрь: кольцо #810 («как у Apple»)
+ * отменено для месяцев решением владельца 2026-10-13 (для часов и минут
+ * времени задачи кольцо остаётся); края клампятся, в граничном году
+ * месяцы за min/max отрезаны. Границы независимы: min закрывает прошлое
+ * (пикер даты задач), max — будущее (пикер периода операций, решение
+ * владельца 2026-09-04). Годы линейны — ось времени не замыкается; без
+ * границ лента идёт от текущего года вперёд без конца
+ * (years-window.ts, решение владельца 2026-10-13), с min — от min.year,
+ * с max — назад без предела через onNearStart (история операций).
+ * Черновик живёт, пока шит смонтирован: при open=false шит не рендерится. */
 export type MonthYearPickerProps = {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
@@ -95,12 +96,16 @@ function MonthYearSheet({
 }): JSX.Element {
   const [draftMonth, setDraftMonth] = useState(month);
   const [draftYear, setDraftYear] = useState(year);
-  // Лента годов тянется за края без границы: у края с min — от min.year
-  // с удлинением вперёд (onNearEnd), у края с max — до max.year
-  // с удлинением назад (onNearStart); без границ — ±3 вокруг выбранного.
+  // Лента годов линейна и тянется за края без границы (решение владельца
+  // 2026-10-13): с min — от min.year с удлинением вперёд (onNearEnd);
+  // с max — от окна вокруг выбранного назад без предела (onNearStart,
+  // история операций); без границ — от текущего года вперёд
+  // (years-window.ts), назад лента не растёт.
+  const currentYear = new Date().getFullYear();
+  const yearsWindow = initialYearsWindow(year, currentYear);
   const [yearsStart, setYearsStart] = useState(() => year - 3);
-  const [yearsEnd, setYearsEnd] = useState(() => year + 3);
-  const startYear = min?.year ?? yearsStart;
+  const [yearsEnd, setYearsEnd] = useState(yearsWindow.end);
+  const startYear = min?.year ?? (max !== undefined ? yearsStart : yearsWindow.start);
   const endYear = max?.year ?? yearsEnd;
   const yearItems: ReadonlyArray<WheelPickerItem> = Array.from(
     { length: Math.max(endYear - startYear + 1, 1) },
@@ -158,7 +163,6 @@ function MonthYearSheet({
           key="month"
           label="Месяц"
           strip={false}
-          loop
           items={monthItems}
           value={String(draftDisplayMonth)}
           onValueChange={(value) => setDraftMonth(Number(value))}
@@ -170,8 +174,16 @@ function MonthYearSheet({
           items={yearItems}
           value={String(draftYear)}
           onValueChange={handleYearChange}
-          onNearEnd={() => setYearsEnd((end) => end + YEARS_EXTENSION)}
-          onNearStart={() => setYearsStart((start) => start - YEARS_EXTENSION)}
+          onNearEnd={
+            max === undefined
+              ? () => setYearsEnd((end) => end + YEARS_EXTENSION)
+              : undefined
+          }
+          onNearStart={
+            min === undefined && max !== undefined
+              ? () => setYearsStart((start) => start - YEARS_EXTENSION)
+              : undefined
+          }
         />,
       ]}
     />

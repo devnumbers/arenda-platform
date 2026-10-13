@@ -22,9 +22,9 @@ export function WheelPickerSheetSection(): JSX.Element {
         <div className={styles.group}>
             <h3 className={styles.groupTitle}>WheelPickerSheet · универсальный шит колёс</h3>
             <p className={styles.groupTitle}>
-                Любое число колёс + передаваемые кнопки (Figma 1539-82659); колёса крутятся без
-                конца — кольцо в обе стороны (#810), на мобиле — выезжающий шит (vaul), на
-                десктопе — карточка.
+                Любое число колёс + передаваемые кнопки (Figma 1539-82659); колёса
+                времени крутятся без конца — кольцо в обе стороны (#810), на мобиле —
+                выезжающий шит (vaul), на десктопе — карточка.
             </p>
             <div className={styles.column}>
                 <Button onClick={() => setWheelSheetOpen(true)}>Открыть шит колёс</Button>

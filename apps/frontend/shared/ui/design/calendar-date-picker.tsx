@@ -41,6 +41,7 @@ import {
   settleIsoRange,
 } from '@/shared/lib/calendar';
 import { formatRangeBound } from '@/shared/lib/date-format';
+import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '@/shared/ui/design/month-grid';
 
 /** Полноэкранный пикер даты (общий компонент дизайн-слоя, вырос из пикера
@@ -161,6 +162,9 @@ export function CalendarDatePicker({
   onClose,
   onConfirm,
 }: CalendarDatePickerProps): JSX.Element {
+  // Поверхность fixed без модальной обёртки: страница под пикером
+  // скроллиться не должна (жест у края ленты раньше уезжал в неё).
+  useBodyScrollLock();
   // Лента от самого раннего из сегодня и значения вперёд без конца;
   // якорь открытия — значение, а без него «сегодня», прижатое в границы
   // [minDate, maxDate] (решение #802 23.09: продление с далёким minDate
@@ -299,7 +303,7 @@ export function CalendarDatePicker({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
@@ -489,6 +493,9 @@ export function CalendarRangePicker({
   onConfirm,
   onReset,
 }: CalendarRangePickerProps): JSX.Element {
+  // Поверхность fixed без модальной обёртки: страница под пикером
+  // скроллиться не должна (жест у нижнего края ленты раньше уезжал в неё).
+  useBodyScrollLock();
   // Черновик открывается по применённому диапазону; без него (#670) —
   // пустой: ничего не выбрано, первый тап задаёт границу.
   const [draft, setDraft] = useState<IsoRangeDraft | null>(() =>
@@ -639,7 +646,7 @@ export function CalendarRangePicker({
         </div>
       </div>
 
-      <div ref={scrollRef} onScroll={handleScroll} className="relative min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} onScroll={handleScroll} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
             const future = calendarMonthIndex({ year, month0 }) > todayIdx;
