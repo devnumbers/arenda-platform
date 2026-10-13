@@ -214,17 +214,29 @@ export function OperationCreateWizardFlow({
         )}
         {step === 3 && (
           <>
-            {/* Открытый поиск меняет контент (канон платежного визарда):
-                пустой запрос — иллюстрация-подсказка вместо списка. */}
-            {categorySearchOpen && categoryQuery === '' ? (
-              <CategorySearchHint text="Начните искать категорию" />
-            ) : (
-              <>
-                <WizardHeading title="Категория операции" subtitle="Выберите категорию" />
+            {/* Открытый поиск меняет контент (канон платежного визарда
+                #1152, решение владельца 13.10): заголовок — только при
+                закрытом поиске; с открытым — пустой запрос даёт
+                иллюстрацию-подсказку, запрос — отфильтрованный список без
+                заголовка. */}
+            {categorySearchOpen ? (
+              categoryQuery === '' ? (
+                <CategorySearchHint text="Начните искать категорию" />
+              ) : (
                 <CategoryStep
                   selectedSlug={draft.categorySlug}
                   onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}
-                  query={categorySearchOpen ? categoryQuery : ''}
+                  query={categoryQuery}
+                />
+              )
+            ) : (
+              <>
+                {/* H1 как на шаге категории платежа #1152 (решение
+                    владельца 13.10) — без подзаголовка. */}
+                <WizardHeading title="Выберите категорию операции" variant="h1" />
+                <CategoryStep
+                  selectedSlug={draft.categorySlug}
+                  onSelect={(slug) => setDraft((prev) => ({ ...prev, categorySlug: slug }))}
                 />
               </>
             )}

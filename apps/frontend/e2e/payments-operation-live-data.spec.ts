@@ -166,7 +166,9 @@ test.describe('данные операции на странице операц�
     await expect(page.getByRole('heading', { name: 'Что хотите добавить?' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Название операции' }).fill(title);
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await expect(page.getByRole('heading', { name: 'Категория операции' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Выберите категорию операции' }),
+    ).toBeVisible();
     await page.getByRole('button', { name: 'Интернет', exact: true }).click();
     await page.getByRole('button', { name: 'Добавить операцию' }).click();
     await expect(page.getByRole('heading', { name: title })).toBeVisible();
