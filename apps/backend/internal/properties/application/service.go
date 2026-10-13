@@ -70,6 +70,7 @@ type PropertyService struct {
 	rentalOccupancy    RentalOccupancyReader
 	overdueOperations  OverdueOperationsReader
 	rentalDeletion     RentalDeletionGuard
+	archivePauses      ArchivePausesBridge
 	ownerCalendar      OwnerCalendar
 	logger             *slog.Logger
 	// Realtime is the late-bound carrier the mutations' frames dispatch
@@ -207,6 +208,15 @@ func (s *PropertyService) SetRentalDeletionGuard(guard RentalDeletionGuard) {
 // report no overdue flags (ticket #585).
 func (s *PropertyService) SetOverdueOperationsReader(reader OverdueOperationsReader) {
 	s.overdueOperations = reader
+}
+
+// SetArchivePausesBridge injects the payments-context bridge of the
+// archive round-trip's system pauses (тикет #1342): the archive pauses the
+// object's live rules, the restore closes only the auto_archive ones.
+// Optional: when not set, the lifecycle changes skip the pauses (a test
+// wiring).
+func (s *PropertyService) SetArchivePausesBridge(bridge ArchivePausesBridge) {
+	s.archivePauses = bridge
 }
 
 // SetOwnerCalendar injects the calendar adapter that resolves the reading
@@ -1128,6 +1138,14 @@ func (s *PropertyService) ArchiveProperty(ctx context.Context, actor, id uuid.UU
 			return err
 		}
 
+		// The archive pauses the object's live payment rules (тикет #1342):
+		// the system auto_archive pause in the same transaction — the
+		// reactions to the object's lifecycle, the rent-managed gate does
+		// not apply (ADR 0053 §3); the payment journals mark the origin.
+		if err := s.pausePaymentsOnArchive(ctx, stores.tx, actor, id, actor, role); err != nil {
+			return err
+		}
+
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
 			ActorID:    &actor,
 			ActorRole:  auditdomain.ActorRoleOwner,
@@ -1406,6 +1424,34 @@ func (s *PropertyService) archivePropertyInTx(
 	return archived, nil
 }
 
+// pausePaymentsOnArchive drives the payments bridge's pause leg inside the
+// archive transaction (тикет #1342); a nil bridge (a test wiring) skips.
+func (s *PropertyService) pausePaymentsOnArchive(
+	ctx context.Context, tx transaction.Tx, scope, propertyID, actor uuid.UUID, role sharedpolicy.Role,
+) error {
+	if s.archivePauses == nil {
+		return nil
+	}
+	if err := s.archivePauses.PauseAllForArchive(ctx, tx, scope, propertyID, actor, role); err != nil {
+		return fmt.Errorf("pause payments on archive: %w", err)
+	}
+	return nil
+}
+
+// resumePaymentsOnRestore drives the bridge's reverse leg inside the
+// restore transaction (тикет #1342); a nil bridge (a test wiring) skips.
+func (s *PropertyService) resumePaymentsOnRestore(
+	ctx context.Context, tx transaction.Tx, scope, propertyID, actor uuid.UUID, role sharedpolicy.Role,
+) error {
+	if s.archivePauses == nil {
+		return nil
+	}
+	if err := s.archivePauses.ResumeArchivePauses(ctx, tx, scope, propertyID, actor, role); err != nil {
+		return fmt.Errorf("resume payments on restore: %w", err)
+	}
+	return nil
+}
+
 // ActivePropertyExists reports whether the property belongs to the scope
 // owner and still occupies a tariff slot: the statuses that count toward the
 // tariff limit are active and maintenance — the same set the excess-archive
@@ -1562,53 +1608,78 @@ func (s *PropertyService) RestoreGraceArchivedProperties(
 			// The limit is spent: the tail stays archived — the debt remainder.
 			return ids[i:], nil
 		}
-		property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, scope)
-		if errors.Is(err, ErrNotFound) {
-			// Deleted since the snapshot: nothing to restore.
-			continue
-		}
+		restored, err := s.restoreGraceProperty(ctx, tx, txRepo, txAudit, scope, id)
 		if err != nil {
-			return nil, fmt.Errorf("get property %s: %w", id, err)
+			return nil, err
 		}
-		if property.Status != domain.PropertyStatusArchived {
-			// Active again (restored manually since the snapshot): settled.
-			continue
-		}
-		if err := txRepo.Unarchive(ctx, id, scope); err != nil {
-			return nil, fmt.Errorf("unarchive property %s: %w", id, err)
-		}
-		count++
-		if err := txAudit.Record(ctx, auditdomain.Entry{
-			ActorID:    &scope,
-			ActorRole:  auditdomain.ActorRoleOwner,
-			Action:     auditdomain.ActionPropertyUnarchived,
-			EntityType: auditdomain.EntityProperty,
-			EntityID:   &id,
-			Context:    map[string]any{"trigger": "grace_restore"},
-		}); err != nil {
-			return nil, fmt.Errorf("record audit: %w", err)
-		}
-		// Same as a manual unarchive: the object re-enters every recipient's
-		// tariff pool, so suspend any recipient already at their limit. The
-		// suspended legs are deliberately not published: the restore runs on
-		// the billing phase of the background worker, outside the v1
-		// realtime boundary (ADR 0062 §3, #716) — the owner learns the
-		// participants state through the next reread of the screen.
-		if s.slots != nil {
-			if _, err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
-				return nil, fmt.Errorf("enforce recipient slot on grace restore: %w", err)
-			}
-			// The owner's own pool grew too — the restored object re-entered it
-			// (D13, #1297): the full pool is re-enforced (the excess shared
-			// memberships suspended, the restored own objects stay). The legs
-			// are dropped for the same reason as above: a background billing
-			// phase publishes nothing.
-			if _, err := s.slots.EnforceRecipientPoolGrowth(ctx, tx, scope, "grace_restore"); err != nil {
-				return nil, fmt.Errorf("enforce recipient pool growth on grace restore: %w", err)
-			}
+		if restored {
+			count++
 		}
 	}
 	return nil, nil
+}
+
+// restoreGraceProperty unarchives one snapshotted property inside the
+// billing transaction: the row lock, the gone/already-active skips, the
+// payments resume, the audit entry and the recipient-slot enforcement
+// (ADR 0055). It reports whether the property was actually restored — a
+// false with a nil error is the gone-or-settled skip.
+func (s *PropertyService) restoreGraceProperty(
+	ctx context.Context, tx transaction.Tx, txRepo PropertyRepository, txAudit auditapp.Recorder,
+	scope, id uuid.UUID,
+) (bool, error) {
+	property, err := txRepo.GetByIDAndOwnerForUpdate(ctx, id, scope)
+	if errors.Is(err, ErrNotFound) {
+		// Deleted since the snapshot: nothing to restore.
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("get property %s: %w", id, err)
+	}
+	if property.Status != domain.PropertyStatusArchived {
+		// Active again (restored manually since the snapshot): settled.
+		return false, nil
+	}
+	if err := txRepo.Unarchive(ctx, id, scope); err != nil {
+		return false, fmt.Errorf("unarchive property %s: %w", id, err)
+	}
+	// The grace restore is the manual unarchive's mirror (ADR 0055): the
+	// return closes only the system auto_archive pauses (тикет #1342) —
+	// a property restored with its own pauses left open would strand
+	// them with no reason while the object is active.
+	if err := s.resumePaymentsOnRestore(ctx, tx, scope, id, scope, sharedpolicy.RoleOwner); err != nil {
+		return false, fmt.Errorf("resume payments on grace restore %s: %w", id, err)
+	}
+	if err := txAudit.Record(ctx, auditdomain.Entry{
+		ActorID:    &scope,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionPropertyUnarchived,
+		EntityType: auditdomain.EntityProperty,
+		EntityID:   &id,
+		Context:    map[string]any{"trigger": "grace_restore"},
+	}); err != nil {
+		return false, fmt.Errorf("record audit: %w", err)
+	}
+	// Same as a manual unarchive: the object re-enters every recipient's
+	// tariff pool, so suspend any recipient already at their limit. The
+	// suspended legs are deliberately not published: the restore runs on
+	// the billing phase of the background worker, outside the v1
+	// realtime boundary (ADR 0062 §3, #716) — the owner learns the
+	// participants state through the next reread of the screen.
+	if s.slots != nil {
+		if _, err := s.slots.EnforceOnUnarchiveForProperty(ctx, tx, id); err != nil {
+			return false, fmt.Errorf("enforce recipient slot on grace restore: %w", err)
+		}
+		// The owner's own pool grew too — the restored object re-entered it
+		// (D13, #1297): the full pool is re-enforced (the excess shared
+		// memberships suspended, the restored own objects stay). The legs
+		// are dropped for the same reason as above: a background billing
+		// phase publishes nothing.
+		if _, err := s.slots.EnforceRecipientPoolGrowth(ctx, tx, scope, "grace_restore"); err != nil {
+			return false, fmt.Errorf("enforce recipient pool growth on grace restore: %w", err)
+		}
+	}
+	return true, nil
 }
 
 func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.UUID) (domain.Property, error) {
@@ -1632,6 +1703,12 @@ func (s *PropertyService) UnarchiveProperty(ctx context.Context, actor, id uuid.
 
 		if err := stores.repo.Unarchive(ctx, id, actor); err != nil {
 			return fmt.Errorf("unarchive property: %w", err)
+		}
+
+		// The return from the archive closes ONLY the system auto_archive
+		// pauses (тикет #1342): the owner's manual pauses stay open.
+		if err := s.resumePaymentsOnRestore(ctx, stores.tx, actor, id, actor, role); err != nil {
+			return err
 		}
 
 		var err error

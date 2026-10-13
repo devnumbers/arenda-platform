@@ -68,12 +68,16 @@ func (noopPaymentStore) MarkCompleted(context.Context, uuid.UUID, uuid.UUID) err
 
 func (noopPaymentStore) Delete(context.Context, uuid.UUID, uuid.UUID) error { panic("unused") }
 
-func (noopPaymentStore) InsertPause(context.Context, uuid.UUID, time.Time) error {
+func (noopPaymentStore) InsertPause(context.Context, uuid.UUID, time.Time, domain.PauseOrigin) error {
 	panic("unused")
 }
 
 func (noopPaymentStore) CloseActivePause(context.Context, uuid.UUID, time.Time) error {
 	panic("unused")
+}
+
+func (noopPaymentStore) CloseAutoArchivePause(context.Context, uuid.UUID, time.Time) error {
+	return nil
 }
 
 func (noopPaymentStore) DeletePlannedFrom(context.Context, uuid.UUID, time.Time) error {

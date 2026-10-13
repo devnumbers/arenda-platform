@@ -1201,6 +1201,65 @@ func TestListPaymentChanges_ErrorMapping(t *testing.T) {
 	}
 }
 
+// TestListPaymentChanges_OriginMark pins the origin's wire shape (тикет
+// #1342): the archive bridge's system row travels with "auto_archive", the
+// manual row with null.
+func TestListPaymentChanges_OriginMark(t *testing.T) {
+	t.Parallel()
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+	actorID := uuid.Must(uuid.NewV7())
+	systemID := uuid.Must(uuid.NewV7())
+	manualID := uuid.Must(uuid.NewV7())
+	at := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+
+	f := &fakePaymentManager{}
+	f.paymentChanges = func(
+		_ context.Context, _, _, _ uuid.UUID, _ application.ChangesQuery,
+	) (application.ChangeLogPage, error) {
+		return application.ChangeLogPage{
+			Items: []domain.ChangeEntry{
+				{
+					ID: systemID, ActorID: actorID, Action: domain.ChangePaused,
+					Origin: domain.PauseOriginAutoArchive, CreatedAt: at,
+				},
+				{
+					ID: manualID, ActorID: actorID, Action: domain.ChangePaused,
+					CreatedAt: at,
+				},
+			},
+		}, nil
+	}
+
+	w := httptest.NewRecorder()
+	NewPaymentHandlers(f, nil).ListPaymentChanges(w, httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), actorID), http.MethodGet, "/", nil,
+	), propertyID, paymentID, openapi.ListPaymentChangesParams{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s, want 200", w.Code, w.Body)
+	}
+	var body struct {
+		Items []struct {
+			ID     string  `json:"id"`
+			Action string  `json:"action"`
+			Origin *string `json:"origin"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 2 {
+		t.Fatalf("items = %d, want 2", len(body.Items))
+	}
+	if body.Items[0].ID != systemID.String() || body.Items[0].Origin == nil ||
+		*body.Items[0].Origin != "auto_archive" {
+		t.Errorf("system row = %+v, want origin auto_archive", body.Items[0])
+	}
+	if body.Items[1].ID != manualID.String() || body.Items[1].Origin != nil {
+		t.Errorf("manual row = %+v, want origin null", body.Items[1])
+	}
+}
+
 // changesFake is the one-page fixture fake: the seeded updated entry with an
 // amount and an end-date diff, both cursors set.
 func changesFake(

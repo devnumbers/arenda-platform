@@ -49,8 +49,15 @@ type Querier interface {
 	// of nothing clears the whole visible personal order).
 	ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error)
 	// Resume: close the open interval with today's date (the resume day is
-	// already outside the pause, [from, to)).
+	// already outside the pause, [from, to)). The owner's resume closes any
+	// open pause — manual or system: while the property is archived the
+	// conveyor refuses the mutation, so an open auto_archive pause here means
+	// the property is active again and the bridge has already closed its own.
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
+	// The archive bridge's reverse leg (тикет #1342): the property returned
+	// from the archive — close only the system auto_archive pause; the owner's
+	// manual pauses stay open. Same [from, to) semantics as the manual resume.
+	CloseAutoArchivePaymentPause(ctx context.Context, arg CloseAutoArchivePaymentPauseParams) (int64, error)
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	// Завершение (ревизия ADR 0053 #1161): дата завершения, возврат залога и
 	// Архив условий удалённого Платежа — один UPDATE; ссылка payment_id
@@ -680,7 +687,8 @@ type Querier interface {
 	InsertPaymentFavorite(ctx context.Context, arg InsertPaymentFavoriteParams) error
 	// The open-ended pause [from, ∞): exactly one may exist per rule — the
 	// partial unique index (to_date IS NULL) makes a double pause a constraint
-	// violation even past the application check.
+	// violation even past the application check. Origin distinguishes the
+	// owner's manual pause from the archive bridge's system one (тикет #1342).
 	InsertPaymentPause(ctx context.Context, arg InsertPaymentPauseParams) error
 	// The id, owner and payment link are app-side (UUIDv7, the denormalized
 	// scope owner, the gateway-minted rent payment).
@@ -1342,7 +1350,8 @@ type Querier interface {
 	// (payment_id, date), status for the future-planned rebuild.
 	ListTickOperationStatuses(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickOperationStatusesRow, error)
 	// Pause intervals of the listed payments (ADR 0002 of the prototype: the
-	// holes are reproducible from the rule plus intervals).
+	// holes are reproducible from the rule plus intervals). Origin rides along
+	// (тикет #1342): the archive bridge closes only its own auto_archive pauses.
 	ListTickPausesByPaymentIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickPausesByPaymentIDsRow, error)
 	// The owner's payment rules on non-archived properties, with the user
 	// category's current name resolved for the materialization snapshot. Pauses

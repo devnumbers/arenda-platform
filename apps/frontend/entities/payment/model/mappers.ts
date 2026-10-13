@@ -241,12 +241,15 @@ function mapFieldChange(dto: PaymentFieldChangeDto): PaymentFieldChange {
 }
 
 /** Строка журнала изменений платежа (ADR 0065, экран «История платежа»
- * #1195): actor остаётся на DTO — экран актора не показывает. */
+ * #1195): actor остаётся на DTO — экран актора не показывает. origin —
+ * отметка системной строки архивного моста (#1342), ручной строке едет
+ * null. */
 export function mapPaymentChangeEntry(dto: PaymentChangeItemDto): PaymentChangeEntry {
   return {
     id: dto.id,
     action: dto.action,
     changes: dto.changes.map(mapFieldChange),
+    origin: dto.origin ?? null,
     createdAt: dto.created_at,
   };
 }

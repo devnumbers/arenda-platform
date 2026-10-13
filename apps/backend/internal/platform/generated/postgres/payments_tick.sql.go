@@ -127,7 +127,7 @@ func (q *Queries) ListTickOperationStatuses(ctx context.Context, dollar_1 []pgty
 }
 
 const listTickPausesByPaymentIDs = `-- name: ListTickPausesByPaymentIDs :many
-SELECT id, payment_id, from_date, to_date
+SELECT id, payment_id, from_date, to_date, origin
 FROM payment_pauses
 WHERE payment_id = ANY($1::uuid[])
 ORDER BY payment_id, from_date
@@ -138,10 +138,12 @@ type ListTickPausesByPaymentIDsRow struct {
 	PaymentID pgtype.UUID `json:"payment_id"`
 	FromDate  pgtype.Date `json:"from_date"`
 	ToDate    pgtype.Date `json:"to_date"`
+	Origin    string      `json:"origin"`
 }
 
 // Pause intervals of the listed payments (ADR 0002 of the prototype: the
-// holes are reproducible from the rule plus intervals).
+// holes are reproducible from the rule plus intervals). Origin rides along
+// (тикет #1342): the archive bridge closes only its own auto_archive pauses.
 func (q *Queries) ListTickPausesByPaymentIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickPausesByPaymentIDsRow, error) {
 	rows, err := q.db.Query(ctx, listTickPausesByPaymentIDs, dollar_1)
 	if err != nil {
@@ -156,6 +158,7 @@ func (q *Queries) ListTickPausesByPaymentIDs(ctx context.Context, dollar_1 []pgt
 			&i.PaymentID,
 			&i.FromDate,
 			&i.ToDate,
+			&i.Origin,
 		); err != nil {
 			return nil, err
 		}

@@ -50,7 +50,8 @@ func (s *PaymentChangeLogStore) WithTx(tx transaction.Tx) (application.PaymentCh
 // Record appends one entry; the id is minted here (UUIDv7, ADR 0019),
 // created_at is the database's. An empty diff (pause/resume) lands as the
 // literal [] — a nil slice would marshal to null and break the column's
-// «array, even empty» shape.
+// «array, even empty» shape. The origin travels only for the archive
+// bridge's system rows (тикет #1342): a manual write stores the NULL.
 func (s *PaymentChangeLogStore) Record(
 	ctx context.Context, scope, propertyID, actorID uuid.UUID, write application.ChangeLogWrite,
 ) error {
@@ -74,10 +75,21 @@ func (s *PaymentChangeLogStore) Record(
 		ActorID:    pgconv.UUIDToPgtype(actorID),
 		Action:     string(write.Action),
 		Changes:    blob,
+		Origin:     pauseOriginToPgtype(write.Origin),
 	}); err != nil {
 		return fmt.Errorf("insert payment change log %s: %w", write.PaymentID, err)
 	}
 	return nil
+}
+
+// pauseOriginToPgtype stores the archive bridge's mark; the manual action
+// (the empty origin) is the stored NULL — every pre-#1342 row reads back
+// through the same empty string.
+func pauseOriginToPgtype(origin domain.PauseOrigin) pgtype.Text {
+	if origin == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: string(origin), Valid: true}
 }
 
 // ListByPayment returns one bidirectional keyset page of the payment's log,
@@ -153,6 +165,7 @@ func changeEntryOf(row postgres.ListPaymentChangesRow) (domain.ChangeEntry, erro
 		ActorID:   pgconv.UUIDFromPgtype(row.ActorID),
 		Action:    domain.ChangeAction(row.Action),
 		Changes:   changes,
+		Origin:    domain.PauseOrigin(pgconv.TextToString(row.Origin)),
 		CreatedAt: row.CreatedAt.Time,
 	}, nil
 }

@@ -32,6 +32,7 @@ import (
 	rentalspg "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // tickBaseTime anchors the fake clock: 2026-08-25 20:00 UTC, already past
@@ -80,6 +81,9 @@ type paymentsHarness struct {
 	svc    *paymentsapp.PaymentService
 	ops    *paymentsapp.OperationService
 	global *paymentsapp.GlobalPaymentService
+	// Bridge is the archive bridge over the same factory (тикет #1342):
+	// the properties context's seam, driven in tests through inTx.
+	bridge *paymentsapp.ArchivePauseBridge
 	// Realtime is the recording carrier the services dispatch their frames
 	// through — the realtime seam's test double (карта #714, #716).
 	realtime *realtimetest.RecordingPublisher
@@ -131,6 +135,7 @@ func newPaymentsHarnessWithPolicy(t *testing.T, policy sharedpolicy.Policy) *pay
 		svc:      svc,
 		ops:      ops,
 		global:   global,
+		bridge:   paymentsapp.NewArchivePauseBridge(factory, calendar),
 		realtime: realtime,
 	}
 }
@@ -204,6 +209,14 @@ func (h *paymentsHarness) withOwner(tz string) *paymentsHarness {
 	return h
 }
 
+// inTx runs the work inside one Unit-of-Work transaction over the harness
+// pool — the archive bridge legs take the caller's transaction, the tests
+// drive them the same way the properties context does.
+func (h *paymentsHarness) inTx(work func(tx transaction.Tx) error) error {
+	logger := slog.New(slog.DiscardHandler)
+	return pgdb.NewUoW(h.pool, logger).Do(h.ctx(), work)
+}
+
 // seedActor seeds a bare user row so audit_log's actor FK holds for members
 // and strangers of the role-matrix tests.
 func (h *paymentsHarness) seedActor(id uuid.UUID) {
@@ -237,17 +250,75 @@ func (h *paymentsHarness) seedPayment(since, recurrence string, autoPay bool) uu
 	return id
 }
 
-// seedPause inserts a pause interval [from, to); nil to is the active
-// open-ended pause.
-func (h *paymentsHarness) seedPause(paymentID uuid.UUID, from string, to *string) {
+// seedNamedPayment is seedPayment with an explicit title — the journal
+// assertions match rows by the rule's title; the schedule anchors to the
+// canonical monthly-on-the-15th August fixture, auto-pay off (the bridge
+// matrix does not exercise the auto-pay leg).
+func (h *paymentsHarness) seedNamedPayment(t *testing.T, title string) uuid.UUID {
+	t.Helper()
+	id, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	if _, err := h.pool.Exec(h.ctx(),
+		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
+		                       recurrence, since, end_date, auto_pay, category_slug)
+		 VALUES ($1, $2, $3, 'expense', $4, 500000, '{"kind":"monthly","daysOfMonth":[15]}', '2026-08-01', NULL, false, 'utilities')`,
+		id, h.owner, h.propID, title,
+	); err != nil {
+		t.Fatalf("seed named payment: %v", err)
+	}
+	return id
+}
+
+// journalRow is one action journal row the archive assertions read: the
+// plain searchable text and the pause origin context mark.
+type journalRow struct {
+	searchable string
+	origin     any
+}
+
+// actionJournalRows reads the payment rows of the «История действий» for
+// the rule titled title — the archive bridge's pause/resume rows.
+func (h *paymentsHarness) actionJournalRows(t *testing.T, title string) []journalRow {
+	t.Helper()
+	rows, err := h.pool.Query(h.ctx(),
+		`SELECT searchable, context->>'pause_origin' FROM action_journal
+		 WHERE property_id = $1 AND kind = 'payment'
+		   AND action IN ('payment.paused','payment.resumed')
+		   AND searchable LIKE '%' || $2 || '%'
+		 ORDER BY created_at DESC`,
+		h.propID, title,
+	)
+	if err != nil {
+		t.Fatalf("query action journal: %v", err)
+	}
+	defer rows.Close()
+	var out []journalRow
+	for rows.Next() {
+		var r journalRow
+		if err := rows.Scan(&r.searchable, &r.origin); err != nil {
+			t.Fatalf("scan action journal: %v", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows action journal: %v", err)
+	}
+	return out
+}
+
+// seedPause inserts the active open-ended pause [from, ∞) — the only shape
+// the suite seeds.
+func (h *paymentsHarness) seedPause(paymentID uuid.UUID, from string) {
 	h.t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
 		h.t.Fatalf("new uuid: %v", err)
 	}
 	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO payment_pauses (id, payment_id, from_date, to_date) VALUES ($1, $2, $3, $4)`,
-		id, paymentID, from, to,
+		`INSERT INTO payment_pauses (id, payment_id, from_date, to_date) VALUES ($1, $2, $3, NULL)`,
+		id, paymentID, from,
 	); err != nil {
 		h.t.Fatalf("seed pause: %v", err)
 	}

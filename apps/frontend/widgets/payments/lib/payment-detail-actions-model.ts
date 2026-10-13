@@ -22,7 +22,15 @@ import type { Payment } from '@/entities/payment';
  * флага (CanBeCompleted требует ещё и наступившую endDate — решение
  * владельца «end_date в прошлом»): при досрочном исчерпании клик вернёт
  * 409, экран зеркалит флаг по слову тикета — копирайт и поведение этого
- * угла сверяются на приёмке #1341. Чистая функция над сущностью — витест
+ * угла сверяются на приёмке #1341.
+ *
+ * Архивный объект (#1342, решение владельца «UI disabled + backend 409»):
+ * мутации правила сервер отвергает (409 «Нельзя изменить архивный объект»),
+ * но пауза — состояние, а не запрет: строка несёт только «Возобновить»
+ * (рендер дизейблит её с пояснением под рядом), прочие действия не
+ * рендерятся — канон «действие, которое сервер отвергнет, не рендерится».
+ *
+ * Чистая функция над сущностью — витест
  * держит матрицу, живая приёмка — проводку.
  */
 export type PaymentDetailAction = 'pause' | 'resume' | 'edit' | 'editRental' | 'pay' | 'complete';
@@ -32,7 +40,11 @@ export function paymentDetailActions(
   paused: boolean,
   endedRule: boolean,
   settled: boolean,
+  propertyArchived: boolean,
 ): ReadonlyArray<PaymentDetailAction> {
+  if (propertyArchived) {
+    return paused && !endedRule ? ['resume'] : [];
+  }
   if (payment.isRentalManaged) {
     return payment.isRentalCompleted ? ['pay'] : ['editRental', 'pay'];
   }

@@ -142,6 +142,22 @@ type OverdueOperationsReader interface {
 	OverdueByProperty(ctx context.Context, owners PropertyOwners) (map[uuid.UUID]bool, error)
 }
 
+// ArchivePausesBridge drives the payments context's system pauses across
+// the object's archive round-trip (тикет #1342): entering the archive
+// places the open-ended auto_archive pause on every live rule of the
+// object (rent-managed included — the pause rides the object's lifecycle,
+// ADR 0053 §3, not a rental terms edit), returning from it closes ONLY the
+// auto_archive pauses — the owner's manual ones stay. Both legs run inside
+// the caller's transaction (the RentalDeletionGuard shape) so the pauses,
+// their change-log rows and their action journal rows are born and die
+// with the archive change itself. Implemented by the payments bounded
+// context; injected optionally — when nil, the lifecycle changes skip the
+// pauses (a test wiring).
+type ArchivePausesBridge interface {
+	PauseAllForArchive(ctx context.Context, tx transaction.Tx, scope, propertyID, actor uuid.UUID, role sharedpolicy.Role) error
+	ResumeArchivePauses(ctx context.Context, tx transaction.Tx, scope, propertyID, actor uuid.UUID, role sharedpolicy.Role) error
+}
+
 // RentalDeletionGuard gates the property deletion on the rentals bounded
 // context (issue #632). HasUnfinished reports the property's unfinished
 // rental — the delete is refused with ErrPropertyOccupied while the

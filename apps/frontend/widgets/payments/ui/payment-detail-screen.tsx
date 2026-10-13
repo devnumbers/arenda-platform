@@ -66,7 +66,10 @@ import {
   PaymentsGroup,
   PaymentsStateCard,
 } from './payments-sections';
-import { paymentDetailActions } from '../lib/payment-detail-actions-model';
+import {
+  paymentDetailActions,
+  type PaymentDetailAction,
+} from '../lib/payment-detail-actions-model';
 import { PaymentDetailSkeleton } from './payments-skeletons';
 
 /**
@@ -135,8 +138,15 @@ export function PaymentDetailScreen({
   const payment = paymentQuery.isSuccess ? paymentQuery.data : undefined;
 
   // Единый предикат мутационного входа страницы: смотрящий читает без кнопок
-  // правки (история 47), архив финансово read-only (#446).
-  const canMutate = propertyPermissions(property).canEdit;
+  // правки (история 47), архив финансово read-only (#446). canMutateByRole —
+  // только роль: архив её не гасит, им живёт исключение «Возобновить» (#1342).
+  const permissions = propertyPermissions(property);
+  const canMutate = permissions.canEdit;
+  const canMutateByRole = permissions.canMutate;
+
+  // Объект в архиве (#1342): «Возобновить» задизейблена с пояснением —
+  // мутации правила архивного объекта сервер отвечает 409.
+  const propertyArchived = property?.status === 'archived';
 
   // Звезда — личное состояние читателя (D12 #1308): гейт по праву просмотра,
   // не мутации, — зритель ведёт своё избранное наравне с владельцем; архив
@@ -220,6 +230,8 @@ export function PaymentDetailScreen({
               propertyId={propertyId}
               payment={payment}
               canMutate={canMutate}
+              canMutateByRole={canMutateByRole}
+              propertyArchived={propertyArchived}
               onCompleted={setCompletedResult}
             />
           )}
@@ -235,11 +247,15 @@ function PaymentDetailBody({
   propertyId,
   payment,
   canMutate,
+  canMutateByRole,
+  propertyArchived,
   onCompleted,
 }: {
   readonly propertyId: string;
   readonly payment: Payment;
   readonly canMutate: boolean;
+  readonly canMutateByRole: boolean;
+  readonly propertyArchived: boolean;
   readonly onCompleted: (completed: Payment) => void;
 }): JSX.Element {
   const router = useRouter();
@@ -259,6 +275,13 @@ function PaymentDetailBody({
   // живы (деталь, секции), звезда — личное состояние читателя.
   const storedCompleted = payment.completedAt !== undefined;
 
+  // Состав кнопок держит модель (#818, #1341, #1342): у архивного объекта —
+  // только «Возобновить» (рендер дизейблит с пояснением), у смотрящего
+  // строки нет; исключение «Возобновить» живёт на роли, не на архиве.
+  const actions = paymentDetailActions(payment, paused, endedRule, settled, propertyArchived);
+  const showActions =
+    !storedCompleted && actions.length > 0 && (canMutate || (propertyArchived && canMutateByRole));
+
   // undefined — списки ещё грузятся, кнопка без состояния; null — гасить
   // нечего (завершённое правило без долга), «Оплатить» отключена.
   const payable =
@@ -276,14 +299,13 @@ function PaymentDetailBody({
         <PaymentHeroCard payment={payment} paused={paused} />
       </div>
 
-      {canMutate && !storedCompleted && (
+      {showActions && (
         <div className="px-6">
           <PaymentActionsRow
             propertyId={propertyId}
             payment={payment}
-            paused={paused}
-            endedRule={endedRule}
-            settled={settled}
+            actions={actions}
+            propertyArchived={propertyArchived}
             payable={payable}
             onCompleted={onCompleted}
           />
@@ -397,17 +419,15 @@ function PaymentHeroCard({
 function PaymentActionsRow({
   propertyId,
   payment,
-  paused,
-  endedRule,
-  settled,
+  actions,
+  propertyArchived,
   payable,
   onCompleted,
 }: {
   readonly propertyId: string;
   readonly payment: Payment;
-  readonly paused: boolean;
-  readonly endedRule: boolean;
-  readonly settled: boolean;
+  readonly actions: ReadonlyArray<PaymentDetailAction>;
+  readonly propertyArchived: boolean;
   readonly payable: PaymentOperation | null | undefined;
   readonly onCompleted: (completed: Payment) => void;
 }): JSX.Element {
@@ -415,11 +435,6 @@ function PaymentActionsRow({
   const pausePayment = usePausePayment(propertyId, payment.id);
   const resumePayment = useResumePayment(propertyId, payment.id);
   const completePayment = useCompletePayment(propertyId, payment.id);
-
-  // Состав кнопок держит чистая модель (#818, #1341): управляемый арендой
-  // платёж — только «Оплатить» (правка/пауза/завершение дают 409, экран
-  // их скрывает).
-  const actions = paymentDetailActions(payment, paused, endedRule, settled);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
@@ -473,6 +488,7 @@ function PaymentActionsRow({
           <RoundActionButton
             icon={<Play />}
             caption="Возобновить"
+            disabled={propertyArchived}
             loading={resumePayment.isPending}
             onClick={() => void resume()}
           />
@@ -526,6 +542,16 @@ function PaymentActionsRow({
           />
         )}
       </div>
+
+      {/* Пояснение дизейбла при архивном объекте (#1342): пауза стоит,
+       * пока объект в архиве — возврат из архива снимает системную
+       * автопаузу сам; кнопка без пояснения выглядела бы сломанной. */}
+      {propertyArchived && actions.includes('resume') && (
+        <p className="m-0 text-center text-base leading-[18px] text-content-secondary">
+          Платеж на паузе, пока объект в архиве. Верните объект из архива,
+          чтобы возобновить его.
+        </p>
+      )}
 
       {/* Confirm-шторка паузы (тексты — резолюция #452): случайное нажатие
        * не должно останавливать обязательство (история 21). Возобновление

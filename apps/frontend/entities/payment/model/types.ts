@@ -326,10 +326,15 @@ export type PaymentFieldChange =
 
 /** Строка журнала изменений (ADR 0065): кто и какое действие совершил
  * (actor остаётся на DTO — экран актора не показывает) и какие поля
- * двинулись. createdAt — полный момент действия, ISO date-time. */
+ * двинулись. createdAt — полный момент действия, ISO date-time.
+ * origin (#1342) — отметка системной строки архивного моста: null — ручное
+ * действие (все строки до тикета). */
+export type PaymentChangeOrigin = 'auto_archive';
+
 export type PaymentChangeEntry = {
   readonly id: string;
   readonly action: PaymentChangeAction;
   readonly changes: ReadonlyArray<PaymentFieldChange>;
+  readonly origin: PaymentChangeOrigin | null;
   readonly createdAt: string;
 };

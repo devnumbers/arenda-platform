@@ -398,6 +398,7 @@ type PaymentChangeLog struct {
 	Action     string             `json:"action"`
 	Changes    []byte             `json:"changes"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	Origin     pgtype.Text        `json:"origin"`
 }
 
 type PaymentMethod struct {
@@ -421,6 +422,7 @@ type PaymentPause struct {
 	ToDate    pgtype.Date        `json:"to_date"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Origin    string             `json:"origin"`
 }
 
 type Property struct {

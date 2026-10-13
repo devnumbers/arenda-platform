@@ -144,11 +144,17 @@ type PaymentStore interface {
 	// Delete removes the rule; the caller has already resolved the fate of
 	// its planned operations (keep_overdue).
 	Delete(ctx context.Context, id, scope uuid.UUID) error
-	// InsertPause opens the open-ended pause [from, ∞).
-	InsertPause(ctx context.Context, paymentID uuid.UUID, from time.Time) error
+	// InsertPause opens the open-ended pause [from, ∞) with the given
+	// origin (тикет #1342): the manual mutations pass PauseOriginManual,
+	// the archive bridge passes PauseOriginAutoArchive.
+	InsertPause(ctx context.Context, paymentID uuid.UUID, from time.Time, origin domain.PauseOrigin) error
 	// CloseActivePause closes the open pause with to=resumeDay — the resume
 	// day is already outside the half-open interval.
 	CloseActivePause(ctx context.Context, paymentID uuid.UUID, resumeDay time.Time) error
+	// CloseAutoArchivePause closes only the open auto_archive pause with
+	// to=resumeDay — the archive bridge's reverse leg (тикет #1342): the
+	// owner's manual pauses stay open when the property returns.
+	CloseAutoArchivePause(ctx context.Context, paymentID uuid.UUID, resumeDay time.Time) error
 	// DeletePlannedFrom removes the rule's planned operations with date >=
 	// from (deletion always drops the future planned).
 	DeletePlannedFrom(ctx context.Context, paymentID uuid.UUID, from time.Time) error
@@ -179,11 +185,14 @@ type PaymentStore interface {
 // diff. The conveyor fills the actor, the owner scope and the property from
 // its own context and records the row inside the same transaction; an empty
 // Changes is the pause/resume shape (the state flip is the content). A nil
-// verdict (creation, deletion, the favorite star) writes no row.
+// verdict (creation, deletion, the favorite star) writes no row. Origin
+// marks the archive bridge's system rows (тикет #1342); empty is the manual
+// action — the stored NULL.
 type ChangeLogWrite struct {
 	PaymentID uuid.UUID
 	Action    domain.ChangeAction
 	Changes   []domain.FieldChange
+	Origin    domain.PauseOrigin
 }
 
 // ChangeLogKey is the change-log cursor's keyset key: the row's (created_at,

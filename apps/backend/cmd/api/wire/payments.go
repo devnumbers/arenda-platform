@@ -21,6 +21,11 @@ type Payments struct {
 	// OverdueOperations serves the properties list red-dot projection
 	// (ticket #585): which properties hold overdue planned operations.
 	OverdueOperations *paymentspg.OverdueOperationsReader
+	// ArchivePauses is the archive round-trip's bridge (тикет #1342): the
+	// properties context drives it inside its archive/restore transactions
+	// to pause the object's live rules with the system auto_archive pause
+	// and to close only those pauses on the return.
+	ArchivePauses *paymentsapp.ArchivePauseBridge
 }
 
 // WirePayments constructs the payments context (ADR 0049): the tick store,
@@ -70,5 +75,6 @@ func WirePayments(p platformDeps) (*Payments, error) {
 		GlobalPayments:    paymentsapp.NewGlobalPaymentService(globalPayments, calendar, factory),
 		TickService:       paymentsapp.NewTickService(factory, zones, calendar, metrics),
 		OverdueOperations: paymentspg.NewOverdueOperationsReader(p.DB, calendar),
+		ArchivePauses:     paymentsapp.NewArchivePauseBridge(factory, calendar),
 	}, nil
 }

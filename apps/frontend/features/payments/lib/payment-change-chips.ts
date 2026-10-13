@@ -18,7 +18,8 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
  * напоминания переход «отсутствовало → появилось» читается «добавлено»,
  * у типа направления — фраза без значения. Пауза, возобновление и
  * завершение (#1340) — строки журнала с пустым дифом; их тексты —
- * канон тостов мутаций #452.
+ * канон тостов мутаций #452. Системные пауза/возобновление архивного
+ * моста (#1342, origin auto_archive) читают причину в самой строке.
  */
 
 /** Порядок чипов — порядок строк дифа (словарный, ADR 0065 §2): ответ
@@ -26,9 +27,17 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
 export function paymentChangeChips(entry: PaymentChangeEntry): ReadonlyArray<string> {
   switch (entry.action) {
     case 'paused':
-      return ['Платеж поставлен на паузу'];
+      return [
+        entry.origin === 'auto_archive'
+          ? 'Платеж поставлен на паузу (объект в архиве)'
+          : 'Платеж поставлен на паузу',
+      ];
     case 'resumed':
-      return ['Платеж возобновлен'];
+      return [
+        entry.origin === 'auto_archive'
+          ? 'Платеж возобновлен (объект из архива)'
+          : 'Платеж возобновлен',
+      ];
     case 'completed':
       return ['Платеж завершен'];
     case 'updated':

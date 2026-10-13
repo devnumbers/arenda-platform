@@ -12,10 +12,38 @@ function entry(
     id: 'ch-1',
     action: 'updated',
     changes,
+    origin: null,
     createdAt: '2026-09-01T10:00:00Z',
     ...overrides,
   };
 }
+
+describe('paymentChangeChips — системные строки архивного моста (#1342)', () => {
+  it('системная пауза с origin auto_archive называет причину', () => {
+    expect(
+      paymentChangeChips(
+        entry([], { action: 'paused', origin: 'auto_archive' }),
+      ),
+    ).toEqual(['Платеж поставлен на паузу (объект в архиве)']);
+  });
+
+  it('системное возобновление читает возврат объекта', () => {
+    expect(
+      paymentChangeChips(
+        entry([], { action: 'resumed', origin: 'auto_archive' }),
+      ),
+    ).toEqual(['Платеж возобновлен (объект из архива)']);
+  });
+
+  it('ручные пауза и возобновление (origin null) не меняются', () => {
+    expect(paymentChangeChips(entry([], { action: 'paused' }))).toEqual([
+      'Платеж поставлен на паузу',
+    ]);
+    expect(paymentChangeChips(entry([], { action: 'resumed' }))).toEqual([
+      'Платеж возобновлен',
+    ]);
+  });
+});
 
 describe('paymentChangeChips — правка полей (макет 3214-73216)', () => {
   it('сумма: новое значение каноническим денежным форматтером', () => {

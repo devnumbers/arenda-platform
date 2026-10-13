@@ -60,13 +60,16 @@ type FieldChange struct {
 
 // ChangeEntry is one stored row of the log: who edited the rule, what kind of
 // action it was and which fields moved. Pause/resume rows carry an empty
-// Changes — the state flip is the content.
+// Changes — the state flip is the content. Origin marks the archive bridge's
+// system pause/resume rows (тикет #1342, the PauseOrigin dictionary); empty
+// is the manual action — every row written before the ticket too.
 type ChangeEntry struct {
 	ID        uuid.UUID
 	PaymentID uuid.UUID
 	ActorID   uuid.UUID
 	Action    ChangeAction
 	Changes   []FieldChange
+	Origin    PauseOrigin
 	CreatedAt time.Time
 }
 

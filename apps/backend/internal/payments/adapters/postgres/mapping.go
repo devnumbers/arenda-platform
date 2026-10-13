@@ -149,8 +149,9 @@ func attachPauses(ctx context.Context, q *postgres.Queries, payments []domain.Pa
 	for _, row := range rows {
 		id := pgconv.UUIDFromPgtype(row.PaymentID)
 		pauses[id] = append(pauses[id], domain.PauseInterval{
-			From: pgconv.DateFromPgtype(row.FromDate),
-			To:   pgconv.DatePtrFromPgtype(row.ToDate),
+			From:   pgconv.DateFromPgtype(row.FromDate),
+			To:     pgconv.DatePtrFromPgtype(row.ToDate),
+			Origin: domain.PauseOrigin(row.Origin),
 		})
 	}
 	for i := range payments {

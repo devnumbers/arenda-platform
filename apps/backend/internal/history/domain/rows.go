@@ -43,6 +43,13 @@ const (
 	// The ctxKeyChanges key carries the raw AttributeChange list of the
 	// unified change rows (the future read model).
 	ctxKeyChanges = "changes"
+	// The ctxKeyPauseOrigin key marks the archive bridge's system
+	// pause/resume rows (тикет #1342): the value is the payments domain's
+	// auto_archive origin.
+	ctxKeyPauseOrigin = "pause_origin"
+	// The archive bridge's origin mark — the key's only value today; the
+	// system rows carry it in the context jsonb.
+	ctxPauseOriginAutoArchive = "auto_archive"
 )
 
 // Общее.
@@ -442,6 +449,27 @@ func PaymentPaused(entityID uuid.UUID, title string) Entry {
 // PaymentResumed builds the resume row.
 func PaymentResumed(entityID uuid.UUID, title string) Entry {
 	return paymentRow(ActionPaymentResumed, BaseChanged, "Платёж возобновлён: ", entityID, title)
+}
+
+// PaymentPausedByArchive builds the archive bridge's system pause row
+// (тикет #1342): the manual action ids stay (the feed's icons and filters
+// are not retrained), the copy names the archive as the reason and the
+// context carries the origin mark.
+func PaymentPausedByArchive(entityID uuid.UUID, title string) Entry {
+	e := paymentRow(ActionPaymentPaused, BaseChanged,
+		"Платёж поставлен на паузу (объект ушёл в архив): ", entityID, title)
+	e.Context[ctxKeyPauseOrigin] = ctxPauseOriginAutoArchive
+	return e
+}
+
+// PaymentResumedByArchive builds the archive bridge's system resume row
+// (тикет #1342): only the bridge's own auto_archive pauses close on the
+// property's return, the row reads the same way.
+func PaymentResumedByArchive(entityID uuid.UUID, title string) Entry {
+	e := paymentRow(ActionPaymentResumed, BaseChanged,
+		"Платёж возобновлён (объект вернулся из архива): ", entityID, title)
+	e.Context[ctxKeyPauseOrigin] = ctxPauseOriginAutoArchive
+	return e
 }
 
 // PaymentCompleted builds the completion row (тикет #1340): the terminal

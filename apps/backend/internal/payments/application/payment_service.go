@@ -448,7 +448,7 @@ func (s *PaymentService) PausePayment(
 			if _, active := domain.ActivePause(rule.Pauses); active {
 				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
 			}
-			if err := stores.payments.InsertPause(ctx, rule.ID, today); err != nil {
+			if err := stores.payments.InsertPause(ctx, rule.ID, today, domain.PauseOriginManual); err != nil {
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("insert pause: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{

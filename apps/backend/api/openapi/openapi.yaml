@@ -7423,6 +7423,15 @@ components:
             пустой массив (состояние и есть содержимое строки).
           items:
             $ref: '#/components/schemas/PaymentFieldChange'
+        origin:
+          type: string
+          nullable: true
+          enum: [auto_archive]
+          description: |
+            Отметка происхождения системной строки (тикет #1342): null или
+            отсутствие — ручное действие пользователя (все строки до тикета);
+            auto_archive — системные пауза/снятие архивного моста: объект
+            ушёл в архив или вернулся из него.
         created_at:
           type: string
           format: date-time

@@ -41,7 +41,7 @@ function change(
   ],
   action: PaymentChangeEntry['action'] = 'updated',
 ): PaymentChangeEntry {
-  return { id, action, changes, createdAt };
+  return { id, action, changes, origin: null, createdAt };
 }
 
 describe('buildPaymentHistoryTimeline — группы по датам (макет 3214-73216)', () => {

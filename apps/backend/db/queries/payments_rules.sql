@@ -153,15 +153,26 @@ WHERE user_id = $1
 -- name: InsertPaymentPause :exec
 -- The open-ended pause [from, ∞): exactly one may exist per rule — the
 -- partial unique index (to_date IS NULL) makes a double pause a constraint
--- violation even past the application check.
-INSERT INTO payment_pauses (id, payment_id, from_date, to_date)
-VALUES ($1, $2, $3, NULL);
+-- violation even past the application check. Origin distinguishes the
+-- owner's manual pause from the archive bridge's system one (тикет #1342).
+INSERT INTO payment_pauses (id, payment_id, from_date, to_date, origin)
+VALUES ($1, $2, $3, NULL, $4);
 
 -- name: CloseActivePaymentPause :execrows
 -- Resume: close the open interval with today's date (the resume day is
--- already outside the pause, [from, to)).
+-- already outside the pause, [from, to)). The owner's resume closes any
+-- open pause — manual or system: while the property is archived the
+-- conveyor refuses the mutation, so an open auto_archive pause here means
+-- the property is active again and the bridge has already closed its own.
 UPDATE payment_pauses SET to_date = $2
 WHERE payment_id = $1 AND to_date IS NULL;
+
+-- name: CloseAutoArchivePaymentPause :execrows
+-- The archive bridge's reverse leg (тикет #1342): the property returned
+-- from the archive — close only the system auto_archive pause; the owner's
+-- manual pauses stay open. Same [from, to) semantics as the manual resume.
+UPDATE payment_pauses SET to_date = $2
+WHERE payment_id = $1 AND to_date IS NULL AND origin = 'auto_archive';
 
 -- name: DeletePaymentPlannedFrom :execrows
 -- Deletion of the rule's planned operations from a date on (today): future

@@ -437,13 +437,20 @@ func paymentChangesResponse(page application.ChangeLogPage) (openapi.PaymentChan
 				New:   newValue,
 			}
 		}
-		items[i] = openapi.PaymentChangeItem{
+		item := openapi.PaymentChangeItem{
 			Id:        entry.ID,
 			ActorId:   entry.ActorID,
 			Action:    openapi.PaymentChangeAction(entry.Action),
 			Changes:   changes,
 			CreatedAt: entry.CreatedAt,
 		}
+		// Отметка происхождения системной строки (тикет #1342); ручное
+		// действие едет по проводу null'ом (и отсутствием поля).
+		if entry.Origin != "" {
+			origin := openapi.PaymentChangeItemOrigin(entry.Origin)
+			item.Origin = &origin
+		}
+		items[i] = item
 	}
 	resp := openapi.PaymentChangesResponse{Items: items}
 	if page.NextCursor != "" {

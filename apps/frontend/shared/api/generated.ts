@@ -3187,6 +3187,14 @@ export interface components {
              *     пустой массив (состояние и есть содержимое строки).
              */
             changes: components["schemas"]["PaymentFieldChange"][];
+            /**
+             * @description Отметка происхождения системной строки (тикет #1342): null или
+             *     отсутствие — ручное действие пользователя (все строки до тикета);
+             *     auto_archive — системные пауза/снятие архивного моста: объект
+             *     ушёл в архив или вернулся из него.
+             * @enum {string|null}
+             */
+            origin?: "auto_archive" | null;
             /** Format: date-time */
             created_at: string;
         };
