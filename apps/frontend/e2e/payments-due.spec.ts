@@ -175,51 +175,52 @@ test.describe('секция «На оплату» — экраны хаба и �
     await expect(page).toHaveURL(new RegExp('/payments/due$'));
   });
 
-  test('страница: бакеты, «Сначала новые» внутри, чип с состоянием в адресе', async ({
+  test('страница: группы по реальным дням, чип переворачивает группы, состояние в адресе', async ({
     page,
     seededUser,
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/payments/due');
 
-    // Бакеты макета 1036:40828 — только непустые: «Сегодня», «Завтра»,
-    // «Через 3 дня» (дальше окна автоплатёж не тянет).
-    await expect(page.getByTestId('payments-due-group-today')).toBeVisible();
-    await expect(page.getByTestId('payments-due-group-tomorrow')).toBeVisible();
-    await expect(page.getByTestId('payments-due-group-in3days')).toBeVisible();
-    await expect(page.getByTestId('payments-due-group-in7days')).toHaveCount(0);
+    // Дневные группы (решение владельца 13.10): «Сегодня», «Завтра»,
+    // «Через 2 дня», «Через 3 дня» — каждая дата под своим заголовком;
+    // дальше окна автоплатёж не тянет (группы day4..day7 пустые).
+    await expect(page.getByTestId('payments-due-group-day0')).toBeVisible();
+    await expect(page.getByTestId('payments-due-group-day1')).toBeVisible();
+    await expect(page.getByTestId('payments-due-group-day2')).toBeVisible();
+    await expect(page.getByTestId('payments-due-group-day3')).toBeVisible();
+    await expect(page.getByTestId('payments-due-group-day7')).toHaveCount(0);
 
-    // «Сначала новые» внутри бакета: дальний срок (+3) над ближним (+2).
-    const in3 = page.getByTestId('payments-due-group-in3days');
-    const late = in3.getByText('Проверка счётчиков');
-    const early = in3.getByText('Мойка фасада');
-    await expect(late).toBeVisible();
-    await expect(early).toBeVisible();
-    expect(await late.boundingBox().then((box) => box?.y ?? 0)).toBeLessThan(
-      await early.boundingBox().then((box) => box?.y ?? 0),
+    // «Сначала новые»: дни по возрастанию — «Через 2 дня» (15-е) над
+    // «Через 3 дня» (16-е), разные даты больше не склеены.
+    const day2 = page.getByTestId('payments-due-group-day2');
+    const day3 = page.getByTestId('payments-due-group-day3');
+    const near = day2.getByText('Мойка фасада');
+    const far = day3.getByText('Проверка счётчиков');
+    await expect(near).toBeVisible();
+    await expect(far).toBeVisible();
+    expect(await near.boundingBox().then((box) => box?.y ?? 0)).toBeLessThan(
+      await far.boundingBox().then((box) => box?.y ?? 0),
     );
 
     // Строка ведёт на страницу правила (сегмент read-only).
-    await late.click();
+    await far.click();
     await expect(page).toHaveURL(
       new RegExp(`/properties/${GARAGE}/payments/${RULE_FAR_LATE}$`),
     );
 
-    // Чип переворачивает сроки только внутри бакетов и живёт в адресе —
-    // перезагрузка состояние держит.
+    // Чип разворачивает порядок групп ЦЕЛИКОМ («Через 7 дней» сверху —
+    // здесь самой дальней группы день 3) и живёт в адресе — перезагрузка
+    // состояние держит; внутри дня порядок не трогается.
     await page.goto('/payments/due');
     await page.getByTestId('payments-due-sort-chip').click();
     await expect(page.getByTestId('payments-due-sort-chip')).toHaveText(
       'Сначала старые',
     );
     await expect(page).toHaveURL(new RegExp('/payments/due\\?sort=old$'));
-    const flippedLate = in3.getByText('Проверка счётчиков');
-    const flippedEarly = in3.getByText('Мойка фасада');
     expect(
-      await flippedEarly.boundingBox().then((box) => box?.y ?? 0),
-    ).toBeLessThan(
-      await flippedLate.boundingBox().then((box) => box?.y ?? 0),
-    );
+      await day3.boundingBox().then((box) => box?.y ?? 0),
+    ).toBeLessThan(await day2.boundingBox().then((box) => box?.y ?? 0));
     await page.reload();
     await expect(page.getByTestId('payments-due-sort-chip')).toHaveText(
       'Сначала старые',

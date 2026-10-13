@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makePaymentDueItem } from '@/entities/payment';
 import {
   DUE_SORT_PARAMS,
-  dueDaysLabel,
-  dueListInOrder,
+  dueGroupsInOrder,
   parseDueSortParams,
   serializeDueSortToParams,
 } from './payments-due-model';
@@ -33,50 +32,41 @@ describe('serializeDueSortToParams — конвенция состояния в 
   });
 });
 
-describe('dueListInOrder — направление строк внутри бакетов', () => {
-  // Серверный порядок (#1346): бакеты по daysLeft asc, «Сначала новые»
-  // внутри (dueDate desc). Здесь — окно «Через 3 дня» (daysLeft 2..3):
-  // дальний срок (16-е) стоит перед ближним (15-е).
+describe('dueGroupsInOrder — направление групп страницы (решение владельца 13.10)', () => {
+  // Серверный порядок (#1347): реальные дни по возрастанию, внутри дня —
+  // id операции; страницы группирует по daysLeft.
   const serverOrder = [
-    makePaymentDueItem({ operationId: 'o-today', dueDate: '2026-10-13', daysLeft: 0 }),
-    makePaymentDueItem({ operationId: 'o-far', dueDate: '2026-10-16', daysLeft: 3 }),
-    makePaymentDueItem({ operationId: 'o-near', dueDate: '2026-10-15', daysLeft: 2 }),
+    makePaymentDueItem({ operationId: 'op-a', dueDate: '2026-10-13', daysLeft: 0 }),
+    makePaymentDueItem({ operationId: 'op-b', dueDate: '2026-10-13', daysLeft: 0 }),
+    makePaymentDueItem({ operationId: 'op-c', dueDate: '2026-10-14', daysLeft: 1 }),
+    makePaymentDueItem({ operationId: 'op-d', dueDate: '2026-10-16', daysLeft: 3 }),
+    makePaymentDueItem({ operationId: 'op-e', dueDate: '2026-10-15', daysLeft: 2 }),
   ];
 
-  it('«Сначала новые» — серверный порядок не трогается', () => {
-    expect(dueListInOrder(serverOrder, 'new')).toStrictEqual(serverOrder);
-  });
-
-  it('«Сначала старые» переворачивает строки только внутри бакета', () => {
-    const ordered = dueListInOrder(serverOrder, 'old');
-    expect(ordered.map((item) => item.operationId)).toStrictEqual([
-      'o-today',
-      'o-near',
-      'o-far',
+  it('«Сначала новые» — дни по возрастанию, «Сегодня» первая группа', () => {
+    const groups = dueGroupsInOrder(serverOrder, 'new');
+    expect(groups.map((group) => group.daysLeft)).toStrictEqual([0, 1, 2, 3]);
+    expect(groups[0]?.label).toBe('Сегодня');
+    // Внутри дня серверный порядок не трогается.
+    expect(groups[0]?.items.map((item) => item.operationId)).toStrictEqual([
+      'op-a',
+      'op-b',
     ]);
   });
 
-  it('равные даты в «Сначала старые» — тай-брейк по id операции asc (зеркало серверного desc)', () => {
-    const tied = [
-      makePaymentDueItem({ operationId: 'o-b', dueDate: '2026-10-13', daysLeft: 0 }),
-      makePaymentDueItem({ operationId: 'o-a', dueDate: '2026-10-13', daysLeft: 0 }),
-    ];
-    expect(dueListInOrder(tied, 'old').map((item) => item.operationId)).toStrictEqual([
-      'o-a',
-      'o-b',
+  it('«Сначала старые» — группы задом наперёд, внутри дня порядок прежний', () => {
+    const groups = dueGroupsInOrder(serverOrder, 'old');
+    expect(groups.map((group) => group.daysLeft)).toStrictEqual([3, 2, 1, 0]);
+    expect(groups[0]?.label).toBe('Через 3 дня');
+    expect(groups.at(-1)?.label).toBe('Сегодня');
+    expect(groups.at(-1)?.items.map((item) => item.operationId)).toStrictEqual([
+      'op-a',
+      'op-b',
     ]);
   });
-});
 
-describe('dueDaysLabel — метка даты карточки хаба', () => {
-  it.each([
-    [0, 'Сегодня'],
-    [1, 'Завтра'],
-    [2, 'Через 2 дня'],
-    [3, 'Через 3 дня'],
-    [5, 'Через 5 дней'],
-    [7, 'Через 7 дней'],
-  ])('%i дн. — «%s»', (daysLeft, label) => {
-    expect(dueDaysLabel(daysLeft)).toBe(label);
+  it('пустое окно — пустой список групп в обоих направлениях', () => {
+    expect(dueGroupsInOrder([], 'new')).toStrictEqual([]);
+    expect(dueGroupsInOrder([], 'old')).toStrictEqual([]);
   });
 });

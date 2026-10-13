@@ -1,24 +1,23 @@
 /**
- * Модель экранов «На оплату» (тикет #1347; макеты 1036:37525 хаб,
- * 1036:40828 страница, 1041:46762 пустое): строки окна напоминаний #1346
- * приходят из GET /payments/due в фиксированном порядке — бакеты по
- * daysLeft asc, «Сначала новые» внутри (dueDate desc). Страница
- * переворачивает направление внутри бакета чипом «Сначала новые/Сначала
- * старые» (состояние — в адресе строки, конвенция ?sort), хаб метит
- * карточки остатком дней строки.
+ * Модель страницы «Платежи на оплату» (тикет #1347; макеты 1036:40828 и
+ * ревизия владельца 13.10): строки окна напоминаний #1346 приходят из
+ * GET /payments/due по реальным дням по возрастанию; страница группирует
+ * их по daysLeft (канон due-days сущности), чип «Сначала новые/Сначала
+ * старые» разворачивает порядок ГРУПП целиком — внутри дня порядок
+ * серверный и не трогается. Состояние чипа — в адресе строки (конвенция
+ * ?sort).
  */
 
 import type { PaymentDueItem } from '@/entities/payment';
-import { groupDueByBucket } from '@/entities/payment';
+import { groupDueByDay } from '@/entities/payment';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
-import { pluralize } from '@/shared/lib/pluralize';
 
-/** Направление строк внутри бакета страницы. */
+/** Направление групп страницы. */
 export type DueSort = 'new' | 'old';
 
 /** Разбор ?sort= строки страницы (конвенция состояния в адресе, канон
  * parseEnumParam): неизвестное, отсутствующее и массивное — дефолт
- * «Сначала новые» (серверный порядок #1346). */
+ * «Сначала новые» (дни по возрастанию, «Сегодня» сверху). */
 export function parseDueSortParams(
   sort: string | string[] | undefined,
 ): DueSort {
@@ -34,39 +33,14 @@ export function serializeDueSortToParams(sort: DueSort): Record<string, string> 
   return sort === 'old' ? { sort: 'old' } : {};
 }
 
-/** Тай-брейк «Сначала старые» — зеркало серверного (id операции desc):
- * по возрастанию id. */
-const byDueDateAsc = (a: PaymentDueItem, b: PaymentDueItem): number =>
-  a.dueDate === b.dueDate
-    ? a.operationId.localeCompare(b.operationId)
-    : a.dueDate.localeCompare(b.dueDate);
-
-/** Строки страницы в направлении чипа. «Сначала новые» — серверный порядок
- * как есть; «Сначала старые» переворачивает сроки только внутри каждого
- * бакета (группировка канона due-buckets держит фиксированный порядок
- * самих бакетов) — «Сегодня» остаётся первой группой страницы. */
-export function dueListInOrder(
+/** Группы страницы в направлении чипа. «Сначала новые» — дни по
+ * возрастанию (серверный порядок); «Сначала старые» — те же группы
+ * задом наперёд («Через 7 дней» сверху), порядок строк внутри дня
+ * сохраняется. */
+export function dueGroupsInOrder(
   items: ReadonlyArray<PaymentDueItem>,
   sort: DueSort,
-): ReadonlyArray<PaymentDueItem> {
-  if (sort === 'new') {
-    return items;
-  }
-  return groupDueByBucket(items).flatMap((group) =>
-    [...group.items].sort(byDueDateAsc),
-  );
-}
-
-/** Метка даты на карточке хаба (макет 1036:37525, синяя строка под суммой):
- * остаток дней строки — «Сегодня» / «Завтра» / «Через N дней» (склонение
- * канона pluralize; за границами окна 0..7 не бывает — сервер метки не
- * строит, крайний остаток печатается как есть). */
-export function dueDaysLabel(daysLeft: number): string {
-  if (daysLeft <= 0) {
-    return 'Сегодня';
-  }
-  if (daysLeft === 1) {
-    return 'Завтра';
-  }
-  return `Через ${daysLeft} ${pluralize(daysLeft, 'день', 'дня', 'дней')}`;
+): ReturnType<typeof groupDueByDay> {
+  const groups = groupDueByDay(items);
+  return sort === 'new' ? groups : [...groups].reverse();
 }

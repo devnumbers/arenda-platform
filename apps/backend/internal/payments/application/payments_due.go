@@ -22,9 +22,8 @@ import (
 
 // PaymentDueItem is one row of the «На оплату» section (ticket #1346): the
 // (rule, operation) pair in the reminder window — the section page's card
-// data. The bucket is the client's rendering of DaysLeft (the server builds
-// no labels): 0 → «Сегодня», 1 → «Завтра», 2..3 → «Через 3 дня», 4..7 →
-// «Через 7 дней».
+// data. The day label is the client's rendering of DaysLeft (the server
+// builds no labels): 0 → «Сегодня», 1 → «Завтра», N ≥ 2 → «Через N дней».
 type PaymentDueItem struct {
 	// ID is the payment rule's id — the card's link target (the payment
 	// screen), not the operation's own page.
@@ -41,12 +40,12 @@ type PaymentDueItem struct {
 	AmountKopecks int64
 	Category      domain.CategoryRef
 	// Today is the property owner's calendar date (ADR 0048) the window math
-	// ran against — the client renders the bucket labels against DaysLeft,
-	// the date travels for the display.
+	// ran against — the client renders the day labels against DaysLeft, the
+	// date travels for the display.
 	Today   time.Time
 	DueDate time.Time
 	// DaysLeft is DueDate − Today (0..7 by the window's construction) — the
-	// bucket key and the hub card's «Через N дней» source.
+	// per-day group key and the hub card's «Через N дней» source.
 	DaysLeft int
 	// ReminderOffsetDays is the rule's lead time (1/3/7) — the window's own
 	// N.
@@ -56,10 +55,12 @@ type PaymentDueItem struct {
 // PaymentDueList is the «На оплату» section's response (ticket #1346): the
 // whole window in one read — the section is small by construction (the
 // materialization keeps at most two window operations per rule, the
-// reminder is armed on a fraction of the rules) — ordered by (bucket,
-// dueDate desc, id desc): the buckets in their fixed order (0, 1, 2..3,
-// 4..7), «Сначала новые» inside one. DueOperationsCount is the rows' own
-// count — the hub card's number, the same figure the feed's counters carry.
+// reminder is armed on a fraction of the rules) — ordered by the real days
+// ascending, the operation's id the same-day tiebreak (решение владельца
+// 13.10, #1347: the page groups the rows per real day and the chip
+// reverses the group order client-side). DueOperationsCount is the rows'
+// own count — the hub card's number, the same figure the feed's counters
+// carry.
 type PaymentDueList struct {
 	Items              []PaymentDueItem
 	DueOperationsCount int64

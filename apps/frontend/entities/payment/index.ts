@@ -11,7 +11,6 @@ export {
   mapPaymentsDue,
 } from './model/mappers';
 export type {
-  DueBucket,
   GlobalPayment,
   GlobalPaymentFeed,
   GlobalPaymentObject,
@@ -39,8 +38,8 @@ export type {
   PaymentsDue,
   Recurrence,
 } from './model/types';
-export { DUE_BUCKET_LABELS, DUE_BUCKET_ORDER, dueBucketOf, groupDueByBucket } from './lib/due-buckets';
-export type { DueBucketGroup } from './lib/due-buckets';
+export { dueDaysLabel, groupDueByDay } from './lib/due-days';
+export type { DueDayGroup } from './lib/due-days';
 export { firstOccurrence, isDatePaused, nextOccurrenceAfter, nextOccurrencesAfter, occurrencesBetween } from './lib/occurrences';
 export { PAYMENT_REMINDER_OPTIONS, paymentReminderOptionLabel } from './lib/reminder-offsets';
 export { addDays, inclusiveDays } from '@/shared/lib/calendar';

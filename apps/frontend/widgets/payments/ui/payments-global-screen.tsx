@@ -26,7 +26,7 @@ import {
 } from "@/features/payments";
 import type { GlobalPayment, PaymentDueItem } from "@/entities/payment";
 import type { PropertyType } from "@/entities/property";
-import { PaymentCardButton } from "@/entities/payment";
+import { dueDaysLabel, PaymentCardButton } from "@/entities/payment";
 import {
   Button,
   EmptyState,
@@ -38,9 +38,7 @@ import {
   Skeleton,
   TopNav,
 } from "@/shared/ui/design";
-import { dueDaysLabel } from "../lib/payments-due-model";
-import {
-  globalFavoritePayments,
+import { globalFavoritePayments,
   globalOverduePayments,
   globalPaymentObjectHasOverdue,
   nearestDateLine,

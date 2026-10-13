@@ -236,11 +236,13 @@ WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
 -- derivation rides for the timezone shifts, ADR 0048 п.5). Overdue
 -- operations (D < today) are out by the lower bound — they live in «Все
 -- просроченные». Days-left is the window's own math (D − today, 0..7 by
--- construction); the reading order is the buckets in their fixed order,
--- «Сначала новые» inside one (dueDate desc, the operation's id the
--- tiebreak). No window: the section comes back whole — the materialization
--- keeps at most two window operations per rule (today's and the next
--- future one), the reminder is armed on a fraction of the rules.
+-- construction); the reading order runs the real days ascending (решение
+-- владельца 13.10, #1347: the page groups the rows per real day, the chip
+-- reverses the group order client-side) with the operation's id the
+-- same-day tiebreak. No window: the section comes back whole — the
+-- materialization keeps at most two window operations per rule (today's
+-- and the next future one), the reminder is armed on a fraction of the
+-- rules.
 SELECT pay.id,
        op.id AS operation_id,
        pay.property_id,
@@ -271,13 +273,7 @@ WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND op.status = 'planned'
   AND op.date >= t.today
   AND op.date <= t.today + pay.reminder_offset_days
-ORDER BY CASE WHEN (op.date - t.today) <= 0 THEN 0
-              WHEN (op.date - t.today) = 1 THEN 1
-              WHEN (op.date - t.today) <= 3 THEN 2
-              ELSE 3
-         END ASC,
-         op.date DESC,
-         op.id DESC;
+ORDER BY days_left ASC, op.date DESC, op.id DESC;
 
 -- name: SumGlobalPaymentSearchCategories :many
 -- The matched categories of the payment rules search (ticket #575): one
