@@ -152,7 +152,7 @@ describe('tariffAboutCard', () => {
 });
 
 describe('tariffFeatureRows', () => {
-  it('paid tariff: object limit from API plus sharing', () => {
+  it('paid tariff: object limit from API plus sharing and history', () => {
     expect(tariffFeatureRows(proTariff)).toStrictEqual([
       {
         kind: 'objects',
@@ -164,6 +164,11 @@ describe('tariffFeatureRows', () => {
         title: 'Совместный доступ',
         description:
           'Приглашайте в свои объекты близких и коллег, оплатить подписку нужно только вам',
+      },
+      {
+        kind: 'history',
+        title: 'История действий',
+        description: 'Отслеживайте любые изменения в объектах',
       },
     ]);
   });
@@ -178,10 +183,10 @@ describe('tariffFeatureRows', () => {
     ]);
   });
 
-  it('business: unlimited limit keeps the sharing row', () => {
+  it('business: unlimited limit keeps the sharing and history rows', () => {
     const rows = tariffFeatureRows(businessTariff);
     expect(rows[0]?.title).toBe('Неограниченно');
-    expect(rows.map((row) => row.kind)).toStrictEqual(['objects', 'sharing']);
+    expect(rows.map((row) => row.kind)).toStrictEqual(['objects', 'sharing', 'history']);
   });
 
   it('pluralizes 2-4 limits', () => {

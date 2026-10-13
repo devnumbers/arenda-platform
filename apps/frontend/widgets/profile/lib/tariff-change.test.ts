@@ -5,6 +5,7 @@ import {
   tariffChangeDefaults,
   tariffChangeFooter,
   tariffPriceLine,
+  TARIFF_CHANGE_CARDS,
   yearlyDiscountPercent,
   yearlyPerMonthLine,
 } from './tariff-change';
@@ -44,6 +45,31 @@ function subscription(overrides: Partial<Subscription>): Subscription {
     ...overrides,
   };
 }
+
+describe('TARIFF_CHANGE_CARDS', () => {
+  it('paid cards carry the shortened sharing row and the history row (макет 3322-158610)', () => {
+    for (const name of ['pro', 'business'] as const) {
+      const card = TARIFF_CHANGE_CARDS.find((entry) => entry.name === name);
+      expect(card?.rows.slice(1)).toStrictEqual([
+        {
+          kind: 'sharing',
+          title: 'Совместный доступ',
+          description: 'Приглашайте в свои объекты близких и коллег',
+        },
+        {
+          kind: 'history',
+          title: 'История действий',
+          description: 'Отслеживайте любые изменения в объектах',
+        },
+      ]);
+    }
+  });
+
+  it('basic card has the objects row only', () => {
+    const card = TARIFF_CHANGE_CARDS.find((entry) => entry.name === 'basic');
+    expect(card?.rows.map((row) => row.kind)).toStrictEqual(['objects']);
+  });
+});
 
 describe('yearlyDiscountPercent', () => {
   it('25% for mockup prices, computed from data not a constant', () => {

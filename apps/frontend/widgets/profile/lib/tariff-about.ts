@@ -81,9 +81,10 @@ export function tariffAboutCard(subscription: Subscription): TariffAboutCardView
 }
 
 /** Ряд карточки «Возможности» (#621): лимит объектов из API + статические
- * описания; «Совместный доступ» — только у платных тарифов. */
+ * описания; «Совместный доступ» и «История действий» (решение владельца
+ * 13.10, макет «Выбрать тариф» 3322-158610) — только у платных тарифов. */
 export type TariffFeatureRow = {
-  kind: 'objects' | 'sharing';
+  kind: 'objects' | 'sharing' | 'history';
   title: string;
   description: string;
 };
@@ -91,6 +92,7 @@ export type TariffFeatureRow = {
 const OBJECTS_LIMIT_DESCRIPTION = 'Для небольшого портфеля недвижимости';
 const SHARING_DESCRIPTION =
   'Приглашайте в свои объекты близких и коллег, оплатить подписку нужно только вам';
+const HISTORY_DESCRIPTION = 'Отслеживайте любые изменения в объектах';
 
 export function tariffFeatureRows(tariff: Tariff): TariffFeatureRow[] {
   const limitTitle = tariff.activePropertyLimit < 0
@@ -103,6 +105,7 @@ export function tariffFeatureRows(tariff: Tariff): TariffFeatureRow[] {
 
   if (isPaidTariff(tariff.name)) {
     rows.push({ kind: 'sharing', title: 'Совместный доступ', description: SHARING_DESCRIPTION });
+    rows.push({ kind: 'history', title: 'История действий', description: HISTORY_DESCRIPTION });
   }
 
   return rows;

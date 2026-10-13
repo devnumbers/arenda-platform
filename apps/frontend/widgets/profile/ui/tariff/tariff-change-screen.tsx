@@ -445,9 +445,9 @@ function TariffChangeSkeleton(): JSX.Element {
           </Fragment>
         ))}
       </div>
-      <Skeleton className="h-[226px] rounded-[32px]" />
-      <Skeleton className="h-[276px] rounded-[32px]" />
-      <Skeleton className="h-[276px] rounded-[32px]" />
+      <Skeleton className="h-[242px] rounded-[32px]" />
+      <Skeleton className="h-[342px] rounded-[32px]" />
+      <Skeleton className="h-[342px] rounded-[32px]" />
       <div className="flex flex-col rounded-3xl bg-surface-muted pb-3">
         <div className="px-6 pb-2 pt-6">
           <Skeleton className="h-6 w-44 bg-surface-muted-hover" />

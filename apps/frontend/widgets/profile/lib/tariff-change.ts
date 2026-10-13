@@ -131,11 +131,12 @@ export function tariffChangeFooter(
   };
 }
 
-/** Карточка возможностей тарифа (#623, макет 1919-74867): заголовок —
- * имя тарифа H1, ряды — статика макета; тексты совпадают с «О тарифе»
- * (#621) и уточняют базовый. */
+/** Карточка возможностей тарифа (#623, макеты 1919-74867 год, обновлены
+ * 3322-158509/158610: у платных — сокращённый «Совместный доступ» и ряд
+ * «История действий»): заголовок — имя тарифа H1, ряды — статика макета;
+ * тексты совпадают с «О тарифе» (#621) и уточняют базовый. */
 export type TariffChangeFeatureRow = {
-  readonly kind: 'objects' | 'sharing';
+  readonly kind: 'objects' | 'sharing' | 'history';
   readonly title: string;
   readonly description: string;
 };
@@ -149,8 +150,13 @@ export type TariffChangeCard = {
 const SHARING_ROW: TariffChangeFeatureRow = {
   kind: 'sharing',
   title: 'Совместный доступ',
-  description:
-    'Приглашайте в свои объекты близких и коллег, оплатить подписку нужно только вам',
+  description: 'Приглашайте в свои объекты близких и коллег',
+};
+
+const HISTORY_ROW: TariffChangeFeatureRow = {
+  kind: 'history',
+  title: 'История действий',
+  description: 'Отслеживайте любые изменения в объектах',
 };
 
 export const TARIFF_CHANGE_CARDS: ReadonlyArray<TariffChangeCard> = [
@@ -176,6 +182,7 @@ export const TARIFF_CHANGE_CARDS: ReadonlyArray<TariffChangeCard> = [
         description: 'Для небольшого портфеля недвижимости',
       },
       SHARING_ROW,
+      HISTORY_ROW,
     ],
   },
   {
@@ -188,6 +195,7 @@ export const TARIFF_CHANGE_CARDS: ReadonlyArray<TariffChangeCard> = [
         description: 'Добавляйте любое количество объектов',
       },
       SHARING_ROW,
+      HISTORY_ROW,
     ],
   },
 ];

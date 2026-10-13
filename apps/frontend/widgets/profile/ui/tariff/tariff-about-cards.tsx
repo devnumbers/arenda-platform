@@ -12,6 +12,7 @@ import type {
 export const FEATURE_IMAGES: Record<TariffFeatureRow['kind'], string> = {
   objects: '/images/tariff/tariff-about-objects.png',
   sharing: '/images/tariff/tariff-about-sharing.png',
+  history: '/images/tariff/tariff-about-history.png',
 };
 
 /** Карточка тарифа экрана «О тарифе» (#621, макет 1918-73255): серая
