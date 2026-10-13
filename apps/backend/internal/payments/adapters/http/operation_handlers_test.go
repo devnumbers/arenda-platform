@@ -1379,6 +1379,7 @@ func TestCreateOperation_ErrorMapping(t *testing.T) {
 		wantStatus int
 	}{
 		{"invalid input is the contract 400", application.ErrInvalidInput, http.StatusBadRequest},
+		{"a future date is the contract 400", application.ErrOperationDateInFuture, http.StatusBadRequest},
 		{"a viewer is the 403", application.ErrForbidden, http.StatusForbidden},
 		{"a stranger is the privacy 404", application.ErrNotFound, http.StatusNotFound},
 		{"an archived property is the 409", application.ErrArchivedProperty, http.StatusConflict},
@@ -1416,6 +1417,96 @@ func TestCreateOperation_ErrorMapping(t *testing.T) {
 			t.Fatalf("status = %d, want 400", w.Code)
 		}
 	})
+
+	// The future date speaks its own words on the wire (ticket #1392): the
+	// problem detail names the rule, not the generic invalid-input text.
+	t.Run("a future date answers its own detail", func(t *testing.T) {
+		t.Parallel()
+		svc := &fakeOperationsManager{
+			create: func(context.Context, uuid.UUID, uuid.UUID, application.CreateOperationCommand) (application.OperationListItem, error) {
+				return application.OperationListItem{}, application.ErrOperationDateInFuture
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodPost, "/operations", strings.NewReader(payload),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.CreateOperation(w, req, propertyID)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400: %s", w.Code, w.Body.String())
+		}
+		var problem openapi.Problem
+		if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+			t.Fatalf("decode problem: %v", err)
+		}
+		if problem.Detail == nil || *problem.Detail != "Дата операции не может быть в будущем" {
+			t.Errorf("detail = %v, want the future-date rule", problem.Detail)
+		}
+	})
+}
+
+// The client-chosen date (backdating, ticket #1392) folds onto the command as
+// the UTC-midnight calendar day; a body date the full-date grammar cannot
+// read is the decoder's 400 and never reaches the use case.
+func TestCreateOperation_FoldsClientDateIntoCommand(t *testing.T) {
+	t.Parallel()
+
+	created := fixtureOperation(domain.StatusPaid)
+	created.Origin = domain.OriginManual
+	created.PaymentID = nil
+
+	var gotCmd application.CreateOperationCommand
+	calls := 0
+	svc := &fakeOperationsManager{
+		create: func(
+			_ context.Context, _, _ uuid.UUID, cmd application.CreateOperationCommand,
+		) (application.OperationListItem, error) {
+			gotCmd = cmd
+			calls++
+			return application.OperationListItem{Operation: created, ViewStatus: domain.ViewStatusPaid}, nil
+		},
+	}
+	h := NewOperationsHandlers(svc, nil)
+	propertyID := uuid.Must(uuid.NewV7())
+	actor := uuid.Must(uuid.NewV7())
+
+	post := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), actor), http.MethodPost, "/operations", strings.NewReader(body),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.CreateOperation(w, req, propertyID)
+		return w
+	}
+
+	if w := post(`{"type":"expense","title":"Ремонт крана","amountKopecks":150000,` +
+		`"categorySlug":"utilities","date":"2026-08-24"}`); w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: %s", w.Code, w.Body.String())
+	}
+	if gotCmd.Date == nil || !gotCmd.Date.Equal(time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("command date = %v, want the chosen UTC-midnight 2026-08-24", gotCmd.Date)
+	}
+
+	// A date outside the RFC 3339 full-date grammar is the decoder's 400 —
+	// the use case never sees it. Sequential on purpose: the calls counter
+	// below reads the fake after these posts.
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"non-ISO format", `{"type":"expense","title":"ЖКУ","amountKopecks":500000,"categorySlug":"utilities","date":"25.08.2026"}`},
+		{"impossible date", `{"type":"expense","title":"ЖКУ","amountKopecks":500000,"categorySlug":"utilities","date":"2026-13-45"}`},
+	} {
+		if w := post(tc.body); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400: %s", tc.name, w.Code, w.Body.String())
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("use case called %d times, want 1 — malformed dates stop at the transport", calls)
+	}
 }
 
 // The scope's match count (ticket #599): the global feed's wire carries

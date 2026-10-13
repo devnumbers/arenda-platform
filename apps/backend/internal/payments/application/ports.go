@@ -32,6 +32,14 @@ var (
 	// ErrInvalidInput — so the wire answers with the specific user-facing
 	// detail instead of the generic «Некорректные данные платежа».
 	ErrEndDateBeforeFirstOccurrence = errors.New("payments: end date before first occurrence")
+	// ErrOperationDateInFuture marks a manual operation whose client-chosen
+	// date stands after the property owner's today (ticket #1392): a payment
+	// fact cannot be born in the future — future days belong to the rule's
+	// schedule, not to a manual fact. It is its own sentinel — not wrapped
+	// into ErrInvalidInput — so the wire answers with the specific
+	// user-facing detail instead of the generic «Некорректные данные
+	// платежа».
+	ErrOperationDateInFuture = errors.New("payments: operation date in the owner's future")
 	// ErrForbidden marks an actor whose role grants the view capability but
 	// not the one the use case needs (viewer on mutations, non-owner on
 	// deletion — the ADR 0028 matrix).
