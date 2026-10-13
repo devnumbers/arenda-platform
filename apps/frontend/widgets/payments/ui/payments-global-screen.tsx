@@ -38,6 +38,7 @@ import {
   Skeleton,
   TopNav,
 } from "@/shared/ui/design";
+import { DragScrollRail } from "@/shared/ui/drag-scroll";
 import { globalFavoritePayments,
   globalOverduePayments,
   globalPaymentObjectHasOverdue,
@@ -389,6 +390,29 @@ function PaymentsGlobalSection({
   );
 }
 
+/** Лента секции хаба: канонный DragScrollRail (mouse-drag прокси #1349,
+ * research/apple-style-drag-hub-sections.md) с bleed на мобайл-ярусе
+ * (≤560): `-mx-6` гасит собственный `px-6` обёртки хаба (легитимный
+ * inner -mx против контейнерного паддинга, «Column width rule»), `px-6`
+ * держит карточки на визуальной линии 24, `scroll-padding-inline: 24px`
+ * держит там же и snap-точки — первый/последний снап не липнет к краю. */
+function SectionRail({
+  testId,
+  children,
+}: {
+  readonly testId: string;
+  readonly children: ReactNode;
+}): JSX.Element {
+  return (
+    <DragScrollRail
+      testId={testId}
+      className="max-tablet:-mx-6 max-tablet:px-6 max-tablet:[scroll-padding-inline:24px]"
+    >
+      {children}
+    </DragScrollRail>
+  );
+}
+
 /** Тело секции «Избранные»: лента карточек + замыкающая «Все избранные»
  * (синяя звезда, счётчик целого скоупа) либо плейсхолдер (880:18354). */
 function FavoritesSectionBody({
@@ -411,7 +435,7 @@ function FavoritesSectionBody({
   }
 
   return (
-    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <SectionRail testId="payments-rail-favorites">
       {favorites.map((payment) => {
         return (
           <PaymentCardButton
@@ -438,7 +462,7 @@ function FavoritesSectionBody({
         accentTitle
         onSelect={onOpenAll}
       />
-    </div>
+    </SectionRail>
   );
 }
 
@@ -472,7 +496,7 @@ function OverdueSectionBody({
   }
 
   return (
-    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <SectionRail testId="payments-rail-overdue">
       {overdue.map((payment) => {
         const style = categoryStyle(
           payment.category.source,
@@ -519,7 +543,7 @@ function OverdueSectionBody({
         accentTitle
         onSelect={onOpenAll}
       />
-    </div>
+    </SectionRail>
   );
 }
 
@@ -549,7 +573,7 @@ function DueSectionBody({
   }
 
   return (
-    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <SectionRail testId="payments-rail-due">
       {due.map((item) => {
         const style = categoryStyle(item.category.source, item.category.slug);
 
@@ -587,7 +611,7 @@ function DueSectionBody({
           onSelect={onOpenAll}
         />
       )}
-    </div>
+    </SectionRail>
   );
 }
 
@@ -613,7 +637,7 @@ function ObjectsSectionBody({
   readonly onOpenAll: () => void;
 }): JSX.Element {
   return (
-    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <SectionRail testId="payments-rail-objects">
       {objects.map((object) => (
         <PaymentCardButton
           key={object.propertyId}
@@ -647,7 +671,7 @@ function ObjectsSectionBody({
           onSelect={onOpenAll}
         />
       )}
-    </div>
+    </SectionRail>
   );
 }
 
@@ -703,13 +727,15 @@ function PaymentsGlobalEmpty({
 }
 
 /** Секция-заглушка хаба «Платежи» (#605): каркас PaymentsGlobalSection —
- * заголовок и лента плиток-карточек на время загрузки. Экспорт для
+ * заголовок и лента плиток-карточек на время загрузки. Ряд плиток несёт
+ * тот же bleed ≤560, что и живая лента (SectionRail), — на мобайл-ярусе
+ * данные занимают место скелетона без сдвига в край (#1349). Экспорт для
  * route-loading (#609). */
 export function PaymentsGlobalSectionSkeleton(): JSX.Element {
   return (
     <section className="flex flex-col gap-4" aria-hidden>
       <Skeleton className="h-6 w-40" />
-      <div className="flex gap-2">
+      <div className="flex gap-2 max-tablet:-mx-6 max-tablet:px-6">
         <Skeleton className="h-[132px] w-[168.5px] shrink-0" />
         <Skeleton className="h-[132px] w-[168.5px] shrink-0" />
       </div>
