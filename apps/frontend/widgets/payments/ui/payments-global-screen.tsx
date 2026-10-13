@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Add,
+  BoldClock,
   BoldObjects,
   BoldStar,
   BoldWarning,
@@ -21,8 +22,9 @@ import {
   PaymentsAddSheet,
   useGlobalPaymentObjects,
   useGlobalPayments,
+  usePaymentsDue,
 } from "@/features/payments";
-import type { GlobalPayment } from "@/entities/payment";
+import type { GlobalPayment, PaymentDueItem } from "@/entities/payment";
 import type { PropertyType } from "@/entities/property";
 import { PaymentCardButton } from "@/entities/payment";
 import {
@@ -36,6 +38,7 @@ import {
   Skeleton,
   TopNav,
 } from "@/shared/ui/design";
+import { dueDaysLabel } from "../lib/payments-due-model";
 import {
   globalFavoritePayments,
   globalOverduePayments,
@@ -44,6 +47,7 @@ import {
   overdueDaysLine,
   overdueOperationsCountLabel,
   paymentHubAddTarget,
+  paymentHubSectionHasAllCard,
   paymentsCountLabel,
 } from "../lib/payments-global-model";
 import {
@@ -63,18 +67,19 @@ const SECTION_CARDS_LIMIT = 4;
  * состав — решения владельца #574, макеты 879:9679/880:17866, пустое
  * состояние — 1041-51463/1041-51460/1036-37530; новый первый блок — макет
  * 3226-75059, хедер 3229-94522, тикет #1235).
- * Секции (порядок макета): «Избранные», «Просроченные», «Платежи объектов»;
- * четвёртая секция макета «На оплату» — новая функциональность (выборки
- * «к оплате» ни в контракте фида #575, ни страницы-приёмника шеврона нет) —
- * вынесена отдельным тикетом #1251, здесь не реализуется. Заголовок
- * с шевроном открывает страницу категории, замыкающая карточка «Все …»
- * ведёт туда же. Карточки платежей — канон PaymentCardButton (168.5,
- * горизонтальная лента): иконка категории, сумма, дата-«Ближайший» (просто
- * дата графика, без статуса; у просроченных — «N дней» красным и красный
- * (!) на иконке). Пустая секция — карточка-плейсхолдер с 3D-иллюстрацией
- * из Figma. Совсем без объектов — глобальное пустое состояние с CTA
- * «Добавить объект». Поиск — пилюля «Найти платёж» на страницу поиска
- * (#581); иконка-слайдеры справа — декор макета, не кликается.
+ * Секции (порядок макета 1036:37525): «Избранные», «Просроченные»,
+ * «На оплату» (#1347 — между «Просроченными» и «Платежами объектов»),
+ * «Платежи объектов». Заголовок с шевроном открывает страницу категории,
+ * замыкающая карточка «Все …» ведёт туда же и видна от трёх карточек
+ * секции (решение владельца #1339, единообразно для всех секций).
+ * Карточки платежей — канон PaymentCardButton (168.5, горизонтальная
+ * лента): иконка категории, сумма, дата-«Ближайший» (просто дата графика,
+ * без статуса; у просроченных — «N дней» красным и красный (!) на иконке;
+ * у «На оплату» — метка «Сегодня/Завтра/Через N дней» синим, 1036:37525).
+ * Пустая секция — карточка-плейсхолдер с 3D-иллюстрацией из Figma. Совсем
+ * без объектов — глобальное пустое состояние с CTA «Добавить объект».
+ * Поиск — пилюля «Найти платёж» на страницу поиска (#581); иконка-слайдеры
+ * справа — декор макета, не кликается.
  * «+» создания (макет 3226-75059) — в ряду заголовка и в правом слоте
  * компакт-бара; видна, когда в книге есть хоть один объект с правом правки
  * (#703), на глобальной пустоте скрыта — действие там CTA состояния.
@@ -90,14 +95,18 @@ export function PaymentsGlobalScreen(): JSX.Element {
   const feedQuery = useGlobalPayments();
   const objectsQuery = useGlobalPaymentObjects();
   const propertiesQuery = useProperties();
+  const dueQuery = usePaymentsDue();
 
   // Скелетон — пока данных нет вовсе (первая загрузка); ошибка без данных
   // показывает карточку повтора, не скелетон (канон состояний).
   const pending =
-    (feedQuery.data === undefined || objectsQuery.data === undefined) &&
+    (feedQuery.data === undefined ||
+      objectsQuery.data === undefined ||
+      dueQuery.data === undefined) &&
     !feedQuery.isError &&
-    !objectsQuery.isError;
-  const error = feedQuery.isError || objectsQuery.isError;
+    !objectsQuery.isError &&
+    !dueQuery.isError;
+  const error = feedQuery.isError || objectsQuery.isError || dueQuery.isError;
   const objects = objectsQuery.data ?? [];
   // Глобальное пустое (1041-51463/1041-51460/1036-37530): видимых
   // объектов нет — платежам негде
@@ -134,6 +143,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
   const retry = (): void => {
     void feedQuery.refetch();
     void objectsQuery.refetch();
+    void dueQuery.refetch();
   };
 
   const openPayment = (payment: GlobalPayment): void =>
@@ -199,6 +209,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
+                <PaymentsGlobalSectionSkeleton />
               </>
             )}
 
@@ -256,6 +267,31 @@ export function PaymentsGlobalScreen(): JSX.Element {
                         }
                         onSelectPayment={openPayment}
                         onOpenAll={() => router.push(ROUTES.paymentsOverdue)}
+                      />
+                    </PaymentsGlobalSection>
+
+                    <PaymentsGlobalSection
+                      testId="payments-section-due"
+                      title="На оплату"
+                      onOpen={() => router.push(ROUTES.paymentsDue)}
+                    >
+                      <DueSectionBody
+                        due={(dueQuery.data?.items ?? []).slice(
+                          0,
+                          SECTION_CARDS_LIMIT,
+                        )}
+                        dueOperationsCount={
+                          feedQuery.data?.dueOperationsCount ?? 0
+                        }
+                        onSelectPayment={(item) =>
+                          router.push(
+                            ROUTES.propertyPayment(
+                              item.propertyId,
+                              item.paymentId,
+                            ),
+                          )
+                        }
+                        onOpenAll={() => router.push(ROUTES.paymentsDue)}
                       />
                     </PaymentsGlobalSection>
 
@@ -485,6 +521,74 @@ function OverdueSectionBody({
         accentTitle
         onSelect={onOpenAll}
       />
+    </div>
+  );
+}
+
+/** Тело секции «На оплату» (#1347, макет 1036:37525): карточки строк окна
+ * напоминаний #1346 — иконка категории, сумма, метка дня «Сегодня/Завтра/
+ * Через N дней» синим (accentDescription), название и объект; тап ведёт
+ * на страницу ПРАВИЛА (сегмент read-only, оплата — на объектных экранах).
+ * Замыкающая «Все платежи на оплату» (синие часы, счётчик целого скоупа)
+ * — по правилу ≥3 (решение владельца #1339). */
+function DueSectionBody({
+  due,
+  dueOperationsCount,
+  onSelectPayment,
+  onOpenAll,
+}: {
+  readonly due: ReadonlyArray<PaymentDueItem>;
+  readonly dueOperationsCount: number;
+  readonly onSelectPayment: (item: PaymentDueItem) => void;
+  readonly onOpenAll: () => void;
+}): JSX.Element {
+  if (due.length === 0) {
+    return (
+      <PaymentsGlobalPlaceholder image="/images/payments/due-empty.png">
+        Здесь будут платежи, которые скоро нужно оплатить
+      </PaymentsGlobalPlaceholder>
+    );
+  }
+
+  return (
+    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {due.map((item) => {
+        const style = categoryStyle(item.category.source, item.category.slug);
+
+        return (
+          <PaymentCardButton
+            key={item.operationId}
+            className="snap-start"
+            leading={
+              <CategoryIcon
+                icon={style.icon}
+                color={style.color}
+                surface="muted"
+              />
+            }
+            title={item.title}
+            subtitle={item.propertyName}
+            amountKopecks={item.amountKopecks}
+            description={dueDaysLabel(item.daysLeft)}
+            accentDescription
+            onSelect={() => onSelectPayment(item)}
+          />
+        );
+      })}
+      {paymentHubSectionHasAllCard(due.length) && (
+        <PaymentCardButton
+          className="snap-start"
+          leading={
+            <GlobalCardIcon>
+              <BoldClock />
+            </GlobalCardIcon>
+          }
+          title="Все платежи на оплату"
+          subtitle={paymentsCountLabel(dueOperationsCount)}
+          accentTitle
+          onSelect={onOpenAll}
+        />
+      )}
     </div>
   );
 }

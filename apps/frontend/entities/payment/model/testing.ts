@@ -1,4 +1,4 @@
-import type { Payment } from './types';
+import type { Payment, PaymentDueItem } from './types';
 
 /**
  * Общий тестовый билдер Payment вместо копии в каждом тестовом файле
@@ -32,6 +32,31 @@ export function makePayment(overrides: Partial<Payment> = {}): Payment {
     pauses: [],
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+/**
+ * Общий тестовый билдер строки «На оплату» (#1346): канон — today-строка
+ * («Сегодня», daysLeft 0) правила без автоплатежа с напоминанием N=3;
+ * сценарные бакеты и суммы задаются overrides.
+ */
+export function makePaymentDueItem(
+  overrides: Partial<PaymentDueItem> = {},
+): PaymentDueItem {
+  return {
+    paymentId: 'p1',
+    operationId: 'o1',
+    propertyId: 'prop1',
+    propertyName: 'Моя квартира',
+    title: 'Арендная плата',
+    amountKopecks: 4_500_000,
+    type: 'expense',
+    category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
+    today: '2026-10-13',
+    dueDate: '2026-10-13',
+    daysLeft: 0,
+    reminderOffsetDays: 3,
     ...overrides,
   };
 }

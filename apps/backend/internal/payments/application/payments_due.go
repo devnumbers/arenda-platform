@@ -56,10 +56,10 @@ type PaymentDueItem struct {
 // PaymentDueList is the «На оплату» section's response (ticket #1346): the
 // whole window in one read — the section is small by construction (the
 // materialization keeps at most two window operations per rule, the
-// reminder is armed on a fraction of the rules) — ordered by
-// (daysLeft, dueDate desc, id desc): the buckets in their fixed order,
-// «Сначала новые» inside one. DueOperationsCount is the rows' own count —
-// the hub card's number, the same figure the feed's counters carry.
+// reminder is armed on a fraction of the rules) — ordered by (bucket,
+// dueDate desc, id desc): the buckets in their fixed order (0, 1, 2..3,
+// 4..7), «Сначала новые» inside one. DueOperationsCount is the rows' own
+// count — the hub card's number, the same figure the feed's counters carry.
 type PaymentDueList struct {
 	Items              []PaymentDueItem
 	DueOperationsCount int64

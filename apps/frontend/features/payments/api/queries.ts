@@ -8,6 +8,7 @@ import {
   mapPaymentChangeEntry,
   mapPaymentOperation,
   mapOperationsSummary,
+  mapPaymentsDue,
 } from '@/entities/payment';
 import type {
   GlobalPaymentFeed,
@@ -16,6 +17,7 @@ import type {
   Payment,
   PaymentChangeEntry,
   PaymentOperation,
+  PaymentsDue,
 } from '@/entities/payment';
 import {
   globalOperationKeys,
@@ -279,6 +281,29 @@ export function globalPaymentsFeedQueryOptions(
   return queryOptions({
     queryKey: globalPaymentKeys.feed,
     queryFn: () => fetchGlobalPaymentsFeed(transport),
+  });
+}
+
+/** Чистый fetch секции «На оплату» (#1346, #1347) — общее горло хука,
+ * прогрева хаба и серверного префетча #887. Всё окно одним чтением без
+ * пагинации; строки уже в порядке бакетов, «Сначала новые» внутри. */
+export async function fetchPaymentsDue(
+  transport: ApiTransport = apiClient,
+): Promise<PaymentsDue> {
+  const response = await transport<components['schemas']['PaymentsDueResponse']>(
+    '/payments/due',
+  );
+  return mapPaymentsDue(response);
+}
+
+/** Опции секции «На оплату» (канон #887): один источник ключ+fetch для
+ * хука и серверного префетча. */
+export function paymentsDueQueryOptions(
+  transport: ApiTransport = apiClient,
+): UseQueryOptions<PaymentsDue, ApiError, PaymentsDue, typeof globalPaymentKeys.due> {
+  return queryOptions({
+    queryKey: globalPaymentKeys.due,
+    queryFn: () => fetchPaymentsDue(transport),
   });
 }
 

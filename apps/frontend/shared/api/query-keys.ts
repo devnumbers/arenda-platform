@@ -327,6 +327,10 @@ export const globalPaymentKeys = {
   /** Фид главного экрана GET /payments (#575): без параметров — весь
    * видимый скоуп целиком; секции и счётчики карточек «Все …» режет фронт. */
   feed: ['global-payments', 'feed'] as const,
+  /** Секция «На оплату» GET /payments/due (#1346, #1347): всё окно одним
+   * чтением, без параметров. Оплата/удаление операции и мутации правила
+   * меняют окно — инвалидируется веткой globalPaymentKeys.all. */
+  due: ['global-payments', 'due'] as const,
   /** Стопки объектов GET /payments/objects (#575): поисковый фильтр —
    * часть ключа ('' = без фильтра). */
   objects: (search = '') => [...globalPaymentKeys.all, 'objects', search] as const,

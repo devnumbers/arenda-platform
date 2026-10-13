@@ -129,9 +129,11 @@ func TestListPaymentDue_Window(t *testing.T) {
 	}
 }
 
-// The bucket order (ticket #1346): the rows run daysLeft ascending — the
-// buckets in their fixed order — and «Сначала новые» inside one: the later
-// deadline first, the operation's id the tiebreak of the same-date pair.
+// The bucket order (ticket #1346, #1347): the rows run the buckets in
+// their fixed order (0, 1, 2..3, 4..7) — and «Сначала новые» inside one:
+// the later deadline first, the operation's id the tiebreak of the
+// same-date pair. The middle bucket spans two days-left values (2 and 3),
+// so the later deadline (daysLeft 3) precedes the nearer one (daysLeft 2).
 func TestListPaymentDue_Order(t *testing.T) {
 	t.Parallel()
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
@@ -156,15 +158,18 @@ func TestListPaymentDue_Order(t *testing.T) {
 	if len(due.Items) != 5 {
 		t.Fatalf("items = %d, want 5", len(due.Items))
 	}
-	wantDays := []int{0, 1, 2, 3, 3}
+	// The fixed bucket order with «Сначала новые» inside: the two 28ths
+	// (daysLeft 3) lead the middle bucket, the 27th (daysLeft 2) closes it.
+	wantDays := []int{0, 1, 3, 3, 2}
 	for i, want := range wantDays {
 		if due.Items[i].DaysLeft != want {
 			t.Fatalf("row %d daysLeft = %d, want the bucket order %v", i, due.Items[i].DaysLeft, wantDays)
 		}
 	}
-	// The daysLeft-3 pair shares the due date; «Сначала новые» breaks the
-	// tie by the operation's id, the newer (larger) id first.
-	first, second := due.Items[3].OperationID, due.Items[4].OperationID
+	// The daysLeft-3 pair (rows 2 and 3) shares the due date; «Сначала
+	// новые» breaks the tie by the operation's id, the newer (larger) id
+	// first.
+	first, second := due.Items[2].OperationID, due.Items[3].OperationID
 	if bytes.Compare(first[:], second[:]) <= 0 {
 		t.Errorf("tie order = %s then %s, want the newer operation id first", first, second)
 	}

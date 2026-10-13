@@ -13,7 +13,9 @@ import { formatMoneyKopecks } from '@/shared/lib/format-money';
  * на иконке категорий остаётся её пропом. Без `amountKopecks` верх остаётся
  * только иконкой, а `accentTitle` красит название синим (варианты «Blue
  * Title» 879:17555/879:17565 — замыкающие карточки секций главного экрана
- * «Платежи», #578).
+ * «Платежи», #578). `accentDescription` красит срок синим — карточки
+ * секции «На оплату»: метка «Сегодня/Завтра/Через N дней» под суммой
+ * (1036:37525, #1347).
  */
 export type PaymentCardButtonProps = {
   /** Заголовок карточки, например название платежа. */
@@ -29,6 +31,8 @@ export type PaymentCardButtonProps = {
   readonly danger?: boolean;
   /** Название синим (879:17555/879:17565) — замыкающая карточка секции. */
   readonly accentTitle?: boolean;
+  /** Срок под суммой синим (1036:37525) — карточка секции «На оплату». */
+  readonly accentDescription?: boolean;
   readonly onSelect?: () => void;
   readonly disabled?: boolean;
   readonly className?: string;
@@ -42,6 +46,7 @@ export function PaymentCardButton({
   leading,
   danger = false,
   accentTitle = false,
+  accentDescription = false,
   onSelect,
   disabled = false,
   className,
@@ -72,7 +77,11 @@ export function PaymentCardButton({
                 <span
                   className={cn(
                     'truncate',
-                    danger ? 'text-danger' : 'text-content-tertiary',
+                    danger
+                      ? 'text-danger'
+                      : accentDescription
+                        ? 'text-primary'
+                        : 'text-content-tertiary',
                   )}
                 >
                   {description}

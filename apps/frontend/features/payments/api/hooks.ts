@@ -25,6 +25,7 @@ import type {
   PaymentCreateCommand,
   PaymentOperation,
   PaymentUpdateCommand,
+  PaymentsDue,
 } from '@/entities/payment';
 import {
   type OperationsSortKey,
@@ -57,6 +58,7 @@ import {
   paymentOperationsOverdueQueryOptions,
   paymentOperationsPagedQueryOptions,
   paymentOperationsSummaryQueryOptions,
+  paymentsDueQueryOptions,
 } from './queries';
 import { keysetNextPageParam } from '@/shared/lib/keyset';
 import {
@@ -151,6 +153,9 @@ export function useCreatePayment(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      // Новое правило с напоминанием уже сегодня стоит в окне «На оплату»
+      // (#1347) — перечитывается глобальная ветка.
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
 }
@@ -193,7 +198,9 @@ export function useCreateOperation(): UseMutationResult<
  * Правка платежа (#467, экран правки): частичный PATCH — команда уже
  * посчитана диффом формы (update-model), опущенное поле остаётся без
  * изменений, `since` серверный. Сервер в транзакции пересоздаёт плановое
- * вхождение и гоняет тик — инвалидируются и правила, и операции.
+ * вхождение и гоняет тик — инвалидируются и правила, и операции; правка
+ * напоминания/автоплатежа вводит и выводит правило из окна «На оплату»
+ * (#1347) — перечитывается глобальная ветка.
  */
 export function useUpdatePayment(
   propertyId: string,
@@ -211,6 +218,7 @@ export function useUpdatePayment(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
 }
@@ -221,6 +229,8 @@ export function useUpdatePayment(
  * долгом (`keepOverdue: true`, безопасный дефолт модалки) или сносятся
  * вместе с правилом (`false`). Оплаченные факты неприкосновенны — в истории
  * они остаются с пометкой «платёж удалён» (`payment_id` обнуляется).
+ * Снос правила убирает его строки из окна «На оплату» (#1347) —
+ * перечитывается глобальная ветка.
  */
 export function useDeletePayment(
   propertyId: string,
@@ -238,6 +248,7 @@ export function useDeletePayment(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
 }
@@ -470,7 +481,9 @@ export function useGlobalOperationsSummary(
  * Удаление операции (решение владельца): planned (долг) и paid получают
  * tombstone-статус cancelled — факт оплаты и долг исчезают, расписание не
  * трогается (надгробие блокирует повторную материализацию на тике).
- * Инвалидация операций и правил (isCompleted мог пересчитаться).
+ * Инвалидация операций и правил (isCompleted мог пересчитаться); отмена
+ * planned из окна «На оплату» выводит строку из секции — перечитывается
+ * и глобальная ветка (#1347).
  */export function useDeleteOperation(
   propertyId: string,
 ): UseMutationResult<void, ApiError, string> {
@@ -486,6 +499,7 @@ export function useGlobalOperationsSummary(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
 }
@@ -493,7 +507,8 @@ export function useGlobalOperationsSummary(
 /**
  * Пауза платежа (история 18 спеки #453): бессрочно с сегодняшнего дня,
  * генерация останавливается. Сервер в транзакции гоняет тик, поэтому
- * инвалидируются и правила, и операции.
+ * инвалидируются и правила, и операции; пауза снимает правило с окна
+ * «На оплату» (#1347) — перечитывается глобальная ветка.
  */
 export function usePausePayment(
   propertyId: string,
@@ -511,11 +526,14 @@ export function usePausePayment(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
 }
 
-/** Возобновление без подтверждения (история 20); расписание идёт от якорей. */
+/** Возобновление без подтверждения (история 20); расписание идёт от якорей.
+ * Будущие planned возвращаются — правило снова может стоять в окне
+ * «На оплату» (#1347), перечитывается глобальная ветка. */
 export function useResumePayment(
   propertyId: string,
   paymentId: string,
@@ -532,6 +550,7 @@ export function useResumePayment(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
 }
@@ -619,7 +638,9 @@ export function useOperation(
  * операция гасится («старейшее неоплаченное»), решает виджет по спискам
  * операций; сервер подтверждает контрактной ошибкой 409 на повторную
  * оплату. Гашение операции арендной платы двигает прогресс аренды
- * (#531) — инвалидируется и срез rentals.
+ * (#531) — инвалидируется и срез rentals. Оплаченная операция покидает
+ * окно «На оплату» (критерий #1347 «оплата → исчезновение») и счётчики
+ * хаба — перечитывается глобальная ветка (канон complete #1340).
  */
 export function usePayOperation(
   propertyId: string,
@@ -638,8 +659,18 @@ export function usePayOperation(
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: rentalKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
+}
+
+/**
+ * Секция «На оплату» (GET /payments/due, #1346; экраны #1347): всё окно
+ * напоминаний видимого скоупа одним чтением — строки хаба и страницы.
+ * Пагинации нет (секция мала по построению материализации).
+ */
+export function usePaymentsDue(): UseQueryResult<PaymentsDue, ApiError> {
+  return useQuery(paymentsDueQueryOptions());
 }
 
 /**

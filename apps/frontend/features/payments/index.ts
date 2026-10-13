@@ -122,6 +122,7 @@ export {
   fetchPaymentOperationsByStatus,
   fetchPaymentOperationsPagedPage,
   fetchPaymentsOfProperty,
+  fetchPaymentsDue,
   fetchPropertyOperationsOverdue,
   fetchPropertyOperationsSummary,
   globalOperationsPagedQueryOptions,
@@ -137,6 +138,7 @@ export {
   paymentOperationsOverdueQueryOptions,
   paymentOperationsPagedQueryOptions,
   paymentOperationsSummaryQueryOptions,
+  paymentsDueQueryOptions,
 } from './api/queries';
 export {
   useCreateOperation,
@@ -155,6 +157,7 @@ export {
   usePaymentOperationsPaged,
   useOperation,
   usePayments,
+  usePaymentsDue,
   useCompletePayment,
   usePausePayment,
   usePayOperation,

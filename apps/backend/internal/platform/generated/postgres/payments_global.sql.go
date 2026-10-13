@@ -488,7 +488,13 @@ WHERE actor_can_read_property(pay.property_id, $3::uuid)
   AND op.status = 'planned'
   AND op.date >= t.today
   AND op.date <= t.today + pay.reminder_offset_days
-ORDER BY days_left ASC, op.date DESC, op.id DESC
+ORDER BY CASE WHEN (op.date - t.today) <= 0 THEN 0
+              WHEN (op.date - t.today) = 1 THEN 1
+              WHEN (op.date - t.today) <= 3 THEN 2
+              ELSE 3
+         END ASC,
+         op.date DESC,
+         op.id DESC
 `
 
 type ListPaymentDueParams struct {

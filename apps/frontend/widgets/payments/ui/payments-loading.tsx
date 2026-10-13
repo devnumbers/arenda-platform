@@ -31,7 +31,7 @@ import {
 
 /** Хаб «Платежи»: шапка с «крыльями», строка заголовка (паритет живого
  * экрана #1235 — «+» ждёт справочника объектов и появляется после), пилюля,
- * три секции-заглушки. */
+ * четыре секции-заглушки (#1347 — «На оплату» третьей). */
 export function PaymentsLoading(): JSX.Element {
   return (
     <>
@@ -53,6 +53,7 @@ export function PaymentsLoading(): JSX.Element {
         <div className="flex flex-col gap-6 px-6 pt-4">
           <PaymentsSearchPill onOpenSearch={() => {}} />
 
+          <PaymentsGlobalSectionSkeleton />
           <PaymentsGlobalSectionSkeleton />
           <PaymentsGlobalSectionSkeleton />
           <PaymentsGlobalSectionSkeleton />
@@ -159,6 +160,29 @@ export function PaymentsOverdueLoading(): JSX.Element {
         <div className="flex flex-col">
           <div className="px-6 pb-3">
             <ChipButton trailingIcon={<ChangeVertical />}>Старые</ChipButton>
+          </div>
+          <PaymentsRowsSkeleton />
+        </div>
+      </PageContent>
+    </>
+  );
+}
+
+/** «Платежи на оплату» (#1347): шапка, чип направления (дефолт «Сначала
+ * новые»; ?sort=old применит живой экран без сдвига) и строки канона. */
+export function PaymentsDueLoading(): JSX.Element {
+  return (
+    <>
+      <TopNav leading={<IconButton icon={<ArrowLeft />} label="Назад" />}>
+        <TopNavTitle title="Платежи на оплату" />
+      </TopNav>
+
+      <PageContent>
+        <div className="flex flex-col">
+          <div className="px-6 pb-3">
+            <ChipButton trailingIcon={<ChangeVertical />}>
+              Сначала новые
+            </ChipButton>
           </div>
           <PaymentsRowsSkeleton />
         </div>
