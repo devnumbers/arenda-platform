@@ -66,3 +66,56 @@ test.describe('настройки уведомлений — матрица со
     await expect(page.locator('p[role="alert"]')).toHaveCount(0);
   });
 });
+
+test.describe('настройки уведомлений — email-колонка без мутационного дизейбла (#1381)', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  // Канон #1028 распространён на email-колонку (тикет #1381): тумблер не
+  // дизейблится на время мутации — отклик оптимистичный (значение двигается
+  // сразу), при ошибке хук откатывает значение и показывает тост. PUT
+  // удерживается в полёте, чтобы окно isPending было детерминированным:
+  // старый код вешал disabled:opacity-50 на ВСЕ четыре тумблера колонки.
+  test('во время мутации все тумблеры колонки активны и не затемнены', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/profile/notifications');
+
+    const emailSwitch = (category: string) =>
+      page.getByRole('switch', { name: `Электронная почта — ${category}` });
+    const categories = ['Аренда', 'Платежи и операции', 'Задачи', 'Совместный доступ'];
+
+    // Сид без строки настроек = всё включено.
+    await expect(emailSwitch('Аренда')).toHaveAttribute('aria-checked', 'true');
+
+    let releasePut: (() => void) | undefined;
+    const putReleased = new Promise<void>((resolve) => {
+      releasePut = resolve;
+    });
+    await page.route('**/api/notification-preferences', async (route) => {
+      if (route.request().method() !== 'PUT') {
+        await route.continue();
+        return;
+      }
+      await putReleased;
+      await route.continue();
+    });
+
+    await emailSwitch('Аренда').click();
+
+    // Оптимистичный отклик: значение двигается до ответа сервера.
+    await expect(emailSwitch('Аренда')).toHaveAttribute('aria-checked', 'false');
+
+    // Всё окно мутации ни один тумблер колонки не заглушен и не затемнён.
+    for (const category of categories) {
+      await expect(emailSwitch(category)).toBeEnabled();
+      await expect(emailSwitch(category).locator('xpath=..')).toHaveCSS('opacity', '1');
+    }
+    await captureScreen(page, testInfo, 'notification-settings-mutation-no-disable');
+
+    releasePut?.();
+    await expect(emailSwitch('Аренда')).toHaveAttribute('aria-checked', 'false');
+    await page.unroute('**/api/notification-preferences');
+  });
+});

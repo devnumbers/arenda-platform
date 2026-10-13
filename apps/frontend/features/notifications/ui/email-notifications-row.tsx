@@ -51,7 +51,7 @@ export function EmailNotificationsRow({
         <Switch
           checked={current?.payments_operations ?? false}
           onCheckedChange={(value) => toggle(value === true)}
-          disabled={current === undefined || updatePrefs.isPending}
+          disabled={current === undefined}
           aria-label={title}
         />
       )}
