@@ -3,6 +3,7 @@
 import type { JSX } from 'react';
 import { isNotificationUnread, NotificationCategoryIcon } from '@/entities/notification';
 import type { Notification } from '@/entities/notification';
+import { paymentCategoryVisualFromSnapshot } from '@/features/payment-categories';
 import { formatTime } from '@/shared/lib/date-format';
 
 /**
@@ -38,6 +39,7 @@ export function NotificationRow({
         eventType={notification.eventType}
         unread={unread}
         photoUrl={notification.payload?.property?.photo}
+        paymentCategoryIcon={paymentCategoryVisualFromSnapshot(notification.payload?.paymentCategory)}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-col gap-1.5">

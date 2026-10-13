@@ -14,6 +14,7 @@ import {
   useMarkNotificationRead,
   useNotificationDetail,
 } from '@/features/notifications';
+import { paymentCategoryVisualFromSnapshot } from '@/features/payment-categories';
 import { BoldHome, BoldUser, Cancel, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonthTime } from '@/shared/lib/date-format';
@@ -169,6 +170,7 @@ function NotificationDetailBody({
         eventType={detail.eventType}
         unread={false}
         variant="page"
+        paymentCategoryIcon={paymentCategoryVisualFromSnapshot(detail.payload.paymentCategory)}
       />
       <div className="flex flex-col gap-3 [word-break:break-word]">
         <h1 className="text-balance text-[28px] font-semibold leading-8 text-content">

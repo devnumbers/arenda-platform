@@ -98,11 +98,13 @@ func TestNotification_PayloadJSONRoundTrip(t *testing.T) {
 	until := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	propertyID := newID()
 	actorID := newID()
+	categoryID := newID()
 	full := Payload{
-		Property: &EntityRef{ID: propertyID, Name: "Объект"},
-		Actor:    &EntityRef{ID: actorID, Name: "Иван"},
-		RentalID: new(newID()),
-		TaskID:   new(newID()),
+		Property:        &EntityRef{ID: propertyID, Name: "Объект"},
+		Actor:           &EntityRef{ID: actorID, Name: "Иван"},
+		RentalID:        new(newID()),
+		TaskID:          new(newID()),
+		PaymentCategory: &PaymentCategoryRef{Slug: "water-supply"},
 		Tariff: &TariffRef{
 			Slug:          "pro",
 			Period:        "monthly",
@@ -126,6 +128,19 @@ func TestNotification_PayloadJSONRoundTrip(t *testing.T) {
 	empty, err := json.Marshal(Payload{})
 	require.NoError(t, err)
 	assert.JSONEq(t, "{}", string(empty))
+
+	// The payment category rides under payment_category (#1348): a custom
+	// category travels by its id only — the ref keeps the payments table's
+	// XOR shape on the wire.
+	custom, err := json.Marshal(Payload{PaymentCategory: &PaymentCategoryRef{UserCategoryID: &categoryID}})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"payment_category":{"user_category_id":"`+categoryID.String()+`"}}`, string(custom))
+
+	// Old feed rows' JSONB has no payment_category — it reads back with the
+	// field nil; the frontend falls back to the standard icon (#1348).
+	var legacy Payload
+	require.NoError(t, json.Unmarshal([]byte(`{"rental_id":"`+newID().String()+`"}`), &legacy))
+	assert.Nil(t, legacy.PaymentCategory)
 }
 
 func TestNewDedupKey(t *testing.T) {

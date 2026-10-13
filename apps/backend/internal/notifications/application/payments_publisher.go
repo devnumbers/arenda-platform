@@ -51,7 +51,13 @@ type PaymentScanTarget struct {
 	// same-origin streaming path, '' when the object has no photo (#1275).
 	PropertyType  string
 	PropertyPhoto string
-	OwnerID       uuid.UUID
+	// CategorySlug and UserCategoryID are the live rule's category (Платёж):
+	// the payload's circle-icon snapshot (#1348) travels the rule's category
+	// like its title. XOR by source — the payments table's CHECK keeps
+	// exactly one half non-null (migration 000115).
+	CategorySlug   string
+	UserCategoryID *uuid.UUID
+	OwnerID        uuid.UUID
 }
 
 // PaymentScanSource is the payments scan's window into the payments context:
@@ -392,6 +398,26 @@ func (p *PaymentsPublisher) publish(ctx context.Context, eventType domain.EventT
 	}
 
 	dueDate := target.DueDate
+	payload := domain.Payload{
+		Property: &domain.EntityRef{
+			ID:      target.PropertyID,
+			Name:    target.PropertyName,
+			Address: target.PropertyAddress,
+			Type:    target.PropertyType,
+			Photo:   target.PropertyPhoto,
+		},
+		PaymentID:   &target.PaymentID,
+		PaymentDate: &dueDate,
+	}
+	// The category snapshot rides along only when the rule has one (#1348):
+	// empty halves stay out of the JSON — the field's absence, not an empty
+	// object (the payloadSnapshot contract).
+	if target.CategorySlug != "" || target.UserCategoryID != nil {
+		payload.PaymentCategory = &domain.PaymentCategoryRef{
+			Slug:           target.CategorySlug,
+			UserCategoryID: target.UserCategoryID,
+		}
+	}
 	return p.pipeline.Publish(ctx, Publication{
 		EventType: eventType,
 		DedupKey:  domain.DedupKey(paymentsDedupKey(eventType, target.PaymentID, target.DueDate)),
@@ -400,18 +426,8 @@ func (p *PaymentsPublisher) publish(ctx context.Context, eventType domain.EventT
 		// The line above the title is the property the payment hangs on —
 		// the feed's context label vocabulary (решение #737).
 		ContextLabel: target.PropertyName,
-		Payload: domain.Payload{
-			Property: &domain.EntityRef{
-				ID:      target.PropertyID,
-				Name:    target.PropertyName,
-				Address: target.PropertyAddress,
-				Type:    target.PropertyType,
-				Photo:   target.PropertyPhoto,
-			},
-			PaymentID:   &target.PaymentID,
-			PaymentDate: &dueDate,
-		},
-		Recipients: recipients,
+		Payload:      payload,
+		Recipients:   recipients,
 	})
 }
 

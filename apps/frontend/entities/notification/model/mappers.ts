@@ -4,22 +4,25 @@
  * нормализуются к null.
  */
 
-import type { components } from '@/shared/api/dto';
+import type { components } from "@/shared/api/dto";
 import type {
   Notification,
   NotificationActionKind,
   NotificationCategory,
   NotificationDetail,
   NotificationEntityRef,
+  NotificationPaymentCategoryRef,
   NotificationPayload,
   NotificationTariffRef,
-} from './types';
-import { NOTIFICATION_ACTION_KINDS } from './types';
-import type { NotificationCategoryPreferences } from './settings-catalog';
+} from "./types";
+import { NOTIFICATION_ACTION_KINDS } from "./types";
+import type { NotificationCategoryPreferences } from "./settings-catalog";
 
-type NotificationItemDto = components['schemas']['NotificationItem'];
-type NotificationDetailDto = components['schemas']['NotificationDetailResponse'];
-type CategoryPreferencesDto = components['schemas']['NotificationCategoryPreferences'];
+type NotificationItemDto = components["schemas"]["NotificationItem"];
+type NotificationDetailDto =
+  components["schemas"]["NotificationDetailResponse"];
+type CategoryPreferencesDto =
+  components["schemas"]["NotificationCategoryPreferences"];
 
 /** Матрица флагов канала (NotificationCategoryPreferences, контракт #743)
  * — snake_case DTO → доменные флаги четырёх настраиваемых категорий. */
@@ -52,7 +55,9 @@ export function mapNotification(dto: NotificationItemDto): Notification {
     // Payload в списке с #1275 — лента читает фото/глиф объекта из снимка;
     // строки без payload-снимков остаются без ключа (факт отсутствия).
     payload:
-      dto.payload !== undefined ? toPayload(dto.payload as Record<string, unknown>) : undefined,
+      dto.payload !== undefined
+        ? toPayload(dto.payload as Record<string, unknown>)
+        : undefined,
   });
 }
 
@@ -60,35 +65,60 @@ export function mapNotification(dto: NotificationItemDto): Notification {
  * известного словаря и переводим в camelCase; чужие ключи и кривые
  * структуры не проходят. */
 function toEntityRef(value: unknown): NotificationEntityRef | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const { id, name, address, email, type, photo } = value as Record<string, unknown>;
-  if (typeof id !== 'string' || typeof name !== 'string') return undefined;
+  if (typeof value !== "object" || value === null) return undefined;
+  const { id, name, address, email, type, photo } = value as Record<
+    string,
+    unknown
+  >;
+  if (typeof id !== "string" || typeof name !== "string") return undefined;
   return withoutUndefinedSlots({
     id,
     name,
-    address: typeof address === 'string' ? address : undefined,
-    email: typeof email === 'string' ? email : undefined,
-    type: typeof type === 'string' ? type : undefined,
-    photo: typeof photo === 'string' ? photo : undefined,
+    address: typeof address === "string" ? address : undefined,
+    email: typeof email === "string" ? email : undefined,
+    type: typeof type === "string" ? type : undefined,
+    photo: typeof photo === "string" ? photo : undefined,
   });
 }
 
 function toTariffRef(value: unknown): NotificationTariffRef | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const { slug, period, amount_kopecks, active_until } = value as Record<string, unknown>;
-  if (typeof slug !== 'string' || typeof period !== 'string' || typeof amount_kopecks !== 'number') {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { slug, period, amount_kopecks, active_until } = value as Record<
+    string,
+    unknown
+  >;
+  if (
+    typeof slug !== "string" ||
+    typeof period !== "string" ||
+    typeof amount_kopecks !== "number"
+  ) {
     return undefined;
   }
   return {
     slug,
     period,
     amountKopecks: amount_kopecks,
-    activeUntil: typeof active_until === 'string' ? active_until : null,
+    activeUntil: typeof active_until === "string" ? active_until : null,
   };
 }
 
 function toId(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
+/** Снимок категории платежа (#1348): валидная половина XOR проходит,
+ * пустой/мусорный снимок — undefined (факт отсутствия, кругляш деградирует
+ * по приоритету потребителя). Словарь payload и кадра SSE общий — парсер
+ * переиспользует features/notifications/api/stream-frame. */
+export function parsePaymentCategoryRef(
+  value: unknown,
+): NotificationPaymentCategoryRef | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const ref = withoutUndefinedSlots({
+    slug: toId((value as Record<string, unknown>).slug),
+    userCategoryId: toId((value as Record<string, unknown>).user_category_id),
+  });
+  return Object.keys(ref).length > 0 ? ref : undefined;
 }
 
 /** Опциональные поля, не пришедшие с бэка, не остаются явными
@@ -108,6 +138,7 @@ function toPayload(raw: Record<string, unknown>): NotificationPayload {
     taskId: toId(raw.task_id),
     membershipId: toId(raw.membership_id),
     tariff: toTariffRef(raw.tariff),
+    paymentCategory: parsePaymentCategoryRef(raw.payment_category),
   });
 }
 
@@ -115,11 +146,17 @@ function toPayload(raw: Record<string, unknown>): NotificationPayload {
  * (каталог v2 при старом фронте) не рендерится. Источник каталога —
  * NOTIFICATION_ACTION_KINDS (types.ts), расхождение исключено. */
 const ACTION_KINDS: ReadonlySet<string> = new Set(NOTIFICATION_ACTION_KINDS);
-function toActions(values: NotificationDetailDto['actions']): NotificationActionKind[] {
-  return values.filter((value): value is NotificationActionKind => ACTION_KINDS.has(value));
+function toActions(
+  values: NotificationDetailDto["actions"],
+): NotificationActionKind[] {
+  return values.filter((value): value is NotificationActionKind =>
+    ACTION_KINDS.has(value),
+  );
 }
 
-export function mapNotificationDetail(dto: NotificationDetailDto): NotificationDetail {
+export function mapNotificationDetail(
+  dto: NotificationDetailDto,
+): NotificationDetail {
   return {
     ...mapNotification(dto),
     payload: toPayload(dto.payload),

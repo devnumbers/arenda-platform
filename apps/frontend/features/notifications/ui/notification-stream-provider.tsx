@@ -1,15 +1,16 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, type JSX } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, type JSX } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   notificationHandlers,
   type ToastGate,
-} from '@/features/notifications/api/notification-handlers';
+} from "@/features/notifications/api/notification-handlers";
+import { connectNotificationStream } from "@/features/notifications/api/notification-stream";
 import {
-  connectNotificationStream,
-} from '@/features/notifications/api/notification-stream';
-import { notifyNotificationCreated } from './notification-toast';
+  notifyNotificationCreated,
+  type ResolvePaymentCategoryIcon,
+} from "./notification-toast";
 
 /**
  * Живой слой уведомлений (#747): одно SSE-соединение на вкладку
@@ -24,8 +25,16 @@ import { notifyNotificationCreated } from './notification-toast';
  */
 export function NotificationStreamProvider({
   shouldToast,
+  resolvePaymentCategoryIcon,
 }: {
   readonly shouldToast?: ToastGate;
+  /** Резолв снимка категории платежа кадра в кругляш тоста (#1348):
+   * инъекция из слоя выше — слайс не импортирует соседний
+   * features/payment-categories. Нет резолвера — тост на стандартной
+   * иконке (прежнее поведение). Должен быть СТАБИЛЬНОЙ ссылкой
+   * (модульная функция, не инлайн) — входит в зависимости эффекта
+   * соединения: новая ссылка переоткрывает SSE. */
+  readonly resolvePaymentCategoryIcon?: ResolvePaymentCategoryIcon;
 } = {}): JSX.Element | null {
   const queryClient = useQueryClient();
   // Гейт читается в момент кадра и обновляется эффектом: настройки
@@ -38,15 +47,21 @@ export function NotificationStreamProvider({
 
   useEffect(() => {
     const dispose = connectNotificationStream({
-      createSource: () => new EventSource('/api/notifications/stream'),
+      createSource: () => new EventSource("/api/notifications/stream"),
       handlers: notificationHandlers({
         queryClient,
-        showToast: notifyNotificationCreated,
+        // Кругляш категории решается в момент кадра из снимка (#1348);
+        // нет снимка/резолвера — undefined, тост рисует стандартную.
+        showToast: (frame) =>
+          notifyNotificationCreated(
+            frame,
+            resolvePaymentCategoryIcon?.(frame.paymentCategory),
+          ),
         toastGate: (category) => shouldToastRef.current?.(category) ?? true,
       }),
     });
     return dispose;
-  }, [queryClient]);
+  }, [queryClient, resolvePaymentCategoryIcon]);
 
   return null;
 }

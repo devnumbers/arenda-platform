@@ -168,6 +168,18 @@ type TariffRef struct {
 	ActiveUntil   *time.Time `json:"active_until,omitempty"`
 }
 
+// PaymentCategoryRef is the payment events' category snapshot (#1348): the
+// catalog slug XOR the user category's id — the same XOR the payments
+// table's CHECK keeps (migration 000115). The frontend resolves the slug
+// through its catalog into the circle icon; the user id degrades to the
+// user-category default. The pointer is omitted wholesale when both halves
+// are empty — the payload's wire contract promises a field's absence, never
+// an empty object (payloadSnapshot).
+type PaymentCategoryRef struct {
+	Slug           string     `json:"slug,omitempty"`
+	UserCategoryID *uuid.UUID `json:"user_category_id,omitempty"`
+}
+
 // Payload carries the feed row's links and name snapshots (решение #737):
 // property (id + имя-снимок), actor, tariff, and the bare entity ids of the
 // transition targets. All fields are optional — the text snapshot in
@@ -182,7 +194,13 @@ type Payload struct {
 	// payload payment = id правила + дата операции) — the calendar date the
 	// «Оплатить» button's live check pins the occurrence to (#743).
 	PaymentDate *time.Time `json:"payment_date,omitempty"`
-	TaskID      *uuid.UUID `json:"task_id,omitempty"`
+	// PaymentCategory is the payment events' category snapshot (#1348): the
+	// circle icon's key, resolved by the frontend's category catalog. The
+	// live rule's category travels — the title's precedent (SQL-комментарий
+	// notifications.sql): the notification's link lands on the payment's
+	// page, so what the reader meets there is what the icon shows.
+	PaymentCategory *PaymentCategoryRef `json:"payment_category,omitempty"`
+	TaskID          *uuid.UUID          `json:"task_id,omitempty"`
 	// TaskRuleID is the task's producing rule (the tasks events, #750): an
 	// active task's screens are its rule's screens, so the «переход к
 	// задаче» navigation needs the rule id alongside the task id.

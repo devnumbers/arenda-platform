@@ -202,6 +202,10 @@ func TestPaymentScanStore_ListDueTargets(t *testing.T) {
 	assert.Equal(t, "Квартира на Ленина", target.PropertyName)
 	assert.Equal(t, "Москва, Тверская 1", target.PropertyAddress)
 	assert.Equal(t, msk, target.OwnerID)
+	// The circle-icon snapshot's source (#1348): the live rule's category
+	// travels with the title — the catalog slug here, never the user id.
+	assert.Equal(t, "maintenance", target.CategorySlug)
+	assert.Nil(t, target.UserCategoryID)
 }
 
 // The overdue leg (решение #737, тип №3): planned operations dated strictly
@@ -473,6 +477,42 @@ func TestPaymentScanStore_GetScheduledDuePayment(t *testing.T) {
 		time.Date(2026, 9, 20, 21, 0, 30, 0, time.UTC))
 	require.NoError(t, err)
 	assert.False(t, live, "the job woke after the day rolled over")
+}
+
+// TestPaymentScanStore_CustomCategoryTravels pins the snapshot's custom half
+// (#1348): a rule on a user category reloads with the category's id and no
+// slug — the XOR the payments CHECK keeps.
+func TestPaymentScanStore_CustomCategoryTravels(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLiveProperty(t, pool, msk)
+	categoryID := uuid.Must(uuid.NewV7())
+	_, err := pool.Exec(ctx,
+		`INSERT INTO payment_categories (id, owner_id, name) VALUES ($1, $2, 'Моя категория')`,
+		categoryID, msk)
+	require.NoError(t, err)
+	rule := uuid.Must(uuid.NewV7())
+	_, err = pool.Exec(ctx, `
+		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence,
+			since, auto_pay, user_category_id)
+		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}',
+			'2026-08-01', false, $4)`,
+		rule, msk, prop, categoryID)
+	require.NoError(t, err)
+	insertScanOperation(t, pool, msk, prop, rule, "2026-09-20", "planned")
+
+	store := NewPaymentScanStore(pool)
+	now := time.Date(2026, 9, 19, 21, 0, 30, 0, time.UTC)
+	target, live, err := store.GetScheduledDuePayment(ctx, rule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	require.True(t, live)
+	require.NotNil(t, target.UserCategoryID, "the custom category's id travels for the circle icon")
+	assert.Equal(t, categoryID, *target.UserCategoryID)
+	assert.Empty(t, target.CategorySlug)
 }
 
 // The overdue boundary job's delivery-time resolution (issue #776): a

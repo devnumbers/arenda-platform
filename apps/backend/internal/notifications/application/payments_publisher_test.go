@@ -245,6 +245,7 @@ func TestPaymentsPublisher_PublishesDuePayment(t *testing.T) {
 		PropertyAddress: scanPropertyAddress,
 		PropertyType:    scanPropertyType,
 		PropertyPhoto:   scanPropertyPhoto,
+		CategorySlug:    "water-supply",
 		OwnerID:         uuid.Must(uuid.NewV7()),
 	}
 	h.source.due[zoneMSK] = []PaymentScanTarget{target}
@@ -286,10 +287,83 @@ func TestPaymentsPublisher_PublishesDuePayment(t *testing.T) {
 		assert.Equal(t, rule, *n.Payload.PaymentID)
 		require.NotNil(t, n.Payload.PaymentDate)
 		assert.Equal(t, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), *n.Payload.PaymentDate)
+		require.NotNil(t, n.Payload.PaymentCategory, "the category snapshot travels for the circle icon (#1348)")
+		assert.Equal(t, "water-supply", n.Payload.PaymentCategory.Slug)
+		assert.Nil(t, n.Payload.PaymentCategory.UserCategoryID, "the XOR travels: a catalog category carries no user id")
 		assert.Nil(t, n.Payload.Actor, "a system scan has no initiator")
 	}
 	assert.Len(t, h.queue.emails, 3)
 	assert.Len(t, h.queue.pushes, 3)
+}
+
+// TestPaymentsPublisher_PublishesCustomCategorySnapshot pins the custom
+// category's half of the XOR (#1348): a user category travels by its id,
+// with no slug — the frontend resolves it to the user-category default icon.
+func TestPaymentsPublisher_PublishesCustomCategorySnapshot(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	rule := uuid.Must(uuid.NewV7())
+	categoryID := uuid.Must(uuid.NewV7())
+	target := PaymentScanTarget{
+		PaymentID:       rule,
+		DueDate:         time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
+		Title:           scanRentTitle,
+		AmountKopecks:   250000,
+		PropertyID:      uuid.Must(uuid.NewV7()),
+		PropertyName:    scanPropertyName,
+		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
+		UserCategoryID:  &categoryID,
+		OwnerID:         uuid.Must(uuid.NewV7()),
+	}
+	h.source.due[zoneMSK] = []PaymentScanTarget{target}
+
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	err := p.RunZoneScans(context.Background(), scanNow)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, h.feed.inserted)
+	for _, n := range h.feed.inserted {
+		require.NotNil(t, n.Payload.PaymentCategory)
+		assert.Equal(t, categoryID, *n.Payload.PaymentCategory.UserCategoryID)
+		assert.Empty(t, n.Payload.PaymentCategory.Slug)
+	}
+}
+
+// TestPaymentsPublisher_OmitsEmptyCategorySnapshot pins the wire shape's
+// promise (payloadSnapshot's contract): a payment without the category
+// fields publishes no payment_category key at all — the old feed rows'
+// absence and the filled snapshot stay indistinguishable from a missing
+// field, never an empty object.
+func TestPaymentsPublisher_OmitsEmptyCategorySnapshot(t *testing.T) {
+	t.Parallel()
+
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	rule := uuid.Must(uuid.NewV7())
+	target := PaymentScanTarget{
+		PaymentID:       rule,
+		DueDate:         time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
+		Title:           scanRentTitle,
+		AmountKopecks:   250000,
+		PropertyID:      uuid.Must(uuid.NewV7()),
+		PropertyName:    scanPropertyName,
+		PropertyAddress: scanPropertyAddress,
+		PropertyType:    scanPropertyType,
+		PropertyPhoto:   scanPropertyPhoto,
+		OwnerID:         uuid.Must(uuid.NewV7()),
+	}
+	h.source.due[zoneMSK] = []PaymentScanTarget{target}
+
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	err := p.RunZoneScans(context.Background(), scanNow)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, h.feed.inserted)
+	for _, n := range h.feed.inserted {
+		assert.Nil(t, n.Payload.PaymentCategory)
+	}
 }
 
 func TestPaymentsPublisher_PublishesOverduePayment(t *testing.T) {

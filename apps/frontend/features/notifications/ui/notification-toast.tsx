@@ -1,15 +1,19 @@
-'use client';
+"use client";
 
-import { createElement, type JSX } from 'react';
-import Link from 'next/link';
-import { toast } from 'react-toastify/unstyled';
-import { Cancel } from '@/shared/assets/icons';
-import { formatTime } from '@/shared/lib/date-format';
-import { ROUTES } from '@/shared/config/routes';
-import { NotificationCategoryIcon } from '@/entities/notification';
-import type { NotificationCreatedFrame } from '@/features/notifications/api/stream-frame';
-import styles from '@/shared/ui/toast/ToastProvider.module.css';
-import { TOAST_AUTO_CLOSE_MS } from '@/shared/ui/toast/ToastProvider';
+import { createElement, type JSX } from "react";
+import Link from "next/link";
+import { toast } from "react-toastify/unstyled";
+import { Cancel } from "@/shared/assets/icons";
+import { formatTime } from "@/shared/lib/date-format";
+import { ROUTES } from "@/shared/config/routes";
+import type {
+  NotificationPaymentCategoryIcon,
+  NotificationPaymentCategoryRef,
+} from "@/entities/notification";
+import { NotificationCategoryIcon } from "@/entities/notification";
+import type { NotificationCreatedFrame } from "@/features/notifications/api/stream-frame";
+import styles from "@/shared/ui/toast/ToastProvider.module.css";
+import { TOAST_AUTO_CLOSE_MS } from "@/shared/ui/toast/ToastProvider";
 
 /**
  * Тост о новом уведомлении (макет 2343:57307, тикеты #747/#778): круг иконки
@@ -28,9 +32,15 @@ import { TOAST_AUTO_CLOSE_MS } from '@/shared/ui/toast/ToastProvider';
  */
 export function NotificationToast({
   frame,
+  paymentCategoryIcon,
   closeToast,
 }: {
   readonly frame: NotificationCreatedFrame;
+  /** Разрешённый кругляш категории платежа (#1348, решение владельца
+   * 13.10 — тост тоже с иконкой категории): провайдер стрима резолвит
+   * снимок кадра инъекцией (resolvePaymentCategoryIcon) — слайс не
+   * импортирует соседний features/payment-categories. */
+  readonly paymentCategoryIcon?: NotificationPaymentCategoryIcon;
   readonly closeToast: () => void;
 }): JSX.Element {
   return (
@@ -40,27 +50,36 @@ export function NotificationToast({
         onClick={closeToast}
         className="flex w-full items-start gap-4 rounded-[24px] p-4 pr-16 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
-        <NotificationCategoryIcon category={frame.category} unread={false} badge={false} />
+        <NotificationCategoryIcon
+          category={frame.category}
+          unread={false}
+          badge={false}
+          paymentCategoryIcon={paymentCategoryIcon}
+        />
         <span className="flex min-w-0 flex-1 flex-col gap-2">
           <span className="flex flex-col gap-1.5">
-            {(frame.contextLabel !== null || frame.occurredAt !== '') && (
+            {(frame.contextLabel !== null || frame.occurredAt !== "") && (
               <span className="flex items-baseline gap-2">
                 {frame.contextLabel !== null && (
                   <span className="min-w-0 flex-1 truncate text-sm leading-4 text-content">
                     {frame.contextLabel}
                   </span>
                 )}
-                {frame.occurredAt !== '' && (
+                {frame.occurredAt !== "" && (
                   <span className="shrink-0 text-sm leading-4 text-content">
                     {formatTime(frame.occurredAt)}
                   </span>
                 )}
               </span>
             )}
-            <span className="truncate text-base font-medium leading-[18px] text-content">{frame.title}</span>
+            <span className="truncate text-base font-medium leading-[18px] text-content">
+              {frame.title}
+            </span>
           </span>
-          {frame.body !== '' && (
-            <span className="line-clamp-2 text-sm leading-4 text-content-secondary">{frame.body}</span>
+          {frame.body !== "" && (
+            <span className="line-clamp-2 text-sm leading-4 text-content-secondary">
+              {frame.body}
+            </span>
           )}
         </span>
       </Link>
@@ -80,6 +99,12 @@ export function NotificationToast({
   );
 }
 
+/** Резолв снимка кадра в кругляш — инъекция из слоя выше провайдера
+ * (widgets): features не импортирует features (границы слоёв). */
+export type ResolvePaymentCategoryIcon = (
+  snapshot: NotificationPaymentCategoryRef | undefined,
+) => NotificationPaymentCategoryIcon | undefined;
+
 /** Показывает тост о новом уведомлении в канон-контейнере. Классы передаются
  * ОБА: опция className тоста в react-toastify v11 ЗАМЕНЯЕТ toastClassName
  * контейнера (поймано приёмкой #747 — карточка без .toast теряла
@@ -87,12 +112,24 @@ export function NotificationToast({
  * `.toast.notification` перекрашивает хром тоста под макет (радиус 24,
  * тень 0 8px 24px) — хром на тосте, а не на карточке, чтобы свёрнутый
  * стек показывал краешки задних карточек (нативный peek); X — своя,
- * closeButton канона выключен. */
-export function notifyNotificationCreated(frame: NotificationCreatedFrame): void {
-  toast(({ closeToast }) => createElement(NotificationToast, { frame, closeToast }), {
-    toastId: `notification-${frame.id}`,
-    className: `${styles.toast} ${styles.notification}`,
-    closeButton: false,
-    autoClose: TOAST_AUTO_CLOSE_MS,
-  });
+ * closeButton канона выключен. Кругляш категории платежа (#1348) приходит
+ * разрешённым — вызыватель (провайдер) резолвит снимок кадра инъекцией. */
+export function notifyNotificationCreated(
+  frame: NotificationCreatedFrame,
+  paymentCategoryIcon?: NotificationPaymentCategoryIcon,
+): void {
+  toast(
+    ({ closeToast }) =>
+      createElement(NotificationToast, {
+        frame,
+        paymentCategoryIcon,
+        closeToast,
+      }),
+    {
+      toastId: `notification-${frame.id}`,
+      className: `${styles.toast} ${styles.notification}`,
+      closeButton: false,
+      autoClose: TOAST_AUTO_CLOSE_MS,
+    },
+  );
 }

@@ -52,6 +52,11 @@ func (p *Publisher) NotificationCreated(ctx context.Context, n domain.Notificati
 			Title:        n.Title,
 			Body:         n.Body,
 			URL:          notificationsapp.DeepLinkFor(n),
+			// The payment events' circle-icon snapshot (#1348, решение
+			// владельца 13.10 — тост тоже с иконкой категории): the REST
+			// payload's ref travels verbatim. Additive to envelope v1 —
+			// old clients ignore the extra field.
+			PaymentCategory: n.Payload.PaymentCategory,
 		}),
 	})
 	if err != nil {
@@ -89,6 +94,10 @@ type createdPayload struct {
 	Title        string `json:"title"`
 	Body         string `json:"body"`
 	URL          string `json:"url,omitempty"`
+	// PaymentCategory is the payment events' circle-icon snapshot (#1348):
+	// the REST payload's ref verbatim ({slug, user_category_id} — the
+	// payments table's XOR shape); omitted when the row carries none.
+	PaymentCategory *domain.PaymentCategoryRef `json:"paymentCategory,omitempty"`
 }
 
 type unreadPayload struct {

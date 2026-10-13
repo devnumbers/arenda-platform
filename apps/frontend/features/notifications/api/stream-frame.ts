@@ -1,4 +1,9 @@
-import { NOTIFICATION_CATEGORIES, type NotificationCategory } from '@/entities/notification';
+import {
+  NOTIFICATION_CATEGORIES,
+  parsePaymentCategoryRef,
+  type NotificationCategory,
+  type NotificationPaymentCategoryRef,
+} from "@/entities/notification";
 
 /**
  * Разбор кадров SSE-стрима (GET /notifications/stream, #742, ADR 0060) на
@@ -9,25 +14,35 @@ import { NOTIFICATION_CATEGORIES, type NotificationCategory } from '@/entities/n
  */
 
 export type StreamFrame =
-  | { readonly kind: 'connected' }
+  | { readonly kind: "connected" }
   | {
-        readonly kind: 'created';
-        readonly id: string;
-        readonly category: NotificationCategory;
-        /** Строка над заголовком — имя объекта/тарифа или «Системные
-         * уведомления»; нет в кадре — строка не рендерится. */
-        readonly contextLabel: string | null;
-        readonly title: string;
-        readonly body: string;
-        /** Deeplink события от бэка; в тосте не используется (тап ведёт на
-         * страницу уведомления), но валидируется same-origin-гардом. */
-        readonly url: string | null;
-        readonly occurredAt: string;
+      readonly kind: "created";
+      readonly id: string;
+      readonly category: NotificationCategory;
+      /** Строка над заголовком — имя объекта/тарифа или «Системные
+       * уведомления»; нет в кадре — строка не рендерится. */
+      readonly contextLabel: string | null;
+      readonly title: string;
+      readonly body: string;
+      /** Deeplink события от бэка; в тосте не используется (тап ведёт на
+       * страницу уведомления), но валидируется same-origin-гардом. */
+      readonly url: string | null;
+      /** Снимок категории платежа (#1348) — кругляш тоста; нет в кадре
+       * (старый бэк, не-платёжное событие) — ключа нет. */
+      readonly paymentCategory?: NotificationPaymentCategoryRef;
+      readonly occurredAt: string;
     }
-  | { readonly kind: 'unread-count'; readonly count: number; readonly occurredAt: string };
+  | {
+      readonly kind: "unread-count";
+      readonly count: number;
+      readonly occurredAt: string;
+    };
 
 /** Кадр нового уведомления — единственный, что рождает тост (#747). */
-export type NotificationCreatedFrame = Extract<StreamFrame, { kind: 'created' }>;
+export type NotificationCreatedFrame = Extract<
+  StreamFrame,
+  { kind: "created" }
+>;
 
 /** envelopeVersion бэка (ADR 0060): ломающее изменение payload поднимает v —
  * такой кадр старый клиент игнорирует; аддитивные поля остаются в v1. */
@@ -46,20 +61,23 @@ type CreatedPayload = {
   title?: string;
   body?: string;
   url?: string;
+  paymentCategory?: unknown;
 };
 
 type UnreadPayload = {
   count?: number;
 };
 
-const CATEGORY_SET: ReadonlySet<string> = new Set<string>(NOTIFICATION_CATEGORIES);
+const CATEGORY_SET: ReadonlySet<string> = new Set<string>(
+  NOTIFICATION_CATEGORIES,
+);
 
 /** Same-origin-гард deeplink (канон resolveClickTarget sw.js): только
  * абсолютные пути этого origin — кадр transport-уровня не открывает чужие
  * адреса. */
 function sameOriginPath(value: string): boolean {
   if (value.length === 0) return false;
-  if (value[0] !== '/' || value[1] === '/' || value[1] === '\\') return false;
+  if (value[0] !== "/" || value[1] === "/" || value[1] === "\\") return false;
   return true;
 }
 
@@ -69,22 +87,25 @@ function urlOrNull(value: unknown): string | null {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === "object" && value !== null;
 }
 
 function text(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 /**
  * Разбирает пару (имя события, data-строка) в типизированный кадр; null —
  * кадр не наш (неизвестное имя, мусор, ломающая версия).
  */
-export function parseStreamFrame(event: string, data: string): StreamFrame | null {
+export function parseStreamFrame(
+  event: string,
+  data: string,
+): StreamFrame | null {
   // Старт-кадр хендлера — служебный «стрим жив», идёт без конверта
   // (Data: "{}", #742): распознаётся по имени до разбора data.
-  if (event === 'connected') {
-    return { kind: 'connected' };
+  if (event === "connected") {
+    return { kind: "connected" };
   }
 
   let envelope: Envelope;
@@ -97,10 +118,11 @@ export function parseStreamFrame(event: string, data: string): StreamFrame | nul
   }
 
   if (envelope.v !== ENVELOPE_VERSION) return null;
-  const occurredAt = typeof envelope.occurredAt === 'string' ? envelope.occurredAt : '';
+  const occurredAt =
+    typeof envelope.occurredAt === "string" ? envelope.occurredAt : "";
   const payload = isRecord(envelope.payload) ? envelope.payload : {};
 
-  if (event === 'notification.created') {
+  if (event === "notification.created") {
     const created = payload as CreatedPayload;
     const id = text(created.id);
     const title = text(created.title);
@@ -109,27 +131,38 @@ export function parseStreamFrame(event: string, data: string): StreamFrame | nul
     // тост не теряем).
     if (id === null || title === null) return null;
     const category =
-      typeof created.category === 'string' && CATEGORY_SET.has(created.category)
+      typeof created.category === "string" && CATEGORY_SET.has(created.category)
         ? (created.category as NotificationCategory)
-        : 'system';
-    return {
-      kind: 'created',
+        : "system";
+    const frame: StreamFrame = {
+      kind: "created",
       id,
       category,
       contextLabel: text(created.contextLabel),
       title,
-      body: typeof created.body === 'string' ? created.body : '',
+      body: typeof created.body === "string" ? created.body : "",
       url: urlOrNull(created.url),
       occurredAt,
     };
+    // Снимок категории — аддитивное поле конверта v1 (#1348): старый бэк
+    // его не кладёт, ключ остаётся фактом отсутствия. Словарь вложенного
+    // рефа — тот же, что у REST payload, парсер общий (entities).
+    const paymentCategory = parsePaymentCategoryRef(created.paymentCategory);
+    return paymentCategory !== undefined
+      ? { ...frame, paymentCategory }
+      : frame;
   }
 
-  if (event === 'notification.unread_count') {
+  if (event === "notification.unread_count") {
     const unread = payload as UnreadPayload;
-    if (typeof unread.count !== 'number' || !Number.isFinite(unread.count) || unread.count < 0) {
+    if (
+      typeof unread.count !== "number" ||
+      !Number.isFinite(unread.count) ||
+      unread.count < 0
+    ) {
       return null;
     }
-    return { kind: 'unread-count', count: unread.count, occurredAt };
+    return { kind: "unread-count", count: unread.count, occurredAt };
   }
 
   return null;

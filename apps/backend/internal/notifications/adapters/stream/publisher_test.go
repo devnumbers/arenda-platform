@@ -18,6 +18,12 @@ type fixedClock struct{}
 
 func (fixedClock) Now() time.Time { return time.Date(2026, 9, 18, 9, 15, 3, 0, time.UTC) }
 
+// The payment-due frame's copy the created-frame tests share.
+const (
+	paymentDueFrameTitle = "Оплатите платёж"
+	paymentDueFrameBody  = "Срок оплаты: 1 октября"
+)
+
 // subscribedHub returns a hub with one open connection for user.
 func subscribedHub(t *testing.T, user uuid.UUID) (hub *sse.Hub, frames <-chan sse.Frame) {
 	t.Helper()
@@ -96,8 +102,8 @@ func TestNotificationCreatedWithoutDeepLinkOmitsURL(t *testing.T) {
 		UserID:    user,
 		Category:  domain.CategoryPaymentsOperations,
 		EventType: domain.EventPaymentDue,
-		Title:     "Оплатите платёж",
-		Body:      "Срок оплаты: 1 октября",
+		Title:     paymentDueFrameTitle,
+		Body:      paymentDueFrameBody,
 	})
 
 	f := receiveFrame(t, frames)
@@ -153,6 +159,67 @@ func TestNotificationCreatedFrameOmitsEmptyContextLabel(t *testing.T) {
 
 	f := receiveFrame(t, frames)
 	assert.NotContains(t, f.Data, `"contextLabel"`, "an empty context label is omitted, not an empty string")
+}
+
+// TestNotificationCreatedFrameCarriesPaymentCategory pins the toast's
+// circle-icon snapshot (#1348, решение владельца 13.10 — тост тоже с
+// иконкой категории): the payment events' category ref rides in the frame
+// additively to envelope v1 — old clients ignore the extra field.
+func TestNotificationCreatedFrameCarriesPaymentCategory(t *testing.T) {
+	t.Parallel()
+
+	user := uuid.Must(uuid.NewV7())
+	hub, frames := subscribedHub(t, user)
+	publisher := NewPublisher(hub, fixedClock{})
+
+	categoryID := uuid.Must(uuid.NewV7())
+	publisher.NotificationCreated(context.Background(), domain.Notification{
+		ID:        uuid.Must(uuid.NewV7()),
+		UserID:    user,
+		Category:  domain.CategoryPaymentsOperations,
+		EventType: domain.EventPaymentDue,
+		Title:     paymentDueFrameTitle,
+		Body:      paymentDueFrameBody,
+		Payload: domain.Payload{
+			PaymentCategory: &domain.PaymentCategoryRef{UserCategoryID: &categoryID},
+		},
+	})
+
+	f := receiveFrame(t, frames)
+	var env struct {
+		Payload json.RawMessage `json:"payload"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(f.Data), &env))
+	var payload struct {
+		PaymentCategory *struct {
+			Slug           string `json:"slug"`
+			UserCategoryID string `json:"user_category_id"`
+		} `json:"paymentCategory"`
+	}
+	require.NoError(t, json.Unmarshal(env.Payload, &payload))
+	require.NotNil(t, payload.PaymentCategory, "the category ref travels for the toast's circle icon")
+	assert.Equal(t, categoryID.String(), payload.PaymentCategory.UserCategoryID)
+	assert.Empty(t, payload.PaymentCategory.Slug, "the ref's XOR shape matches the REST payload's")
+}
+
+func TestNotificationCreatedFrameOmitsEmptyPaymentCategory(t *testing.T) {
+	t.Parallel()
+
+	user := uuid.Must(uuid.NewV7())
+	hub, frames := subscribedHub(t, user)
+	publisher := NewPublisher(hub, fixedClock{})
+
+	publisher.NotificationCreated(context.Background(), domain.Notification{
+		ID:        uuid.Must(uuid.NewV7()),
+		UserID:    user,
+		Category:  domain.CategoryPaymentsOperations,
+		EventType: domain.EventPaymentDue,
+		Title:     paymentDueFrameTitle,
+		Body:      paymentDueFrameBody,
+	})
+
+	f := receiveFrame(t, frames)
+	assert.NotContains(t, f.Data, "paymentCategory", "a notification without the snapshot omits the field, not an empty object")
 }
 
 func TestUnreadCountFrame(t *testing.T) {

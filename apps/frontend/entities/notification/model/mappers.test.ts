@@ -217,6 +217,32 @@ describe('mapNotificationDetail', () => {
     expect('payload' in mapped).toBe(false);
   });
 
+  it('payment_category — снимок категории платежа (#1348): слаг и id пользовательской переносятся, мусор нет', () => {
+    const catalog = mapNotificationDetail(
+      detailDto({ payload: { payment_category: { slug: 'water-supply' } } }),
+    );
+    expect(catalog.payload.paymentCategory).toStrictEqual({ slug: 'water-supply' });
+
+    const custom = mapNotificationDetail(
+      detailDto({
+        payload: {
+          payment_category: {
+            slug: 42,
+            user_category_id: '0194a3f8-0000-7000-8000-000000000009',
+          },
+        },
+      }),
+    );
+    expect(custom.payload.paymentCategory).toStrictEqual({
+      userCategoryId: '0194a3f8-0000-7000-8000-000000000009',
+    });
+
+    // Ни одной валидной половины XOR — снимка нет (факт отсутствия), кругляш
+    // деградирует в фото/стандарт по приоритету потребителя.
+    const empty = mapNotificationDetail(detailDto({ payload: { payment_category: {} } }));
+    expect('paymentCategory' in empty.payload).toBe(false);
+  });
+
   it('урезает payload до известного словаря — мусор не проходит', () => {
     const mapped = mapNotificationDetail(
       detailDto({

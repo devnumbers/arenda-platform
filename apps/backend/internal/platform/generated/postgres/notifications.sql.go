@@ -255,6 +255,8 @@ const getScheduledAutoPaidPayment = `-- name: GetScheduledAutoPaidPayment :one
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
+       pay.category_slug,
+       pay.user_category_id,
        o.amount_kopecks,
        p.id AS property_id,
        p.name AS property_name,
@@ -288,6 +290,8 @@ type GetScheduledAutoPaidPaymentRow struct {
 	PaymentID       pgtype.UUID `json:"payment_id"`
 	Date            pgtype.Date `json:"date"`
 	Title           string      `json:"title"`
+	CategorySlug    pgtype.Text `json:"category_slug"`
+	UserCategoryID  pgtype.UUID `json:"user_category_id"`
 	AmountKopecks   int64       `json:"amount_kopecks"`
 	PropertyID      pgtype.UUID `json:"property_id"`
 	PropertyName    string      `json:"property_name"`
@@ -316,6 +320,8 @@ func (q *Queries) GetScheduledAutoPaidPayment(ctx context.Context, arg GetSchedu
 		&i.PaymentID,
 		&i.Date,
 		&i.Title,
+		&i.CategorySlug,
+		&i.UserCategoryID,
 		&i.AmountKopecks,
 		&i.PropertyID,
 		&i.PropertyName,
@@ -393,6 +399,8 @@ const getScheduledDuePayment = `-- name: GetScheduledDuePayment :one
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
+       pay.category_slug,
+       pay.user_category_id,
        o.amount_kopecks,
        p.id AS property_id,
        p.name AS property_name,
@@ -424,6 +432,8 @@ type GetScheduledDuePaymentRow struct {
 	PaymentID       pgtype.UUID `json:"payment_id"`
 	Date            pgtype.Date `json:"date"`
 	Title           string      `json:"title"`
+	CategorySlug    pgtype.Text `json:"category_slug"`
+	UserCategoryID  pgtype.UUID `json:"user_category_id"`
 	AmountKopecks   int64       `json:"amount_kopecks"`
 	PropertyID      pgtype.UUID `json:"property_id"`
 	PropertyName    string      `json:"property_name"`
@@ -450,6 +460,8 @@ func (q *Queries) GetScheduledDuePayment(ctx context.Context, arg GetScheduledDu
 		&i.PaymentID,
 		&i.Date,
 		&i.Title,
+		&i.CategorySlug,
+		&i.UserCategoryID,
 		&i.AmountKopecks,
 		&i.PropertyID,
 		&i.PropertyName,
@@ -465,6 +477,8 @@ const getScheduledOverduePayment = `-- name: GetScheduledOverduePayment :one
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
+       pay.category_slug,
+       pay.user_category_id,
        o.amount_kopecks,
        p.id AS property_id,
        p.name AS property_name,
@@ -495,6 +509,8 @@ type GetScheduledOverduePaymentRow struct {
 	PaymentID       pgtype.UUID `json:"payment_id"`
 	Date            pgtype.Date `json:"date"`
 	Title           string      `json:"title"`
+	CategorySlug    pgtype.Text `json:"category_slug"`
+	UserCategoryID  pgtype.UUID `json:"user_category_id"`
 	AmountKopecks   int64       `json:"amount_kopecks"`
 	PropertyID      pgtype.UUID `json:"property_id"`
 	PropertyName    string      `json:"property_name"`
@@ -517,6 +533,8 @@ func (q *Queries) GetScheduledOverduePayment(ctx context.Context, arg GetSchedul
 		&i.PaymentID,
 		&i.Date,
 		&i.Title,
+		&i.CategorySlug,
+		&i.UserCategoryID,
 		&i.AmountKopecks,
 		&i.PropertyID,
 		&i.PropertyName,
@@ -600,6 +618,8 @@ const getScheduledReminderPayment = `-- name: GetScheduledReminderPayment :one
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
+       pay.category_slug,
+       pay.user_category_id,
        o.amount_kopecks,
        p.id AS property_id,
        p.name AS property_name,
@@ -631,6 +651,8 @@ type GetScheduledReminderPaymentRow struct {
 	PaymentID       pgtype.UUID `json:"payment_id"`
 	Date            pgtype.Date `json:"date"`
 	Title           string      `json:"title"`
+	CategorySlug    pgtype.Text `json:"category_slug"`
+	UserCategoryID  pgtype.UUID `json:"user_category_id"`
 	AmountKopecks   int64       `json:"amount_kopecks"`
 	PropertyID      pgtype.UUID `json:"property_id"`
 	PropertyName    string      `json:"property_name"`
@@ -654,6 +676,8 @@ func (q *Queries) GetScheduledReminderPayment(ctx context.Context, arg GetSchedu
 		&i.PaymentID,
 		&i.Date,
 		&i.Title,
+		&i.CategorySlug,
+		&i.UserCategoryID,
 		&i.AmountKopecks,
 		&i.PropertyID,
 		&i.PropertyName,
@@ -811,6 +835,8 @@ const listPaymentAutoPaidTargets = `-- name: ListPaymentAutoPaidTargets :many
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
+       pay.category_slug,
+       pay.user_category_id,
        o.amount_kopecks,
        p.id AS property_id,
        p.name AS property_name,
@@ -846,6 +872,8 @@ type ListPaymentAutoPaidTargetsRow struct {
 	PaymentID       pgtype.UUID `json:"payment_id"`
 	Date            pgtype.Date `json:"date"`
 	Title           string      `json:"title"`
+	CategorySlug    pgtype.Text `json:"category_slug"`
+	UserCategoryID  pgtype.UUID `json:"user_category_id"`
 	AmountKopecks   int64       `json:"amount_kopecks"`
 	PropertyID      pgtype.UUID `json:"property_id"`
 	PropertyName    string      `json:"property_name"`
@@ -881,6 +909,8 @@ func (q *Queries) ListPaymentAutoPaidTargets(ctx context.Context, arg ListPaymen
 			&i.PaymentID,
 			&i.Date,
 			&i.Title,
+			&i.CategorySlug,
+			&i.UserCategoryID,
 			&i.AmountKopecks,
 			&i.PropertyID,
 			&i.PropertyName,
@@ -903,6 +933,8 @@ const listPaymentDueTargets = `-- name: ListPaymentDueTargets :many
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
+       pay.category_slug,
+       pay.user_category_id,
        o.amount_kopecks,
        p.id AS property_id,
        p.name AS property_name,
@@ -935,6 +967,8 @@ type ListPaymentDueTargetsRow struct {
 	PaymentID       pgtype.UUID `json:"payment_id"`
 	Date            pgtype.Date `json:"date"`
 	Title           string      `json:"title"`
+	CategorySlug    pgtype.Text `json:"category_slug"`
+	UserCategoryID  pgtype.UUID `json:"user_category_id"`
 	AmountKopecks   int64       `json:"amount_kopecks"`
 	PropertyID      pgtype.UUID `json:"property_id"`
 	PropertyName    string      `json:"property_name"`
@@ -969,6 +1003,8 @@ func (q *Queries) ListPaymentDueTargets(ctx context.Context, arg ListPaymentDueT
 			&i.PaymentID,
 			&i.Date,
 			&i.Title,
+			&i.CategorySlug,
+			&i.UserCategoryID,
 			&i.AmountKopecks,
 			&i.PropertyID,
 			&i.PropertyName,
@@ -991,6 +1027,8 @@ const listPaymentOverdueTargets = `-- name: ListPaymentOverdueTargets :many
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
+       pay.category_slug,
+       pay.user_category_id,
        o.amount_kopecks,
        p.id AS property_id,
        p.name AS property_name,
@@ -1022,6 +1060,8 @@ type ListPaymentOverdueTargetsRow struct {
 	PaymentID       pgtype.UUID `json:"payment_id"`
 	Date            pgtype.Date `json:"date"`
 	Title           string      `json:"title"`
+	CategorySlug    pgtype.Text `json:"category_slug"`
+	UserCategoryID  pgtype.UUID `json:"user_category_id"`
 	AmountKopecks   int64       `json:"amount_kopecks"`
 	PropertyID      pgtype.UUID `json:"property_id"`
 	PropertyName    string      `json:"property_name"`
@@ -1054,6 +1094,8 @@ func (q *Queries) ListPaymentOverdueTargets(ctx context.Context, arg ListPayment
 			&i.PaymentID,
 			&i.Date,
 			&i.Title,
+			&i.CategorySlug,
+			&i.UserCategoryID,
 			&i.AmountKopecks,
 			&i.PropertyID,
 			&i.PropertyName,
@@ -1076,6 +1118,8 @@ const listPaymentReminderTargets = `-- name: ListPaymentReminderTargets :many
 SELECT pay.id AS payment_id,
        o.date,
        pay.title,
+       pay.category_slug,
+       pay.user_category_id,
        o.amount_kopecks,
        p.id AS property_id,
        p.name AS property_name,
@@ -1108,6 +1152,8 @@ type ListPaymentReminderTargetsRow struct {
 	PaymentID       pgtype.UUID `json:"payment_id"`
 	Date            pgtype.Date `json:"date"`
 	Title           string      `json:"title"`
+	CategorySlug    pgtype.Text `json:"category_slug"`
+	UserCategoryID  pgtype.UUID `json:"user_category_id"`
 	AmountKopecks   int64       `json:"amount_kopecks"`
 	PropertyID      pgtype.UUID `json:"property_id"`
 	PropertyName    string      `json:"property_name"`
@@ -1139,6 +1185,8 @@ func (q *Queries) ListPaymentReminderTargets(ctx context.Context, arg ListPaymen
 			&i.PaymentID,
 			&i.Date,
 			&i.Title,
+			&i.CategorySlug,
+			&i.UserCategoryID,
 			&i.AmountKopecks,
 			&i.PropertyID,
 			&i.PropertyName,

@@ -99,6 +99,17 @@ export type NotificationTariffRef = {
 };
 
 /**
+ * Снимок категории платежа (#1348): слаг каталога XOR id пользовательской —
+ * тот же XOR, что держит CHECK таблицы payments. Кругляш платёжных
+ * уведомлений резолвит слаг через каталог фронта; id пользовательской
+ * деградирует в дефолт пользовательских категорий.
+ */
+export type NotificationPaymentCategoryRef = {
+  readonly slug?: string;
+  readonly userCategoryId?: string;
+};
+
+/**
  * Payload страницы уведомления (решение #737): ссылки и снимки имён,
  * все поля опциональны — текст-снимок title/body самодостаточен, payload
  * добавляет навигацию и карточки.
@@ -117,6 +128,9 @@ export type NotificationPayload = {
   readonly taskRuleId?: string;
   readonly membershipId?: string;
   readonly tariff?: NotificationTariffRef;
+  /** Снимок категории платежа (#1348) — ключ кругляша платёжных событий;
+   * нет снимка (старые строки) — фото объекта/стандартная иконка. */
+  readonly paymentCategory?: NotificationPaymentCategoryRef;
 };
 
 /**

@@ -109,4 +109,30 @@ describe('parseStreamFrame — защита от мусора', () => {
     );
     expect(frame).toMatchObject({ kind: 'created', category: 'system' });
   });
+
+  it('paymentCategory — снимок категории платежа (#1348): слаг и id пользовательской проходят', () => {
+    const frame = parseStreamFrame(
+      'notification.created',
+      frameData({
+        id: 'x',
+        category: 'payments_operations',
+        title: 'Оплатите платёж',
+        body: 'b',
+        paymentCategory: { slug: 'water-supply', user_category_id: '0194a3f8-0000-7000-8000-000000000009' },
+      }),
+    );
+    expect(
+      (frame as Extract<StreamFrame, { kind: 'created' }>).paymentCategory,
+    ).toStrictEqual({ slug: 'water-supply', userCategoryId: '0194a3f8-0000-7000-8000-000000000009' });
+  });
+
+  it('paymentCategory без валидных половин XOR и не-объект — снимка нет', () => {
+    const base = { id: 'x', category: 'payments_operations', title: 't', body: 'b' };
+    const empty = parseStreamFrame('notification.created', frameData({ ...base, paymentCategory: {} }));
+    expect('paymentCategory' in (empty as Extract<StreamFrame, { kind: 'created' }>)).toBe(false);
+    const garbage = parseStreamFrame('notification.created', frameData({ ...base, paymentCategory: 42 }));
+    expect('paymentCategory' in (garbage as Extract<StreamFrame, { kind: 'created' }>)).toBe(false);
+    const absent = parseStreamFrame('notification.created', frameData(base));
+    expect('paymentCategory' in (absent as Extract<StreamFrame, { kind: 'created' }>)).toBe(false);
+  });
 });

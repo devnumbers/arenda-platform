@@ -2,6 +2,7 @@
 
 import { type JSX } from 'react';
 import { NotificationStreamProvider } from '@/features/notifications';
+import { paymentCategoryVisualFromSnapshot } from '@/features/payment-categories';
 import {
   usePushDevicePreferences,
   usePushSubscriptionStatus,
@@ -25,6 +26,7 @@ export function NotificationStreamGate(): JSX.Element | null {
   return (
     <NotificationStreamProvider
       shouldToast={(category) => toastAllowedByPush(preferences, category)}
+      resolvePaymentCategoryIcon={paymentCategoryVisualFromSnapshot}
     />
   );
 }
