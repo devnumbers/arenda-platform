@@ -10,6 +10,7 @@ import { NotificationCategoryIcon } from '@/entities/notification';
 import type { NotificationCreatedFrame } from '@/features/notifications/api/stream-frame';
 import styles from '@/shared/ui/toast/ToastProvider.module.css';
 import { TOAST_AUTO_CLOSE_MS } from '@/shared/ui/toast/ToastProvider';
+import { showDisplacingToast } from '@/shared/ui/toast/show-displacing-toast';
 
 /**
  * Тост о новом уведомлении (макет 2343:57307, тикеты #747/#778): круг иконки
@@ -80,19 +81,21 @@ export function NotificationToast({
   );
 }
 
-/** Показывает тост о новом уведомлении в канон-контейнере. Классы передаются
- * ОБА: опция className тоста в react-toastify v11 ЗАМЕНЯЕТ toastClassName
- * контейнера (поймано приёмкой #747 — карточка без .toast теряла
- * pointer-events: auto и не пропускала тапы), а bare-вариант
+/** Показывает тост о новом уведомлении в канон-контейнере — через вытесняющий
+ * показ (showDisplacingToast, решение владельца 13.10): новое уведомление
+ * заменяет видимое, старое играет exit-анимацию одновременно со входом нового.
+ * Классы передаются ОБА: опция className тоста в react-toastify v11 ЗАМЕНЯЕТ
+ * toastClassName контейнера (поймано приёмкой #747 — карточка без .toast
+ * теряла pointer-events: auto и не пропускала тапы), а bare-вариант
  * `.toast.notification` перекрашивает хром тоста под макет (радиус 24,
- * тень 0 8px 24px) — хром на тосте, а не на карточке, чтобы свёрнутый
- * стек показывал краешки задних карточек (нативный peek); X — своя,
- * closeButton канона выключен. */
+ * тень 0 8px 24px); X — своя, closeButton канона выключен. */
 export function notifyNotificationCreated(frame: NotificationCreatedFrame): void {
-  toast(({ closeToast }) => createElement(NotificationToast, { frame, closeToast }), {
-    toastId: `notification-${frame.id}`,
-    className: `${styles.toast} ${styles.notification}`,
-    closeButton: false,
-    autoClose: TOAST_AUTO_CLOSE_MS,
+  showDisplacingToast(() => {
+    toast(({ closeToast }) => createElement(NotificationToast, { frame, closeToast }), {
+      toastId: `notification-${frame.id}`,
+      className: `${styles.toast} ${styles.notification}`,
+      closeButton: false,
+      autoClose: TOAST_AUTO_CLOSE_MS,
+    });
   });
 }

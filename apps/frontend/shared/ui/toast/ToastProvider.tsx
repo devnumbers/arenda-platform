@@ -2,8 +2,8 @@
 
 import {type JSX, useEffect, useState} from 'react';
 import {type CloseButtonProps, cssTransition, ToastContainer,} from 'react-toastify/unstyled';
-// Нативный CSS библиотеки: контейнер, позиции, стек (peek-ступени,
-// data-collapsed, transition transform 0.3s). unstyled сам стилей не несёт.
+// Нативный CSS библиотеки: контейнер, позиции, скрытие прогресс-бара.
+// unstyled сам стилей не несёт.
 import 'react-toastify/dist/ReactToastify.css';
 import {Cancel} from '@/shared/assets/icons';
 import styles from './ToastProvider.module.css';
@@ -63,11 +63,12 @@ export function ToastProvider(): JSX.Element {
     return (
         <ToastContainer
             position={isMobile ? 'top-center' : 'top-right'}
-            stacked
-            /* Больше трёх карточек в стеке не показываются: лишние стоят в
-               нативной очереди и выходят по мере закрытия (решение владельца
-               21.09). */
-            limit={3}
+            /* Максимум один тост на экране (решение владельца 13.10): новый
+               показ вытесняет видимый (showDisplacingToast), стек и нативная
+               очередь лишних не используются — без limit их просто нет.
+               limit={1} вместо этого не годится: v11 держит тост в счётчике
+               показанных до конца exit+collapse, и новый тост ждал бы в
+               очереди ~600мс — замена шла бы «ступенькой», не кросс-свапом. */
             hideProgressBar
             closeOnClick={false}
             pauseOnHover

@@ -1,16 +1,23 @@
 /* Тосты на react-toastify v11 (unstyled) + нативный ReactToastify.css.
-   Библиотечный CSS несёт контейнер, позиции, стек (позиции --y/--s/--g,
-   data-collapsed, peek-ступени, transition transform 0.3s), скрытие
-   содержимого свёрнутых карточек. Здесь только скины поверх него и
-   библиотечные CSS-переменные; специфичность поднята до .toast.Toastify__toast,
+   Библиотечный CSS несёт контейнер, позиции и скрытие прогресс-бара;
+   unstyled сам стилей не несёт. Максимум один тост на экране (решение
+   владельца 13.10): стек (stacked, peek-ступени, --y/--s) не используется,
+   замена — вытесняющий показ (showDisplacingToast), кейфреймы — на каноне
+   §8 DESIGN.md (--dl-ease, --dl-duration-move). Карточки ложатся НА ОДНО
+   МЕСТО (дополнение решения 13.10: «надо чтобы просто в бок уходило и
+   все») — absolute-укладка вместо нативной колонки: заменяющая карточка
+   появляется ровно на месте старой и никуда не едет по вертикали, старая
+   уезжает вбок из-под неё. Специфичность поднята до .toast.Toastify__toast,
    чтобы не зависеть от порядка в бандле. */
 
-:global(:root) {
-    --toastify-toast-width: 460px;
-}
-
-/* Пустые зоны контейнера не ловят клики; сам тост — pointer-events: auto. */
+/* Пустые зоны контейнера не ловят клики; сам тост — pointer-events: auto.
+   Канонная ширина сценарного тоста 460 живёт НА КОНТЕЙНЕРЕ, а не на :root:
+   нативный ReactToastify.css определяет тот же var на :root (320), и при
+   совпадающей специфичности порядок CSS-чанков решает — на живой сборке
+   побеждала нативная двойка (замер приёмкой 13.10). Элементная переменная
+   бьёт любое :root-наследование. */
 .container {
+    --toastify-toast-width: 460px;
     pointer-events: none;
 }
 
@@ -22,11 +29,40 @@
     }
 }
 
-.toast:global(.Toastify__toast) {
-    /* Стековые transform-переменные выставляет библиотека инлайн; дефолт
-       --s страхует кадр до layout-эффекта (нативный дефолт только у --y). */
-    --s: 1;
+/* Absolute-укладка, десктоп: контейнер — точка-якорь у правого края
+   (нативная fit-content ширина с абсолютными детьми схлопывается в 0 —
+   невидима и pointer-events: none), каждая карточка прижата к его правому
+   краю. Порядок отрисовки — порядок в DOM: заменяющая карточка позже и
+   накрывает уходящую. */
+.container:global(.Toastify__toast-container--top-right) .toast:global(.Toastify__toast) {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
 
+/* Absolute-укладка, мобайл (top-center): контейнер растягивается в полосу
+   между полями 12 (нативный left:50% + translateX(-50%) снят — transform
+   на контейнере конфликтовал бы с центрированием), карточки центрируются
+   margin-inline: auto без transform — кейфреймы и drag держат transform
+   карточки целиком. */
+@media (max-width: 767px) {
+    .container:global(.Toastify__toast-container--top-center) {
+        left: 12px;
+        right: 12px;
+        width: auto;
+        transform: none;
+    }
+
+    .container:global(.Toastify__toast-container--top-center) .toast:global(.Toastify__toast) {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        margin-inline: auto;
+    }
+}
+
+.toast:global(.Toastify__toast) {
     gap: 12px;
     padding: 12px 16px;
     border-radius: var(--radius-button);
@@ -74,27 +110,6 @@
     to {
         transform: scaleX(0);
     }
-}
-
-/* В v11 обёртки .Toastify__toast-body больше нет — контент рендерится
-   напрямую в тост, и нативное правило фейда «... .Toastify__toast-body
-   { transition: opacity 0.1s }» не находит элемент. Повторяем его намерение
-   на прямых детях тоста: содержимое свёрнутых карточек гаснет/проявляется
-   плавно вслед за разлётом стека, а не одним кадром. */
-.toast:global(.Toastify__toast)[class*='--stacked'] > * {
-    transition: opacity 0.1s;
-}
-
-/* Наслоение свёрнутого стека (решение владельца 28.09: «чтобы больше
-   друг на друга наслаивались»): библиотека жёстко считает --y как 20%
-   накопленных высот хвостов — множителем поверх той же переменной
-   хвосты прячутся глубже под фронт-карточку (замер живьём: peek ~6/15px
-   вместо ~22/45).
-   Только data-collapsed='true': раскрытый стек (hover) остаётся колонкой
-   полных карточек (макет 2343-50629); drag ставит свою inline-
-   трансформу и этим правилом не перебивается. */
-.toast:global(.Toastify__toast--stacked)[data-collapsed='true'] {
-    transform: translate3d(0, calc(var(--y) * 0.5), 0) scale(var(--s));
 }
 
 .body {
@@ -148,15 +163,11 @@
 }
 
 /* Bare variant (тост о новом уведомлении, #747, макет 2343:57307): макет
-   карточки — радиус 24 и тень 0 8px 24px — несёт сам тост, поэтому фон и
-   хром видны и у свёрнутых карточек (нативный peek-стек), а содержимое
-   скрывается стеком библиотеки. Ширина карточки — 402 (макет #778, поля
-   24 во фрейме 450), мобайл — экран − 48 (поля 24 с обеих сторон).
-   Ширина задаётся СВОЙСТВОМ, не переменной: в stacked-режиме библиотека
-   кладёт на тосты `.Toastify__toast--stacked { width: 100% }` позже своей
-   базовой ширины — var(--toastify-toast-width) на тосте не разрешается
-   вовсе, карточка тянется на ширину контейнера. 0-3-0 варианта бьёт
-   0-1-0 библиотеки; канонные тосты сценариев остаются на :root-значении
+   карточки — радиус 24 и тень 0 8px 24px — несёт сам тост. Ширина — 402
+   (макет #778, поля 24 во фрейме 450), мобайл — экран − 48 (поля 24 с обеих
+   сторон). Ширина задаётся СВОЙСТВОМ: она перекрывает нативную
+   `width: var(--toastify-toast-width)` на .Toastify__toast (0-3-0 бьёт
+   0-1-0 библиотеки); канонные тосты сценариев остаются на :root-значении
    460. */
 .toast:global(.Toastify__toast).notification {
     width: 402px;
@@ -171,23 +182,6 @@
     .toast:global(.Toastify__toast).notification {
         width: calc(100vw - 48px);
     }
-}
-
-/* Extended hit area канона накрывает X верхней карточки свёрнутого
-   стека — клик по крестику перехватывает фронт-карточка (поймано
-   владельцем 19.09: «уведомления не закрываются на крестик»). У
-   уведомительных тостов зона отключена: X кликабелен всегда; gap
-   filler (::after) остаётся — hover-раскрытие работает. */
-.toast.notification[class*='--stacked']::before {
-    content: none;
-}
-
-/* Exit канона («улет вправо») перебивает stack-трансформ (--y/--s):
-   свёрнутая карточка при закрытии скачет по вертикали и масштабу.
-   Не-фронтовая карточка гаснет на месте; фронтовая (:last-child)
-   сохраняет вылет канона. */
-.toast.notification[class*='--stacked']:not(:last-child).toastExit {
-    animation-name: toast-fade-out;
 }
 
 .closeButton {
@@ -239,83 +233,73 @@
     color: var(--color-primary);
 }
 
+/* Канон §8 DESIGN.md: единая кривая --dl-ease, движение — 350ms
+   (--dl-duration-move). Замена тостов — кросс-свап (вытесняющий показ
+   showDisplacingToast): старый уходит exit-анимацией, новый одновременно
+   въезжает; схлопывание высоты уходящего делает react-toastify
+   (collapseDuration 250), поэтому въехавший доезжает вверх без прыжка. */
 .toastEnter {
-    animation-duration: 0.2s;
+    animation-duration: var(--dl-duration-move);
     animation-fill-mode: both;
     animation-name: toast-enter-right;
-    animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+    animation-timing-function: var(--dl-ease);
 }
 
 .toastExit {
-    animation-duration: 0.25s;
+    animation-duration: var(--dl-duration-move);
     animation-fill-mode: both;
     animation-name: toast-exit-right;
-    animation-timing-function: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+    animation-timing-function: var(--dl-ease);
 }
 
 /* Apple-style banner motion (HIG: brief, precise, exit mirrors enter):
-   short travel, single soft deceleration, ~6px overshoot, fade-in early. */
+   single soft deceleration on --dl-ease, fade rides the same move —
+   no overshoot, no stack choreography. */
 @keyframes toast-enter-right {
     from {
         opacity: 0;
-        transform: translate3d(120%, var(--y), 0) scale(var(--s));
-    }
-
-    50% {
-        opacity: 1;
-    }
-
-    75% {
-        transform: translate3d(-6px, var(--y), 0) scale(var(--s));
+        transform: translate3d(120%, 0, 0);
     }
 
     to {
         opacity: 1;
-        transform: translate3d(0, var(--y), 0) scale(var(--s));
+        transform: translate3d(0, 0, 0);
     }
 }
 
 @keyframes toast-exit-right {
     from {
         opacity: 1;
-        transform: translate3d(0, var(--y), 0) scale(var(--s));
+        transform: translate3d(0, 0, 0);
     }
 
     to {
         opacity: 0;
-        transform: translate3d(120%, var(--y), 0) scale(var(--s));
+        transform: translate3d(120%, 0, 0);
     }
 }
 
 @keyframes toast-enter-down {
     from {
         opacity: 0;
-        transform: translate3d(0, calc(-100% - 32px), 0) scale(var(--s));
-    }
-
-    50% {
-        opacity: 1;
-    }
-
-    75% {
-        transform: translate3d(0, calc(var(--y) + 6px), 0) scale(var(--s));
+        transform: translate3d(0, calc(-100% - 32px), 0);
     }
 
     to {
         opacity: 1;
-        transform: translate3d(0, var(--y), 0) scale(var(--s));
+        transform: translate3d(0, 0, 0);
     }
 }
 
 @keyframes toast-exit-up {
     from {
         opacity: 1;
-        transform: translate3d(0, var(--y), 0) scale(var(--s));
+        transform: translate3d(0, 0, 0);
     }
 
     to {
         opacity: 0;
-        transform: translate3d(0, calc(-100% - 32px), 0) scale(var(--s));
+        transform: translate3d(0, calc(-100% - 32px), 0);
     }
 }
 
@@ -339,17 +323,19 @@
     }
 }
 
+/* Канон §8: reduced-motion анимации не отключает, а укорачивает до
+   ~150ms — остаётся кроссфейд без движения. */
 @media (prefers-reduced-motion: reduce) {
     .toastEnter {
-        animation-duration: 0.2s;
+        animation-duration: 150ms;
         animation-name: toast-fade-in;
-        animation-timing-function: ease-out;
+        animation-timing-function: var(--dl-ease);
     }
 
     .toastExit {
-        animation-duration: 0.2s;
+        animation-duration: 150ms;
         animation-name: toast-fade-out;
-        animation-timing-function: ease-out;
+        animation-timing-function: var(--dl-ease);
     }
 }
 
