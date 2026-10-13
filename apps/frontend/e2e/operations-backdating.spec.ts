@@ -67,13 +67,11 @@ async function pickPreviousMonth15th(page: Page, calendar: Locator): Promise<voi
       .getByRole('button', { name: '1', exact: true }),
   ).toBeDisabled();
 
-  // Лента открыта на «сегодня» (scrollTop 0): качнуть и вернуть в ноль —
-  // дорисовка порции месяцев назад, 15-е предыдущего месяца появляется.
-  await calendar.locator('.overflow-y-auto').evaluate((element) => {
-    const feed = element as HTMLElement;
-    feed.scrollTop = 400;
-    feed.scrollTop = 0;
-  });
+  // Лента стартует порцией раньше «сегодня» (решение владельца 13.10):
+  // прокрутка вверх работает первым же движением колеса — дорисовка назад
+  // не требует «качания».
+  await calendar.locator('.overflow-y-auto').hover();
+  await page.mouse.wheel(0, -800);
   await expect(calendar.getByText(previous.heading)).toBeVisible();
   await calendar
     .locator('section')
@@ -106,7 +104,28 @@ test.describe('операция задним числом — шаг «Выбе�
       await page.goto('/operations/new');
       await page.getByRole('textbox', { name: 'Сумма' }).fill('600');
       await page.getByRole('button', { name: 'Продолжить' }).click();
-      await pickPreviousMonth15th(page, page.getByRole('dialog', { name: CALENDAR_NAME }));
+      const calendar = page.getByRole('dialog', { name: CALENDAR_NAME });
+      await expect(calendar).toBeVisible();
+
+      // Жёсткий край ленты (решение владельца 13.10): за парой приглушённых
+      // месяцев после «сегодня» ленты нет.
+      await expect(calendar.getByText(monthShifted(todayIso(), 2).heading)).toBeVisible();
+      await expect(calendar.getByText(monthShifted(todayIso(), 3).heading)).toHaveCount(0);
+
+      // Колесо годов зажато по «сегодня»: будущего в шите месяца нет
+      // (шит — отдельный диалог-портал, не внутри пикера).
+      const current = monthShifted(todayIso(), 0);
+      const year = Number(todayIso().slice(0, 4));
+      await calendar
+        .getByRole('button', { name: current.heading.replace(', ', ' ') })
+        .click();
+      const sheet = page.getByRole('dialog', { name: 'Месяц и год' });
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByRole('option', { name: String(year) })).toBeVisible();
+      await expect(sheet.getByRole('option', { name: String(year + 1) })).toHaveCount(0);
+      await sheet.getByRole('button', { name: 'Отменить' }).click();
+
+      await pickPreviousMonth15th(page, calendar);
 
       // Название шага названия — уникальный title для SQL-правды и уборки.
       await page.getByRole('textbox').fill(title);

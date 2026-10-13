@@ -24,6 +24,8 @@ import {
   booleanRunSegments,
   calendarDayDisabled,
   calendarPastFloor,
+  calendarSingleFeedWindow,
+  type CalendarMonthRef,
   pickIsoRange,
   rangeFeedWindow,
   settleIsoRange,
@@ -383,5 +385,53 @@ describe('calendar: «сегодня» в поясе профиля (#1394)', ()
   it('невалидный пояс не роняет рендер — локальная дата устройства', () => {
     const now = new Date('2026-10-13T12:00:00Z');
     expect(isoTodayInTimezone('Not/AZone', now)).toBe(dateToIsoLocal(now));
+  });
+});
+
+describe('calendar: окно ленты одиночного пикера (решение 13.10, #1394)', () => {
+  const october2026: CalendarMonthRef = { year: 2026, month0: 9 };
+
+  it('стартует порцией дорисовки раньше старта — прокрутка вверх работает сразу', () => {
+    const window = calendarSingleFeedWindow({
+      feedStart: october2026,
+      anchorMonth: october2026,
+      maxDate: '2026-10-13',
+    });
+    expect(window.first).toEqual({ year: 2026, month0: 3 });
+    expect(window.forwardEdge).toEqual({ year: 2026, month0: 11 });
+    expect(window.count).toBe(9);
+  });
+
+  it('закрытое будущее при глубоком якоре — окно покрывает якорь и край', () => {
+    const window = calendarSingleFeedWindow({
+      feedStart: { year: 2024, month0: 0 },
+      anchorMonth: { year: 2024, month0: 3 },
+      maxDate: '2026-10-13',
+    });
+    expect(window.first).toEqual({ year: 2023, month0: 6 });
+    expect(window.forwardEdge).toEqual({ year: 2026, month0: 11 });
+    expect(window.count).toBe(42);
+  });
+
+  it('открытое будущее (maxDate не задан) — края нет, лента годом от якоря', () => {
+    const window = calendarSingleFeedWindow({
+      feedStart: october2026,
+      anchorMonth: october2026,
+      maxDate: undefined,
+    });
+    expect(window.first).toEqual({ year: 2026, month0: 3 });
+    expect(window.forwardEdge).toBeNull();
+    expect(window.count).toBe(12);
+  });
+
+  it('якорь-значение в прошлом (правка #502) тоже получает содержимое выше', () => {
+    const window = calendarSingleFeedWindow({
+      feedStart: { year: 2020, month0: 2 },
+      anchorMonth: { year: 2020, month0: 2 },
+      maxDate: undefined,
+    });
+    expect(window.first).toEqual({ year: 2019, month0: 8 });
+    expect(window.forwardEdge).toBeNull();
+    expect(window.count).toBe(12);
   });
 });

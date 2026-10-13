@@ -272,6 +272,61 @@ export function rangeFeedWindow(
   };
 }
 
+/** Порция дорисовки ленты одиночного пикера назад по доскроллу (и стартовый
+ * отступ от семантического старта — см. calendarSingleFeedWindow). */
+export const CALENDAR_FEED_PREPEND_CHUNK = 6;
+
+/** Месяцы приглушённого будущего за жёстким краем ленты (1:1 с пикером
+ * периода: «текущий месяц плюс два приглушённых будущих»). */
+export const CALENDAR_FEED_FORWARD_CONTEXT = 2;
+
+/** Стартовая лента одиночного пикера без края и порция роста вперёд. */
+export const CALENDAR_FEED_MONTHS = 12;
+
+/** Окно ленты одиночного пикера дат (решение владельца 13.10, #1394).
+ * Старт — на порцию дорисовки раньше семантического старта
+ * calendarFeedStart: над якорем всегда есть содержимое, и прокрутка вверх
+ * работает сразу — на верхнем упоре scroll-событие не возникает вовсе,
+ * дорисовка по порогу не запускается («сначала качни вниз», приёмка
+ * #1394). Вперёд при закрытом будущем (maxDate задан) — жёсткий край:
+ * последний месяц = месяц maxDate плюс пара приглушённых месяцев
+ * контекста (1:1 с rangeFeedWindow), дальше лента не растёт. У открытого
+ * будущего (maxDate не задан — начало аренды, плановые платежи) края нет:
+ * лента открывается годом и растёт годом, как раньше. */
+export function calendarSingleFeedWindow(args: {
+  readonly feedStart: CalendarMonthRef;
+  readonly anchorMonth: CalendarMonthRef;
+  readonly maxDate: IsoDate | undefined;
+}): {
+  readonly first: CalendarMonthRef;
+  readonly count: number;
+  readonly forwardEdge: CalendarMonthRef | null;
+} {
+  const first = calendarMonthOfIndex(
+    calendarMonthIndex(args.feedStart) - CALENDAR_FEED_PREPEND_CHUNK,
+  );
+  const anchorIdx =
+    calendarMonthIndex(args.anchorMonth) - calendarMonthIndex(first);
+  if (args.maxDate === undefined) {
+    return {
+      first,
+      count: Math.max(CALENDAR_FEED_MONTHS, anchorIdx + 1),
+      forwardEdge: null,
+    };
+  }
+  const edge = calendarMonthOfIndex(
+    calendarMonthIndex(calendarMonthOf(args.maxDate)) + CALENDAR_FEED_FORWARD_CONTEXT,
+  );
+  return {
+    first,
+    count: Math.max(
+      anchorIdx + 1,
+      calendarMonthIndex(edge) - calendarMonthIndex(first) + 1,
+    ),
+    forwardEdge: edge,
+  };
+}
+
 /** Непрерывные отрезки подложки диапазона внутри одной недели календаря:
  * серые «пилюли» от границы до границы — ряды целиком в диапазоне и
  * частичные ряды краёв. Индексы 0-based включительно по колонкам недели. */

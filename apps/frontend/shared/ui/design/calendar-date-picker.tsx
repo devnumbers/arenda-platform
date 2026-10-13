@@ -23,12 +23,15 @@ import {
 // точки входа сами по себе), как в мастере платежей.
 import {
   booleanRunSegments,
+  CALENDAR_FEED_MONTHS,
+  CALENDAR_FEED_PREPEND_CHUNK,
   calendarDayDisabled,
   calendarFeedStart,
   calendarMonthIndex,
   calendarMonthOf,
   calendarMonthOfIndex,
   calendarPastFloor,
+  calendarSingleFeedWindow,
   type CalendarMonthRef,
   type IsoDate,
   type IsoRange,
@@ -47,10 +50,11 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * задач #500, Figma 1539-78660): назад, чип «Август 2026 ⌄» (шит
  * MonthYearPicker) и шапка дней недели закреплены над прокруткой — лента
  * месяцев скроллится под ними (решение владельца 2026-09-04). Лента
- * бесконечна вперёд: старт — самый ранний из «сегодня» и значения (якорь
- * правки #502), месяцы дорисовываются годом при приближении к нижнему
- * краю, а оффскрин-блоки не участвуют в layout (content-visibility) —
- * прокрутка остаётся плавной на любой глубине. Открывается сеткой на
+ * стартует на порцию дорисовки раньше якоря — прокрутка вверх работает
+ * сразу, без «качания» (решение владельца 13.10, #1394: на верхнем упоре
+ * scroll-событие не возникает, дорисовка по порогу не запускается);
+ * оффскрин-блоки не участвуют в layout (content-visibility) — прокрутка
+ * остаётся плавной на любой глубине. Открывается сеткой на
  * месяце якоря — значения, а без него «сегодня», прижатое в
  * [minDate, maxDate] (решение владельца #802 23.09: продление с далёким
  * минимумом открывается на первом доступном месяце). Черновик предвыбран
@@ -90,10 +94,16 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  *
  * Прошлое без пола (allowPast без minDate, #1393 — операции задним
  * числом): черты нет, прошедшие дни открыты без ограничения; лента
- * стартует на месяце «сегодня»/значения и растёт назад по доскроллу
- * вверх — порции по 6 месяцев, позиция прокрутки не дёргается (тот же
- * приём, что в пикере периода); шит месяца без нижнего зажима — годы
- * уходят в прошлое по колёснику.
+ * растёт назад по доскроллу — порции по 6 месяцев, позиция прокрутки не
+ * дёргается (тот же приём, что в пикере периода); шит месяца без нижнего
+ * зажима — годы уходят в прошлое по колёснику.
+ *
+ * Будущее с жёстким краем (maxDate задан, решение владельца 13.10,
+ * #1394): дни позже недоступны (#534), лента заканчивается месяцем maxDate
+ * плюс парой приглушённых месяцев контекста — дальше не дорисовывается, и
+ * шит месяца зажат по maxDate (1:1 с пикером периода). У открытого
+ * будущего (maxDate не задан — начало аренды, плановые платежи) края нет:
+ * лента растёт вперёд годом, как раньше.
  *
  * Максимальная дата (проп maxDate, #534): дни позже недоступны — дата
  * завершения аренды не бывает будущей (ADR 0053 §3, потребитель передаёт
@@ -105,9 +115,7 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * нижние панели во всю ширину, на ПК ≥1024 — колонка 560; решение
  * владельца 28.09 после аудита #877, канон DESIGN.md §5). */
 
-/** Стартовая лента и шаг дорисовки — год месяцев. */
-const FEED_MONTHS = 12;
-/** Порог дорисовки: до нижнего края осталось ~2 месяца прокрутки. */
+/** Порог дорисовки вперёд: до нижнего края осталось ~2 месяца прокрутки. */
 const APPEND_THRESHOLD_PX = 1000;
 
 function monthKey(year: number, month0: number): string {
@@ -170,13 +178,15 @@ export function CalendarDatePicker({
   onClose,
   onConfirm,
 }: CalendarDatePickerProps): JSX.Element {
-  // Лента от самого раннего из сегодня и значения вперёд без конца;
-  // якорь открытия — значение, а без него «сегодня», прижатое в границы
-  // [minDate, maxDate] (решение #802 23.09: продление с далёким minDate
-  // открывается на первом доступном месяце, а не на сегодня, где выбирать
-  // нечего); лента под якорь дорисована, скролл к нему при монтаже.
-  // В безпольном режиме (#1393) пол не передаётся — старт у сегодня/
-  // значения, а лента дорисовывается назад по доскроллу.
+  // Лента (решение владельца 13.10, #1394): старт — на порцию дорисовки
+  // раньше семантического старта calendarFeedStart — над якорем всегда
+  // есть содержимое, прокрутка вверх работает сразу (на верхнем упоре
+  // scroll-событие не возникает, дорисовка по порогу не запускалась —
+  // «сначала качни вниз»); якорь скроллится на место в layout-эффекте до
+  // первой отрисовки. Вперёд при закрытом будущем (maxDate) — жёсткий
+  // край: месяц maxDate плюс пара приглушённых месяцев контекста, дальше
+  // лента не растёт (1:1 с пикером периода); у открытого будущего края
+  // нет — лента растёт годом.
   const initialAnchor = value ?? initialDraft(today, minDate, maxDate);
   const pastFloor = calendarPastFloor(today, minDate, allowPast);
   const endlessPast = pastFloor === null;
@@ -185,15 +195,23 @@ export function CalendarDatePicker({
     value,
     pastFloor !== null && pastFloor !== today ? calendarMonthOf(pastFloor) : undefined,
   );
-  const anchorIndex =
-    calendarMonthIndex(calendarMonthOf(initialAnchor)) - calendarMonthIndex(feedStart);
-  const [firstMonth, setFirstMonth] = useState<CalendarMonthRef>(feedStart);
-  const [monthsCount, setMonthsCount] = useState(() => Math.max(FEED_MONTHS, anchorIndex + 1));
+  const feedWindow = calendarSingleFeedWindow({
+    feedStart,
+    anchorMonth: calendarMonthOf(initialAnchor),
+    maxDate,
+  });
+  const [firstMonth, setFirstMonth] = useState<CalendarMonthRef>(feedWindow.first);
+  const [monthsCount, setMonthsCount] = useState(feedWindow.count);
+  // Край ленты стабилен всю жизнь смонтированного пикера (пропсы не
+  // меняются — компонент рендерится только в открытом состоянии).
+  const forwardEdge = feedWindow.forwardEdge;
   const [draft, setDraft] = useState<IsoDate | null>(
     value ?? initialDraft(today, minDate, maxDate),
   );
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const startIndex = calendarMonthIndex(firstMonth);
+  const anchorIndex =
+    calendarMonthIndex(calendarMonthOf(initialAnchor)) - startIndex;
   const months = listCalendarMonths(firstMonth, monthsCount);
   const monthRefs = useRef(new Map<string, HTMLElement>());
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -209,10 +227,12 @@ export function CalendarDatePicker({
   const draftMonth = calendarMonthOf(draft ?? today);
 
   // Открытие — сразу к месяцу якоря (значение или ближайший доступный
-  // день), когда он не стартовый месяц ленты. Один раз: после дорисовки
-  // назад старт уплывает — повторного прыжка к якорю не нужно.
+  // день): лента стартует порцией раньше якоря, без прыжка первый кадр
+  // показывал бы не его. Layout-эффект — до отрисовки, вспышки чужого
+  // месяца нет. Один раз: после дорисовки назад старт уплывает —
+  // повторного прыжка к якорю не нужно.
   const anchorScrolledRef = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (anchorScrolledRef.current || anchorIndex <= 0) {
       return;
     }
@@ -260,29 +280,35 @@ export function CalendarDatePicker({
   }, [monthPickerOpen, onClose]);
 
   // Приближение к нижнему краю дорисовывает ленту ещё годом — вперёд
-  // месяцы есть всегда; в безпольном режиме (#1393) дотягивание к верху
-  // дорисовывает порцию месяцев назад. DOM растёт только пройденной
-  // глубиной, а тяжёлый layout оффскрина снимает content-visibility на
-  // блоках месяцев.
+  // месяцы есть всегда, пока будущее открыто; при закрытом (maxDate, жёсткий
+  // край #1394) лента заканчивается парой приглушённых месяцев за краем и
+  // не растёт. В безпольном режиме (#1393) дотягивание к верху дорисовывает
+  // порцию месяцев назад. DOM растёт только пройденной глубиной, а тяжёлый
+  // layout оффскрина снимает content-visibility на блоках месяцев.
   const handleScroll = (): void => {
     const list = scrollRef.current;
     if (list === null || heightAnchorRef.current !== null) return;
     if (endlessPast && list.scrollTop <= PREPEND_THRESHOLD_PX) {
       heightAnchorRef.current = list.scrollHeight;
       setFirstMonth((month) =>
-        calendarMonthOfIndex(calendarMonthIndex(month) - PREPEND_CHUNK),
+        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_PREPEND_CHUNK),
       );
-      setMonthsCount((count) => count + PREPEND_CHUNK);
+      setMonthsCount((count) => count + CALENDAR_FEED_PREPEND_CHUNK);
       return;
     }
-    if (list.scrollTop + list.clientHeight >= list.scrollHeight - APPEND_THRESHOLD_PX) {
-      setMonthsCount((count) => count + FEED_MONTHS);
+    if (
+      forwardEdge === null
+      && list.scrollTop + list.clientHeight >= list.scrollHeight - APPEND_THRESHOLD_PX
+    ) {
+      setMonthsCount((count) => count + CALENDAR_FEED_MONTHS);
     }
   };
 
   /** Прыжок по чипу: месяц ленты — скроллом, за дорисованный край —
    * дорисовка порцией и скролл после монтирования. Вперёд лента растёт
-   * годом; назад — только в безпольном режиме, порциями. */
+   * годом; назад — только в безпольном режиме, порциями; при закрытом
+   * будущем вперёд прыжок ограничен краем (колесо годов и так не предложит
+   * месяц за maxDate). */
   const jumpTo = (year: number, month0: number): void => {
     const targetIdx = calendarMonthIndex({ year, month0 });
     if (targetIdx >= startIndex && targetIdx - startIndex < monthsCount) {
@@ -293,13 +319,17 @@ export function CalendarDatePicker({
     if (targetIdx < startIndex) {
       let nextStart = startIndex;
       while (nextStart > targetIdx) {
-        nextStart -= PREPEND_CHUNK;
+        nextStart -= CALENDAR_FEED_PREPEND_CHUNK;
       }
       setMonthsCount((count) => count + (startIndex - nextStart));
       setFirstMonth(calendarMonthOfIndex(nextStart));
       return;
     }
-    setMonthsCount(targetIdx - startIndex + FEED_MONTHS);
+    setMonthsCount(
+      forwardEdge !== null
+        ? calendarMonthIndex(forwardEdge) - startIndex + 1
+        : targetIdx - startIndex + CALENDAR_FEED_MONTHS,
+    );
   };
 
   return (
@@ -354,6 +384,14 @@ export function CalendarDatePicker({
           {months.map(({ year, month0 }, index) => {
             const days = daysInMonth(year, month0);
             const leadingBlanks = firstWeekdayOfMonth(year, month0);
+            // Приглушённое будущее за месяцем maxDate (жёсткий край #1394):
+            // контекст после черты виден, но выбирать там нечего — 1:1 с
+            // пикером периода.
+            const beyondMaxDate =
+              forwardEdge !== null
+              && maxDate !== undefined
+              && calendarMonthIndex({ year, month0 })
+                > calendarMonthIndex(calendarMonthOf(maxDate));
             return (
               <section
                 key={monthKey(year, month0)}
@@ -368,6 +406,7 @@ export function CalendarDatePicker({
                 // прохода, дальше браузер держит реальный размер.
                 className={cn(
                   index === 0 ? undefined : 'mt-8',
+                  beyondMaxDate && 'opacity-50',
                   '[content-visibility:auto] [contain-intrinsic-size:auto_480px]',
                 )}
               >
@@ -440,13 +479,16 @@ export function CalendarDatePicker({
       {/* Шит месяца и года — самостоятельный WheelPickerSheet (общий
           компонент), монтируется только в открытом состоянии; в безпольном
           режиме (#1393) нижнего зажима нет — годы уходят в прошлое по
-          колёснику (onNearStart), месяцы не обрезаются. */}
+          колёснику (onNearStart), месяцы не обрезаются. Будущее закрыто
+          зажимом по maxDate (жёсткий край #1394): дальше черты колесо не
+          предложит — 1:1 с пикером периода. */}
       <MonthYearPicker
         open={monthPickerOpen}
         onOpenChange={setMonthPickerOpen}
         month={draftMonth.month0}
         year={draftMonth.year}
         min={endlessPast ? undefined : feedStart}
+        max={maxDate !== undefined ? calendarMonthOf(maxDate) : undefined}
         onConfirm={(month0, year) => {
           setMonthPickerOpen(false);
           jumpTo(year, month0);
@@ -480,8 +522,6 @@ function MonthJumpChip({
 /** Порог дорисовки назад: до верха контейнера осталось меньше этого
  * (пикер периода и безпольный режим одиночного пикера #1393). */
 const PREPEND_THRESHOLD_PX = 32;
-/** Сколько месяцев дорисовывается назад за одно дотягивание к верху. */
-const PREPEND_CHUNK = 6;
 
 export type CalendarRangePickerProps = {
   readonly title?: string;
@@ -593,7 +633,7 @@ export function CalendarRangePicker({
     }
     anchorRef.current = container.scrollHeight;
     setFirstMonth((month) =>
-      calendarMonthOfIndex(calendarMonthIndex(month) - PREPEND_CHUNK),
+      calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_PREPEND_CHUNK),
     );
   };
 
@@ -607,7 +647,7 @@ export function CalendarRangePicker({
     }
     let nextFirst = calendarMonthIndex(firstMonth);
     while (nextFirst > targetIdx) {
-      nextFirst -= PREPEND_CHUNK;
+      nextFirst -= CALENDAR_FEED_PREPEND_CHUNK;
     }
     pendingJumpRef.current = monthKey(year, month0);
     setFirstMonth(calendarMonthOfIndex(nextFirst));
