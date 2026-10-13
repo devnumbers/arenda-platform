@@ -689,7 +689,13 @@ type Querier interface {
 	// Cancelled tombstones are not materialized facts.
 	LastOperationDatesOfPayments(ctx context.Context, paymentIds string) ([]LastOperationDatesOfPaymentsRow, error)
 	// Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
-	// «История действий» по объектам read-скоупа читателя. Область видимости —
+	// «История действий». Область двух родов (сужение глобальной ленты —
+	// тикет #1412, по образцу изоляции D14 фильтра участников):
+	// глобальная лента (property_ids = '') — только СОБСТВЕННЫЕ объекты
+	// читателя (p.owner_id = actor, архивный срез владельческий — свои
+	// архивные объекты остаются): события объектов, куда читателя пригласили,
+	// в глобальную ленту не попадают; их история читается в суженной области.
+	// Суженная лента (property_ids задан — объект, участник, пара #841) —
 	// SQL-функция actor_can_read_property (000142, до #884 —
 	// actor_can_read_history 000137): владелец (включая архивные
 	// объекты) и активные участники неархивных объектов; suspended и чужие
@@ -906,6 +912,9 @@ type Querier interface {
 	// относительный same-origin путь стриминга через бэкенд.
 	// '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а CASE по NULL-ключу
 	// промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+	// Область — как у ленты (#1412): глобально только свои объекты читателя,
+	// сужение — канон actor_can_read_property (иначе чип чужого объекта
+	// фильтровал бы ленту, которая чужих строк не отдаёт).
 	//
 	ListHistoryFilterObjects(ctx context.Context, arg ListHistoryFilterObjectsParams) ([]ListHistoryFilterObjectsRow, error)
 	// Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =

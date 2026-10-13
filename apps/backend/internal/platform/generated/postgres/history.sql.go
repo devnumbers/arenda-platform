@@ -82,9 +82,11 @@ SELECT aj.id,
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
 LEFT JOIN users u ON u.id = aj.actor_id
-WHERE actor_can_read_property(aj.property_id, $1::uuid)
-  AND ($2::text = ''
-       OR aj.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+WHERE CASE WHEN $1::text = ''
+           THEN p.owner_id = $2::uuid
+           ELSE aj.property_id = ANY(string_to_array($1::text, ',')::uuid[])
+                AND actor_can_read_property(aj.property_id, $2::uuid)
+      END
   AND ($3::text = ''
        OR aj.actor_id = ANY(string_to_array($3::text, ',')::uuid[]))
   AND ($4::text = ''
@@ -120,8 +122,8 @@ LIMIT $14::int
 `
 
 type ListActionJournalParams struct {
-	Actor       pgtype.UUID        `json:"actor"`
 	PropertyIds string             `json:"property_ids"`
+	Actor       pgtype.UUID        `json:"actor"`
 	ActorIds    string             `json:"actor_ids"`
 	Kinds       string             `json:"kinds"`
 	BaseActions string             `json:"base_actions"`
@@ -157,7 +159,13 @@ type ListActionJournalRow struct {
 }
 
 // Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
-// «История действий» по объектам read-скоупа читателя. Область видимости —
+// «История действий». Область двух родов (сужение глобальной ленты —
+// тикет #1412, по образцу изоляции D14 фильтра участников):
+// глобальная лента (property_ids = ”) — только СОБСТВЕННЫЕ объекты
+// читателя (p.owner_id = actor, архивный срез владельческий — свои
+// архивные объекты остаются): события объектов, куда читателя пригласили,
+// в глобальную ленту не попадают; их история читается в суженной области.
+// Суженная лента (property_ids задан — объект, участник, пара #841) —
 // SQL-функция actor_can_read_property (000142, до #884 —
 // actor_can_read_history 000137): владелец (включая архивные
 // объекты) и активные участники неархивных объектов; suspended и чужие
@@ -194,8 +202,8 @@ type ListActionJournalRow struct {
 // ListActionJournalAfter: адаптер конвертирует ряды общим feedEntryOf.
 func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error) {
 	rows, err := q.db.Query(ctx, listActionJournal,
-		arg.Actor,
 		arg.PropertyIds,
+		arg.Actor,
 		arg.ActorIds,
 		arg.Kinds,
 		arg.BaseActions,
@@ -268,9 +276,11 @@ SELECT aj.id,
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
 LEFT JOIN users u ON u.id = aj.actor_id
-WHERE actor_can_read_property(aj.property_id, $1::uuid)
-  AND ($2::text = ''
-       OR aj.property_id = ANY(string_to_array($2::text, ',')::uuid[]))
+WHERE CASE WHEN $1::text = ''
+           THEN p.owner_id = $2::uuid
+           ELSE aj.property_id = ANY(string_to_array($1::text, ',')::uuid[])
+                AND actor_can_read_property(aj.property_id, $2::uuid)
+      END
   AND ($3::text = ''
        OR aj.actor_id = ANY(string_to_array($3::text, ',')::uuid[]))
   AND ($4::text = ''
@@ -301,8 +311,8 @@ LIMIT $12::int
 `
 
 type ListActionJournalAfterParams struct {
-	Actor       pgtype.UUID        `json:"actor"`
 	PropertyIds string             `json:"property_ids"`
+	Actor       pgtype.UUID        `json:"actor"`
 	ActorIds    string             `json:"actor_ids"`
 	Kinds       string             `json:"kinds"`
 	BaseActions string             `json:"base_actions"`
@@ -349,8 +359,8 @@ type ListActionJournalAfterRow struct {
 // конвертирует ряды общим feedEntryOf).
 func (q *Queries) ListActionJournalAfter(ctx context.Context, arg ListActionJournalAfterParams) ([]ListActionJournalAfterRow, error) {
 	rows, err := q.db.Query(ctx, listActionJournalAfter,
-		arg.Actor,
 		arg.PropertyIds,
+		arg.Actor,
 		arg.ActorIds,
 		arg.Kinds,
 		arg.BaseActions,
@@ -407,15 +417,17 @@ SELECT p.id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS photo_url
 FROM properties p
-WHERE actor_can_read_property(p.id, $1::uuid)
-  AND ($2::text = ''
-       OR p.id = ANY(string_to_array($2::text, ',')::uuid[]))
+WHERE CASE WHEN $1::text = ''
+           THEN p.owner_id = $2::uuid
+           ELSE p.id = ANY(string_to_array($1::text, ',')::uuid[])
+                AND actor_can_read_property(p.id, $2::uuid)
+      END
 ORDER BY p.name ASC, p.id ASC
 `
 
 type ListHistoryFilterObjectsParams struct {
-	Actor       pgtype.UUID `json:"actor"`
 	PropertyIds string      `json:"property_ids"`
+	Actor       pgtype.UUID `json:"actor"`
 }
 
 type ListHistoryFilterObjectsRow struct {
@@ -432,8 +444,11 @@ type ListHistoryFilterObjectsRow struct {
 // относительный same-origin путь стриминга через бэкенд.
 // ” = фото нет (COALESCE: sqlc верит NOT NULL колонке, а CASE по NULL-ключу
 // промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+// Область — как у ленты (#1412): глобально только свои объекты читателя,
+// сужение — канон actor_can_read_property (иначе чип чужого объекта
+// фильтровал бы ленту, которая чужих строк не отдаёт).
 func (q *Queries) ListHistoryFilterObjects(ctx context.Context, arg ListHistoryFilterObjectsParams) ([]ListHistoryFilterObjectsRow, error) {
-	rows, err := q.db.Query(ctx, listHistoryFilterObjects, arg.Actor, arg.PropertyIds)
+	rows, err := q.db.Query(ctx, listHistoryFilterObjects, arg.PropertyIds, arg.Actor)
 	if err != nil {
 		return nil, err
 	}

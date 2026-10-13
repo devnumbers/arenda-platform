@@ -3,12 +3,15 @@
 package postgres_test
 
 // The integration suite of the journal's reading side (карта #704, тикет
-// #708, ADR 0061 §7): the SQL visibility (actor_can_read_property, 000142) —
-// owner, active members (viewer included), suspended and revoked excluded,
-// the archive visible to the owner only — the bidirectional keyset walk
-// (before/after, no duplicates, no drops), the filters, the always-OR search
-// through the service seam and the filter-sheet options (current members ∪
-// historical actors; objects with the photo avatar).
+// #708, ADR 0061 §7): the two-fold read scope (revision #1412) — the global
+// feed and the filter options' objects leg scope to the reader's own
+// properties, a narrowed per-object call rides the derived-access canon
+// (actor_can_read_property, 000142: owner, active members (viewer included),
+// suspended and revoked excluded, the archive visible to the owner only) —
+// the bidirectional keyset walk (before/after, no duplicates, no drops), the
+// filters, the always-OR search through the service seam and the filter-sheet
+// options (current members ∪ historical actors; objects with the photo
+// avatar).
 
 import (
 	"context"
@@ -190,13 +193,19 @@ func TestReadStore_FeedVisibility(t *testing.T) {
 		t.Fatalf("owner feed: want 2 rows (archive included), got %d", len(page.Items))
 	}
 
-	// Активный участник читает ленту живого объекта.
+	// Активный участник: глобальная лента — только СОБСТВЕННЫЕ объекты
+	// (тикет #1412): членство в чужом живом объекте строк глобальной ленты
+	// не добавляет; история чужого объекта читается только в суженной
+	// области (TestReadStore_FeedScopedCanonForMember).
+	ownProperty := seedProperty(t, pool, viewer)
+	seedEntry(t, pool, viewer, ownProperty, time.Unix(50, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Своя операция")
 	page, err = svc.Feed(ctx, viewer, historyapp.FeedQuery{})
 	if err != nil {
 		t.Fatalf("viewer feed: %v", err)
 	}
-	if len(page.Items) != 1 || page.Items[0].PropertyID != liveProperty {
-		t.Fatalf("viewer feed: want the live property's row only, got %+v", page.Items)
+	if len(page.Items) != 1 || page.Items[0].PropertyID != ownProperty {
+		t.Fatalf("viewer global feed: want only the own property's row, got %+v", page.Items)
 	}
 
 	// Приостановленный участник ленту не видит вовсе («suspended — недоступно»).
@@ -216,6 +225,90 @@ func TestReadStore_FeedVisibility(t *testing.T) {
 	}
 	if len(page.Items) != 0 {
 		t.Fatalf("stranger: want no rows, got %d", len(page.Items))
+	}
+}
+
+// After-нога двустороннего курсора несёт тот же скоуп, что и основная
+// страница (сужение глобальной ленты, тикет #1412): prepend участника не
+// привозит строки чужого объекта, prepend владельца не меняется.
+func TestReadStore_FeedGlobalPrependScope(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+
+	liveProperty := seedProperty(t, pool, owner)
+	seedMembership(t, pool, liveProperty, viewer)
+	seedEntry(t, pool, owner, liveProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	// Якорь — страница владельца; свежая строка чужого объекта участника
+	// в prepend не приезжает, у владельца — приезжает.
+	ownerPage, err := svc.Feed(ctx, owner, historyapp.FeedQuery{})
+	if err != nil {
+		t.Fatalf("owner anchor page: %v", err)
+	}
+	seedEntry(t, pool, owner, liveProperty, time.Unix(200, 0), domain.KindPayment, domain.ActionPaymentCreated,
+		domain.BaseAdded, "Свежая строка чужого объекта")
+	page, err := svc.Feed(ctx, viewer, historyapp.FeedQuery{AfterCursor: ownerPage.PrevCursor})
+	if err != nil {
+		t.Fatalf("viewer prepend feed: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("viewer global prepend: want no foreign rows, got %+v", page.Items)
+	}
+	page, err = svc.Feed(ctx, owner, historyapp.FeedQuery{AfterCursor: ownerPage.PrevCursor})
+	if err != nil {
+		t.Fatalf("owner prepend feed: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("owner global prepend: want the fresh row, got %d", len(page.Items))
+	}
+}
+
+// Суженная область (property_ids) — канон derived access без изменений
+// (#1412): участник читает историю живого объекта, куда приглашён, обеими
+// ногами курсора.
+func TestReadStore_FeedScopedCanonForMember(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+
+	liveProperty := seedProperty(t, pool, owner)
+	seedMembership(t, pool, liveProperty, viewer)
+	seedEntry(t, pool, owner, liveProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	page, err := svc.Feed(ctx, viewer, historyapp.FeedQuery{PropertyIDs: []uuid.UUID{liveProperty}})
+	if err != nil {
+		t.Fatalf("viewer scoped feed: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("viewer scoped feed: want the live property's row, got %+v", page.Items)
+	}
+
+	// After-нога суженной области — та же строка.
+	page, err = svc.Feed(ctx, viewer, historyapp.FeedQuery{PropertyIDs: []uuid.UUID{liveProperty}, AfterCursor: page.PrevCursor})
+	if err != nil {
+		t.Fatalf("viewer scoped prepend: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("viewer scoped prepend: want nothing newer, got %+v", page.Items)
+	}
+
+	// Suspended-лег канона живёт в суженной области (000142): сервис
+	// отсекает приостановленное членство privacy-404 до SQL — глобальный
+	// вакуум участника без своих объектов этот случай не различает.
+	suspendMembership(t, pool, liveProperty, viewer)
+	if _, err := svc.Feed(ctx, viewer, historyapp.FeedQuery{PropertyIDs: []uuid.UUID{liveProperty}}); !errors.Is(err, historyapp.ErrNotFound) {
+		t.Fatalf("suspended scoped feed: want ErrNotFound (privacy), got %v", err)
 	}
 }
 
@@ -605,9 +698,9 @@ func TestReadStore_SearchRespectsScope(t *testing.T) {
 
 	svc := newReadStack(pool)
 	ctx := context.Background()
-	search := func(actor uuid.UUID, q string) int {
+	search := func(actor uuid.UUID, q string, propertyIDs ...uuid.UUID) int {
 		t.Helper()
-		page, err := svc.Feed(ctx, actor, historyapp.FeedQuery{Query: q})
+		page, err := svc.Feed(ctx, actor, historyapp.FeedQuery{Query: q, PropertyIDs: propertyIDs})
 		if err != nil {
 			t.Fatalf("search %q: %v", q, err)
 		}
@@ -617,13 +710,22 @@ func TestReadStore_SearchRespectsScope(t *testing.T) {
 	if got := search(owner, "qqqqzzzz"); got != 0 {
 		t.Fatalf("garbage query: want 0 rows, got %d", got)
 	}
-	// Поиск уважает скоуп: зритель находит строку владельца по его имени,
-	// свою — по своей почте (семантика предиката — TestReadStore_SearchPredicate).
-	if got := search(member, "Иванов"); got != 1 {
-		t.Fatalf("member search by owner name: want 1 row, got %d", got)
+	// Поиск уважает скоуп. Глобальная лента участника — только свои объекты
+	// (#1412): строки чужого объекта не находятся, даже по имени владельца.
+	if got := search(member, "Иванов"); got != 0 {
+		t.Fatalf("member global search by owner name: want 0 rows (#1412), got %d", got)
 	}
-	if got := search(member, "Петров"); got != 1 {
-		t.Fatalf("member search by own name: want 1 row, got %d", got)
+	if got := search(member, "Петров"); got != 0 {
+		t.Fatalf("member global search by own name: want 0 rows (no own objects), got %d", got)
+	}
+	// Суженная область — канон: участник ищет по чужому объекту, который
+	// читает, — свою строку по своей почте, строку владельца по имени
+	// (семантика предиката — TestReadStore_SearchPredicate).
+	if got := search(member, "Иванов", property); got != 1 {
+		t.Fatalf("member scoped search by owner name: want 1 row, got %d", got)
+	}
+	if got := search(member, "Петров", property); got != 1 {
+		t.Fatalf("member scoped search by own name: want 1 row, got %d", got)
 	}
 }
 
@@ -938,6 +1040,46 @@ func TestReadStore_GlobalFilterParticipantsIsolation(t *testing.T) {
 		t.Fatalf("recipient scoped filters: %v", err)
 	}
 	assertScopedOwnership(t, scoped.Participants, map[uuid.UUID]bool{owner: true, recipient: false})
+}
+
+// Изоляция глобального фильтра «Объекты» (сужение глобальной ленты,
+// тикет #1412): получатель shared-доступа в глобальной области видит
+// только СВОИ объекты — чужой живой объект, куда его пригласили, в опциях
+// не раскрывается (иначе чип фильтровал бы ленту, которая по #1412 чужих
+// строк не отдаёт). Per-object фильтр (property_ids) ведёт себя по канону
+// derived access — запрошенный видимый чужой объект остаётся.
+func TestReadStore_GlobalFilterObjectsIsolation(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	recipient := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
+
+	sharedProperty := seedProperty(t, pool, owner)
+	ownProperty := seedProperty(t, pool, recipient)
+	seedMembership(t, pool, sharedProperty, recipient)
+	seedEntry(t, pool, owner, sharedProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+
+	// Глобальный фильтр получателя: только свой объект.
+	opts, err := svc.Filters(t.Context(), recipient, nil)
+	if err != nil {
+		t.Fatalf("recipient global filters: %v", err)
+	}
+	if len(opts.Objects) != 1 || opts.Objects[0].ID != ownProperty {
+		t.Fatalf("global objects: want only the own property, got %+v", opts.Objects)
+	}
+
+	// Per-object фильтр того же получателя (история чужого объекта):
+	// запрошенный видимый объект остаётся — канон без изменений.
+	scoped, err := svc.Filters(t.Context(), recipient, []uuid.UUID{sharedProperty})
+	if err != nil {
+		t.Fatalf("recipient scoped filters: %v", err)
+	}
+	if len(scoped.Objects) != 1 || scoped.Objects[0].ID != sharedProperty {
+		t.Fatalf("scoped objects: want the shared property, got %+v", scoped.Objects)
+	}
 }
 
 // Владелец-замок считается по любому объекту скоупа, а не по роли на

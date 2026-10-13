@@ -7,7 +7,13 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 RETURNING id;
 
 -- Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
--- «История действий» по объектам read-скоупа читателя. Область видимости —
+-- «История действий». Область двух родов (сужение глобальной ленты —
+-- тикет #1412, по образцу изоляции D14 фильтра участников):
+-- глобальная лента (property_ids = '') — только СОБСТВЕННЫЕ объекты
+-- читателя (p.owner_id = actor, архивный срез владельческий — свои
+-- архивные объекты остаются): события объектов, куда читателя пригласили,
+-- в глобальную ленту не попадают; их история читается в суженной области.
+-- Суженная лента (property_ids задан — объект, участник, пара #841) —
 -- SQL-функция actor_can_read_property (000142, до #884 —
 -- actor_can_read_history 000137): владелец (включая архивные
 -- объекты) и активные участники неархивных объектов; suspended и чужие
@@ -66,9 +72,11 @@ SELECT aj.id,
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
 LEFT JOIN users u ON u.id = aj.actor_id
-WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
-  AND (sqlc.arg('property_ids')::text = ''
-       OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+WHERE CASE WHEN sqlc.arg('property_ids')::text = ''
+           THEN p.owner_id = sqlc.arg('actor')::uuid
+           ELSE aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+                AND actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
+      END
   AND (sqlc.arg('actor_ids')::text = ''
        OR aj.actor_id = ANY(string_to_array(sqlc.arg('actor_ids')::text, ',')::uuid[]))
   AND (sqlc.arg('kinds')::text = ''
@@ -138,9 +146,11 @@ SELECT aj.id,
 FROM action_journal aj
 JOIN properties p ON p.id = aj.property_id
 LEFT JOIN users u ON u.id = aj.actor_id
-WHERE actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
-  AND (sqlc.arg('property_ids')::text = ''
-       OR aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+WHERE CASE WHEN sqlc.arg('property_ids')::text = ''
+           THEN p.owner_id = sqlc.arg('actor')::uuid
+           ELSE aj.property_id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+                AND actor_can_read_property(aj.property_id, sqlc.arg('actor')::uuid)
+      END
   AND (sqlc.arg('actor_ids')::text = ''
        OR aj.actor_id = ANY(string_to_array(sqlc.arg('actor_ids')::text, ',')::uuid[]))
   AND (sqlc.arg('kinds')::text = ''
@@ -256,6 +266,9 @@ ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.id ASC;
 -- относительный same-origin путь стриминга через бэкенд.
 -- '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а CASE по NULL-ключу
 -- промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+-- Область — как у ленты (#1412): глобально только свои объекты читателя,
+-- сужение — канон actor_can_read_property (иначе чип чужого объекта
+-- фильтровал бы ленту, которая чужих строк не отдаёт).
 --
 -- name: ListHistoryFilterObjects :many
 SELECT p.id,
@@ -266,8 +279,10 @@ SELECT p.id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS photo_url
 FROM properties p
-WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
-  AND (sqlc.arg('property_ids')::text = ''
-       OR p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[]))
+WHERE CASE WHEN sqlc.arg('property_ids')::text = ''
+           THEN p.owner_id = sqlc.arg('actor')::uuid
+           ELSE p.id = ANY(string_to_array(sqlc.arg('property_ids')::text, ',')::uuid[])
+                AND actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
+      END
 ORDER BY p.name ASC, p.id ASC;
 
