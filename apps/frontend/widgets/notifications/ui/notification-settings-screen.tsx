@@ -257,7 +257,6 @@ export function NotificationSettingsScreen(): JSX.Element {
                 <Switch
                   checked={emailQuery.data[category]}
                   onCheckedChange={(value) => toggleEmail(category, value)}
-                  disabled={updateEmail.isPending}
                   aria-label={`Электронная почта — ${notificationCategoryLabel(category)}`}
                 />
               )}
