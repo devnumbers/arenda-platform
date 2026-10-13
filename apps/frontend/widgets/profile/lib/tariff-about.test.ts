@@ -54,7 +54,7 @@ describe('tariffAboutCard', () => {
           isActive: true,
           createdAt: '2026-08-01T10:00:00Z',
         },
-      })),
+      }), '2026-09-05'),
     ).toStrictEqual({
       title: 'Про',
       rows: [
@@ -66,15 +66,26 @@ describe('tariffAboutCard', () => {
   });
 
   it('active paid year: price follows the current period', () => {
-    const card = tariffAboutCard(subscription({ currentPeriod: 'year' }));
+    const card = tariffAboutCard(subscription({ currentPeriod: 'year' }), '2026-09-05');
     expect(card.rows[0]).toStrictEqual({
       label: 'Стоимость',
       value: 'Вы платите 4\u00A0900 ₽ в год',
     });
   });
 
+  it('следующее списание в следующем году — год в строке (правило владельца 13.10)', () => {
+    const card = tariffAboutCard(
+      subscription({ currentPeriod: 'year', validUntil: '2027-09-10T21:00:00Z' }),
+      '2026-09-05',
+    );
+    expect(card.rows[1]).toStrictEqual({
+      label: 'Следующее списание',
+      value: '10 сентября, 2027',
+    });
+  });
+
   it('active paid without a payment method omits the method row', () => {
-    const card = tariffAboutCard(subscription({}));
+    const card = tariffAboutCard(subscription({}), '2026-09-05');
     expect(card.rows.map((row) => row.label)).toStrictEqual([
       'Стоимость',
       'Следующее списание',
@@ -91,7 +102,7 @@ describe('tariffAboutCard', () => {
         isActive: true,
         createdAt: '2026-08-01T10:00:00Z',
       },
-    }));
+    }), '2026-09-05');
     expect(card.rows.at(-1)).toStrictEqual({
       label: 'Способ оплаты',
       value: '•••• 0700',
@@ -108,7 +119,7 @@ describe('tariffAboutCard', () => {
         isActive: true,
         createdAt: '2026-08-01T10:00:00Z',
       },
-    }));
+    }), '2026-09-05');
     expect(card.rows.at(-1)).toStrictEqual({
       label: 'Способ оплаты',
       value: '**',
@@ -120,7 +131,7 @@ describe('tariffAboutCard', () => {
       tariffAboutCard(subscription({
         status: 'grace',
         validUntil: '2026-09-17T21:00:00Z',
-      })),
+      }), '2026-09-05'),
     ).toStrictEqual({
       title: 'Про',
       rows: [
@@ -131,7 +142,7 @@ describe('tariffAboutCard', () => {
   });
 
   it('cancelled: stopped title with the valid-until row only', () => {
-    expect(tariffAboutCard(subscription({ status: 'cancelled' }))).toStrictEqual({
+    expect(tariffAboutCard(subscription({ status: 'cancelled' }), '2026-09-05')).toStrictEqual({
       title: 'Про отключен',
       rows: [{ label: 'Действует до', value: '10 сентября' }],
     });
@@ -143,7 +154,7 @@ describe('tariffAboutCard', () => {
         tariff: basicTariff,
         validUntil: undefined,
         currentPeriod: undefined,
-      })),
+      }), '2026-09-05'),
     ).toStrictEqual({
       title: 'Базовый',
       rows: [{ label: 'Стоимость', value: 'Бесплатно' }],

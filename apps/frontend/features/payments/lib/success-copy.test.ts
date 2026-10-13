@@ -12,6 +12,7 @@ import { successScreenCopy } from './success-copy';
 describe('successScreenCopy', () => {
   it('автоплатёж — формулировка пополнения из фрейма успеха, без суммы в описании', () => {
     const copy = successScreenCopy({
+      today: '2026-08-30',
       draftType: 'autopayment',
       typedTitle: 'Аренда мебели',
       recurrence: { kind: 'monthly', daysOfMonth: [10], lastDay: false },
@@ -23,6 +24,7 @@ describe('successScreenCopy', () => {
 
   it('обычный платёж — формулировка первого платежа', () => {
     const copy = successScreenCopy({
+      today: '2026-08-30',
       draftType: 'payment',
       typedTitle: 'Коммунальные услуги',
       recurrence: { kind: 'weekly', weekdays: [1] },
@@ -35,6 +37,7 @@ describe('successScreenCopy', () => {
   it('мультидневная неделя и последний день месяца читаются из канонических меток', () => {
     expect(
       successScreenCopy({
+        today: '2026-08-30',
         draftType: 'payment',
         typedTitle: 'Т',
         recurrence: { kind: 'weekly', weekdays: [0, 3] },
@@ -43,6 +46,7 @@ describe('successScreenCopy', () => {
     ).toBe('Первый платеж 3 сентября, далее каждую неделю в ср, вс');
     expect(
       successScreenCopy({
+        today: '2026-08-30',
         draftType: 'payment',
         typedTitle: 'Т',
         recurrence: { kind: 'monthly', daysOfMonth: [], lastDay: true },
@@ -53,12 +57,14 @@ describe('successScreenCopy', () => {
 
   it('название не введено — заголовок одной строкой без «названия»', () => {
     const copy = successScreenCopy({
+      today: '2026-08-30',
       draftType: 'payment',
       recurrence: { kind: 'weekly', weekdays: [1] },
       firstOccurrence: '2026-08-31',
     });
     expect(copy.heading).toBe('Вы создали платеж');
     const auto = successScreenCopy({
+      today: '2026-08-30',
       draftType: 'autopayment',
       recurrence: { kind: 'weekly', weekdays: [1] },
       firstOccurrence: '2026-08-31',
@@ -68,6 +74,7 @@ describe('successScreenCopy', () => {
 
   it('первое вхождение не определено (окончание раньше заведения) — описания нет', () => {
     const copy = successScreenCopy({
+      today: '2026-08-30',
       draftType: 'payment',
       typedTitle: 'Страховка',
       recurrence: { kind: 'daily' },
@@ -75,5 +82,15 @@ describe('successScreenCopy', () => {
     });
     expect(copy.heading).toBe('Вы создали платеж\n«Страховка»');
     expect(copy.description).toBeUndefined();
+  });
+
+  it('первое вхождение в следующем году — год в дате (правило владельца 13.10)', () => {
+    const copy = successScreenCopy({
+      today: '2026-12-20',
+      draftType: 'payment',
+      recurrence: { kind: 'monthly', daysOfMonth: [10], lastDay: false },
+      firstOccurrence: '2027-01-10',
+    });
+    expect(copy.description).toBe('Первый платеж 10 января, 2027, далее каждый месяц 10 числа');
   });
 });

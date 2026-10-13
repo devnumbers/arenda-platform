@@ -1,6 +1,6 @@
 import type { IsoDate } from '@/shared/lib/calendar';
 import { fullMonthsBetween } from '@/shared/lib/calendar';
-import { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
+import { formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
 import { formatMoneyKopecks, ratioToPercent } from '@/shared/lib/format-money';
 import { monthsWord } from '@/shared/lib/months-word';
 import { pluralize } from '@/shared/lib/pluralize';
@@ -124,12 +124,13 @@ function optionalMoney(kopecks: number | null): string {
 }
 
 /** Три строки карточки «Условия аренды» на детализации (Figma 1232:61522):
- * плата, день оплаты, начало — без года (макет 1232:61524). */
+ * плата, день оплаты, начало — год вне текущего (правило владельца 13.10;
+ * макет 1232:61524 без года старше правила — переиграно #1385). */
 export function rentalTeaserRows(rental: Rental): ReadonlyArray<RentalTermsRow> {
   return [
     { label: 'Арендная плата', value: rentAmountPerMonth(rental.rentPayment.amountKopecks) },
     { label: 'День оплаты', value: paymentDayLabel(rental.rentPayment.paymentDay) },
-    { label: 'Начало аренды', value: formatDayMonth(rental.startDate) },
+    { label: 'Начало аренды', value: formatDayMonthWithYear(rental.startDate, rental.today) },
   ];
 }
 

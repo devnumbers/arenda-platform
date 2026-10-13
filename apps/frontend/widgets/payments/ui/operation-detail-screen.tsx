@@ -9,7 +9,6 @@ import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  formatDayMonth,
   formatDayMonthWithYear,
   PaymentRowButton,
   type IsoDate,
@@ -97,6 +96,10 @@ export function OperationDetailScreen({
   const property = propertyQuery.isSuccess ? propertyQuery.data : undefined;
   const operation = operationQuery.isSuccess ? operationQuery.data : undefined;
 
+  // Дата в шапке — правило года (владелец 13.10): «сегодня» клиентское,
+  // как у тела страницы (ADR 0061 §7) — история уходит в прошлые годы.
+  const today = dateToIsoLocal(new Date());
+
   // Успех оплаты живёт на уровне экрана: в этом состоянии рисуется свой
   // экран (1444:65733) с крестиком вместо шапки «назад + дата».
   const [paidResult, setPaidResult] = useState<PaymentOperation | null>(null);
@@ -175,7 +178,7 @@ export function OperationDetailScreen({
         }
       >
         {operation !== undefined && (
-          <TopNavTitle title={formatDayMonth(operation.paidDate ?? operation.date)} />
+          <TopNavTitle title={formatDayMonthWithYear(operation.paidDate ?? operation.date, today)} />
         )}
       </TopNav>
 

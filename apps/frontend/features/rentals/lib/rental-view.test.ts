@@ -198,6 +198,14 @@ describe('rentalTeaserRows', () => {
       value: 'Последний день месяца',
     });
   });
+
+  it('начало вне текущего года — год в строке (правило владельца 13.10; тизер завершённой аренды)', () => {
+    const rental = rentalFixture({ startDate: '2025-05-10' });
+    expect(rentalTeaserRows(rental)).toContainEqual({
+      label: 'Начало аренды',
+      value: '10 мая, 2025',
+    });
+  });
 });
 
 describe('rentalTermsRows', () => {

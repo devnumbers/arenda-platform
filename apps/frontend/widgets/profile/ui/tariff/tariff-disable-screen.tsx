@@ -12,6 +12,7 @@ import {
   StickyBottomBar,
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import type { ApiError } from '@/shared/api/errors';
@@ -150,7 +151,7 @@ function TariffDisableContent({
           )}
         </section>
 
-        <TariffAboutCard view={tariffAboutCard(subscription)} />
+        <TariffAboutCard view={tariffAboutCard(subscription, dateToIsoLocal(new Date()))} />
 
         <TariffFeaturesCard rows={tariffFeatureRows(subscription.tariff)} />
       </div>

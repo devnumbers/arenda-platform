@@ -6,7 +6,7 @@ import {
   SEEDED_APARTMENT_PROPERTY_ID,
   test,
 } from './fixtures';
-import { formatDayMonth } from '@/shared/lib/date-format';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 
 // Страница платежа (#465): карточка правила (иконка/цвет категории,
@@ -107,9 +107,11 @@ test.describe('страница платежа', () => {
     // «вчера»), в строке — дата факта (групп-заголовков «Сегодня» здесь
     // нет, это канон подэкрана) и знак расхода. TZ прогона UTC — тот же
     // «сегодня», что у CURRENT_DATE сидового postgres.
-    const todayLabel = formatDayMonth(dateToIsoLocal(new Date()));
-    const yesterdayLabel = formatDayMonth(
+    const today = dateToIsoLocal(new Date());
+    const todayLabel = formatDayMonthWithYear(today, today);
+    const yesterdayLabel = formatDayMonthWithYear(
       dateToIsoLocal(new Date(Date.now() - 24 * 60 * 60 * 1000)),
+      today,
     );
     await expect(historySection.getByText(todayLabel, { exact: true })).toBeVisible();
     await expect(historySection.getByText(yesterdayLabel, { exact: true })).toBeVisible();
@@ -194,7 +196,10 @@ test.describe('страница платежа', () => {
 
       await page.goto(PAYMENT_URLS.insurance);
       await expect(
-        nearestRow.getByText(formatDayMonth(materializedDate), { exact: true }),
+        nearestRow.getByText(
+          formatDayMonthWithYear(materializedDate, dateToIsoLocal(new Date())),
+          { exact: true },
+        ),
       ).toBeVisible();
       await nearestRow.click();
       await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/schedule$`));

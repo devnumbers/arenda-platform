@@ -5,8 +5,19 @@ import {
   SEEDED_GARAGE_PROPERTY_ID,
   test,
 } from './fixtures';
-import { formatDayMonth } from '@/shared/lib/date-format';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import type { Page, TestInfo } from '@playwright/test';
+
+/** «Сегодня» браузера прогона (ADR 0048-независимая проверка текста):
+ * сиды режутся от CURRENT_DATE postgres (TZ UTC), прогон в UTC — совпадают. */
+async function browserToday(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+  });
+}
 
 // Следующая дата оплаты — серверная истина на «Платежах объекта» (#993,
 // баг #967): предоплата ближайшего вхождения переставляет плановую на
@@ -103,7 +114,7 @@ test.describe('следующая дата оплаты из серверног�
       return plannedItems.length;
     }).toBeGreaterThanOrEqual(1);
 
-    const beforeLabel = formatDayMonth(firstOccurrence);
+    const beforeLabel = formatDayMonthWithYear(firstOccurrence, await browserToday(page));
     await expect(rowDate(page, beforeLabel)).toBeVisible();
 
     // ── Предоплата ближайшего (будущего) вхождения: «Оплатить» на странице
@@ -130,7 +141,7 @@ test.describe('следующая дата оплаты из серверног�
       nextOccurrence = plannedItems[0]?.date ?? '';
       return nextOccurrence > firstOccurrence;
     }).toBe(true);
-    const afterLabel = formatDayMonth(nextOccurrence);
+    const afterLabel = formatDayMonthWithYear(nextOccurrence, await browserToday(page));
 
     // ── Страница платежа («Ближайшая операция») и хаб — одна и та же новая
     // дата; старой (оплаченной) на поверхностях нет — регрессия #967 ──

@@ -1,6 +1,6 @@
 import type { IsoDate } from '@/shared/lib/calendar';
-import { fullMonthsBetween } from '@/shared/lib/calendar';
-import { formatDayMonthDotted } from '@/shared/lib/date-format';
+import { fullMonthsBetween, isoYear } from '@/shared/lib/calendar';
+import { formatDayMonthDotted, formatDottedDate } from '@/shared/lib/date-format';
 import { monthsWord } from '@/shared/lib/months-word';
 import type { Property } from '@/entities/property';
 
@@ -8,9 +8,10 @@ import type { Property } from '@/entities/property';
  * Бейджи карточки объекта (резолюция #584, экран #586): один арендный бейдж
  * по приоритету плюс жёлтый «на ремонте», соседствующий с арендным.
  * Канон занятости — PropertyOccupancy (properties/CONTEXT.md); «сегодня
- * владельца» приходит из списочного ответа (ADR 0048) и нужен только
- * бейджу «Осталось N месяцев» — остальные бейджи считаются сразу, пока
- * today в пути, чтобы список не мигал.
+ * владельца» приходит из списочного ответа (ADR 0048) и нужен бейджам
+ * «Осталось N месяцев» и «Аренда с» (правило года, владелец 13.10) —
+ * остальные бейджи считаются сразу, пока today в пути, чтобы список
+ * не мигал.
  */
 export type PropertyBadgeKey =
   | 'rental-completed'
@@ -46,8 +47,9 @@ export function rentalMonthsLeftLabel(
 
 /** Арендный бейдж по приоритету резолюции #584; без аренды или у активной
  * бессрочной — null. Явно завершённая аренда — это occupancy=none: бейджа нет.
- * «Осталось N месяцев» считается от today; пока today не пришёл из ответа,
- * бейдж откладывается — остальные рендерятся сразу. */
+ * «Осталось N месяцев» и «Аренда с» считаются от today (правило года);
+ * пока today не пришёл из ответа, бейдж откладывается — остальные
+ * рендерятся сразу. */
 function rentalBadge(property: Property, today: IsoDate | undefined): PropertyBadge | null {
   const occupancy = property.occupancy;
   if (!occupancy) return null;
@@ -64,10 +66,15 @@ function rentalBadge(property: Property, today: IsoDate | undefined): PropertyBa
         tone: 'accent',
       };
     case 'upcoming':
-      if (!occupancy.start_date) return null;
+      // Форма «DD.MM» из макета #586 — только в текущем году; начало бывает
+      // и в следующем (декабрьское «сегодня») — там точечная дата с годом,
+      // как у formatRangeBound (правило владельца 13.10).
+      if (!occupancy.start_date || today === undefined) return null;
       return {
         key: 'rental-upcoming',
-        label: `Аренда с ${formatDayMonthDotted(occupancy.start_date)}`,
+        label: `Аренда с ${isoYear(occupancy.start_date) === isoYear(today)
+          ? formatDayMonthDotted(occupancy.start_date)
+          : formatDottedDate(occupancy.start_date)}`,
         tone: 'accent',
       };
     case 'none':

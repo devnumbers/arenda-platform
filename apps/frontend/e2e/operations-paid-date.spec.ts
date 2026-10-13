@@ -4,7 +4,7 @@ import {
   SEEDED_STUDIO_PROPERTY_ID,
   test,
 } from './fixtures';
-import { formatDayMonth, formatDayMonthWithYear, formatDayMonthYear } from '@/shared/lib/date-format';
+import { formatDayMonthWithYear, formatDayMonthYear } from '@/shared/lib/date-format';
 import type { Page, TestInfo } from '@playwright/test';
 
 // Операционные ленты читаются по фактической дате оплаты (#933/#994):
@@ -135,9 +135,8 @@ test.describe('операционные ленты по факту оплаты'
     // страницы — строгие page-wide getByText на них падают, прогон 30.09).
     // Лейблы лент — «Сегодня, <дата>», истории — «Сегодня» (канон истории,
     // без даты через запятую).
-    const feedGroupLabel = paidDate === today
-      ? `Сегодня, ${formatDayMonth(paidDate)}`
-      : formatDayMonthWithYear(paidDate, today);
+    const feedGroupLabel = (paidDate === today ? 'Сегодня, ' : '')
+      + formatDayMonthWithYear(paidDate, today);
     const historyGroupLabel = paidDate === today
       ? 'Сегодня'
       : formatDayMonthYear(paidDate);

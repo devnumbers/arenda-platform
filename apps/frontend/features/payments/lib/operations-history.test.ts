@@ -102,6 +102,17 @@ describe('groupOperationsByDate', () => {
   it('пустой список даёт пустой список групп', () => {
     expect(groupOperationsByDate([], '2026-08-27')).toStrictEqual([]);
   });
+
+  it('через Новый год «Вчера» несёт год: «Вчера, 31 декабря, 2025» (правило владельца 13.10)', () => {
+    const groups = groupOperationsByDate(
+      [paid('a', '2025-12-31'), paid('b', '2025-12-30')],
+      '2026-01-01',
+    );
+    expect(groups.map((group) => group.label)).toStrictEqual([
+      'Вчера, 31 декабря, 2025',
+      '30 декабря, 2025',
+    ]);
+  });
 });
 
 describe('groupOperationsByDate — лента по факту оплаты: ключ группы paidDate (#933/#994)', () => {

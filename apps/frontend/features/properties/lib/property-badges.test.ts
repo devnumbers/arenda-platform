@@ -76,6 +76,24 @@ describe('propertyBadges', () => {
     ]);
   });
 
+  it('upcoming в следующем году — точечная дата с годом (правило владельца 13.10)', () => {
+    const property = makeProperty({
+      id: '15',
+      occupancy: { status: 'upcoming', start_date: '2027-01-05', planned_end_date: null },
+    });
+    expect(propertyBadges(property, TODAY)).toEqual([
+      { key: 'rental-upcoming', label: 'Аренда с 05.01.2027', tone: 'accent' },
+    ]);
+  });
+
+  it('upcoming без today откладывается вместе с «Осталось N месяцев» — решать год нечем', () => {
+    const property = makeProperty({
+      id: '16',
+      occupancy: { status: 'upcoming', start_date: '2026-10-05', planned_end_date: null },
+    });
+    expect(propertyBadges(property)).toEqual([]);
+  });
+
   it('явно завершённая аренда (none) — без бейджа', () => {
     const property = makeProperty({
       id: '5',

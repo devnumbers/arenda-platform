@@ -4,8 +4,8 @@ import {
   type Subscription,
 } from '@/entities/billing';
 import { isPaidTariff, getTariffLabel } from '@/entities/user';
-import { dateToIso } from '@/shared/lib/calendar';
-import { formatDayMonth } from '@/shared/lib/date-format';
+import { dateToIso, type IsoDate } from '@/shared/lib/calendar';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
 
 /** Вариант hero-карточки главного экрана «Тариф» (#620, макеты
@@ -18,9 +18,11 @@ export type TariffHero =
   | { kind: 'grace'; title: string; priceLine: string; subLine: string }
   | { kind: 'stopped'; title: string; dateLine?: string; subLine: string };
 
-/** День из серверной даты-времени строкой «10 сентября» (UTC, ADR 0048). */
-export function dayMonth(datetime: string): string {
-  return formatDayMonth(dateToIso(new Date(datetime)));
+/** День из серверной даты-времени строкой «10 сентября»; год — вне текущего
+ * (правило владельца 13.10): today — клиентский (ADR 0061 §7), серверного
+ * в контракте подписки нет, а годовой тариф живёт в следующем году. */
+export function dayMonth(datetime: string, today: IsoDate): string {
+  return formatDayMonthWithYear(dateToIso(new Date(datetime)), today);
 }
 
 export function priceLine(subscription: Subscription): string {
@@ -31,14 +33,14 @@ export function priceLine(subscription: Subscription): string {
   return `Вы платите ${formatMoneyKopecks(price)} в ${PAYMENT_PERIOD_LABELS[period]}`;
 }
 
-export function tariffHero(subscription: Subscription): TariffHero {
+export function tariffHero(subscription: Subscription, today: IsoDate): TariffHero {
   const title = getTariffLabel(subscription.tariff.name);
 
   if (subscription.status === 'cancelled') {
     return {
       kind: 'stopped',
       title: `${title} остановлен`,
-      dateLine: subscription.validUntil ? dayMonth(subscription.validUntil) : undefined,
+      dateLine: subscription.validUntil ? dayMonth(subscription.validUntil, today) : undefined,
       subLine: 'Действует до',
     };
   }
@@ -49,7 +51,7 @@ export function tariffHero(subscription: Subscription): TariffHero {
       title,
       priceLine: priceLine(subscription),
       subLine: subscription.validUntil
-        ? `Оплатите тариф до ${dayMonth(subscription.validUntil)}`
+        ? `Оплатите тариф до ${dayMonth(subscription.validUntil, today)}`
         : 'Оплатите тариф',
     };
   }
@@ -62,7 +64,9 @@ export function tariffHero(subscription: Subscription): TariffHero {
     kind: 'paid',
     title,
     priceLine: priceLine(subscription),
-    subLine: subscription.validUntil ? `Спишем ${dayMonth(subscription.validUntil)}` : undefined,
+    subLine: subscription.validUntil
+      ? `Спишем ${dayMonth(subscription.validUntil, today)}`
+      : undefined,
   };
 }
 

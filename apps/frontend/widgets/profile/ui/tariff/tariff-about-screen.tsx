@@ -12,6 +12,7 @@ import {
 } from '@/shared/ui/design';
 import { billingKeys } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { notify } from '@/shared/lib/notifications';
 import type { ApiError } from '@/shared/api/errors';
 import {
@@ -73,6 +74,9 @@ function TariffAboutContent({
   const changeTariff = useChangeTariff();
   const [guardOpen, setGuardOpen] = useState(false);
   const [resumed, setResumed] = useState(false);
+  // Правило года (владелец 13.10): «сегодня» клиентское — серверного в
+  // контракте подписки нет (ADR 0061 §7).
+  const today = dateToIsoLocal(new Date());
 
   const cancelled = subscription.status === 'cancelled';
   const grace = subscription.status === 'grace';
@@ -127,9 +131,9 @@ function TariffAboutContent({
           PageContent pb-136 не хватает, последняя кнопка контента остаётся
           под панелью; добор 48px возвращает зазор (приёмка #621). */}
       <div className={grace ? 'flex flex-col gap-4 pb-12' : 'flex flex-col gap-4'}>
-        {grace && <GracePlaque validUntil={subscription.validUntil} />}
+        {grace && <GracePlaque validUntil={subscription.validUntil} today={today} />}
 
-        <TariffAboutCard view={tariffAboutCard(subscription)} />
+        <TariffAboutCard view={tariffAboutCard(subscription, today)} />
 
         {!cancelled && (
           <TariffFeaturesCard rows={tariffFeatureRows(subscription.tariff)} />

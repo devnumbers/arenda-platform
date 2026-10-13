@@ -19,7 +19,7 @@ import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
-  formatDayMonth,
+  formatDayMonthWithYear,
   isDatePaused,
   recurrenceLabel,
   PaymentRowButton,
@@ -290,7 +290,7 @@ function PaymentDetailBody({
           </PaymentsGroup>
         )}
 
-        <HistorySection propertyId={propertyId} paymentId={payment.id} />
+        <HistorySection propertyId={propertyId} paymentId={payment.id} today={today} />
       </div>
     </>
   );
@@ -542,8 +542,9 @@ function NextPaymentSection({
         <NextPaymentRow
           payment={payment}
           title={nearest.kind === 'operation' ? nearest.operation.title : payment.title}
-          subtitle={formatDayMonth(
+          subtitle={formatDayMonthWithYear(
             nearest.kind === 'operation' ? nearest.operation.date : nearest.date,
+            today,
           )}
           amountKopecks={
             nearest.kind === 'operation' ? nearest.operation.amountKopecks : payment.amountKopecks
@@ -602,9 +603,11 @@ const HISTORY_PREVIEW_LIMIT = 3;
 function HistorySection({
   propertyId,
   paymentId,
+  today,
 }: {
   readonly propertyId: string;
   readonly paymentId: string;
+  readonly today: IsoDate;
 }): JSX.Element | null {
   const router = useRouter();
   // Порция desc — первые HISTORY_PREVIEW_LIMIT и есть новейшие; тот же
@@ -652,6 +655,7 @@ function HistorySection({
         <HistoryPreviewRow
           key={operation.id}
           operation={operation}
+          today={today}
           onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
         />
       ))}
@@ -660,13 +664,15 @@ function HistorySection({
 }
 
 /** Строка превью истории: название, дата факта в подзаголовке (в подэкране
- * дату несёт групповой заголовок — здесь групп нет), сумма справа
- * знаковая (1302:52209). */
+ * дату несёт групповой заголовок — здесь групп нет; год — вне текущего,
+ * правило владельца 13.10), сумма справа знаковая (1302:52209). */
 function HistoryPreviewRow({
   operation,
+  today,
   onSelect,
 }: {
   readonly operation: PaymentOperation;
+  readonly today: IsoDate;
   readonly onSelect?: () => void;
 }): JSX.Element {
   const style = categoryStyle('default', operation.categorySlug);
@@ -677,7 +683,7 @@ function HistoryPreviewRow({
       className="px-3 pb-2"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
       title={operation.title}
-      subtitle={formatDayMonth(operation.paidDate ?? operation.date)}
+      subtitle={formatDayMonthWithYear(operation.paidDate ?? operation.date, today)}
       amountKopecks={
         operation.type === 'expense' ? -operation.amountKopecks : operation.amountKopecks
       }

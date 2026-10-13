@@ -1,4 +1,5 @@
 import { cardNumberTail, type Subscription, type Tariff } from '@/entities/billing';
+import type { IsoDate } from '@/shared/lib/calendar';
 import { getTariffLabel, isPaidTariff } from '@/entities/user';
 import { pluralize } from '@/shared/lib/pluralize';
 import type { TariffName } from '@/entities/user';
@@ -34,7 +35,7 @@ function withMethod(
   return method === undefined ? rows : [...rows, method];
 }
 
-export function tariffAboutCard(subscription: Subscription): TariffAboutCardView {
+export function tariffAboutCard(subscription: Subscription, today: IsoDate): TariffAboutCardView {
   const title = getTariffLabel(subscription.tariff.name);
 
   if (subscription.status === 'cancelled') {
@@ -42,7 +43,7 @@ export function tariffAboutCard(subscription: Subscription): TariffAboutCardView
       title: `${title} отключен`,
       rows: subscription.validUntil !== undefined
         ? [
-            { label: 'Действует до', value: dayMonth(subscription.validUntil) },
+            { label: 'Действует до', value: dayMonth(subscription.validUntil, today) },
           ]
         : [],
     };
@@ -62,7 +63,7 @@ export function tariffAboutCard(subscription: Subscription): TariffAboutCardView
       title,
       rows: withMethod(
         subscription.validUntil !== undefined
-          ? [price, { label: 'Оплатите тариф', value: `До ${dayMonth(subscription.validUntil)}` }]
+          ? [price, { label: 'Оплатите тариф', value: `До ${dayMonth(subscription.validUntil, today)}` }]
           : [price],
         subscription,
       ),
@@ -73,7 +74,7 @@ export function tariffAboutCard(subscription: Subscription): TariffAboutCardView
     title,
     rows: withMethod(
       subscription.validUntil !== undefined
-        ? [price, { label: 'Следующее списание', value: dayMonth(subscription.validUntil) }]
+        ? [price, { label: 'Следующее списание', value: dayMonth(subscription.validUntil, today) }]
         : [price],
       subscription,
     ),

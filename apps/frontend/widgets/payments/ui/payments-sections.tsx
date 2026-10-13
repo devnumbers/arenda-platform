@@ -2,7 +2,7 @@ import { useState, type JSX, type ReactNode } from 'react';
 import { BoldHome, SmallArrowDown, Star } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import {
-  formatDayMonth,
+  formatDayMonthWithYear,
   formatOverdueDays,
   PaymentRowButton,
 } from '@/entities/payment';
@@ -423,7 +423,7 @@ export function PaymentRow({
     subtitle.kind === 'paused'
       ? 'На паузе'
       : subtitle.kind === 'date'
-        ? formatDayMonth(subtitle.iso)
+        ? formatDayMonthWithYear(subtitle.iso, today)
         : undefined;
 
   return (

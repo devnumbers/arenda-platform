@@ -48,10 +48,12 @@ describe('date-format', () => {
     expect(formatTime('не дата')).toBe('—');
   });
 
-  it('день-месяц и время момента: «15 сентября, 14:40» в локальном времени, невалидное — «—» (#745)', () => {
-    expect(formatDayMonthTime('2026-09-15T14:40:00')).toBe('15 сентября, 14:40');
-    expect(formatDayMonthTime('2026-01-01T07:05:00')).toBe('1 января, 07:05');
-    expect(formatDayMonthTime('не дата')).toBe('—');
+  it('день-месяц и время момента: «15 сентября, 14:40» в локальном времени, год — вне текущего (#745, правило владельца 13.10)', () => {
+    const now = new Date('2026-09-18T12:00:00');
+    expect(formatDayMonthTime('2026-09-15T14:40:00', now)).toBe('15 сентября, 14:40');
+    expect(formatDayMonthTime('2026-01-01T07:05:00', now)).toBe('1 января, 07:05');
+    expect(formatDayMonthTime('2025-09-15T09:08:00', now)).toBe('15 сентября 2025, 09:08');
+    expect(formatDayMonthTime('не дата', now)).toBe('—');
   });
 
   it('момент сессии в списке устройств: «14 августа, 14:41», год — вне текущего (#730)', () => {

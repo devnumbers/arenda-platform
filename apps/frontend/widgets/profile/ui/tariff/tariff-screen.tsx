@@ -8,6 +8,7 @@ import { Button, Skeleton, SupportModal } from '@/shared/ui/design';
 import { billingKeys } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
 import { useSubscription } from '@/features/billing';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { NO_SUBSCRIPTION } from '@/widgets/profile/lib/no-subscription';
 import { tariffHero } from '@/widgets/profile/lib/tariff-overview';
 import { GracePlaque } from './grace-plaque';
@@ -26,6 +27,9 @@ export function TariffScreen(): JSX.Element {
   const subscription = data ?? NO_SUBSCRIPTION;
   const queryClient = useQueryClient();
   const [supportOpen, setSupportOpen] = useState(false);
+  // Правило года (владелец 13.10): «сегодня» клиентское — серверного в
+  // контракте подписки нет (ADR 0061 §7), годовой тариф живёт в следующем.
+  const today = dateToIsoLocal(new Date());
 
   if (isPending) {
     return <TariffScreenSkeleton />;
@@ -46,7 +50,7 @@ export function TariffScreen(): JSX.Element {
 
   return (
     <div className="flex flex-col gap-4">
-      <TariffHero hero={tariffHero(subscription)} />
+      <TariffHero hero={tariffHero(subscription, today)} />
 
       {subscription.pendingPayment !== undefined && (
         <PendingPaymentPlaque
@@ -58,7 +62,7 @@ export function TariffScreen(): JSX.Element {
       )}
 
       {subscription.status === 'grace' && (
-        <GracePlaque validUntil={subscription.validUntil} />
+        <GracePlaque validUntil={subscription.validUntil} today={today} />
       )}
 
       <nav aria-label="Управление подпиской" className="flex items-stretch gap-3">

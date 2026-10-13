@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useState, type JSX, type ReactNode } from 'react';
 import { Calendar, Check, Edit, Key, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { formatDayMonth } from '@/shared/lib/date-format';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { formatPhoneDisplay } from '@/shared/lib/phone';
 import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
@@ -395,7 +395,7 @@ function PaymentRow({
       title="Арендная плата"
       subtitle={
         rental.rentPayment.nextPayment !== null
-          ? formatDayMonth(rental.rentPayment.nextPayment.date)
+          ? formatDayMonthWithYear(rental.rentPayment.nextPayment.date, rental.today)
           : undefined
       }
       amountKopecks={rental.rentPayment.amountKopecks}
