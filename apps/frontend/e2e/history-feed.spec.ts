@@ -29,6 +29,8 @@ import {
 /** uuid юзера сидового участника (actor_id журнала) — снимок имени в
  * шапках ленты. */
 const MARIA_ID = '12111111-1111-4111-8111-111111111121';
+/** uuid сидового владельца (фикс сида seed.sql). */
+const OWNER_ID = '11111111-1111-4111-8111-111111111111';
 
 /** Чип дня в JS — зеркально formatDayMonthWithYear (год вне текущего). */
 function expectedDayChip(daysAgo: number): string {
@@ -153,24 +155,33 @@ test('лента из сида: чипы дней, группы «объект �
   await expect(page.getByText('Вчера', { exact: true })).toBeVisible();
   await expect(page.getByText(expectedDayChip(12), { exact: true })).toBeVisible();
 
-  // Шапки объектов — живые названия области, кликабельны (страница
-  // объекта); у сидовой квартиры виден и адрес (вторая строка шапки по
-  // макету 2157-56876, из /history/filters).
+  // Шапки объектов — живые названия области, кликабельны: с 13.10.2026
+  // ведут на «Историю объекта» (решение владельца — амендмент #1361), а
+  // не на страницу объекта; у сидовой квартиры виден и адрес (вторая
+  // строка шапки по макету 2157-56876, из /history/filters).
   const apartmentHeader = page.getByRole('link', { name: /Квартира на Ленина/ }).first();
   await expect(apartmentHeader).toBeVisible();
-  await expect(apartmentHeader).toHaveAttribute('href', new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}`));
+  await expect(apartmentHeader).toHaveAttribute(
+    'href',
+    new RegExp(`/history/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
+  );
   await expect(page.getByText('Москва, ул. Ленина, 1').first()).toBeVisible();
   await expect(page.getByRole('link', { name: /Гараж на Садовой/ }).first()).toBeVisible();
 
-  // Шапки актёров — имена в серых карточках; роль экран не показывает
-  // (макет 2157-56876). В общей ленте шапки статичны (#1361 — страница
-  // «Действия участника» снята): ни участник, ни владелец не ссылки —
-  // тап по актёру ведёт в ленту только из «Истории объекта», где пара
-  // человек+объект известна.
-  await expect(page.getByRole('heading', { name: 'Иван Иванов' }).first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Мария Петрова' }).first()).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Мария Петрова' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Иван Иванов' })).toHaveCount(0);
+  // Шапки актёров — тоже ссылки (решение владельца 13.10.2026): пара
+  // «Действия участника в объекте» в рамках секции, где актёр изменения
+  // сделал; владелец включительно (обезличенных записей в сиде нет).
+  // Роль экран не показывает (макет 2157-56876).
+  await expect(page.getByRole('link', { name: 'Мария Петрова' }).first()).toHaveAttribute(
+    'href',
+    new RegExp(`/history/participants/${MARIA_ID}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
+  );
+  await expect(page.getByRole('link', { name: 'Иван Иванов' }).first()).toHaveAttribute(
+    'href',
+    new RegExp(
+      `/history/participants/${OWNER_ID}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`,
+    ),
+  );
 
   // Строки: сегменты дословно, связанные фрагменты — синие ссылки на
   // страницы сущностей (#713), иконка основного действия с подписью группы.
@@ -288,7 +299,8 @@ test('синие переходы #713: связанные сегменты ве
 
   // Ссылка участника — на страницу участника хаба (uuid юзера из ссылки).
   // Локатор по href: имя «Мария Петрова» звучит и в шапке актёра той же
-  // группы, но та в общей ленте статична (#1361) — ссылка одна.
+  // группы, но та ведёт на пару «участник в объекте» (/history/participants/…,
+  // решение владельца 13.10.2026) — ссылка на хаб одна.
   const memberLink = page.locator(`a[href="/participants/${memberUserId}"]`);
   await expect(memberLink).toHaveCount(1);
   await memberLink.click();
@@ -415,9 +427,13 @@ test('свой актор подписан «(Вы)»: метка видна т�
   await expect(page.getByRole('heading', { name: 'Мария Петрова', exact: true }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Мария Петрова (Вы)' })).toHaveCount(0);
 
-  // Метка кликабельность не трогает, но в общей ленте шапки статичны
-  // (#1361): своя шапка с «(Вы)» — тоже не ссылка.
-  await expect(page.getByRole('link', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
+  // Своя шапка — тоже ссылка (решение владельца 13.10.2026): пара «свой
+  // актёр + объект записи»; метка «(Вы)» кликабельность не трогает.
+  const meId = await execE2eSql(`SELECT id FROM users WHERE email = '${seededUser.email}'`);
+  await expect(page.getByRole('link', { name: 'Иван Иванов (Вы)' }).first()).toHaveAttribute(
+    'href',
+    new RegExp(`/history/participants/${meId}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
+  );
 
   // Глазами приглашённого — семантика Telegram: своя группа подписана
   // «(Вы)», владелец — без метки (решение владельца 24.09).
@@ -502,12 +518,12 @@ test('открытие «с конца» держится всегда: «Наз
   await expect(page.getByText('Платёж создан: Заготовка 1', { exact: true })).toBeVisible();
 
   // Уход из ленты по обычной ссылке (SPA push: шапка объектной секции
-  // ведёт на страницу объекта) и «Назад» (goBack, кнопка шапки ведёт
-  // себя так же — history.back): реставрации позиции чтения нет
-  // (решение владельца 10.10.2026) — лента открывается заново на самых
-  // свежих записях, дно в вьюпорте.
+  // ведёт в «Историю объекта» — решение владельца 13.10.2026) и «Назад»
+  // (goBack, кнопка шапки ведёт себя так же — history.back): реставрации
+  // позиции чтения нет (решение владельца 10.10.2026) — лента открывается
+  // заново на самых свежих записях, дно в вьюпорте.
   await page.getByRole('link', { name: /Квартира на Ленина/ }).first().click();
-  await page.waitForURL(`**/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
+  await page.waitForURL(`**/history/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
   await page.goBack();
   await expect(page.getByText('Платёж создан: Заготовка 60', { exact: true })).toBeVisible();
   await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
@@ -592,9 +608,12 @@ test('безымянный актёр: живые ноги дают «Польз
     // показывается (снимок — фолбэк только обезличенных строк).
     await expect(page.getByRole('heading', { name: 'Пользователь', exact: true })).toHaveCount(2);
     await expect(page.getByRole('heading', { name: '+7********27', exact: true })).toHaveCount(0);
-    // Шапки в общей ленте статичны (#1361) — безымянный титул ничего
-    // не ломает, ссылок на актёра нет.
-    await expect(page.getByRole('link', { name: 'Пользователь' })).toHaveCount(0);
+    // Живые ноги безымянного дают ссылку на пару (решение владельца
+    // 13.10.2026) — титул ничего не ломает.
+    await expect(page.getByRole('link', { name: 'Пользователь' }).first()).toHaveAttribute(
+      'href',
+      new RegExp(`/history/participants/${NAMELESS_ID}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
+    );
 
     // Снапшотный фолбэк D5: пользователь удалён — записи обезличены
     // (FK actor_id ON DELETE SET NULL), шапки групп собираются по снимку

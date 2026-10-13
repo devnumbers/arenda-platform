@@ -23,6 +23,7 @@ import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { useMe } from '@/features/auth';
+import { useHistoryHasEntries } from '@/features/history';
 import { useProperty } from '@/features/properties';
 import { useLeaveProperty } from '@/features/participants';
 import { propertyPermissions } from '@/entities/property';
@@ -108,7 +109,10 @@ const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = 
  * «Историей объекта» и красный CTA «Покинуть объект» (D6; самовыход
  * #701: DELETE .../access/members/self с канон-подтверждением, возврат к
  * объектам). На архивном объекте приглашение скрыто, отзыв, история и
- * выход живут.
+ * выход живут. Пустой список (только строка владельца) с живым журналом
+ * — вместо кебаба одна иконка «История объекта» (решение владельца
+ * 13.10.2026: действия в объекте были — вход в ленту нужен; проверка
+ * лёгким limit=1-запросом ленты); без действий иконки нет, поиск скрыт.
  *
  * Тап по ряду — страница участника (#698, агрегат): uuid юзера, у
  * pending — почта. Статичные ряды, без шеврона: владелец (страница
@@ -191,12 +195,21 @@ export function PropertyParticipantsScreen({
   const isArchived = propertyQuery.data?.status === 'archived';
 
   const participantsCount = rows.filter((row) => !row.isOwner).length;
+  // Список загрузился и читается — от него зависят обе ветки шапки.
+  const membersSettled = !membersQuery.isPending && !membersQuery.isError;
   // Служебные иконки шапки — только когда есть кого искать (§7): список
   // из одного владельца и ошибка загрузки их прячут; кебаб (D6) живёт
   // при тех же условиях — у владельца с действиями управления, у
   // приглашённого только с «Историей объекта».
-  const headerActionsVisible =
-    !membersQuery.isPending && !membersQuery.isError && participantsCount > 0;
+  const headerActionsVisible = membersSettled && participantsCount > 0;
+  // Иконка «Истории объекта» пустого списка (решение владельца
+  // 13.10.2026): участников нет, но действия в объекте были — вместо
+  // кебаба рисуется одна иконка истории (проверка — лёгкий limit=1
+  // запрос, только при пустом списке; на ошибке консервативно скрыто).
+  // Поиск по-прежнему прячется: искать некого (§7).
+  const emptyList = membersSettled && participantsCount === 0;
+  const hasJournalEntries = useHistoryHasEntries(propertyId, { enabled: emptyList });
+  const emptyHistoryVisible = emptyList && hasJournalEntries;
   const query = search.trim();
   const searching = searchMode && query.length > 0;
   const visible = sortPropertyParticipantsByTitle(
@@ -385,6 +398,16 @@ export function PropertyParticipantsScreen({
                     )}
                   </MenuContent>
                 </Menu>
+              </span>
+            ) : emptyHistoryVisible ? (
+              /* Пустой список с живым журналом (решение владельца
+               * 13.10.2026): вместо кебаба — одна иконка истории. */
+              <span className="flex items-center pr-3.5">
+                <IconButton
+                  icon={<TimeHistory className="h-6 w-6" />}
+                  label="История объекта"
+                  onClick={() => router.push(ROUTES.historyProperty(propertyId))}
+                />
               </span>
             ) : undefined
           }

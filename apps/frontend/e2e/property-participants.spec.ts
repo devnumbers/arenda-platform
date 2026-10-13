@@ -1,13 +1,15 @@
 import {
   captureScreen,
-  expect,
   execE2eSql,
+  expect,
   openCabinetWithSeededSession,
   openCabinetWithSessionToken,
+  seedJournalEntry,
   seededMemberSessionToken,
   seededViewerSessionToken,
   screenHeader,
   test,
+  todayAt,
 } from './fixtures';
 
 // Экран «Участники объекта» (D6 #1312, макет 3298-75434): полный состав
@@ -23,6 +25,7 @@ import {
 // execE2eSql (workers=1).
 
 const APARTMENT_ID = '33333333-3333-4333-8333-333333333333';
+const GARAGE_ID = '44444444-4444-4444-8444-444444444444';
 const MARIA_ID = '12111111-1111-4111-8111-111111111121';
 const MARIA_MEMBER_ID = '99999999-9999-4999-8999-999999999931';
 const SERGEY_ID = '13111111-1111-4111-8111-111111111131';
@@ -293,6 +296,57 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
         `('${MARIA_MEMBER_ID}', '${APARTMENT_ID}', '${MARIA_ID}', 'full_access', '11111111-1111-4111-8111-111111111111'), ` +
         `('${SERGEY_MEMBER_ID}', '${APARTMENT_ID}', '${SERGEY_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
         `ON CONFLICT (id) DO NOTHING`,
+    );
+  }
+});
+
+test('пустой список: иконка «История объекта» видна только когда действия были (решение владельца 13.10.2026)', async ({ page, seededUser }) => {
+  await execE2eSql('DELETE FROM action_journal;');
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Гараж свободен: в списке только строка владельца — кебаба и поиска
+  // нет (§7: искать некого), и иконки истории нет: действий в объекте
+  // не было.
+  await page.goto(`/properties/${GARAGE_ID}/participants`);
+  const header = screenHeader(page);
+  await expect(page.getByText('Иван (Вы)')).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Еще — действия со списком' })).toHaveCount(0);
+  await expect(header.getByRole('button', { name: 'Поиск участников' })).toHaveCount(0);
+  await expect(header.getByRole('button', { name: 'История объекта' })).toHaveCount(0);
+
+  // Непустой список (квартира) — кебаб как был, отдельной иконки истории
+  // не появляется (ветки шапки взаимоисключающие).
+  await page.goto(`/properties/${APARTMENT_ID}/participants`);
+  await expect(header.getByRole('button', { name: 'Еще — действия со списком' })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'История объекта' })).toHaveCount(0);
+  await page.goto(`/properties/${GARAGE_ID}/participants`);
+  await expect(page.getByText('Иван (Вы)')).toBeVisible();
+
+  // Запись журнала гаража появляется — иконка истории в шапке ведёт в
+  // прибитую ленту объекта (вместо кебаба — решение владельца 13.10).
+  await seedJournalEntry(
+    {
+      id: 'b0000000-0000-4000-8000-000000000091',
+      createdAtSql: todayAt(5),
+      propertyId: GARAGE_ID,
+      text: 'Платёж удалён: Старый платёж',
+      searchable: 'Платёж удалён: Старый платёж Иван Иванов',
+      action: 'payment.deleted',
+      baseAction: 'deleted',
+    },
+    seededUser,
+  );
+  await page.reload();
+  try {
+    await header.getByRole('button', { name: 'История объекта' }).click();
+    await page.waitForURL(`**/history/properties/${GARAGE_ID}`);
+    await expect(page.getByText('История объекта').first()).toBeVisible();
+    await expect(page.getByText('Платёж удалён: Старый платёж')).toBeVisible();
+  } finally {
+    // Конвенция файла: тест восстанавливает сид (сеяная строка журнала
+    // снимается).
+    await execE2eSql(
+      `DELETE FROM action_journal WHERE id = 'b0000000-0000-4000-8000-000000000091'`,
     );
   }
 });

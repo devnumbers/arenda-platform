@@ -17,6 +17,7 @@ import {
   fetchHistoryPage,
   historyFeedQueryOptions,
   historyFiltersQueryOptions,
+  historyHasEntriesQueryOptions,
   type HistoryFeedPage,
 } from './queries';
 
@@ -249,4 +250,23 @@ export function useHistoryFilters(
   propertyIds?: ReadonlyArray<string>,
 ): UseQueryResult<HistoryFilterOptions, ApiError> {
   return useQuery(historyFiltersQueryOptions({ propertyIds }));
+}
+
+/**
+ * Были ли действия у объекта (решение владельца 13.10.2026): один лёгкий
+ * запрос limit=1 для пустого списка «Участников объекта» — иконка
+ * «Истории объекта» рисуется, только когда записи есть, свежий объект
+ * остаётся без входа. Запрос включается вызовом (enabled — список пуст);
+ * пока ответа нет и на ошибке — false, вход консервативно скрыт (§7:
+ * иконки появляются по факту данных).
+ */
+export function useHistoryHasEntries(
+  propertyId: string,
+  options: { readonly enabled?: boolean } = {},
+): boolean {
+  const query = useQuery({
+    ...historyHasEntriesQueryOptions({ propertyId }),
+    enabled: options.enabled ?? true,
+  });
+  return query.data ?? false;
 }

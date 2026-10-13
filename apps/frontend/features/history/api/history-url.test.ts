@@ -42,4 +42,10 @@ describe('historyFeedUrl', () => {
   it('пустые списки скоупа не попадают в query', () => {
     expect(historyFeedUrl({ actions: [], kinds: [] }, undefined)).toBe(`/history?limit=${HISTORY_PAGE_SIZE}`);
   });
+
+  it('лимит порции переопределяется: проверка существования записей несёт limit=1', () => {
+    expect(
+      historyFeedUrl({ propertyIds: ['33333333-3333-4333-8333-333333333333'] }, undefined, 1),
+    ).toBe('/history?limit=1&property_ids=33333333-3333-4333-8333-333333333333');
+  });
 });

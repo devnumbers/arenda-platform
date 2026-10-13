@@ -81,6 +81,40 @@ export function historyFeedQueryOptions({
   };
 }
 
+/** Проверка «были ли действия у объекта» (решение владельца 13.10.2026):
+ * один лёгкий запрос limit=1 — пустой список «Участников объекта»
+ * показывает вход в «Историю объекта», только когда записи есть. */
+export async function fetchHistoryHasEntries(
+  propertyId: string,
+  transport: ApiTransport = apiClient,
+): Promise<boolean> {
+  const response = await transport<HistoryPageDto>(
+    historyFeedUrl({ propertyIds: [propertyId] }, undefined, 1),
+  );
+  return response.items.length > 0;
+}
+
+/** Опции проверки существования записей (канон #887 — один источник
+ * ключ+fetch); ключ отдельный от порций ленты — страница limit=1 не
+ * должна попадать в кэш ленты. */
+export function historyHasEntriesQueryOptions({
+  propertyId,
+  transport,
+}: {
+  readonly propertyId: string;
+  readonly transport?: ApiTransport;
+}): UseQueryOptions<
+  boolean,
+  ApiError,
+  boolean,
+  ReturnType<typeof historyKeys.hasEntries>
+> {
+  return queryOptions({
+    queryKey: historyKeys.hasEntries(propertyId),
+    queryFn: () => fetchHistoryHasEntries(propertyId, transport),
+  });
+}
+
 /** Чистый fetch опций шита фильтров — общее горло хука и серверного
  * префетча #887; URL и семантика сужения — historyFiltersUrl. */
 export async function fetchHistoryFilters(

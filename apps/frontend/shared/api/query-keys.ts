@@ -419,6 +419,11 @@ export const historyKeys = {
    * страницы (#840/#841); сужение — часть ключа. */
   filters: (propertyIds?: ReadonlyArray<string>) =>
     [...historyKeys.all, 'filters', propertyIds?.join(',') ?? ''] as const,
+  /** Были ли действия у объекта — лёгкий limit=1-запрос GET /history
+   * (решение владельца 13.10.2026): пустой список «Участников объекта»
+   * рисует иконку «История объекта», только когда записи есть. */
+  hasEntries: (propertyId: string) =>
+    [...historyKeys.all, 'has-entries', propertyId] as const,
 };
 
 // features/subscription
