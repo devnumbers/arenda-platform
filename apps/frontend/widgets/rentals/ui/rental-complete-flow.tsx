@@ -48,7 +48,10 @@ import { RentalSummarySkeleton } from './rental-skeletons';
  * шага («Отмена»/«Продолжить»), шаг 1 — дата окончания (чипы «Сегодня» /
  * «По плану», границы [начало, сегодня] — ADR 0053 §3; пикер с allowPast —
  * дата завершения бывает задним числом, #805), шаг 2 — возврат залога (0
- * валиден — «не вернул», комментарий ≤2000), шаг 3 — итоги: на телефоне
+ * валиден — «не вернул», комментарий ≤2000), а у аренды без залога — только
+ * комментарий под заголовком «Добавьте комментарий» (решение владельца
+ * 13.10, #1386; команда без записи либо возврат с нулём — контракт #1384),
+ * шаг 3 — итоги: на телефоне
  * (<561) сначала hero-экран с «Подвести итоги», обзор открывается по кнопке
  * (макеты 1433:60681 → 1433:61074); на планшете и десктопе (≥561) обзор
  * сразу (1433:61389/1433:61927). Финал — «Аренда объекта … завершена»
@@ -58,7 +61,8 @@ import { RentalSummarySkeleton } from './rental-skeletons';
  * Сумма залога обязательна (кнопка шага скрыта до готовности — канон
  * 2026-09-05); в макете поле с плейсхолдером «Сумма» — канон арендных форм
  * (пустое поле пустое, решение владельца 2026-09-05) важнее буквы макета —
- * сверить на приёмке (#805: сверено, поле пустое).
+ * сверить на приёмке (#805: сверено, поле пустое). У аренды без залога шаг
+ * готов всегда — комментарий опционален.
  */
 
 const COMPLETE_WIZARD_STEPS = 3;
@@ -263,46 +267,57 @@ export function RentalCompleteFlow({
         {stage === 'deposit' && (
           <>
             <div className="flex flex-col gap-8 px-6 pt-6">
-              <div className="flex flex-col gap-2">
-                <h1 className="font-sans text-xl font-semibold leading-6 text-content">
-                  Возвращение залога
-                </h1>
-                <p className="text-base leading-[18px] text-content-secondary">
-                  Выберите сумму, которая возвращается арендатору
-                </p>
-              </div>
-              <div className="flex flex-col gap-3">
-                <MoneyField
-                  title="Залог"
-                  raw={depositRaw}
-                  onRawChange={setDepositRaw}
-                  onClear={() => setDepositRaw('')}
-                  ariaLabel="Сумма возврата залога"
-                />
-                <div className="flex flex-wrap gap-2">
-                  {depositKopecks !== null && (
+              {depositKopecks !== null ? (
+                <div className="flex flex-col gap-2">
+                  <h1 className="font-sans text-xl font-semibold leading-6 text-content">
+                    Возвращение залога
+                  </h1>
+                  <p className="text-base leading-[18px] text-content-secondary">
+                    Выберите сумму, которая возвращается арендатору
+                  </p>
+                </div>
+              ) : (
+                // Без залога шаг — только комментарий (решение владельца
+                // 13.10, #1386): поля суммы и чипов нет, подзаголовок про
+                // сумму не имеет смысла.
+                <div className="flex flex-col gap-2">
+                  <h1 className="font-sans text-xl font-semibold leading-6 text-content">
+                    Добавьте комментарий
+                  </h1>
+                </div>
+              )}
+              {depositKopecks !== null && (
+                <div className="flex flex-col gap-3">
+                  <MoneyField
+                    title="Залог"
+                    raw={depositRaw}
+                    onRawChange={setDepositRaw}
+                    onClear={() => setDepositRaw('')}
+                    ariaLabel="Сумма возврата залога"
+                  />
+                  <div className="flex flex-wrap gap-2">
                     <ChipButton
-                      onClick={() =>
-                        setDepositRaw(kopecksToAmountInputString(depositKopecks))
-                      }
+                      onClick={() => setDepositRaw(kopecksToAmountInputString(depositKopecks))}
                     >
                       {formatMoneyKopecks(depositKopecks)}
                     </ChipButton>
-                  )}
-                  <ChipButton onClick={() => setDepositRaw('0')}>
-                    {formatMoneyKopecks(0)}
-                  </ChipButton>
+                    <ChipButton onClick={() => setDepositRaw('0')}>
+                      {formatMoneyKopecks(0)}
+                    </ChipButton>
+                  </div>
                 </div>
-              </div>
+              )}
               <Textarea
                 title="Комментарий"
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 maxLength={RENTAL_COMMENT_MAX}
-                aria-label="Комментарий к возврату залога"
+                aria-label={depositKopecks === null ? 'Комментарий завершения' : 'Комментарий к возврату залога'}
               />
             </div>
-            {depositAmount !== undefined && (
+            {/* С залогом шаг ждёт читаемую сумму (канон 2026-09-05); без
+                залога готов всегда — комментарий опционален. */}
+            {(depositKopecks === null || depositAmount !== undefined) && (
               <StickyBottomBar>
                 <WizardBottomBar>
                   <Button className="w-full" onClick={() => setStage('summary')}>
@@ -385,8 +400,13 @@ export function RentalCompleteFlow({
                   propertyType={propertyType}
                   propertyPhotoUrl={propertyPhotoUrl}
                   tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
-                  depositReturnKopecks={depositAmount ?? 0}
-                  depositReturnComment={comment.trim()}
+                  depositReturn={
+                    depositKopecks === null
+                      ? comment.trim().length > 0
+                        ? { kopecks: 0, comment: comment.trim() }
+                        : null
+                      : { kopecks: depositAmount ?? 0, comment: comment.trim() }
+                  }
                 />
               )}
             </div>
@@ -455,6 +475,7 @@ export function RentalCompleteFlow({
   async function complete(): Promise<void> {
     const command = buildRentalCompleteCommand({
       completedDate,
+      hasDeposit: depositKopecks !== null,
       depositRaw,
       comment,
     });

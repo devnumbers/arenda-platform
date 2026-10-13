@@ -126,8 +126,14 @@ export function RentalSummaryScreen({
               propertyType={propertyQuery.data.type}
               propertyPhotoUrl={propertyQuery.data.photoUrl}
               tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
-              depositReturnKopecks={rental.depositReturnKopecks ?? 0}
-              depositReturnComment={rental.depositReturnComment ?? ''}
+              depositReturn={
+                rental.depositReturnKopecks === null && rental.depositReturnComment === null
+                  ? null
+                  : {
+                      kopecks: rental.depositReturnKopecks ?? 0,
+                      comment: rental.depositReturnComment ?? '',
+                    }
+              }
             />
           )}
       </PageContent>

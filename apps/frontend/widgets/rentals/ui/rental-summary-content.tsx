@@ -37,10 +37,11 @@ export type RentalSummaryContentProps = {
   /** Фото контакта-арендатора из книги (ADR 0065, решение #1286);
    * undefined — контакта нет в книге или у него нет фото. */
   readonly tenantPhotoUrl?: string | undefined;
-  /** Записанный возврат залога — сумма из черновика мастера (копейки). */
-  readonly depositReturnKopecks: number;
-  /** Комментарий возврата из черновика мастера. */
-  readonly depositReturnComment: string;
+  /** Запись возврата залога: в мастере — из черновика (сумма + комментарий),
+   * на итогах завершённой — из записанного; null — записи нет (у аренды без
+   * залога пустой комментарий, #1386): секция не выводится вовсе (канон:
+   * секция без контента не рисуется). */
+  readonly depositReturn: { readonly kopecks: number; readonly comment: string } | null;
 };
 
 export function RentalSummaryContent({
@@ -51,8 +52,7 @@ export function RentalSummaryContent({
   propertyType,
   propertyPhotoUrl,
   tenantPhotoUrl,
-  depositReturnKopecks,
-  depositReturnComment,
+  depositReturn,
 }: RentalSummaryContentProps): JSX.Element {
   const tenant = rental.tenant;
   const rentStyle = categoryStyle('default', 'rent');
@@ -75,18 +75,26 @@ export function RentalSummaryContent({
           <SummaryField label="Расходы" value={formatMoneyKopecks(summary.expenseKopecks)} />
         </SummarySection>
 
-        <SummarySection title="Возвращение залога">
-          <SummaryField
-            label="Сумма на возврат"
-            value={formatMoneyKopecks(depositReturnKopecks)}
-          />
-          <div className="flex flex-col gap-2">
-            <span className="text-base font-medium leading-[18px] text-content">Комментарий</span>
-            <div className="min-h-[92px] whitespace-pre-wrap break-words rounded-2xl bg-surface-muted px-[18px] py-[10px] text-base leading-[18px] text-content">
-              {depositReturnComment}
+        {/* Секция выводится только с записью (#1386, канон «секция без
+            контента не выводится»); строку «Сумма на возврат» рисует аренда
+            с залогом — у завершения без залога запись-ноль («не вернул»)
+            смысла суммы не несёт, остаётся комментарий. */}
+        {depositReturn !== null && (
+          <SummarySection title="Возвращение залога">
+            {rental.depositKopecks !== null && (
+              <SummaryField
+                label="Сумма на возврат"
+                value={formatMoneyKopecks(depositReturn.kopecks)}
+              />
+            )}
+            <div className="flex flex-col gap-2">
+              <span className="text-base font-medium leading-[18px] text-content">Комментарий</span>
+              <div className="min-h-[92px] whitespace-pre-wrap break-words rounded-2xl bg-surface-muted px-[18px] py-[10px] text-base leading-[18px] text-content">
+                {depositReturn.comment}
+              </div>
             </div>
-          </div>
-        </SummarySection>
+          </SummarySection>
+        )}
       </div>
 
       <div className="pt-16">
