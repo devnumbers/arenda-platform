@@ -723,7 +723,7 @@ func TestEmailChangeService_RequestNewEmailCode(t *testing.T) {
 
 // changeEmailHappyPath drives the full three-step flow and returns the
 // handles the success-path assertions need.
-func changeEmailHappyPath(t *testing.T) (h *emailChangeHarness, user domain.User, newEmail domain.Email, currentHash, otherHash string) {
+func changeEmailHappyPath(t *testing.T) (h *emailChangeHarness, user domain.User, newEmail domain.Email, firstHash, secondHash string) {
 	t.Helper()
 	h = newEmailChangeHarness()
 	phone := mustPhone(t, "+79160000300")
@@ -731,32 +731,32 @@ func changeEmailHappyPath(t *testing.T) (h *emailChangeHarness, user domain.User
 	newEmail = mustEmail(t, "new-change@example.com")
 	user = h.seedEmailChangeUser(t, phone, currentEmail, nil) // Unverified current address: yet to be confirmed.
 
-	// Two sessions: the change keeps the one making it and revokes the other
-	// (решение #1207 — the same rule the phone change follows).
-	currentHash = h.hasher.HashToken("current-session")
-	h.sessions.sessions[currentHash] = domain.Session{UserID: user.ID, TokenHash: currentHash}
-	otherHash = h.hasher.HashToken("other-session")
-	h.sessions.sessions[otherHash] = domain.Session{UserID: user.ID, TokenHash: otherHash}
+	// Two sessions: the change touches neither (решение #1380, разворот
+	// #1207) — the contact change no longer logs other devices out.
+	firstHash = h.hasher.HashToken("current-session")
+	h.sessions.sessions[firstHash] = domain.Session{UserID: user.ID, TokenHash: firstHash}
+	secondHash = h.hasher.HashToken("other-session")
+	h.sessions.sessions[secondHash] = domain.Session{UserID: user.ID, TokenHash: secondHash}
 
 	grantToken, newCode := h.runToStepThree(t, user.ID, newEmail)
 
-	updated, err := h.svc.ChangeEmail(t.Context(), user.ID, newCode, grantToken, "current-session")
+	updated, err := h.svc.ChangeEmail(t.Context(), user.ID, newCode, grantToken)
 	if err != nil {
 		t.Fatalf("step 3 ChangeEmail: %v", err)
 	}
 	if updated.Email == nil || updated.Email.String() != newEmail.String() {
 		t.Fatalf("updated email = %v, want %s", updated.Email, newEmail)
 	}
-	return h, user, newEmail, currentHash, otherHash
+	return h, user, newEmail, firstHash, secondHash
 }
 
 // changeEmailAppliesAndConsumes asserts the success-path side effects: the new
-// address stored verified, the grant consumed, other sessions revoked while
-// the current one survives, the code burned, the success audit recorded, and
-// the change letter scheduled to the OLD address (решение #1207).
+// address stored verified, the grant consumed, sessions untouched, the code
+// burned, the success audit recorded, and the change letter scheduled to the
+// OLD address (решение #1207).
 func changeEmailAppliesAndConsumes(t *testing.T) {
 	t.Helper()
-	h, user, newEmail, currentHash, otherHash := changeEmailHappyPath(t)
+	h, user, newEmail, firstHash, secondHash := changeEmailHappyPath(t)
 	ctx := t.Context()
 
 	// The change is visible through the repository.
@@ -776,12 +776,12 @@ func changeEmailAppliesAndConsumes(t *testing.T) {
 		t.Fatalf("grants remaining = %d, want 0", len(h.grants.grants))
 	}
 
-	// Sessions: the current one survives, the others die (решение #1207).
-	if _, ok := h.sessions.sessions[currentHash]; !ok {
-		t.Fatal("current session deleted, want retained")
+	// Sessions: the change touches neither (решение #1380, разворот #1207).
+	if _, ok := h.sessions.sessions[firstHash]; !ok {
+		t.Fatal("first session deleted, want retained")
 	}
-	if _, ok := h.sessions.sessions[otherHash]; ok {
-		t.Fatal("other session retained, want deleted")
+	if _, ok := h.sessions.sessions[secondHash]; !ok {
+		t.Fatal("second session deleted, want retained")
 	}
 
 	// The step-2 code is burned.
@@ -849,7 +849,7 @@ func changeEmailWrongCodeKeepsGrant(t *testing.T) {
 	newEmail := mustEmail(t, "new@example.com")
 	grantToken, _ := h.runToStepThree(t, user.ID, newEmail)
 
-	_, err := h.svc.ChangeEmail(t.Context(), user.ID, "000000", grantToken, "current-session")
+	_, err := h.svc.ChangeEmail(t.Context(), user.ID, "000000", grantToken)
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("error = %v, want ErrLoginCodeInvalid", err)
 	}
@@ -890,7 +890,7 @@ func changeEmailExpiredGrant(t *testing.T) {
 	grantToken, newCode := h.runToStepThree(t, user.ID, newEmail)
 
 	h.clock.advance(domain.EmailChangeGrantTTL + time.Second)
-	_, err := h.svc.ChangeEmail(t.Context(), user.ID, newCode, grantToken, "current-session")
+	_, err := h.svc.ChangeEmail(t.Context(), user.ID, newCode, grantToken)
 	if !errors.Is(err, ErrEmailChangeGrantInvalid) {
 		t.Fatalf("error = %v, want ErrEmailChangeGrantInvalid", err)
 	}
@@ -913,7 +913,7 @@ func changeEmailReusedGrant(t *testing.T) {
 
 	// First change consumes the first grant.
 	grantToken, newCode := h.runToStepThree(t, user.ID, firstEmail)
-	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, newCode, grantToken, "current-session"); err != nil {
+	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, newCode, grantToken); err != nil {
 		t.Fatalf("first change: %v", err)
 	}
 
@@ -922,12 +922,12 @@ func changeEmailReusedGrant(t *testing.T) {
 	h.clock.advance(time.Minute)
 	freshToken, freshCode := h.runToStepThree(t, user.ID, secondEmail)
 
-	_, err := h.svc.ChangeEmail(t.Context(), user.ID, freshCode, grantToken, "current-session")
+	_, err := h.svc.ChangeEmail(t.Context(), user.ID, freshCode, grantToken)
 	if !errors.Is(err, ErrEmailChangeGrantInvalid) {
 		t.Fatalf("error = %v, want ErrEmailChangeGrantInvalid", err)
 	}
 	// And the fresh flow still completes.
-	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, freshCode, freshToken, "current-session"); err != nil {
+	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, freshCode, freshToken); err != nil {
 		t.Fatalf("fresh change: %v", err)
 	}
 	stored, err := h.users.GetByID(t.Context(), user.ID)
@@ -949,7 +949,7 @@ func changeEmailTakenBetweenSteps(t *testing.T) {
 
 	h.seedOtherEmailOwner(t, newEmail)
 
-	_, err := h.svc.ChangeEmail(t.Context(), user.ID, newCode, grantToken, "current-session")
+	_, err := h.svc.ChangeEmail(t.Context(), user.ID, newCode, grantToken)
 	if !errors.Is(err, ErrEmailAlreadyTaken) {
 		t.Fatalf("error = %v, want ErrEmailAlreadyTaken", err)
 	}
@@ -996,10 +996,10 @@ func resendHappyPath(t *testing.T) {
 	}
 
 	// The stale step-2 code no longer verifies; the fresh one does.
-	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, oldCode, grantToken, "current-session"); !errors.Is(err, domain.ErrLoginCodeInvalid) {
+	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, oldCode, grantToken); !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("stale code error = %v, want ErrLoginCodeInvalid", err)
 	}
-	updated, err := h.svc.ChangeEmail(t.Context(), user.ID, h.sender.sent[2].code, grantToken, "current-session")
+	updated, err := h.svc.ChangeEmail(t.Context(), user.ID, h.sender.sent[2].code, grantToken)
 	if err != nil {
 		t.Fatalf("change with resent code: %v", err)
 	}
@@ -1026,7 +1026,7 @@ func resendThrottledWithinMinute(t *testing.T) {
 		t.Fatalf("sender calls = %d, want 2 (no resend delivery)", len(h.sender.sent))
 	}
 	// The original code still completes step 3.
-	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, liveCode, grantToken, "current-session"); err != nil {
+	if _, err := h.svc.ChangeEmail(t.Context(), user.ID, liveCode, grantToken); err != nil {
 		t.Fatalf("original code after throttled resend: %v", err)
 	}
 }
@@ -1230,7 +1230,7 @@ func changeAddresslessGrantRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("steps 1-2: %v", err)
 	}
-	_, err = h.svc.ChangeEmail(t.Context(), user.ID, "123456", grantToken, "current-session")
+	_, err = h.svc.ChangeEmail(t.Context(), user.ID, "123456", grantToken)
 	if !errors.Is(err, ErrEmailChangeGrantInvalid) {
 		t.Fatalf("error = %v, want ErrEmailChangeGrantInvalid", err)
 	}
@@ -1285,7 +1285,7 @@ func TestEmailChangeService_ChangeEmail(t *testing.T) {
 	t.Run("unknown user returns ErrNotFound", func(t *testing.T) {
 		t.Parallel()
 		h := newEmailChangeHarness()
-		_, err := h.svc.ChangeEmail(t.Context(), uuid.Must(uuid.NewV7()), "123456", "grant", "current-session")
+		_, err := h.svc.ChangeEmail(t.Context(), uuid.Must(uuid.NewV7()), "123456", "grant")
 		if !errors.Is(err, ErrNotFound) {
 			t.Fatalf("error = %v, want ErrNotFound", err)
 		}

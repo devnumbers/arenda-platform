@@ -180,7 +180,6 @@ func WireIdentity(
 		identityapp.PhoneChangeServiceConfig{
 			LoginCodes: loginCodeService,
 			Clock:      p.Clock,
-			Hasher:     p.Encryptor,
 			Logger:     p.Logger,
 		},
 	)

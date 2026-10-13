@@ -39,7 +39,6 @@ func newPhoneChangeHarness() *phoneChangeHarness {
 	svc := NewPhoneChangeService(factory, PhoneChangeServiceConfig{
 		LoginCodes: loginCodes,
 		Clock:      clock,
-		Hasher:     fakeHasher{},
 		Logger:     discardLogger(),
 	})
 	return &phoneChangeHarness{
@@ -55,8 +54,8 @@ func newPhoneChangeHarness() *phoneChangeHarness {
 
 // seedPhoneChangeUser creates a verified owner in the fake repos so
 // SendChangeCode and ChangePhone have a user to act on. It also opens a session
-// with a known token hash so ChangePhone's "keep current, delete others" logic
-// can be asserted.
+// with a known token hash so the change's session-retention behavior can be
+// asserted.
 func (h *phoneChangeHarness) seedPhoneChangeUser(
 	t *testing.T,
 	phone domain.Phone,
@@ -222,14 +221,14 @@ func TestPhoneChangeService_SendChangeCode(t *testing.T) {
 
 // changePhoneScenario carries the handles the ChangePhone happy-path assertions
 // need: the harness with fake stores, the seeded user, both phone numbers, and
-// the token hashes of the retained and the deleted session.
+// the token hashes of the two sessions that must both survive the change.
 type changePhoneScenario struct {
-	h           *phoneChangeHarness
-	user        domain.User
-	oldPhone    domain.Phone
-	newPhone    domain.Phone
-	currentHash string
-	otherHash   string
+	h          *phoneChangeHarness
+	user       domain.User
+	oldPhone   domain.Phone
+	newPhone   domain.Phone
+	firstHash  string
+	secondHash string
 }
 
 // changePhoneHappyPath seeds a second session and attempt windows for both
@@ -242,14 +241,14 @@ func changePhoneHappyPath(t *testing.T) changePhoneScenario {
 	newPhone := mustPhone(t, "+79160000399")
 	email := mustEmail(t, "change@example.com")
 	currentToken := "current-session-token"
-	user, currentHash := h.seedPhoneChangeUser(t, oldPhone, email, currentToken)
+	user, firstHash := h.seedPhoneChangeUser(t, oldPhone, email, currentToken)
 	ctx := t.Context()
 
-	// Seed a second session so we can prove ChangePhone deletes the others.
-	otherHash := h.hasher.HashToken("other-session")
-	h.sessions.sessions[otherHash] = domain.Session{
+	// Seed a second session so we can prove ChangePhone leaves it alive.
+	secondHash := h.hasher.HashToken("other-session")
+	h.sessions.sessions[secondHash] = domain.Session{
 		UserID:    user.ID,
-		TokenHash: otherHash,
+		TokenHash: secondHash,
 	}
 
 	// Seed attempt windows for both the old and new phone so we can prove
@@ -264,7 +263,7 @@ func changePhoneHappyPath(t *testing.T) changePhoneScenario {
 	}
 	changeCode := h.sender.sent[0].code
 
-	updated, err := h.svc.ChangePhone(ctx, user.ID, newPhone, changeCode, currentToken)
+	updated, err := h.svc.ChangePhone(ctx, user.ID, newPhone, changeCode)
 	if err != nil {
 		t.Fatalf("ChangePhone error = %v", err)
 	}
@@ -272,19 +271,20 @@ func changePhoneHappyPath(t *testing.T) changePhoneScenario {
 		t.Fatalf("updated phone = %s, want %s", updated.Phone, newPhone)
 	}
 	return changePhoneScenario{
-		h:           h,
-		user:        user,
-		oldPhone:    oldPhone,
-		newPhone:    newPhone,
-		currentHash: currentHash,
-		otherHash:   otherHash,
+		h:          h,
+		user:       user,
+		oldPhone:   oldPhone,
+		newPhone:   newPhone,
+		firstHash:  firstHash,
+		secondHash: secondHash,
 	}
 }
 
 // assertChangePhoneCleanup verifies the ChangePhone side effects: the user
-// resolves from the new phone, the old phone is released, only the current
-// session survives, login codes are cleared, both attempt windows are reset,
-// and the phone-changed audit entry is recorded.
+// resolves from the new phone, the old phone is released, both sessions
+// survive untouched (решение #1380, разворот #1207), login codes are cleared,
+// both attempt windows are reset, and the phone-changed audit entry is
+// recorded.
 func assertChangePhoneCleanup(t *testing.T, sc changePhoneScenario) {
 	t.Helper()
 	h := sc.h
@@ -303,12 +303,13 @@ func assertChangePhoneCleanup(t *testing.T, sc changePhoneScenario) {
 		t.Fatalf("GetByPhone(oldPhone) error = %v, want ErrNotFound", err)
 	}
 
-	// Current session survives; the other is deleted.
-	if _, ok := h.sessions.sessions[sc.currentHash]; !ok {
-		t.Fatal("current session was deleted, want retained")
+	// Sessions are untouched by the contact change (решение #1380): both
+	// survive — the change no longer logs other devices out.
+	if _, ok := h.sessions.sessions[sc.firstHash]; !ok {
+		t.Fatal("first session deleted, want retained")
 	}
-	if _, ok := h.sessions.sessions[sc.otherHash]; ok {
-		t.Fatal("other session still present, want deleted")
+	if _, ok := h.sessions.sessions[sc.secondHash]; !ok {
+		t.Fatal("second session deleted, want retained")
 	}
 
 	// Login codes are cleared.
@@ -353,7 +354,7 @@ func changePhoneInvalidCodeRecordsAttempt(t *testing.T) {
 		t.Fatalf("SendChangeCode: %v", err)
 	}
 
-	_, err := h.svc.ChangePhone(ctx, user.ID, newPhone, "000000", "token")
+	_, err := h.svc.ChangePhone(ctx, user.ID, newPhone, "000000")
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("ChangePhone error = %v, want ErrLoginCodeInvalid", err)
 	}
@@ -400,7 +401,7 @@ func TestPhoneChangeService_ChangePhone(t *testing.T) {
 			h := newPhoneChangeHarness()
 			userID, phone := tc.setup(t, h)
 
-			_, err := h.svc.ChangePhone(t.Context(), userID, phone, "123456", "token")
+			_, err := h.svc.ChangePhone(t.Context(), userID, phone, "123456")
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("ChangePhone error = %v, want %v", err, tc.wantErr)
 			}

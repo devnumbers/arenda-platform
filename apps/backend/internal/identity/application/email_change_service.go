@@ -50,10 +50,11 @@ func (s *EmailChangeService) hashGrantToken(token string) string {
 //  4. ResendNewEmailCode (#732) re-issues the code against the still-live
 //     grant bound to the new address.
 //  5. ChangeEmail verifies the code against the grant, applies the new
-//     address as verified, consumes the grant, revokes every other session,
-//     audits, and schedules the change letter to the old address — all in
-//     one commit (решение #1207: other devices are force-logged-out and the
-//     old address learns the change the moment it commits).
+//     address as verified, consumes the grant, audits, and schedules the
+//     change letter to the old address — all in one commit (решение #1207:
+//     the old address learns the change the moment it commits). Other
+//     sessions survive (решение #1380, разворот #1207): a contact change is
+//     not a security event for already-authenticated devices.
 //
 // The grant is server-side state: the client sees a one-time plaintext token,
 // the store keeps only its hash; a user holds at most one live grant. An
@@ -276,22 +277,21 @@ func (s *EmailChangeService) RequestNewEmailCode(
 
 // ChangeEmail implements the final step: verify the code sent to the new
 // address against the grant, apply the change, and consume the grant — one
-// commit covers verify → mark-used → apply → session revocation → grant
-// deletion → audit → change-letter scheduling. The grant check runs before
-// the code check so an expired or replayed grant fails without burning a
-// still-live code or polluting the attempt window. The grant must carry its
-// bound address: an addressless one (step 2 just passed, step 3 never ran)
-// is the same "start over" refusal (#1202).
+// commit covers verify → mark-used → apply → grant deletion → audit →
+// change-letter scheduling. The grant check runs before the code check so an
+// expired or replayed grant fails without burning a still-live code or
+// polluting the attempt window. The grant must carry its bound address: an
+// addressless one (step 2 just passed, step 3 never ran) is the same "start
+// over" refusal (#1202).
 //
-// Every session except the one making the change is revoked (решение #1207,
-// the same rule the phone change follows — overriding the old "email is only
-// a delivery channel" stance of #720-5), and the change letter is scheduled
-// in this same transaction: the old address learns the change the moment it
-// commits, or not at all.
+// Sessions are not touched (решение #1380, разворот #1207 — the same rule the
+// phone change follows, overriding the #1207 force-logout), and the change
+// letter is scheduled in this same transaction: the old address learns the
+// change the moment it commits, or not at all.
 func (s *EmailChangeService) ChangeEmail(
 	ctx context.Context,
 	userID uuid.UUID,
-	code, grantToken, currentToken string,
+	code, grantToken string,
 ) (domain.User, error) {
 	var updated domain.User
 	var phone domain.Phone
@@ -333,10 +333,6 @@ func (s *EmailChangeService) ChangeEmail(
 		updated, err = stores.users.UpdateEmailVerified(ctx, userID, grant.Email, new(s.clock.Now()))
 		if err != nil {
 			return fmt.Errorf("update email: %w", err)
-		}
-
-		if _, err := stores.sessions.DeleteByUserIDExcept(ctx, userID, s.hasher.HashToken(currentToken)); err != nil {
-			return fmt.Errorf("delete other sessions: %w", err)
 		}
 
 		if err := stores.audit.Record(ctx, auditdomain.Entry{
