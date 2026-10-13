@@ -148,10 +148,10 @@ func fixtureOperation(status domain.OperationStatus) domain.Operation {
 	op := domain.Operation{
 		ID: id, PropertyID: propID, PaymentID: &paymentID,
 		Origin: domain.OriginPayment, Date: date, Status: status,
-		Type: domain.TypeExpense, Title: "ЖКУ", AmountKopecks: 500000,
+		Type: domain.TypeExpense, Title: testTitleZhku, AmountKopecks: 500000,
 		CategoryLabel: "Коммунальные услуги",
 	}
-	slug := "utilities"
+	slug := testSlugUtilities
 	op.CategorySlug = &slug
 	if status == domain.StatusPaid {
 		paid := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)

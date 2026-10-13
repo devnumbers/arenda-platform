@@ -27,6 +27,9 @@ const (
 	// TestSlugUtilities is the utilities slug of the operation fixtures
 	// (the category snapshot the manual-creation tests freeze).
 	testSlugUtilities = "utilities"
+	// TestTitleZhku is the utilities rule's title across the global and
+	// operation fixtures.
+	testTitleZhku = "ЖКУ"
 )
 
 // fakePaymentManager is the func-backed PaymentManager double: every use case

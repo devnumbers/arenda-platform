@@ -5,10 +5,13 @@ export {
   mapGlobalPaymentSearch,
   mapPayment,
   mapPaymentChangeEntry,
+  mapPaymentDueItem,
   mapPaymentOperation,
   mapOperationsSummary,
+  mapPaymentsDue,
 } from './model/mappers';
 export type {
+  DueBucket,
   GlobalPayment,
   GlobalPaymentFeed,
   GlobalPaymentObject,
@@ -25,6 +28,7 @@ export type {
   PaymentChangeCategoryRef,
   PaymentChangeEntry,
   PaymentCreateCommand,
+  PaymentDueItem,
   PaymentFieldChange,
   PaymentOperation,
   PaymentOperationStatus,
@@ -32,8 +36,11 @@ export type {
   PaymentSchedule,
   PaymentType,
   PaymentUpdateCommand,
+  PaymentsDue,
   Recurrence,
 } from './model/types';
+export { DUE_BUCKET_LABELS, DUE_BUCKET_ORDER, dueBucketOf, groupDueByBucket } from './lib/due-buckets';
+export type { DueBucketGroup } from './lib/due-buckets';
 export { firstOccurrence, isDatePaused, nextOccurrenceAfter, nextOccurrencesAfter, occurrencesBetween } from './lib/occurrences';
 export { PAYMENT_REMINDER_OPTIONS, paymentReminderOptionLabel } from './lib/reminder-offsets';
 export { addDays, inclusiveDays } from '@/shared/lib/calendar';

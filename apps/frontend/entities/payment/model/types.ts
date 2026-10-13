@@ -240,11 +240,60 @@ export type GlobalPayment = {
 };
 
 /** Фид главного экрана «Платежи» (#575): все видимые правила плюс счётчики
- * целого скоупа для карточек «Все избранные»/«Все просроченные». */
+ * целого скоупа для карточек «Все избранные»/«Все просроченные»/«На
+ * оплату». */
 export type GlobalPaymentFeed = {
   readonly items: ReadonlyArray<GlobalPayment>;
   readonly favoriteCount: number;
   readonly overdueOperationsCount: number;
+  /** Карточка «На оплату (N)» (#1346): операций в окне напоминаний по
+   * всему видимому скоупу (правила с напоминанием и без автоплатежа) и
+   * ближайший остаток дней (dueDate − today, 0..7) — источник метки
+   * «Сегодня/Завтра/Через N дней»; null — окно пусто, карточка без метки.
+   * Поиском не сужается, как остальные счётчики. */
+  readonly dueOperationsCount: number;
+  readonly dueNearestDays: number | null;
+};
+
+/** Одна строка секции «На оплату» (#1346): пара (правило, операция),
+ * стоящая в окне напоминания D−N ≤ today ≤ D (напоминание включено,
+ * автоплатежа нет — решение владельца). Просроченные в секцию не попадают;
+ * сегмент read-only — оплата живёт на объектных экранах. */
+export type PaymentDueItem = {
+  /** Правило — цель ссылки карточки (страница платежа). */
+  readonly paymentId: string;
+  /** Операция окна — идентичность строки (у правила их до двух:
+   * «сегодня» и следующее будущее). */
+  readonly operationId: string;
+  readonly propertyId: string;
+  readonly propertyName: string;
+  readonly title: string;
+  readonly amountKopecks: number;
+  readonly type: PaymentType;
+  readonly category: PaymentCategoryView;
+  /** today владельца объекта (ADR 0048), по которому считалось окно. */
+  readonly today: IsoDate;
+  /** Дата операции (D) — срок на карточке. */
+  readonly dueDate: IsoDate;
+  /** dueDate − today (0..7 по построению окна) — ключ бакета. */
+  readonly daysLeft: number;
+  /** Горизонт напоминания правила (1|3|7) — само N окна. */
+  readonly reminderOffsetDays: PaymentReminderOffset;
+};
+
+/** Бакеты секции «На оплату» (#1346): группировка по daysLeft, порядок
+ * фиксированный; заголовки — «Сегодня», «Завтра», «Через 3 дня», «Через
+ * 7 дней» (промежуточные остатки 2..3 и 4..7 прижимаются к ближнему
+ * заголовку). Сервер текстов не строит — ключи структурные. */
+export type DueBucket = 'today' | 'tomorrow' | 'in3days' | 'in7days';
+
+/** Ответ секции «На оплату» (#1346): всё окно одним чтением (секция мала
+ * по построению материализации — до двух операций окна на правило), строки
+ * в порядке бакетов, «Сначала новые» внутри; dueOperationsCount повторяет
+ * число строк — та же цифра, что в счётчиках фида. */
+export type PaymentsDue = {
+  readonly items: ReadonlyArray<PaymentDueItem>;
+  readonly dueOperationsCount: number;
 };
 
 /** Ответ поиска глобальных платежей (#575): совпавшие строки — состав

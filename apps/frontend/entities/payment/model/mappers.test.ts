@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/shared/api/dto';
-import { mapGlobalPaymentObject, mapGlobalPaymentSearch, mapPayment, mapPaymentOperation } from './mappers';
+import {
+  mapGlobalPaymentFeed,
+  mapGlobalPaymentObject,
+  mapGlobalPaymentSearch,
+  mapPayment,
+  mapPaymentOperation,
+  mapPaymentsDue,
+} from './mappers';
 
 type PaymentDto = components['schemas']['PaymentResponse'];
 type OperationDto = components['schemas']['OperationResponse'];
@@ -169,6 +176,72 @@ const globalItemDto: components['schemas']['PaymentGlobalItem'] = {
   overdueDays: null,
   oldestOverdueOperationId: null,
 };
+
+describe('mapGlobalPaymentFeed — счётчики «На оплату» (#1346)', () => {
+  it('карточка «На оплату (N)» едет рядом с избранными и просроченными', () => {
+    const feed = mapGlobalPaymentFeed({
+      items: [globalItemDto],
+      favoriteCount: 2,
+      overdueOperationsCount: 5,
+      dueOperationsCount: 3,
+      dueNearestDays: 1,
+    });
+    expect(feed.dueOperationsCount).toBe(3);
+    expect(feed.dueNearestDays).toBe(1);
+    expect(feed.favoriteCount).toBe(2);
+    expect(feed.overdueOperationsCount).toBe(5);
+  });
+
+  it('пустое окно — null ближайшего дня, метки нет', () => {
+    const feed = mapGlobalPaymentFeed({
+      items: [],
+      favoriteCount: 0,
+      overdueOperationsCount: 0,
+      dueOperationsCount: 0,
+      dueNearestDays: null,
+    });
+    expect(feed.dueOperationsCount).toBe(0);
+    expect(feed.dueNearestDays).toBeNull();
+  });
+});
+
+describe('mapPaymentsDue — секция «На оплату» (#1346)', () => {
+  const dueItemDto: components['schemas']['PaymentDueItem'] = {
+    paymentId: '0198b6a7-due-rule',
+    operationId: '0198b6a7-due-op',
+    propertyId: '0198b6a7-1000-7000-8000-00000000prop',
+    propertyName: 'Моя квартира',
+    title: 'ЖКУ',
+    amountKopecks: 500_000,
+    type: 'expense',
+    category: { source: 'default', slug: 'utilities', label: 'ЖКУ' },
+    today: '2026-09-08',
+    dueDate: '2026-09-10',
+    daysLeft: 2,
+    reminderOffsetDays: 3,
+  };
+
+  it('строка несёт пару (правило, операция), окно и категорию', () => {
+    const due = mapPaymentsDue({ items: [dueItemDto], dueOperationsCount: 1 });
+    expect(due.dueOperationsCount).toBe(1);
+    const item = due.items[0];
+    expect(item?.paymentId).toBe('0198b6a7-due-rule');
+    expect(item?.operationId).toBe('0198b6a7-due-op');
+    expect(item?.propertyName).toBe('Моя квартира');
+    expect(item?.title).toBe('ЖКУ');
+    expect(item?.amountKopecks).toBe(500_000);
+    expect(item?.category).toStrictEqual({
+      source: 'default',
+      slug: 'utilities',
+      id: undefined,
+      label: 'ЖКУ',
+    });
+    expect(item?.today).toBe('2026-09-08');
+    expect(item?.dueDate).toBe('2026-09-10');
+    expect(item?.daysLeft).toBe(2);
+    expect(item?.reminderOffsetDays).toBe(3);
+  });
+});
 
 describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581, курсор #597, total #599)', () => {
   const searchDto: components['schemas']['PaymentsSearchGlobalResponse'] = {

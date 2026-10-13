@@ -165,7 +165,61 @@ func (s *GlobalPaymentStore) SumGlobalPaymentCounters(
 	return application.GlobalPaymentCounters{
 		FavoriteCount:          row.FavoriteCount,
 		OverdueOperationsCount: row.OverdueOperationsCount,
+		DueOperationsCount:     row.DueOperationsCount,
+		DueNearestDays:         dueNearestDays(row.DueNearestDays),
 	}, nil
+}
+
+// dueNearestDays lifts the counters' sentinel: the SQL folds the empty
+// window into -1 (out of the 0..7 days-left range) where the port speaks
+// nil — the card hides the label.
+func dueNearestDays(raw int32) *int {
+	if raw < 0 {
+		return nil
+	}
+	out := int(raw)
+	return &out
+}
+
+// ListPaymentDue returns the actor's visible «На оплату» rows — the
+// window-filtered, bucket-ordered (rule, operation) pairs the SQL selected.
+func (s *GlobalPaymentStore) ListPaymentDue(
+	ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time,
+) ([]application.PaymentDueItem, error) {
+	ownerIDs, todaysCSV, err := ownerTodaysCSV(todays)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.q().ListPaymentDue(ctx, postgres.ListPaymentDueParams{
+		OwnerIds: ownerIDs,
+		Todays:   todaysCSV,
+		Actor:    pgconv.UUIDToPgtype(actor),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list payment due: %w", err)
+	}
+	out := make([]application.PaymentDueItem, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, application.PaymentDueItem{
+			ID:            pgconv.UUIDFromPgtype(row.ID),
+			OperationID:   pgconv.UUIDFromPgtype(row.OperationID),
+			PropertyID:    pgconv.UUIDFromPgtype(row.PropertyID),
+			PropertyName:  row.PropertyName,
+			Type:          domain.PaymentType(row.Type),
+			Title:         row.Title,
+			AmountKopecks: row.AmountKopecks,
+			Category: domain.CategoryRef{
+				Slug:             pgconv.TextToPtrString(row.CategorySlug),
+				UserCategoryID:   pgconv.UUIDFromPgtypePtr(row.UserCategoryID),
+				UserCategoryName: pgconv.TextToPtrString(row.UserCategoryName),
+			},
+			Today:              pgconv.DateFromPgtype(row.OwnerToday),
+			DueDate:            pgconv.DateFromPgtype(row.DueDate),
+			DaysLeft:           int(row.DaysLeft),
+			ReminderOffsetDays: int(row.ReminderOffsetDays.Int32),
+		})
+	}
+	return out, nil
 }
 
 // SumGlobalPaymentSearchCategories returns the matched categories of the

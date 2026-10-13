@@ -50,8 +50,10 @@ type fakeGlobalReader struct {
 	lastDates  map[uuid.UUID]time.Time
 	rulesByID  map[uuid.UUID]domain.Payment
 	countRules int64
+	due        []PaymentDueItem
 
 	countCalled     bool
+	dueCalled       bool
 	gotTodays       map[uuid.UUID]time.Time
 	gotQuery        GlobalPaymentRulesQuery
 	gotSumQuery     GlobalPaymentRulesQuery
@@ -75,6 +77,14 @@ func (f *fakeGlobalReader) SumGlobalPaymentCounters(
 	_ context.Context, _ uuid.UUID, _ map[uuid.UUID]time.Time,
 ) (GlobalPaymentCounters, error) {
 	return f.counters, nil
+}
+
+func (f *fakeGlobalReader) ListPaymentDue(
+	_ context.Context, _ uuid.UUID, todays map[uuid.UUID]time.Time,
+) ([]PaymentDueItem, error) {
+	f.dueCalled = true
+	f.gotTodays = todays
+	return f.due, nil
 }
 
 func (f *fakeGlobalReader) SumGlobalPaymentSearchCategories(

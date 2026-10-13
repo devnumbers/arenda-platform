@@ -66,12 +66,20 @@ type GlobalPaymentItem struct {
 }
 
 // GlobalPaymentFeed is the global «Платежи» feed (ticket #575) with the
-// main screen's counters: the sections' rows plus the «Все избранные (N)»
-// and «Все просроченные (N)» cards' numbers.
+// main screen's counters: the sections' rows plus the «Все избранные (N)»,
+// «Все просроченные (N)» and — since ticket #1346 — «На оплату» cards'
+// numbers.
 type GlobalPaymentFeed struct {
 	Items                  []GlobalPaymentItem
 	FavoriteCount          int64
 	OverdueOperationsCount int64
+	// DueOperationsCount and DueNearestDays are the «На оплату» card's
+	// number and label source (ticket #1346): the window operations of the
+	// reminder rules without auto-pay across the whole visible scope, the
+	// nearest days-left (D − today, 0..7) — «Сегодня»/«Завтра»/«Через N
+	// дней»; nil when the window is empty.
+	DueOperationsCount int64
+	DueNearestDays     *int
 }
 
 // GlobalPaymentSearch is the global payment rules search's response (ticket
@@ -166,6 +174,8 @@ func (s *GlobalPaymentService) ListGlobalPayments(ctx context.Context, actor uui
 		Items:                  items,
 		FavoriteCount:          counters.FavoriteCount,
 		OverdueOperationsCount: counters.OverdueOperationsCount,
+		DueOperationsCount:     counters.DueOperationsCount,
+		DueNearestDays:         counters.DueNearestDays,
 	}, nil
 }
 

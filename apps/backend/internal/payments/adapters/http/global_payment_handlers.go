@@ -34,6 +34,7 @@ type GlobalPaymentsManager interface {
 	) (application.GlobalPaymentSearch, error)
 	ListGlobalPaymentObjects(ctx context.Context, actor uuid.UUID, search string) ([]application.GlobalPaymentObjectCard, error)
 	SaveFavoriteOrder(ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID) error
+	ListPaymentDue(ctx context.Context, actor uuid.UUID) (application.PaymentDueList, error)
 }
 
 // GlobalPaymentHandlers implements the generated global payment endpoints.
@@ -65,6 +66,24 @@ func (h *GlobalPaymentHandlers) ListGlobalPayments(w http.ResponseWriter, r *htt
 	}
 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, paymentsGlobalResponse(feed))
+}
+
+// ListPaymentDue implements GET /payments/due — the «На оплату» section's
+// read (ticket #1346): the reminder-window rows in the buckets' fixed
+// order. Reads never tick.
+func (h *GlobalPaymentHandlers) ListPaymentDue(w http.ResponseWriter, r *http.Request) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	due, err := h.svc.ListPaymentDue(r.Context(), actor)
+	if err != nil {
+		h.handleGlobalPaymentError(w, r, err)
+		return
+	}
+
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, paymentsDueResponse(due))
 }
 
 // SearchGlobalPayments implements GET /payments/search — the feed narrowed
@@ -209,7 +228,8 @@ func (h *GlobalPaymentHandlers) handleGlobalPaymentError(w http.ResponseWriter, 
 	httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 }
 
-// paymentsGlobalResponse maps the feed onto the wire (ticket #575).
+// paymentsGlobalResponse maps the feed onto the wire (ticket #575; the due
+// counters — ticket #1346).
 func paymentsGlobalResponse(feed application.GlobalPaymentFeed) openapi.PaymentsGlobalResponse {
 	items := make([]openapi.PaymentGlobalItem, 0, len(feed.Items))
 	for _, item := range feed.Items {
@@ -219,6 +239,34 @@ func paymentsGlobalResponse(feed application.GlobalPaymentFeed) openapi.Payments
 		Items:                  items,
 		FavoriteCount:          int(feed.FavoriteCount),
 		OverdueOperationsCount: int(feed.OverdueOperationsCount),
+		DueOperationsCount:     int(feed.DueOperationsCount),
+		DueNearestDays:         feed.DueNearestDays,
+	}
+}
+
+// paymentsDueResponse maps the «На оплату» section onto the wire (ticket
+// #1346).
+func paymentsDueResponse(due application.PaymentDueList) openapi.PaymentsDueResponse {
+	items := make([]openapi.PaymentDueItem, 0, len(due.Items))
+	for _, item := range due.Items {
+		items = append(items, openapi.PaymentDueItem{
+			PaymentId:          item.ID,
+			OperationId:        item.OperationID,
+			PropertyId:         item.PropertyID,
+			PropertyName:       item.PropertyName,
+			Title:              item.Title,
+			AmountKopecks:      item.AmountKopecks,
+			Type:               openapi.PaymentDueItemType(item.Type),
+			Category:           categoryView(item.Category),
+			Today:              openapi_types.Date{Time: item.Today},
+			DueDate:            openapi_types.Date{Time: item.DueDate},
+			DaysLeft:           item.DaysLeft,
+			ReminderOffsetDays: openapi.PaymentDueItemReminderOffsetDays(item.ReminderOffsetDays),
+		})
+	}
+	return openapi.PaymentsDueResponse{
+		Items:              items,
+		DueOperationsCount: int(due.DueOperationsCount),
 	}
 }
 

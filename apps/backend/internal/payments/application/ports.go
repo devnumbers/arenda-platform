@@ -487,12 +487,20 @@ type GlobalPaymentRuleRow struct {
 	FavoriteOrder *int64
 }
 
-// GlobalPaymentCounters are the main screen's two scope counters (ticket
-// #575): the «Все избранные (N)» and «Все просроченные (N)» cards. They
-// describe the whole visible scope — a search never narrows them.
+// GlobalPaymentCounters are the main screen's scope counters (ticket #575,
+// the due pair — ticket #1346): the «Все избранные (N)» and «Все
+// просроченные (N)» cards plus the «На оплату» card. They describe the
+// whole visible scope — a search never narrows them.
 type GlobalPaymentCounters struct {
 	FavoriteCount          int64
 	OverdueOperationsCount int64
+	// DueOperationsCount is the «На оплату» operations summed across the
+	// window rules (reminder on, auto-pay off — the owner's decision);
+	// DueNearestDays the smallest days-left among them (D − today, 0..7) —
+	// the card's «Сегодня»/«Завтра»/«Через N дней» source; nil when the
+	// window is empty.
+	DueOperationsCount int64
+	DueNearestDays     *int
 }
 
 // GlobalPaymentObject is one visible non-archived property of the «Объекты»
@@ -532,6 +540,15 @@ type GlobalPaymentReader interface {
 	SumGlobalPaymentCounters(
 		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time,
 	) (GlobalPaymentCounters, error)
+	// ListPaymentDue returns the actor's visible «На оплату» rows (ticket
+	// #1346) — the (rule, operation) pairs in the reminder window
+	// (D−N ≤ today ≤ D, today the row's owner's): reminder rules without
+	// auto-pay, completed excluded, archived excluded. The window predicate
+	// and the (daysLeft, dueDate desc, id desc) order live in the store's
+	// SQL; the rows answer as the response items.
+	ListPaymentDue(
+		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time,
+	) ([]PaymentDueItem, error)
 	// SumGlobalPaymentSearchCategories returns the matched categories of the
 	// search — the chips' category identities, one per category (ticket
 	// #602), the largest match count first.
