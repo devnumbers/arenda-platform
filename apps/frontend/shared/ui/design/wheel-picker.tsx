@@ -149,6 +149,11 @@ export function WheelPicker({
   // пока родитель удлиняет. Только без loop.
   const nearEndAtLengthRef = useRef<number | null>(null);
   const nearStartAtLengthRef = useRef<number | null>(null);
+  // Форма ленты на прошлом прогоне синхронизации: первый ряд отличает
+  // приписку в начало (onNearStart) от прочих изменений; valueIndex —
+  // рост ленты от смены значения.
+  const firstValueRef = useRef<string | undefined>(items[0]?.value);
+  const syncFromRef = useRef<number | null>(null);
   const optionId = useId();
   const valueIndex = Math.max(items.findIndex((item) => item.value === value), 0);
   // Позиция скролла в физических рядах ленты: без loop ряд = индекс
@@ -169,6 +174,15 @@ export function WheelPicker({
   // докручивают нужный ряд в центр; после собственного скролла человека
   // ничего не дёргается — позиция уже совпадает с целевой. Актуальный
   // индекс для типографики приходит из событий скролла этого прокрута.
+  // Рост ленты (onNearEnd/onNearStart у концов без границы) значением не
+  // является: ряды дописаны, а позиция скролла уже правильная — синк здесь
+  // дёргал колесо smooth-скроллом обратно к выбранному ряду посреди
+  // инерции (дёрганье и откат при прокрутке года в будущее, жалоба
+  // владельца 13.10 на пикере создания платежа). Поэтому синк живёт
+  // только для реальной смены значения и для ре-анкора кольца при смене
+  // длины цикла; приписка в начало ленты (нелинейный рост назад)
+  // компенсируется сдвигом scrollTop — иначе viewport мгновенно уезжал
+  // бы на добавленное число рядов.
   // В loop первая установка садится на якорную копию (середина ленты —
   // максимальный запас пробега в обе стороны), дальше — ближайший
   // представитель значения; смена длины цикла — ре-анкор на якорную
@@ -176,6 +190,19 @@ export function WheelPicker({
   useEffect(() => {
     const list = listRef.current;
     if (list === null) return;
+    const prevFirstValue = firstValueRef.current;
+    firstValueRef.current = items[0]?.value;
+    if (!loop && prevFirstValue !== undefined) {
+      const addedAtStart = items.findIndex((item) => item.value === prevFirstValue);
+      if (addedAtStart > 0) {
+        list.scrollTop += addedAtStart * WHEEL_ROW_HEIGHT;
+      }
+    }
+    const syncFrom = syncFromRef.current;
+    syncFromRef.current = valueIndex;
+    if (!loop && syncFrom !== null && syncFrom === valueIndex) {
+      return;
+    }
     const maxRow = loop ? loopRowCount(items.length) - 1 : items.length - 1;
     let targetRow = valueIndex;
     if (loop) {
@@ -200,7 +227,7 @@ export function WheelPicker({
       });
     }
     instantRef.current = false;
-  }, [valueIndex, loop, items.length]);
+  }, [valueIndex, loop, items.length, items]);
 
   const commitIndex = (index: number): void => {
     const item = items[index];

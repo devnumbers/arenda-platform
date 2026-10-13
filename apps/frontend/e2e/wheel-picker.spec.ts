@@ -45,6 +45,29 @@ test.describe('WheelPicker: конечные месяцы и годы от те�
       .toBe(floorYear);
     await expect(yearList.locator('[aria-selected="true"]')).toHaveText(floorYear);
   });
+
+  test('жёсткий флик года вперёд не откатывает колесо к выбранному году', async ({ page }) => {
+    await page.goto(UI_KIT);
+    await page.getByRole('button', { name: 'Август, 2026' }).click();
+    const yearList = page.getByRole('listbox', { name: 'Год' });
+    await expect(yearList).toBeVisible();
+    await page.waitForTimeout(600); // мгновенная посадка на стартовый год
+    const initial = await yearList.locator('[aria-selected="true"]').textContent();
+    const initialYear = Number(initial);
+    const box = await yearList.boundingBox();
+    if (box === null) {
+      throw new Error('колесо годов не найдено');
+    }
+    // Жёсткий флик одним жестом через край стартовой ленты: рост ленты
+    // (onNearEnd) не должен синхронизировать позицию колеса — иначе
+    // smooth-скролл к выбранному ряду дёргает колесо назад посреди
+    // инерции (жалоба владельца 13.10 на пикере создания платежа).
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 3000);
+    await page.waitForTimeout(1_500);
+    const settled = await yearList.locator('[aria-selected="true"]').textContent();
+    expect(Number(settled)).toBeGreaterThan(initialYear + 20);
+  });
 });
 
 test.describe('WheelPicker: страница под открытым пикером не прокручивается', () => {

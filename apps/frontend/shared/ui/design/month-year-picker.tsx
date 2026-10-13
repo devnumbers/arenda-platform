@@ -46,7 +46,11 @@ export type MonthYearPickerProps = {
   readonly className?: string;
 };
 
-const YEARS_EXTENSION = 10;
+/** Шаг удлинения ленты годов у края без границы (решение владельца
+ * 2026-10-13: 25 лет — с окном старта +25 жёсткий флик вперёд почти всегда
+ * не достаёт до края, а достройка невидима — рост ленты не синхронизирует
+ * позицию колеса). */
+const YEARS_EXTENSION = 25;
 
 export function MonthYearPicker({
   open,
