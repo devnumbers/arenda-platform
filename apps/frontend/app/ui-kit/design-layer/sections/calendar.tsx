@@ -237,6 +237,41 @@ export function CalendarDatePickerSection(): JSX.Element {
     );
 }
 
+export function MonthYearPickerPastSection(): JSX.Element {
+    const [pastWheelOpen, setPastWheelOpen] = useState(false);
+    const [pastMonth, setPastMonth] = useState(5);
+    const [pastYear, setPastYear] = useState(2026);
+
+    return (
+        <div className={styles.group}>
+            <h3 className={styles.groupTitle}>MonthYearPicker · назад без предела (только max)</h3>
+            <p className={styles.groupTitle}>
+                Будущее закрыто границей, назад лента годов уходит без предела (решение
+                владельца 2026-09-04): сеется сразу на 400 лет в прошлое, у края
+                достраивается в паузе по 400 (решение владельца 2026-10-13, #1427).
+                Конфигурация истории операций.
+            </p>
+            <div className={styles.column}>
+                <ChipButton trailingIcon={<ArrowDown />} onClick={() => setPastWheelOpen(true)}>
+                    {monthTitle(pastYear, pastMonth)}
+                </ChipButton>
+            </div>
+            <MonthYearPicker
+                open={pastWheelOpen}
+                onOpenChange={setPastWheelOpen}
+                month={pastMonth}
+                year={pastYear}
+                max={{ year: 2026, month0: 8 }}
+                onConfirm={(month, year) => {
+                    setPastMonth(month);
+                    setPastYear(year);
+                    setPastWheelOpen(false);
+                }}
+            />
+        </div>
+    );
+}
+
 export function CalendarRangePickerSection(): JSX.Element {
     const [rangePickerOpen, setRangePickerOpen] = useState(false);
     const [rangePickerValue, setRangePickerValue] = useState<IsoRange | null>(null);

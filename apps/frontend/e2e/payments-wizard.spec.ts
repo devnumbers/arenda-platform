@@ -521,23 +521,25 @@ test.describe('визард создания платежа', () => {
         .getByRole('option', { selected: true }),
     ).toHaveText('Декабрь');
 
-    // Годы без верхней границы: упор в конец списка удлиняет его вперёд.
-    // End ставит selected на текущий конец ленты; следующий End жмём только
-    // после монтирования дорисованных строк: 2029 (текущий+3) → 2039 (+13),
-    // лента после второго упора достаёт до +23 — год+20 виден.
+    // Годы без верхней границы: упор в конец списка удлиняет его вперёд
+    // (годы-окно years-window: стартовое окно +25, достройка по +25,
+    // решение владельца 2026-10-13). End ставит selected на конец окна;
+    // после дорисовки лента достаёт до +50 — второй упор садится на +50.
     const yearWheel = page.getByRole('listbox', { name: 'Год' });
     const year = new Date().getFullYear();
     await yearWheel.press('End');
-    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 3));
-    await expect(yearWheel.getByText(String(year + 13)).first()).toBeVisible();
+    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 25));
+    await expect(yearWheel.getByText(String(year + 50)).first()).toBeVisible();
     await yearWheel.press('End');
-    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 13));
-    await expect(yearWheel.getByText(String(year + 23)).first()).toBeVisible();
-    await expect(page.getByText(String(year + 20)).first()).toBeVisible();
+    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 50));
+    // Для прыжка берём умеренный год из удлинённой ленты: +50 повалит
+    // полвека ленты календаря.
+    await yearWheel.getByText(String(year + 30)).first().click();
+    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 30));
 
     // Подтверждаем колёса: календарь прыгает на декабрь выбранного года.
     await page.getByRole('dialog', { name: 'Месяц и год' }).getByRole('button', { name: 'Выбрать' }).click();
-    const jumpedYear = year + 13;
+    const jumpedYear = year + 30;
 
     // Календарь переключился на декабрь прыжка; выбираем 10-е — секция
     // именно этого месяца: в ленте остаются и прошлые месяцы с тем же днём.

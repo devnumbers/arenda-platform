@@ -29,6 +29,7 @@ import {
     CalendarRangePickerEmptySection,
     CalendarRangePickerSection,
     MonthDaysGridSection,
+    MonthYearPickerPastSection,
     MonthYearPickerSection,
 } from './sections/calendar';
 import { WheelPickerSheetSection } from './sections/wheels';
@@ -94,6 +95,7 @@ export function DesignLayerShowcase(): JSX.Element {
                 <CalendarButtonSection />
                 <CalendarMonthSection />
                 <MonthYearPickerSection />
+                <MonthYearPickerPastSection />
                 <WheelPickerSheetSection />
                 <CalendarDatePickerSection />
                 <CalendarRangePickerSection />

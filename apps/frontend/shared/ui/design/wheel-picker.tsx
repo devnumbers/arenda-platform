@@ -18,6 +18,7 @@ import {
   loopSyncRow,
   modRows,
 } from './wheel-loop';
+import { isNearEnd, isNearStart } from './wheel-edge';
 
 /** Колесо-«крутилка» дизайн-слоя (редизайн 2026-09-04 по решению
  * владельца, Figma 1539-82659): вертикальный список с нативным скроллом
@@ -46,7 +47,12 @@ import {
  * стабильные id там, повторы aria-hidden; aria-activedescendant всегда
  * указывает на якорную копию выбранного значения. При min/max цикл
  * составляют только разрешённые значения — закольцовка не открывает
- * запрещённые. Годы остаются линейными: ось времени не замыкается. */
+ * запрещённые. Годы остаются линейными: ось времени не замыкается.
+ * Линейная лента без границы удлиняется из зоны триггера у края
+ * (wheel-edge.ts — зона шире максимального флика, физический край
+ * недостижим одним жестом): вперёд — сразу, приписка в конец не трогает
+ * позицию скролла; назад — в паузе после остановки, сдвиг scrollTop
+ * посреди инерции убил бы её. */
 
 /** Высота ряда (px); окно колеса — 5 рядов. */
 const WHEEL_ROW_HEIGHT = 48;
@@ -72,11 +78,15 @@ export type WheelPickerProps = {
   /** Замкнуть ленту в кольцо: крутится без конца в обе стороны
    * (часы, минуты, месяцы). Без loop лента конечная. */
   readonly loop?: boolean;
-  /** Прокрутка дошла до края списка (за 2 ряда) — родитель может удлинить
-   * items (бесконечная лента годов пикера месяц/год). Только без loop. */
+  /** Прокрутка вошла в зону у нижнего края (wheel-edge.ts — зона шире
+   * максимального флика, стена не долетаема одним жестом) — родитель
+   * может удлинить items (бесконечная лента годов пикера месяц/год):
+   * приписка в конец невидима для инерции. Только без loop. */
   readonly onNearEnd?: () => void;
-  /** То же у верхнего края: родитель может удлинить items назад
-   * (лента годов пикера периода операций уходит в прошлое без предела).
+  /** То же у верхнего края: родитель может удлинить items назад (лента
+   * годов пикера периода операций уходит в прошлое без предела).
+   * Вызывается в паузе после остановки колеса — приписка в начало
+   * требует сдвига scrollTop, который нельзя делать посреди инерции.
    * Только без loop. */
   readonly onNearStart?: () => void;
   /** Полоса выбора за центральным рядом; false — когда полосу рисует общий
@@ -149,6 +159,9 @@ export function WheelPicker({
   // пока родитель удлиняет. Только без loop.
   const nearEndAtLengthRef = useRef<number | null>(null);
   const nearStartAtLengthRef = useRef<number | null>(null);
+  // Верхний край сообщил о себе (isNearStart), но приписка ждёт паузы —
+  // у settle-таймера (см. handleScroll).
+  const pendingStartRef = useRef(false);
   // Форма ленты на прошлом прогоне синхронизации: первый ряд отличает
   // приписку в начало (onNearStart) от прочих изменений; valueIndex —
   // рост ленты от смены значения.
@@ -255,29 +268,37 @@ export function WheelPicker({
     } else {
       // Повторный сигнал о том же крае — только после удлинения списка
       // родителем (иначе инерционный доскат у края растянул бы его на
-      // сотни).
+      // сотни). Зона триггера шире максимального флика (wheel-edge.ts):
+      // из неё физический край недостижим одним жестом, достройка всегда
+      // успевает раньше инерции.
       if (
         onNearEnd !== undefined &&
-        row >= items.length - 2 &&
+        isNearEnd(row, items.length) &&
         nearEndAtLengthRef.current !== items.length
       ) {
         nearEndAtLengthRef.current = items.length;
         onNearEnd();
       }
+      // Назад — только запрос: приписка рядов в начало требует сдвига
+      // scrollTop, а запись позиции посреди инерции её убивает, поэтому
+      // onNearStart вызывается из settle-таймера, в неподвижности.
       if (
         onNearStart !== undefined &&
-        row <= 1 &&
+        isNearStart(row) &&
         nearStartAtLengthRef.current !== items.length
       ) {
         nearStartAtLengthRef.current = items.length;
-        onNearStart();
+        pendingStartRef.current = true;
       }
     }
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
-    settleTimerRef.current = window.setTimeout(
-      () => commitIndex(loop ? modRows(row, items.length) : row),
-      SETTLE_TIMEOUT_MS,
-    );
+    settleTimerRef.current = window.setTimeout(() => {
+      if (pendingStartRef.current) {
+        pendingStartRef.current = false;
+        onNearStart?.();
+      }
+      commitIndex(loop ? modRows(row, items.length) : row);
+    }, SETTLE_TIMEOUT_MS);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {

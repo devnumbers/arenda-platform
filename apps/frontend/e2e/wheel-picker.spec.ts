@@ -1,15 +1,33 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, openCabinetWithSessionToken, test } from './fixtures';
 
 // Колесо-«крутилка» дизайн-слоя (решения владельца 2026-10-13): месяцы —
 // конечная лента (отмена #810 в части месяцев, часы/минуты остаются
 // кольцом), годы без границ — от текущего года вперёд, страница под
 // открытым пикером не прокручивается (лок + overscroll-contain), жест
-// внутри колеса не тащит vaul-шит, ряды у краёв сжаты «барабаном».
-// Поверхность — витрина /ui-kit: живой каталог канона, сидовая сессия
-// нужна только чтобы middleware пустил в кабинет.
+// внутри колеса не тащит vaul-шит, ряды у краёв сжаты «барабаном»,
+// край линейной ленты недостижим одним жестом (зона триггера 80 рядов,
+// достройка назад — в паузе). Поверхность — витрина /ui-kit: живой
+// каталог канона, сидовая сессия нужна только чтобы middleware пустил
+// в кабинет.
 
 const UI_KIT = '/ui-kit';
+
+/** Колесо устоялось: два замера scrollTop с шагом 200мс дают одно значение.
+ * Анимация колёсного скролла на 3000px живёт ~700мс, сеттл-коммит и
+ * отложенная достройка приезжают следом — флики и ассерты имеют смысл
+ * только после тишины (клавиатурный подскролл поверх живой анимации и
+ * вовсе дожимается ею обратно к целевому ряду). */
+async function wheelStill(page: Page, list: Locator): Promise<void> {
+  await expect
+    .poll(async () => {
+      const a = await list.evaluate((el) => Math.round(el.scrollTop));
+      await page.waitForTimeout(200);
+      const b = await list.evaluate((el) => Math.round(el.scrollTop));
+      return a === b;
+    }, { timeout: 10_000 })
+    .toBe(true);
+}
 
 test.beforeEach(async ({ page, seededUser }) => {
   await openCabinetWithSessionToken(page, seededUser.sessionToken);
@@ -67,6 +85,93 @@ test.describe('WheelPicker: конечные месяцы и годы от те�
     await page.waitForTimeout(1_500);
     const settled = await yearList.locator('[aria-selected="true"]').textContent();
     expect(Number(settled)).toBeGreaterThan(initialYear + 20);
+  });
+});
+
+test.describe('WheelPicker: край ленты недостижим одним жестом (#1427)', () => {
+  test('жёсткий флик года вперёд пролетает край стартовой ленты без остановки', async ({ page }) => {
+    await page.goto(UI_KIT);
+    await page.getByRole('button', { name: 'Август, 2026' }).click();
+    const yearList = page.getByRole('listbox', { name: 'Год' });
+    await expect(yearList).toBeVisible();
+    // Стена стартовой ленты — её последний ряд (выбранный +25). Ставим
+    // колесо в два ряда до неё: прежний триггер удлинения сидел за 2 ряда
+    // — инерция пролетала их за ~12мс, React не успевал достроить ленту,
+    // прокрутка гасла о физический край и «просто останавливалась».
+    const wallYear = Math.max(new Date().getFullYear(), 2026) + 25;
+    await yearList.focus();
+    await page.keyboard.press('End');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
+    // Клавиатурная докрутка анимируется: флик поверх живой программы
+    // дожимается ею обратно к целевому ряду — ждём тишины колеса.
+    await wheelStill(page, yearList);
+    const box = await yearList.boundingBox();
+    if (box === null) {
+      throw new Error('колесо годов не найдено');
+    }
+    // Один жёсткий флик (3000px ≈ 62 ряда) из зоны триггера: стена обязана
+    // уехать раньше, чем инерция до неё долетит.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 3000);
+    await wheelStill(page, yearList);
+    await page.waitForTimeout(300); // сеттл-коммит после тишины
+    const settled = await yearList.locator('[aria-selected="true"]').textContent();
+    expect(Number(settled)).toBeGreaterThan(wallYear + 19);
+  });
+
+  test('лента годов периода уходит в прошлое без стены и достраивается в паузе', async ({ page }) => {
+    // Мобильный вьюпорт: шит колёс — vaul-дроп (на десктопе карточка без
+    // входной анимации), флик живёт на телефоне.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(UI_KIT);
+    // Секция «назад без предела»: только max (сентябрь 2026), чип «Июнь,
+    // 2026» — конфигурация истории операций (решение владельца 2026-09-04).
+    await page.getByRole('button', { name: 'Июнь, 2026' }).click();
+    const yearList = page.getByRole('listbox', { name: 'Год' });
+    await expect(yearList).toBeVisible();
+    // Шит въезжает снизу полсекунды — ждём оседания, как в vaul-тесте ниже.
+    await expect
+      .poll(() => page.evaluate(() => {
+        const drawer = document.querySelector('[data-vaul-drawer]');
+        return drawer === null ? '' : getComputedStyle(drawer).transform;
+      }), { timeout: 5_000 })
+      .toBe('none');
+    // Стена в прошлом сеется сразу на 400 лет: первый же флик назад
+    // встречает глубокую ленту, а не «выбранный − 3» (2023).
+    const seededFloor = 2026 - 400;
+    await expect(yearList.locator('li').first()).toHaveText(String(seededFloor));
+    const box = await yearList.boundingBox();
+    if (box === null) {
+      throw new Error('колесо годов не найдено');
+    }
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    // Серия жёстких фликов назад (по ~62 ряда): ни один не упирается в
+    // стену — колесо каждый раз уезжает на десятки лет в прошлое. Между
+    // фликами ждём тишины: сеттл-коммит и достройка успевают, анимация
+    // одного флика не обрывается следующим.
+    for (let i = 0; i < 6; i += 1) {
+      await page.mouse.move(cx, cy);
+      await page.mouse.wheel(0, -3000);
+      await wheelStill(page, yearList);
+    }
+    // Сеттл-коммит последнего флика (и отложенная достройка в том же
+    // колбэке) — читаем с поллингом.
+    await expect
+      .poll(async () =>
+        Number(await yearList.locator('[aria-selected="true"]').textContent()),
+      { timeout: 5_000 })
+      .toBeLessThanOrEqual(2026 - 300);
+    // Достройка назад пишется в паузе после остановки: осели в зоне
+    // триггера — первый ряд ленты уехал в прошлое глубже посева.
+    await expect
+      .poll(
+        async () =>
+          Number(await yearList.locator('li').first().textContent()),
+        { timeout: 5_000 },
+      )
+      .toBeLessThan(seededFloor);
   });
 });
 
