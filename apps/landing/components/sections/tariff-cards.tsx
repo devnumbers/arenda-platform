@@ -133,7 +133,7 @@ export function TariffCards({
     return (
       <Reveal
         key={tariff.id}
-        delay={index * 100}
+        delay={index * 80}
         /* self-stretch, не h-full: в авторазмерном ряду (планшетная
            полоса, сетки мобайл/десктоп) процентная высота против
            неопределённой строки даёт auto — «Базовый» оставался ниже
@@ -157,7 +157,7 @@ export function TariffCards({
               onAnimationEnd={animated ? settlePrice : undefined}
               className={`flex flex-col gap-2.5 ${
                 animated && pricePhase === "leaving"
-                  ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+                  ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout motion-reduce:transition-none"
                   : animated && pricePhase === "entering"
                     ? "animate-tariff-price-in motion-reduce:animate-none"
                     : ""
@@ -242,7 +242,7 @@ export function TariffCards({
         >
           <span
             aria-hidden
-            className="absolute inset-y-0.5 left-0.5 w-[125px] rounded-[14px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+            className="absolute inset-y-0.5 left-0.5 w-[125px] rounded-[14px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition-transform duration-300 ease-inout motion-reduce:transition-none"
             style={{
               transform:
                 billing === "yearly"

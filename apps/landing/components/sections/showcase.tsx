@@ -651,7 +651,7 @@ export function Showcase() {
             </p>
           </div>
         </Reveal>
-        <Reveal delay={100} className="w-full">
+        <Reveal delay={80} className="w-full">
           <div
             ref={zoneRef}
             className={`${s.carousel} ${s.zone}`}
@@ -747,7 +747,7 @@ export function Showcase() {
             </div>
           </div>
         </Reveal>
-        <Reveal delay={200}>
+        <Reveal delay={120}>
           <LandingLink href="/login">Попробовать</LandingLink>
         </Reveal>
       </div>

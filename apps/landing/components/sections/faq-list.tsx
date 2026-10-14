@@ -21,7 +21,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
   return (
     <>
       {groups.map((group, groupIndex) => (
-        <Reveal key={group.category} delay={groupIndex * 100} className="w-full">
+        <Reveal key={group.category} delay={groupIndex * 80} className="w-full">
           <div className="flex flex-col gap-4 rounded-[32px] bg-surface px-8 pb-4 pt-8 tab:rounded-[40px] tab:px-10 tab:pb-5 tab:pt-10 desk:flex-row desk:gap-6 desk:rounded-none desk:bg-transparent desk:p-0">
             <p className="shrink-0 text-l font-semibold tab:text-h4 desk:w-[240px] desk:text-h3 desk:font-medium">
               {group.category}
@@ -48,7 +48,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                         aria-hidden="true"
-                        className={`shrink-0 text-gray-2 transition-transform duration-300 motion-reduce:transition-none ${
+                        className={`shrink-0 text-gray-2 transition-transform duration-200 ease-inout motion-reduce:transition-none ${
                           expanded ? "rotate-180" : ""
                         }`}
                       >

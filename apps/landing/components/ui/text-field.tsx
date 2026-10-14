@@ -84,7 +84,7 @@ export function TextField({
   const bottomLeft = error ?? description;
 
   const box = cn(
-    "flex w-full items-center rounded-button bg-surface-muted pl-[18px] pr-2 transition-shadow",
+    "flex w-full items-center rounded-button bg-surface-muted pl-[18px] pr-2 transition-shadow duration-200",
     multiline ? "min-h-14 flex-col justify-center py-[10px]" : "h-14 py-0",
     !disabled && error === undefined && "hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]",
     error !== undefined && "bg-surface-danger hover:shadow-none",
@@ -116,7 +116,11 @@ export function TextField({
             <label
               htmlFor={inputId}
               className={cn(
-                "pointer-events-none absolute left-0 text-content-secondary transition-all duration-300",
+                // Долг DESIGN.md §8 погашен наполовину: transition-all →
+                // точный список анимируемых свойств + reduce-ветка. Сам
+                // layout-характер (top/font-size) остаётся до синхронной
+                // правки с фронта (там transform-перевод метки).
+                "pointer-events-none absolute left-0 text-content-secondary transition-[top,font-size,line-height] duration-300 ease-inout motion-reduce:transition-none",
                 "top-[19px] text-base leading-[18px]",
                 "peer-focus:top-[10px] peer-focus:text-[13px] peer-focus:leading-[15px]",
                 "peer-[:not(:placeholder-shown)]:top-[10px] peer-[:not(:placeholder-shown)]:text-[13px] peer-[:not(:placeholder-shown)]:leading-[15px]",

@@ -33,7 +33,7 @@ import type { NavItem } from "@/lib/nav";
 // схлопывается в один кадр — срез совпадает с setOpen(false).
 // Повторное открытие посреди closing продолжает высоту с текущего кадра и
 // перезапускает каскад.
-const EASE = "ease-[cubic-bezier(0.4,0,0.6,1)]";
+const EASE = "ease-menu";
 const CLOSE_CUT_MS = 440;
 // Зеркало --breakpoint-desk (globals.css) — та же строка, что в
 // rentals-carousel.tsx: tailwind-классы desk:* из JS не прочитать.

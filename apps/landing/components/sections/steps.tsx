@@ -81,7 +81,7 @@ export function Steps() {
                   onAnimationEnd={settleText}
                   className={`mx-auto max-w-[250px] text-center text-s leading-5 text-ink/50 tab:max-w-none desk:text-l desk:leading-[26px] ${
                     textPhase === "leaving"
-                      ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+                      ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout motion-reduce:transition-none"
                       : textPhase === "entering"
                         ? "animate-steps-text-in motion-reduce:animate-none"
                         : ""
@@ -91,7 +91,7 @@ export function Steps() {
                 </p>
               </div>
             </Reveal>
-            <Reveal delay={100} className="mt-14">
+            <Reveal delay={80} className="mt-14">
               <div className="relative h-[400px] w-[273px]">
                 {STEPS.map((item, index) => (
                   <Image
@@ -102,7 +102,7 @@ export function Steps() {
                     height={400}
                     sizes="273px"
                     priority={false}
-                    className={`absolute inset-0 transition-opacity duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${
+                    className={`absolute inset-0 transition-opacity duration-[600ms] ease-inout motion-reduce:transition-none ${
                       active === index ? "opacity-100" : "opacity-0"
                     }`}
                   />
@@ -111,7 +111,7 @@ export function Steps() {
             </Reveal>
           </div>
         </div>
-        <Reveal delay={150}>
+        <Reveal delay={120}>
           <LandingLink href="/login">Начать пользоваться</LandingLink>
         </Reveal>
       </div>

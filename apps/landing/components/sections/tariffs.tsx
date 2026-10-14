@@ -25,7 +25,7 @@ export async function Tariffs() {
 
   return (
     <TariffsShell>
-      <Reveal delay={100} className="flex w-full flex-col items-center">
+      <Reveal delay={80} className="flex w-full flex-col items-center">
         <TariffCards tariffs={TARIFFS} currentTariff={me?.tariff} />
       </Reveal>
     </TariffsShell>
@@ -38,7 +38,7 @@ export async function Tariffs() {
 export function TariffsFallback() {
   return (
     <TariffsShell>
-      <Reveal delay={100} className="flex w-full flex-col items-center">
+      <Reveal delay={80} className="flex w-full flex-col items-center">
         <TariffCards tariffs={TARIFFS} />
       </Reveal>
     </TariffsShell>
