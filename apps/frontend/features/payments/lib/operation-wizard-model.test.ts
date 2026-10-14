@@ -20,6 +20,7 @@ describe('operationPresetFromQueryParam', () => {
 const FULL_DRAFT: OperationWizardDraft = {
   type: 'expense',
   amountKopecks: 600_000,
+  date: '2026-10-01',
   title: 'Аренда мебели',
   categorySlug: 'rent',
   propertyId: 'property-1',
@@ -44,18 +45,23 @@ describe('operationWizardStepReady', () => {
     expect(operationWizardStepReady(1, { amountKopecks: 1 })).toBe(true);
   });
 
+  it('шаг даты (#1394) готов только с подтверждённой датой', () => {
+    expect(operationWizardStepReady(2, {})).toBe(false);
+    expect(operationWizardStepReady(2, { date: '2026-10-01' })).toBe(true);
+  });
+
   it('шаг названия необязателен и готов всегда', () => {
-    expect(operationWizardStepReady(2, {})).toBe(true);
+    expect(operationWizardStepReady(3, {})).toBe(true);
   });
 
   it('шаг категории готов после выбора', () => {
-    expect(operationWizardStepReady(3, {})).toBe(false);
-    expect(operationWizardStepReady(3, { categorySlug: 'rent' })).toBe(true);
+    expect(operationWizardStepReady(4, {})).toBe(false);
+    expect(operationWizardStepReady(4, { categorySlug: 'rent' })).toBe(true);
   });
 
   it('шаг объекта готов после выбора объекта', () => {
-    expect(operationWizardStepReady(4, {})).toBe(false);
-    expect(operationWizardStepReady(4, { propertyId: 'p1' })).toBe(true);
+    expect(operationWizardStepReady(5, {})).toBe(false);
+    expect(operationWizardStepReady(5, { propertyId: 'p1' })).toBe(true);
   });
 });
 
@@ -66,9 +72,22 @@ describe('buildOperationCreateCommand', () => {
     resolveTitle: (slug: string) => (slug === 'rent' ? 'Аренда' : undefined),
   } as const;
 
-  it('полный черновик даёт команду 1:1 контракту POST', () => {
+  it('полный черновик даёт команду 1:1 контракту POST — с выбранной датой (#1394)', () => {
     expect(
       buildOperationCreateCommand(FULL_DRAFT, options),
+    ).toStrictEqual({
+      type: 'expense',
+      title: 'Аренда мебели',
+      amountKopecks: 600_000,
+      categorySlug: 'rent',
+      date: '2026-10-01',
+    });
+  });
+
+  it('без даты в черновике поле не уходит в команду — сервер ставит «сегодня владельца»', () => {
+    const { date: _date, ...draftWithoutDate } = FULL_DRAFT;
+    expect(
+      buildOperationCreateCommand(draftWithoutDate, options),
     ).toStrictEqual({
       type: 'expense',
       title: 'Аренда мебели',
@@ -113,6 +132,7 @@ describe('buildOperationCreateCommand', () => {
       title: 'Аренда мебели',
       amountKopecks: 600_000,
       categorySlug: 'rent',
+      date: '2026-10-01',
     });
   });
 

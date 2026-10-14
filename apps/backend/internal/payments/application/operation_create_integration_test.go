@@ -256,3 +256,196 @@ func TestCreateOperation_FullAccessMemberCreates(t *testing.T) {
 		t.Fatal("full access create produced a non-paid operation")
 	}
 }
+
+// wireDate is the UTC-midnight shape the transport folds into the command:
+// the generated openapi_types.Date parses the full-date at UTC midnight, and
+// the owner's today from the calendar is the same shape (ADR 0048).
+func wireDate(day string) time.Time {
+	d, err := time.Parse(time.DateOnly, day)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+// TestCreateOperation_BackdatedFactLandsOnChosenDate covers the backdating
+// core (ticket #1392): the client-chosen past date lands in BOTH date
+// columns of the born-paid fact — the response echo and the stored row —
+// while created_at stays the record moment.
+func TestCreateOperation_BackdatedFactLandsOnChosenDate(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	cmd := createOpCmd()
+	chosen := wireDate(day24) // The day before the Moscow today (day25).
+	cmd.Date = &chosen
+	item, err := h.ops.CreateOperation(h.ctx(), h.owner, h.propID, cmd)
+	if err != nil {
+		t.Fatalf("create backdated operation: %v", err)
+	}
+
+	t.Run("the response carries the chosen date in both columns", func(t *testing.T) {
+		t.Parallel()
+		op := item.Operation
+		if op.Status != domain.StatusPaid || item.ViewStatus != domain.ViewStatusPaid {
+			t.Errorf("status/view = %s/%s, want paid/paid", op.Status, item.ViewStatus)
+		}
+		if got := op.Date.Format(time.DateOnly); got != day24 {
+			t.Errorf("date = %s, want the chosen %s", got, day24)
+		}
+		if op.PaidDate == nil || op.PaidDate.Format(time.DateOnly) != "2026-08-24" {
+			t.Errorf("paid_date = %v, want the chosen %s", op.PaidDate, day24)
+		}
+		if !op.UpdatedAt.After(chosen) {
+			t.Errorf("updated_at = %v, want the record moment after the chosen day", op.UpdatedAt)
+		}
+	})
+	t.Run("the stored row carries the chosen date in both columns", func(t *testing.T) {
+		t.Parallel()
+		var date, paidDate time.Time
+		if err := h.pool.QueryRow(h.ctx(),
+			`SELECT date, paid_date FROM operations WHERE id = $1`, item.Operation.ID,
+		).Scan(&date, &paidDate); err != nil {
+			t.Fatalf("load stored row: %v", err)
+		}
+		if got := date.Format(time.DateOnly); got != day24 {
+			t.Errorf("stored date = %s, want %s", got, day24)
+		}
+		if got := paidDate.Format(time.DateOnly); got != day24 {
+			t.Errorf("stored paid_date = %s, want %s", got, day24)
+		}
+	})
+}
+
+// TestCreateOperation_ClientDateValidation covers the future boundary on the
+// owner's calendar (ticket #1392): tomorrow and far-future are the future
+// sentinel, the explicit today is accepted, and rejected commands leak no
+// rows.
+func TestCreateOperation_ClientDateValidation(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	// The leak assertion rides t.Cleanup: parallel subtests resume only when
+	// the parent function has returned, so a tail-of-parent check would read
+	// the table too early.
+	t.Cleanup(func() {
+		// Only the accepted explicit-today fact leaked into the table.
+		var count int
+		if err := h.pool.QueryRow(h.ctx(),
+			`SELECT count(*) FROM operations WHERE property_id = $1`, h.propID,
+		).Scan(&count); err != nil {
+			t.Errorf("count rows: %v", err)
+			return
+		}
+		if count != 1 {
+			t.Errorf("rejected commands leaked rows: %d stored, want 1", count)
+		}
+	})
+
+	t.Run("tomorrow by the owner's calendar is rejected", func(t *testing.T) {
+		t.Parallel()
+		cmd := createOpCmd()
+		tomorrow := wireDate(day26)
+		cmd.Date = &tomorrow
+		if _, err := h.ops.CreateOperation(h.ctx(), h.owner, h.propID, cmd); !errors.Is(err, paymentsapp.ErrOperationDateInFuture) {
+			t.Errorf("err = %v, want ErrOperationDateInFuture", err)
+		}
+	})
+	t.Run("a year ahead is rejected", func(t *testing.T) {
+		t.Parallel()
+		cmd := createOpCmd()
+		yearAhead := wireDate("2027-08-25")
+		cmd.Date = &yearAhead
+		if _, err := h.ops.CreateOperation(h.ctx(), h.owner, h.propID, cmd); !errors.Is(err, paymentsapp.ErrOperationDateInFuture) {
+			t.Errorf("err = %v, want ErrOperationDateInFuture", err)
+		}
+	})
+	t.Run("the explicit today is accepted", func(t *testing.T) {
+		t.Parallel()
+		cmd := createOpCmd()
+		today := wireDate(day25)
+		cmd.Date = &today
+		item, err := h.ops.CreateOperation(h.ctx(), h.owner, h.propID, cmd)
+		if err != nil {
+			t.Fatalf("create with explicit today: %v", err)
+		}
+		if got := item.Operation.Date.Format(time.DateOnly); got != day25 {
+			t.Errorf("date = %s, want the today %s", got, day25)
+		}
+	})
+}
+
+// TestCreateOperation_FutureBoundaryFollowsOwnerTimezone pins the boundary to
+// the data owner's calendar (ADR 0048 п.4): at the anchor instant Kamchatka
+// already lives on its 26th, so its today is accepted even though Moscow
+// would call it tomorrow — and Kamchatka's tomorrow is rejected.
+func TestCreateOperation_FutureBoundaryFollowsOwnerTimezone(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Asia/Kamchatka")
+
+	t.Run("the Kamchatka today is accepted", func(t *testing.T) {
+		t.Parallel()
+		cmd := createOpCmd()
+		kamchatkaToday := wireDate(day26)
+		cmd.Date = &kamchatkaToday
+		if _, err := h.ops.CreateOperation(h.ctx(), h.owner, h.propID, cmd); err != nil {
+			t.Fatalf("create on the Kamchatka today: %v", err)
+		}
+	})
+	t.Run("the Kamchatka tomorrow is rejected", func(t *testing.T) {
+		t.Parallel()
+		cmd := createOpCmd()
+		kamchatkaTomorrow := wireDate("2026-08-27")
+		cmd.Date = &kamchatkaTomorrow
+		if _, err := h.ops.CreateOperation(h.ctx(), h.owner, h.propID, cmd); !errors.Is(err, paymentsapp.ErrOperationDateInFuture) {
+			t.Errorf("err = %v, want ErrOperationDateInFuture", err)
+		}
+	})
+}
+
+// TestCreateOperation_BackdatedFactReadsByPaidDate is research-checklist
+// грабля №3 (ticket #1391): the feeds read the listing's date key, so the
+// backdated fact must surface in the period of its paid_date — not of the
+// record day.
+func TestCreateOperation_BackdatedFactReadsByPaidDate(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	cmd := createOpCmd()
+	chosen := wireDate("2026-08-24")
+	cmd.Date = &chosen
+	item, err := h.ops.CreateOperation(h.ctx(), h.owner, h.propID, cmd)
+	if err != nil {
+		t.Fatalf("create backdated operation: %v", err)
+	}
+
+	// The paid-date window of the chosen day finds it; the record day's
+	// window does not — the fact lives on its business date.
+	from, to := wireDate(day24), wireDate(day24)
+	inWindow, err := h.ops.ListPropertyOperations(h.ctx(), h.owner, h.propID, paymentsapp.OperationsListQuery{
+		Sort:     paymentsapp.SortByPaidDate,
+		DateFrom: &from,
+		DateTo:   &to,
+		Limit:    50,
+	})
+	if err != nil {
+		t.Fatalf("list in the chosen-day window: %v", err)
+	}
+	if len(inWindow) != 1 || inWindow[0].Operation.ID != item.Operation.ID {
+		t.Fatalf("paid_date window of %s = %d items, want the backdated fact", day24, len(inWindow))
+	}
+
+	laterFrom, laterTo := wireDate(day25), wireDate(day26)
+	outOfWindow, err := h.ops.ListPropertyOperations(h.ctx(), h.owner, h.propID, paymentsapp.OperationsListQuery{
+		Sort:     paymentsapp.SortByPaidDate,
+		DateFrom: &laterFrom,
+		DateTo:   &laterTo,
+		Limit:    50,
+	})
+	if err != nil {
+		t.Fatalf("list in the record-day window: %v", err)
+	}
+	if len(outOfWindow) != 0 {
+		t.Fatalf("record-day window returned %d items, want none", len(outOfWindow))
+	}
+}

@@ -613,7 +613,7 @@ export interface paths {
         put?: never;
         /**
          * Create a manual operation (the one-off paid fact)
-         * @description The manual one-off income/expense fact on the property (ticket #569). It is born paid: date = paidDate = today in the property owner's timezone (ADR 0048), no originating rule behind it (paymentId null). The category travels as the default-catalog slug and freezes as the snapshot with its label. Full Access and above may create; on an archived property the mutation is the conflict.
+         * @description The manual one-off income/expense fact on the property (ticket #569). It is born paid on the client-chosen date (backdating, ticket #1392): date = paidDate = the chosen calendar date, or today in the property owner's timezone when the date is absent (ADR 0048); no originating rule behind it (paymentId null). A future date by the owner's calendar is the 400 «Дата операции не может быть в будущем»; the past carries no lower bound. The category travels as the default-catalog slug and freezes as the snapshot with its label. Full Access and above may create; on an archived property the mutation is the conflict.
          */
         post: operations["createOperation"];
         delete?: never;
@@ -3303,7 +3303,7 @@ export interface components {
         PinnedUpdateRequest: {
             pinned: boolean;
         };
-        /** @description The body of the manual operation creation (ticket #569). The date is server-set — today in the property owner's timezone — and the fact is born paid; no payment form exists behind a manual fact. */
+        /** @description The body of the manual operation creation (ticket #569). The fact is born paid on the client-chosen calendar date; when the date is absent it is the property owner's today (ADR 0048) — backwards compatible. No payment form exists behind a manual fact. */
         CreateOperationRequest: {
             /** @enum {string} */
             type: "income" | "expense";
@@ -3312,6 +3312,11 @@ export interface components {
             amountKopecks: number;
             /** @description Slug of the default category catalog; frozen as the operation's snapshot. */
             categorySlug: string;
+            /**
+             * Format: date
+             * @description The client-chosen calendar date of the fact (backdating, ticket #1392): RFC 3339 full-date, no time and no timezone — the calendar-day semantics, not a moment. It lands in both the planned date and the paid date (the fact is born paid). Absent means the property owner's today (ADR 0048). A date after the owner's today is rejected with 400 «Дата операции не может быть в будущем»; there is no lower bound — the past is unlimited.
+             */
+            date?: string;
         };
         /** @description One operation of the Payments context: a payment occurrence or a manual fact. status carries overdue as a server-computed view status (planned with the date already past in the property owner's timezone). */
         OperationResponse: {
@@ -5845,7 +5850,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Operation created (status is paid, paidDate = today in the owner's timezone) */
+            /** @description Operation created (born paid; date = paidDate = the chosen date, or the owner's today when absent) */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5854,7 +5859,15 @@ export interface operations {
                     "application/json": components["schemas"]["OperationResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
+            /** @description Bad request — a malformed body or a date after the property owner's today («Дата операции не может быть в будущем») */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

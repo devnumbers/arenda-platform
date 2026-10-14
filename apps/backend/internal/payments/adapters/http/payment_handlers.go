@@ -96,6 +96,16 @@ var staticPaymentProblems = []httpsupport.ErrorProblem{
 		Detail: "Дата окончания не может быть раньше первого платежа",
 	},
 	{
+		// The manual operation's client-chosen date (ticket #1392): the
+		// future bound speaks its own words — the sentinel is not wrapped
+		// into ErrInvalidInput, so this row answers before the shared
+		// «Некорректные данные платежа» table.
+		Err:    application.ErrOperationDateInFuture,
+		Status: http.StatusBadRequest,
+		Title:  "Bad request",
+		Detail: "Дата операции не может быть в будущем",
+	},
+	{
 		// The rent payment's rule mutations answer the domain's own words
 		// (ADR 0053, ticket #818): the rental owns the amount, the payment
 		// day, the auto-pay and the planned end.

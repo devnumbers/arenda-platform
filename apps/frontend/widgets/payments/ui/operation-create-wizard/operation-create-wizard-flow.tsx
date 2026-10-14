@@ -7,8 +7,11 @@ import { ArrowLeft, Cancel, Search } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
+import { isoTodayInTimezone } from '@/shared/lib/calendar';
+import { deviceTimezone, useMe } from '@/features/auth';
 import {
   Button,
+  CalendarDatePicker,
   IconButton,
   PageContent,
   SearchField,
@@ -38,19 +41,24 @@ import { OperationSuccess } from './operation-success';
 
 /**
  * Поток шагов визарда создания операции (#570; Figma 1858:104557/105397,
- * 1863:67296, 1858:105011, 1858:105544): сумма и направление → название →
- * категория → объект (только глобальный вход — аннотация фрейма выбора) →
- * успех. Клиентское состояние на одном маршруте, старт всегда с шага
- * суммы: черновика у операции нет (карта #1052, Q2=В) — уход со страницы,
- * перезагрузка и закрытие дают чистый лист. Шаги без чипа — шапка несёт
- * названия шагов из макета; на последнем шаге кнопка сабмита «Добавить
- * операцию» (аннотация фрейма названия: у входа с объекта она живёт
- * на категории).
+ * 1863:67296, 1858:105011, 1858:105544): сумма и направление → дата
+ * («Выберите дату» #1394, макет 3431-78480 — экран целиком
+ * CalendarDatePicker) → название → категория → объект (только глобальный
+ * вход — аннотация фрейма выбора) → успех. Клиентское состояние на одном
+ * маршруте, старт всегда с шага суммы: черновика у операции нет (карта
+ * #1052, Q2=В) — уход со страницы, перезагрузка и закрытие дают чистый
+ * лист. Шаги без чипа — шапка несёт названия шагов из макета; шаг даты —
+ * самостоятельная полноэкранная поверхность пикера с её шапкой и
+ * «Продолжить»; на последнем шаге кнопка сабмита «Добавить операцию»
+ * (аннотация фрейма названия: у входа с объекта она живёт на категории).
+ * «Сегодня» для шага даты — календарь профиля через Intl (ADR 0048):
+ * сервер остаётся авторитетным гейтом — будущее отклоняется 400-й с
+ * понятным тостом (operationCreateError читает problem+json).
  */
 
 export type OperationCreateWizardFlowProps = {
   readonly mode: OperationWizardMode;
-  /** Объект входа с объекта; у глобального входа выбирается на шаге 4. */
+  /** Объект входа с объекта; у глобального входа выбирается на шаге 5. */
   readonly propertyId?: string;
   /** Пресет направления точки входа (Расходы→Расход, Доходы→Доход, иначе Расход). */
   readonly presetType: PaymentType;
@@ -66,6 +74,13 @@ export function OperationCreateWizardFlow({
 }: OperationCreateWizardFlowProps): JSX.Element {
   const router = useRouter();
   const createOperation = useCreateOperation();
+  // «Сегодня» календаря профиля для шага даты (#1394): профиль уже в
+  // кеше — его читает провайдер пользователя шапки кабинета. Пока профиль
+  // едет (холодный вход), пояс устройства — ближайшая догадка, дефолт
+  // Москвы не путается с «профиль не пришёл»; авторитет «сегодня» в любом
+  // случае сервер (будущее отклоняется 400-й).
+  const { data: me } = useMe();
+  const today = isoTodayInTimezone(me?.timezone ?? deviceTimezone());
   // Состояние шагов живёт только пока смонтирован поток (канон — в модели).
   const [draft, setDraft] = useState<OperationWizardDraft>({});
   // Визард — экран создания: футер глушится на всех шагах (как у платежей).
@@ -135,10 +150,36 @@ export function OperationCreateWizardFlow({
     );
   }
 
+  // Шаг даты (#1394) — экран целиком CalendarDatePicker (макет 3431-78480):
+  // своя шапка «Выберите дату» и «Продолжить», дата обязательна (снять
+  // нельзя), дефолт — предвыбранное «сегодня владельца», прошлое открыто
+  // без пола, будущее закрыто. «Назад» пикера — возврат на шаг суммы.
+  if (step === 2) {
+    return (
+      <CalendarDatePicker
+        title="Выберите дату"
+        confirmLabel="Продолжить"
+        today={today}
+        value={draft.date ?? null}
+        required
+        allowPast
+        maxDate={today}
+        onClose={() => goToStep(1)}
+        onConfirm={(date) => {
+          if (date === null) {
+            return;
+          }
+          setDraft((prev) => ({ ...prev, date }));
+          goToStep(3);
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <TopNav
-        variant={step === 3 && categorySearchOpen ? 'search' : 'default'}
+        variant={step === 4 && categorySearchOpen ? 'search' : 'default'}
         leading={
           <IconButton
             icon={step === 1 ? <Cancel /> : <ArrowLeft />}
@@ -147,7 +188,7 @@ export function OperationCreateWizardFlow({
           />
         }
         trailing={
-          step === 3 && !categorySearchOpen ? (
+          step === 4 && !categorySearchOpen ? (
             <IconButton
               icon={<Search />}
               label="Поиск по категориям"
@@ -156,7 +197,7 @@ export function OperationCreateWizardFlow({
           ) : undefined
         }
       >
-        {step === 3 && categorySearchOpen ? (
+        {step === 4 && categorySearchOpen ? (
           <SearchField
             ref={searchInputRef}
             value={categoryQuery}
@@ -197,7 +238,7 @@ export function OperationCreateWizardFlow({
             </StickyBottomBar>
           </>
         )}
-        {step === 2 && (
+        {step === 3 && (
           <>
             <OperationTitleStep
               title={draft.title ?? ''}
@@ -205,14 +246,14 @@ export function OperationCreateWizardFlow({
             />
             <StickyBottomBar>
               <WizardBottomBar>
-                <Button className="w-full" onClick={() => goToStep(3)}>
+                <Button className="w-full" onClick={() => goToStep(4)}>
                   Продолжить
                 </Button>
               </WizardBottomBar>
             </StickyBottomBar>
           </>
         )}
-        {step === 3 && (
+        {step === 4 && (
           <>
             {/* Открытый поиск меняет контент (канон платежного визарда
                 #1152, решение владельца 13.10): заголовок — только при
@@ -256,7 +297,7 @@ export function OperationCreateWizardFlow({
                       Добавить операцию
                     </Button>
                   ) : (
-                    <Button className="w-full" onClick={() => goToStep(4)}>
+                    <Button className="w-full" onClick={() => goToStep(5)}>
                       Продолжить
                     </Button>
                   )}
@@ -265,7 +306,7 @@ export function OperationCreateWizardFlow({
             )}
           </>
         )}
-        {step === 4 && (
+        {step === 5 && (
           <>
             <OperationPropertyStep
               selectedPropertyId={draft.propertyId}
@@ -276,7 +317,7 @@ export function OperationCreateWizardFlow({
               <WizardBottomBar>
                 <Button
                   className="w-full"
-                  disabled={!operationWizardStepReady(4, draft)}
+                  disabled={!operationWizardStepReady(5, draft)}
                   loading={createOperation.isPending}
                   onClick={() => void submit()}
                 >
@@ -295,7 +336,7 @@ export function OperationCreateWizardFlow({
   }
 
   function navigateBack(): void {
-    if (step === 3 && categorySearchOpen) {
+    if (step === 4 && categorySearchOpen) {
       setCategorySearchOpen(false);
       setCategoryQuery('');
       return;
@@ -318,7 +359,7 @@ export function OperationCreateWizardFlow({
   }
 
   /** Объект сабмита: у входа с объекта — маршрут, у глобального — выбор
-   * шага 4. */
+   * шага 5. */
   function targetPropertyId(): string | undefined {
     return mode === 'property' ? propertyId : draft.propertyId;
   }
@@ -352,10 +393,12 @@ export function OperationCreateWizardFlow({
 
 /** Названия шагов в шапке (Figma 1858:104557 «Добавить операцию»,
  * 1863:67296 «Операция», 1858:105038 «Выбрать объект»); у шага категории
- * название из макета платежного визарда адаптировано под операцию. */
-const HEADER_TITLES: Record<OperationWizardStep, string> = {
+ * название из макета платежного визарда адаптировано под операцию. Шага 2
+ * в реестре нет — экран даты рисует CalendarDatePicker со своей шапкой
+ * «Выберите дату» (#1394). */
+const HEADER_TITLES: Record<Exclude<OperationWizardStep, 2>, string> = {
   1: 'Добавить операцию',
-  2: 'Операция',
-  3: 'Категория',
-  4: 'Выбрать объект',
+  3: 'Операция',
+  4: 'Категория',
+  5: 'Выбрать объект',
 };

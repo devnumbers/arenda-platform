@@ -194,9 +194,11 @@ func (h *OperationsHandlers) SummarizeOperations(w http.ResponseWriter, r *http.
 }
 
 // CreateOperation implements POST /properties/{propertyId}/operations
-// (ticket #569): the manual one-off fact born paid on the owner's today.
+// (ticket #569): the manual one-off fact born paid on the client-chosen date
+// (backdating, ticket #1392) or the owner's today when the date is absent.
 // The contract rules — enums, amount bounds, title length, the catalog
-// slug — are the application validator's; the transport only folds the body.
+// slug, the date's full-date grammar and its future bound — are the decoder
+// and the application validator's; the transport only folds the body.
 func (h *OperationsHandlers) CreateOperation(w http.ResponseWriter, r *http.Request, propertyID openapi_types.UUID) {
 	actor, ok := httpsupport.RequireUser(w, r)
 	if !ok {
@@ -217,6 +219,7 @@ func (h *OperationsHandlers) CreateOperation(w http.ResponseWriter, r *http.Requ
 		Title:         body.Title,
 		AmountKopecks: body.AmountKopecks,
 		CategorySlug:  body.CategorySlug,
+		Date:          datePtrFromWire(body.Date),
 	})
 	if err != nil {
 		h.handleOperationError(w, r, err)

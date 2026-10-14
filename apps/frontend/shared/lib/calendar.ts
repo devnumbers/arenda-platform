@@ -157,15 +157,19 @@ export function calendarFeedStart(
 /** Пол прошлого пикера дат: до какой черты прошедшие дни закрыты. По
  * умолчанию — сегодня (задним числом даты не создаются, #498); пикер с
  * allowPast (дата завершения бывает задним числом, ADR 0053 §3 — #805)
- * опускает черту до minDate. */
+ * опускает черту до minDate; allowPast без minDate — режима «задним
+ * числом без пола» (#1393): черты нет (null), прошедшие дни открыты
+ * без ограничения. */
 export function calendarPastFloor(
   today: IsoDate, minDate: IsoDate | undefined, allowPast: boolean,
-): IsoDate {
-  return allowPast && minDate !== undefined ? minDate : today;
+): IsoDate | null {
+  return allowPast ? (minDate ?? null) : today;
 }
 
-/** Погашен ли день в пикере дат: до пола прошлого (значение-якорь остаётся
- * тапабельным — правка #502), раньше minDate, позже maxDate. */
+/** Погашен ли день в пикере дат: до пола прошлого, если он есть (null —
+ * режима «без пола» #1393: прошлое открыто без ограничения; значение-якорь
+ * остаётся тапабельным и под полом — правка #502), раньше minDate, позже
+ * maxDate. */
 export function calendarDayDisabled(args: {
   readonly iso: IsoDate;
   readonly today: IsoDate;
@@ -176,7 +180,7 @@ export function calendarDayDisabled(args: {
 }): boolean {
   const floor = calendarPastFloor(args.today, args.minDate, args.allowPast);
   return (
-    (cmp(args.iso, floor) < 0 && args.iso !== args.value)
+    (floor !== null && cmp(args.iso, floor) < 0 && args.iso !== args.value)
     || (args.minDate !== undefined && cmp(args.iso, args.minDate) < 0)
     || (args.maxDate !== undefined && cmp(args.iso, args.maxDate) > 0)
   );
@@ -192,6 +196,36 @@ export function clampMonthToMin(min: CalendarMonthRef, year: number, month0: num
  * max.month0 не существуют (будущее закрыто), в остальных — любой. */
 export function clampMonthToMax(max: CalendarMonthRef, year: number, month0: number): number {
   return year === max.year ? Math.min(month0, max.month0) : month0;
+}
+
+/** Платформенный пояс по умолчанию — тот же, что ставит бекенд пустой
+ * колонке users.timezone (ADR 0048, миграция 000088). */
+export const DEFAULT_TIMEZONE = 'Europe/Moscow';
+
+/** «Сегодня» календаря в заданном IANA-поясе (ADR 0048): клиентский дефолт
+ * шага даты визарда операции (#1394). Авторитет «сегодня» — сервер
+ * (мутация считает по поясу владельца объекта и отклоняет будущее 400-й) —
+ * здесь только предвыбор и закрытие будущих дней. Без пояса — платформенный
+ * дефолт; невалидный пояс не роняет рендер — локальная дата устройства
+ * (dateToIsoLocal), расхождение ограничено краевыми часами суток. */
+export function isoTodayInTimezone(
+  timezone: string | null | undefined,
+  now: Date = new Date(),
+): IsoDate {
+  const zone = timezone ?? DEFAULT_TIMEZONE;
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const value = (type: string): string =>
+      parts.find((part) => part.type === type)?.value ?? '';
+    return `${value('year')}-${value('month')}-${value('day')}`;
+  } catch {
+    return dateToIsoLocal(now);
+  }
 }
 
 /** Диапазон дат с включительными границами (пикер периода операций). */
@@ -242,6 +276,61 @@ export function rangeFeedWindow(
   return {
     first: calendarMonthOfIndex(firstIdx),
     last: calendarMonthOfIndex(currentIdx + 2),
+  };
+}
+
+/** Порция дорисовки ленты одиночного пикера назад по доскроллу (и стартовый
+ * отступ от семантического старта — см. calendarSingleFeedWindow). */
+export const CALENDAR_FEED_PREPEND_CHUNK = 6;
+
+/** Месяцы приглушённого будущего за жёстким краем ленты (1:1 с пикером
+ * периода: «текущий месяц плюс два приглушённых будущих»). */
+export const CALENDAR_FEED_FORWARD_CONTEXT = 2;
+
+/** Стартовая лента одиночного пикера без края и порция роста вперёд. */
+export const CALENDAR_FEED_MONTHS = 12;
+
+/** Окно ленты одиночного пикера дат (решение владельца 13.10, #1394).
+ * Старт — на порцию дорисовки раньше семантического старта
+ * calendarFeedStart: над якорем всегда есть содержимое, и прокрутка вверх
+ * работает сразу — на верхнем упоре scroll-событие не возникает вовсе,
+ * дорисовка по порогу не запускается («сначала качни вниз», приёмка
+ * #1394). Вперёд при закрытом будущем (maxDate задан) — жёсткий край:
+ * последний месяц = месяц maxDate плюс пара приглушённых месяцев
+ * контекста (1:1 с rangeFeedWindow), дальше лента не растёт. У открытого
+ * будущего (maxDate не задан — начало аренды, плановые платежи) края нет:
+ * лента открывается годом и растёт годом, как раньше. */
+export function calendarSingleFeedWindow(args: {
+  readonly feedStart: CalendarMonthRef;
+  readonly anchorMonth: CalendarMonthRef;
+  readonly maxDate: IsoDate | undefined;
+}): {
+  readonly first: CalendarMonthRef;
+  readonly count: number;
+  readonly forwardEdge: CalendarMonthRef | null;
+} {
+  const first = calendarMonthOfIndex(
+    calendarMonthIndex(args.feedStart) - CALENDAR_FEED_PREPEND_CHUNK,
+  );
+  const anchorIdx =
+    calendarMonthIndex(args.anchorMonth) - calendarMonthIndex(first);
+  if (args.maxDate === undefined) {
+    return {
+      first,
+      count: Math.max(CALENDAR_FEED_MONTHS, anchorIdx + 1),
+      forwardEdge: null,
+    };
+  }
+  const edge = calendarMonthOfIndex(
+    calendarMonthIndex(calendarMonthOf(args.maxDate)) + CALENDAR_FEED_FORWARD_CONTEXT,
+  );
+  return {
+    first,
+    count: Math.max(
+      anchorIdx + 1,
+      calendarMonthIndex(edge) - calendarMonthIndex(first) + 1,
+    ),
+    forwardEdge: edge,
   };
 }
 

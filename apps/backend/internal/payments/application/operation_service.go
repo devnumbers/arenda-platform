@@ -155,14 +155,20 @@ type OperationListItem struct {
 }
 
 // CreateOperationCommand is the create payload of a manual operation (ticket
-// #569): a one-off income/expense fact. The date is not part of it — the
-// server sets it to the owner's today like the rule's since. The
-// category travels as the default-catalog slug and freezes as the snapshot.
+// #569): a one-off income/expense fact. The date is the client-chosen
+// calendar day (backdating, ticket #1392) — nil means the server-set owner's
+// today like the rule's since; the chosen day lands in both the planned date
+// and the paid date, and a day after the owner's today is the validator's
+// ErrOperationDateInFuture. The category travels as the default-catalog slug
+// and freezes as the snapshot.
 type CreateOperationCommand struct {
 	Type          domain.PaymentType
 	Title         string
 	AmountKopecks int64
 	CategorySlug  string
+	// Date is the client-chosen calendar day at UTC midnight (the wire's
+	// openapi_types.Date shape) or nil for the owner's today.
+	Date *time.Time
 }
 
 // OperationService carries the operation use cases of the second contracts
@@ -273,8 +279,9 @@ func (s *OperationService) PayOperation(
 
 // CreateOperation implements the manual «+ операция» (POST
 // …/operations, ticket #569): the one-off fact is born paid with
-// date = paid_date = today in the owner's timezone (ADR 0048), origin
-// manual, no rule behind it — payment_id stays NULL. The
+// date = paid_date = the client-chosen calendar day (backdating, ticket
+// #1392) or today in the owner's timezone when the command carries no date
+// (ADR 0048), origin manual, no rule behind it — payment_id stays NULL. The
 // category freezes as the snapshot right here: the label resolves from the
 // catalog (the validator guarantees the slug resolves), the slug travels.
 // Full Access and Owner may create; a viewer gets ErrForbidden, a stranger
@@ -289,12 +296,19 @@ func (s *OperationService) CreateOperation(
 			ctx context.Context, stores *txStores, scope uuid.UUID, _ domain.Payment, today time.Time,
 		) (mutationOutcome[domain.Operation], error) {
 			slug := cmd.CategorySlug
+			// The chosen calendar day (UTC midnight off the wire) or the
+			// owner's today when the client left the date out — the
+			// backwards-compatible default (ticket #1392).
+			chosen := today
+			if cmd.Date != nil {
+				chosen = *cmd.Date
+			}
 			draft := domain.Operation{
 				OwnerID:       scope,
 				PropertyID:    propertyID,
 				Origin:        domain.OriginManual,
-				Date:          today,
-				PaidDate:      &today,
+				Date:          chosen,
+				PaidDate:      &chosen,
 				Status:        domain.StatusPaid,
 				Type:          cmd.Type,
 				Title:         strings.TrimSpace(cmd.Title),
@@ -302,7 +316,7 @@ func (s *OperationService) CreateOperation(
 				CategoryLabel: domain.CategoryRef{Slug: &slug}.SnapshotLabel(),
 				CategorySlug:  &slug,
 			}
-			if err := validateManualOperation(draft); err != nil {
+			if err := validateManualOperation(draft, today); err != nil {
 				return mutationOutcome[domain.Operation]{}, err
 			}
 			id, err := uuid.NewV7()
@@ -705,11 +719,15 @@ func (s *OperationService) listScoped(
 // create contract (ticket #569): the rule's create vocabulary (validateRule)
 // minus the rule-only parts — a manual fact carries no recurrence and no
 // payment form, and its category reference is the default-catalog slug only.
-// The transport decodes and delegates here, so the rules cannot drift
-// between layers: the direction enum, a non-empty title within
+// The client-chosen date (ticket #1392) is checked here too, against the
+// owner's today the mutation resolved (ADR 0048): a day strictly after it is
+// ErrOperationDateInFuture — a payment fact cannot be born in the future —
+// while the past carries no lower bound (the owner's decision: backdating
+// without limits). The transport decodes and delegates here, so the rules
+// cannot drift between layers: the direction enum, a non-empty title within
 // MaxTitleLength characters (counted in runes), kopecks within 1..10⁹ and a
 // resolvable catalog slug.
-func validateManualOperation(op domain.Operation) error {
+func validateManualOperation(op domain.Operation, today time.Time) error {
 	if op.Type != domain.TypeIncome && op.Type != domain.TypeExpense {
 		return ErrInvalidInput
 	}
@@ -718,6 +736,11 @@ func validateManualOperation(op domain.Operation) error {
 	}
 	if op.AmountKopecks < 1 || op.AmountKopecks > MaxAmountKopecks {
 		return ErrInvalidInput
+	}
+	// Date-only values compare as UTC midnights on both sides (ADR 0048):
+	// the conveyor's today and the wire's openapi_types.Date share the shape.
+	if op.Date.After(today) {
+		return ErrOperationDateInFuture
 	}
 	return validateCategory(domain.CategoryRef{Slug: op.CategorySlug})
 }

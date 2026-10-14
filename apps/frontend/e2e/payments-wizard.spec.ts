@@ -1,4 +1,5 @@
 import {
+  calendarMonthSection,
   captureScreen,
   expect,
   mockEmailCategoryShortcut,
@@ -458,6 +459,49 @@ test.describe('визард создания платежа', () => {
       month: target.getMonth() + 1,
       day: target.getDate(),
     });
+  });
+
+  test('календарь: в дефолтном режиме прошлое закрыто и лента не растёт назад (регресс #1393)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, 'E2E пикер даты без регрессий');
+
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
+    await expect(dialog).toBeVisible();
+
+    // Пол прошлого — сегодня (контракт #498): вчерашний день погашен,
+    // сегодняшний доступен. Спот старого экрана на канон пикера после
+    // появления безпольного режима (#1393): дефолт не изменился.
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await expect(
+      calendarMonthSection(dialog, yesterday).getByRole('button', {
+        name: String(yesterday.getDate()),
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await expect(dialog.locator('button[aria-current="date"]')).toBeEnabled();
+
+    // Старт ленты — текущий месяц («сегодня» в первой секции); доскролл
+    // вверх ничего не дорисовывает: назад лента идёт только в безпольном
+    // режиме, старым экранам поведение не менялось.
+    const feed = dialog.locator('section');
+    const todayCell = feed.first().locator('button[aria-current="date"]');
+    await expect(todayCell).toHaveCount(1);
+    const sectionsBefore = await feed.count();
+    await feed.first().evaluate((el) => {
+      const scroller = el.closest('.overflow-y-auto');
+      if (scroller === null) {
+        throw new Error('лента пикера не найдена');
+      }
+      scroller.scrollTop = 200;
+      scroller.scrollTop = 0;
+    });
+    await expect(todayCell).toHaveCount(1);
+    await expect(feed).toHaveCount(sectionsBefore);
   });
 
   test('ежегодная ветка: дата в следующем году через пикер года (дыра «только текущий месяц»)', async ({

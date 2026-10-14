@@ -16,6 +16,7 @@ import {
   fullMonthsBetween,
   inclusiveDays,
   isoDateOf,
+  isoTodayInTimezone,
   isoDayOfMonth,
   isoMonthNumber,
   isoYear,
@@ -24,6 +25,8 @@ import {
   booleanRunSegments,
   calendarDayDisabled,
   calendarPastFloor,
+  calendarSingleFeedWindow,
+  type CalendarMonthRef,
   pickIsoRange,
   rangeFeedWindow,
   settleIsoRange,
@@ -276,8 +279,9 @@ describe('calendar: пикер завершения — прошлое откр�
   it('пол прошлого: сегодня по умолчанию, minDate при allowPast', () => {
     expect(calendarPastFloor(today, undefined, false)).toBe(today);
     expect(calendarPastFloor(today, '2026-01-23', false)).toBe(today);
-    expect(calendarPastFloor(today, undefined, true)).toBe(today);
     expect(calendarPastFloor(today, '2026-01-23', true)).toBe('2026-01-23');
+    // allowPast без minDate — не этот режим: пол снимается целиком (#1393),
+    // см. describe «задним числом без пола».
   });
 
   it('allowPast: период [minDate, today] тапабелен, края погашены', () => {
@@ -305,5 +309,136 @@ describe('calendar: пикер завершения — прошлое откр�
     expect(calendarFeedStart(today, '2026-03-10', floor)).toEqual({ year: 2026, month0: 0 });
     expect(calendarFeedStart(today, '2025-12-01', floor)).toEqual({ year: 2025, month0: 11 });
     expect(calendarFeedStart(today, null)).toEqual({ year: 2026, month0: 8 });
+  });
+});
+
+describe('calendar: задним числом без пола (#1393)', () => {
+  const today = '2026-10-13';
+
+  it('allowPast без minDate — пола нет: calendarPastFloor отдаёт null', () => {
+    expect(calendarPastFloor(today, undefined, true)).toBeNull();
+  });
+
+  it('без пола весь прошедший тапабелен, будущее гасит maxDate', () => {
+    const day = (iso: string) =>
+      calendarDayDisabled({
+        iso,
+        today,
+        value: null,
+        minDate: undefined,
+        maxDate: today,
+        allowPast: true,
+      });
+    expect(day('2026-10-12')).toBe(false);
+    expect(day('2020-01-01')).toBe(false);
+    expect(day('1999-12-31')).toBe(false);
+    expect(day(today)).toBe(false);
+    expect(day('2026-10-14')).toBe(true);
+  });
+
+  it('без пола и без maxDate закрытых дней нет вовсе', () => {
+    const day = (iso: string) =>
+      calendarDayDisabled({
+        iso,
+        today,
+        value: null,
+        minDate: undefined,
+        maxDate: undefined,
+        allowPast: true,
+      });
+    expect(day('2026-10-12')).toBe(false);
+    expect(day('2000-02-29')).toBe(false);
+    expect(day('2026-10-14')).toBe(false);
+  });
+
+  it('старт ленты без пола — месяц today; якорь значения в прошлом уводит старт к себе', () => {
+    expect(calendarFeedStart(today, null)).toEqual({ year: 2026, month0: 9 });
+    expect(calendarFeedStart(today, '2020-03-05')).toEqual({ year: 2020, month0: 2 });
+    // Якорь глубже любого технического пола — лента открывается у значения,
+    // назад дорисуется по доскроллу.
+    expect(calendarFeedStart(today, '2020-03-05', { year: 2021, month0: 5 })).toEqual({
+      year: 2020,
+      month0: 2,
+    });
+  });
+});
+
+describe('calendar: «сегодня» в поясе профиля (#1394)', () => {
+  it('считает календарную дату момента в заданном IANA-поясе', () => {
+    // UTC 12:00 13-го — на Камчатке (UTC+12) уже 00:00 14-го.
+    expect(isoTodayInTimezone('UTC', new Date('2026-10-13T12:00:00Z'))).toBe('2026-10-13');
+    expect(
+      isoTodayInTimezone('Asia/Kamchatka', new Date('2026-10-13T12:00:00Z')),
+    ).toBe('2026-10-14');
+    // UTC 06:00 13-го — в Лос-Анджелесе (UTC-7) ещё 23:00 12-го.
+    expect(
+      isoTodayInTimezone('America/Los_Angeles', new Date('2026-10-13T06:00:00Z')),
+    ).toBe('2026-10-12');
+    // Москва (UTC+3): граница суток в 21:00 UTC.
+    expect(isoTodayInTimezone('Europe/Moscow', new Date('2026-10-13T20:59:00Z'))).toBe(
+      '2026-10-13',
+    );
+    expect(isoTodayInTimezone('Europe/Moscow', new Date('2026-10-13T21:00:00Z'))).toBe(
+      '2026-10-14',
+    );
+  });
+
+  it('без пояса — платформенный дефолт Europe/Moscow (ADR 0048)', () => {
+    const now = new Date('2026-10-13T21:00:00Z');
+    expect(isoTodayInTimezone(null, now)).toBe('2026-10-14');
+    expect(isoTodayInTimezone(undefined, now)).toBe(isoTodayInTimezone('Europe/Moscow', now));
+  });
+
+  it('невалидный пояс не роняет рендер — локальная дата устройства', () => {
+    const now = new Date('2026-10-13T12:00:00Z');
+    expect(isoTodayInTimezone('Not/AZone', now)).toBe(dateToIsoLocal(now));
+  });
+});
+
+describe('calendar: окно ленты одиночного пикера (решение 13.10, #1394)', () => {
+  const october2026: CalendarMonthRef = { year: 2026, month0: 9 };
+
+  it('стартует порцией дорисовки раньше старта — прокрутка вверх работает сразу', () => {
+    const window = calendarSingleFeedWindow({
+      feedStart: october2026,
+      anchorMonth: october2026,
+      maxDate: '2026-10-13',
+    });
+    expect(window.first).toEqual({ year: 2026, month0: 3 });
+    expect(window.forwardEdge).toEqual({ year: 2026, month0: 11 });
+    expect(window.count).toBe(9);
+  });
+
+  it('закрытое будущее при глубоком якоре — окно покрывает якорь и край', () => {
+    const window = calendarSingleFeedWindow({
+      feedStart: { year: 2024, month0: 0 },
+      anchorMonth: { year: 2024, month0: 3 },
+      maxDate: '2026-10-13',
+    });
+    expect(window.first).toEqual({ year: 2023, month0: 6 });
+    expect(window.forwardEdge).toEqual({ year: 2026, month0: 11 });
+    expect(window.count).toBe(42);
+  });
+
+  it('открытое будущее (maxDate не задан) — края нет, лента годом от якоря', () => {
+    const window = calendarSingleFeedWindow({
+      feedStart: october2026,
+      anchorMonth: october2026,
+      maxDate: undefined,
+    });
+    expect(window.first).toEqual({ year: 2026, month0: 3 });
+    expect(window.forwardEdge).toBeNull();
+    expect(window.count).toBe(12);
+  });
+
+  it('якорь-значение в прошлом (правка #502) тоже получает содержимое выше', () => {
+    const window = calendarSingleFeedWindow({
+      feedStart: { year: 2020, month0: 2 },
+      anchorMonth: { year: 2020, month0: 2 },
+      maxDate: undefined,
+    });
+    expect(window.first).toEqual({ year: 2019, month0: 8 });
+    expect(window.forwardEdge).toBeNull();
+    expect(window.count).toBe(12);
   });
 });
