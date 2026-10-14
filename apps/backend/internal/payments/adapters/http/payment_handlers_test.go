@@ -998,11 +998,6 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 		{"already paused", application.ErrAlreadyPaused, http.StatusConflict, "Платёж уже на паузе"},
 		{"not paused", application.ErrNotPaused, http.StatusConflict, "Платёж не на паузе"},
 		{"rental-managed", application.ErrRentManagedPayment, http.StatusConflict, "Платёж управляется арендой"},
-		// The completion contract's own details (тикет #1340).
-		{
-			"not completable", application.ErrPaymentNotCompletable,
-			http.StatusConflict, "дата окончания уже наступила",
-		},
 		// The schedule window's specific detail answers before the shared
 		// invalid-input table (ticket #1154).
 		{

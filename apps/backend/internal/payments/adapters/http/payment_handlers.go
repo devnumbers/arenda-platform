@@ -104,15 +104,6 @@ var staticPaymentProblems = []httpsupport.ErrorProblem{
 		Title:  httpsupport.ProblemTitleConflict,
 		Detail: "Платёж управляется арендой — поставить на паузу, изменить или удалить его можно только в аренде",
 	},
-	{
-		// The completion gate's own message (тикет #1340): the sentinel is
-		// not wrapped into any other outcome, the wire names what the
-		// «Завершить» action waits for.
-		Err:    application.ErrPaymentNotCompletable,
-		Status: http.StatusConflict,
-		Title:  httpsupport.ProblemTitleConflict,
-		Detail: "Завершить можно только платёж, у которого все операции оплачены, а дата окончания уже наступила",
-	},
 }
 
 // writePaymentsError maps an error with a fixed outcome onto the wire via the

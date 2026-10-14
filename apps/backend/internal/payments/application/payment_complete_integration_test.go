@@ -2,14 +2,16 @@
 
 package application_test
 
-// Завершение платежа (тикет #1377, ревизия #1340): завершение удаляет правило
-// с сохранением оплаченных операций — хвост payment_id NULL по FK, origin
-// 'payment' (тот же исход, что у завершения аренды #1161 и удаления #446).
-// Гейты доступности прежние (аренда, открытая пауза, CanBeCompleted), повторное
-// завершение — приватный 404: правила больше нет. Скрытие из лент, списков и
-// подсчётов хаба — фактом удаления; звезда читателя падает вместе с правилом
-// (FK CASCADE). Журнал правок каскадит — строки о завершении в него не пишем;
-// «История действий» несёт «Платёж завершён: …», audit — payment.completed.
+// Завершение платежа (тикет #1377, ревизия #1340; ревизия 2 — #1426):
+// завершение удаляет правило с сохранением оплаченных операций — хвост
+// payment_id NULL по FK, origin 'payment' (тот же исход, что у завершения
+// аренды #1161 и удаления #446). Гейт доступности один — арендный (ревизия
+// 2 сняла endDate, «всё оплачено» и открытую паузу: доступность как у
+// удаления #446), повторное завершение — приватный 404: правила больше нет.
+// Скрытие из лент, списков и подсчётов хаба — фактом удаления; звезда
+// читателя падает вместе с правилом (FK CASCADE). Журнал правок каскадит —
+// строки о завершении в него не пишем; «История действий» несёт «Платёж
+// завершён: …», audit — payment.completed.
 
 import (
 	"testing"
@@ -170,29 +172,18 @@ func TestCompletePayment_Gates(t *testing.T) {
 		assert.ErrorIs(t, err, paymentsapp.ErrNotFound, "err = %v", err)
 	})
 
-	t.Run("открытая пауза — ErrAlreadyPaused, возобновление открывает путь", func(t *testing.T) {
+	t.Run("открытая пауза не мешает — доступность как у удаления (#1426)", func(t *testing.T) {
 		t.Parallel()
 		h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 		created := h.completableRule(t)
 		_, err := h.svc.PausePayment(h.ctx(), h.owner, h.propID, created.ID)
 		require.NoError(t, err)
-		err = h.svc.CompletePayment(h.ctx(), h.owner, h.propID, created.ID)
-		require.ErrorIs(t, err, paymentsapp.ErrAlreadyPaused, "err = %v", err)
-		_, err = h.svc.ResumePayment(h.ctx(), h.owner, h.propID, created.ID)
-		require.NoError(t, err)
 		require.NoError(t, h.svc.CompletePayment(h.ctx(), h.owner, h.propID, created.ID))
+		_, err = h.svc.GetPayment(h.ctx(), h.owner, h.propID, created.ID)
+		assert.ErrorIs(t, err, paymentsapp.ErrNotFound, "err = %v", err)
 	})
 
-	t.Run("есть planned — ErrPaymentNotCompletable", func(t *testing.T) {
-		t.Parallel()
-		h := newPaymentsHarness(t).withOwner("Europe/Moscow")
-		created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.completeCmd())
-		require.NoError(t, err)
-		err = h.svc.CompletePayment(h.ctx(), h.owner, h.propID, created.ID)
-		assert.ErrorIs(t, err, paymentsapp.ErrPaymentNotCompletable, "err = %v", err)
-	})
-
-	t.Run("endDate впереди при оплаченных вхождениях — ErrPaymentNotCompletable", func(t *testing.T) {
+	t.Run("endDate впереди при оплаченных вхождениях — завершается (#1426)", func(t *testing.T) {
 		t.Parallel()
 		h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 		cmd := h.completeCmd()
@@ -200,24 +191,78 @@ func TestCompletePayment_Gates(t *testing.T) {
 		cmd.EndDate = &endDate
 		created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, cmd)
 		require.NoError(t, err)
-		// Вычисляемый флаг отвечает «завершён» уже сегодня — гейт мутации
-		// ждёт конца правила.
+		// Вычисляемый флаг отвечает «завершён» уже сегодня — мутация больше
+		// не ждёт конца правила (ревизия 2 сняла endDate-гейт).
 		h.payAllOperations(t, created.ID)
 		settled, err := h.svc.CompletedStatus(h.ctx(), h.owner, h.propID, created.ID)
 		require.NoError(t, err)
 		assert.True(t, settled)
-		err = h.svc.CompletePayment(h.ctx(), h.owner, h.propID, created.ID)
-		assert.ErrorIs(t, err, paymentsapp.ErrPaymentNotCompletable, "err = %v", err)
+		require.NoError(t, h.svc.CompletePayment(h.ctx(), h.owner, h.propID, created.ID))
+		_, err = h.svc.GetPayment(h.ctx(), h.owner, h.propID, created.ID)
+		assert.ErrorIs(t, err, paymentsapp.ErrNotFound, "err = %v", err)
 	})
 
-	t.Run("бессрочное правило — ErrPaymentNotCompletable", func(t *testing.T) {
+	t.Run("бессрочное правило — завершается (#1426)", func(t *testing.T) {
 		t.Parallel()
 		h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 		created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
 		require.NoError(t, err)
 		h.payAllOperations(t, created.ID)
-		err = h.svc.CompletePayment(h.ctx(), h.owner, h.propID, created.ID)
-		assert.ErrorIs(t, err, paymentsapp.ErrPaymentNotCompletable, "err = %v", err)
+		require.NoError(t, h.svc.CompletePayment(h.ctx(), h.owner, h.propID, created.ID))
+		_, err = h.svc.GetPayment(h.ctx(), h.owner, h.propID, created.ID)
+		assert.ErrorIs(t, err, paymentsapp.ErrNotFound, "err = %v", err)
+	})
+
+	t.Run("частично оплаченное правило — плановые сносятся, оплаченные остаются хвостом", func(t *testing.T) {
+		t.Parallel()
+		h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+		created, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, h.createCmd())
+		require.NoError(t, err)
+		// Двое суток тика: у бессрочного ежедневного правила копятся
+		// непогашенные плановые — просрочка включена.
+		h.clock.now = tickBaseTime.AddDate(0, 0, 2)
+		h.runTick()
+		ops, err := h.ops.ListPaymentOperations(h.ctx(), h.owner, h.propID, created.ID,
+			h.listCmd(nil, 50, 0, false))
+		require.NoError(t, err)
+		var paidID uuid.UUID
+		for _, op := range ops {
+			if op.Operation.Status == domain.StatusPlanned {
+				_, err := h.ops.PayOperation(h.ctx(), h.owner, h.propID, op.Operation.ID)
+				require.NoError(t, err)
+				paidID = op.Operation.ID
+				break // Одно оплаченное — и достаточно: остальное остаётся долгом.
+			}
+		}
+		require.NotEqual(t, uuid.Nil, paidID, "fixture: a planned occurrence got paid")
+		allIDs := h.ruleOperationIDs(t, created.ID)
+		require.Greater(t, len(allIDs), 1, "fixture: unpaid planned occurrences remain")
+
+		require.NoError(t, h.svc.CompletePayment(h.ctx(), h.owner, h.propID, created.ID))
+
+		_, err = h.svc.GetPayment(h.ctx(), h.owner, h.propID, created.ID)
+		require.ErrorIs(t, err, paymentsapp.ErrNotFound, "err = %v", err)
+		// Оплаченное — хвост: payment_id NULL, origin 'payment'.
+		var paymentID *string
+		var status, origin string
+		err = h.pool.QueryRow(h.ctx(),
+			`SELECT payment_id::text, status, origin FROM operations WHERE id = $1`, paidID,
+		).Scan(&paymentID, &status, &origin)
+		require.NoError(t, err)
+		assert.Nil(t, paymentID)
+		assert.Equal(t, domain.StatusPaid, domain.OperationStatus(status))
+		assert.Equal(t, domain.OriginPayment, domain.OperationOrigin(origin))
+		// Непогашенные плановые снесены без вопросов — ревизия 2 не спрашивает
+		// о судьбе просрочки (шторка 3249:75723 дословно).
+		for _, opID := range allIDs {
+			if opID == paidID {
+				continue
+			}
+			var n int
+			require.NoError(t, h.pool.QueryRow(h.ctx(),
+				`SELECT COUNT(*) FROM operations WHERE id = $1`, opID).Scan(&n))
+			assert.Equal(t, 0, n, "unpaid planned %s is gone", opID)
+		}
 	})
 
 	t.Run("арендно-управляемое правило — ErrRentManagedPayment", func(t *testing.T) {

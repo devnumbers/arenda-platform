@@ -971,17 +971,17 @@ func (s *PaymentService) ruleCompletionInputs(
 	return lastMaterialized, false, nil
 }
 
-// CompletePayment deletes the rule (тикет #1377, ревизия #1340): completing
-// is removing — the DeletePayment shape with the completion's journals, no
-// stored completed state ever existed. The gates, in order: the rent gate
-// first (the rule's state never outranks it, ADR 0053 — a rent payment
-// completes with its rental, never here), then the open pause (the
-// completion waits for the resume), then the availability gate itself — the
-// computed settlement completeness with the schedule genuinely over
-// (domain.CanBeCompleted). A repeated complete is the privacy 404: the rule
-// is gone. From the conveyor the planned removal is defensive (the gate
-// leaves none), the paid operations stay — the FK sets their payment_id to
-// NULL and origin 'payment' marks the tail (the same outcome as the
+// CompletePayment deletes the rule (тикет #1377, ревизия #1340; ревизия 2 —
+// #1426): completing is removing — the DeletePayment shape with the
+// completion's journals, no stored completed state ever existed. The one
+// gate is the rent gate (the rule's state never outranks it, ADR 0053 — a
+// rent payment completes with its rental, never here); everything else the
+// delete admits, the completion admits too — before endDate, with unpaid
+// planned (overdue included) and through an open pause alike (the owner's
+// word 14.10: «это просто удаление платежа»). A repeated complete is the
+// privacy 404: the rule is gone. All unpaid planned rows go with the rule
+// without questions — the paid operations stay, the FK sets their payment_id
+// to NULL and origin 'payment' marks the tail (the same outcome as the
 // rental's completion #1161 and the plain delete #446). The reader's
 // favorite star falls with the rule (the FK cascade). The verdict states
 // Tick=false explicitly — the rule is gone and its plan was resolved by the
@@ -999,18 +999,9 @@ func (s *PaymentService) CompletePayment(
 			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
-			if _, active := domain.ActivePause(rule.Pauses); active {
-				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
-			}
-			lastMaterialized, hasPlanned, err := s.ruleCompletionInputs(ctx, scope, today, rule)
-			if err != nil {
-				return mutationOutcome[domain.Payment]{}, err
-			}
-			if !domain.CanBeCompleted(rule, today, lastMaterialized, hasPlanned) {
-				return mutationOutcome[domain.Payment]{}, ErrPaymentNotCompletable
-			}
-			// Defensive: the gate above proves no planned rows stand — the
-			// DeletePayment shape removes them anyway, the race-proof order.
+			// The DeletePayment shape: every unpaid planned row (overdue
+			// included) goes with the rule, no questions — the paid
+			// operations stay as the ownerless tail.
 			if err := stores.payments.DeletePlannedFrom(ctx, rule.ID, today); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}

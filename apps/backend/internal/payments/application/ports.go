@@ -54,13 +54,6 @@ var (
 	// facts (pay) and the favorite star stay open — they are not the
 	// rental's terms.
 	ErrRentManagedPayment = errors.New("payments: payment is managed by a rental")
-	// ErrPaymentNotCompletable marks a complete attempt on a rule that does
-	// not pass the availability gate (тикет #1340): the computed settlement
-	// completeness has not been reached, or the rule's end date is still
-	// ahead (early exhaustion / prepayment) — «Завершить» waits. A completed
-	// rule is gone (тикет #1377: completing deletes), so a repeated complete
-	// never reaches this gate — the load answers ErrNotFound first.
-	ErrPaymentNotCompletable = errors.New("payments: payment is not completable")
 )
 
 // PropertyRef is the payments view of the property a use case targets: the
