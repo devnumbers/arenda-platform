@@ -3,6 +3,7 @@ import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { LiveValue } from '@/shared/ui/live-value';
 
 /**
  * Карточка платежа (компонент Figma «Payment Card Button», 705:10625 —
@@ -57,8 +58,11 @@ export function PaymentCardButton({
     <div
       {...activatorProps}
       className={cn(
-        'flex w-[168.5px] shrink-0 cursor-pointer flex-col rounded-card bg-surface-muted p-4 outline-none',
-        'transition-all focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        /* h-[137px] — паритет скелетона (#605): худший случай контента
+         * (двухстрочный заголовок 13/30) = 16+44+12+30+4+15+16; текстовый
+         * блок прижат к дну (mt-auto) — плитки секции ровным рядом. */
+        'flex h-[137px] w-[168.5px] shrink-0 cursor-pointer flex-col rounded-card bg-surface-muted p-4 outline-none',
+        'transition-opacity focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         'hover:opacity-80 active:opacity-80',
         onSelect === undefined && 'cursor-default',
         disabled && 'pointer-events-none opacity-50',
@@ -70,9 +74,13 @@ export function PaymentCardButton({
           {leading !== undefined && <span className="shrink-0">{leading}</span>}
           {amountKopecks !== undefined && (
             <span className="flex min-w-0 flex-1 flex-col justify-center gap-1 text-xs font-medium">
-              <span className={cn('truncate', danger ? 'text-danger' : 'text-content')}>
-                {formatMoneyKopecks(amountKopecks)}
-              </span>
+              {/* Канон B (flash): плотная плитка — смена суммы без
+               * кроссфейда, только вспышка; valueKey — копейки. */}
+              <LiveValue valueKey={amountKopecks} mode="flash" className="min-w-0 max-w-full">
+                <span className={cn('truncate', danger ? 'text-danger' : 'text-content')}>
+                  {formatMoneyKopecks(amountKopecks)}
+                </span>
+              </LiveValue>
               {description !== undefined && (
                 <span
                   className={cn(
@@ -91,7 +99,7 @@ export function PaymentCardButton({
           )}
         </span>
       </span>
-      <span className="flex w-full flex-col gap-1 text-xs font-medium">
+      <span className="mt-auto flex w-full flex-col gap-1 text-xs font-medium">
         <span className={cn('line-clamp-2', accentTitle ? 'text-primary' : 'text-content')}>
           {title}
         </span>

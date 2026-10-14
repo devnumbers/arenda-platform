@@ -148,9 +148,10 @@ export function ModalContent({
       <DialogPortal>
         <DialogOverlay
           className={cn(
-            'fixed inset-0 z-50 bg-overlay',
-            'data-[state=open]:animate-[modal-overlay-in_350ms_var(--dl-ease)]',
-            'data-[state=closed]:animate-[modal-overlay-out_250ms_var(--dl-ease)]',
+            /* modal-surface — класс-хук reduced-motion-блока globals.css. */
+            'modal-surface fixed inset-0 z-50 bg-overlay',
+            'data-[state=open]:animate-[modal-overlay-in_var(--motion-modal-overlay-in)_var(--dl-ease)]',
+            'data-[state=closed]:animate-[modal-overlay-out_var(--motion-modal-overlay-out)_var(--dl-ease)]',
           )}
         />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
@@ -162,9 +163,10 @@ export function ModalContent({
               // потребителя — последним (tailwind-merge отдаёт приоритет
               // последнему); «канва последней» верна только для мобильного
               // Drawer-блока ниже.
-              'relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
-              'data-[state=open]:animate-[modal-card-in_400ms_var(--dl-ease)]',
-              'data-[state=closed]:animate-[modal-card-out_220ms_var(--dl-ease)]',
+              /* modal-surface — класс-хук reduced-motion-блока globals.css. */
+              'modal-surface relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
+              'data-[state=open]:animate-[modal-card-in_var(--motion-modal-card-in)_var(--dl-ease)]',
+              'data-[state=closed]:animate-[modal-card-out_var(--motion-modal-card-out)_var(--dl-ease)]',
               className,
             )}
           >
@@ -179,9 +181,10 @@ export function ModalContent({
     <Drawer.Portal>
       <Drawer.Overlay
         className={cn(
-          'fixed inset-0 z-50 bg-overlay',
-          'data-[state=open]:animate-[modal-overlay-in_350ms_var(--dl-ease)]',
-          'data-[state=closed]:animate-[modal-overlay-out_250ms_var(--dl-ease)]',
+          // modal-surface — класс-хук reduced-motion-блока globals.css.
+          'modal-surface fixed inset-0 z-50 bg-overlay',
+          'data-[state=open]:animate-[modal-overlay-in_var(--motion-modal-overlay-in)_var(--dl-ease)]',
+          'data-[state=closed]:animate-[modal-overlay-out_var(--motion-modal-overlay-out)_var(--dl-ease)]',
         )}
       />
       <Drawer.Content
@@ -194,7 +197,9 @@ export function ModalContent({
           className,
           // Вход/выход анимирует сам vaul (slideFromBottom 0.5s на той же
           // кривой cubic-bezier(0.32,0.72,0,1)) — скоординировано с drag.
-          'fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-white font-sans outline-none',
+          // modal-surface — класс-хук reduced-motion-блока globals.css
+          // (укорачивает и vaul-переход шита до 150мс, как у «Еще»).
+          'modal-surface fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-white font-sans outline-none',
         )}
       >
         {body}

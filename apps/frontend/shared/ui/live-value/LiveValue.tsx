@@ -22,6 +22,11 @@ import {
 } from './live-value-machine';
 import styles from './LiveValue.module.css';
 
+/** WAAPI-зеркало кривой дома --dl-ease (tokens.css): Web Animations API не
+ * читает var(), поэтому дубликат вынужденный — держится байт-в-байт за
+ * токеном; смена кривой дома меняет и эту константу (#1349). */
+const DL_EASE_WAAPI = 'cubic-bezier(0.32, 0.72, 0, 1)';
+
 export type LiveValueProps = {
   /** Сменяемый дискриминатор значения (роль, статус, метка): сравнение
    * prev/next запускает канон. Дети — визуал ТЕКУЩЕГО значения. */
@@ -296,7 +301,7 @@ export function LiveValue({
     heightAnimationRef.current?.cancel();
     const timing: KeyframeAnimationOptions = {
       duration: timingsRef.current.blurInMs,
-      easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+      easing: DL_EASE_WAAPI,
     };
     widthAnimationRef.current = swap.animate(
       [{ width: `${startWidth}px` }, { width: `${targetWidth}px` }],

@@ -370,6 +370,20 @@
     }
 }
 
+/* Однократное проявление одиночного элемента (#1349): кнопка «+» хаба
+   после резолва данных, иллюстрации плейсхолдеров. Fade-семейство канона
+   §8 — reduced-motion не гейтится; целые поверхности по-прежнему не
+   анимируются. Использование: animate-[dl-fade-in_250ms_var(--dl-ease)_both]. */
+@keyframes dl-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
 /* Сворачиваемая секция дизайн-слоя (#499): раскрытие/скрытие по высоте
    контента — переменную ведёт Radix Collapsible. */
 @keyframes collapsible-down {
@@ -555,7 +569,12 @@
     .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'],
     .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'],
     .more-sheet-backdrop[data-state='open'],
-    .more-sheet-backdrop[data-state='closed'] {
+    .more-sheet-backdrop[data-state='closed'],
+    /* Модалки design-слоя (класс-хук .modal-surface): keyframes-въезды
+       карточки/оверлея и vaul-переход мобильного шита укорачиваются как у
+       «Еще» — канон §8 «укорачиваем, не отключаем» (#1349). */
+    .modal-surface[data-state='open'],
+    .modal-surface[data-state='closed'] {
         animation-duration: 150ms;
         transition-duration: 150ms;
     }
@@ -576,6 +595,11 @@
 html {
     line-height: 1.15; /* 1 */
     -webkit-text-size-adjust: 100%; /* 2 */
+    /* Серая вспышка тапа (iOS Safari/Android Chrome) гасит собственный
+       :active-фидбек компонентов (active:opacity-80) — сброс глобальный
+       (#1349, mobile-native база). Контент-текст вне контролов не тронут:
+       user-select нигде не запрещён. */
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* Sections

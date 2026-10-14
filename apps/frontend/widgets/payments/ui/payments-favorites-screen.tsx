@@ -3,7 +3,8 @@
 import type { JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Reorder, useDragControls, useReducedMotion } from "framer-motion";
+import { Reorder, useDragControls } from "framer-motion";
+import { useReducedMotion } from "@/shared/lib/hooks/useReducedMotion";
 import {
   ArrowLeft,
   Cancel,
@@ -472,7 +473,7 @@ function FavoritesEditList({
 }): JSX.Element {
   const [grabbedId, setGrabbedId] = useState<string | null>(null);
   const [announce, setAnnounce] = useState("");
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = useReducedMotion();
 
   const announceDrag = (
     kind: FavoriteDragAnnouncementKind,
@@ -659,6 +660,10 @@ function FavoritesEditRow({
       transition={{
         duration,
         ease: EDIT_ROW_EASE,
+        // Layout-анимации соседей (drag-сортировка, клавиатурные стрелки) —
+        // спринг с bounce 0 (критическое демпфирование): несёт скорость при
+        // ретаргете, соседи следуют за пальцем, а не доигрывают твин.
+        layout: { type: "spring", duration, bounce: 0 },
       }}
       data-testid={`favorites-edit-row-${payment.id}`}
       // Плашка правки не выделяет текст и не зовёт системное меню по

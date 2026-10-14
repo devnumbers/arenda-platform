@@ -150,12 +150,15 @@ export function PaymentsGlobalScreen(): JSX.Element {
 
   // Два экземпляра узла: у ряда заголовка свой testid — слоты TopNav
   // рендерят свой узел в трёх местах (крыло, инлайн-компакт, мобайл-клон),
-  // общий testid давал бы строгую неоднозначность в e2e.
+  // общий testid давал бы строгую неоднозначность в e2e. Fade-in 250мс:
+  // кнопка приезжает после резолва справочника — короткий фейд закрывает
+  // шов телепорта (#1349, dl-fade-in в globals.css; fade — канон §8).
   const addButton = (
     <IconButton
       icon={<Add />}
       label="Создать платёж"
       data-testid="payments-create"
+      className="animate-[dl-fade-in_250ms_var(--dl-ease)_both]"
       onClick={openAdd}
     />
   );
@@ -164,6 +167,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
       icon={<Add />}
       label="Создать платёж"
       data-testid="payments-create-compact"
+      className="animate-[dl-fade-in_250ms_var(--dl-ease)_both]"
       onClick={openAdd}
     />
   );
@@ -390,12 +394,13 @@ function PaymentsGlobalSection({
   );
 }
 
-/** Лента секции хаба: канонный SnapRail (Embla dragFree: 'snap' #1349,
- * механика — DESIGN.md §8 «Drag горизонтальных snap-лент») с bleed на
- * мобайл-ярусе (≤560): `-mx-6` гасит собственный `px-6` обёртки хаба
+/** Лента секции хаба: канонный SnapRail (нативный тач + drag-прокси мыши
+ * #1349, механика — DESIGN.md §8 «Drag горизонтальных snap-лент») с bleed
+ * на мобайл-ярусе (≤560): `-mx-6` гасит собственный `px-6` обёртки хаба
  * (легитимный inner -mx против контейнерного паддинга, «Column width
- * rule»), `px-6` держит карточки на визуальной линии 24 — контейнер Embla
- * сидит внутри паддинга, поэтому линия 24 и есть линия снапа. */
+ * rule»), `px-6` держит карточки на визуальной линии 24, а
+ * `scroll-padding-inline: 24px` делает линию 24 линией снапа нативного
+ * скролла и drag-прокси. */
 function SectionRail({
   testId,
   children,
@@ -404,7 +409,10 @@ function SectionRail({
   readonly children: ReactNode;
 }): JSX.Element {
   return (
-    <SnapRail testId={testId} className="max-tablet:-mx-6 max-tablet:px-6">
+    <SnapRail
+      testId={testId}
+      className="max-tablet:-mx-6 max-tablet:px-6 max-tablet:[scroll-padding-inline:24px]"
+    >
       {children}
     </SnapRail>
   );
@@ -680,12 +688,14 @@ function PaymentsGlobalPlaceholder({
       <p className="min-w-0 flex-1 text-base leading-[18px] text-content-secondary">
         {children}
       </p>
+      {/* Fade-in 350мс (dl-fade-in): иллюстрация проявляется вместе с
+       * секцией при первом показе — разом всплывающие 3D-картинки (#1349). */}
       <Image
         src={image}
         alt=""
         width={64}
         height={64}
-        className="h-16 w-16 shrink-0"
+        className="h-16 w-16 shrink-0 animate-[dl-fade-in_350ms_var(--dl-ease)_both]"
       />
     </div>
   );
@@ -720,15 +730,17 @@ function PaymentsGlobalEmpty({
 /** Секция-заглушка хаба «Платежи» (#605): каркас PaymentsGlobalSection —
  * заголовок и лента плиток-карточек на время загрузки. Ряд плиток несёт
  * тот же bleed ≤560, что и живая лента (SectionRail), — на мобайл-ярусе
- * данные занимают место скелетона без сдвига в край (#1349). Экспорт для
- * route-loading (#609). */
+ * данные занимают место скелетона без сдвига в край (#1349). Плитка 137px —
+ * точная высота живой PaymentCardButton (паритет #605: данные занимают
+ * место скелетона без сдвига; 16+44+12+30+4+15+16, двухстрочный заголовок).
+ * Экспорт для route-loading (#609). */
 export function PaymentsGlobalSectionSkeleton(): JSX.Element {
   return (
     <section className="flex flex-col gap-4" aria-hidden>
       <Skeleton className="h-6 w-40" />
       <div className="flex gap-2 max-tablet:-mx-6 max-tablet:px-6">
-        <Skeleton className="h-[132px] w-[168.5px] shrink-0" />
-        <Skeleton className="h-[132px] w-[168.5px] shrink-0" />
+        <Skeleton className="h-[137px] w-[168.5px] shrink-0" />
+        <Skeleton className="h-[137px] w-[168.5px] shrink-0" />
       </div>
     </section>
   );

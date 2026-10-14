@@ -126,9 +126,11 @@ describe('live-value machine — канон C: dim → hold → кроссфей
 
   it('кривая WAAPI-движений размера — токен --dl-ease посимвольно', () => {
     // Дрейф-страж: WAAPI не принимает var() — кривая --dl-ease продублирована
-    // в LiveValue.tsx литералом для движений размера; расхождение токена и
-    // литерала разъехало бы размер и резкость, которые §8 требует доезжать
-    // вместе. Сравниваем значение токена и литерал посимвольно.
+    // в LiveValue.tsx константой DL_EASE_WAAPI для движений размера
+    // (#1349: единственная копия, без рассыпанных литералов); расхождение
+    // токена и константы разъехало бы размер и резкость, которые §8
+    // требует доезжать вместе. Сравниваем значение токена и константу
+    // посимвольно и проверяем, что easing в файле только через константу.
     const tokensCss = readFileSync(
       fileURLToPath(new URL('../../styles/tokens.css', import.meta.url)),
       'utf8',
@@ -141,9 +143,14 @@ describe('live-value machine — канон C: dim → hold → кроссфей
       fileURLToPath(new URL('./LiveValue.tsx', import.meta.url)),
       'utf8',
     );
+    const constantValues = [...source.matchAll(/const DL_EASE_WAAPI = '([^']+)'/g)].map(
+      (m) => m[1],
+    );
+    expect(constantValues, 'константа DL_EASE_WAAPI в LiveValue.tsx').toHaveLength(1);
+    expect(constantValues[0]).toBe(easeValues[0]);
+    // Литералов easing вне константы быть не должно — иначе дрейф мимо стража.
     const easingValues = [...source.matchAll(/easing:\s*'([^']+)'/g)].map((m) => m[1]);
-    expect(easingValues, 'литерал easing движений размера в LiveValue.tsx').toHaveLength(1);
-    expect(easingValues[0]).toBe(easeValues[0]);
+    expect(easingValues, 'easing задаётся только константой DL_EASE_WAAPI').toHaveLength(0);
   });
 
   it('reduced-motion укорачивает hold и чистку до ~150мс-порядка', () => {
