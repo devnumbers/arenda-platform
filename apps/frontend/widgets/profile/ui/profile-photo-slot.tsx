@@ -15,17 +15,18 @@ import { ProfileAvatar } from './profile-avatar';
  * канон правки 1299:51572/73; ADR 0065): круг-плейсхолдер с BoldUser либо
  * фото. Экран — автосейв-форма, изменения применяются сразу (решение
  * владельца: «при изменении фото оно сразу должно меняться»): пикер
- * запускает мутацию немедленно, stage живёт только на время полёта,
- * показывая data-URL превью; сбой возвращает круг к серверному состоянию
- * с тостом (ретрай — повторный выбор). Круг — настоящая кнопка
- * (aria-label, клавиатура): без фото открывает пикер, с фото — замену.
- * Бейдж-корзина — сосед круга в DOM, не потомок: клик по нему открывает
- * ConfirmDialog (однотапный бейдж не стирает молча), подтверждение —
- * сразу DELETE: диалог держит pending, пока мутация летит, и закрывается
- * по её факту (канон ConfirmDialog.pending), описание избыточно —
- * заголовок и danger-«Удалить» говорят всё. На время мутаций (busy) круг
- * и бейдж глушатся, ссылка прячется с сохранением слота — ноль layout
- * shift; бейдж гаснет по канону дизейблов.
+ * запускает мутацию немедленно, stage держит data-URL превью; успех гасит
+ * stage, провал ДЕРЖИТ файл (план 037) — тап по кругу повторяет ту же
+ * загрузку, «Повторить» в тосте — то же действие, ссылка «Обновить фото»
+ * остаётся пикером (замена файла). Круг — настоящая кнопка (aria-label,
+ * клавиатура): без фото открывает пикер, с фото — замену, с провалом —
+ * повтор. Бейдж-корзина — сосед круга в DOM, не потомок: клик по нему
+ * открывает ConfirmDialog (однотапный бейдж не стирает молча),
+ * подтверждение — сразу DELETE: диалог держит pending, пока мутация
+ * летит, и закрывается по её факту (канон ConfirmDialog.pending). На
+ * время мутаций (busy) круг и бейдж глушатся, ссылка прячется с
+ * сохранением слота — ноль layout shift; бейдж гаснет по канону
+ * дизейблов.
  */
 
 const PHOTO_INPUT_ACCEPT = 'image/jpeg,image/png,image/webp';
@@ -38,7 +39,8 @@ const PHOTO_BUTTON_CLASS =
 export type ProfilePhotoSlotProps = {
   /** same-origin стриминговый путь выдачи (ADR 0065), null — фото нет. */
   readonly photoUrl?: string | null;
-  /** Летящая загрузка: превью выбранного файла в круге (см. выше). */
+  /** Загрузка в круге: превью выбранного файла; failed — прошлый провал
+   * (тап по кругу = повтор, см. onRetry). */
   readonly stage: MePhotoStage | null;
   /** Фото-мутация в полёте — управление слота глушится, диалог держит
    * pending. */
@@ -49,6 +51,8 @@ export type ProfilePhotoSlotProps = {
   readonly onFileChosen: (file: File) => void;
   /** Удаление подтверждено — экран сразу вызывает DELETE. */
   readonly onRemove: () => void;
+  /** Повтор провалившейся загрузки тем же файлом (план 037). */
+  readonly onRetry: () => void;
 };
 
 export function ProfilePhotoSlot({
@@ -58,6 +62,7 @@ export function ProfilePhotoSlot({
   progress = null,
   onFileChosen,
   onRemove,
+  onRetry,
 }: ProfilePhotoSlotProps): JSX.Element {
   const photoBuster = useMePhotoBuster();
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
@@ -76,6 +81,8 @@ export function ProfilePhotoSlot({
 
   const displayUrl = mePhotoDisplay(photoUrl ?? null, photoBuster, stage);
   const hasPhoto = displayUrl !== null;
+  // Провал прошлой попытки (план 037): круг зовёт повтор, не пикер.
+  const retrying = stage?.failed === true;
 
   const openPicker = (): void => {
     fileInputRef.current?.click();
@@ -100,10 +107,12 @@ export function ProfilePhotoSlot({
   const avatarButton = (
     <button
       type="button"
-      aria-label={hasPhoto ? 'Обновить фото' : 'Добавить фото'}
+      aria-label={
+        retrying ? 'Повторить загрузку фото' : hasPhoto ? 'Обновить фото' : 'Добавить фото'
+      }
       disabled={busy}
       className={PHOTO_BUTTON_CLASS}
-      onClick={openPicker}
+      onClick={retrying ? onRetry : openPicker}
     >
       <ProfileAvatar photoUrl={displayUrl} />
     </button>

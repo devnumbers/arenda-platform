@@ -28,4 +28,10 @@ describe('mePhotoDisplay — правило показа с летящей му�
   it('без мутации и без серверного фото — глиф-плейсхолдер', () => {
     expect(mePhotoDisplay(null, 0, null)).toBeNull();
   });
+
+  it('провал прошлой попытки (failed) дисплей не меняет — превью держится (план 037: файл переживает провал)', () => {
+    const failed: MePhotoStage = { ...uploading, failed: true };
+    expect(mePhotoDisplay(serverUrl, 3, failed)).toBe('data:image/png;base64,preview-1');
+    expect(mePhotoDisplay(null, 0, failed)).toBe('data:image/png;base64,preview-1');
+  });
 });
