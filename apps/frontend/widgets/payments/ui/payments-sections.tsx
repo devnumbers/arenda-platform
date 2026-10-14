@@ -153,7 +153,11 @@ export function PaymentObjectAvatar({
  * секции, где виден весь список.
  */
 
-const headingClass = 'text-xl font-semibold leading-6 text-content';
+// Заголовок секции — 20/24. text-left явный: заголовки-стрелки живут
+// внутри <button>, а UA-стиль кнопки центрирует текст — на узком экране
+// двухстрочный заголовок («Просроченные операции») рендерился по центру
+// карточки.
+const headingClass = 'text-left text-xl font-semibold leading-6 text-content';
 /** Пояснение секции (Mobile/Text/M/400, 1043:62920): 14/16, серый. */
 const hintClass = 'text-sm leading-4 text-content-secondary';
 
