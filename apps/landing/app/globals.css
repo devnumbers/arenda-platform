@@ -181,6 +181,20 @@
      прозрачный tap-highlight возвращает нажатию задуманный отклик. */
   html {
     -webkit-tap-highlight-color: transparent;
+    /* Ландшафтный Safari не вправе раздувать шрифты (baseline скилла). */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Тап без задержки двойного нажатия (iOS Safari добивает часть
+     элементов 300мс) и без выделения подписи контрола долгим нажатием.
+     user-select только на контролах: текст контента копируется. */
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   /* Лендинг только светлый: без явного color-scheme тёмная ОС рендерит

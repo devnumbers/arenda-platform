@@ -142,7 +142,7 @@ export function ModalContent({
       {/* Канва модалок не привязана к ярусам хрома: карточка от 768
        * (useIsDesktop) — литерал, не токен tablet: (тот с 481). */}
       <SheetDragHandle className="min-[768px]:hidden" />
-      <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <div className="flex flex-col gap-4 overflow-y-auto overscroll-y-contain p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {titleBlock}
         {description !== undefined && (
           <DialogDescription className={cn("text-sm text-content-secondary", descriptionClassName)}>

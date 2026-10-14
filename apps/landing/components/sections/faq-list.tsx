@@ -36,7 +36,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
                       type="button"
                       aria-expanded={expanded}
                       onClick={() => setOpen(expanded ? null : key)}
-                      className="flex w-full cursor-pointer items-center gap-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="-mx-2 flex w-full cursor-pointer select-none items-center gap-4 rounded-xl px-2 text-left outline-none transition-colors duration-200 hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary/40 active:bg-surface-active"
                     >
                       <span className="min-h-6 flex-1 text-r text-ink">
                         {item.question}

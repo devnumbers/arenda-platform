@@ -202,8 +202,17 @@
   transition: background-color 200ms ease;
 }
 
-.plate:hover {
-  background: #e9eaec;
+/* Hover — только для мыши: на таче :hover залипает серым до чужого тапа
+   (практики mobile-native; hover: Tailwind здесь недоступен — CSS-модуль).
+   Нажатию отвечает :active — tap-highlight глобально прозрачен. */
+@media (hover: hover) and (pointer: fine) {
+  .plate:hover {
+    background: #e9eaec;
+  }
+}
+
+.plate:active {
+  background: #dfe0e2;
 }
 
 .plateIcon {
@@ -308,6 +317,13 @@
   object-fit: cover;
   border-radius: inherit;
   pointer-events: none;
+}
+
+/* Нажатие по карточке-кнопке: лёгкое притухание вместо вспышки тапа
+   (тач; при drag-захвате :active уходит на .scroller — на движение
+   не влияет). */
+.slide:active {
+  opacity: 0.92;
 }
 
 /* Стеклянная карточка характеристик */
