@@ -10,6 +10,7 @@ import {
 describe('buildRentalCompleteCommand', () => {
   const base: RentalCompleteDraft = {
     completedDate: '2029-01-10',
+    hasDeposit: true,
     depositRaw: '56000',
     comment: '',
   };
@@ -49,6 +50,32 @@ describe('buildRentalCompleteCommand', () => {
   it('с нечитаемой суммой команды нет', () => {
     expect(buildRentalCompleteCommand({ ...base, depositRaw: '' })).toBeUndefined();
     expect(buildRentalCompleteCommand({ ...base, depositRaw: 'abc' })).toBeUndefined();
+  });
+
+  it('без залога: пустой комментарий — команда без depositReturn, записи нет (канон NULL)', () => {
+    expect(
+      buildRentalCompleteCommand({ ...base, hasDeposit: false, depositRaw: '', comment: '   ' }),
+    ).toEqual({ completedDate: '2029-01-10' });
+  });
+
+  it('без залога: комментарий — единственная форма сохранить текст, возврат с нулём (ресерч #1384)', () => {
+    expect(
+      buildRentalCompleteCommand({
+        ...base,
+        hasDeposit: false,
+        depositRaw: '',
+        comment: '  Ключи переданы  ',
+      }),
+    ).toEqual({
+      completedDate: '2029-01-10',
+      depositReturn: { amountKopecks: 0, comment: 'Ключи переданы' },
+    });
+  });
+
+  it('без залога: сырая сумма из черновика игнорируется — поля на шаге нет', () => {
+    expect(
+      buildRentalCompleteCommand({ ...base, hasDeposit: false, depositRaw: '56000' }),
+    ).toEqual({ completedDate: '2029-01-10' });
   });
 });
 

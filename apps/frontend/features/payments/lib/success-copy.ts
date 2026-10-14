@@ -1,9 +1,9 @@
 import {
-  formatDayMonth,
   recurrenceLabel,
   type IsoDate,
   type Recurrence,
 } from '@/entities/payment';
+import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import type { PaymentDraftType } from './use-payment-wizard-draft';
 
 /**
@@ -25,6 +25,9 @@ export type SuccessScreenCopyInput = {
   readonly recurrence: Recurrence;
   /** null — вхождений не будет (окончание раньше даты заведения). */
   readonly firstOccurrence: IsoDate | null;
+  /** Клиентское «сегодня» (ADR 0061 §7): года правила ещё нет, а вхождение
+   * бывает в следующем году — платёж, заведённый в декабре на январь. */
+  readonly today: IsoDate;
 };
 
 export type SuccessScreenCopy = {
@@ -51,6 +54,6 @@ export function successScreenCopy(input: SuccessScreenCopyInput): SuccessScreenC
     description:
       input.firstOccurrence === null
         ? undefined
-        : `${lead} ${formatDayMonth(input.firstOccurrence)}, далее ${tail}`,
+        : `${lead} ${formatDayMonthWithYear(input.firstOccurrence, input.today)}, далее ${tail}`,
   };
 }

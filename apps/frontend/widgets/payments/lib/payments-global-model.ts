@@ -6,7 +6,7 @@
  * «На оплату» в срезе нет).
  */
 
-import { formatDayMonth, formatOverdueDays } from '@/shared/lib/date-format';
+import { formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
 import { pluralize } from '@/shared/lib/pluralize';
 import type { GlobalPayment, GlobalPaymentObject } from '@/entities/payment';
 import { globalOverdueList } from './overdue-global-model';
@@ -71,9 +71,13 @@ export function overdueOperationsCountLabel(count: number): string {
 }
 
 /** Дата-«Ближайший» (699:9446): просто дата графика, без статуса; у правила
- * без следующего вхождения строки нет (879:17555, Show Description=false). */
+ * без следующего вхождения строки нет (879:17555, Show Description=false).
+ * Год — вне текущего (правило владельца 13.10): today — серверное поле
+ * контракта (ADR 0048), «Ближайший» бывает и в январе. */
 export function nearestDateLine(item: GlobalPayment): string | undefined {
-  return item.nearestDate === null ? undefined : formatDayMonth(item.nearestDate);
+  return item.nearestDate === null
+    ? undefined
+    : formatDayMonthWithYear(item.nearestDate, item.today);
 }
 
 /** Срок просрочки под суммой: возраст старейшего вхождения — «2 дня». */

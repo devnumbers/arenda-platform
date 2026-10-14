@@ -61,13 +61,16 @@ export {
   rentalOverdueLine,
   rentalPaidTitle,
   rentalProgressPercent,
-  rentalRemainingLine,
   rentalTeaserRows,
   rentalTermsRows,
   rentalTenantTitle,
   rentAmountPerMonth,
 } from './lib/rental-view';
 export type { RentalTermsRow } from './lib/rental-view';
+// Строка остатка — общая для детализации, блока объекта и бейджа списка
+// (#1387): канон живёт в shared, бейджу features/properties он нужен так же,
+// как строкам аренды (прецедент months-word #851).
+export { rentalRemainingLine } from '@/shared/lib/rental-remaining-line';
 export {
   completedRentalMonths,
   completedRentalsOf,

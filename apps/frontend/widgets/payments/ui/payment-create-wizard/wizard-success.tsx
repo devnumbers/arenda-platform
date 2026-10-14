@@ -11,6 +11,7 @@ import {
 import { Button, StatusIcon, StickyBottomBar } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { successScreenCopy } from '@/features/payments';
 import type { PaymentDraftType } from '@/features/payments';
 import { firstOccurrencePreview } from '../../lib/first-occurrence';
@@ -55,6 +56,9 @@ export function WizardSuccess({
       created.since,
       created.endDate,
     ),
+    // Правила ещё нет, а вхождение бывает в следующем году — «сегодня»
+    // клиентское (ADR 0061 §7).
+    today: dateToIsoLocal(new Date()),
   });
   // Знак — отображение направления (канон операций: «-1 000 ₽»/«+1 000 ₽»);
   // сумма хранится положительной. Формат — только канонический форматтер.

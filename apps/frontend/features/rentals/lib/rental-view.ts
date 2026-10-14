@@ -1,6 +1,6 @@
 import type { IsoDate } from '@/shared/lib/calendar';
-import { fullMonthsBetween } from '@/shared/lib/calendar';
-import { formatDayMonth, formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
+import { daysUntil, fullMonthsBetween } from '@/shared/lib/calendar';
+import { formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
 import { formatMoneyKopecks, ratioToPercent } from '@/shared/lib/format-money';
 import { monthsWord } from '@/shared/lib/months-word';
 import { pluralize } from '@/shared/lib/pluralize';
@@ -71,32 +71,21 @@ export function rentalOverdueLine(overdueMonths: number): string {
   return `${verb} ${overdueMonths} ${monthsWord(overdueMonths)}`;
 }
 
-/** Строка «Осталось 23 месяца аренды»; у бессрочной остатка нет — строки нет.
- * Глагол согласуется числом: «Остался 21 месяц», но «Осталось 11 месяцев». */
-export function rentalRemainingLine(monthsRemaining: number | null): string | undefined {
-  if (monthsRemaining === null) {
-    return undefined;
-  }
-  const remained = pluralize(monthsRemaining, 'Остался', 'Осталось', 'Осталось');
-  return `${remained} ${monthsRemaining} ${monthsWord(monthsRemaining)} аренды`;
-}
-
 /** Карточка прогресса на детализации видима, пока ей есть что жить: со
  * следующим платежом — строка дней и бар (1232:61259), без него — строка
- * остатка или прошедших месяцев, просрочка — красная строка (#817). У
- * срочной в день планового окончания и в «Ожидает действия» содержимого
- * нет — карточка прячется целиком: пустого контейнера макеты не рисуют
- * (F1, решение владельца 23.09); задолженность появляется — содержимое
- * снова есть. */
-export function hasProgressCard(
-  nextPayment: RentalNextPayment | null,
-  progress: RentalProgress,
-): boolean {
+ * остатка или прошедших месяцев, просрочка — красная строка (#817). Строка
+ * остатка у срочной живёт, пока план не наступил: месяцы, а в последние
+ * недели — дни (#1387). В сам день планового окончания содержимого нет —
+ * карточка прячется целиком: пустого контейнера макеты не рисуют (F1,
+ * решение владельца 23.09; «Заканчивается сегодня» этого дня живёт в футере
+ * блока объекта и бейдже); задолженность появляется — содержимое снова
+ * есть. */
+export function hasProgressCard(rental: Rental): boolean {
   return (
-    nextPayment !== null ||
-    progress.overdueMonths !== null ||
-    progress.totalMonths === null ||
-    (progress.monthsRemaining ?? 0) > 0
+    rental.rentPayment.nextPayment !== null ||
+    rental.progress.overdueMonths !== null ||
+    rental.progress.totalMonths === null ||
+    (rental.plannedEndDate !== null && daysUntil(rental.today, rental.plannedEndDate) > 0)
   );
 }
 
@@ -124,12 +113,13 @@ function optionalMoney(kopecks: number | null): string {
 }
 
 /** Три строки карточки «Условия аренды» на детализации (Figma 1232:61522):
- * плата, день оплаты, начало — без года (макет 1232:61524). */
+ * плата, день оплаты, начало — год вне текущего (правило владельца 13.10;
+ * макет 1232:61524 без года старше правила — переиграно #1385). */
 export function rentalTeaserRows(rental: Rental): ReadonlyArray<RentalTermsRow> {
   return [
     { label: 'Арендная плата', value: rentAmountPerMonth(rental.rentPayment.amountKopecks) },
     { label: 'День оплаты', value: paymentDayLabel(rental.rentPayment.paymentDay) },
-    { label: 'Начало аренды', value: formatDayMonth(rental.startDate) },
+    { label: 'Начало аренды', value: formatDayMonthWithYear(rental.startDate, rental.today) },
   ];
 }
 

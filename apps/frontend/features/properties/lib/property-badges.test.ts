@@ -3,7 +3,7 @@ import type { Property } from '@/entities/property';
 import {
   hasPropertyAttentionDot,
   propertyBadges,
-  rentalMonthsLeftLabel,
+  rentalRemainingLabel,
 } from './property-badges';
 
 const TODAY = '2026-09-10';
@@ -21,19 +21,23 @@ function makeProperty(overrides: Partial<Property> & { id: string }): Property {
   };
 }
 
-describe('rentalMonthsLeftLabel', () => {
+describe('rentalRemainingLabel', () => {
   it('полные месяцы до планового окончания', () => {
-    expect(rentalMonthsLeftLabel('2026-09-10', '2027-09-10')).toBe('Осталось 12 месяцев аренды');
+    expect(rentalRemainingLabel('2026-09-10', '2027-09-10')).toBe('Осталось 12 месяцев аренды');
   });
 
   it('склоняет месяцы: 1 месяц, 2 месяца, 5 месяцев', () => {
-    expect(rentalMonthsLeftLabel('2026-09-10', '2026-10-10')).toBe('Остался 1 месяц аренды');
-    expect(rentalMonthsLeftLabel('2026-09-10', '2026-11-10')).toBe('Осталось 2 месяца аренды');
-    expect(rentalMonthsLeftLabel('2026-09-10', '2027-02-10')).toBe('Осталось 5 месяцев аренды');
+    expect(rentalRemainingLabel('2026-09-10', '2026-10-10')).toBe('Остался 1 месяц аренды');
+    expect(rentalRemainingLabel('2026-09-10', '2026-11-10')).toBe('Осталось 2 месяца аренды');
+    expect(rentalRemainingLabel('2026-09-10', '2027-02-10')).toBe('Осталось 5 месяцев аренды');
   });
 
-  it('N=0 — «Осталось меньше месяца» (резолюция #584)', () => {
-    expect(rentalMonthsLeftLabel('2026-09-10', '2026-09-25')).toBe('Осталось меньше месяца');
+  it('N=0 — календарные дни (#1387; до этого — «Осталось меньше месяца», резолюция #584)', () => {
+    expect(rentalRemainingLabel('2026-09-10', '2026-09-25')).toBe('Осталось 15 дней аренды');
+  });
+
+  it('план сегодня — «Заканчивается сегодня»', () => {
+    expect(rentalRemainingLabel('2026-09-10', '2026-09-10')).toBe('Заканчивается сегодня');
   });
 });
 
@@ -58,6 +62,16 @@ describe('propertyBadges', () => {
     ]);
   });
 
+  it('активная с остатком меньше месяца — бейдж в днях (#1387)', () => {
+    const property = makeProperty({
+      id: '17',
+      occupancy: { status: 'active', start_date: '2025-09-01', planned_end_date: '2026-09-25' },
+    });
+    expect(propertyBadges(property, TODAY)).toEqual([
+      { key: 'rental-months', label: 'Осталось 15 дней аренды', tone: 'accent' },
+    ]);
+  });
+
   it('активная бессрочная — без арендного бейджа', () => {
     const property = makeProperty({
       id: '3',
@@ -74,6 +88,24 @@ describe('propertyBadges', () => {
     expect(propertyBadges(property, TODAY)).toEqual([
       { key: 'rental-upcoming', label: 'Аренда с 05.10', tone: 'accent' },
     ]);
+  });
+
+  it('upcoming в следующем году — точечная дата с годом (правило владельца 13.10)', () => {
+    const property = makeProperty({
+      id: '15',
+      occupancy: { status: 'upcoming', start_date: '2027-01-05', planned_end_date: null },
+    });
+    expect(propertyBadges(property, TODAY)).toEqual([
+      { key: 'rental-upcoming', label: 'Аренда с 05.01.2027', tone: 'accent' },
+    ]);
+  });
+
+  it('upcoming без today откладывается вместе с «Осталось N месяцев» — решать год нечем', () => {
+    const property = makeProperty({
+      id: '16',
+      occupancy: { status: 'upcoming', start_date: '2026-10-05', planned_end_date: null },
+    });
+    expect(propertyBadges(property)).toEqual([]);
   });
 
   it('явно завершённая аренда (none) — без бейджа', () => {

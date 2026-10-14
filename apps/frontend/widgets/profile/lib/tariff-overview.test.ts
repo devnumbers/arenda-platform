@@ -36,7 +36,7 @@ function subscription(overrides: Partial<Subscription>): Subscription {
 
 describe('tariffHero', () => {
   it('paid month: price line and the next charge date', () => {
-    expect(tariffHero(subscription({}))).toStrictEqual({
+    expect(tariffHero(subscription({}), '2026-09-05')).toStrictEqual({
       kind: 'paid',
       title: 'Про',
       priceLine: 'Вы платите 490 ₽ в месяц',
@@ -45,7 +45,7 @@ describe('tariffHero', () => {
   });
 
   it('paid year: price line follows the current period', () => {
-    expect(tariffHero(subscription({ currentPeriod: 'year' }))).toStrictEqual({
+    expect(tariffHero(subscription({ currentPeriod: 'year' }), '2026-09-05')).toStrictEqual({
       kind: 'paid',
       title: 'Про',
       priceLine: 'Вы платите 4\u00A0900 ₽ в год',
@@ -53,12 +53,21 @@ describe('tariffHero', () => {
     });
   });
 
+  it('годовое списание в следующем году — год в строке (правило владельца 13.10)', () => {
+    expect(
+      tariffHero(
+        subscription({ currentPeriod: 'year', validUntil: '2027-09-10T21:00:00Z' }),
+        '2026-09-05',
+      ).subLine,
+    ).toBe('Спишем 10 сентября, 2027');
+  });
+
   it('basic: free, no price line', () => {
     expect(tariffHero(subscription({
       tariff: { ...proTariff, name: 'basic', monthlyPriceKopecks: 0, yearlyPriceKopecks: 0 },
       validUntil: undefined,
       currentPeriod: undefined,
-    }))).toStrictEqual({
+    }), '2026-09-05')).toStrictEqual({
       kind: 'basic',
       title: 'Базовый',
       subLine: 'Бесплатно',
@@ -71,7 +80,7 @@ describe('tariffHero', () => {
       tariff: businessTariff,
       currentPeriod: 'year',
       validUntil: '2026-09-17T21:00:00Z',
-    }))).toStrictEqual({
+    }), '2026-09-05')).toStrictEqual({
       kind: 'grace',
       title: 'Бизнес',
       priceLine: 'Вы платите 8\u00A0900 ₽ в год',
@@ -80,7 +89,7 @@ describe('tariffHero', () => {
   });
 
   it('cancelled: stopped title with the valid-until date', () => {
-    expect(tariffHero(subscription({ status: 'cancelled' }))).toStrictEqual({
+    expect(tariffHero(subscription({ status: 'cancelled' }), '2026-09-05')).toStrictEqual({
       kind: 'stopped',
       title: 'Про остановлен',
       dateLine: '10 сентября',
@@ -89,7 +98,7 @@ describe('tariffHero', () => {
   });
 
   it('stopped without validUntil omits the date line', () => {
-    const hero = tariffHero(subscription({ status: 'cancelled', validUntil: undefined }));
+    const hero = tariffHero(subscription({ status: 'cancelled', validUntil: undefined }), '2026-09-05');
     expect(hero).toStrictEqual({
       kind: 'stopped',
       title: 'Про остановлен',

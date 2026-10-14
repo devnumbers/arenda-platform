@@ -6,7 +6,7 @@ import { ArrowLeft, Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
-import { formatDayMonth } from '@/entities/task';
+import { formatDayMonth, formatDayMonthWithYear } from '@/entities/task';
 import { useProperties, useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
 import {
@@ -222,10 +222,18 @@ export function TaskCreateScreen({
             />
             <div className="grid grid-cols-2 gap-2">
               {/* «Сегодня» ещё не пришло из листинга — пикеру не на что
-                  опереться (ADR 0048), кнопка ждёт. */}
+                  опереться (ADR 0048), кнопка ждёт; лейбл с предзаполненной
+                  датой до today рисует годовую форму без решения — год
+                  добавит сам канонный форматтер. */}
               <TaskFieldButton
                 title="Дата"
-                label={draft.dueDate === null ? 'Выбрать' : formatDayMonth(draft.dueDate)}
+                label={
+                  draft.dueDate === null
+                    ? 'Выбрать'
+                    : today === undefined
+                      ? formatDayMonth(draft.dueDate)
+                      : formatDayMonthWithYear(draft.dueDate, today)
+                }
                 disabled={today === undefined}
                 onClick={() => setDateOpen(true)}
               />

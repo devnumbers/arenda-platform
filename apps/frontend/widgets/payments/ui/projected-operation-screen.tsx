@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
-import { formatDayMonth, type IsoDate } from '@/entities/payment';
+import { formatDayMonthWithYear, type IsoDate } from '@/entities/payment';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { useProperty } from '@/features/properties';
 import { projectedOperation, usePayment } from '@/features/payments';
@@ -57,7 +57,7 @@ export function ProjectedOperationScreen({
           />
         }
       >
-        <TopNavTitle title={operation !== undefined ? formatDayMonth(date) : 'Операция'} />
+        <TopNavTitle title={operation !== undefined ? formatDayMonthWithYear(date, today) : 'Операция'} />
       </TopNav>
 
       <PageContent>

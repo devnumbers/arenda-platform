@@ -23,8 +23,9 @@ export type PropertyRentalBlockModel = {
   readonly paymentLine: string | null;
   /** Процент прогресс-бара; у бессрочной бара нет (null). */
   readonly percent: number | null;
-  /** Серый футер: «Осталось N месяцев аренды» / «Прошло N месяцев» /
-   * «Срок аренды подошел к концу». */
+  /** Серый футер: «Осталось N месяцев аренды» / «Осталось N дней аренды» /
+   * «Заканчивается сегодня» / «Прошло N месяцев» / «Срок аренды подошел
+   * к концу». */
   readonly footerLine: string;
   /** Срок подошёл к концу (needs_attention) — блок с кнопками
    * «Продлить»/«Завершить» (1581:53905). */
@@ -73,8 +74,11 @@ export function buildPropertyRentalBlock(rental: Rental): PropertyRentalBlockMod
   if (endOfTerm) {
     footerLine = 'Срок аренды подошел к концу';
   } else {
+    // Общая метка остатка #1387: месяцы, в последние недели — дни,
+    // в сам день плана — «Заканчивается сегодня» (активная ещё не
+    // needs_attention, ADR 0053 §2); бессрочная — «Прошло N месяцев».
     footerLine =
-      rentalRemainingLine(progress.monthsRemaining) ??
+      rentalRemainingLine(rental.today, rental.plannedEndDate) ??
       rentalElapsedLine(startDate, rental.today);
   }
 

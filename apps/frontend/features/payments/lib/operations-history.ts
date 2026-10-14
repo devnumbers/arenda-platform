@@ -1,5 +1,5 @@
 import type { IsoDate, PaymentOperation } from '@/entities/payment';
-import { addDays, formatDayMonth, formatDayMonthWithYear } from '@/entities/payment';
+import { addDays, formatDayMonthWithYear } from '@/entities/payment';
 import { formatDayMonthYear } from '@/shared/lib/date-format';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
@@ -133,11 +133,10 @@ function historyGroupLabel(date: IsoDate, today: IsoDate, yesterday: IsoDate): s
 }
 
 function operationsGroupLabel(date: IsoDate, today: IsoDate, yesterday: IsoDate): string {
-  if (date === today) {
-    return `Сегодня, ${formatDayMonth(date)}`;
-  }
-  if (date === yesterday) {
-    return `Вчера, ${formatDayMonth(date)}`;
-  }
-  return formatDayMonthWithYear(date, today);
+  // Правило владельца 13.10: год у любой даты вне текущего — канонный
+  // форматтер выражает его сам («Сегодня» всегда в текущем году, «Вчера»
+  // через Новый год автоматически несёт год прошедшего).
+  const day = date === today ? 'Сегодня' : date === yesterday ? 'Вчера' : null;
+  const label = formatDayMonthWithYear(date, today);
+  return day === null ? label : `${day}, ${label}`;
 }

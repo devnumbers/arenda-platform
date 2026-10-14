@@ -391,4 +391,64 @@ test.describe('машина «Действий аренды» на страни�
 
     await captureScreen(page, testInfo, 'rental-actions-active-complete');
   });
+
+  test('остаток меньше месяца — дни: футер блока, строка детализации, бейдж списка (#1387)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await seedProperty();
+    await seedRental(-60, 5); // активная, до планового конца 5 дней
+    await openDetail(page, seededUser);
+
+    // Футер блока «Аренда» — в днях (до #1387 здесь было «Осталось 0 месяцев аренды»).
+    await expect(
+      page.getByTestId('property-rental-block').getByText('Осталось 5 дней аренды'),
+    ).toBeVisible();
+
+    // Детализация аренды: карточка жива ради строки дней — и с будущим
+    // платежом, и без него (состав будущего вхождения зависит от даты
+    // прогона относительно дня 15, строка остатка рендерится в обоих
+    // случаях); переход — по секции «Аренда», URL раньше текста: тот же
+    // текст на странице объекта смастчил бы строгий локатор до навигации.
+    // Локатор — в пределах секции карточки: page-wide getByText поймал бы
+    // строку и в оставшемся до замены дереве предыдущей страницы.
+    await page.getByRole('link', { name: 'Аренда' }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY_ID}/rentals$`));
+    await expect(
+      page.locator('section').filter({ hasText: 'Осталось 5 дней аренды' }),
+    ).toHaveCount(1);
+
+    // Бейдж карточки списка — те же дни (до #1387 — «Осталось меньше месяца»).
+    // Бейдж — сосед ссылки-обложки внутри карточки, скоуп — статья ряда.
+    await page.goto('/properties');
+    await expect(
+      page
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('heading', { name: 'Дом арендных состояний' }) })
+        .getByText('Осталось 5 дней аренды'),
+    ).toBeVisible();
+
+    await captureScreen(page, testInfo, 'rental-remaining-days');
+  });
+
+  test('план сегодня при активном статусе — «Заканчивается сегодня» в футере и бейдже (#1387)', async ({
+    page,
+    seededUser,
+  }) => {
+    await seedProperty();
+    await seedRental(-60, 0); // плановый конец — сегодня; статус ещё «идёт» (ADR 0053 §2)
+    await openDetail(page, seededUser);
+
+    await expect(
+      page.getByTestId('property-rental-block').getByText('Заканчивается сегодня'),
+    ).toBeVisible();
+
+    await page.goto('/properties');
+    await expect(
+      page
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('heading', { name: 'Дом арендных состояний' }) })
+        .getByText('Заканчивается сегодня'),
+    ).toBeVisible();
+  });
 });

@@ -5,10 +5,14 @@ import { pluralize } from '@/shared/lib/pluralize';
 import type { Rental, RentalCompleteCommand } from '@/entities/rental';
 
 /** Черновик мастера завершения (#534): «сырое» поле суммы залога (как в
- * формах аренды) и комментарий возврата. Форма-состояние сценария — живёт
- * в фиче, как RentalEditForm и RentalWizardDraft. */
+ * формах аренды), комментарий возврата и признак залога — шаг 2 без залога
+ * это только комментарий (решение владельца 13.10, #1386; контракт —
+ * ресерч #1384). Форма-состояние сценария — живёт в фиче, как
+ * RentalEditForm и RentalWizardDraft. */
 export type RentalCompleteDraft = {
   readonly completedDate: IsoDate | undefined;
+  /** У аренды есть залог — шаг возврата с суммой; false — суммы на шаге нет. */
+  readonly hasDeposit: boolean;
   readonly depositRaw: string;
   readonly comment: string;
 };
@@ -54,21 +58,30 @@ export function completePlannedEndDate(rental: Rental): IsoDate | undefined {
   return planned;
 }
 
-/** Команда завершения из черновика мастера: сумма залога парсится из
+/** Команда завершения из черновика мастера. С залогом: сумма парсится из
  * «сырого» поля (пустое/нечитаемое — команды нет, шаг не готов), комментарий
  * триммится и не пустой — только тогда попадает в тело (контракт: комментарий
- * только при сумме; сумма в мастере обязательна). */
+ * только при сумме). Без залога (решение владельца 13.10, #1386): шаг —
+ * только комментарий, готов всегда; пустой (после trim) — команда без
+ * `depositReturn` (записи нет, канон NULL — возвращать было нечего), непустой
+ * — `{ amountKopecks: 0, comment }`, единственная легальная форма сохранить
+ * текст (0 = «залог не возвращался»; контракт #1384, CHECK требует сумму). */
 export function buildRentalCompleteCommand(
   draft: RentalCompleteDraft,
 ): RentalCompleteCommand | undefined {
   if (draft.completedDate === undefined) {
     return undefined;
   }
+  const comment = draft.comment.trim();
+  if (!draft.hasDeposit) {
+    return comment.length > 0
+      ? { completedDate: draft.completedDate, depositReturn: { amountKopecks: 0, comment } }
+      : { completedDate: draft.completedDate };
+  }
   const amountKopecks = parseRublesToKopecks(draft.depositRaw);
   if (amountKopecks === undefined) {
     return undefined;
   }
-  const comment = draft.comment.trim();
   return {
     completedDate: draft.completedDate,
     depositReturn: comment.length > 0

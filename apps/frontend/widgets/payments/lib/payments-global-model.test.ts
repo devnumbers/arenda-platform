@@ -75,6 +75,10 @@ describe('nearestDateLine — дата «Ближайший» без стату�
     expect(nearestDateLine(item({ nearestDate: '2026-08-17' }))).toBe('17 августа');
   });
 
+  it('вне текущего года год в дате — «Ближайший» бывает и в январе (правило владельца 13.10)', () => {
+    expect(nearestDateLine(item({ nearestDate: '2027-01-10' }))).toBe('10 января, 2027');
+  });
+
   it('нет следующего вхождения (пауза/завершён) — строки нет', () => {
     expect(nearestDateLine(item({ nearestDate: null }))).toBeUndefined();
   });

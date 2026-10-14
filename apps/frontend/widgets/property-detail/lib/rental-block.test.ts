@@ -9,8 +9,29 @@ describe('buildPropertyRentalBlock — активная аренда', () => {
     const block = buildPropertyRentalBlock(makeRental());
     expect(block.paidTitle).toBe('Оплачено 6 из 24 платежей');
     expect(block.paymentLine).toBe('150 дней до следующего платежа');
-    expect(block.footerLine).toBe('Осталось 23 месяца аренды');
+    // Полных месяцев от today фикстуры (2026-09-11) до планового конца.
+    expect(block.footerLine).toBe('Осталось 18 месяцев аренды');
     expect(block.endOfTerm).toBe(false);
+  });
+
+  it('остаток меньше месяца — футер в днях (#1387, слово владельца 13.10)', () => {
+    const block = buildPropertyRentalBlock(
+      makeRental({
+        plannedEndDate: '2026-09-16', // 5 дней от today фикстуры
+        progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },
+      }),
+    );
+    expect(block.footerLine).toBe('Осталось 5 дней аренды');
+  });
+
+  it('план сегодня при активном статусе — «Заканчивается сегодня» (ADR 0053 §2)', () => {
+    const block = buildPropertyRentalBlock(
+      makeRental({
+        plannedEndDate: '2026-09-11',
+        progress: { paidMonths: 6, totalMonths: 24, monthsRemaining: 0, overdueMonths: null },
+      }),
+    );
+    expect(block.footerLine).toBe('Заканчивается сегодня');
   });
 
   it('первый платёж ещё не оплачен — «N дней до платежа» (макет 1425:55908)', () => {

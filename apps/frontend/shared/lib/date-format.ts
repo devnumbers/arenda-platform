@@ -133,11 +133,17 @@ export function formatTime(value: string): string {
 /** Момент «15 сентября, 14:40» — секция «Категория + дата-время» страницы
  * уведомления (#745, Figma 2333:184048; время на странице остаётся всегда
  * — решение владельца 17.09.2026, чарт карты #734): локальные день-месяц и
- * время смотрящего, без года. Невалидная строка даёт «—». */
-export function formatDayMonthTime(value: string): string {
+ * время смотрящего; год — только вне текущего («15 сентября 2025, 14:40»),
+ * по шаблону formatSessionLastSeen (правило владельца 13.10). «Сейчас» —
+ * параметром для чистоты (дефолт — факт). Невалидная строка даёт «—». */
+export function formatDayMonthTime(value: string, now: Date = new Date()): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return `${localDayMonthFormatter.format(date)}, ${localTimeFormatter.format(date)}`;
+  const dayMonth = localDayMonthFormatter.format(date);
+  const time = localTimeFormatter.format(date);
+  return date.getFullYear() === now.getFullYear()
+    ? `${dayMonth}, ${time}`
+    : `${dayMonth} ${date.getFullYear()}, ${time}`;
 }
 
 /** Момент последней активности сессии в списке устройств (#730, мок
