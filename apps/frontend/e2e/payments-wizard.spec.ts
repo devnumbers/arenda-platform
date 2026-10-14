@@ -485,18 +485,36 @@ test.describe('визард создания платежа', () => {
     ).toBeDisabled();
     await expect(dialog.locator('button[aria-current="date"]')).toBeEnabled();
 
-    // Старт ленты — текущий месяц («сегодня» в первой секции); доскролл
-    // вверх ничего не дорисовывает: назад лента идёт только в безпольном
-    // режиме, старым экранам поведение не менялось.
+    // Старт ленты — контракт #1394 (решение владельца 13.10): лента
+    // отрисована с порцией дорисовки раньше якоря, поэтому «сегодня» не в
+    // первой секции DOM; якорный месяц приведён к верхней кромке скроллера
+    // layout-эффектом до первой отрисовки. Доскролл вверх ничего не
+    // дорисовывает: назад лента идёт только в безпольном режиме, старым
+    // экранам поведение не менялось.
     const feed = dialog.locator('section');
-    const todayCell = feed.first().locator('button[aria-current="date"]');
+    const todayCell = dialog.locator('button[aria-current="date"]');
     await expect(todayCell).toHaveCount(1);
+
+    // Якорь у верхней кромки скроллера: секция «сегодня» начинается у верха
+    // вьюпорта ленты, а не на дорисовочной порции над ней (канарейка
+    // якорного скролла открытия).
+    const topGap = await dialog
+      .locator('.overflow-y-auto')
+      .evaluate((scroller) => {
+        const today = scroller.querySelector('button[aria-current="date"]');
+        if (today === null) {
+          throw new Error('сегодняшняя клетка не найдена');
+        }
+        const section = today.closest('section');
+        if (section === null) {
+          throw new Error('секция текущего месяца не найдена');
+        }
+        return section.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      });
+    expect(topGap).toBeLessThan(100);
+
     const sectionsBefore = await feed.count();
-    await feed.first().evaluate((el) => {
-      const scroller = el.closest('.overflow-y-auto');
-      if (scroller === null) {
-        throw new Error('лента пикера не найдена');
-      }
+    await dialog.locator('.overflow-y-auto').evaluate((scroller) => {
       scroller.scrollTop = 200;
       scroller.scrollTop = 0;
     });
