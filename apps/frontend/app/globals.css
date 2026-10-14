@@ -548,6 +548,39 @@
     }
 }
 
+/* Модалка отодвигает фон (канон apple-design §12: модальная задача —
+   скрим + push back, как у iOS sheet presentation; решение владельца
+   14.10): пока открыт любой Modal, оболочка экранов (.screen-shell в
+   ScreenLayout) уходит вглубь — масштаб 0.96, сдвиг вниз 8px, углы 16px.
+   Крючок — .modal-overlay на оверлеях Dialog и vaul-Drawer в modal.tsx;
+   сама модалка рендерится в портале вне оболочки и не масштабируется.
+   Шит «Ещё» (.more-sheet-*) и полноэкранные поверхности
+   (.fullscreen-surface) триггером не являются — их решения о хроме
+   (22.09 — бар над листом; #865 — хром над поверхностью) не трогаются.
+   Закрытие — фон возвращается тем же путём (§7): data-state оверлея
+   гаснет в момент старта анимации выхода. transform на оболочке делает
+   её содержащим блоком fixed-хрома — сайдбар, пилюли и TabBar уходят
+   вглубь вместе с контентом. Radius анимируется вместе с transform;
+   overflow: hidden не анимируется, но при радиусе ~0 на старте клип
+   незаметен. */
+.screen-shell {
+    transition:
+        transform 400ms var(--dl-ease),
+        border-radius 400ms var(--dl-ease);
+}
+
+body:has(.modal-overlay[data-state='open']) .screen-shell {
+    transform: translateY(8px) scale(0.96);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .screen-shell {
+        transition-duration: 150ms;
+    }
+}
+
 /* prefers-reduced-motion: анимацию не выключаем, а укорачиваем до ~150ms,
    fade сохраняем; drag-жесты не трогаем — это управление, не декор
    (research §9). */
@@ -1048,6 +1081,22 @@ body > * {
         color: inherit;
         text-decoration: none;
     }
+
+    /* Мобильная нативность (канон mobile-native): серую вспышку тапа
+       iOS/Android глушим глобально — отклик рисуют контролы через
+       :active; контролам — мгновенный click без double-tap-задержки и
+       неселектируемый текст (контрол — не контент). */
+    html {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    button,
+    a,
+    [role='button'] {
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+    }
 }
 
 /* Барабан WheelPicker (решение владельца 2026-10-13 — отмена решения
@@ -1059,21 +1108,27 @@ body > * {
    сила), к краям — scale 0.72 / opacity 0.35. Каскад привязан к позиции
    скролла, а не ко времени, поэтому prefers-reduced-motion его не глушит
    (канон §8: жесты — управление). Браузеры без scroll-driven animations
-   видят прежние плоские ряды — спокойная деградация. */
+   видят прежние плоские ряды — спокойная деградация. Цвет ряда в тех же
+   кейфреймах — потемнение к центру непрерывное, без ступеньки на границе
+   полосы; React-переключение `dark` (wheel-picker.tsx) остаётся фолбэком
+   для браузеров без SDA. */
 @keyframes wheel-row-cascade {
     from {
         scale: 0.72;
         opacity: 0.35;
+        color: var(--color-content-secondary);
     }
 
     50% {
         scale: 1;
         opacity: 1;
+        color: var(--color-content);
     }
 
     to {
         scale: 0.72;
         opacity: 0.35;
+        color: var(--color-content-secondary);
     }
 }
 

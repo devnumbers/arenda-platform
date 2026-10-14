@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -19,6 +20,8 @@ import {
   modRows,
 } from './wheel-loop';
 import { isNearEnd, isNearStart } from './wheel-edge';
+import { shouldTickRow, tickRow } from './wheel-haptics';
+import { rollDurationMs, rollEase } from './wheel-roll';
 
 /** Колесо-«крутилка» дизайн-слоя (редизайн 2026-09-04 по решению
  * владельца, Figma 1539-82659): вертикальный список с нативным скроллом
@@ -52,7 +55,15 @@ import { isNearEnd, isNearStart } from './wheel-edge';
  * (wheel-edge.ts — зона шире максимального флика, физический край
  * недостижим одним жестом): вперёд — сразу, приписка в конец не трогает
  * позицию скролла; назад — в паузе после остановки, сдвиг scrollTop
- * посреди инерции убил бы её. */
+ * посреди инерции убил бы её.
+ *
+ * Смена ряда под полосой тикает вибромотором (wheel-haptics.ts): Android
+ * Chrome — щелчок 8мс с паузой 40мс, iOS Safari / desktop — честный no-op.
+ *
+ * Программная докрутка (клавиатура, внешнее значение) — собственный rAF-ролл
+ * (wheel-roll.ts): старт от текущей позиции, кривая --dl-ease,
+ * prefers-reduced-motion сажает ряд мгновенно; жест человека
+ * (pointerdown/wheel/touchstart) ролл обрывает. */
 
 /** Высота ряда (px); окно колеса — 5 рядов. */
 const WHEEL_ROW_HEIGHT = 48;
@@ -124,8 +135,10 @@ function WheelRow({
       style={{ height: WHEEL_ROW_HEIGHT }}
       className={cn(
         // Единый кегль всех рядов (Figma 1539-82659): выбранный
-        // темнеет, остальные серые — без каскада размеров.
-        'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-xl leading-6 text-content-secondary transition-colors',
+        // темнеет, остальные серые — без каскада размеров. active —
+        // мгновенный отклик на тап по ряду (канон Apple §1): тот же
+        // токен, что у вторичной Button.
+        'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-xl leading-6 text-content-secondary transition-colors active:bg-surface-muted-active',
         dark && 'text-content',
       )}
     >
@@ -177,12 +190,52 @@ export function WheelPicker({
     loop ? WHEEL_LOOP_ANCHOR * items.length + valueIndex : valueIndex,
   );
   const rowCount = loop ? loopRowCount(items.length) : items.length;
+  // Тактильный тик: последний ряд, прошедший полосу (физический), и
+  // время прошлого тика — тики не чаще паузы из wheel-haptics.ts.
+  const lastTickedRowRef = useRef<number>(
+    loop ? WHEEL_LOOP_ANCHOR * items.length + valueIndex : valueIndex,
+  );
+  const lastTickAtRef = useRef<number | null>(null);
+
+  // Ролл программной докрутки: rAF-анимация от презентационного значения
+  // (канон Apple §3), прерываемая жестом человека. scroll-события самого
+  // ролла прерыванием не считаются — их пишет анимация.
+  const rollFrameRef = useRef<number | null>(null);
+  // Стабильные (только ref-ы внутри): эффект синхронизации держит rollTo
+  // в зависимостях — стабильность не перезапускает эффект.
+  const cancelRoll = useCallback((): void => {
+    if (rollFrameRef.current !== null) {
+      window.cancelAnimationFrame(rollFrameRef.current);
+      rollFrameRef.current = null;
+    }
+  }, []);
+  const rollTo = useCallback((list: HTMLUListElement, top: number): void => {
+    cancelRoll();
+    if (
+      list.scrollTop === top ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      list.scrollTop = top;
+      return;
+    }
+    const from = list.scrollTop;
+    const duration = rollDurationMs(top - from);
+    const startedAt = performance.now();
+    const step = (now: number): void => {
+      const progress = Math.min((now - startedAt) / duration, 1);
+      list.scrollTop = from + (top - from) * rollEase(progress);
+      rollFrameRef.current =
+        progress < 1 ? window.requestAnimationFrame(step) : null;
+    };
+    rollFrameRef.current = window.requestAnimationFrame(step);
+  }, [cancelRoll]);
 
   useEffect(
     () => () => {
       if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+      cancelRoll();
     },
-    [],
+    [cancelRoll],
   );
 
   // Колесо следует за значением: внешний выбор или клавиатура плавно
@@ -233,6 +286,7 @@ export function WheelPicker({
       prevValue === value &&
       Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== valueIndex
     ) {
+      cancelRoll();
       list.scrollTop = valueIndex * WHEEL_ROW_HEIGHT;
     }
     const maxRow = loop ? loopRowCount(items.length) - 1 : items.length - 1;
@@ -253,13 +307,14 @@ export function WheelPicker({
       loopLengthRef.current = items.length;
     }
     if (Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== targetRow) {
-      list.scrollTo({
-        top: targetRow * WHEEL_ROW_HEIGHT,
-        behavior: instantRef.current ? 'auto' : 'smooth',
-      });
+      if (instantRef.current) {
+        list.scrollTop = targetRow * WHEEL_ROW_HEIGHT;
+      } else {
+        rollTo(list, targetRow * WHEEL_ROW_HEIGHT);
+      }
     }
     instantRef.current = false;
-  }, [value, valueIndex, loop, items.length, items]);
+  }, [value, valueIndex, loop, items.length, items, rollTo, cancelRoll]);
 
   const commitIndex = (index: number): void => {
     const item = items[index];
@@ -283,6 +338,7 @@ export function WheelPicker({
         // scroll-событие (оно же переустановит settle на новом месте).
         list.scrollTop += jumpRows * WHEEL_ROW_HEIGHT;
         setScrollRow(row + jumpRows);
+        lastTickedRowRef.current = row + jumpRows;
       }
     } else {
       // Повторный сигнал о том же крае — только после удлинения списка
@@ -308,6 +364,14 @@ export function WheelPicker({
       ) {
         nearStartAtLengthRef.current = items.length;
         pendingStartRef.current = true;
+      }
+    }
+    if (row !== lastTickedRowRef.current) {
+      lastTickedRowRef.current = row;
+      const now = performance.now();
+      if (shouldTickRow(now, lastTickAtRef.current)) {
+        lastTickAtRef.current = now;
+        tickRow();
       }
     }
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
@@ -368,10 +432,13 @@ export function WheelPicker({
         aria-activedescendant={`${optionId}-${valueIndex}`}
         tabIndex={0}
         onScroll={handleScroll}
+        onPointerDown={cancelRoll}
+        onWheel={cancelRoll}
+        onTouchStart={cancelRoll}
         onKeyDown={handleKeyDown}
         onClick={handleClick}
         data-vaul-no-drag=""
-        className="wheel-cascade relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
+        className="wheel-cascade relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] [overflow-anchor:none] select-none [-webkit-touch-callout:none] touch-manipulation focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
       >
         {Array.from({ length: rowCount }, (_, row) => {
           const logical = loop ? modRows(row, items.length) : row;
