@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "./logo";
 import type { NavItem } from "@/lib/nav";
@@ -23,14 +23,12 @@ import type { NavItem } from "@/lib/nav";
 // Морф иконки: средняя линия гаснет, крайние съезжаются в крест (240мс).
 // Страница под открытым меню блокируется от скролла (overflow hidden на
 // html + scrollbar-gutter stable — на классических скроллбарах без сдвига
-// контента). prefers-reduced-motion — без анимаций и без каскадных задержек.
+// контента).
 //
 // Машина состояний: open («раскрыто» — высота, каскад), closing (свёртывание:
 // open уже false, панель едет вниз до среза; срез — таймаутом на шаг длиннее
 // свёртывания: transitionend в фоновом табе ненадёжен). Форма карточки —
 // прямые нижние углы и тень — живёт на open||closing до самого среза.
-// При reduced-motion фаза closing не заводится вовсе: анимации нет, шторка
-// схлопывается в один кадр — срез совпадает с setOpen(false).
 // Повторное открытие посреди closing продолжает высоту с текущего кадра и
 // перезапускает каскад.
 const EASE = "ease-menu";
@@ -48,17 +46,6 @@ export function MobileMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
-  // Канон клиент-only значения (гидратация без React #418): сервер снапшот —
-  // false, клиентский подписывается на живое переключение media query.
-  const reducedMotion = useSyncExternalStore(
-    (onChange) => {
-      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-      mq.addEventListener("change", onChange);
-      return () => mq.removeEventListener("change", onChange);
-    },
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    () => false,
-  );
 
   useEffect(() => {
     if (!closing) {
@@ -104,13 +91,7 @@ export function MobileMenu({
   const startClose = () => {
     if (open && !closing) {
       setOpen(false);
-      // Reduced-motion: шторка схлопывается мгновенно (motion-reduce на
-      // transition) — анимации нет, значит нет и фазы closing: срез
-      // происходит сразу, вместе с open уходят лок скролла и форма
-      // карточки, а таймер CLOSE_CUT_MS нечего держать.
-      if (!reducedMotion) {
-        setClosing(true);
-      }
+      setClosing(true);
     }
   };
 
@@ -161,17 +142,17 @@ export function MobileMenu({
                 средняя гаснет, крайние съезжаются на центральную ось. */}
             <span aria-hidden="true" className="relative block h-6 w-6">
               <span
-                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate,opacity] duration-[240ms] ${EASE} motion-reduce:transition-none ${
+                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate,opacity] duration-[240ms] ${EASE} ${
                   open ? "opacity-0" : ""
                 }`}
               />
               <span
-                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate] duration-[240ms] ${EASE} motion-reduce:transition-none ${
+                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate] duration-[240ms] ${EASE} ${
                   open ? "translate-y-0 rotate-45" : "-translate-y-[7px]"
                 }`}
               />
               <span
-                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate] duration-[240ms] ${EASE} motion-reduce:transition-none ${
+                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate] duration-[240ms] ${EASE} ${
                   open ? "translate-y-0 -rotate-45" : "translate-y-[7px]"
                 }`}
               />
@@ -181,7 +162,7 @@ export function MobileMenu({
       </div>
       <div
         id="mobile-menu"
-        className={`absolute inset-x-0 top-full grid rounded-b-3xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-[grid-template-rows] duration-[400ms] ${EASE} motion-reduce:transition-none ${
+        className={`absolute inset-x-0 top-full grid rounded-b-3xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-[grid-template-rows] duration-[400ms] ${EASE} ${
           open || closing ? "visible" : "invisible"
         } ${open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]"}`}
       >
@@ -193,15 +174,13 @@ export function MobileMenu({
                   href={item.href}
                   onClick={startClose}
                   style={{
-                    transitionDelay: reducedMotion
-                      ? "0ms"
-                      : open
-                        ? `${i * 45}ms`
-                        : closing
-                          ? `${(nav.length - 1 - i) * 45}ms`
-                          : "0ms",
+                    transitionDelay: open
+                      ? `${i * 45}ms`
+                      : closing
+                        ? `${(nav.length - 1 - i) * 45}ms`
+                        : "0ms",
                   }}
-                  className={`flex min-h-[52px] items-center rounded-xl px-6 text-s text-ink transition-[opacity,translate] duration-[240ms] ${EASE} motion-reduce:transition-none hover:bg-surface active:bg-surface ${
+                  className={`flex min-h-[52px] items-center rounded-xl px-6 text-s text-ink transition-[opacity,translate] duration-[240ms] ${EASE} hover:bg-surface active:bg-surface ${
                     open
                       ? "translate-y-0 opacity-100"
                       : "translate-y-2.5 opacity-0"

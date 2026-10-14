@@ -48,7 +48,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                         aria-hidden="true"
-                        className={`shrink-0 text-gray-2 transition-transform duration-200 ease-inout motion-reduce:transition-none ${
+                        className={`shrink-0 text-gray-2 transition-transform duration-200 ease-inout ${
                           expanded ? "rotate-180" : ""
                         }`}
                       >
@@ -62,7 +62,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
                       </svg>
                     </button>
                     <div
-                      className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none ${
+                      className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
                         expanded
                           ? "opacity-100 [grid-template-rows:1fr]"
                           : "opacity-0 [grid-template-rows:0fr]"

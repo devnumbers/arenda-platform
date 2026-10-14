@@ -604,8 +604,8 @@ function MobileSlides({
 }) {
   return REVIEWS.map((review, index) => {
     const { q, jumping } = mobStateOf(index, activeIndex, previous);
-    const transition = jumping ? "slide-jump" : "slide-mob motion-reduce:transition-none";
-    const className = `absolute left-1/2 top-0 -ml-[160px] h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition} motion-reduce:transition-none`;
+    const transition = jumping ? "slide-jump" : "slide-mob";
+    const className = `absolute left-1/2 top-0 -ml-[160px] h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition}`;
     const style: React.CSSProperties = {
       transform: mobTransformOf(q),
       zIndex: q === 0 ? 2 : Math.abs(q) === 1 ? 1 : 0,
@@ -780,7 +780,7 @@ function DesktopSlides({
     const transition = jumping
       ? DESK_JUMP_TRANSITION_CLASS
       : DESK_TRANSITION_CLASS;
-    const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition} motion-reduce:transition-none`;
+    const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition}`;
     const style = slideStyle(rel, DESK_STEP, DESK_EXTRA, ACTIVE_SCALE, frozen);
     // Кликабельны только видимые позиции — очередь №1 и №2 (№3 за
     // обрезом; у Яндекса за срезом тоже никто не кликает).

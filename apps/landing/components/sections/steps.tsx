@@ -17,8 +17,7 @@ import { STEPS } from "@/lib/content";
 
 // Переходы — в духе apple.com: фото кроссфейдится 600мс на ease-in-out
 // сразу по клику, текст меняется следом (180мс уход → подмена → 280мс
-// въезд, токен --animate-steps-text-in); prefers-reduced-motion меняет
-// текст мгновенно и глушит кроссфейд.
+// въезд, токен --animate-steps-text-in).
 const TEXT_OUT_MS = 180;
 
 export function Steps() {
@@ -81,9 +80,9 @@ export function Steps() {
                   onAnimationEnd={settleText}
                   className={`mx-auto max-w-[250px] text-center text-s leading-5 text-ink/50 tab:max-w-none desk:text-l desk:leading-[26px] ${
                     textPhase === "leaving"
-                      ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout motion-reduce:transition-none"
+                      ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout"
                       : textPhase === "entering"
-                        ? "animate-steps-text-in motion-reduce:animate-none"
+                        ? "animate-steps-text-in"
                         : ""
                   }`}
                 >
@@ -102,7 +101,7 @@ export function Steps() {
                     height={400}
                     sizes="273px"
                     priority={false}
-                    className={`absolute inset-0 transition-opacity duration-[600ms] ease-inout motion-reduce:transition-none ${
+                    className={`absolute inset-0 transition-opacity duration-[600ms] ease-inout ${
                       active === index ? "opacity-100" : "opacity-0"
                     }`}
                   />

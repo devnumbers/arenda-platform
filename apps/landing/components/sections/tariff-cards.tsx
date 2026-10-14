@@ -36,8 +36,8 @@ import type { Tariff, TariffFeature } from "@/lib/content";
 // сегмент — белая пилюля, переезжающая между Год/Месяц за 300мс
 // (iOS-сегментконтрол); бейдж «−25%» живёт в сегменте «Год» всегда.
 // Цена при переключении меняется в хореографии steps (180мс уход →
-// 280мс въезд, токен --animate-tariff-price-in); prefers-reduced-motion
-// глушит и пилюлю, и смену цены. Кнопка «Ваш тариф» — White Disabled
+// 280мс въезд, токен --animate-tariff-price-in). Кнопка «Ваш тариф» —
+// White Disabled
 // (серый текст). CTA платных карточек ведёт на экран «Выбрать тариф»
 // кабинета с tariff и текущим периодом в query — экран предвыбирает
 // их из URL (гость доводится логином через from= прокси кабинета).
@@ -157,9 +157,9 @@ export function TariffCards({
               onAnimationEnd={animated ? settlePrice : undefined}
               className={`flex flex-col gap-2.5 ${
                 animated && pricePhase === "leaving"
-                  ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout motion-reduce:transition-none"
+                  ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout"
                   : animated && pricePhase === "entering"
-                    ? "animate-tariff-price-in motion-reduce:animate-none"
+                    ? "animate-tariff-price-in"
                     : ""
               }`}
             >
@@ -242,7 +242,7 @@ export function TariffCards({
         >
           <span
             aria-hidden
-            className="absolute inset-y-0.5 left-0.5 w-[125px] rounded-[14px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition-transform duration-300 ease-inout motion-reduce:transition-none"
+            className="absolute inset-y-0.5 left-0.5 w-[125px] rounded-[14px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition-transform duration-300 ease-inout"
             style={{
               transform:
                 billing === "yearly"

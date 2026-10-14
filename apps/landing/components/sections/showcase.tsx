@@ -258,9 +258,6 @@ export function Showcase() {
   const slideNodes = useRef<Array<HTMLElement | null>>([]);
   const plateNodes = useRef<Array<HTMLElement | null>>([]);
   const stateRef = useRef<EngineState | null>(null);
-  const reducedRef = useRef(false);
-
-  const reduced = useCallback(() => reducedRef.current, []);
 
   // Один проход отрисовки: k по дистанции до позиций покоя, транслейт
   // фотодорожки, центровка ряда плашек. Источник истины — st.p.
@@ -376,11 +373,11 @@ export function Showcase() {
         renormalize();
         return;
       }
-      st.anim = { from: st.p, to, t0: performance.now(), dur: reduced() ? 0 : STEP_MS };
+      st.anim = { from: st.p, to, t0: performance.now(), dur: STEP_MS };
       cancelAnimationFrame(st.raf);
       frameLoop();
     },
-    [frameLoop, reduced, render, renormalize],
+    [frameLoop, render, renormalize],
   );
 
   // Один wheel-шаг в направлении dir: сосед от ближайшей позиции покоя.
@@ -420,16 +417,6 @@ export function Showcase() {
     },
     [animateTo],
   );
-
-  useEffect(() => {
-    const rm = window.matchMedia("(prefers-reduced-motion: reduce)");
-    reducedRef.current = rm.matches;
-    const onRmChange = () => {
-      reducedRef.current = rm.matches;
-    };
-    rm.addEventListener("change", onRmChange);
-    return () => rm.removeEventListener("change", onRmChange);
-  }, []);
 
   // Стартовая центровка и пересборка базы на смену яруса.
   useEffect(() => {

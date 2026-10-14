@@ -117,10 +117,10 @@ export function TextField({
               htmlFor={inputId}
               className={cn(
                 // Долг DESIGN.md §8 погашен наполовину: transition-all →
-                // точный список анимируемых свойств + reduce-ветка. Сам
-                // layout-характер (top/font-size) остаётся до синхронной
-                // правки с фронта (там transform-перевод метки).
-                "pointer-events-none absolute left-0 text-content-secondary transition-[top,font-size,line-height] duration-300 ease-inout motion-reduce:transition-none",
+                // точный список анимируемых свойств. Сам layout-характер
+                // (top/font-size) остаётся до синхронной правки с фронта
+                // (там transform-перевод метки).
+                "pointer-events-none absolute left-0 text-content-secondary transition-[top,font-size,line-height] duration-300 ease-inout",
                 "top-[19px] text-base leading-[18px]",
                 "peer-focus:top-[10px] peer-focus:text-[13px] peer-focus:leading-[15px]",
                 "peer-[:not(:placeholder-shown)]:top-[10px] peer-[:not(:placeholder-shown)]:text-[13px] peer-[:not(:placeholder-shown)]:leading-[15px]",

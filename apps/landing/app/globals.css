@@ -205,24 +205,6 @@
   }
 }
 
-/* Reduced motion: крупное движение модалок гасится — scale-кейфреймы
-   карточки и слайд vaul-шита на 100% высоты (у библиотеки своей ветки
-   нет, data-vaul-drawer — её Content). Осмысленность дают мгновенные
-   opacity-подмены: 1ms, не 0 — animationend/transitionend стартуют. */
-@media (prefers-reduced-motion: reduce) {
-  .dl-overlay-in,
-  .dl-overlay-out,
-  .dl-overlay-vaul,
-  .dl-card-in,
-  .dl-card-out {
-    animation-duration: 1ms;
-  }
-
-  [data-vaul-drawer] {
-    transition-duration: 1ms !important;
-  }
-}
-
 /* Полупрозрачные поверхности для тех, кто просит меньше прозрачности
    (apple-design §14): стекло становится почти сплошным, блюр снимается —
    маркерные классы .glass-plate (плашки отзывов) и .glass-card (стекло
@@ -394,10 +376,6 @@ html body[data-scroll-locked] {
    съедает 0ms-длительность transform. */
 @utility slide-jump {
   transition: transform 0ms linear, opacity 360ms ease-out;
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
 }
 
 /* Десктопный переход карусели отзывов — плавнее тачевого (решение
@@ -405,24 +383,15 @@ html body[data-scroll-locked] {
    тачах): дольше (440 против 360ms) и с мягким входом и выходом
    (cubic-bezier(0.45,0,0.2,1)) — у яндексовского ease-out резкий разгон
    первых ~15% пути читался как рывок на въезде карточки. Утилитой, не
-   arbitrary-классом (см. slide-jump); reduce — внутри утилиты, чтобы не
-   бороться с motion-reduce:transition-none за порядок каскада. */
+   arbitrary-классом (см. slide-jump). */
 @utility slide-desk {
   transition:
     transform 440ms var(--ease-desk),
     opacity 440ms var(--ease-desk);
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
 }
 
 @utility slide-jump-desk {
   transition: transform 0ms linear, opacity 440ms var(--ease-desk);
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
 }
 
 /* Мобильный переход карусели отзывов (≤480) — скорость Яндекса
@@ -430,8 +399,4 @@ html body[data-scroll-locked] {
    Swiper = ease). Утилитой по тем же причинам, что slide-jump. */
 @utility slide-mob {
   transition: transform 600ms ease, opacity 600ms ease;
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
 }
