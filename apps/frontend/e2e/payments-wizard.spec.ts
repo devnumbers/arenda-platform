@@ -605,8 +605,26 @@ test.describe('визард создания платежа', () => {
     // впереди ленты). Прежний код: нативный scroll-якорь и ручная
     // компенсация складывались, колесо уезжало в кламп последнего ряда
     // (декабрь) и плавно возвращалось к выбранному месяцу.
-    await yearList.getByText(String(new Date().getFullYear() + 1), { exact: true }).click();
-    await page.waitForTimeout(1_000);
+    // Туда-обратно несколько раз: при сжатии ленты (обратное
+    // переключение) реснап браузера гонится со зажимом о новый максимум
+    // — экскурсия к декабрю была интервальной, замок должен держать все
+    // переключения.
+    const thisYear = String(new Date().getFullYear());
+    const nextYear = String(new Date().getFullYear() + 1);
+    // Троттлинг CPU растягивает рендер перекроенной ленты: гонка реснапа
+    // со зажимом о новый максимум на быстрой машине выпадает не каждый
+    // раз, под нагрузкой — почти всегда.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 8 });
+    await yearList.getByText(nextYear, { exact: true }).click();
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      await page.waitForTimeout(350);
+      await yearList.getByText(thisYear, { exact: true }).click();
+      await page.waitForTimeout(350);
+      await yearList.getByText(nextYear, { exact: true }).click();
+    }
+    await page.waitForTimeout(800);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     const centers = await page.evaluate(
       () => (window as unknown as { __mWheel: number[] }).__mWheel,
     );

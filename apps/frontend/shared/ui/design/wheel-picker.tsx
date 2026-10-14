@@ -166,6 +166,9 @@ export function WheelPicker({
   // приписку в начало (onNearStart) от прочих изменений; valueIndex —
   // рост ленты от смены значения.
   const syncFromRef = useRef<number | null>(null);
+  // Значение прошлого рендера: отличает перекройку ленты (ряд значения
+  // сместился без смены значения) от реальной смены значения.
+  const prevValueRef = useRef(value);
   const optionId = useId();
   const valueIndex = Math.max(items.findIndex((item) => item.value === value), 0);
   // Позиция скролла в физических рядах ленты: без loop ряд = индекс
@@ -208,10 +211,29 @@ export function WheelPicker({
   useEffect(() => {
     const list = listRef.current;
     if (list === null) return;
+    const prevValue = prevValueRef.current;
+    prevValueRef.current = value;
     const syncFrom = syncFromRef.current;
     syncFromRef.current = valueIndex;
     if (!loop && syncFrom !== null && syncFrom === valueIndex) {
       return;
+    }
+    // Лента перекроена без смены значения (разблокировка/блокировка
+    // месяцев года при переключении года: [текущий..декабрь] ↔ полная
+    // лента) — значение то же, его ряд в ленте другой. Браузер к моменту
+    // эффекта уже поправил позицию: реснапом к выбранному элементу или
+    // зажимом о новый максимум ленты; исход гонки не важен — ставим
+    // колесо на ряд значения напрямую. Это идемпотентно после реснапа и
+    // лечит зажим: иначе зажатая позиция (декабрь в хвосте обрезанной
+    // ленты) доезжала плавным скроллом до выбранного ряда — обратная
+    // сторона #1429 («скролится с декабря по октябрь», интервально:
+    // реснап выигрывает гонку не всегда).
+    if (
+      !loop &&
+      prevValue === value &&
+      Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== valueIndex
+    ) {
+      list.scrollTop = valueIndex * WHEEL_ROW_HEIGHT;
     }
     const maxRow = loop ? loopRowCount(items.length) - 1 : items.length - 1;
     let targetRow = valueIndex;
@@ -237,7 +259,7 @@ export function WheelPicker({
       });
     }
     instantRef.current = false;
-  }, [valueIndex, loop, items.length, items]);
+  }, [value, valueIndex, loop, items.length, items]);
 
   const commitIndex = (index: number): void => {
     const item = items[index];
