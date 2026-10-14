@@ -81,10 +81,16 @@ test.describe('страница платежа', () => {
 
     // Плиток подэкранов нет: вход на график — заголовок и строка
     // ближайшего, вход в историю — стрелка секции. У свежесидовой аренды
-    // paid-операций нет — секция истории скрыта, «Графика платежей» на
-    // странице не существует вовсе.
+    // paid-операций нет — секция истории всё равно видна с пустым
+    // состоянием «Платежей еще не было» (решение владельца #1427: блок
+    // рисуется всегда, паттерн emptyHint «Просроченных»), «Графика
+    // платежей» на странице не существует вовсе.
     await expect(page.getByText('График платежей')).toHaveCount(0);
-    await expect(page.getByText('История платежа')).toHaveCount(0);
+    const emptyHistorySection = page.locator('section').filter({
+      has: page.getByRole('heading', { name: 'История платежа' }),
+    });
+    await expect(emptyHistorySection).toBeVisible();
+    await expect(emptyHistorySection.getByText('Платежей еще не было')).toBeVisible();
 
     await captureScreen(page, testInfo, 'payment-detail-filled-mobile');
   });

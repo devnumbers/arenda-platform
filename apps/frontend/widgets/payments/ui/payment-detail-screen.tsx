@@ -83,7 +83,9 @@ import { PaymentDetailSkeleton } from './payments-skeletons';
  * тоже), «Просроченные платежи» (максимум 3; пустое состояние — «У вас
  * нет просроченных платежей») и «История платежа» с превью оплаченных —
  * только сами операции, без плашек изменений, строки ведут на операцию
- * (копии секций — макет 3214:76417, #1194). Дата ближайшего вхождения —
+ * (копии секций — макет 3214:76417, #1194). Секция истории рисуется
+ * всегда: без оплаченных — «Платежей еще не было» в карточке (решение
+ * владельца #1427). Дата ближайшего вхождения —
  * клиентская проекция порта вхождений (entities/payment/lib/occurrences);
  * просрочки приходят с сервера — статус overdue считает он по TZ
  * собственника (ADR 0048).
@@ -790,16 +792,18 @@ const HISTORY_PREVIEW_LIMIT = 3;
  * новейшие сверху (порция desc по фактической дате, канон истории #994).
  * В превью — только сами операции, без плашек изменений; у строки — дата
  * факта и знаковая сумма (расход с минусом — канон 1302:52209), клик —
- * страница операции. Пустая история секции не имеет: без paid-операций
- * секция не рисуется — подэкран остаётся доступен по прямому URL, путь к
- * графику при этом держат заголовок и строка ближайшего. */
+ * страница операции. Секция рисуется всегда (решение владельца #1427):
+ * без paid-операций — пустое состояние «Платежей еще не было» внутри
+ * карточки (копирайт #1338 «и в блоке, и на подэкране», паттерн emptyHint
+ * «Просроченных»), во время загрузки секция тоже видна сразу с этим
+ * подзаголовком — заголовок не мелькает. */
 function HistorySection({
   propertyId,
   paymentId,
 }: {
   readonly propertyId: string;
   readonly paymentId: string;
-}): JSX.Element | null {
+}): JSX.Element {
   const router = useRouter();
   // Порция desc — первые HISTORY_PREVIEW_LIMIT и есть новейшие; тот же
   // сорт, что у подэкрана (фактическая дата, OPERATIONS_FEED_SORT).
@@ -808,11 +812,12 @@ function HistorySection({
     order: 'desc',
     sort: OPERATIONS_FEED_SORT,
   });
+  const preview = historyQuery.data?.slice(0, HISTORY_PREVIEW_LIMIT) ?? [];
 
-  if (historyQuery.isPending || historyQuery.isError) {
-    // Секция появляется после загрузки; при ошибке истории страница не
-    // должна пустовать целиком — карточка состояния как у просроченных.
-    return historyQuery.isError ? (
+  if (historyQuery.isError) {
+    // Страница не должна пустовать целиком — карточка состояния, как у
+    // просроченных.
+    return (
       <PaymentsStateCard
         title="Не удалось загрузить историю"
         hint="Проверьте подключение и попробуйте снова"
@@ -826,12 +831,7 @@ function HistorySection({
           </Button>
         }
       />
-    ) : null;
-  }
-
-  const preview = historyQuery.data.slice(0, HISTORY_PREVIEW_LIMIT);
-  if (preview.length === 0) {
-    return null;
+    );
   }
 
   return (
@@ -841,14 +841,17 @@ function HistorySection({
         label: 'Открыть историю платежа',
         onOpen: () => router.push(ROUTES.propertyPaymentHistory(propertyId, paymentId)),
       }}
+      emptyHint={preview.length > 0 ? undefined : 'Платежей еще не было'}
     >
-      {preview.map((operation) => (
-        <HistoryPreviewRow
-          key={operation.id}
-          operation={operation}
-          onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
-        />
-      ))}
+      {preview.length > 0
+        ? preview.map((operation) => (
+            <HistoryPreviewRow
+              key={operation.id}
+              operation={operation}
+              onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+            />
+          ))
+        : null}
     </PaymentsGroup>
   );
 }
