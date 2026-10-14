@@ -157,6 +157,11 @@ const headingClass = 'text-xl font-semibold leading-6 text-content';
 /** Пояснение секции (Mobile/Text/M/400, 1043:62920): 14/16, серый. */
 const hintClass = 'text-sm leading-4 text-content-secondary';
 
+/** Подзаголовок пустой истории платежа — один и тот же текст у блока
+ * страницы платежа и у пустого подэкрана (решение владельца #1338;
+ * payments/GLOSSARY.md, UI-copy exception). */
+export const PAYMENT_HISTORY_EMPTY_HINT = 'Платежей еще не было';
+
 /**
  * Секция-карточка «Платежей объекта» (1043:57610, 1043:62920): заголовок
  * слева, шеврон-стрелка — у правого края карточки (как в SectionHeader и
