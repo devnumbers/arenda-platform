@@ -190,6 +190,38 @@ test.describe('drag секций хаба — десктоп-мышь (нати�
     await expect.poll(() => scrollLeftOf(rail)).toBeGreaterThan(50);
   });
 
+  test('drag не выделяет текст карточек — выделение гасится на активном жесте (#1436)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openHub(page, seededUser);
+    const rail = page.getByTestId(RAIL);
+    await rail.scrollIntoViewIfNeeded();
+    const card = rail.locator('> div > div').first();
+    const box = await boxOrThrow(card, 'карточка');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+
+    // Выделение текста синтетической мышью не воспроизводится вовсе
+    // (drag-select в Chromium ведётся реальным вводом) — проверяется
+    // сам механизм подавления: на активном жесте на ленте стоит
+    // user-select: none (жест-стиль, гасит drag-select реального ввода,
+    // apple-design §2 — прямая манипуляция без побочных эффектов),
+    // после жеста стиль снят — честное выделение текста мышью живёт.
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x - 2, y + 16, { steps: 4 });
+    await page.mouse.move(x - 120, y, { steps: 8 });
+    await expect
+      .poll(() => rail.evaluate((element) => element.style.userSelect))
+      .toBe('none');
+    await page.mouse.up();
+    await waitForSettle(page);
+    await expect
+      .poll(() => rail.evaluate((element) => element.style.userSelect))
+      .toBe('');
+  });
+
   test('после drag-доезда карточки кликабельны (гасится только click жеста)', async ({
     page,
     seededUser,

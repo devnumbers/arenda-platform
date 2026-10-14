@@ -57,7 +57,10 @@ const REDUCED_SETTLE_S = 0.15;
  * клик живёт до порога, после реального drag первый click гасится
  * capture-фазой; pointercancel (native drag, жест ОС) — мгновенный возврат
  * snap; колесо/новый pointerdown гасят бегущий доезд; RTL ленты жестом не
- * обслуживаются (приложение LTR).
+ * обслуживаются (приложение LTR). Выделение текста реальным вводом гасится
+ * на активном жесте: user-select:none на ленте + очистка начавшегося до
+ * порога, снятие реставратором после жеста (#1436; preventDefault
+ * совместимых mousemove drag-select в Chromium не останавливает).
  */
 
 export type SnapRailDragControls = {
@@ -141,11 +144,13 @@ export function useSnapRailDrag(): SnapRailDragControls {
   }, [reducedMotion]);
 
   // Off-switch snap'а на время жеста и возврат после доезда; курсор здесь
-  // же — один реставратор на все inline-стили жеста.
+  // же — один реставратор на все inline-стили жеста. user-select — тоже
+  // жест-стиль (#1436): подавление drag-select только на активном жесте.
   const restoreSnap = useCallback((element: HTMLDivElement): void => {
     element.style.scrollSnapType = "";
     element.style.scrollBehavior = "";
     element.style.cursor = "";
+    element.style.userSelect = "";
   }, []);
 
   const clearRubber = useCallback((): void => {
@@ -359,6 +364,14 @@ export function useSnapRailDrag(): SnapRailDragControls {
           railElement.style.scrollSnapType = "none";
           railElement.style.scrollBehavior = "auto";
           railElement.style.cursor = "grabbing";
+          // Подавление drag-select реального ввода (#1436): совместимые
+          // mousemove preventDefault ниже гасит, но выделение в Chromium
+          // ведётся мимо них — гасит user-select:none на жесте. Очищается
+          // выделение, успевшее начаться до порога (вертикальный забег
+          // мыши порог не берёт и его не гасит). Жест-стиль — реставратор
+          // снимет вместе с snap/cursor.
+          railElement.style.userSelect = "none";
+          document.getSelection()?.removeAllRanges();
           try {
             // Capture гасит hover-мигание карточек под курсором; click после
             // capture целится в ленту — но он и так гасится после drag.
@@ -367,7 +380,7 @@ export function useSnapRailDrag(): SnapRailDragControls {
             // Указатель уже ушёл — жест доживёт без capture.
           }
         }
-        // Совместимые mousemove гасятся — выделение текста под drag не едет.
+        // Совместимые mousemove гасятся — часть побочных дефолтов жеста.
         move.preventDefault();
         // RAW-позиция без клампа: скорость считается и в резинке, где
         // scrollLeft уже стоит на границе. Резинка — ПЕРЕД записью
