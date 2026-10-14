@@ -18,6 +18,7 @@ import {
   loopSyncRow,
   modRows,
 } from './wheel-loop';
+import { isNearEnd, isNearStart } from './wheel-edge';
 
 /** Колесо-«крутилка» дизайн-слоя (редизайн 2026-09-04 по решению
  * владельца, Figma 1539-82659): вертикальный список с нативным скроллом
@@ -38,15 +39,20 @@ import {
  * Space/Escape — семантика стрелок иная; в режиме loop стрелки заворачивают
  * по кругу (решение владельца #810), без loop — упираются в края.
  *
- * Режим loop (#810: часы, минуты, месяцы — «как у Apple»): логический цикл
- * items отрисован 31 раз (wheel-loop.ts), у края лента молча перепрыгивает
- * на полспана — прыжок невидим (содержимое периодично) и не прерывает
- * инерцию: запас до зоны прыжка недостижим одним жестом. Скринридерам
- * показан только средний (якорный) цикл: role=option и стабильные id там,
- * повторы aria-hidden; aria-activedescendant всегда указывает на якорную
- * копию выбранного значения. При min/max цикл составляют только разрешённые
- * значения (MonthYearPicker режет месяц-колесо) — закольцовка не открывает
- * запрещённые. Годы остаются линейными: ось времени не замыкается. */
+ * Режим loop (#810: часы, минуты — «как у Apple»): логический цикл
+ * items отрисован WHEEL_LOOP_CYCLES раз (wheel-loop.ts), у края лента молча
+ * перепрыгивает на полспана — прыжок невидим (содержимое периодично) и не
+ * прерывает инерцию: запас до зоны прыжка недостижим одним жестом.
+ * Скринридерам показан только средний (якорный) цикл: role=option и
+ * стабильные id там, повторы aria-hidden; aria-activedescendant всегда
+ * указывает на якорную копию выбранного значения. При min/max цикл
+ * составляют только разрешённые значения — закольцовка не открывает
+ * запрещённые. Годы остаются линейными: ось времени не замыкается.
+ * Линейная лента без границы удлиняется из зоны триггера у края
+ * (wheel-edge.ts — зона шире максимального флика, физический край
+ * недостижим одним жестом): вперёд — сразу, приписка в конец не трогает
+ * позицию скролла; назад — в паузе после остановки, сдвиг scrollTop
+ * посреди инерции убил бы её. */
 
 /** Высота ряда (px); окно колеса — 5 рядов. */
 const WHEEL_ROW_HEIGHT = 48;
@@ -72,11 +78,15 @@ export type WheelPickerProps = {
   /** Замкнуть ленту в кольцо: крутится без конца в обе стороны
    * (часы, минуты, месяцы). Без loop лента конечная. */
   readonly loop?: boolean;
-  /** Прокрутка дошла до края списка (за 2 ряда) — родитель может удлинить
-   * items (бесконечная лента годов пикера месяц/год). Только без loop. */
+  /** Прокрутка вошла в зону у нижнего края (wheel-edge.ts — зона шире
+   * максимального флика, стена не долетаема одним жестом) — родитель
+   * может удлинить items (бесконечная лента годов пикера месяц/год):
+   * приписка в конец невидима для инерции. Только без loop. */
   readonly onNearEnd?: () => void;
-  /** То же у верхнего края: родитель может удлинить items назад
-   * (лента годов пикера периода операций уходит в прошлое без предела).
+  /** То же у верхнего края: родитель может удлинить items назад (лента
+   * годов пикера периода операций уходит в прошлое без предела).
+   * Вызывается в паузе после остановки колеса — приписка в начало
+   * требует сдвига scrollTop, который нельзя делать посреди инерции.
    * Только без loop. */
   readonly onNearStart?: () => void;
   /** Полоса выбора за центральным рядом; false — когда полосу рисует общий
@@ -149,6 +159,16 @@ export function WheelPicker({
   // пока родитель удлиняет. Только без loop.
   const nearEndAtLengthRef = useRef<number | null>(null);
   const nearStartAtLengthRef = useRef<number | null>(null);
+  // Верхний край сообщил о себе (isNearStart), но приписка ждёт паузы —
+  // у settle-таймера (см. handleScroll).
+  const pendingStartRef = useRef(false);
+  // Форма ленты на прошлом прогоне синхронизации: первый ряд отличает
+  // приписку в начало (onNearStart) от прочих изменений; valueIndex —
+  // рост ленты от смены значения.
+  const syncFromRef = useRef<number | null>(null);
+  // Значение прошлого рендера: отличает перекройку ленты (ряд значения
+  // сместился без смены значения) от реальной смены значения.
+  const prevValueRef = useRef(value);
   const optionId = useId();
   const valueIndex = Math.max(items.findIndex((item) => item.value === value), 0);
   // Позиция скролла в физических рядах ленты: без loop ряд = индекс
@@ -169,6 +189,21 @@ export function WheelPicker({
   // докручивают нужный ряд в центр; после собственного скролла человека
   // ничего не дёргается — позиция уже совпадает с целевой. Актуальный
   // индекс для типографики приходит из событий скролла этого прокрута.
+  // Рост ленты (onNearEnd/onNearStart у концов без границы) значением не
+  // является: ряды дописаны, а позиция скролла уже правильная — синк здесь
+  // дёргал колесо smooth-скроллом обратно к выбранному ряду посреди
+  // инерции (дёрганье и откат при прокрутке года в будущее, жалоба
+  // владельца 13.10 на пикере создания платежа). Поэтому синк живёт
+  // только для реальной смены значения и для ре-анкора кольца при смене
+  // длины цикла; приписка в начало ленты (нелинейный рост назад)
+  // компенсируется самим браузером: scroll-snap реснапится к тому же
+  // элементу ленты, что был выбран, — приписанные сверху ряды он
+  // учитывает при layout, до пейнта. Ручной сдвиг scrollTop здесь был
+  // вторым слагаемым: суммы двух корректировок уводили колесо в кламп
+  // последнего ряда при разблокировке месяцев года (приписка 9 рядов
+  // вперёд обрезанной ленты [текущий..декабрь] — колесо показывало
+  // декабрь и плавно возвращалось к выбранному месяцу; #1429, замер:
+  // 0 → 528 → плавный спуск к 432).
   // В loop первая установка садится на якорную копию (середина ленты —
   // максимальный запас пробега в обе стороны), дальше — ближайший
   // представитель значения; смена длины цикла — ре-анкор на якорную
@@ -176,6 +211,30 @@ export function WheelPicker({
   useEffect(() => {
     const list = listRef.current;
     if (list === null) return;
+    const prevValue = prevValueRef.current;
+    prevValueRef.current = value;
+    const syncFrom = syncFromRef.current;
+    syncFromRef.current = valueIndex;
+    if (!loop && syncFrom !== null && syncFrom === valueIndex) {
+      return;
+    }
+    // Лента перекроена без смены значения (разблокировка/блокировка
+    // месяцев года при переключении года: [текущий..декабрь] ↔ полная
+    // лента) — значение то же, его ряд в ленте другой. Браузер к моменту
+    // эффекта уже поправил позицию: реснапом к выбранному элементу или
+    // зажимом о новый максимум ленты; исход гонки не важен — ставим
+    // колесо на ряд значения напрямую. Это идемпотентно после реснапа и
+    // лечит зажим: иначе зажатая позиция (декабрь в хвосте обрезанной
+    // ленты) доезжала плавным скроллом до выбранного ряда — обратная
+    // сторона #1429 («скролится с декабря по октябрь», интервально:
+    // реснап выигрывает гонку не всегда).
+    if (
+      !loop &&
+      prevValue === value &&
+      Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== valueIndex
+    ) {
+      list.scrollTop = valueIndex * WHEEL_ROW_HEIGHT;
+    }
     const maxRow = loop ? loopRowCount(items.length) - 1 : items.length - 1;
     let targetRow = valueIndex;
     if (loop) {
@@ -200,7 +259,7 @@ export function WheelPicker({
       });
     }
     instantRef.current = false;
-  }, [valueIndex, loop, items.length]);
+  }, [value, valueIndex, loop, items.length, items]);
 
   const commitIndex = (index: number): void => {
     const item = items[index];
@@ -228,29 +287,37 @@ export function WheelPicker({
     } else {
       // Повторный сигнал о том же крае — только после удлинения списка
       // родителем (иначе инерционный доскат у края растянул бы его на
-      // сотни).
+      // сотни). Зона триггера шире максимального флика (wheel-edge.ts):
+      // из неё физический край недостижим одним жестом, достройка всегда
+      // успевает раньше инерции.
       if (
         onNearEnd !== undefined &&
-        row >= items.length - 2 &&
+        isNearEnd(row, items.length) &&
         nearEndAtLengthRef.current !== items.length
       ) {
         nearEndAtLengthRef.current = items.length;
         onNearEnd();
       }
+      // Назад — только запрос: приписка рядов в начало требует сдвига
+      // scrollTop, а запись позиции посреди инерции её убивает, поэтому
+      // onNearStart вызывается из settle-таймера, в неподвижности.
       if (
         onNearStart !== undefined &&
-        row <= 1 &&
+        isNearStart(row) &&
         nearStartAtLengthRef.current !== items.length
       ) {
         nearStartAtLengthRef.current = items.length;
-        onNearStart();
+        pendingStartRef.current = true;
       }
     }
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
-    settleTimerRef.current = window.setTimeout(
-      () => commitIndex(loop ? modRows(row, items.length) : row),
-      SETTLE_TIMEOUT_MS,
-    );
+    settleTimerRef.current = window.setTimeout(() => {
+      if (pendingStartRef.current) {
+        pendingStartRef.current = false;
+        onNearStart?.();
+      }
+      commitIndex(loop ? modRows(row, items.length) : row);
+    }, SETTLE_TIMEOUT_MS);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
@@ -287,6 +354,13 @@ export function WheelPicker({
           className="pointer-events-none absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 bg-surface-muted"
         />
       )}
+      {/* data-vaul-no-drag: жест, начавшийся внутри колеса, никогда не
+          отбирается vaul-дравером шита. Раньше у верхнего края ленты
+          (scrollTop 0 — январь конечных месяцев, min-год) vaul решал
+          «скроллер на верхнем крае → крутят шит» и тащил шит к закрытию
+          тем же жестом; теперь колесо владеет своим жестом целиком — шит
+          закрывается ручкой, свайпом вне колёс, кнопками и тапом по
+          оверлею (решение владельца 2026-10-13). */}
       <ul
         ref={listRef}
         role="listbox"
@@ -296,7 +370,8 @@ export function WheelPicker({
         onScroll={handleScroll}
         onKeyDown={handleKeyDown}
         onClick={handleClick}
-        className="relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
+        data-vaul-no-drag=""
+        className="wheel-cascade relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
       >
         {Array.from({ length: rowCount }, (_, row) => {
           const logical = loop ? modRows(row, items.length) : row;

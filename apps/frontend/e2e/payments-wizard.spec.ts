@@ -548,9 +548,9 @@ test.describe('визард создания платежа', () => {
     await passTitleStep(page, title);
 
     await page.getByRole('button', { name: 'Каждый год' }).click();
-    // Чип открывает шит-пикер: колесо месяцев и годы от текущего. В
-    // граничном году кольцо (#810) несёт только разрешённые месяцы от
-    // текущего — «Сентябрь»-хардкод падал с октября, месяц в тесте сезонно-
+    // Чип открывает шит-пикер: конечная лента месяцев и годы от текущего.
+    // В граничном году лента несёт только разрешённые месяцы от текущего —
+    // «Сентябрь»-хардкод падал с октября, месяц в тесте сезонно-
     // независимый: «Декабрь» (последний разрешённый текущего года).
     await page.getByRole('dialog', { name: 'Выбрать дату' }).getByRole('button', { name: /\d{4}/ }).click();
     await expect(page.getByText('Отменить')).toBeVisible();
@@ -565,23 +565,32 @@ test.describe('визард создания платежа', () => {
         .getByRole('option', { selected: true }),
     ).toHaveText('Декабрь');
 
-    // Годы без верхней границы: упор в конец списка удлиняет его вперёд.
-    // End ставит selected на текущий конец ленты; следующий End жмём только
-    // после монтирования дорисованных строк: 2029 (текущий+3) → 2039 (+13),
-    // лента после второго упора достаёт до +23 — год+20 виден.
+    // Годы без верхней границы: упор в конец списка удлиняет его вперёд
+    // (годы-окно years-window: стартовое окно +25, достройка по +25,
+    // решение владельца 2026-10-13). Зона триггера — 80 рядов (#1427):
+    // достройка успевает прямо во время прокрутки, край ленты недостижим,
+    // и лента может удлиниться не один раз за упор — сверяемся с
+    // фактическим последним рядом, а не с фиксированной арифметикой.
     const yearWheel = page.getByRole('listbox', { name: 'Год' });
     const year = new Date().getFullYear();
     await yearWheel.press('End');
-    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 3));
-    await expect(yearWheel.getByText(String(year + 13)).first()).toBeVisible();
+    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 25));
+    await page.waitForTimeout(400);
+    expect(Number(await yearWheel.locator('li').last().textContent())).toBeGreaterThan(year + 25);
+    // Повторный упор — снова на конец удлинённой ленты.
     await yearWheel.press('End');
-    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 13));
-    await expect(yearWheel.getByText(String(year + 23)).first()).toBeVisible();
-    await expect(page.getByText(String(year + 20)).first()).toBeVisible();
+    await page.waitForTimeout(400);
+    const settledEnd = Number(await yearWheel.getByRole('option', { selected: true }).textContent());
+    expect(settledEnd).toBeGreaterThanOrEqual(year + 50);
+    expect(settledEnd).toBeLessThanOrEqual(Number(await yearWheel.locator('li').last().textContent()));
+    // Для прыжка берём умеренный год из удлинённой ленты: +50 повалит
+    // полвека ленты календаря.
+    await yearWheel.getByText(String(year + 30)).first().click();
+    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 30));
 
     // Подтверждаем колёса: календарь прыгает на декабрь выбранного года.
     await page.getByRole('dialog', { name: 'Месяц и год' }).getByRole('button', { name: 'Выбрать' }).click();
-    const jumpedYear = year + 13;
+    const jumpedYear = year + 30;
 
     // Календарь переключился на декабрь прыжка; выбираем 10-е — секция
     // именно этого месяца: в ленте остаются и прошлые месяцы с тем же днём.
@@ -599,6 +608,73 @@ test.describe('визард создания платежа', () => {
     expect(created?.recurrence.kind).toBe('yearly');
     expect(created?.recurrence.month).toBe(12);
     expect(created?.recurrence.day).toBe(10);
+  });
+
+  test('ежегодная ветка: разблокировка месяцев года не увозит колесо месяцев в чужой ряд (#1429)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, 'E2E разблокировка месяцев');
+
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    // Чип текущего месяца открывает шит колёс: при min в текущем году
+    // лента месяцев обрезана [текущий..декабрь].
+    const monthName = new Date().toLocaleDateString('ru-RU', { month: 'long' });
+    const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+    await page
+      .getByRole('dialog', { name: 'Выбрать дату' })
+      .getByRole('button', { name: new RegExp(`${capMonth} \\d{4}`) })
+      .click();
+    const monthList = page.getByRole('listbox', { name: 'Месяц' });
+    const yearList = page.getByRole('listbox', { name: 'Год' });
+    await expect(monthList).toBeVisible();
+
+    // Зонд: центральный ряд колеса месяцев по кадрам. Выбранный месяц до
+    // разблокировки — первый ряд обрезанной ленты (scrollTop 0), после —
+    // ряд minMonth0 полной ленты.
+    const minMonth0 = new Date().getMonth();
+    await monthList.evaluate((el) => {
+      const w = window as unknown as { __mWheel: number[] };
+      w.__mWheel = [];
+      const tick = () => {
+        w.__mWheel.push(Math.round(el.scrollTop / 48));
+        if (w.__mWheel.length < 400) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+
+    // Переключаем год — месяцы до текущего разблокируются (приписка
+    // впереди ленты). Прежний код: нативный scroll-якорь и ручная
+    // компенсация складывались, колесо уезжало в кламп последнего ряда
+    // (декабрь) и плавно возвращалось к выбранному месяцу.
+    // Туда-обратно несколько раз: при сжатии ленты (обратное
+    // переключение) реснап браузера гонится со зажимом о новый максимум
+    // — экскурсия к декабрю была интервальной, замок должен держать все
+    // переключения.
+    const thisYear = String(new Date().getFullYear());
+    const nextYear = String(new Date().getFullYear() + 1);
+    // Троттлинг CPU растягивает рендер перекроенной ленты: гонка реснапа
+    // со зажимом о новый максимум на быстрой машине выпадает не каждый
+    // раз, под нагрузкой — почти всегда.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 8 });
+    await yearList.getByText(nextYear, { exact: true }).click();
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      await page.waitForTimeout(350);
+      await yearList.getByText(thisYear, { exact: true }).click();
+      await page.waitForTimeout(350);
+      await yearList.getByText(nextYear, { exact: true }).click();
+    }
+    await page.waitForTimeout(800);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    const centers = await page.evaluate(
+      () => (window as unknown as { __mWheel: number[] }).__mWheel,
+    );
+    for (const center of centers) {
+      expect([0, minMonth0]).toContain(center);
+    }
   });
 
   test('окончание платежа: пикер не даёт день раньше первого вхождения, дата в контракте', async ({

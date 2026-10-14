@@ -36,7 +36,9 @@ export function mapHistoryItem(dto: HistoryItemDto): HistoryEntry {
     actorName: dto.actor_name,
     actorFirstName: dto.actor_first_name,
     actorLastName: dto.actor_last_name,
-    actorPhotoUrl: dto.actor_photo_url ?? null,
+    // '' — легаси-форма «фото нет» (бэк до StringPtr-фикса шлёт пустую
+    // строку вопреки nullable-контракту): нормализуем к null, канону заглушек.
+    actorPhotoUrl: dto.actor_photo_url === '' ? null : dto.actor_photo_url,
     actorRole: dto.actor_role,
     baseAction: dto.base_action,
     action: dto.action,

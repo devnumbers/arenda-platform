@@ -20,28 +20,35 @@ describe('wheel-loop', () => {
     expect(modRows(-25, 60)).toBe(35);
   });
 
-  it('loopRowCount — цикл отрисован 31 раз: часы 744, минуты 1860, месяцы 372', () => {
-    expect(WHEEL_LOOP_CYCLES).toBe(31);
-    expect(WHEEL_LOOP_ANCHOR).toBe(15);
-    expect(loopRowCount(24)).toBe(744);
-    expect(loopRowCount(60)).toBe(1860);
-    expect(loopRowCount(12)).toBe(372);
+  it('loopRowCount — цикл отрисован 9 раз: часы 216, минуты 540 (месяцы без loop)', () => {
+    expect(WHEEL_LOOP_CYCLES).toBe(9);
+    expect(WHEEL_LOOP_ANCHOR).toBe(4);
+    expect(loopRowCount(24)).toBe(216);
+    expect(loopRowCount(60)).toBe(540);
+  });
+
+  it('запас после прыжка — три цикла: дальность жёсткого флика (~2600px = v₀≈8000px/s × τ≈325мс) не достаёт до зоны прыжка у часов (3×24×48 = 3456px)', () => {
+    // Зона прыжка — row <= n; после прыжка ряд = ANCHOR*n. Запас в рядах:
+    for (const n of [24, 60]) {
+      expect(loopRecenterRows(0, n) - n).toBe((WHEEL_LOOP_ANCHOR - 1) * n);
+      expect((WHEEL_LOOP_ANCHOR - 1) * n).toBeGreaterThanOrEqual(3 * 24);
+    }
   });
 
   it('isAnchorRow — role=option только у среднего цикла', () => {
     const n = 24;
     expect(isAnchorRow(0, n)).toBe(false);
-    expect(isAnchorRow(14 * n + 5, n)).toBe(false);
-    expect(isAnchorRow(15 * n + 0, n)).toBe(true);
-    expect(isAnchorRow(15 * n + 23, n)).toBe(true);
-    expect(isAnchorRow(16 * n + 5, n)).toBe(false);
+    expect(isAnchorRow(3 * n + 5, n)).toBe(false);
+    expect(isAnchorRow(4 * n + 0, n)).toBe(true);
+    expect(isAnchorRow(4 * n + 23, n)).toBe(true);
+    expect(isAnchorRow(5 * n + 5, n)).toBe(false);
     expect(isAnchorRow(loopRowCount(n) - 1, n)).toBe(false);
   });
 
   it('loopRecenterRows — в середине скачок не нужен', () => {
     const n = 24;
-    expect(loopRecenterRows(15 * n, n)).toBe(0);
-    expect(loopRecenterRows(20 * n, n)).toBe(0);
+    expect(loopRecenterRows(4 * n, n)).toBe(0);
+    expect(loopRecenterRows(6 * n, n)).toBe(0);
   });
 
   it('loopRecenterRows — у верхнего края (меньше цикла запаса) прыжок на полспана вниз', () => {
@@ -78,30 +85,30 @@ describe('wheel-loop', () => {
 
   it('loopNearestRow — тот же логический индекс: ряд не меняется', () => {
     const n = 24;
-    const row = 15 * n + 7;
+    const row = 4 * n + 7;
     expect(loopNearestRow(row, 7, n)).toBe(row);
   });
 
   it('loopNearestRow — ближайший представитель логического индекса, а не якорная копия', () => {
     const n = 24;
     // ушли на 3 ряда вниз от якоря — логический 5 ближе копией в этом же цикле
-    expect(loopNearestRow(15 * n + 8, 5, n)).toBe(15 * n + 5);
+    expect(loopNearestRow(4 * n + 8, 5, n)).toBe(4 * n + 5);
     // ушли на 3 ряда вверх — логический 1
-    expect(loopNearestRow(15 * n + 2, 1, n)).toBe(15 * n + 1);
+    expect(loopNearestRow(4 * n + 2, 1, n)).toBe(4 * n + 1);
   });
 
   it('loopNearestRow — заворот через край цикла: не длиннее полцикла', () => {
     const n = 24;
-    const row = 15 * n + 2;
+    const row = 4 * n + 2;
     // логический 22 = текущий 2 минус 4 ряда (через край цикла), а не плюс 20
-    expect(loopNearestRow(row, 22, n)).toBe(15 * n - 2);
+    expect(loopNearestRow(row, 22, n)).toBe(4 * n - 2);
     expect(loopNearestRow(row, 12, n)).toBe(row + 10); // ровно полцикла — вниз
   });
 
   it('loopNearestRow сохраняет логический индекс и работает от любой позиции', () => {
     for (const n of [1, 2, 9, 12, 24, 60]) {
       for (let logical = 0; logical < n; logical += 1) {
-        for (const row of [0, 5, 15 * n, 20 * n + 3, loopRowCount(n) - 1]) {
+        for (const row of [0, 5, 4 * n, 6 * n + 3, loopRowCount(n) - 1]) {
           const target = loopNearestRow(row, logical, n);
           expect(modRows(target, n)).toBe(logical);
           expect(Math.abs(target - row)).toBeLessThanOrEqual(n / 2);
@@ -111,12 +118,12 @@ describe('wheel-loop', () => {
   });
 
   it('loopSyncRow — смена длины цикла ре-анкорит на якорную копию (граничный год режет месяц-колесо)', () => {
-    // 12 → 4: позиция 123 — это кламп физического ряда в новую ленту
-    // (loopRowCount(4) − 1); ближайший представитель Sep = 124 вне ленты,
-    // кламп оставил бы 123 = Dec — молчаливая подмена черновика месяца.
-    expect(loopSyncRow(123, 0, 4, 12)).toBe(WHEEL_LOOP_ANCHOR * 4);
+    // 12 → 4: позиция 100 — это кламп физического ряда в новую ленту
+    // (loopRowCount(4) − 1 = 35); ближайший представитель вне ленты,
+    // кламп оставил бы чужой логический ряд — молчаливая подмена черновика.
+    expect(loopSyncRow(100, 0, 4, 12)).toBe(WHEEL_LOOP_ANCHOR * 4);
     // 4 → 12: подъём обратно тоже садит на якорную копию, а не на ближнюю.
-    expect(loopSyncRow(50, 8, 12, 4)).toBe(WHEEL_LOOP_ANCHOR * 12 + 8);
+    expect(loopSyncRow(30, 8, 12, 4)).toBe(WHEEL_LOOP_ANCHOR * 12 + 8);
   });
 
   // Полный перебор ~250 тыс. комбинаций идёт дольше дефолтных 5 с vitest

@@ -131,7 +131,9 @@ export function ModalContent({
        * (useIsDesktop), решение владельца 08.09 #561 — литерал, не токен
        * tablet: (тот с 08.09 = 561, начало планшетного яруса). */}
       <SheetDragHandle className="min-[768px]:hidden" />
-      <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      {/* overscroll-contain: тело шита не отдаёт жест цепочкой vaul-драверу
+          и странице — у собственного края контент гасит прокрутку. */}
+      <div className="flex flex-col gap-4 overflow-y-auto overscroll-contain p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {titleBlock}
         {description !== undefined && (
           <DialogDescription className={cn('text-sm text-content-secondary', descriptionClassName)}>

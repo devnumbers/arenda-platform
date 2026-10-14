@@ -34,11 +34,18 @@ func (f *historyReaderFake) List(_ context.Context, _ uuid.UUID, q historyapp.Jo
 
 func (f *historyReaderFake) FilterParticipants(_ context.Context, _ uuid.UUID, ids []uuid.UUID) ([]domain.FilterParticipant, error) {
 	f.gotIDs = &ids
-	return []domain.FilterParticipant{{ID: uuid.Must(uuid.NewV7()), Name: "Иван Иванов", Email: "ivan@example.com"}}, nil
+	return []domain.FilterParticipant{
+		{ID: uuid.Must(uuid.NewV7()), Name: fakeParticipantName, Email: "ivan@example.com"},
+		// Участник с фото: путь стриминга доходит до провода дословно.
+		{
+			ID: uuid.Must(uuid.NewV7()), Name: "Мария Петрова", Email: "maria@example.com",
+			PhotoURL: "/api/users/" + uuid.Must(uuid.NewV7()).String() + "/photo",
+		},
+	}, nil
 }
 
 func (f *historyReaderFake) FilterObjects(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]domain.FilterObject, error) {
-	return []domain.FilterObject{{ID: uuid.Must(uuid.NewV7()), Name: "Гараж", Address: "Москва", PhotoURL: "", Type: "garage"}}, nil
+	return []domain.FilterObject{{ID: uuid.Must(uuid.NewV7()), Name: fakePropertyName, Address: "Москва", PhotoURL: "", Type: "garage"}}, nil
 }
 
 // historyPolicyAllow grants the owner role everywhere — the privacy-404
@@ -69,18 +76,25 @@ func historyRequest(userID *uuid.UUID, target string) *http.Request {
 
 var historyReaderID = uuid.Must(uuid.NewV7())
 
+// Значения фейка, повторяющиеся в ассертах (goconst).
+const (
+	fakeParticipantName = "Иван Иванов"
+	fakePropertyName    = "Гараж"
+)
+
 func TestHistoryHandlers_GetHistoryPage(t *testing.T) {
 	t.Parallel()
 
 	h, reader := newHistoryTestHandlers()
 	actor := uuid.Must(uuid.NewV7())
 	linkID := uuid.Must(uuid.NewV7())
+	withPhoto := uuid.Must(uuid.NewV7())
 	reader.rows = []domain.FeedEntry{{
 		ID:           uuid.Must(uuid.NewV7()),
 		PropertyID:   uuid.Must(uuid.NewV7()),
-		PropertyName: "Гараж",
+		PropertyName: fakePropertyName,
 		ActorID:      &actor,
-		ActorName:    "Иван Иванов",
+		ActorName:    fakeParticipantName,
 		ActorEmail:   "ivan@example.com",
 		ActorRole:    domain.ActorRoleOwner,
 		Kind:         domain.KindOperation,
@@ -92,6 +106,21 @@ func TestHistoryHandlers_GetHistoryPage(t *testing.T) {
 		},
 		Context:   map[string]any{"amount_kopecks": float64(150000)},
 		CreatedAt: time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC),
+	}, {
+		// Актёр с фото: путь стриминга доходит до провода дословно.
+		ID:            uuid.Must(uuid.NewV7()),
+		PropertyID:    uuid.Must(uuid.NewV7()),
+		PropertyName:  fakePropertyName,
+		ActorID:       &withPhoto,
+		ActorName:     fakeParticipantName,
+		ActorPhotoURL: "/api/users/" + withPhoto.String() + "/photo",
+		ActorRole:     domain.ActorRoleOwner,
+		Kind:          domain.KindProperty,
+		Action:        domain.ActionPropertyRenamed,
+		BaseAction:    domain.BaseChanged,
+		Segments:      domain.Segments{{Text: "Объект переименован"}},
+		Context:       map[string]any{},
+		CreatedAt:     time.Date(2026, 9, 20, 11, 0, 0, 0, time.UTC),
 	}}
 
 	w := httptest.NewRecorder()
@@ -120,8 +149,11 @@ func TestHistoryHandlers_GetHistoryPage(t *testing.T) {
 			PropertyName string    `json:"property_name"`
 			ActorID      *string   `json:"actor_id"`
 			ActorRole    string    `json:"actor_role"`
-			BaseAction   string    `json:"base_action"`
-			Segments     []struct {
+			// Актёр без фото — null на проводе (контракт nullable, ADR 0065):
+			// пустая строка на проводе ломает фолбэк заглушки клиента.
+			ActorPhotoURL *string `json:"actor_photo_url"`
+			BaseAction    string  `json:"base_action"`
+			Segments      []struct {
 				Text string `json:"text"`
 				Link *struct {
 					Kind string `json:"kind"`
@@ -135,18 +167,23 @@ func TestHistoryHandlers_GetHistoryPage(t *testing.T) {
 		PrevCursor *string `json:"prev_cursor"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
-	require.Len(t, page.Items, 1)
+	require.Len(t, page.Items, 2)
 	item := page.Items[0]
-	assert.Equal(t, "Гараж", item.PropertyName)
+	assert.Equal(t, fakePropertyName, item.PropertyName)
 	assert.Equal(t, "owner", item.ActorRole)
 	assert.Equal(t, "completed", item.BaseAction)
 	require.NotNil(t, item.ActorID)
 	assert.Equal(t, actor.String(), *item.ActorID)
+	assert.Nil(t, item.ActorPhotoURL, "актёр без фото — null на проводе, не ''")
 	require.Len(t, item.Segments, 2)
 	require.NotNil(t, item.Segments[1].Link)
 	assert.Equal(t, "operation", item.Segments[1].Link.Kind)
 	assert.Equal(t, linkID.String(), item.Segments[1].Link.ID)
 	assert.InDelta(t, 150000.0, item.Context["amount_kopecks"], 0.01)
+
+	withPhotoItem := page.Items[1]
+	require.NotNil(t, withPhotoItem.ActorPhotoURL)
+	assert.Equal(t, "/api/users/"+withPhoto.String()+"/photo", *withPhotoItem.ActorPhotoURL)
 }
 
 func TestHistoryHandlers_GetHistoryErrors(t *testing.T) {
@@ -201,6 +238,8 @@ func TestHistoryHandlers_GetHistoryFilters(t *testing.T) {
 			ID    string `json:"id"`
 			Name  string `json:"name"`
 			Email string `json:"email"`
+			// Участник без фото — null на проводе (контракт nullable, ADR 0065).
+			PhotoURL *string `json:"photo_url"`
 		} `json:"participants"`
 		Objects []struct {
 			ID       string `json:"id"`
@@ -210,9 +249,12 @@ func TestHistoryHandlers_GetHistoryFilters(t *testing.T) {
 		} `json:"objects"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Len(t, body.Participants, 1)
-	assert.Equal(t, "Иван Иванов", body.Participants[0].Name)
+	require.Len(t, body.Participants, 2)
+	assert.Equal(t, fakeParticipantName, body.Participants[0].Name)
+	assert.Nil(t, body.Participants[0].PhotoURL, "участник без фото — null на проводе, не ''")
+	assert.Equal(t, "Мария Петрова", body.Participants[1].Name)
+	require.NotNil(t, body.Participants[1].PhotoURL)
 	require.Len(t, body.Objects, 1)
-	assert.Equal(t, "Гараж", body.Objects[0].Name)
+	assert.Equal(t, fakePropertyName, body.Objects[0].Name)
 	assert.Equal(t, "garage", body.Objects[0].Type, "the filter row's glyph type (#1244)")
 }

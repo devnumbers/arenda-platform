@@ -1049,3 +1049,37 @@ body > * {
         text-decoration: none;
     }
 }
+
+/* Барабан WheelPicker (решение владельца 2026-10-13 — отмена решения
+   2026-09-04 в части визуального каскада; кегль рядов 20/24 не меняется,
+   цветовое различие выбранного остаётся): ряды дальше от центра окна
+   сжаты и приглушены, как у UIPickerView. Scroll-driven animations —
+   таймлайн привязан к позиции ряда в окне скролла и считается на
+   компоситоре, JS на кадр не нужен; 50% таймлайна — ряд в центре (полная
+   сила), к краям — scale 0.72 / opacity 0.35. Каскад привязан к позиции
+   скролла, а не ко времени, поэтому prefers-reduced-motion его не глушит
+   (канон §8: жесты — управление). Браузеры без scroll-driven animations
+   видят прежние плоские ряды — спокойная деградация. */
+@keyframes wheel-row-cascade {
+    from {
+        scale: 0.72;
+        opacity: 0.35;
+    }
+
+    50% {
+        scale: 1;
+        opacity: 1;
+    }
+
+    to {
+        scale: 0.72;
+        opacity: 0.35;
+    }
+}
+
+@supports (animation-timeline: view()) {
+    .wheel-cascade > li {
+        animation: wheel-row-cascade linear both;
+        animation-timeline: view();
+    }
+}

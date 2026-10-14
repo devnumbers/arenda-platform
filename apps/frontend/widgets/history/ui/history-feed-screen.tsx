@@ -757,10 +757,12 @@ function PropertyHeaderContent({
  * ссылка на страницу участника, без — статичная шапка. Свой актёр
  * подписан серым суффиксом «(Вы)» — канон шита фильтров (#710). */
 /** Аватар актёра в шапке группы ленты (решение #1286): фото профиля 24,
- * иначе — и при битом фото (404 стрима) — заглушка BoldUser. */
+ * иначе — и при битом фото (404 стрима) — заглушка BoldUser. Гард '' —
+ * канон UserAvatar: легаси-бэк мог отдать пустую строку вместо null, а
+ * <img src=""> не стреляет onError в WebKit — без него круг без глифа. */
 function ActorFeedAvatar({ photoUrl }: { readonly photoUrl: string | null }): JSX.Element {
   const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl !== null && !photoBroken;
+  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
   return (
     <span
       aria-hidden

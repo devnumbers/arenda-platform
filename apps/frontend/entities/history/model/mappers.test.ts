@@ -81,6 +81,9 @@ describe('mapHistoryItem', () => {
     );
     expect(entry.actorPhotoUrl).toBe('/api/users/user-1/photo');
     expect(mapHistoryItem(itemDto({ actor_photo_url: null })).actorPhotoUrl).toBeNull();
+    // Легаси-форма бэка (до StringPtr-фикса контракта): '' — тоже «фото нет»,
+    // канон заглушек UserAvatar/PropertyAvatar.
+    expect(mapHistoryItem(itemDto({ actor_photo_url: '' })).actorPhotoUrl).toBeNull();
 
     const options = mapHistoryFilterOptions({
       participants: [
