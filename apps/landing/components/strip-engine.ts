@@ -274,7 +274,12 @@ export function createStripEngine(
       }
     }
     if (!st.dragMoved) {
-      return; // тап без движения — ничего не делает
+      // Тап без движения перебивает полёт (жест перехватывает движение,
+      // канон) — лента доезжает до ближайшей позиции покоя, а не застывает
+      // между карточками до следующего жеста. На покое это no-op.
+      const { pos } = model(viewport, track, config);
+      animateTo(pos[nearestIndex(st.p, pos)] ?? st.p);
+      return;
     }
     const { pos } = model(viewport, track, config);
     let best = nearestIndex(st.p, pos);
