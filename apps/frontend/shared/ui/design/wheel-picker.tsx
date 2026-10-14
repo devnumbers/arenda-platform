@@ -165,7 +165,6 @@ export function WheelPicker({
   // Форма ленты на прошлом прогоне синхронизации: первый ряд отличает
   // приписку в начало (onNearStart) от прочих изменений; valueIndex —
   // рост ленты от смены значения.
-  const firstValueRef = useRef<string | undefined>(items[0]?.value);
   const syncFromRef = useRef<number | null>(null);
   const optionId = useId();
   const valueIndex = Math.max(items.findIndex((item) => item.value === value), 0);
@@ -194,8 +193,14 @@ export function WheelPicker({
   // владельца 13.10 на пикере создания платежа). Поэтому синк живёт
   // только для реальной смены значения и для ре-анкора кольца при смене
   // длины цикла; приписка в начало ленты (нелинейный рост назад)
-  // компенсируется сдвигом scrollTop — иначе viewport мгновенно уезжал
-  // бы на добавленное число рядов.
+  // компенсируется самим браузером: scroll-snap реснапится к тому же
+  // элементу ленты, что был выбран, — приписанные сверху ряды он
+  // учитывает при layout, до пейнта. Ручной сдвиг scrollTop здесь был
+  // вторым слагаемым: суммы двух корректировок уводили колесо в кламп
+  // последнего ряда при разблокировке месяцев года (приписка 9 рядов
+  // вперёд обрезанной ленты [текущий..декабрь] — колесо показывало
+  // декабрь и плавно возвращалось к выбранному месяцу; #1429, замер:
+  // 0 → 528 → плавный спуск к 432).
   // В loop первая установка садится на якорную копию (середина ленты —
   // максимальный запас пробега в обе стороны), дальше — ближайший
   // представитель значения; смена длины цикла — ре-анкор на якорную
@@ -203,14 +208,6 @@ export function WheelPicker({
   useEffect(() => {
     const list = listRef.current;
     if (list === null) return;
-    const prevFirstValue = firstValueRef.current;
-    firstValueRef.current = items[0]?.value;
-    if (!loop && prevFirstValue !== undefined) {
-      const addedAtStart = items.findIndex((item) => item.value === prevFirstValue);
-      if (addedAtStart > 0) {
-        list.scrollTop += addedAtStart * WHEEL_ROW_HEIGHT;
-      }
-    }
     const syncFrom = syncFromRef.current;
     syncFromRef.current = valueIndex;
     if (!loop && syncFrom !== null && syncFrom === valueIndex) {
@@ -352,7 +349,7 @@ export function WheelPicker({
         onKeyDown={handleKeyDown}
         onClick={handleClick}
         data-vaul-no-drag=""
-        className="wheel-cascade relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
+        className="wheel-cascade relative flex h-[240px] list-none flex-col snap-y snap-mandatory overflow-y-scroll overscroll-y-contain py-[96px] outline-none [scrollbar-width:none] [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-primary [&::-webkit-scrollbar]:hidden"
       >
         {Array.from({ length: rowCount }, (_, row) => {
           const logical = loop ? modRows(row, items.length) : row;

@@ -523,15 +523,22 @@ test.describe('визард создания платежа', () => {
 
     // Годы без верхней границы: упор в конец списка удлиняет его вперёд
     // (годы-окно years-window: стартовое окно +25, достройка по +25,
-    // решение владельца 2026-10-13). End ставит selected на конец окна;
-    // после дорисовки лента достаёт до +50 — второй упор садится на +50.
+    // решение владельца 2026-10-13). Зона триггера — 80 рядов (#1427):
+    // достройка успевает прямо во время прокрутки, край ленты недостижим,
+    // и лента может удлиниться не один раз за упор — сверяемся с
+    // фактическим последним рядом, а не с фиксированной арифметикой.
     const yearWheel = page.getByRole('listbox', { name: 'Год' });
     const year = new Date().getFullYear();
     await yearWheel.press('End');
     await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 25));
-    await expect(yearWheel.getByText(String(year + 50)).first()).toBeVisible();
+    await page.waitForTimeout(400);
+    expect(Number(await yearWheel.locator('li').last().textContent())).toBeGreaterThan(year + 25);
+    // Повторный упор — снова на конец удлинённой ленты.
     await yearWheel.press('End');
-    await expect(yearWheel.getByRole('option', { selected: true })).toHaveText(String(year + 50));
+    await page.waitForTimeout(400);
+    const settledEnd = Number(await yearWheel.getByRole('option', { selected: true }).textContent());
+    expect(settledEnd).toBeGreaterThanOrEqual(year + 50);
+    expect(settledEnd).toBeLessThanOrEqual(Number(await yearWheel.locator('li').last().textContent()));
     // Для прыжка берём умеренный год из удлинённой ленты: +50 повалит
     // полвека ленты календаря.
     await yearWheel.getByText(String(year + 30)).first().click();
@@ -557,6 +564,55 @@ test.describe('визард создания платежа', () => {
     expect(created?.recurrence.kind).toBe('yearly');
     expect(created?.recurrence.month).toBe(12);
     expect(created?.recurrence.day).toBe(10);
+  });
+
+  test('ежегодная ветка: разблокировка месяцев года не увозит колесо месяцев в чужой ряд (#1429)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, 'E2E разблокировка месяцев');
+
+    await page.getByRole('button', { name: 'Каждый год' }).click();
+    // Чип текущего месяца открывает шит колёс: при min в текущем году
+    // лента месяцев обрезана [текущий..декабрь].
+    const monthName = new Date().toLocaleDateString('ru-RU', { month: 'long' });
+    const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+    await page
+      .getByRole('dialog', { name: 'Выбрать дату' })
+      .getByRole('button', { name: new RegExp(`${capMonth} \\d{4}`) })
+      .click();
+    const monthList = page.getByRole('listbox', { name: 'Месяц' });
+    const yearList = page.getByRole('listbox', { name: 'Год' });
+    await expect(monthList).toBeVisible();
+
+    // Зонд: центральный ряд колеса месяцев по кадрам. Выбранный месяц до
+    // разблокировки — первый ряд обрезанной ленты (scrollTop 0), после —
+    // ряд minMonth0 полной ленты.
+    const minMonth0 = new Date().getMonth();
+    await monthList.evaluate((el) => {
+      const w = window as unknown as { __mWheel: number[] };
+      w.__mWheel = [];
+      const tick = () => {
+        w.__mWheel.push(Math.round(el.scrollTop / 48));
+        if (w.__mWheel.length < 400) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+
+    // Переключаем год — месяцы до текущего разблокируются (приписка
+    // впереди ленты). Прежний код: нативный scroll-якорь и ручная
+    // компенсация складывались, колесо уезжало в кламп последнего ряда
+    // (декабрь) и плавно возвращалось к выбранному месяцу.
+    await yearList.getByText(String(new Date().getFullYear() + 1), { exact: true }).click();
+    await page.waitForTimeout(1_000);
+    const centers = await page.evaluate(
+      () => (window as unknown as { __mWheel: number[] }).__mWheel,
+    );
+    for (const center of centers) {
+      expect([0, minMonth0]).toContain(center);
+    }
   });
 
   test('окончание платежа: пикер не даёт день раньше первого вхождения, дата в контракте', async ({

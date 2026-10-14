@@ -659,7 +659,14 @@ export function CalendarRangePicker({
         </div>
       </div>
 
-      <div ref={scrollRef} onScroll={handleScroll} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      {/* Нативный scroll-якорь выключен: позицию при дорисовке держит
+          ручная компенсация (useLayoutEffect выше) — в Chrome двойная
+          корректировка уводила бы кадр на прирост высоты. */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none]"
+      >
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
             const future = calendarMonthIndex({ year, month0 }) > todayIdx;
