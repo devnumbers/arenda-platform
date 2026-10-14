@@ -39,6 +39,14 @@ COPY --from=build --chown=nextjs:nextjs /app/apps/landing/public ./public
 COPY --from=build --chown=nextjs:nextjs /app/apps/landing/.next/standalone ./
 COPY --from=build --chown=nextjs:nextjs /app/apps/landing/.next/static ./.next/static
 
+# Каталог дискового кэша image-оптимизатора (/_next/image): деплой-компоуз
+# монтирует сюда именованный volume, чтобы тёплый кэш переживал замену
+# образа. Каталог обязан существовать в образе с владельцем nextjs —
+# volume, созданный на пустом пути, достался бы root и оптимизатор не смог
+# бы в него писать.
+RUN mkdir -p ./.next/cache \
+    && chown nextjs:nextjs ./.next/cache
+
 USER nextjs
 
 EXPOSE 8080

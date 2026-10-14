@@ -174,6 +174,20 @@
   body {
     @apply bg-white font-sans text-ink antialiased;
   }
+
+  /* Мобильно-платформенный слой (практики Эмиля Ковальски, mobile-native):
+     серая вспышка на тапе — самый громкий сигнал «это сайт» — она спорит
+     с собственным press-фидбеком кнопок (:active, канон доски 2864-5099);
+     прозрачный tap-highlight возвращает нажатию задуманный отклик. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Лендинг только светлый: без явного color-scheme тёмная ОС рендерит
+     UA-виджеты (скроллбары, автозаполнение полей) в тёмной теме. */
+  :root {
+    color-scheme: light;
+  }
 }
 
 /* Лок скролла Radix/vaul-оверлеев (react-remove-scroll-bar) ставит body
