@@ -351,10 +351,21 @@
   border-radius: inherit;
 }
 
+/* В движении (драг/переход, класс ставит render() в showcase.tsx) блюр
+   стекла заморожен на покойном центральном значении: интерполяция блюра
+   перерастеризует стекло каждый кадр — самая дорогая часть морфа (в
+   Safari особенно), а ступеньку приезда глаз в движении не читает. */
+.moving .cardGlass {
+  -webkit-backdrop-filter: blur(var(--blur));
+  backdrop-filter: blur(var(--blur));
+}
+
 /* Стекло характеристик для тех, кто просит меньше прозрачности или
-   больший контраст: почти сплошная подложка, интерполяция блюра снята. */
+   больший контраст: почти сплошная подложка, блюр снят целиком —
+   включая motion-фриз выше (селектор .moving .cardGlass специфичнее). */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .cardGlass {
+  .cardGlass,
+  .moving .cardGlass {
     background: rgba(0, 0, 0, 0.82);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;

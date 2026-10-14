@@ -264,6 +264,9 @@ export function Showcase() {
 
   // Один проход отрисовки: k по дистанции до позиций покоя, транслейт
   // фотодорожки, центровка ряда плашек. Источник истины — st.p.
+  // Чтения (clientWidth) — ДО любых записей стилей: запись после чтения
+  // форсирует sync-layout посреди кадра (порядок «сначала читаем, потом
+  // пишем» держит один layout на кадр).
   const render = useCallback(() => {
     const viewport = viewportRef.current;
     const photoTrack = photoTrackRef.current;
@@ -272,6 +275,7 @@ export function Showcase() {
     const st = stateRef.current;
     if (!viewport || !photoTrack || !strip || !zone || !st) return;
     const { m, step, snapArr } = snapModel(tierOf(), viewport.clientWidth);
+    const zoneW = zone.clientWidth;
     const p = st.p;
     const k = st.k;
     let dirty = false;
@@ -289,6 +293,7 @@ export function Showcase() {
         plateNodes.current[g]?.setAttribute("style", `--k:${kk}`);
       }
     }
+    zone.classList.toggle(s.moving ?? "", st.anim !== null || st.dragging);
     photoTrack.style.transform = `translate3d(${(-p).toFixed(2)}px,0,0)`;
     // Плашки: транслейт линейно по p между позициями покоя — плашечный
     // ряд скользит с той же кривой, что и фото (frac линеен по p), и
@@ -301,7 +306,7 @@ export function Showcase() {
     const next = snapArr[Math.min(gLo + 1, G - 1)] ?? 0;
     const span = Math.max(next - (snapArr[gLo] ?? 0), 1);
     const frac = clamp((p - (snapArr[gLo] ?? 0)) / span, 0, 1);
-    const tx = zone.clientWidth / 2 - (gLo * pitch + m.plate / 2) - frac * pitch;
+    const tx = zoneW / 2 - (gLo * pitch + m.plate / 2) - frac * pitch;
     strip.style.transform = `translateX(${tx.toFixed(1)}px)`;
   }, []);
 
@@ -346,6 +351,7 @@ export function Showcase() {
       } else {
         st.anim = null;
         renormalize();
+        render(); // снимает .moving (фриз блюра) после посадки
         // Непрерывный скролл: расстояние, набранное пальцем во время
         // анимации, продолжает серию — лок на время перехода, не тишина.
         if (st.wheelAcc >= WHEEL_STEP_PX && st.wheelSign !== 0) {
