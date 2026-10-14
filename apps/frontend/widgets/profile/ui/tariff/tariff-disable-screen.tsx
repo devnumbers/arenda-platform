@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Button,
   CircleIcon,
+  CirclePhoto,
   ConfirmDialog,
   RadioGroup,
   RadioGroupItem,
@@ -196,22 +197,17 @@ function PropertyPickRow({
   const photoUrl = property.photoUrl ?? undefined;
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = propertyTypeIcons[property.type];
-  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
-  const [photoBroken, setPhotoBroken] = useState(false);
+  // Механика показа (битое фото — канон #1275/#1286, гард, ожидание) —
+  // примитив CirclePhoto (#1423); список выбора — ленивая подача.
 
   return (
     <label className="flex cursor-pointer items-center gap-3 py-3">
       <CircleIcon variant="muted" aria-hidden className="relative overflow-hidden rounded-full">
-        {photoUrl !== undefined && !photoBroken ? (
-          <img
-            src={photoUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            onError={() => setPhotoBroken(true)}
-          />
-        ) : (
-          <Glyph className="h-6 w-6 text-[#D3D7D9]" />
-        )}
+        <CirclePhoto
+          photoUrl={photoUrl}
+          loading="lazy"
+          glyph={<Glyph className="h-6 w-6 text-[#D3D7D9]" />}
+        />
       </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-base font-medium leading-[18px] text-content">{property.name}</span>

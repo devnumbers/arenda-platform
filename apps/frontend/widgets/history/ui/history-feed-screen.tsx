@@ -27,6 +27,7 @@ import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import {
   Button,
   ErrorCard,
+  CirclePhoto,
   InfiniteQueryHead,
   IconButton,
   MeSuffix,
@@ -757,30 +758,23 @@ function PropertyHeaderContent({
  * ссылка на страницу участника, без — статичная шапка. Свой актёр
  * подписан серым суффиксом «(Вы)» — канон шита фильтров (#710). */
 /** Аватар актёра в шапке группы ленты (решение #1286): фото профиля 24,
- * иначе — и при битом фото (404 стрима) — заглушка BoldUser. Гард '' —
- * канон UserAvatar: легаси-бэк мог отдать пустую строку вместо null, а
- * <img src=""> не стреляет onError в WebKit — без него круг без глифа. */
+ * иначе — и при битом фото (404 стрима) — заглушка BoldUser. Механика
+ * «глиф под фото + onLoad» и гард '' — примитив CirclePhoto (#1423);
+ * лента — ленивая подача, аватары за экраном не запрашиваются. */
 function ActorFeedAvatar({ photoUrl }: { readonly photoUrl: string | null }): JSX.Element {
-  const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
   return (
     <span
       aria-hidden
       className={cn(
         'flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-white',
-        showPhoto && 'overflow-hidden',
+        photoUrl != null && photoUrl !== '' && 'overflow-hidden',
       )}
     >
-      {showPhoto ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : (
-        <BoldUser className="h-3.5 w-3.5" aria-hidden />
-      )}
+      <CirclePhoto
+        photoUrl={photoUrl}
+        loading="lazy"
+        glyph={<BoldUser className="h-3.5 w-3.5" />}
+      />
     </span>
   );
 }

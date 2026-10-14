@@ -14,11 +14,11 @@ import {
   useContactPhotoBuster,
   useDeleteContact,
 } from '@/features/contacts';
-import { useProperty } from '@/features/properties';
+import { useProperty, usePropertyPhotoBuster } from '@/features/properties';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { photoDisplayUrl } from '@/shared/lib/photo';
-import { ConfirmDialog, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
+import { ConfirmDialog, CirclePhoto, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactInfoView, type ContactValueRow } from '../lib/contact-detail-model';
 import { ContactDetailHeader } from './contact-detail-header';
 import { ContactKebabMenu } from './contact-kebab-menu';
@@ -164,6 +164,16 @@ function ContactCardBody({
     contact.photoUrl !== undefined
       ? photoDisplayUrl(contact.photoUrl, photoBuster)
       : null;
+  // Бастер фото привязанного объекта (тикет #1423, ADR 0065): правка фото
+  // объектным слотом тоже возвращает на карточку контакта; до фикса фото
+  // объекта рисовалось сырым <img> без onError и бастера — единственный
+  // отход от канона #1275/#1229.
+  const boundPhotoBuster = usePropertyPhotoBuster(boundPropertyId ?? '');
+  const boundPhoto = boundProperty?.photoUrl;
+  const boundPhotoUrl =
+    boundPhoto != null && boundPhoto !== ''
+      ? photoDisplayUrl(boundPhoto, boundPhotoBuster)
+      : null;
 
   return (
     <div className="flex flex-col px-6 pb-8">
@@ -200,15 +210,17 @@ function ContactCardBody({
                 aria-hidden
                 className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white"
               >
-                {boundProperty.photoUrl ? (
-                  <img
-                    src={boundProperty.photoUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : BoundPropertyGlyph !== undefined ? (
-                  <BoundPropertyGlyph className="h-6 w-6 text-content-tertiary" />
-                ) : null}
+                <CirclePhoto
+                  photoUrl={boundPhotoUrl}
+                  loading="lazy"
+                  glyph={
+                    BoundPropertyGlyph !== undefined ? (
+                      <BoundPropertyGlyph className="h-6 w-6 text-content-tertiary" />
+                    ) : (
+                      <></>
+                    )
+                  }
+                />
               </span>
               <span className="flex min-w-0 flex-col gap-1">
                 <span className="truncate text-base font-medium leading-[18px] text-content">

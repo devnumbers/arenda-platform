@@ -341,6 +341,12 @@ const eslintConfig = defineConfig([
   // preset's rules land here — re-declaring the plugin object would be a
   // config error. alt-text keeps eslint-config-next's next/image scope
   // (`img: ["Image"]`) unioned with the preset's default element set.
+  // label-has-associated-control: Radix-ряды выбора — label оборачивает
+  // RadioGroupItem (рендерит кнопку, labelable-элемент HTML; канон рядов
+  // #622), статике правила кастомный компонент не виден; раньше такие
+  // label проходили случайно — условные контейнеры-выражения правило
+  // считает лейблом-контролом, явная структура примитива CirclePhoto
+  // (#1423) сняла эту случайность.
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
     rules: {
@@ -351,6 +357,10 @@ const eslintConfig = defineConfig([
           elements: ["img", "object", "area", 'input[type="image"]'],
           img: ["Image"],
         },
+      ],
+      "jsx-a11y/label-has-associated-control": [
+        "error",
+        { controlComponents: ["RadioGroupItem"] },
       ],
     },
   },

@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { type JSX } from 'react';
 import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, EditSmall, EyeSmall, FullAccessSmall, Minus } from '@/shared/assets/icons';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { type PropertyType } from '@/entities/property';
 import { propertyTypeIcons } from '@/entities/property';
 import { cn } from '@/shared/lib/cn';
-import { buttonVariants, CircleIcon, EmptyState } from '@/shared/ui/design';
+import { buttonVariants, CircleIcon, CirclePhoto, EmptyState } from '@/shared/ui/design';
 
 /** Иконка роли у почты в рядах и карточках участников (макет 1980-107096,
  * решение владельца 13.10.2026 #1389): владелец — открытый замок,
@@ -40,7 +40,9 @@ export const RIGHTS_ROW_ACTION_CLASS = cn(
 /** Круглый аватар объекта 44px (Category Icon из Figma): фото или глиф —
  * Bold/Objects у агрегатной строки «Все объекты», глиф типа объекта
  * (Category Icon, карта #1217; без типа — Bold/Home) у конкретных
- * объектов; белое кольцо 2.5px по компоненту (2008-81468). */
+ * объектов; белое кольцо 2.5px по компоненту (2008-81468). Механика
+ * показа — примитив CirclePhoto (#1423): гард '' и фолбэк битого фото
+ * (канон #1275, #1286) там же; строки участников — ленивая подача. */
 export function ObjectAvatarGlyph({
   photoUrl,
   type,
@@ -52,22 +54,19 @@ export function ObjectAvatarGlyph({
 }): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
-  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
-  const [photoBroken, setPhotoBroken] = useState(false);
   return (
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-      {photoUrl !== undefined && !photoBroken ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : isAll ? (
-        <BoldObjects className="h-6 w-6 text-content-tertiary" />
-      ) : (
-        <Glyph className="h-6 w-6 text-content-tertiary" />
-      )}
+      <CirclePhoto
+        photoUrl={photoUrl}
+        loading="lazy"
+        glyph={
+          isAll ? (
+            <BoldObjects className="h-6 w-6 text-content-tertiary" />
+          ) : (
+            <Glyph className="h-6 w-6 text-content-tertiary" />
+          )
+        }
+      />
     </CircleIcon>
   );
 }

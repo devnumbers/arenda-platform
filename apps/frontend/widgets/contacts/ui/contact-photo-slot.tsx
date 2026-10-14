@@ -5,7 +5,7 @@ import { notify } from '@/shared/lib/notifications';
 import { BoldUser } from '@/shared/assets/icons';
 import { PHOTO_FILE_TOO_LARGE_MESSAGE, photoFileTooLarge } from '@/shared/lib/photo';
 import { type ContactPhotoStage, contactPhotoDisplay, useContactPhotoBuster } from '@/features/contacts';
-import { Button, circleIconRing, ConfirmDialog, PhotoRemoveBadge } from '@/shared/ui/design';
+import { Button, circleIconRing, CirclePhoto, ConfirmDialog, PhotoRemoveBadge } from '@/shared/ui/design';
 
 /**
  * Слот фото контакта в форме (тикет #1229; макеты 1281:48439 /
@@ -54,9 +54,10 @@ export function ContactPhotoSlot({
   onFileChosen,
   onRemove,
 }: ContactPhotoSlotProps): JSX.Element {
-  // Битое фото (выдача answering 404 после чужого удаления) откатывается к
-  // заглушке — канон #1275 (#1286).
-  const [photoBroken, setPhotoBroken] = useState(false);
+  // Бастер читается по id (на создании — пустой ключ, не инкрементится);
+  // механика показа (битое фото → заглушка, гард '', ожидание) — примитив
+  // CirclePhoto (#1423); при битом фото круг с кантом остаётся — канон
+  // UserAvatar/профильного слота.
   const photoBuster = useContactPhotoBuster(contactId);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,21 +97,15 @@ export function ContactPhotoSlot({
       <span
         className={[
           'flex h-24 w-24 items-center justify-center rounded-full bg-surface-muted',
-          hasPhoto && !photoBroken ? `overflow-hidden ${circleIconRing.white}` : undefined,
+          hasPhoto ? `overflow-hidden ${circleIconRing.white}` : undefined,
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {hasPhoto && !photoBroken ? (
-          <img
-            src={displayUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            onError={() => setPhotoBroken(true)}
-          />
-        ) : (
-          <BoldUser className="h-13 w-13 text-content-tertiary" aria-hidden />
-        )}
+        <CirclePhoto
+          photoUrl={displayUrl}
+          glyph={<BoldUser className="h-13 w-13 text-content-tertiary" />}
+        />
       </span>
     </button>
   );

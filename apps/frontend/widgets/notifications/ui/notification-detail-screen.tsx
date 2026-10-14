@@ -23,6 +23,7 @@ import { propertyTypeIcons, type PropertyType } from '@/entities/property';
 import {
   Button,
   CircleIcon,
+  CirclePhoto,
   ConfirmDialog,
   IconButton,
   PageContent,
@@ -267,20 +268,16 @@ function NotificationEntityCardBody({
 
 /** Аватар актёра на карточке payload-снимка (решение #1286): фото профиля
  * из снимка публикации; битое (фото удалили, доступ отозван — 404 стрима)
- * или отсутствующее — заглушка BoldUser, канон фолбэка #1275. */
+ * или отсутствующее — заглушка BoldUser, канон фолбэка #1275. Механика
+ * показа — примитив CirclePhoto (#1423); глиф тон цвета канона снимка. */
 function ActorAvatar({ photo }: { readonly photo?: string }): JSX.Element {
-  const [photoBroken, setPhotoBroken] = useState(false);
-  if (photo !== undefined && photo !== '' && !photoBroken) {
-    return (
-      <img
-        src={photo}
-        alt=""
-        className="h-full w-full object-cover"
-        onError={() => setPhotoBroken(true)}
-      />
-    );
-  }
-  return <BoldUser className="h-6 w-6 text-[#d3d7d9]" />;
+  return (
+    <CirclePhoto
+      photoUrl={photo}
+      loading="lazy"
+      glyph={<BoldUser className="h-6 w-6 text-[#d3d7d9]" />}
+    />
+  );
 }
 
 /** Карточка приглашающего — не ссылка. */
@@ -335,18 +332,14 @@ function PropertyGlyph({ type }: { readonly type: string | undefined }): JSX.Ele
 
 /** Аватар объекта на карточке payload-снимка (#1275): фото из снимка
  * заполняет круг; битое (фото или объект удалили после публикации — 404
- * стрима) откатывается к глифу типа. */
+ * стрима) откатывается к глифу типа. Механика — примитив CirclePhoto
+ * (#1423), гард пустой строки снимка там же. */
 function PropertyCardAvatar({ photo, type }: { readonly photo?: string; readonly type?: string }): JSX.Element {
-  const [photoBroken, setPhotoBroken] = useState(false);
-  if (photo !== undefined && !photoBroken) {
-    return (
-      <img
-        src={photo}
-        alt=""
-        className="h-full w-full object-cover"
-        onError={() => setPhotoBroken(true)}
-      />
-    );
-  }
-  return <PropertyGlyph type={type} />;
+  return (
+    <CirclePhoto
+      photoUrl={photo}
+      loading="lazy"
+      glyph={<PropertyGlyph type={type} />}
+    />
+  );
 }

@@ -31,6 +31,11 @@ export type CirclePhotoProps = {
   /** Глиф-подложка: тип объекта / BoldUser — выбирает вызывающий; живёт
    * и в ожидании байтов, и при битом фото (фолбэк #1275). */
   readonly glyph: ReactElement;
+  /** Ленивая подача (#1423/035): ряды списков и лент — 'lazy' (аватары за
+   * экраном не соревнуются с данными); hero-круги и фото-слоты — eager
+   * (дефолт, атрибут не пишется). Проводка атрибута — проводка рендера,
+   * проверяется экранной приёмкой и e2e (канон node-тестов). */
+  readonly loading?: 'lazy';
   /** Классы обёртки-круга (размер поверх родителя). */
   readonly className?: string;
 };
@@ -48,7 +53,7 @@ export type CirclePhotoProps = {
  * инвариант анти-мигания бастера (photoDisplayUrl). loading-атрибут —
  * за вызывающим (ленивая подача рядов — план 035).
  */
-export function CirclePhoto({ photoUrl, glyph, className }: CirclePhotoProps): JSX.Element {
+export function CirclePhoto({ photoUrl, glyph, loading, className }: CirclePhotoProps): JSX.Element {
   const [photoBroken, setPhotoBroken] = useState(false);
   const [photoReady, setPhotoReady] = useState(false);
   const view = circlePhotoView(photoUrl, { photoBroken, photoReady });
@@ -67,6 +72,7 @@ export function CirclePhoto({ photoUrl, glyph, className }: CirclePhotoProps): J
           src={view.imgSrc}
           alt=""
           decoding="async"
+          loading={loading}
           className={cn(
             'absolute inset-0 h-full w-full object-cover transition-opacity',
             view.imgHidden ? 'opacity-0' : 'opacity-100',

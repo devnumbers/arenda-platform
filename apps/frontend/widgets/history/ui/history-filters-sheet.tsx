@@ -51,6 +51,7 @@ import {
   Button,
   CalendarRangePicker,
   Checkbox,
+  CirclePhoto,
   ErrorCard,
   fullscreenSurfaceClass,
   IconButton,
@@ -224,28 +225,22 @@ export type HistoryFiltersSheetProps = {
 
 /** Аватар участника в строке шита фильтров (решение #1286): фото профиля
  * 36, иначе — и при битом фото (404 стрима, отозванный доступ) — заглушка
- * BoldUser. */
+ * BoldUser. Механика показа — примитив CirclePhoto (#1423); строки шита —
+ * ленивая подача. */
 function ParticipantFilterAvatar({ photoUrl }: { readonly photoUrl?: string | null }): JSX.Element {
-  const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
   return (
     <span
       aria-hidden
       className={cn(
         'ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-pill bg-white',
-        showPhoto && 'overflow-hidden',
+        photoUrl != null && photoUrl !== '' && 'overflow-hidden',
       )}
     >
-      {showPhoto ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : (
-        <BoldUser className="h-4 w-4" aria-hidden />
-      )}
+      <CirclePhoto
+        photoUrl={photoUrl}
+        loading="lazy"
+        glyph={<BoldUser className="h-4 w-4" />}
+      />
     </span>
   );
 }
