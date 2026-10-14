@@ -1,18 +1,41 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, Minus } from '@/shared/assets/icons';
+import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, EditSmall, EyeSmall, FullAccessSmall, Minus } from '@/shared/assets/icons';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { type PropertyType } from '@/entities/property';
 import { propertyTypeIcons } from '@/entities/property';
+import { cn } from '@/shared/lib/cn';
 import { buttonVariants, CircleIcon, EmptyState } from '@/shared/ui/design';
+
+/** Иконка роли у почты в рядах и карточках участников (макет 1980-107096,
+ * решение владельца 13.10.2026 #1389): владелец — открытый замок,
+ * «Управление» — карандаш, «Просмотр» — глаз; ключ —
+ * PropertyParticipantEmailIcon (глиф выбирает emailRoleIcon, здесь только
+ * имя → компонент). Одна карта на три поверхности (ряды «Участников
+ * объекта», D7-карточка владельческого экрана, member-режим прав #1362). */
+export const EMAIL_ROLE_ICONS = {
+  full: FullAccessSmall,
+  edit: EditSmall,
+  eye: EyeSmall,
+} as const;
 
 /** Базовый класс кликабельного ряда списков участника (Row Button
  * 936:39348): общий для страницы участника, экрана прав и мультичека
  * приглашения; роль ряда (кнопка/checkbox) задаёт потребитель. */
 export const PARTICIPANT_ROW_BASE_CLASS =
   'flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80';
+
+/** Row Button нижних строк макета 2177-59620: ведущий слот-круг 44 под
+ * иконку 24, подпись 16/18 Medium; высота строки 52 (44 + py 4). Общая
+ * для «Действий участника в объекте» и красного отзыва — иконки обеих
+ * строк стоят на одной оси; member-режим прав (#1362) берёт класс для
+ * своей строки действий. */
+export const RIGHTS_ROW_ACTION_CLASS = cn(
+  'flex w-full cursor-pointer items-center rounded-button py-1 text-left text-base font-medium outline-none',
+  'transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80',
+);
 
 /** Круглый аватар объекта 44px (Category Icon из Figma): фото или глиф —
  * Bold/Objects у агрегатной строки «Все объекты», глиф типа объекта

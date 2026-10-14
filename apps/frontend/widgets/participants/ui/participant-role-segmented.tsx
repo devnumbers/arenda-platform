@@ -8,10 +8,16 @@ import type { ParticipantAccessRole } from '@/entities/participants';
 /** Сегмент-переключатель роли доступа (карта #692, тикет #698; макеты
  * 2177-59620 «Права участника» и 2010-131724 шит «Пригласить в объект»):
  * серая капсула radius 16 с паддингом 2, активный сегмент — белая пилюля
- * radius 14 с тенью, подписи 14/500 (решение чарта: роли только
- * отображение — full_access «Редактирование», viewer «Просмотр»).
- * Потребителей двое в этом же виджете; третий — кандидат на вынос в
- * design-слой. */
+ * radius 14 с тенью, подписи 14/500 (роли только
+ * отображение — full_access «Управление», viewer «Просмотр», #1358).
+ * Капсула клипит тень пилюли (#1395, «Clip content» макета 3298-75577 —
+ * прецедент тарифного переключателя лендинга b76507f45); вместе с клипом
+ * и фокус-ринг без offset, как на том же прецеденте — offset-зазор 2px
+ * плюс ринг 2px вылезали за паддинг капсулы и срезались клипом целиком.
+ * Курсор кнопкам
+ * даёт глобальное base-правило globals.css, локального cursor-класса
+ * сегмент не несёт. Потребителей двое в этом же виджете; третий —
+ * кандидат на вынос в design-слой. */
 export function ParticipantRoleSegmented({
   value,
   disabled = false,
@@ -34,7 +40,7 @@ export function ParticipantRoleSegmented({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="flex rounded-2xl bg-surface-muted p-0.5"
+      className="flex overflow-clip rounded-2xl bg-surface-muted p-0.5"
     >
       {options.map((option) => {
         const selected = value === option.role;
@@ -48,7 +54,7 @@ export function ParticipantRoleSegmented({
             onClick={() => onChange(option.role)}
             className={cn(
               'h-12 flex-1 rounded-[14px] text-sm font-medium outline-none transition-colors',
-              'focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+              'focus-visible:ring-2 focus-visible:ring-primary',
               disabled && 'cursor-default opacity-60',
               selected
                 ? 'bg-surface text-content shadow-[0_2px_8px_rgba(0,0,0,0.16)]'

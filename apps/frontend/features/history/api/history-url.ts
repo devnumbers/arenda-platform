@@ -22,9 +22,10 @@ export type HistoryFeedPageParam = {
 export function historyFeedUrl(
   scope: HistoryFeedScope,
   cursor: HistoryFeedPageParam | undefined,
+  limit: number = HISTORY_PAGE_SIZE,
 ): string {
   const query = new URLSearchParams();
-  query.set('limit', String(HISTORY_PAGE_SIZE));
+  query.set('limit', String(limit));
   if (cursor?.before) {
     query.set('before_cursor', cursor.before);
   }

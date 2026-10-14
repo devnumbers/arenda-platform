@@ -17,6 +17,7 @@ import {
   fetchHistoryPage,
   historyFeedQueryOptions,
   historyFiltersQueryOptions,
+  historyHasEntriesQueryOptions,
   type HistoryFeedPage,
 } from './queries';
 
@@ -237,10 +238,10 @@ function useLiveFeedFrames(
 /**
  * Опции шита фильтров (GET /history/filters, #708): ленте нужны фото
  * объектов для шапок групп — item фото не несёт (ADR 0061 §7). Без
- * propertyIds — опции всей области чтения: «Действия участника» (#712)
- * прибивает человека скоупом ленты, а не опций, объектные шапки и фильтр
- * «Объекты» работают по всей области. С propertyIds — суженная область
- * прибитой объектом страницы («История объекта» #840, страница пары #841):
+ * propertyIds — опции всей области чтения: глобальная лента не прибита,
+ * объектные шапки и фильтр «Объекты» работают по всей области. С
+ * propertyIds — суженная область прибитой объектом страницы («История
+ * объекта» #840, страница пары #841):
  * участники — собственник и соучастники объекта (D6), глобальная же
  * область с D14 (#1305) несёт только участников моих объектов — без
  * сужения получатель shared-доступа не увидел бы в шите чужого владельца.
@@ -249,4 +250,23 @@ export function useHistoryFilters(
   propertyIds?: ReadonlyArray<string>,
 ): UseQueryResult<HistoryFilterOptions, ApiError> {
   return useQuery(historyFiltersQueryOptions({ propertyIds }));
+}
+
+/**
+ * Были ли действия у объекта (решение владельца 13.10.2026): один лёгкий
+ * запрос limit=1 для пустого списка «Участников объекта» — иконка
+ * «Истории объекта» рисуется, только когда записи есть, свежий объект
+ * остаётся без входа. Запрос включается вызовом (enabled — список пуст);
+ * пока ответа нет и на ошибке — false, вход консервативно скрыт (§7:
+ * иконки появляются по факту данных).
+ */
+export function useHistoryHasEntries(
+  propertyId: string,
+  options: { readonly enabled?: boolean } = {},
+): boolean {
+  const query = useQuery({
+    ...historyHasEntriesQueryOptions({ propertyId }),
+    enabled: options.enabled ?? true,
+  });
+  return query.data ?? false;
 }

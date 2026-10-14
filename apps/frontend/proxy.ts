@@ -100,6 +100,17 @@ export async function proxy(request: NextRequest) {
   ) {
     return NextResponse.redirect(new URL('/properties', request.url), 308);
   }
+  // Глобальная страница «Действия участника» /history/participants/{id}
+  // снята (решение владельца 12.10.2026, #1361) — лента по одному
+  // человеку без объекта больше не существует, вход в историю остался
+  // через объектные скоупы («История объекта» #840, пара #841). Старые
+  // входы (закладки, история браузера) ведут на общую ленту — её фолбэк
+  // «Назад» снятой страницы был /history. Ровно два сегмента: живая
+  // пара /history/participants/{p}/properties/{id} длиннее и не
+  // задевается. 308 перманентный — канон /dashboard выше.
+  if (/^\/history\/participants\/[^/]+\/?$/.test(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL('/history', request.url), 308);
+  }
   // Разведка строгой CSP: nonce на каждый запрос. Заголовок запроса Next
   // разбирает при SSR и вешает nonce на фреймворк-скрипты и инлайн-стили
   // (Report-Only он понимает так же, как блокирующий — app-render Next 16);

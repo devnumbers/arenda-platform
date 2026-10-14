@@ -3,7 +3,7 @@
  * D6 #1312), neutral — серая. */
 export type ParticipantRowBadgeTone = 'neutral' | 'warning' | 'info';
 
-/** Иконка чипа: Edit («Редактирование»), Eye («Просмотр»), Lock
+/** Иконка чипа: Edit («Управление»), Eye («Просмотр»), Lock
  * (warning-чип лимита); undefined — без иконки. */
 export type ParticipantRowBadgeIcon = 'edit' | 'eye' | 'lock';
 

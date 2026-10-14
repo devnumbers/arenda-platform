@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -809,6 +810,175 @@ func TestInvitationService_ListMembersViewerSeesEmailsAndPending(t *testing.T) {
 	}
 	if emailByUser[owner] != testOwnerEmail || emailByUser[viewer] != "viewer@example.com" {
 		t.Errorf("viewer must see member emails, got %v", emailByUser)
+	}
+}
+
+// Reading one members-list row alone (issue #1357): the «Права участника»
+// card of every row the list shows — the owner by user id, a member by
+// membership id or user id, a pending invitation by invitation id. The
+// contract is the row itself: GetMember returns exactly what ListMembers
+// returns for the same addressing id, through the same gate.
+
+// getMemberFixture seeds owner + viewer member + pending invitation: the
+// same three-row shape the ListMembers tests assert on.
+func getMemberFixture(t *testing.T) (
+	f *invitationFixture, property, viewer, invitationID uuid.UUID, membership domain.Membership,
+) {
+	t.Helper()
+	f = newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	property = f.addProperty(owner)
+	viewer = uuid.Must(uuid.NewV7())
+	f.limiter.set(viewer, 10)
+	f.emails.set(owner, testOwnerEmail)
+	f.emails.set(viewer, testMemberEmail)
+	m, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleFullAccess); err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+	invitations, err := f.invitations.ListByProperty(t.Context(), property)
+	if err != nil || len(invitations) != 1 {
+		t.Fatalf("invitation rows = %d (err %v), want 1", len(invitations), err)
+	}
+	return f, property, viewer, invitations[0].ID, m
+}
+
+func TestInvitationService_GetMemberOwnerRowByUserID(t *testing.T) {
+	t.Parallel()
+	f := newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	property := f.addProperty(owner)
+	f.emails.set(owner, testOwnerEmail)
+
+	// The owner row is addressed by the owner's user id: the synthesized row
+	// carries no membership id. The read returns the list's row itself.
+	list, err := f.svc.ListMembers(t.Context(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	ownerRow, err := f.svc.GetMember(t.Context(), owner, property, owner)
+	if err != nil {
+		t.Fatalf("GetMember owner: %v", err)
+	}
+	if !ownerRow.IsOwner || ownerRow.UserID != owner {
+		t.Errorf("owner row = %+v", ownerRow)
+	}
+	if !reflect.DeepEqual(ownerRow, list[0]) {
+		t.Errorf("owner row must equal the list row: got %+v, want %+v", ownerRow, list[0])
+	}
+}
+
+func TestInvitationService_GetMemberMemberRowByIDAndUserID(t *testing.T) {
+	t.Parallel()
+	f, property, viewer, _, membership := getMemberFixture(t)
+	owner := f.owners[property]
+
+	list, err := f.svc.ListMembers(t.Context(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	byID, err := f.svc.GetMember(t.Context(), owner, property, membership.ID)
+	if err != nil {
+		t.Fatalf("GetMember by membership id: %v", err)
+	}
+	if byID.ID != membership.ID || byID.UserID != viewer || byID.IsOwner {
+		t.Errorf("member row by id = %+v", byID)
+	}
+	if !reflect.DeepEqual(byID, list[1]) {
+		t.Errorf("member row must equal the list row: got %+v, want %+v", byID, list[1])
+	}
+	byUserID, err := f.svc.GetMember(t.Context(), owner, property, viewer)
+	if err != nil {
+		t.Fatalf("GetMember by user id: %v", err)
+	}
+	if !reflect.DeepEqual(byUserID, list[1]) {
+		t.Errorf("member row by user id must equal the list row: got %+v, want %+v", byUserID, list[1])
+	}
+}
+
+func TestInvitationService_GetMemberPendingRowByInvitationID(t *testing.T) {
+	t.Parallel()
+	f, property, _, invitationID, _ := getMemberFixture(t)
+	owner := f.owners[property]
+
+	list, err := f.svc.ListMembers(t.Context(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	// A pending invitation row answers to its invitation id (the «Аккаунт не
+	// создан» card): no user id, the invitee email and last_sent_at filled.
+	pending, err := f.svc.GetMember(t.Context(), owner, property, invitationID)
+	if err != nil {
+		t.Fatalf("GetMember pending: %v", err)
+	}
+	if !pending.Pending || pending.UserID != uuid.Nil || pending.ID != invitationID {
+		t.Errorf("pending row = %+v", pending)
+	}
+	if pending.Email == nil || *pending.Email != testNewUserEmail || pending.LastSentAt == nil {
+		t.Errorf("pending row email/last_sent_at = %+v", pending)
+	}
+	if !reflect.DeepEqual(pending, list[2]) {
+		t.Errorf("pending row must equal the list row: got %+v, want %+v", pending, list[2])
+	}
+}
+
+func TestInvitationService_GetMemberViewerReadsEveryRow(t *testing.T) {
+	t.Parallel()
+	f, property, viewer, invitationID, _ := getMemberFixture(t)
+	owner := f.owners[property]
+
+	// The invited participant opens the rights pages of all list rows,
+	// including their own (решение грю 12.10, эпик #1354).
+	if _, err := f.svc.GetMember(t.Context(), viewer, property, viewer); err != nil {
+		t.Errorf("viewer self row: %v", err)
+	}
+	if _, err := f.svc.GetMember(t.Context(), viewer, property, owner); err != nil {
+		t.Errorf("viewer owner row: %v", err)
+	}
+	if _, err := f.svc.GetMember(t.Context(), viewer, property, invitationID); err != nil {
+		t.Errorf("viewer pending row: %v", err)
+	}
+}
+
+func TestInvitationService_GetMemberPrivacyNotFound(t *testing.T) {
+	t.Parallel()
+	f, property, _, _, membership := getMemberFixture(t)
+	owner := f.owners[property]
+	stranger := uuid.Must(uuid.NewV7())
+
+	// A stranger with no relation to the object gets the privacy-preserving
+	// not-found, for the owner row and any member row alike.
+	if _, err := f.svc.GetMember(t.Context(), stranger, property, owner); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("stranger owner row: expected ErrMemberNotFound, got %v", err)
+	}
+	if _, err := f.svc.GetMember(t.Context(), stranger, property, membership.ID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("stranger member row: expected ErrMemberNotFound, got %v", err)
+	}
+
+	// A suspended member sees nothing (канон #162): their own row included.
+	suspended := uuid.Must(uuid.NewV7())
+	f.limiter.set(suspended, 0)
+	if _, err := f.access.AddMember(t.Context(), owner, property, suspended, domain.RoleViewer); err != nil {
+		t.Fatalf("suspended AddMember: %v", err)
+	}
+	sm, err := f.repo.GetByPropertyAndUser(t.Context(), property, suspended)
+	if err != nil {
+		t.Fatalf("suspended membership: %v", err)
+	}
+	if _, err := f.svc.GetMember(t.Context(), suspended, property, sm.ID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("suspended reader: expected ErrMemberNotFound, got %v", err)
+	}
+
+	// An authorized reader gets not-found for an id no row carries.
+	if _, err := f.svc.GetMember(t.Context(), owner, property, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("unknown id: expected ErrMemberNotFound, got %v", err)
+	}
+	// The zero uuid addresses nothing: no row carries it.
+	if _, err := f.svc.GetMember(t.Context(), owner, property, uuid.Nil); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("zero uuid: expected ErrMemberNotFound, got %v", err)
 	}
 }
 

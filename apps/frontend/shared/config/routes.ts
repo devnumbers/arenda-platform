@@ -169,6 +169,16 @@ export const ROUTES = {
   /** Экран «Права участника» (#698): роль и отзыв на одном объекте. */
   participantRights: (participantId: string, propertyId: string) =>
     `/participants/${encodeURIComponent(participantId)}/properties/${propertyId}`,
+  /** «Права участника» в member-режиме (#1362): тот же экран read-only
+   * для приглашённых — карточка объекта с ролью и строка «Действия
+   * участника в объекте», без сегмента роли и отзыва (мутации остаются
+   * у владельца на participantRights). Идентификатор — адресующий id
+   * строки чтения GET /properties/{id}/access/members/{memberId}
+   * (контракт #1357, клиентское правило `row.id ?? row.user_id`):
+   * membership id, invitation id у pending или user_id у ряда владельца —
+   * deep-link и refresh участника работают по построению. */
+  propertyParticipantRights: (propertyId: string, memberId: string) =>
+    `/properties/${propertyId}/participants/${encodeURIComponent(memberId)}`,
   /** Экран «Пригласить в объект» (#698): мультичек объектов читающего
    * для существующего участника (не путать с participantsInvite —
    * приглашением нового человека, #699). */
@@ -181,24 +191,24 @@ export const ROUTES = {
    * скроллом вверх. Вход — кебабы шапки «Ваших участников» и «Объектов
    * пользователей» (#843, макеты 1967-86441/2008-47514); история объекта
    * — выделенный экран historyProperty (#840, макет 1980-139712), поиск
-   * #710, действия участника #712, переходы строк #713. */
+   * #710, пара участник-в-объекте historyMemberProperty #841, переходы
+   * строк #713. */
   history: '/history',
-  /** «Действия участника» (карта #704, тикет #712): та же лента,
-   * прибитая к одному человеку (actor_ids = один, ADR 0061 §7).
-   * Идентификатор — uuid юзера (actor_id журнала); вход — тап по актёру
-   * в общей ленте и кебаб страницы участника (#698). */
-  historyParticipant: (participantId: string) =>
-    `/history/participants/${encodeURIComponent(participantId)}`,
   /** «История объекта» (карта #838, тикет #840): та же лента, прибитая к
    * одному объекту (property_ids = один, ADR 0061 §7). Идентификатор —
-   * uuid объекта; вход — кебаб «Участников объекта» (макет 1980-139712). */
+   * uuid объекта; вход — кебаб «Участников объекта» (макет 1980-139712),
+   * иконка истории его пустого списка и шапки объектов общей ленты
+   * (оба — решение владельца 13.10.2026, амендмент #1361). */
   historyProperty: (propertyId: string) =>
     `/history/properties/${encodeURIComponent(propertyId)}`,
   /** «Действия участника в объекте» (карта #838, тикет #841): та же
    * лента, прибитая к паре человек+объект (actor_ids и property_ids =
    * по одному, ADR 0061 §7; сервер AND'ит обе группы — бэк #708 без
    * изменений). Идентификаторы — uuid юзера (actor_id журнала) и uuid
-   * объекта; вход — строка на «Правах участника» (макет 2177-59620). */
+   * объекта; вход — строка на «Правах участника» (макет 2177-59620) и
+   * шапки актёров лент: «Истории объекта» (#840) и общей (амендмент
+   * #1361, решение владельца 13.10.2026 — человек кликается в рамках
+   * объекта, где он изменения сделал). */
   historyMemberProperty: (participantId: string, propertyId: string) =>
     `/history/participants/${encodeURIComponent(participantId)}/properties/${encodeURIComponent(propertyId)}`,
   /** Центр уведомлений — лента (карта #734, тикет #744): хаб-маршрут

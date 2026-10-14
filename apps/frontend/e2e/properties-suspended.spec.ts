@@ -80,7 +80,7 @@ test('свои карточки без ряда участников и без �
   await expect(apartmentCard.getByTestId('property-participants')).toHaveCount(0);
   await expect(apartmentCard.getByTestId('property-owner')).toHaveCount(0);
   await expect(apartmentCard.getByText('Мария Петрова')).toHaveCount(0);
-  await expect(apartmentCard.getByText('Редактирование')).toHaveCount(0);
+  await expect(apartmentCard.getByText('Управление')).toHaveCount(0);
 
   await captureScreen(page, testInfo, 'properties-own-cards-plain');
 });

@@ -30,8 +30,9 @@ func (s ParticipantEntryStatus) String() string { return string(s) }
 // (issue #693): «доступ ко всем объектам» (the person holds active access to
 // every active property in the reading actor's scope), «доступно N объектов»
 // (partial), «превышен лимит объектов» (at least one suspended membership).
-// The roles shown to owners remain display-only («Редактирование»/«Просмотр»),
-// the domain stays full_access/viewer — chart decision of map #692.
+// The roles shown to owners remain display-only («Управление»/«Просмотр»),
+// the domain stays full_access/viewer — chart decision of map #692, display
+// wording unified by owner decision of 12.10.2026 (#1358).
 type ParticipantAggregateStatus string
 
 const (

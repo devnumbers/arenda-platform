@@ -10,8 +10,6 @@ import {
   Check,
   CheckmarkCircle,
   Edit,
-  EyeSmall,
-  FullAccessSmall,
   HomeMain,
   Key,
   LockSmall,
@@ -48,6 +46,7 @@ import {
 } from '@/features/history';
 import { dateToIsoLocal, type IsoRange } from '@/shared/lib/calendar';
 import { cn } from '@/shared/lib/cn';
+import { OWN_USER_NAME_SUFFIX } from '@/shared/lib/display-name';
 import {
   Button,
   CalendarRangePicker,
@@ -55,6 +54,7 @@ import {
   ErrorCard,
   fullscreenSurfaceClass,
   IconButton,
+  MeSuffix,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
@@ -85,10 +85,10 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
  * область чекбокса шапки — паддинги на label, margin на кнопке съедает
  * preflight (#753). Участники: чужой — канон отображаемого имени, своя
  * строка —
- * только имя + серый суффикс «(Вы)» (по id сессии). Иконку роли 16
- * несёт каждая строка участника перед подзаголовком (owner — замок,
- * full_access — силуэт, viewer — глаз; словарь actorRoleLabel), замок —
- * частный случай owner. Семантика
+ * только имя + серый суффикс «(Вы)» (по id сессии). Замок владельца 16
+ * перед подзаголовком несёт только строка с is_owner (решение владельца
+ * 12.10.2026, #1360, макет 3339-160075; прежние иконки ролей #840
+ * сняты) — у остальных строк только имя и почта. Семантика
  * по аннотации макета («открывается сначала со свернутыми и всеми
  * выбранными категориями»): все выбрано = «все» (null) — сервер не
  * фильтрует; частичный выбор — только выбранное; ни одного — пустой
@@ -134,8 +134,9 @@ import { HistoryFiltersSheetSkeleton } from './history-states';
 /** Строка группы: id значения, подпись, опциональный подзаголовок и
  * ведущая иконка/аватар (макет 2067-163528: 24-иконка действий/видов,
  * кружок 36 у участников, аватар объекта 32). isMe — суффикс «(Вы)»;
- * roleIcon — иконка роли 16 перед подзаголовком (#840, макет 2184-94261:
- * owner — замок, full_access — силуэт, viewer — глаз). */
+ * isOwner — замок владельца 16 перед подзаголовком (решение владельца
+ * 12.10.2026, #1360, макет 3339-160075: иконку несёт только строка
+ * с is_owner, остальные — без иконок). */
 type HistoryFilterOptionRow = {
   readonly id: string;
   readonly label: string;
@@ -151,7 +152,9 @@ type HistoryFilterOptionRow = {
    * карта #1217, #1244). */
   readonly type?: PropertyType;
   readonly isMe?: boolean;
-  readonly roleIcon?: HistoryParticipantOption['role'];
+  /** Замок владельца перед подзаголовком (#711): is_owner области
+   * чтения (решение #1360 — единственная иконка строки участника). */
+  readonly isOwner?: boolean;
 };
 
 /** Секция строк внутри группы: подпись над строками (undefined — секция
@@ -202,15 +205,15 @@ export type HistoryFiltersSheetProps = {
   readonly optionsQuery: UseQueryResult<HistoryFilterOptions, ApiError>;
   readonly onApply: (draft: HistoryFilters) => void;
   readonly onClose: () => void;
-  /** Заголовок шита (шапка оверлея): на «Действиях участника» (#712) шит
-   * поверх той же ленты — заголовок страницы, не общей. */
+  /** Заголовок шита (шапка оверлея): на прибитых страницах (#840/#841)
+   * шит поверх той же ленты — заголовок страницы, не общей. */
   readonly title?: string;
-  /** Действия участника (#712, макет 2184-92510, решение владельца
-   * 23.09): группа «Участники» показывает ТОЛЬКО прибитого человека —
-   * серым (disabled-чекбокс канона Checkbox), тапы не проходят; он не
-   * часть черновика — «Сбросить» и «Применить» его не трогают. Подпись
-   * группы — «Участник» (решение владельца 10.10.2026, доработка
-   * #1321). */
+  /** «Действия участника в объекте» (#841, макет 2184-92510, решение
+   * владельца 23.09): группа «Участники» показывает ТОЛЬКО прибитого
+   * человека — серым (disabled-чекбокс канона Checkbox), тапы не
+   * проходят; он не часть черновика — «Сбросить» и «Применить» его не
+   * трогают. Подпись группы — «Участник» (решение владельца 10.10.2026,
+   * доработка #1321; одиночный пин страницы #712 снят, #1361). */
   readonly pinnedParticipantId?: string;
   /** История объекта (#840, макет 2184-94176, решение владельца 24.09):
    * зеркало пина участника для группы «Объекты» — только прибитый
@@ -320,7 +323,7 @@ export function HistoryFiltersSheet({
     leadingSize: 'participant',
     participantPhotoUrl: participant.photoUrl,
     isMe: participant.id === meId,
-    roleIcon: participant.isOwner ? 'owner' : participant.role,
+    isOwner: participant.isOwner,
   });
 
   const participantSections: ReadonlyArray<HistoryFilterSection> = historyParticipantSections(
@@ -646,8 +649,9 @@ function FilterGroupCard({
  * сепаратор #ebebeb на контейнере текста (кроме последней строки).
  * Вся строка — label: клик в любое место переключает опцию; цвет текста
  * от состояния чекбокса не зависит (макет 2050-158281: невыбранная
- * остаётся чёрной). У себя — суффикс «(Вы)» серым; перед подзаголовком —
- * иконка роли 16 (#840, макет 2184-94261). Disabled (#712): чекбокс
+ * остаётся чёрной). У себя — серый суффикс MeSuffix; перед подзаголовком
+ * — замок владельца 16, только у строк с is_owner (решение владельца
+ * 12.10.2026, #1360, макет 3339-160075). Disabled (#712): чекбокс
  * серый, текст приглушён, тапы не проходят. */
 function FilterOptionRow({
   row,
@@ -674,7 +678,7 @@ function FilterOptionRow({
         checked={checked}
         disabled={disabled}
         onCheckedChange={onToggle}
-        aria-label={row.isMe === true ? `${row.label} (Вы)` : row.label}
+        aria-label={row.isMe === true ? `${row.label}${OWN_USER_NAME_SUFFIX}` : row.label}
       />
       {row.leadingSize === 'icon' && (
         <span className="ml-4 flex h-6 w-6 shrink-0 items-center justify-center text-content">
@@ -696,11 +700,17 @@ function FilterOptionRow({
           className={`truncate text-sm font-medium leading-4 ${disabled ? 'text-content-tertiary' : 'text-content'}`}
         >
           {row.label}
-          {row.isMe === true && <span className="text-content-tertiary"> (Вы)</span>}
+          {row.isMe === true && <MeSuffix />}
         </span>
         {row.subtitle !== undefined && (
           <span className="flex items-center gap-1">
-            {row.roleIcon !== undefined && <RoleIcon role={row.roleIcon} />}
+            {row.isOwner === true && (
+              <LockSmall
+                className="h-4 w-4 shrink-0 text-content-tertiary"
+                role="img"
+                aria-label={`Роль: ${actorRoleLabel('owner')}`}
+              />
+            )}
             <span className="truncate text-[13px] leading-[15px] text-content-tertiary">
               {row.subtitle}
             </span>
@@ -709,21 +719,4 @@ function FilterOptionRow({
       </span>
     </label>
   );
-}
-
-/** Иконка роли 16 перед подзаголовком строки участника (#840, макет
- * 2184-94261): owner — замок (канон #711), full_access — силуэт,
- * viewer — глаз (канон «Просмотра», #698). Подпись роли — резолвер
- * actorRoleLabel (словарь ролей shared/model/access, решение чарта #692);
- * роль — смысловая информация строки, поэтому иконка несёт accessible
- * name, а не aria-hidden. */
-function RoleIcon({ role }: { readonly role: HistoryParticipantOption['role'] }): JSX.Element {
-  const className = 'h-4 w-4 shrink-0 text-content-tertiary';
-  if (role === 'owner') {
-    return <LockSmall className={className} role="img" aria-label={`Роль: ${actorRoleLabel(role)}`} />;
-  }
-  if (role === 'viewer') {
-    return <EyeSmall className={className} role="img" aria-label={`Роль: ${actorRoleLabel(role)}`} />;
-  }
-  return <FullAccessSmall className={className} role="img" aria-label={`Роль: ${actorRoleLabel(role)}`} />;
 }

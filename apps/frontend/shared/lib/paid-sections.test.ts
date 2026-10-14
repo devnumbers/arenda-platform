@@ -46,9 +46,6 @@ describe('paidSectionGateRedirect', () => {
 
     it('gates deep routes of the history section, both nested entities', () => {
         expect(
-            paidSectionGateRedirect('/history/participants/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001', 'basic'),
-        ).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
-        expect(
             paidSectionGateRedirect('/history/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001', 'basic'),
         ).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
         expect(

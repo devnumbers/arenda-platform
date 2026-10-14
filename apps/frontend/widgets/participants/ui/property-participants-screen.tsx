@@ -7,8 +7,6 @@ import {
   ArrowLeft,
   Block,
   Cancel,
-  EyeSmall,
-  FullAccessSmall,
   Kebab,
   Search,
   SmallArrowDown,
@@ -23,6 +21,7 @@ import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { useMe } from '@/features/auth';
+import { useHistoryHasEntries } from '@/features/history';
 import { useProperty } from '@/features/properties';
 import { useLeaveProperty } from '@/features/participants';
 import { propertyPermissions } from '@/entities/property';
@@ -49,6 +48,7 @@ import {
   SearchField,
   Skeleton,
   UserAvatar,
+  MeSuffix,
   skeletonRowWidths,
   StickyBottomBar,
   StatusIcon,
@@ -70,27 +70,22 @@ import {
   serializePropertyParticipantOrderToParams,
   serializePropertyParticipantRoleFilterToParams,
   sortPropertyParticipantsByTitle,
-  type PropertyParticipantEmailIcon,
   type PropertyParticipantRoleFilter,
   type PropertyParticipantRow,
   type PropertyParticipantSortOrder,
 } from '../lib/property-participants-list';
 import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
 import { resolvePropertyParticipantsError } from '../lib/property-participants-error';
+import { EMAIL_ROLE_ICONS, PropertyAccessNotFound } from './participant-fragments';
 import { ParticipantSuccessPopup } from './participant-success-popup';
-import { PropertyAccessNotFound } from './participant-fragments';
-
-const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = {
-  full: FullAccessSmall,
-  eye: EyeSmall,
-};
 
 /**
  * Экран «Участники объекта» (D6 #1312, макет 3298-75434): полный состав
  * с почтами и pending-приглашениями читают все участники объекта —
  * read-only у не-владельца. Владелец первым отдельным рядом, у каждого
- * ряда иконка роли у почты (открытый замок Icon/S/FullAccess — владелец
- * и full_access, глаз — просмотр), чипы статусов: «Аккаунт не создан»
+ * ряда иконка роли у почты (открытый замок Icon/S/FullAccess — владелец,
+ * карандаш Icon/S/Edit — «Управление», глаз — «Просмотр»; решение
+ * владельца 13.10.2026 #1389), чипы статусов: «Аккаунт не создан»
  * у pending-приглашения (инфо, лейбл #1105 в титуле) и «Превышен лимит
  * объектов» у suspended-ноги.
  *
@@ -107,18 +102,23 @@ const EMAIL_ROLE_ICONS: Record<PropertyParticipantEmailIcon, typeof EyeSmall> = 
  * «Историей объекта» и красный CTA «Покинуть объект» (D6; самовыход
  * #701: DELETE .../access/members/self с канон-подтверждением, возврат к
  * объектам). На архивном объекте приглашение скрыто, отзыв, история и
- * выход живут.
+ * выход живут. Пустой список (только строка владельца) с живым журналом
+ * — вместо кебаба одна иконка «История объекта» (решение владельца
+ * 13.10.2026: действия в объекте были — вход в ленту нужен; проверка
+ * лёгким limit=1-запросом ленты); без действий иконки нет, поиск скрыт.
  *
- * Тап по ряду — страница участника (#698, агрегат): uuid юзера, у
- * pending — почта. Статичные ряды, без шеврона: владелец (страница
- * участника про выданные доступы, своих ног у владельца нет), своя
- * строка «Имя (Вы)» (ФИО-канон D4: имя читателя без фамилии, серый
- * суффикс — канон шита фильтров #710; #770 — своей ноги в
- * manage-скоупе читателя нет, /participants/{себя} отвечает 404),
- * читающий без manage-прав (404-политика #693) и архивный объект (нога
- * участника там может быть только архивной). Пока /me не разрешился,
- * ряды статичны тоже — кнопка, ведущая на 404, не рендерится вовсе.
- * У зрителя, как в модалке, скрыты и manage-контролы (кебаб, CTA),
+ * Тап по ряду — по ветке читателя (решение владельца 12.10.2026, #1362).
+ * Владелец: страница участника агрегата (#698) — все ряды, кроме своей
+ * строки (ФИО-канон D4: имя читателя без фамилии, серый суффикс — канон
+ * шита фильтров #710; #770 — своей ноги в manage-скоупе читателя нет,
+ * /participants/{себя} отвечает 404); ряды архивного объекта статичны
+ * (нога участника там может быть только архивной). Приглашённый
+ * (canManage=false при загрузившемся объекте): member-режим прав #1362 —
+ * read-only страница прав любого ряда по адресу reading id строки
+ * (контракт #1357), включая свою строку (быстрый переход в историю) и
+ * ряд владельца; статичен ряд без адресующего id. Пока /me или объект не
+ * разрешились, ряды статичны тоже — кнопка, ведущая на 404, не рендерится
+ * вовсе. У зрителя, как в модалке, скрыты и manage-контролы (кебаб, CTA),
  * выдача на архивный объект запрещена.
  */
 export function PropertyParticipantsScreen({
@@ -190,12 +190,21 @@ export function PropertyParticipantsScreen({
   const isArchived = propertyQuery.data?.status === 'archived';
 
   const participantsCount = rows.filter((row) => !row.isOwner).length;
+  // Список загрузился и читается — от него зависят обе ветки шапки.
+  const membersSettled = !membersQuery.isPending && !membersQuery.isError;
   // Служебные иконки шапки — только когда есть кого искать (§7): список
   // из одного владельца и ошибка загрузки их прячут; кебаб (D6) живёт
   // при тех же условиях — у владельца с действиями управления, у
   // приглашённого только с «Историей объекта».
-  const headerActionsVisible =
-    !membersQuery.isPending && !membersQuery.isError && participantsCount > 0;
+  const headerActionsVisible = membersSettled && participantsCount > 0;
+  // Иконка «Истории объекта» пустого списка (решение владельца
+  // 13.10.2026): участников нет, но действия в объекте были — вместо
+  // кебаба рисуется одна иконка истории (проверка — лёгкий limit=1
+  // запрос, только при пустом списке; на ошибке консервативно скрыто).
+  // Поиск по-прежнему прячется: искать некого (§7).
+  const emptyList = membersSettled && participantsCount === 0;
+  const hasJournalEntries = useHistoryHasEntries(propertyId, { enabled: emptyList });
+  const emptyHistoryVisible = emptyList && hasJournalEntries;
   const query = search.trim();
   const searching = searchMode && query.length > 0;
   const visible = sortPropertyParticipantsByTitle(
@@ -289,24 +298,39 @@ export function PropertyParticipantsScreen({
       {roleFilterChip}
     </div>
   );
+  // Разводка тапа по ряду (решение владельца 12.10.2026, #1362):
+  // владелец — агрегат /participants/{id} (#698), все ряды, кроме своей
+  // строки (архивный держит ряды статичными — нога там может быть только
+  // архивной); приглашённый при загрузившемся объекте — member-режим прав
+  // (#1362), read-only страница любого ряда, включая свою (быстрый
+  // переход в историю) и ряд владельца; ряд без адресующего id статичен.
+  // Пока /me или объект не разрешились — ряды статичны: ветка читателя
+  // ещё не известна, кнопка, ведущая на 404, не рендерится вовсе.
+  const resolveRowSelect = (row: PropertyParticipantRow): (() => void) | undefined => {
+    if (!meQuery.isSuccess || !propertyQuery.isSuccess) {
+      return undefined;
+    }
+    if (canManage) {
+      const target = row.participantId;
+      return !isArchived && !row.isOwner && !row.isMe && target !== undefined
+        ? () => router.push(ROUTES.participant(target))
+        : undefined;
+    }
+    const memberTarget = row.memberAddressId;
+    return memberTarget !== undefined
+      ? () => router.push(ROUTES.propertyParticipantRights(propertyId, memberTarget))
+      : undefined;
+  };
+
   const rowsBlock = (
     <div className="flex flex-col px-6">
       {visible.map((row) => {
-        // Тап ведёт на агрегат /participants/{id} (#698) только в скоупе
-        // читателя — полная политика в доке экрана.
-        const target =
-          canManage && !isArchived && meQuery.isSuccess && !row.isOwner && !row.isMe
-            ? row.participantId
-            : undefined;
+        // Полная политика тапа — в доке resolveRowSelect.
         return (
           <PropertyParticipantRowView
             key={row.key}
             row={row}
-            onSelect={
-              target === undefined
-                ? undefined
-                : () => router.push(ROUTES.participant(target))
-            }
+            onSelect={resolveRowSelect(row)}
           />
         );
       })}
@@ -384,6 +408,16 @@ export function PropertyParticipantsScreen({
                     )}
                   </MenuContent>
                 </Menu>
+              </span>
+            ) : emptyHistoryVisible ? (
+              /* Пустой список с живым журналом (решение владельца
+               * 13.10.2026): вместо кебаба — одна иконка истории. */
+              <span className="flex items-center pr-3.5">
+                <IconButton
+                  icon={<TimeHistory className="h-6 w-6" />}
+                  label="История объекта"
+                  onClick={() => router.push(ROUTES.historyProperty(propertyId))}
+                />
               </span>
             ) : undefined
           }
@@ -546,7 +580,7 @@ function PropertyParticipantRowView({
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">
           {row.title}
-          {row.isMe && <span className="text-content-tertiary"> (Вы)</span>}
+          {row.isMe && <MeSuffix />}
         </span>
         {/* Иконка роли — постоянная часть второй строки (макет ставит её
          * у почты; когда почта скрыта контрактом или обогащение не
@@ -558,7 +592,14 @@ function PropertyParticipantRowView({
          * не нужен: вспышка играется самой сменой значения. */}
         <span className="flex min-w-0 items-center gap-1 text-sm text-content-secondary">
           <LiveValue valueKey={row.emailIcon} mode="flash">
-            <EmailIcon className="h-4 w-4 shrink-0" aria-hidden />
+            {/* testid с родом глифа — ассерт иконки роли в e2e (прецедент
+             * property-access-pill #1358): декоративный svg по-другому не
+             * различить. */}
+            <EmailIcon
+              className="h-4 w-4 shrink-0"
+              aria-hidden
+              data-testid={`participant-role-icon-${row.emailIcon}`}
+            />
           </LiveValue>
           {row.subtitle !== undefined && <span className="truncate">{row.subtitle}</span>}
         </span>

@@ -1,18 +1,28 @@
 import type { AccessRole, PropertyAccessMember } from '@/entities/access';
-import { ACCESS_ROLE_LABELS } from '@/entities/access';
+import { ACCESS_ROLE_ICON_NAMES, ACCESS_ROLE_LABELS } from '@/entities/access';
 import {
   accountNotCreatedBadge,
   filterByRuQuery,
   sortByRuText,
   suspendedLimitBadge,
 } from '@/entities/participants';
-import { displayUserName } from '@/shared/lib/display-name';
+import { displayOwnUserName } from '@/shared/lib/display-name';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
-/** Иконка у почты в ряду (макет D6 3298-75434): полный доступ — открытый
- * замок Icon/S/FullAccess (и у владельца, и у full_access), просмотр —
- * глаз. */
-export type PropertyParticipantEmailIcon = 'full' | 'eye';
+/** Иконка у почты в ряду (макет 1980-107096, решение владельца 13.10.2026
+ * #1389): владелец — открытый замок Icon/S/FullAccess; общие роли — канон
+ * словаря ACCESS_ROLE_ICON_NAMES (#698): «Управление» — карандаш
+ * Icon/S/Edit, «Просмотр» — глаз. Дискриминация здесь — только владелец:
+ * словарь роль→глиф общих ролей один, в shared/model/access; его значение
+ * читают и билдеры карточек «Прав участника» (participant-rights-card). */
+export type PropertyParticipantEmailIcon = 'full' | 'edit' | 'eye';
+
+export function emailRoleIcon(role: AccessRole): PropertyParticipantEmailIcon {
+  if (role === 'owner') {
+    return 'full';
+  }
+  return ACCESS_ROLE_ICON_NAMES[role];
+}
 
 /** Чип статуса ноги в ряду — форма конструкторов entities/participants
  * (прецедент UserPropertyBadge): тип не экспортируется из индекса,
@@ -95,9 +105,9 @@ export type PropertyParticipantRow = {
   readonly key: string;
   /** База титула по ФИО-канону D4: чужие — серверный канон
    * access.DisplayNameOf (почта — только у pending, контракт #693),
-   * своя строка — имя читателя без фамилии (макет «Даниил (Вы)»).
-   * Суффикс «(Вы)» в базе не живёт — его серым рисует вид по isMe
-   * (канон шита фильтров #710). */
+   * своя строка — displayOwnUserName, имя читателя без фамилии (макет
+   * «Даниил (Вы)»). Суффикс «(Вы)» в базе не живёт — его серым рисует
+   * MeSuffix (общий примитив, #1356). */
   readonly title: string;
   /** Путь стриминга фото профиля участника (ADR 0065, решение #1286);
    * undefined — pending или у юзера нет фото. */
@@ -113,11 +123,18 @@ export type PropertyParticipantRow = {
   /** Цель тапа — агрегат /participants/{id}: uuid юзера, у pending —
    * почта (контракт #693); undefined — строка без идентификатора. */
   readonly participantId: string | undefined;
+  /** Адресующий id чтения строки (контракт #1357, клиентское правило
+   * `row.id ?? row.user_id`): membership id, invitation id у pending,
+   * user_id у синтезированного ряда владельца. Цель тапа member-режима
+   * «Прав участника» (#1362, read-only); undefined — обе опоры пусты,
+   * строка чтению не адресуется (ряд остаётся статичным). */
+  readonly memberAddressId: string | undefined;
   /** Роль ноги: фильтр «Все роли» и сортировка. */
   readonly role: AccessRole;
   readonly isOwner: boolean;
-  /** Строка самого читателя — вид рисует серый суффикс «(Вы)» (канон
-   * #710); ряд инертный (#770; политика тапа — в доке экрана). */
+  /** Строка самого читателя — вид рисует серый суффикс «(Вы)»
+   * (MeSuffix, #1356); ряд инертный (#770; политика тапа — в доке
+   * экрана). */
   readonly isMe: boolean;
 };
 
@@ -158,14 +175,14 @@ function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined
     // пуст — memberResponse отдаёт её без обогащения).
     const isPending = member.status === 'pending';
     // ФИО-канон D4: своя строка — имя читателя из /me без фамилии
-    // серверной строки (прецедент шита фильтров #710); нет имени —
-    // «Пользователь» (даст на виде «Пользователь (Вы)»). Чужие —
+    // серверной строки (displayOwnUserName); нет имени — «Пользователь»
+    // (даст на виде «Пользователь (Вы)»). Чужие —
     // серверный канон DisplayNameOf, фронт его не пересобирает; у
     // pending юзера ещё нет («the email is the label», #693) — анонимный
     // титул #1105 ставит VM. Суффикс «(Вы)» в базе не живёт — его серым
-    // рисует вид по isMe (канон шита фильтров #710).
+    // рисует MeSuffix (общий примитив, #1356).
     const title = isMe
-      ? displayUserName(reader.name ?? '', '')
+      ? displayOwnUserName(reader.name ?? '')
       : isPending
         ? ANONYMOUS_TITLE
         : (displayName ?? (email !== '' ? email : ''));
@@ -175,7 +192,7 @@ function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined
       photoUrl: member.photoUrl ?? undefined,
       subtitle:
         (isPending || displayName !== undefined) && email !== '' ? email : undefined,
-      emailIcon: member.role === 'viewer' ? 'eye' : 'full',
+      emailIcon: emailRoleIcon(member.role),
       badge: isPending
         ? accountNotCreatedBadge()
         : member.status === 'suspended'
@@ -183,6 +200,7 @@ function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined
           : undefined,
       participantId:
         member.userId ?? (member.status === 'pending' && email !== '' ? email : undefined),
+      memberAddressId: member.id ?? member.userId ?? undefined,
       role: member.role,
       isOwner: member.isOwner,
       isMe,

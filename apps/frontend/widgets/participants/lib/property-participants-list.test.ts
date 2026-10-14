@@ -128,7 +128,7 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
     expect(rows[0]?.isMe).toBe(true);
   });
 
-  it('иконка у почты: владелец и full_access — полный доступ (открытый замок), viewer — глаз (D6, 3298-75434)', () => {
+  it('иконка у почты: владелец — открытый замок, full_access («Управление») — карандаш, viewer — глаз (#1389, 1980-107096)', () => {
     const rows = propertyParticipantRows(
       [
         maria,
@@ -138,8 +138,8 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
       OWNER_READER,
     );
 
-    // Владелец первым (замок «полный доступ»), дальше в порядке входа.
-    expect(rows.map((row) => row.emailIcon)).toEqual(['full', 'eye', 'full']);
+    // Владелец первым (открытый замок), дальше в порядке входа.
+    expect(rows.map((row) => row.emailIcon)).toEqual(['full', 'eye', 'edit']);
   });
 
   it('suspended-бейдж «Превышен лимит объектов» только у приостановленного; participantId — uuid, у pending — почта', () => {
@@ -181,6 +181,26 @@ describe('propertyParticipantRows — VM ряда «Участники объе�
     const rows = propertyParticipantRows([member({ email: null })], OWNER_READER);
 
     expect(rows[0]?.subtitle).toBeUndefined();
+  });
+
+  it('memberAddressId — адресующий id чтения строки (#1357, #1362): membership id, invitation id, у владельца user_id', () => {
+    // Строка владельца — как на проводе: синтезированная, membership id
+    // нулевой (контракт #1357).
+    const ownerRow = member({
+      id: null,
+      userId: OWNER_ID,
+      email: 'ivan@example.com',
+      role: 'owner',
+      isOwner: true,
+      displayName: 'Иван Иванов',
+    });
+    const rows = propertyParticipantRows([maria, ownerRow, pending], OWNER_READER);
+    const byKey = new Map(rows.map((row) => [row.key, row]));
+
+    expect(byKey.get('member-1')?.memberAddressId).toBe('member-1');
+    // Синтезированная строка владельца читается по user_id владельца.
+    expect(byKey.get(OWNER_ID)?.memberAddressId).toBe(OWNER_ID);
+    expect(byKey.get('invitation-1')?.memberAddressId).toBe('invitation-1');
   });
 });
 

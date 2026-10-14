@@ -66,16 +66,21 @@ var feedCatalog = map[EventType]struct {
 	// что у платёжной пары решения #737 — переход на страницу правила.
 	// «Автоплатёж исполнен» (#1169): та же категория и та же кнопка —
 	// переход на страницу правила.
-	EventPaymentAutoPaid:              {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
-	EventPaymentReminder:              {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
-	EventTaskOverdue:                  {CategoryTasks, []ActionKind{ActionOpenTask}},
-	EventPropertyInvitation:           {CategorySharedAccess, []ActionKind{ActionOpenProperty}},
-	EventInvitationAccepted:           {CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},
-	EventAccessRevoked:                {CategorySharedAccess, nil},
-	EventAccessPaused:                 {CategorySharedAccess, nil},
-	EventAccessResumed:                {CategorySharedAccess, nil},
-	EventMemberLeft:                   {CategorySharedAccess, nil},
-	EventAccessRoleChanged:            {CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},
+	EventPaymentAutoPaid:    {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	EventPaymentReminder:    {CategoryPaymentsOperations, []ActionKind{ActionOpenPayment}},
+	EventTaskOverdue:        {CategoryTasks, []ActionKind{ActionOpenTask}},
+	EventPropertyInvitation: {CategorySharedAccess, []ActionKind{ActionOpenProperty}},
+	EventInvitationAccepted: {CategorySharedAccess, []ActionKind{ActionOpenPropertyMembers}},
+	EventAccessRevoked:      {CategorySharedAccess, nil},
+	EventAccessPaused:       {CategorySharedAccess, nil},
+	EventAccessResumed:      {CategorySharedAccess, nil},
+	EventMemberLeft:         {CategorySharedAccess, nil},
+	// Событие access_role_changed ведёт в объект (#1359, решение владельца
+	// 12.10.2026): было open_property_members — owner-only раздел
+	// «Участники», мёртвая кнопка для участника-получателя. Семантика
+	// гейта та же — кнопка стоит, пока доступ жив (ActionOpenProperty и
+	// ActionOpenPropertyMembers гейтятся одинаково).
+	EventAccessRoleChanged:            {CategorySharedAccess, []ActionKind{ActionOpenProperty}},
 	EventSubscriptionPaymentFailed:    {CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	EventSubscriptionPaymentReminder:  {CategoryTariff, []ActionKind{ActionOpenTariffs}},
 	EventSubscriptionPaymentSucceeded: {CategoryTariff, nil},

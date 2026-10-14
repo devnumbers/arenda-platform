@@ -1,13 +1,15 @@
 import {
   captureScreen,
-  expect,
   execE2eSql,
+  expect,
   openCabinetWithSeededSession,
   openCabinetWithSessionToken,
+  seedJournalEntry,
   seededMemberSessionToken,
   seededViewerSessionToken,
   screenHeader,
   test,
+  todayAt,
 } from './fixtures';
 
 // Экран «Участники объекта» (D6 #1312, макет 3298-75434): полный состав
@@ -23,6 +25,7 @@ import {
 // execE2eSql (workers=1).
 
 const APARTMENT_ID = '33333333-3333-4333-8333-333333333333';
+const GARAGE_ID = '44444444-4444-4444-8444-444444444444';
 const MARIA_ID = '12111111-1111-4111-8111-111111111121';
 const MARIA_MEMBER_ID = '99999999-9999-4999-8999-999999999931';
 const SERGEY_ID = '13111111-1111-4111-8111-111111111131';
@@ -47,6 +50,13 @@ test('вход из детали объекта: «Управление» → «
   await expect(sergeyRow).toBeVisible();
   await expect(sergeyRow.getByText('e2e-viewer@example.com')).toBeVisible();
 
+  // Иконка роли у почты (#1389, макет 1980-107096): открытый замок —
+  // только владелец, карандаш — «Управление» (Мария и Анна — у обеих
+  // full_access), глаз — «Просмотр» (Сергей).
+  await expect(page.getByTestId('participant-role-icon-full')).toHaveCount(1);
+  await expect(page.getByTestId('participant-role-icon-edit')).toHaveCount(2);
+  await expect(page.getByTestId('participant-role-icon-eye')).toHaveCount(1);
+
   // CTA приглашения от объекта — постоянная нижняя панель.
   await expect(
     page.getByRole('button', { name: 'Пригласить участника' }).filter({ hasText: 'Пригласить участника' }),
@@ -64,33 +74,40 @@ test('тап по ряду — страница участника агрега�
   await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
 });
 
-test('manage-участник (D8): состав read-only — своя строка «(Вы)» и чужие ряды инертные; CTA выхода на месте', async ({ page }) => {
+test('manage-участник (D8): своя строка и чужие ряды ведут на read-only права #1362; CTA выхода на месте', async ({ page }) => {
   // Мария — full_access на чужой «Квартире на Ленина»: D8 (#1304) забрал у
   // неё member-management (canManageMembers — только владелец), D6 оставил
-  // чтение состава, «Историю объекта» и «Покинуть объект».
+  // чтение состава, «Историю объекта» и «Покинуть объект»; #1362 (решение
+  // владельца 12.10.2026) открыл ей страницы прав всех рядов — read-only
+  // по контракту чтения строки #1357 (детали экрана —
+  // participant-rights-member.spec.ts).
   await openCabinetWithSessionToken(page, seededMemberSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
   const header = screenHeader(page);
 
   await expect(header.getByText('Участники объекта')).toBeVisible();
 
-  // Своя строка «Имя (Вы)» (ФИО-канон D4) — статичный ряд: не
-  // role=button, без шеврона.
+  // Своя строка «Имя (Вы)» (ФИО-канон D4) — тап ведёт на member-режим
+  // прав: быстрый переход к истории своей строки.
   await expect(page.getByText('Мария (Вы)')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Мария \(Вы\)/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /Мария \(Вы\)/ }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/properties/${APARTMENT_ID}/participants/${MARIA_MEMBER_ID}$`),
+  );
+  await expect(header.getByText('Права участника')).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Управление' })).toHaveCount(0);
+  await expect(page.getByText('Отозвать доступ')).toHaveCount(0);
 
-  // Тап по своей строке никуда не ведёт — экран остаётся на месте.
-  await page.getByText('Мария (Вы)').click();
+  // Чужой ряд — туда же: member-маршрут чтения строки (агрегат
+  // /participants/{id} ответил бы не-владельцу приватным 404, #693).
+  await page.goBack();
   await expect(header.getByText('Участники объекта')).toBeVisible();
-  await expect(page.getByText('Участник не найден')).toHaveCount(0);
-  await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT_ID}/participants$`));
-
-  // D8: чужие ряды тоже статичные — страницы участника вне скоупа
-  // не-владельца (404-политика #693).
-  await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
+  await expect(header.getByText('Права участника')).toBeVisible();
 
   // D6: у приглашённого вместо приглашения — красный CTA выхода (кебаб
   // «История объекта» покрыт зрительским тестом).
+  await page.goBack();
   await expect(page.getByRole('button', { name: 'Покинуть объект' })).toBeVisible();
 });
 
@@ -157,7 +174,7 @@ test('приглашение от объекта: свой email — 400, све
 
   // Свежая почта — pending-приглашение, возврат на список с попапом.
   await emailField.fill(INVITE_EMAIL);
-  await page.getByRole('radio', { name: 'Редактирование' }).click();
+  await page.getByRole('radio', { name: 'Управление' }).click();
   try {
     await page.getByRole('button', { name: 'Пригласить' }).filter({ hasText: 'Пригласить' }).click();
 
@@ -297,14 +314,66 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
   }
 });
 
+test('пустой список: иконка «История объекта» видна только когда действия были (решение владельца 13.10.2026)', async ({ page, seededUser }) => {
+  await execE2eSql('DELETE FROM action_journal;');
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Гараж свободен: в списке только строка владельца — кебаба и поиска
+  // нет (§7: искать некого), и иконки истории нет: действий в объекте
+  // не было.
+  await page.goto(`/properties/${GARAGE_ID}/participants`);
+  const header = screenHeader(page);
+  await expect(page.getByText('Иван (Вы)')).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Еще — действия со списком' })).toHaveCount(0);
+  await expect(header.getByRole('button', { name: 'Поиск участников' })).toHaveCount(0);
+  await expect(header.getByRole('button', { name: 'История объекта' })).toHaveCount(0);
+
+  // Непустой список (квартира) — кебаб как был, отдельной иконки истории
+  // не появляется (ветки шапки взаимоисключающие).
+  await page.goto(`/properties/${APARTMENT_ID}/participants`);
+  await expect(header.getByRole('button', { name: 'Еще — действия со списком' })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'История объекта' })).toHaveCount(0);
+  await page.goto(`/properties/${GARAGE_ID}/participants`);
+  await expect(page.getByText('Иван (Вы)')).toBeVisible();
+
+  // Запись журнала гаража появляется — иконка истории в шапке ведёт в
+  // прибитую ленту объекта (вместо кебаба — решение владельца 13.10).
+  await seedJournalEntry(
+    {
+      id: 'b0000000-0000-4000-8000-000000000091',
+      createdAtSql: todayAt(5),
+      propertyId: GARAGE_ID,
+      text: 'Платёж удалён: Старый платёж',
+      searchable: 'Платёж удалён: Старый платёж Иван Иванов',
+      action: 'payment.deleted',
+      baseAction: 'deleted',
+    },
+    seededUser,
+  );
+  await page.reload();
+  try {
+    await header.getByRole('button', { name: 'История объекта' }).click();
+    await page.waitForURL(`**/history/properties/${GARAGE_ID}`);
+    await expect(page.getByText('История объекта').first()).toBeVisible();
+    await expect(page.getByText('Платёж удалён: Старый платёж')).toBeVisible();
+  } finally {
+    // Конвенция файла: тест восстанавливает сид (сеяная строка журнала
+    // снимается).
+    await execE2eSql(
+      `DELETE FROM action_journal WHERE id = 'b0000000-0000-4000-8000-000000000091'`,
+    );
+  }
+});
+
 test('зритель: состав read-only, кебаб только с «Историей объекта», красный CTA «Покинуть объект» (D6)', async ({ page }, testInfo) => {
   await openCabinetWithSessionToken(page, seededViewerSessionToken());
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
   const header = screenHeader(page);
 
   await expect(header.getByText('Участники объекта')).toBeVisible();
-  // Ряды без manage-прав статичные (страница участника вне скоупа
-  // зрителя) — проверяем текстами, не role=button.
+  // Ряды читаются зрителю целиком (решение #758); тап любого ряда ведёт
+  // на member-режим прав #1362 (навигация покрыта там же и в
+  // participant-rights-member.spec.ts), здесь — состав и хром зрителя.
   await expect(page.getByText('Иван Иванов')).toBeVisible();
   // Зритель видит себя «Имя (Вы)» (ФИО-канон D4); manage-контролов нет.
   await expect(page.getByText('Сергей (Вы)')).toBeVisible();

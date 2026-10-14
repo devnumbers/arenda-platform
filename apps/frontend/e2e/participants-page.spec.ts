@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import {
   captureScreen,
   expect,
@@ -45,14 +46,15 @@ test('страница участника: шапка, чип агрегата, 
   await expect(page.getByText('Доступные объекты')).toBeVisible();
   const apartmentRow = page.getByRole('button', { name: /Квартира на Ленина/ });
   await expect(apartmentRow).toBeVisible();
-  await expect(apartmentRow.getByText('Редактирование')).toBeVisible();
+  await expect(apartmentRow.getByText('Управление')).toBeVisible();
 
-  // Кебаб шапки: приглашение, действия участника (#712) и отзыв
-  // (макет 2008-48318).
+  // Кебаб шапки: приглашение и отзыв (макет 2008-48318); пункта
+  // «Действия участника» больше нет (#1361 — глобальная лента по одному
+  // человеку снята).
   await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
   await expect(page.getByRole('menuitem', { name: 'Пригласить в объект' })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toHaveCount(0);
   await page.keyboard.press('Escape');
 
   await captureScreen(page, testInfo, 'participant-page');
@@ -119,7 +121,13 @@ test('права участника: смена роли сегментом, п�
 
   await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
   await expect(header.getByText('Права участника')).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Редактирование' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Управление' })).toBeChecked();
+
+  // Карточка объекта — ссылка на объект и у владельца (амендмент
+  // владельца 13.10.2026, общий с member-режимом #1362; без шеврона).
+  const objectCard = page.getByRole('link', { name: /Квартира на Ленина/ });
+  await expect(objectCard).toBeVisible();
+  await expect(objectCard).toHaveAttribute('href', `/properties/${APARTMENT_ID}`);
 
   try {
     await page.getByRole('radio', { name: 'Просмотр' }).click();
@@ -141,8 +149,113 @@ test('права участника: смена роли сегментом, п�
   }
   await page.reload();
   await expect(
-    page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование'),
+    page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Управление'),
   ).toBeVisible();
+});
+
+/** CDP-задержка сети: полёт мутации удлиняется — погашенное состояние
+ * переключателя роли наблюдаемо (канон double-submit-guard; route-задержка
+ * ненадёжна — грабля #1113). Возвращает функцию снятия эмуляции. */
+async function holdNetworkLatency(page: Page, latencyMs: number): Promise<() => Promise<void>> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: latencyMs,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  });
+  return async () => {
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    });
+  };
+}
+
+test('переключатель роли: курсор-пойнтер на кнопках, клип тени капсулы (#1395); в полёте мутации курсор default, сид восстанавливается', async ({ page, seededUser }) => {
+  test.setTimeout(120_000);
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${MARIA_ID}`);
+
+  await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
+  await expect(page.getByRole('radio', { name: 'Управление' })).toBeChecked();
+
+  // Курсор переключателю задаёт глобальное base-правило
+  // button:not(:disabled) (#1395): сам сегмент локального cursor-класса
+  // не несёт, поэтому снятие base-правила валит этот ассерт — радио и есть
+  // канарейка глобальности.
+  const manage = page.getByRole('radio', { name: 'Управление' });
+  const view = page.getByRole('radio', { name: 'Просмотр' });
+  await expect(manage).toHaveCSS('cursor', 'pointer');
+  await expect(view).toHaveCSS('cursor', 'pointer');
+
+  // Тень активной пилюли не выходит за капсулу: «Clip content» макета
+  // 3298-75577, тот же CSS-аналог, что на тарифах лендинга (#1010).
+  await expect(
+    page.getByRole('radiogroup', { name: 'Роль участника на объекте' }),
+  ).toHaveCSS('overflow', 'clip');
+
+  // Погашенный сегмент в полёте мутации — курсор остаётся default:
+  // base-правило с оговоркой :not(:disabled) (слово владельца).
+  const releaseLatency = await holdNetworkLatency(page, 2000);
+  try {
+    await view.click();
+    await expect(view).toBeDisabled();
+    await expect(view).toHaveCSS('cursor', 'default');
+  } finally {
+    await releaseLatency();
+  }
+
+  await expect(
+    page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  try {
+    // Сид восстанавливается — тот же член ряда, что в сценарии смены роли.
+    await execE2eSql(
+      `UPDATE property_members SET role = 'full_access' WHERE id = '99999999-9999-4999-8999-999999999931'`,
+    );
+  } finally {
+    await page.reload();
+  }
+  await expect(manage).toBeChecked();
+});
+
+test('страница участника: отступы шапки по макету 2036-84861, h1 без легаси-маржина (#1402)', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${LIMITED_ID}`);
+
+  const h1 = page.getByRole('heading', { name: 'Анна Лимитова' });
+
+  // Легаси-маржин h1 (0.67em ≈ 18.76px на кегле 28) снесён глобально
+  // (#1402, слово владельца): без этого base-правила ассерт красный.
+  await expect(h1).toHaveCSS('margin-top', '0px');
+  await expect(h1).toHaveCSS('margin-bottom', '0px');
+
+  // Геометрия шапки: аватар / имя+почта / (чип) с зазорами 24 и 8 внутри
+  // блока; контент страницы разнесён на 48 (2036-84861). Канарейка
+  // глобальности маржина — сам h1: локального margin-класса он не несёт.
+  // Ассерт 48 жив, пока сида Анны partial (бейджа и notice в шапке нет —
+  // при дрейфе сида между почтой и секцией встанут чип+карточка).
+  const avatar = page.locator('.h-24.rounded-pill').first();
+  const email = page.getByText('e2e-limited@example.com');
+  const section = page.getByRole('heading', { name: 'Доступные объекты' });
+  const [avatarBox, h1Box, emailBox, sectionBox] = await Promise.all([
+    avatar.boundingBox(),
+    h1.boundingBox(),
+    email.boundingBox(),
+    section.boundingBox(),
+  ]);
+  if (!avatarBox || !h1Box || !emailBox || !sectionBox) {
+    throw new Error('боксы шапки не измерились');
+  }
+  expect(Math.round(h1Box.y - avatarBox.y - avatarBox.height)).toBe(24);
+  expect(Math.round(emailBox.y - h1Box.y - h1Box.height)).toBe(8);
+  expect(Math.round(sectionBox.y - emailBox.y - emailBox.height)).toBe(48);
 });
 
 test('пригласить в объект: мультичек гаража, шит роли, «Доступ выдан»; сид восстанавливается', async ({ page, seededUser }) => {
@@ -175,7 +288,7 @@ test('пригласить в объект: мультичек гаража, ш�
 
   // Шит роли (макет 2010-131724): сегмент + кнопка «Пригласить».
   const sheet = page.getByRole('dialog');
-  await sheet.getByRole('radio', { name: 'Редактирование' }).click();
+  await sheet.getByRole('radio', { name: 'Управление' }).click();
   try {
     await sheet.getByRole('button', { name: 'Пригласить' }).click();
 
@@ -197,9 +310,9 @@ test('пригласить в объект: мультичек гаража, ш�
     ).toBeVisible();
     await expect(page.getByTestId('participant-limit-notice').getByText(/Попросите его освободить слот/)).toBeVisible();
     await expect(
-      page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Редактирование'),
+      page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Управление'),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Редактирование')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Управление')).toBeVisible();
   } finally {
     await execE2eSql(
       `DELETE FROM property_members WHERE property_id = '${GARAGE_ID}' AND user_id = '${LIMITED_ID}'`,
@@ -324,6 +437,15 @@ test('pending-участник: deep-link по почте, бейдж «Акка
     await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
     await expect(page.getByText('Аккаунт не создан')).toBeVisible();
 
+    // Чип шапки pending-участника: титул → 24 + 6 внутреннего паддинга
+    // инстанса бейджа (#1402, 2036-84861).
+    const h1Box = await page.getByRole('heading', { name: 'e2e-pending@example.com' }).boundingBox();
+    const chipBox = await page.getByText('Аккаунт не создан').boundingBox();
+    if (!h1Box || !chipBox) {
+      throw new Error('боксы титула и чипа не измерились');
+    }
+    expect(Math.round(chipBox.y - h1Box.y - h1Box.height)).toBe(30);
+
     const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
     await expect(garageRow.getByText('Приглашён')).toBeVisible();
 
@@ -331,7 +453,7 @@ test('pending-участник: deep-link по почте, бейдж «Акка
     await expect(header.getByText('Права участника')).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
 
-    await page.getByRole('radio', { name: 'Редактирование' }).click();
+    await page.getByRole('radio', { name: 'Управление' }).click();
     await expect(
       page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
     ).toBeVisible();
@@ -392,8 +514,9 @@ test('права участника без аккаунта (D7): карточк
       notice.getByText('После создания аккаунта он сможет пользоваться вашим объектом'),
     ).toBeVisible();
 
-    // Сегмент роли и красная строка отзыва; «Действий участника» у
-    // pending нет (канон #712 — журнал адресуется uuid юзера).
+    // Сегмент роли и красная строка отзыва; строки «Действия участника
+    // в объекте» у pending нет — журнал адресуется uuid юзера (actor_id),
+    // которого у приглашённого ещё не существует.
     await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
     await expect(page.getByTestId('participant-rights-revoke')).toBeVisible();
     await expect(page.getByText('Действия участника')).toHaveCount(0);
@@ -444,6 +567,10 @@ test('D7 owner-only: manage-участник по deep-link видит «Уча�
   // Мария (full_access на чужой квартире) открывает D7-экран напрямую:
   // агрегат GET /participants/{id} — owner-скоуп (D5 #1304), не-собственнику
   // приватный 404; зрителя проверяет та же ветка (404 не зависит от роли).
+  // #1362 открыл участнику страницы прав по member-маршруту
+  // /properties/{id}/participants/{memberId} (контракт чтения строки
+  // #1357, спек participant-rights-member.spec.ts) — агрегатный маршрут
+  // владельческого экрана остаётся owner-only, этот лок стоит.
   await seedPendingRightsInvitation('viewer');
   try {
     await openCabinetWithSessionToken(page, seededMemberSessionToken());
@@ -451,7 +578,7 @@ test('D7 owner-only: manage-участник по deep-link видит «Уча�
 
     await expect(page.getByText('Участник не найден')).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Просмотр' })).toHaveCount(0);
-    await expect(page.getByRole('radio', { name: 'Редактирование' })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: 'Управление' })).toHaveCount(0);
     await expect(page.getByTestId('participant-rights-revoke')).toHaveCount(0);
     // Назад в шапке жив (§7).
     await expect(screenHeader(page).getByRole('button', { name: 'Назад' })).toBeVisible();

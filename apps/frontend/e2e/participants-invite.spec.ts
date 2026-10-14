@@ -41,7 +41,7 @@ test('экран по макету: заголовок, почта, сегмен
 
   // Сегмент роли: по умолчанию «Просмотр» (макеты 2008-46375).
   await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
-  await expect(page.getByRole('radio', { name: 'Редактирование' })).not.toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Управление' })).not.toBeChecked();
 
   // Свёрнутый выбор: дефолт «Все N объектов» (снапшот трёх объектов).
   await expect(page.getByText('Все 3 объекта')).toBeVisible();

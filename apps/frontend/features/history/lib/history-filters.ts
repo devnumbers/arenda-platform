@@ -2,7 +2,7 @@ import type { IsoDate, IsoRange } from '@/shared/lib/calendar';
 import type { HistoryBaseAction, HistoryKind, HistoryParticipantOption } from '@/entities/history';
 import { HISTORY_BASE_ACTIONS, HISTORY_KINDS } from '@/entities/history';
 import { formatIsoRangeChipLabel } from '@/shared/lib/date-format';
-import { displayUserName } from '@/shared/lib/display-name';
+import { displayOwnUserName } from '@/shared/lib/display-name';
 import { readCsvParam, readCsvUuidParam } from '@/shared/lib/parse-csv-uuid-param';
 import { readIsoRangeParam, type UrlParamsSource } from '@/shared/lib/parse-iso-range-param';
 import type { HistoryFeedScope } from '@/shared/api/query-keys';
@@ -125,15 +125,17 @@ export function isDefaultHistoryFilters(filters: HistoryFilters): boolean {
 
 /**
  * Пины страницы: предметы, прибитые путём страницы, а не фильтрами
- * («Действия участника» #712 — человек, «История объекта» #840 — объект,
- * «Действия участника в объекте» #841 — пара). Заданный пин значит «своя
+ * («История объекта» #840 — объект, «Действия участника в объекте»
+ * #841 — пара; одиночный пин человека #712 снят вместе с его страницей,
+ * #1361 — actorId живёт только в паре). Заданный пин значит «своя
  * группа адреса не читается»: в шите она видна серой незабираемой строкой
  * (макеты 2184-92510, 2184-94176; на странице пары — обе, «1/1»), но не
  * пишет в черновик; hand-crafted ?actors=/?objects= игнорируются, а
  * «Применить фильтры» их вычищает — запись группы своя.
  */
 export type HistoryFilterPins = {
-  /** Прибитый человек (#712): uuid юзера из пути (actor_id журнала). */
+  /** Прибитый человек (#841): uuid юзера из пути (actor_id журнала);
+   * одиночной страницей человека больше не прибивается (#1361). */
   readonly actorId?: string;
   /** Прибитый объект (#840): uuid объекта из пути. */
   readonly propertyId?: string;
@@ -164,7 +166,7 @@ export function pinnedHistoryFilters(
  * контракт пустой список не отличает от «все» — лента не запрашивается
  * вовсе (экран рисует пустое состояние без запроса).
  *
- * С пинами (ADR 0061 §7 — на прибитых страницах #712/#840/#841 тот же
+ * С пинами (ADR 0061 §7 — на прибитых страницах #840/#841 тот же
  * GET /history, actor_ids и property_ids = по одному; сервер AND'ит их —
  * бэк #708 без изменений) группы адреса действуют поверх прибитых
  * предметов, а прибитые id подставляются в скоуп сильнее своих групп:
@@ -201,10 +203,10 @@ export function historyPeriodChipLabel(period: IsoRange | null): string {
 }
 
 /** Заголовок строки участника шита: чужой — канон отображаемого имени,
- * себе — только имя без фамилии (макет 2067-163528: «Даниил (Вы)»;
- * суффикс «(Вы)» серым рисует сам шит); фамилия своей строки в канон
- * D4 не подмешивается — displayUserName получает пустую фамилию, и без
- * имени канон даёт «Пользователь» (#1105, аменд #1123). */
+ * себе — база своей строки displayOwnUserName (макет 2067-163528:
+ * «Даниил (Вы)»; серый суффикс рисует шит через MeSuffix, #1356).
+ * Фамилия своей строки в канон D4 не подмешивается, и без имени канон
+ * даёт «Пользователь» (#1105, аменд #1123). */
 export function historyParticipantTitle(
   participant: Pick<HistoryParticipantOption, 'name' | 'firstName'>,
   isMe: boolean,
@@ -212,7 +214,7 @@ export function historyParticipantTitle(
   if (!isMe) {
     return participant.name;
   }
-  return displayUserName(participant.firstName, '');
+  return displayOwnUserName(participant.firstName);
 }
 
 /** Секция группы «Участники» шита: подпись (undefined — секция без

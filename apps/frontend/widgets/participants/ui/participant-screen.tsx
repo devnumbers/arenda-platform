@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Add, Block, Info, Kebab, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
+import { Add, Block, Info, Kebab, SmallArrowRight } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -45,10 +45,10 @@ import { ParticipantScreenSkeleton } from './participants-skeletons';
  * /participants/{id} → goBack на список (источник), где рендерится попап
  * «Участник удален» (2008-83716; флаг — stageParticipantPopup).
  *
- * Пункт кебаба «Действия участника» — вход в журнал истории (#712, карта
- * «История действий»): та же лента, прибитая к человеку. Только у
- * зарегистрированных (userId известен = actor_id журнала): у
- * pending-приглашения действий не бывает.
+ * Пункт кебаба «Действия участника» снят вместе с его страницей (решение
+ * владельца 12.10.2026, #1361): глобальная лента по одному человеку
+ * удалена, лента истории адресуется парами человек+объект (#841) или
+ * объектом (#840).
  *
  * Deep-link-политика (#693): человек вне скоупа читающего или уже отозван
  * — приватный 404 → «Участник не найден» по центру, кебаб скрыт (§7),
@@ -81,9 +81,6 @@ export function ParticipantScreen({
   // Иконки/меню шапки — только когда участник загружен (§7: пустых и
   // ошибочных состояний они не касаются).
   const kebabVisible = headerLoaded;
-  // Пункт кебаба «Действия участника»: переход по uuid юзера — это и есть
-  // actor_id журнала; у pending-строки userId нет.
-  const actionsUserId = participant?.userId;
   const propertyById = new Map(
     (propertiesQuery.data ?? []).map((property) => [property.id, property]),
   );
@@ -109,16 +106,6 @@ export function ParticipantScreen({
                   >
                     Пригласить в объект
                   </MenuItem>
-                  {actionsUserId !== undefined && (
-                    <MenuItem
-                      icon={<TimeHistory className="h-6 w-6" />}
-                      onSelect={() =>
-                        router.push(ROUTES.historyParticipant(actionsUserId))
-                      }
-                    >
-                      Действия участника
-                    </MenuItem>
-                  )}
                   <MenuItem
                     icon={<Block className="h-6 w-6 text-error" />}
                     className="text-error"
@@ -145,7 +132,7 @@ export function ParticipantScreen({
             />
           )
         ) : (
-          <div className="flex flex-col gap-6 pb-2">
+          <div className="flex flex-col gap-12 pb-2">
             <ParticipantHeader participant={participantQuery.data} />
             {participantQuery.data.aggregateStatus === 'limit_exceeded' && (
               <ParticipantLimitNotice />
@@ -213,12 +200,15 @@ export function ParticipantScreen({
   );
 }
 
-/** Блок «аватар — имя — почта — бейдж» (макет 2008-81468): аватар 96 — фото
- * профиля или заглушка BoldUser (UserAvatar hero), имя H1 28/32 SemiBold,
- * почта 14/16 —
- * всё по центру; у pending-участника имени нет — почта уже титул. Бейдж —
- * из двух статусных (D3 #1313): «Аккаунт не создан» у pending, «Превышен
- * лимит объектов» у suspended; остальные без бейджа. */
+/** Блок «аватар — имя — почта — бейдж» (макеты 2008-81468, 2036-84861):
+ * аватар 96 — фото профиля или заглушка BoldUser (UserAvatar hero), имя
+ * H1 28/32 SemiBold, почта 14/16 — зазоры: аватар → блок 24, имя → почта
+ * 8, блок → бейдж 24 + 6 внутреннего паддинга инстанса бейджа (pt-1.5);
+ * всё по центру. Маржин h1 глобально снесён (#1402) — зазор тут явный
+ * gap-2, легаси-плюс 18.76px больше не вспухает. У pending-участника
+ * имени нет — почта уже титул. Бейдж — из двух статусных (D3 #1313):
+ * «Аккаунт не создан» у pending, «Превышен лимит объектов» у suspended;
+ * остальные без бейджа. */
 function ParticipantHeader({ participant }: { readonly participant: Participant }): JSX.Element {
   const title = participant.displayName ?? participant.email ?? '';
   const email =
@@ -226,16 +216,18 @@ function ParticipantHeader({ participant }: { readonly participant: Participant 
   const badge = participantStatusBadge(participant);
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-6">
       <UserAvatar size="hero" photoUrl={participant.photoUrl} />
-      <h1 className="text-center text-[28px] font-semibold leading-8 text-content">
-        {title}
-      </h1>
-      {email !== undefined && (
-        <p className="text-center text-sm leading-4 text-content-secondary">{email}</p>
-      )}
+      <div className="flex flex-col items-center gap-2">
+        <h1 className="text-center text-[28px] font-semibold leading-8 text-content">
+          {title}
+        </h1>
+        {email !== undefined && (
+          <p className="text-center text-sm leading-4 text-content-secondary">{email}</p>
+        )}
+      </div>
       {badge !== null && (
-        <div className="pt-2">
+        <div className="pt-1.5">
           <ParticipantRowBadge badge={badge} />
         </div>
       )}

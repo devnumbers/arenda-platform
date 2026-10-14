@@ -7,8 +7,8 @@ describe('actorRoleLabel', () => {
     expect(actorRoleLabel('owner')).toBe('Владелец');
   });
 
-  it('роли участия читаются словарём shared/model/access (решение чарта #692)', () => {
-    expect(actorRoleLabel('full_access')).toBe('Редактирование');
+  it('роли участия читаются словарём shared/model/access (решение владельца 12.10.2026, #1358)', () => {
+    expect(actorRoleLabel('full_access')).toBe('Управление');
     expect(actorRoleLabel('viewer')).toBe('Просмотр');
   });
 });

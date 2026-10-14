@@ -82,11 +82,14 @@ test('вход из кебаба «Участников объекта»: лен
   await expect(screenHeader(page).getByRole('link', { name: 'Квартира на Ленина' })).toHaveCount(0);
   await expect(page.getByText('Москва, ул. Ленина, 1')).toHaveCount(0);
 
-  // Группировка вырождена: внутри дня сразу карточки актёров, шапки
-  // актёров кликабельны — вход в «Действия участника» (#712).
+  // Группировка вырождена: внутри дня сразу карточки актёров; шапка
+  // актёра — вход в «Действия участника в объекте» (#1361: прибитая
+  // пара человек+объект, глобальной страницы «Действия участника»
+  // больше нет).
   await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Мария Петрова' }).first().click();
-  await page.waitForURL(`**/history/participants/**`);
+  await page.waitForURL(`**/history/participants/**/properties/${APARTMENT_ID}`);
+  await expect(page.getByText('Действия участника в объекте').first()).toBeVisible();
 
   // «Настройки» на месте (макет 3258-76984).
   await page.goBack();

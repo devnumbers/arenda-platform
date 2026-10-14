@@ -10,6 +10,12 @@ export const accessKeys = {
   all: ['property-access'] as const,
   list: (propertyId: string) =>
     [...accessKeys.all, 'list', propertyId] as const,
+  /** Строка участника GET /properties/{id}/access/members/{memberId}
+   * (#1357, экран member-режима прав #1362): вложена под list того же
+   * объекта — инвалидация accessKeys.list (канон invalidateAccessProjections)
+   * префиксом снимает и её. */
+  member: (propertyId: string, memberId: string) =>
+    [...accessKeys.list(propertyId), 'member', memberId] as const,
 };
 
 // features/auth
@@ -381,9 +387,9 @@ export const notificationKeys = {
  * периода ('YYYY-MM-DD'), основные действия, виды, актёры, объекты и
  * поисковый запрос целиком уходят в ключ react-query и в query-параметры.
  * #709 читает ленту без скоупа; поиск (#710), шит фильтров (#711) и
- * прибитые экраны «Действия участника» (#712), «История объекта» (#840)
- * и пары участник-в-объекте (#841) доопределяют поля (пины
- * actor_ids/property_ids).
+ * прибитые экраны «История объекта» (#840) и пары участник-в-объекте
+ * (#841) доопределяют поля (пины actor_ids/property_ids; одиночный пин
+ * человека #712 снят, #1361 — actor_ids живёт только в паре).
  */
 export type HistoryFeedScope = {
   readonly dateFrom?: string;
@@ -419,6 +425,11 @@ export const historyKeys = {
    * страницы (#840/#841); сужение — часть ключа. */
   filters: (propertyIds?: ReadonlyArray<string>) =>
     [...historyKeys.all, 'filters', propertyIds?.join(',') ?? ''] as const,
+  /** Были ли действия у объекта — лёгкий limit=1-запрос GET /history
+   * (решение владельца 13.10.2026): пустой список «Участников объекта»
+   * рисует иконку «История объекта», только когда записи есть. */
+  hasEntries: (propertyId: string) =>
+    [...historyKeys.all, 'has-entries', propertyId] as const,
 };
 
 // features/subscription

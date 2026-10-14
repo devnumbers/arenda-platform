@@ -396,7 +396,7 @@ func TestMemberRoleChanged_DetailsCarryTheDiff(t *testing.T) {
 	if e.Action != ActionMemberRoleChanged || e.BaseAction != BaseChanged {
 		t.Errorf("action/base = %s/%s", e.Action, e.BaseAction)
 	}
-	want := DetailLines{`Роль: «Просмотр» → «Полный доступ»`}
+	want := DetailLines{`Роль: «Просмотр» → «Управление»`}
 	if len(e.Details) != 1 || e.Details[0] != want[0] {
 		t.Errorf("details = %q, want %q", e.Details, want)
 	}

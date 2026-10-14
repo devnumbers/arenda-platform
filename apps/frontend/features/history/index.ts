@@ -6,6 +6,7 @@ export {
 export {
   useHistoryFeed,
   useHistoryFilters,
+  useHistoryHasEntries,
   historyFeedScopeKey,
   lastLiveMergeAt,
 } from './api/hooks';

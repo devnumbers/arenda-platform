@@ -20,9 +20,10 @@ export type PropertyAccessPillProps = {
 };
 
 /** Пилюля доступа под заголовком чужого объекта (Figma 2200-97365,
- * компонент StatusHouseBadge): роль читающего — «Редактирование» с
+ * компонент StatusHouseBadge): роль читающего — «Управление» с
  * Icon/S/Edit либо «Просмотр» с Icon/S/Eye (канон participantLegBadge
- * #698). Заменяет снесённый баннер «С вами делится…» (приёмка #757);
+ * #698; слово — решение владельца 12.10.2026, #1358). Заменяет
+ * снесённый баннер «С вами делится…» (приёмка #757);
  * владелец пилюлю не получает, suspended до детали не доходит
  * (лимит-экран). Отступ ряда пилюль держит обёртка страницы
  * (propertyHeaderPills #773). Смена роли чужой рукой оживает каноном C
@@ -35,7 +36,10 @@ export function PropertyAccessPill({ role, refreshing = false }: PropertyAccessP
   }
   const Icon = ROLE_ICON_COMPONENTS[ACCESS_ROLE_ICON_NAMES[role]];
   return (
-    <p className={propertyPillClass}>
+    // testid — сосед property-archived-pill: «Управление» (#1358) больше
+    // не уникальный текст страницы (есть секция «Управление»), e2e
+    // различает пилюли по атрибуту.
+    <p data-testid="property-access-pill" className={propertyPillClass}>
       {/* Flex-раскладка внутри: корень LiveValue — inline-block (модуль),
        * дети оверлея снимаются целиком. */}
       <LiveValue valueKey={role} refreshing={refreshing}>

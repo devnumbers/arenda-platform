@@ -146,6 +146,7 @@ func TestPaidSectionsComposition_BasicRefusedOnEveryGatedRoute(t *testing.T) {
 	router := newPaidSectionsRouter(t, false)
 
 	const participantID = "0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001"
+	const memberID = "0197aaaa-bbbb-7ccc-8ddd-eeeeffff0002"
 	cases := []struct {
 		name   string
 		method string
@@ -157,6 +158,7 @@ func TestPaidSectionsComposition_BasicRefusedOnEveryGatedRoute(t *testing.T) {
 		{"participant page", http.MethodGet, "/participants/" + participantID},
 		{"revoke participant", http.MethodDelete, "/participants/" + participantID},
 		{"grant more properties", http.MethodPost, "/participants/" + participantID + "/properties"},
+		{"object member card", http.MethodGet, "/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0003/access/members/" + memberID},
 		{"journal feed", http.MethodGet, "/history"},
 		{"filter options", http.MethodGet, "/history/filters"},
 	}

@@ -26,6 +26,12 @@ import {
 // action_journal (запись журнала идёт в транзакциях мутаций — сиду
 // проще класть строки тем же контрактом, что миграция 000140).
 
+/** uuid юзера сидового участника (actor_id журнала) — снимок имени в
+ * шапках ленты. */
+const MARIA_ID = '12111111-1111-4111-8111-111111111121';
+/** uuid сидового владельца (фикс сида seed.sql). */
+const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+
 /** Чип дня в JS — зеркально formatDayMonthWithYear (год вне текущего). */
 function expectedDayChip(daysAgo: number): string {
   const day = new Date();
@@ -55,6 +61,30 @@ test('вход с кебаба «Ваших участников», пустая
   await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
 
   await captureScreen(page, testInfo, 'history-feed-empty');
+});
+
+test('снятая страница «Действия участника» — 308 на общую ленту (канон /dashboard, #975)', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Глобальная лента по одному человеку удалена (#1361): старые входы
+  // (закладка, история браузера) заканчиваются на живой общей ленте, а
+  // не на 404 — 308 в proxy, goto следует за ним (прецедент
+  // /participants/list в participants-list.spec.ts). Контент redirected
+  // ленты не проверяем — журнал пуст после соседних тестов.
+  const member = await page.goto(`/history/participants/${MARIA_ID}`);
+  expect(member?.status()).toBe(200);
+  await expect(page).toHaveURL(/\/history$/);
+
+  // Живая пара «участник+объект» на два сегмента длиннее — редирект по
+  // двум сегментам её не задевает.
+  const pair = await page.goto(
+    `/history/participants/${MARIA_ID}/properties/${SEEDED_APARTMENT_PROPERTY_ID}`,
+  );
+  expect(pair?.status()).toBe(200);
+  await expect(page).toHaveURL(
+    new RegExp(`/history/participants/${MARIA_ID}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
+  );
+  await expect(page.getByText('Действия участника в объекте').first()).toBeVisible();
 });
 
 test('лента из сида: чипы дней, группы «объект → актёр», иконки и время строк', async ({ page, seededUser }, testInfo) => {
@@ -125,27 +155,32 @@ test('лента из сида: чипы дней, группы «объект �
   await expect(page.getByText('Вчера', { exact: true })).toBeVisible();
   await expect(page.getByText(expectedDayChip(12), { exact: true })).toBeVisible();
 
-  // Шапки объектов — живые названия области, кликабельны (страница
-  // объекта); у сидовой квартиры виден и адрес (вторая строка шапки по
-  // макету 2157-56876, из /history/filters).
+  // Шапки объектов — живые названия области, кликабельны: с 13.10.2026
+  // ведут на «Историю объекта» (решение владельца — амендмент #1361), а
+  // не на страницу объекта; у сидовой квартиры виден и адрес (вторая
+  // строка шапки по макету 2157-56876, из /history/filters).
   const apartmentHeader = page.getByRole('link', { name: /Квартира на Ленина/ }).first();
   await expect(apartmentHeader).toBeVisible();
-  await expect(apartmentHeader).toHaveAttribute('href', new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}`));
+  await expect(apartmentHeader).toHaveAttribute(
+    'href',
+    new RegExp(`/history/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
+  );
   await expect(page.getByText('Москва, ул. Ленина, 1').first()).toBeVisible();
   await expect(page.getByRole('link', { name: /Гараж на Садовой/ }).first()).toBeVisible();
 
-  // Шапки актёров — имена в серых карточках; роль экран не показывает
-  // (макет 2157-56876). Шапка с actor_id — вход в «Действия участника»
-  // (#712): кликабельны и участник, и владелец (страница действий не
-  // читает участников, 404 не бывает), обезличенные записи не ссылки.
-  await expect(page.getByRole('heading', { name: 'Иван Иванов' }).first()).toBeVisible();
+  // Шапки актёров — тоже ссылки (решение владельца 13.10.2026): пара
+  // «Действия участника в объекте» в рамках секции, где актёр изменения
+  // сделал; владелец включительно (обезличенных записей в сиде нет).
+  // Роль экран не показывает (макет 2157-56876).
   await expect(page.getByRole('link', { name: 'Мария Петрова' }).first()).toHaveAttribute(
     'href',
-    /\/history\/participants\//,
+    new RegExp(`/history/participants/${MARIA_ID}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
   );
   await expect(page.getByRole('link', { name: 'Иван Иванов' }).first()).toHaveAttribute(
     'href',
-    /\/history\/participants\//,
+    new RegExp(
+      `/history/participants/${OWNER_ID}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`,
+    ),
   );
 
   // Строки: сегменты дословно, связанные фрагменты — синие ссылки на
@@ -263,8 +298,9 @@ test('синие переходы #713: связанные сегменты ве
   await expect(propertyLink).toHaveAttribute('href', `/properties/${SEEDED_GARAGE_PROPERTY_ID}`);
 
   // Ссылка участника — на страницу участника хаба (uuid юзера из ссылки).
-  // Локатор по href: шапка актёра той же группы тоже «Мария Петрова», но
-  // ведёт в «Действия участника» (#712).
+  // Локатор по href: имя «Мария Петрова» звучит и в шапке актёра той же
+  // группы, но та ведёт на пару «участник в объекте» (/history/participants/…,
+  // решение владельца 13.10.2026) — ссылка на хаб одна.
   const memberLink = page.locator(`a[href="/participants/${memberUserId}"]`);
   await expect(memberLink).toHaveCount(1);
   await memberLink.click();
@@ -374,7 +410,7 @@ test('короткая лента прижата к низу вьюпорта �
   expect(gapToBottom).toBeLessThanOrEqual(176);
 });
 
-test('свой актор подписан «(Вы)»: в ленте и на прибитой странице про себя', async ({ page, seededUser }) => {
+test('свой актор подписан «(Вы)»: метка видна только себе (семантика Telegram)', async ({ page, seededUser }) => {
   await execE2eSql('DELETE FROM action_journal;');
   await openCabinetWithSeededSession(page, seededUser);
 
@@ -391,19 +427,13 @@ test('свой актор подписан «(Вы)»: в ленте и на п�
   await expect(page.getByRole('heading', { name: 'Мария Петрова', exact: true }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Мария Петрова (Вы)' })).toHaveCount(0);
 
-  // Метка не меняет кликабельность (#712): своя шапка в общей ленте —
-  // по-прежнему ссылка в «Действия участника».
+  // Своя шапка — тоже ссылка (решение владельца 13.10.2026): пара «свой
+  // актёр + объект записи»; метка «(Вы)» кликабельность не трогает.
+  const meId = await execE2eSql(`SELECT id FROM users WHERE email = '${seededUser.email}'`);
   await expect(page.getByRole('link', { name: 'Иван Иванов (Вы)' }).first()).toHaveAttribute(
     'href',
-    /\/history\/participants\//,
+    new RegExp(`/history/participants/${meId}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
   );
-
-  // На прибитой странице про себя (#712) карточки актёров нет —
-  // страница уже про него (D7): ни шапки с меткой, ни ссылок.
-  const meId = await execE2eSql(`SELECT id FROM users WHERE email = '${seededUser.email}'`);
-  await page.goto(`/history/participants/${meId}`);
-  await expect(page.getByText('Иван Иванов (Вы)', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Иван Иванов (Вы)' })).toHaveCount(0);
 
   // Глазами приглашённого — семантика Telegram: своя группа подписана
   // «(Вы)», владелец — без метки (решение владельца 24.09).
@@ -459,8 +489,7 @@ test('открытие «с конца» держится всегда: «Наз
   await openCabinetWithSeededSession(page, seededUser);
 
   // Серия из 60 записей владельца (две порции keyset) — лента заведомо
-  // выше вьюпорта; запись Марии рвёт серию, шапки актёров кликабельны
-  // (#712).
+  // выше вьюпорта; запись Марии рвёт серию, карточки актёров разные.
   for (let index = 0; index < 60; index += 1) {
     await seedJournalEntry(
       paymentCreatedEntry(
@@ -484,23 +513,17 @@ test('открытие «с конца» держится всегда: «Наз
   }));
   expect(anchored.distanceToBottom).toBeLessThan(120);
 
-  // Читатель поднялся к верху ленты — sentinel догружает старую порцию;
-  // тап по шапке актёра — «Действия участника» (клик по ссылке из DOM:
-  // без автоскролла Playwright).
+  // Читатель поднялся к верху ленты — sentinel догружает старую порцию.
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(page.getByText('Платёж создан: Заготовка 1', { exact: true })).toBeVisible();
-  await page.evaluate(() => {
-    (document.querySelector('a[href^="/history/participants"]') as HTMLAnchorElement).click();
-  });
-  await page.waitForURL('**/history/participants/**');
-  // Прибитая лента открывается с конца тоже (D8): в кадре — старейшая
-  // строка первой порции (60 записей — две порции, хвост приезжает
-  // prepend'ом при прокрутке).
-  await expect(page.getByText('Платёж создан: Заготовка 11', { exact: true })).toBeVisible();
 
-  // «Назад» (goBack, кнопка шапки ведёт себя так же — history.back):
-  // реставрации позиции чтения нет (решение владельца 10.10.2026) —
-  // лента открывается заново на самых свежих записях, дно в вьюпорте.
+  // Уход из ленты по обычной ссылке (SPA push: шапка объектной секции
+  // ведёт в «Историю объекта» — решение владельца 13.10.2026) и «Назад»
+  // (goBack, кнопка шапки ведёт себя так же — history.back): реставрации
+  // позиции чтения нет (решение владельца 10.10.2026) — лента открывается
+  // заново на самых свежих записях, дно в вьюпорте.
+  await page.getByRole('link', { name: /Квартира на Ленина/ }).first().click();
+  await page.waitForURL(`**/history/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
   await page.goBack();
   await expect(page.getByText('Платёж создан: Заготовка 60', { exact: true })).toBeVisible();
   await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
@@ -513,20 +536,23 @@ test('открытие «с конца» держится всегда: «Наз
 
 test('фолбэк загрузки с хромом экрана (#1281): шапка скоупа, «Настройки» и скелетон в колонке', async ({ page, seededUser }, testInfo) => {
   await execE2eSql('DELETE FROM action_journal;');
-  const meId = await execE2eSql(`SELECT id FROM users WHERE email = '${seededUser.email}'`);
   await openCabinetWithSeededSession(page, seededUser);
 
   // Медленный /api/history — pending-кадр прибитой страницы живёт долго;
   // фолбэк Suspense-границы и pending-ветка экрана — одна композиция с
   // хромом (#1281): шапка скоупа и «Настройки» на месте, скелетон внутри
-  // колонки PageContent, а не голый у верха вьюпорта.
+  // колонки PageContent, а не голый у верха вьюпорта. Прибитая страница
+  // объекта истории не сервер-префетчится (префетч #887 живёт только на
+  // общей ленте) — клиентский запрос догоняется route-задержкой; на
+  // самой общей ленте фолбэк недостижим в принципе: её лента приходит
+  // в первом кадре SSR, поэтому дефолтный хром здесь не проверяется.
   await page.route('**/api/history*', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 4000));
     await route.continue();
   });
-  await page.goto(`/history/participants/${meId}`);
+  await page.goto(`/history/properties/${SEEDED_APARTMENT_PROPERTY_ID}`);
 
-  await expect(page.getByText('Действия участника').first()).toBeVisible();
+  await expect(page.getByText('История объекта').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
   // Скелетонные бары живут внутри колонки PageContent (max-w-column),
   // а не голым блоком у верха вьюпорта.
@@ -582,11 +608,11 @@ test('безымянный актёр: живые ноги дают «Польз
     // показывается (снимок — фолбэк только обезличенных строк).
     await expect(page.getByRole('heading', { name: 'Пользователь', exact: true })).toHaveCount(2);
     await expect(page.getByRole('heading', { name: '+7********27', exact: true })).toHaveCount(0);
-    // Шапка с actor_id кликабельна в «Действия участника» (#712) —
-    // безымянный титул ничего не ломает.
+    // Живые ноги безымянного дают ссылку на пару (решение владельца
+    // 13.10.2026) — титул ничего не ломает.
     await expect(page.getByRole('link', { name: 'Пользователь' }).first()).toHaveAttribute(
       'href',
-      new RegExp(`/history/participants/${NAMELESS_ID}`),
+      new RegExp(`/history/participants/${NAMELESS_ID}/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`),
     );
 
     // Снапшотный фолбэк D5: пользователь удалён — записи обезличены

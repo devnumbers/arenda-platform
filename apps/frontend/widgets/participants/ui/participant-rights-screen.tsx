@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import { cn } from '@/shared/lib/cn';
-import { Block, EyeSmall, FullAccessSmall, Info, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
+import { Block, Info, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -33,23 +34,16 @@ import { resolvePropertyParticipantsError } from '../lib/property-participants-e
 import { pendingParticipantRightsCard, type ParticipantRightsCard } from '../lib/participant-rights-card';
 import {
   ObjectAvatarGlyph,
+  EMAIL_ROLE_ICONS,
   PARTICIPANT_ROW_BASE_CLASS,
   ParticipantNotFound,
   PropertyAccessNotFound,
+  RIGHTS_ROW_ACTION_CLASS,
 } from './participant-fragments';
 import { stageParticipantPopup } from '../lib/participant-popups';
 import { ParticipantSuccessPopup } from './participant-success-popup';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantRightsSkeleton } from './participants-skeletons';
-
-/** Row Button нижних строк макета 2177-59620: ведущий слот-круг 44 под
- * иконку 24, подпись 16/18 Medium; высота строки 52 (44 + py 4). Общая
- * для «Действий участника в объекте» и красного отзыва — иконки обеих
- * строк стоят на одной оси. */
-const RIGHTS_ROW_ACTION_CLASS = cn(
-  'flex w-full cursor-pointer items-center rounded-button py-1 text-left text-base font-medium outline-none',
-  'transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80',
-);
 
 /** Окно «своего» изменения бейджа роли после локальной мутации (мс):
  * инвалидация onSettled приносит перечитывание с уже новым значением —
@@ -60,12 +54,15 @@ const OWN_CHANGE_WINDOW_MS = 3000;
 /**
  * Экран «Права участника» (карта #692, тикет #698; Figma 2177-59620):
  * шапка «назад + Права участника», строка объекта с бейджем роли,
- * сегмент-переключатель «Просмотр | Редактирование» (активная роль — белая
+ * сегмент-переключатель «Просмотр | Управление» (активная роль — белая
  * с тенью), строка «Действия участника в объекте» — вход в ленту истории,
  * прибитую к паре человек+объект (#841, тот же макет; только у
- * зарегистрированных — у pending действий не бывает, канон кебаба
- * страницы участника #712) — и красная строка «Отозвать доступ к объекту»;
+ * зарегистрированных — у pending действий не бывает: uuid юзера
+ * (actor_id журнала) ещё не существует) — и красная строка «Отозвать
+ * доступ к объекту»;
  * обе строки — Row Button макета с ведущим слотом-кругом 44 под иконку 24.
+ * Карточка объекта — ссылка на сам объект (амендмент владельца
+ * 13.10.2026, общий с member-режимом #1362): вид прежний, без шеврона.
  *
  * D7 — приглашённый без аккаунта (#1314, #1264; макет 3298-75576): вместо
  * карточки объекта — карточка участника (анонимный титул «Пользователь»,
@@ -75,8 +72,8 @@ const OWN_CHANGE_WINDOW_MS = 3000;
  * сегмент роли (мутации — только собственник: агрегат owner-скоупа D5
  * #1304 — не-собственнику экран отвечает приватным 404, сегмента и отзыва
  * он не видит) и красная строка «Отозвать доступ» (отмена приглашения).
- * Строки «Действия участника» у pending нет: журнал адресуется uuid юзера
- * (actor_id), которого не существует — канон #712; на макете строка —
+ * Строки «Действия участника в объекте» у pending нет: журнал адресуется
+ * uuid юзера (actor_id), которого не существует; на макете строка —
  * общий шаблон, для pending она не наполнена.
  *
  * Данные: агрегат GET /participants/{id} и строки
@@ -238,7 +235,14 @@ export function ParticipantRightsScreen({
   } else {
     content = (
       <div className="flex flex-col gap-6">
-        <section className={cn(PARTICIPANT_ROW_BASE_CLASS, 'cursor-default')}>
+        {/* Карточка объекта — ссылка на сам объект (амендмент владельца
+          * 13.10.2026, общий с member-режимом #1362): вид прежний, без
+          * шеврона — курсор и ховер канонного кликабельного ряда. */}
+        <NextLink
+          href={ROUTES.property(propertyId)}
+          className={PARTICIPANT_ROW_BASE_CLASS}
+          data-testid="participant-rights-object-card"
+        >
           <ObjectAvatarGlyph photoUrl={leg?.photoUrl ?? property?.photoUrl ?? undefined} type={leg?.type ?? property?.type} />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="truncate text-base font-medium leading-[18px] text-content">
@@ -265,7 +269,7 @@ export function ParticipantRightsScreen({
               </span>
             )}
           </span>
-        </section>
+        </NextLink>
 
         <ParticipantRoleSegmented
           value={member.role === 'full_access' ? 'full_access' : 'viewer'}
@@ -337,14 +341,6 @@ export function ParticipantRightsScreen({
   );
 }
 
-/** Иконка роли у почты D7-карточки — та же дискриминация, что в рядах
- * «Участников объекта» (D6, 3298-75434): полный доступ — открытый замок,
- * просмотр — глаз. */
-const PENDING_EMAIL_ICONS = {
-  full: FullAccessSmall,
-  eye: EyeSmall,
-} as const;
-
 /**
  * Контент «Права участника» без аккаунта (D7 #1314, макет 3298-75576):
  * карточка участника (Row Button — аватар, анонимный титул «Пользователь»,
@@ -374,7 +370,7 @@ function ParticipantRightsPending({
   readonly onRevoke: () => void;
   readonly onOpenParticipant: () => void;
 }): JSX.Element {
-  const EmailIcon = PENDING_EMAIL_ICONS[card.emailIcon];
+  const EmailIcon = EMAIL_ROLE_ICONS[card.emailIcon];
 
   return (
     <div className="flex flex-col gap-6">

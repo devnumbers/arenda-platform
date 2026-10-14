@@ -147,11 +147,11 @@ func (p *AccessPublisher) NotifyMembershipGranted(
 // NotifyRoleChanged publishes the «Роль изменена» row (карта #828, тикет
 // #830, решение владельца 23.09): a manager changed the member's role, and
 // the member learns it — the changer the actor, the recipient the member.
-// The role names speak the #692 chart canon's display wording
-// («Редактирование»/«Просмотр»); ChangedAt is the change instant (the
-// membership row's updated_at) the dedup key stamps — every change is its
-// own fact and notifies anew, a repeat publication of the same change
-// inserts nothing.
+// The role names speak the role dictionary's display wording
+// («Управление»/«Просмотр», решение владельца 12.10.2026, #1358); ChangedAt
+// is the change instant (the membership row's updated_at) the dedup key
+// stamps — every change is its own fact and notifies anew, a repeat
+// publication of the same change inserts nothing.
 func (p *AccessPublisher) NotifyRoleChanged(
 	ctx context.Context,
 	membershipID, propertyID, recipientID, actorID uuid.UUID,
@@ -180,13 +180,14 @@ func (p *AccessPublisher) NotifyRoleChanged(
 }
 
 // roleChangedLabel renders the membership role in the display wording of the
-// #692 chart canon (the frontend's shared/model/access labels): full_access
-// reads «Редактирование», viewer «Просмотр». Anything else renders the raw
+// role dictionary (the frontend's shared/model/access labels): full_access
+// reads «Управление» (решение владельца 12.10.2026, #1358 — было
+// «Редактирование»), viewer «Просмотр». Anything else renders the raw
 // role — a defensive default the two catalog roles never hit.
 func roleChangedLabel(role string) string {
 	switch role {
 	case "full_access":
-		return "Редактирование"
+		return "Управление"
 	case "viewer":
 		return "Просмотр"
 	default:

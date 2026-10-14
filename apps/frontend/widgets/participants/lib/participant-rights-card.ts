@@ -3,7 +3,7 @@ import {
   accountNotCreatedBadge,
   type Participant,
 } from '@/entities/participants';
-import { ANONYMOUS_TITLE, type PropertyParticipantEmailIcon } from './property-participants-list';
+import { ANONYMOUS_TITLE, emailRoleIcon, type PropertyParticipantEmailIcon } from './property-participants-list';
 
 /** Данные карточки участника на D7-экране «Права участника» без аккаунта
  * (макет 3298-75576): анатомия Row Button со страницы — аватар, титул,
@@ -19,6 +19,24 @@ export type ParticipantRightsCard = {
    * поле держит аватар карточки в одном месте с остальными её полями. */
   readonly photoUrl: string | undefined;
 };
+
+/** Общий литерал карточки D7-анатомии: различаются у владельческого
+ * (#698) и member-режима (#1362) только источники почты и фото, остальное
+ * собирается здесь — второй копии анонимного титула, бейджа и иконки
+ * роли нет. */
+function buildPendingRightsCard(
+  email: string,
+  emailIcon: PropertyParticipantEmailIcon,
+  photoUrl: string | undefined,
+): ParticipantRightsCard {
+  return {
+    title: ANONYMOUS_TITLE,
+    email,
+    emailIcon,
+    badge: accountNotCreatedBadge(),
+    photoUrl,
+  };
+}
 
 /**
  * D7-кейс экрана «Права участника» — приглашённый без аккаунта: участник
@@ -38,11 +56,27 @@ export function pendingParticipantRightsCard(
   ) {
     return undefined;
   }
-  return {
-    title: ANONYMOUS_TITLE,
-    email: participant.email ?? member.email ?? '',
-    emailIcon: member.role === 'viewer' ? 'eye' : 'full',
-    badge: accountNotCreatedBadge(),
-    photoUrl: participant.photoUrl ?? undefined,
-  };
+  return buildPendingRightsCard(
+    participant.email ?? member.email ?? '',
+    emailRoleIcon(member.role),
+    participant.photoUrl ?? undefined,
+  );
+}
+
+/**
+ * Та же карточка для member-режима «Прав участника» (#1362): читатель —
+ * не владелец, агрегата /participants/{id} у него нет — вход только
+ * строка чтения GET /access/members/{memberId}. Строка pending —
+ * карточка (анонимный титул #1105, почта с иконкой роли, бейдж);
+ * зарегистрированная строка — не карточка (экран рисует карточку
+ * объекта). Фото у pending не бывает — поле держит аватар в одном месте
+ * с остальными полями карточки.
+ */
+export function pendingMemberRightsCard(
+  member: PropertyAccessMember,
+): ParticipantRightsCard | undefined {
+  if (member.status !== 'pending') {
+    return undefined;
+  }
+  return buildPendingRightsCard(member.email ?? '', emailRoleIcon(member.role), undefined);
 }

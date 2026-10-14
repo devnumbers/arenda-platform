@@ -283,7 +283,7 @@ test('участники «в ноль» — «Ничего не найдено�
   await expect(page.getByText('Платёж создан: Аренда за сентябрь')).toBeVisible();
 });
 
-test('участники: своя строка «Иван (Вы)» с замком владельца, чужая — иконка роли (макеты 2067-163528, 2184-94261)', async ({ page, seededUser }) => {
+test('участники: своя строка «Иван (Вы)» с замком владельца, у чужой иконок нет (макеты 2067-163528, 3339-160075)', async ({ page, seededUser }) => {
   await openHistoryWithFeed(page, seededUser);
 
   await page.getByRole('button', { name: 'Настройки' }).click();
@@ -299,14 +299,14 @@ test('участники: своя строка «Иван (Вы)» с замк�
   await expect(ownRow.getByText('(Вы)', { exact: true })).toBeVisible();
   await expect(ownRow.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(1);
 
-  // Приглашённая без своих объектов: канон имени + иконка роли
-  // full_access (#840, макет 2184-94261).
+  // Приглашённая без своих объектов: канон имени, почта подзаголовком;
+  // иконок у не-владельцев нет ни одной (решение владельца 12.10,
+  // #1360, макет 3339-160075 — прежние иконки ролей #840 сняты).
   const memberRow = page
     .locator('.min-h-14')
     .filter({ has: page.getByRole('checkbox', { name: 'Мария Петрова' }) });
   await expect(memberRow).toHaveCount(1);
-  await expect(memberRow.getByRole('img', { name: 'Роль: Редактирование' })).toHaveCount(1);
-  await expect(memberRow.getByRole('img', { name: 'Роль: Владелец' })).toHaveCount(0);
+  await expect(memberRow.getByRole('img')).toHaveCount(0);
 
   // Без удалённых разделения нет (parent #1294: оно появляется только
   // после удаления участника с журнальными строками) — подписей секций
@@ -357,12 +357,14 @@ test('удалённый участник — секции «Текущие»/«
     await expect(group.getByText('5/5')).toBeVisible();
 
     // Отозванный — строка в «Удалённых» с почтой подзаголовком; своя
-    // строка остаётся в «Текущих» по канону D4 («Иван (Вы)»).
+    // строка остаётся в «Текущих» по канону D4 («Иван (Вы)»). Удалённым
+    // иконок тоже нет (#1360, макет 3339-160075).
     const removedRow = page
       .locator('.min-h-14')
       .filter({ has: page.getByRole('checkbox', { name: 'Павел Отозванный' }) });
     await expect(removedRow).toHaveCount(1);
     await expect(removedRow.getByText(REMOVED_EMAIL)).toBeVisible();
+    await expect(removedRow.getByRole('img')).toHaveCount(0);
     await expect(page.getByRole('checkbox', { name: 'Иван (Вы)' })).toBeVisible();
 
     // Мастер-чекбокс группы правит обе секции: «все» → «ни одного»

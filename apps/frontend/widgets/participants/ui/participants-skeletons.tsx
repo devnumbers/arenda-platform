@@ -4,17 +4,21 @@ import { Skeleton, skeletonRowWidths, type SkeletonRowWidths } from '@/shared/ui
 /**
  * Скелетон страницы участника (#698, паритет — §7 DESIGN.md): центр-блок
  * «аватар 96 — имя 32 — почта 16 — чип 24» и ряды «Доступных объектов»
- * (аватар 44, титул 18, адрес 16, бейдж 24, чеврон). Ширины —
- * детерминированный цикл, как у списка #697.
+ * (аватар 44, титул 18, адрес 16, бейдж 24, чеврон). Отступы — по макету
+ * 2036-84861 и паритету шапки (#1402): аватар → блок 24, имя → почта 8,
+ * чип +6, контент разнесён на 48. Ширины — детерминированный цикл, как у
+ * списка #697.
  */
 export function ParticipantScreenSkeleton(): JSX.Element {
   return (
-    <div aria-hidden className="flex flex-col gap-6 pt-4">
-      <div className="flex flex-col items-center gap-2">
+    <div aria-hidden className="flex flex-col gap-12 pt-4">
+      <div className="flex flex-col items-center gap-6">
         <Skeleton className="h-24 w-24 rounded-pill" />
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-4 w-48" />
-        <Skeleton className="mt-2 h-6 w-44 rounded-lg" />
+        <div className="flex flex-col items-center gap-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <Skeleton className="mt-1.5 h-6 w-44 rounded-lg" />
       </div>
       <Skeleton className="h-6 w-48" />
       <div className="flex flex-col">
@@ -40,10 +44,12 @@ function LegRowSkeleton({ widths }: { readonly widths: SkeletonRowWidths }): JSX
   );
 }
 
-/** Скелетон экрана «Права участника» (#698, паритет — §7 DESIGN.md): строка
- * объекта с бейджем роли, сегмент роли (высота контейнера 52 = кнопки 48 +
- * паддинг капсулы 2×2) и оба ряда действий («Действия участника в объекте»
- * есть у зарегистрированных — обычный случай; «Отозвать» — всегда). */
+/** Скелетон владелецского экрана «Права участника» (#698, паритет — §7
+ * DESIGN.md): строка объекта с бейджем роли, сегмент роли (высота
+ * контейнера 52 = кнопки 48 + паддинг капсулы 2×2) и оба ряда действий
+ * («Действия участника в объекте» есть у зарегистрированных — обычный
+ * случай; «Отозвать» — всегда у владельца). Member-режиму (#1362) чужой:
+ * сегмента и отзыва там не бывает — свой ParticipantRightsMemberSkeleton. */
 export function ParticipantRightsSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-6">
@@ -64,6 +70,31 @@ export function ParticipantRightsSkeleton(): JSX.Element {
         <span className="flex w-full items-center rounded-button py-1">
           <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
           <Skeleton className="ml-1 h-[18px] w-48" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Скелетон «Прав участника» в member-режиме (#1362, паритет — §7
+ * DESIGN.md): read-only экран — карточка объекта с бейджем роли и одна
+ * строка действий; у pending-ряда строка заменится карточкой приглашения
+ * (загрузка→контент без сегмента и отзыва, которых здесь никогда нет). */
+export function ParticipantRightsMemberSkeleton(): JSX.Element {
+  return (
+    <div aria-hidden className="flex flex-col gap-6">
+      <span className="flex w-full items-center gap-3 py-3">
+        <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <Skeleton className="h-[18px] w-2/5" />
+          <Skeleton className="h-4 w-3/5" />
+          <Skeleton className="h-6 w-40 rounded-lg" />
+        </span>
+      </span>
+      <div className="flex flex-col">
+        <span className="flex w-full items-center rounded-button py-1">
+          <Skeleton className="h-11 w-11 shrink-0 rounded-pill" />
+          <Skeleton className="ml-1 h-[18px] w-56" />
         </span>
       </div>
     </div>

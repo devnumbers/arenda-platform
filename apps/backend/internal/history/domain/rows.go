@@ -30,7 +30,7 @@ import (
 // link — delete-builders omit the Link.
 
 const (
-	roleLabelFullAccess = "Полный доступ"
+	roleLabelFullAccess = "Управление"
 	roleLabelViewer     = "Просмотр"
 
 	// The context jsonb keys (ADR 0061 §5: the structured extras).
@@ -729,9 +729,9 @@ func MemberAdded(userID uuid.UUID, label string) Entry {
 }
 
 // MemberRoleChanged builds the role-change row by the unified change
-// template (решение 12.10): «Участник изменён: [имя]» + «Роль: «Полный
-// доступ» → «Просмотр»» in the details (было «Роль участника изменена» с
-// диффом в заголовке).
+// template (решение 12.10): «Участник изменён: [имя]» + «Роль: «Управление»
+// → «Просмотр»» in the details (было «Роль участника изменена» с диффом в
+// заголовке).
 func MemberRoleChanged(userID uuid.UUID, name string, oldRole, newRole ActorRole) Entry {
 	return Entry{
 		Kind:       KindMember,

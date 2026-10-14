@@ -56,6 +56,29 @@ export function usePropertyAccessMembers(
     });
 }
 
+/** Чтение одной строки участников (#1357, экран member-режима прав
+ * #1362): тот же гейт и тот же ответ, что у строки списка — участник
+ * объекта читает любой ряд «Участников объекта» read-only, включая свой
+ * и ряд владельца. Адресация memberId: membership id, invitation id
+ * (pending) или user_id (ряд владельца); 404 — читающий вне скоупа
+ * объекта либо строки нет (приватный 404, без 403). Ключ вложен под
+ * accessKeys.list — access-мутации снимают его префиксом. */
+export function usePropertyAccessMember(
+    propertyId: string,
+    memberId: string,
+): UseQueryResult<PropertyAccessMember, ApiError> {
+    return useQuery({
+        queryKey: accessKeys.member(propertyId, memberId),
+        queryFn: async () => {
+            const response = await apiClient<PropertyAccessMemberResponse>(
+                `/properties/${propertyId}/access/members/${memberId}`,
+            );
+            return mapPropertyAccessMemberResponse(response);
+        },
+        enabled: Boolean(propertyId) && Boolean(memberId),
+    });
+}
+
 export function useUpdatePropertyAccessInvitation(
     propertyId: string,
 ): UseMutationResult<

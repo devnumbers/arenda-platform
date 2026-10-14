@@ -33,7 +33,7 @@ export function HistoryFeedLoading({
       </TopNav>
 
       <PageContent className="flex-1 justify-end px-4" aboveTabBarFooter>
-        {historyFeedSkeleton(participantId, propertyId)}
+        {historyFeedSkeleton(propertyId)}
       </PageContent>
 
       {/* Зеркало плавающей кнопки «Настройки» живого экрана (паттерн «CTA

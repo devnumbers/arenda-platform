@@ -251,13 +251,13 @@ export { default as CheckNoneLine } from './check-none-line.svg';
 export { default as CancelColor } from './cancel-color.svg';
 
 // Страница участника (#698, Figma 2008-81468): бейджи ролей ног доступа —
-// Icon/S/Edit 1961:52805 («Редактирование») и Icon/S/Eye 1961:52816
+// Icon/S/Edit 1961:52805 («Управление», #1358) и Icon/S/Eye 1961:52816
 // («Просмотр»), контурные 16×16, currentColor.
 export { default as EditSmall } from './edit-small.svg';
 export { default as EyeSmall } from './eye-small.svg';
 
-// Иконка роли «Полный доступ» в шите фильтров «Истории» (#840, Figma
-// Icon/S/FullAccess 1963-83727): контурный 16×16, currentColor — сосед
+// Иконка роли «Управление» (full_access) в шите фильтров «Истории» (#840,
+// Figma Icon/S/FullAccess 1963-83727): контурный 16×16, currentColor — сосед
 // EyeSmall («Просмотр») и LockSmall (владелец).
 export { default as FullAccessSmall } from './full-access-small.svg';
 

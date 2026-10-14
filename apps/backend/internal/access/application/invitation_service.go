@@ -620,6 +620,35 @@ func (s *InvitationService) ListMembers(ctx context.Context, actor, propertyID u
 	return members, nil
 }
 
+// GetMember returns one row of the members list by its addressing id (issue
+// #1357): the «Права участника» card reads exactly what ListMembers shows for
+// that row, so the read goes through the list itself — the same CanView gate
+// (a stranger or a suspended member gets ErrMemberNotFound), the same email
+// enrichment, the same pending merge. A member row answers to its membership
+// id and to its user id, the synthesized owner row (no membership id) to the
+// owner's user id, a pending invitation row to its invitation id.
+func (s *InvitationService) GetMember(ctx context.Context, actor, propertyID, memberID uuid.UUID) (Member, error) {
+	members, err := s.ListMembers(ctx, actor, propertyID)
+	if err != nil {
+		return Member{}, err
+	}
+	for _, m := range members {
+		if m.Pending {
+			if m.ID == memberID {
+				return m, nil
+			}
+			continue
+		}
+		// The owner row carries the zero uuid as its membership id, and no
+		// row carries a zero user id — neither may match a zero addressing
+		// id.
+		if (m.ID != uuid.Nil && m.ID == memberID) || (m.UserID != uuid.Nil && m.UserID == memberID) {
+			return m, nil
+		}
+	}
+	return Member{}, domain.ErrMemberNotFound
+}
+
 // sendInviteEmail renders and sends the single invite email. A missing
 // property title degrades to the generic text (an empty title list, the
 // shared resolveInviteTitles) rather than failing the send.
