@@ -53,6 +53,7 @@ async function createMonthlyPaymentToday(
   seededUser: Parameters<typeof openCabinetWithSeededSession>[1],
   title: string,
   day: string,
+  landOnPayment = false,
 ): Promise<string> {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(PAYMENTS_URL);
@@ -103,8 +104,17 @@ async function createMonthlyPaymentToday(
     page.getByText(new RegExp(day === '31' ? 'Первый платеж .*, далее последний день каждого месяца' : `Первый платеж .*, далее каждый месяц ${day} числа`)),
   ).toBeVisible();
   await expect(page.getByText(`-1\u00A0990 ₽`)).toBeVisible();
-  await page.getByRole('button', { name: 'Хорошо, закрыть' }).click();
-  await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
+  // landOnPayment — маршрут владельца (#1433): «Посмотреть платеж» кладёт
+  // страницу платежа в историю через push, и следующий goBack после смерти
+  // правила выпадает на шаг создания — детерминированный replace списка
+  // этот угол и проверяет.
+  if (landOnPayment) {
+    await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
+  } else {
+    await page.getByRole('button', { name: 'Хорошо, закрыть' }).click();
+    await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
+  }
 
   const response = await page.request.get(`/api/properties/${PROPERTY}/payments`);
   expect(response.ok()).toBe(true);
@@ -356,7 +366,7 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText(title2)).toHaveCount(0);
   });
 
-  test('оплата последней операции → «Полностью оплачен» → «Завершить» → финал → правило удалено, хвост в ленте объекта (#1341, ревизия #1377)', async ({
+  test('оплата последней операции → «Полностью оплачен» → «Завершить» → финал → правило удалено, «Хорошо» — на список платежей (#1341, ревизии #1377/#1433)', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -366,7 +376,9 @@ test.describe('сквозная жизнь платежа', () => {
     // прогона UTC), локальная дата узла у владельца MSK уходит вперёд в
     // полночном окне.
     const day = String(new Date().getUTCDate());
-    const id = await createMonthlyPaymentToday(page, seededUser, title, day);
+    // Маршрут владельца (#1433): на страницу платежа — через «Посмотреть
+    // платеж» экрана успеха (push в историю), как в живом сценарии.
+    const id = await createMonthlyPaymentToday(page, seededUser, title, day, true);
     const paymentUrl = `/properties/${PROPERTY}/payments/${id}`;
     const paymentsUrl = `/properties/${PROPERTY}/payments`;
 
@@ -386,9 +398,8 @@ test.describe('сквозная жизнь платежа', () => {
       ),
     ).toBe('DELETE 1');
 
-    // Оплата единственного вхождения.
-    await page.goto(paymentsUrl);
-    await page.goto(paymentUrl);
+    // Оплата единственного вхождения: мы уже на странице платежа —
+    // «Посмотреть платеж» привёл сюда (#1433).
     await page.getByRole('button', { name: 'Оплатить' }).click();
     await expect(page).toHaveURL(
       new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`),
@@ -399,8 +410,8 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
 
     // Вычисляемая завершённость: блок ближайшего — «Платежей больше не
-    // будет», «Оплатить» заменена «Завершить» (#1341, макет 3249:74119).
-    await page.goto(paymentUrl);
+    // будет», «Оплатить» заменена «Завершить» (#1341, макет 3249:74119);
+    // returnTo уже вернул на страницу платежа.
     await expect(page.getByText('Платежей больше не будет')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Оплатить' })).toHaveCount(0);
     const completeButton = page.getByRole('button', { name: 'Завершить' });
@@ -416,8 +427,10 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText(`Платеж «${title}» завершен`)).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо' }).click();
 
-    // «Хорошо» — назад на список; правило удалено (#1377) — скрыто из
-    // списка объекта и из API-списка.
+    // «Хорошо» — детерминированный replace на список платежей объекта
+    // (#1433): goBack по истории выпадал на шаг создания, когда платёж
+    // открыт «Посмотреть платеж» из экрана успеха. Правило удалено
+    // (#1377) — скрыто из списка объекта и из API-списка.
     await expect(page).toHaveURL(new RegExp(`${paymentsUrl}$`));
     await expect(page.getByText(title)).toHaveCount(0);
     const response = await page.request.get(`/api/properties/${PROPERTY}/payments`);
