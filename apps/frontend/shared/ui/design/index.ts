@@ -44,6 +44,12 @@ export {
 export { ListRow, type ListRowProps } from './list-row';
 export { CircleIcon, type CircleIconProps } from './circle-icon';
 export {
+  CirclePhoto,
+  circlePhotoView,
+  type CirclePhotoFlags,
+  type CirclePhotoProps,
+} from './circle-photo';
+export {
   type CircleIconVariant,
   circleIconPair,
   circleIconRing,

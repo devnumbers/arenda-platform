@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, type ComponentProps, type JSX } from 'react';
+import { type ComponentProps, type JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { BoldUser } from '@/shared/assets/icons';
+import { CirclePhoto } from './circle-photo';
 import { CircleIcon } from './circle-icon';
 
 export type UserAvatarProps = Omit<ComponentProps<'span'>, 'children'> & {
@@ -43,10 +44,11 @@ export function UserAvatar({
   className,
   ...props
 }: UserAvatarProps): JSX.Element {
-  // Битое фото живёт до размонтирования: строки списков кейуются по id,
-  // повторная загрузка фото меняет ETag, не путь.
-  const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
+  // Битое фото живёт до размонтирования (внутри CirclePhoto): строки
+  // списков кейуются по id, повторная загрузка фото меняет ETag, не путь.
+  // Клип включается по факту фото; после onError глиф остаётся в том же
+  // круге — класс на отображение не влияет.
+  const showPhoto = photoUrl != null && photoUrl !== '';
 
   return (
     <CircleIcon
@@ -55,16 +57,10 @@ export function UserAvatar({
       className={cn(SIZE_BOX[size], showPhoto && 'overflow-hidden rounded-full', className)}
       {...props}
     >
-      {showPhoto ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : (
-        <BoldUser className={SIZE_GLYPH[size]} />
-      )}
+      <CirclePhoto
+        photoUrl={photoUrl}
+        glyph={<BoldUser className={SIZE_GLYPH[size]} />}
+      />
     </CircleIcon>
   );
 }

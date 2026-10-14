@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, type ComponentProps, type JSX } from 'react';
+import { type ComponentProps, type JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { BoldHome, NotificationDot } from '@/shared/assets/icons';
-import { circleIconPair } from '@/shared/ui/design';
+import { CirclePhoto, circleIconPair } from '@/shared/ui/design';
 
 import { propertyTypeIcons } from '../lib/property-type-icons';
 import type { PropertyType } from '../model/types';
@@ -15,7 +15,9 @@ import type { PropertyType } from '../model/types';
  * «лицо объекта» рисуют ещё два потребителя снимков уведомлений (#1275):
  * NotificationCategoryIcon (фото в строке ленты) и PropertyCardAvatar на
  * странице уведомления — у обоих фолбэк битого фото отличается (иконка
- * категории / глиф типа), поэтому канон не переиспользован.
+ * категории / глиф типа), поэтому канон не переиспользован. Механика
+ * показа — примитив CirclePhoto: глиф-подложка в ожидании байтов и при
+ * битом фото, проявление по onLoad (#1423).
  * Поверхности: card — на серой карточке списка «Объектов» (белый круг 64,
  * кант серого — 1603:88779) с красной точкой занятости/просрочки
  * (Notification Dot 651:6759, запечённый кант); row — на белой странице
@@ -82,11 +84,6 @@ export function PropertyAvatar({
 }: PropertyAvatarProps): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
-  // Битое фото (объект или фото удалили после рендера строки — 404 стрима)
-  // откатывается к глифу типа: канон фолбэка #1275, поднятый из
-  // notification-компонентов (решение #1286). Флаг живёт до размонтирования
-  // или смены photoUrl (списки кейуются по id — перемонтирование).
-  const [photoBroken, setPhotoBroken] = useState(false);
 
   return (
     <span
@@ -99,16 +96,10 @@ export function PropertyAvatar({
           SURFACE_CIRCLE[surface],
         )}
       >
-        {photoUrl && !photoBroken ? (
-          <img
-            src={photoUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            onError={() => setPhotoBroken(true)}
-          />
-        ) : (
-          <Glyph className={cn('text-[#D3D7D9]', SURFACE_ICON[surface])} aria-hidden />
-        )}
+        <CirclePhoto
+          photoUrl={photoUrl}
+          glyph={<Glyph className={cn('text-[#D3D7D9]', SURFACE_ICON[surface])} aria-hidden />}
+        />
       </span>
       {withAttentionDot && (
         <NotificationDot className="absolute left-0 top-0 h-3.5 w-3.5" aria-hidden />
