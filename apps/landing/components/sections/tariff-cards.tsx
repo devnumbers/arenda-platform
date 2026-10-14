@@ -17,6 +17,7 @@ import iconHomeMain from "@/assets/icons/icon-home-main.svg";
 import iconObjects from "@/assets/icons/icon-objects.svg";
 import iconTeam from "@/assets/icons/icon-team.svg";
 import iconTimeHistory from "@/assets/icons/icon-time-history.svg";
+import type { SubscriptionPeriod } from "@/lib/auth";
 import type { Tariff, TariffFeature } from "@/lib/content";
 
 // «Тарифы» — макеты 3448-78571 (десктоп: 3×320×597, r40, p-40: шапка
@@ -38,7 +39,9 @@ import type { Tariff, TariffFeature } from "@/lib/content";
 // Цена при переключении меняется в хореографии steps (180мс уход →
 // 280мс въезд, токен --animate-tariff-price-in). Кнопка «Ваш тариф» —
 // White Disabled
-// (серый текст). CTA платных карточек ведёт на экран «Выбрать тариф»
+// (серый текст) и только на периоде подписки (currentPeriod из /me): на
+// другом периоде платная карточка снова покупается (решение владельца
+// 14.10). CTA платных карточек ведёт на экран «Выбрать тариф»
 // кабинета с tariff и текущим периодом в query — экран предвыбирает
 // их из URL (гость доводится логином через from= прокси кабинета).
 const PRICE_OUT_MS = 180;
@@ -82,9 +85,11 @@ type Billing = "yearly" | "monthly";
 export function TariffCards({
   tariffs,
   currentTariff,
+  currentPeriod,
 }: {
   tariffs: Tariff[];
   currentTariff?: string;
+  currentPeriod?: SubscriptionPeriod;
 }) {
   const [billing, setBilling] = useState<Billing>("yearly");
   const {
@@ -109,7 +114,17 @@ export function TariffCards({
   // без сетки-обёртки (иначе снап и бросок перескакивали бы по две
   // карточки на узких планшетах, где ход длиннее шага).
   const cards = tariffs.map((tariff, index) => {
-    const isCurrent = currentTariff === tariff.id;
+    // «Ваш тариф» — только на текущем тарифе. У платных маркер живёт
+    // только на периоде самой подписки: на другом периоде карточка снова
+    // покупается — её CTA и есть способ сменить период (решение владельца
+    // 14.10). «Базовый» от периода не зависит. Неизвестный период (ответ
+    // /me без currentPeriod) — показываем маркер как раньше, чтобы не
+    // спрятать его из-за неполных данных.
+    const isCurrent =
+      currentTariff === tariff.id &&
+      (tariff.id === "basic" ||
+        currentPeriod === undefined ||
+        (billing === "yearly" ? "year" : "month") === currentPeriod);
     const theme = CARD_THEMES[tariff.id];
     // «Бесплатно» от периода не зависит — анимируем смену только
     // у платных карточек, константную цену не дёргаем.

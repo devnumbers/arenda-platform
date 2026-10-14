@@ -8,7 +8,11 @@ import { headers } from "next/headers";
 // страница рендерятся в одном запросе — /me зовётся один раз.
 export type TariffName = "basic" | "pro" | "business";
 
-export type Me = { tariff?: TariffName };
+// Период подписки — словарь кабинета (subscription.currentPeriod),
+// не словарь лендинга (yearly/monthly).
+export type SubscriptionPeriod = "month" | "year";
+
+export type Me = { tariff?: TariffName; period?: SubscriptionPeriod };
 
 export const getMe = cache(async (): Promise<Me | null> => {
   const cookieHeader = (await headers()).get("cookie") ?? "";
@@ -29,9 +33,17 @@ export const getMe = cache(async (): Promise<Me | null> => {
       return null;
     }
     const data = (await res.json()) as {
-      subscription?: { tariff?: { name?: TariffName } };
+      subscription?: {
+        tariff?: { name?: TariffName };
+        currentPeriod?: string;
+      };
     };
-    return { tariff: data.subscription?.tariff?.name };
+    const period = data.subscription?.currentPeriod;
+    return {
+      tariff: data.subscription?.tariff?.name,
+      period:
+        period === "month" || period === "year" ? period : undefined,
+    };
   } catch {
     return null;
   }
