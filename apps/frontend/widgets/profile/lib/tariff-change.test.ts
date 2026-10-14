@@ -4,6 +4,7 @@ import {
   currentBadgeVisible,
   tariffChangeDefaults,
   tariffChangeFooter,
+  tariffChangeUrlOverrides,
   tariffPriceLine,
   TARIFF_CHANGE_CARDS,
   yearlyDiscountPercent,
@@ -139,6 +140,36 @@ describe('tariffChangeDefaults', () => {
         }),
       ),
     ).toStrictEqual({ tariff: 'pro', period: 'year' });
+  });
+});
+
+describe('tariffChangeUrlOverrides', () => {
+  it('deep link from the landing preselects the paid tariff it names', () => {
+    expect(tariffChangeUrlOverrides(new URLSearchParams('tariff=pro'))).toStrictEqual({
+      tariff: 'pro',
+    });
+    expect(tariffChangeUrlOverrides(new URLSearchParams('tariff=business'))).toStrictEqual({
+      tariff: 'business',
+    });
+  });
+
+  it('period rides along when valid', () => {
+    expect(
+      tariffChangeUrlOverrides(new URLSearchParams('tariff=pro&period=month')),
+    ).toStrictEqual({ tariff: 'pro', period: 'month' });
+  });
+
+  it('unknown tariff, basic and junk are ignored — выбор базового живёт только во флоу отключения', () => {
+    expect(tariffChangeUrlOverrides(new URLSearchParams('tariff=basic'))).toStrictEqual({});
+    expect(tariffChangeUrlOverrides(new URLSearchParams('tariff=ultimate'))).toStrictEqual({});
+    expect(tariffChangeUrlOverrides(new URLSearchParams('period=month'))).toStrictEqual({});
+    expect(tariffChangeUrlOverrides(null)).toStrictEqual({});
+  });
+
+  it('invalid period does not sink a valid tariff', () => {
+    expect(
+      tariffChangeUrlOverrides(new URLSearchParams('tariff=pro&period=week')),
+    ).toStrictEqual({ tariff: 'pro' });
   });
 });
 

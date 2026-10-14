@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { SubScreenShell } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
@@ -10,13 +11,15 @@ export const metadata: Metadata = {
 
 /** Страница выбора тарифа (#623). Сюда же ведёт редирект платного гейта
  * (карта #997): proxy.ts отправляет базовый тариф с платных разделов на
- * этот экран — без контекстной плашки, решение владельца 30.09. */
+ * этот экран — без контекстной плашки, решение владельца 30.09. Экран
+ * читает query глубокой ссылки лендинга (?tariff=…&period=…) через
+ * useSearchParams — Suspense-граница обязательна для пререндера (Next). */
 export default function TariffChangePage() {
   return (
-    <>
-      <SubScreenShell title="Выбрать тариф" fallbackHref={ROUTES.profileTariff}>
+    <SubScreenShell title="Выбрать тариф" fallbackHref={ROUTES.profileTariff}>
+      <Suspense>
         <TariffChangeScreen />
-      </SubScreenShell>
-    </>
+      </Suspense>
+    </SubScreenShell>
   );
 }
