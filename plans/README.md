@@ -97,3 +97,98 @@
   закрытия лента на месте; то же в пикере объектов приглашения, шаге
   «Выберите день» визарда аренды и поиске адреса; на десктопе на странице
   одна видимая полоса прокрутки — корневая; pull-to-refresh жив.
+
+---
+
+# Аудит анимаций вне колеса (карта #1416, тикет #1418, 2026-10-14)
+
+Аудит движения `apps/frontend` вне WheelPicker (его канон — plans/001–004,
+DONE — не ре-аудитировался; изоляция скролла — plans/005–006 — не
+дублировалась). Метод: скилл improve-animations, effort deep, фан-аут
+8 субагентов по категориям AUDIT.md, каждая находка проветрена по месту
+на 2d6925b76. Решение владельца: брать все находки. Скоуп — только
+`apps/frontend`.
+
+## Проветренные находки (severity × leverage, file:line)
+
+| # | Severity | file:line | Находка | План |
+| --- | --- | --- | --- | --- |
+| 1 | HIGH | `list-row.tsx:82`, `chip-button.tsx:27` + `button/icon-button.tsx` | Ноль пресс-отклика у самых нажимаемых элементов; словарь «нажато» — 5 диалектов (opacity-80 ×23, opacity-90 ×3, bg ×18, border ×7, text ×3, active==hover) | 007, 008 |
+| 2 | HIGH | `ToastProvider.module.css:269-281,287-299` | Exit-кейфреймы с явным `from` — вытеснение недо-въехавшего тоста телепортирует его в центр (keyframes на rapidly-triggered UI) | 010 |
+| 3 | HIGH | `hub-collapse.tsx:41` + `globals.css:492,502` | rAF пишет `--hub-collapse` на `:root` каждый кадр скролла — инвалидация custom properties по всему дереву; потребителей двое | 011 |
+| 4 | MEDIUM | `ToastProvider.module.css:342-350` | Mobile-блок стоит после reduced-блока и перебивает `animation-name` — на телефоне reduced-motion не работает (документированный кроссфейд не выполняется) | 010 |
+| 5 | MEDIUM | `menu.tsx:35` | Единственный якорный попап скейлится от центра (`modal-card-in`), origin-переменную Radix никто не использует, выхода нет; 11 потребителей; контакт-кебаб — второй сырой DropdownMenu без анимации (`contact-kebab-menu.tsx:30`) | 009 |
+| 6 | MEDIUM | `modal.tsx:158-173`, `success-popup.tsx:45-46` | Keyframes карточки/оверлея рестартуют при быстром «закрыл→открыл»; переход-модель уже канон (MoreSheet, решение 22.09) — модалки на неё не переведены | 012 |
+| 7 | MEDIUM | `modal.tsx:205` + `globals.css:450-483` | Один жест «открыть шит» = 500 (vaul-дефолт) / 440 (Еще) / 400ms (карточка); 440/330 живут 8 копиями литералов; доки разъехались (DESIGN.md:206,1819; modal.tsx:27; ui-kit:249) | 012 |
+| 8 | MEDIUM | `collapsible-section.tsx:65` + `globals.css:375-393` | Раскрытие секции — height-keyframes: layout-анимация + рестарт посреди закрытия | 013 |
+| 9 | MEDIUM | `history-filters-sheet.tsx:611-618` | Группы фильтров раскрываются телепортом, шеврон свапается без проворота (missed opportunity — канон 0fr→1fr в репо есть) | 013 |
+| 10 | MEDIUM | `text-field.tsx:188` | Плавающий лейбл всех форм — `transition-all` + анимация `top`/`font-size`/`line-height` при каждом фокусе (морф 300ms и точки — решение, меняется механизм) | 015 |
+| 11 | MEDIUM | `payment-row-button.tsx:76`, `payment-card-button.tsx:56`, `payments-add-sheet.tsx:179` | `transition-all` на частых рядах/карточках (всего 4 места по фронту) | 008 |
+| 12 | MEDIUM | vaul-дефолт + `switch.tsx:26`, `tariff-faq.tsx:171,183`, `PullToRefresh.module.css:32` | Хвост reduced-motion дыр: мобильная модалка (полный слайд 500ms), switch 350ms, tariff-faq, бесконечный ptr-spin | 012, 014 |
+| 13 | MEDIUM | `payments-favorites-screen.tsx:638,656` | Клавиатурная перестановка избранного ждёт 350ms- tween на каждый шаг стрелки | 016 |
+| 14 | LOW | `PullToRefresh.tsx:267,346` | Спиннер едет через setState на каждый touchmove (контент — напрямую; iOS-only) | 017 |
+| 15 | LOW | `skeleton.tsx:17` | Pulse скелетона на дефолтной кривой Tailwind (0.4,0.6,1) мимо токен-канона | 014 |
+
+**Без плана (решения зафиксированы здесь):**
+
+- Drag-дисмисс тоста без velocity (`ToastProvider.tsx:74`) — жест зашит в
+  react-toastify v11, конфига нет; документированное ограничение.
+- Framer-шортанды `scale` в Reorder избранного
+  (`payments-favorites-screen.tsx:609-616`) — перевод на полную строку
+  transform конфликтует с drag-композицией framer; лифт задокументирован
+  (DESIGN.md §8). Не трогать.
+- `prefers-reduced-transparency`/`prefers-contrast` = 0 — вне motion-канона,
+  пробел зафиксирован.
+- Своп шагов визарда, вход экрана успеха, свап шапки в поиск — аддитивные
+  швы категории missed opportunities, отложены в часть «переходы» карты
+  (#1416: граница с отклонёнными переходами #867 решается прототипом).
+- Проверено и чисто: `ease-in` по фронту — 0; hover-движение — 0 (Tailwind
+  v4 гейтит `hover:` за `(hover: hover)`); все blur ≤6px; скелетоны —
+  opacity-pulse; history-row-вставка и SuccessPopup — каноничны; тосты и
+  history — на токенах; LiveValue/EDIT_ROW зеркала кривой охраняются
+  тестами; кривая/300ms tariff-faq — решение владельца 28.09 (не
+  ре-литигируется, закрыт только reduced-пробел).
+
+## Планы
+
+| # | План | Severity | Status |
+| --- | --- | --- | --- |
+| 007 | [Пресс-канон дизайн-слоя](007-press-feedback-canon.md) | HIGH | TODO |
+| 008 | [Sweep `.pressable` по рядам/карточкам](008-press-sweep-rows-cards.md) | MEDIUM | TODO |
+| 009 | [Меню: скейл от триггера + выход](009-menu-trigger-origin.md) | MEDIUM | TODO |
+| 010 | [Тосты: exit из текущей позиции + каскад reduced](010-toast-exit-from-current.md) | HIGH | TODO |
+| 011 | [hub-collapse: прямые записи вместо :root-переменной](011-hub-collapse-direct-writes.md) | HIGH | TODO |
+| 012 | [Модальные поверхности: переход-модель + токены + vaul + reduced](012-modal-surfaces-transition-model.md) | MEDIUM | TODO |
+| 013 | [CollapsibleSection → grid-rows + группы фильтров](013-collapsible-grid-rows.md) | MEDIUM | TODO |
+| 014 | [Reduced-motion: остаточное покрытие](014-reduced-motion-coverage.md) | MEDIUM | TODO |
+| 015 | [text-field: лейбл на transform](015-text-field-label-transform.md) | MEDIUM | TODO |
+| 016 | [Избранное: клавиатурный шаг без 350ms](016-favorites-keyboard-step.md) | MEDIUM | TODO |
+| 017 | [PTR: спиннер мимо React-рендера](017-ptr-spinner-direct-writes.md) | LOW | TODO |
+
+## Порядок исполнения
+
+010 → 011 → 007 → 008 → 009 → 013 → 012 → 015 → 014 → 016 → 017.
+
+- 010, 011 — верх таблицы leverage: точечные HIGH-фиксы (тосты — один
+  module.css, хаб — один хук + блок CSS).
+- 007 → 008 — строго последовательно: 007 вводит токен `press` и класс
+  `.pressable`, 008 раскатывает их по рядам/карточкам.
+- 009–014 — независимые поверхности; правят `globals.css` и/или
+  `tokens.css`, поэтому executor'ов не параллелить.
+- 012 — самый крупный (переход-модель модалок); идти после 013, чтобы
+  reduced-блоки globals.css ложились в готовую структуру (013 и 012
+  добавляют блоки в одну зону файла).
+- 015–017 — одиночные файлы, в любой момент после 007.
+
+## Верификация после всех планов
+
+- `make frontend-test` — зелёный.
+- `make frontend-e2e` (Docker) — полный набор зелёный (эти планы новых
+  e2e не вводят; существующие — `support-modal`, `pull-to-refresh`,
+  `favorites-edit`, `scroll-isolation`, `WheelPicker` — гейты регресса).
+- Feel-check владельца на реальном iPhone/Android (протокол карты):
+  пресс-отклик кнопок/рядов; тосты — быстрая замена без телепорта;
+  сворачивание хаба; меню от кебаба; «закрыл-открыл» модалку; группы
+  фильтров; морф лейбла на чёткость; reduced-motion-проход по
+  модалкам/switch/FAQ/PTR.
+
