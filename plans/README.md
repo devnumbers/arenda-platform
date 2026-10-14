@@ -569,11 +569,11 @@ error-редьюсер без гарда данных — `query.js:375-385`). �
 
 | # | План | Severity | Status |
 | --- | --- | --- | --- |
-| 034 | [Круг фото без мёртвого воздуха: глиф-подложка + onLoad](034-photo-circle-placeholder.md) | HIGH | TODO |
-| 035 | [Раскатка примитива: 16 сайтов + бастер контакт-детали + lazy](035-photo-sweep-lazy.md) | MEDIUM | TODO |
-| 036 | [Прогресс загрузки: XHR onprogress + кольцо](036-upload-progress-ring.md) | MEDIUM | TODO |
-| 037 | [Retry autosave-фото профиля](037-photo-retry-autosave.md) | MEDIUM | TODO |
-| 038 | [Канон фото: DESIGN.md + CODING_STANDARDS + инвариант бастера](038-photo-canon-docs.md) | LOW | TODO |
+| 034 | [Круг фото без мёртвого воздуха: глиф-подложка + onLoad](034-photo-circle-placeholder.md) | HIGH | DONE |
+| 035 | [Раскатка примитива: 15 сайтов + бастер контакт-детали + lazy](035-photo-sweep-lazy.md) | MEDIUM | DONE |
+| 036 | [Прогресс загрузки: XHR onprogress + кольцо](036-upload-progress-ring.md) | MEDIUM | DONE |
+| 037 | [Retry autosave-фото профиля](037-photo-retry-autosave.md) | MEDIUM | DONE |
+| 038 | [Канон фото: DESIGN.md + CODING_STANDARDS + инвариант бастера](038-photo-canon-docs.md) | LOW | DONE |
 
 ## Порядок исполнения
 
