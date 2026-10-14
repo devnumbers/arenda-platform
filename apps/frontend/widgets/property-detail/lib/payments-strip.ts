@@ -1,4 +1,3 @@
-import { isDatePaused } from '@/entities/payment';
 import type { IsoDate, Payment } from '@/entities/payment';
 import { sortPaymentsByNextOccurrence } from '@/features/payments';
 
@@ -8,10 +7,12 @@ import { sortPaymentsByNextOccurrence } from '@/features/payments';
  * категорий с красной точкой накопленной просрочки (семантика точки —
  * payments/CONTEXT.md; идентификаторы платёж с просрочкой считает
  * вызывающий код из usePropertyOverdueOperations, как на «Платежах
- * объекта»). Лимиты: обе группы — по 4, одна группа — 7. Внутри группы
- * сначала платежи с просрочкой, затем по ближайшему вхождению.
- * Паузные правила не выводятся — их место на странице платежа
- * (решение #463).
+ * объекта»). Лимиты: обе группы — по 4, одна группа — 7. Порядок группы:
+ * сначала платежи с накопленной просрочкой, затем по ближайшему вхождению.
+ * Паузные правила — обычные круги без отличий (решение владельца 12.10,
+ * #1353 — отмена правила #463: платёж на паузе не исчезает с экранов):
+ * без долга дат у них нет, и они оседают в конце группы; с накопленным
+ * долгом — остаются в просроченном кармане впереди, как все должники.
  */
 export type PropertyPaymentGroup = {
   readonly label: 'Автоплатежи' | 'Платежи';
@@ -43,10 +44,9 @@ export function propertyPaymentGroups(
   overduePaymentIds: ReadonlySet<string>,
   today: IsoDate,
 ): ReadonlyArray<PropertyPaymentGroup> {
-  const active = payments.filter((payment) => !isDatePaused(payment.pauses, today));
   const order = (group: Payment[]) => sortOverdueFirst(group, overduePaymentIds, today);
-  const auto = order(active.filter((payment) => payment.autoPay));
-  const regular = order(active.filter((payment) => !payment.autoPay));
+  const auto = order(payments.filter((payment) => payment.autoPay));
+  const regular = order(payments.filter((payment) => !payment.autoPay));
   const limit = auto.length > 0 && regular.length > 0 ? BOTH_GROUPS_LIMIT : SINGLE_GROUP_LIMIT;
   const toItem = (payment: Payment) => ({
     payment,
