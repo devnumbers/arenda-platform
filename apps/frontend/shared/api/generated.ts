@@ -3422,6 +3422,11 @@ export interface components {
              * @description The originating rule; null marks it deleted or the fact manual.
              */
             paymentId: string | null;
+            /**
+             * @description Where the operation came from: a rule occurrence (payment) or a one-off manual fact (manual). A rule occurrence keeps payment after its rule is deleted — with paymentId null that pair marks the deleted-rule tail (ticket #1371): the operation page shows the same detail rows as before the deletion.
+             * @enum {string}
+             */
+            origin: "manual" | "payment";
             /** Format: date */
             date: string;
             /** Format: date */

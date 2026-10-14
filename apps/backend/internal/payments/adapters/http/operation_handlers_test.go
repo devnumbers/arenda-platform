@@ -643,6 +643,43 @@ func TestGetOperation_ReturnsOperationAndMapsErrors(t *testing.T) {
 			t.Errorf("wire = %s/%s, want the requested id with the computed paid status",
 				body.Id, body.Status)
 		}
+		if body.Origin != openapi.OperationResponseOriginPayment {
+			t.Errorf("origin = %q, want payment — the origin travels to the wire so the deleted-rule "+
+				"tail stays distinguishable from a manual fact (ticket #1371)", body.Origin)
+		}
+	})
+
+	t.Run("manual origin travels to the wire", func(t *testing.T) {
+		t.Parallel()
+		manual := fixtureOperation(domain.StatusPaid)
+		manual.Origin = domain.OriginManual
+		manual.PaymentID = nil
+		svc := &fakeOperationsManager{
+			get: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (application.OperationListItem, error) {
+				return application.OperationListItem{
+					Operation:  manual,
+					ViewStatus: domain.ViewStatusPaid,
+				}, nil
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), uuid.Must(uuid.NewV7())), http.MethodGet, "/operation", nil,
+		)
+		w := httptest.NewRecorder()
+		h.GetOperation(w, req, manual.PropertyID, manual.ID)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+		}
+		var body openapi.OperationResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body.Origin != openapi.OperationResponseOriginManual {
+			t.Errorf("origin = %q, want manual", body.Origin)
+		}
 	})
 
 	t.Run("a foreign operation is the privacy 404", func(t *testing.T) {

@@ -1,4 +1,8 @@
-import type { Payment, PaymentDueItem } from './types';
+import type {
+  Payment,
+  PaymentDueItem,
+  PaymentOperation,
+} from './types';
 
 /**
  * Общий тестовый билдер Payment вместо копии в каждом тестовом файле
@@ -57,6 +61,32 @@ export function makePaymentDueItem(
     dueDate: '2026-10-13',
     daysLeft: 0,
     reminderOffsetDays: 3,
+    ...overrides,
+  };
+}
+
+/**
+ * Общий тестовый билдер операции правила: канон — плановое вхождение
+ * «Арендной платы» (monthly, 1-е число, канон makePayment); сценарные
+ * статусы, факты и хвосты удалённого правила (paymentId null + origin,
+ * #1371) задаются overrides.
+ */
+export function makePaymentOperation(
+  overrides: Partial<PaymentOperation> = {},
+): PaymentOperation {
+  return {
+    id: 'o1',
+    propertyId: 'prop1',
+    paymentId: 'p1',
+    origin: 'payment',
+    date: '2026-09-01',
+    status: 'planned',
+    type: 'expense',
+    title: 'Арендная плата',
+    amountKopecks: 4_500_000,
+    categoryLabel: 'Арендная плата',
+    categorySlug: 'rent',
+    updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
   };
 }

@@ -21,6 +21,9 @@ export type PaymentReminderOffset = 1 | 3 | 7;
 /** Статус вхождения; `overdue` — серверная проекция planned с прошедшей датой. */
 export type PaymentOperationStatus = 'planned' | 'paid' | 'overdue';
 
+/** Происхождение операции: вхождение правила или ручной факт (#569). */
+export type PaymentOperationOrigin = 'manual' | 'payment';
+
 /** Якорь расписания живёт в регулярности; генерация идёт с даты заведения. */
 export type Recurrence =
   | { kind: 'daily' }
@@ -106,6 +109,11 @@ export type PaymentOperation = {
   readonly propertyId: string;
   /** Правило-источник; null — «платёж удалён» или ручной факт. */
   readonly paymentId: string | null;
+  /** Происхождение: вхождение правила (payment) или ручной факт (manual).
+   * Вхождение хранит payment и после удаления правила — пара
+   * «paymentId null + origin payment» маркирует хвост удалённого
+   * правила (#1371): страница показывает те же строки, что до удаления. */
+  readonly origin: PaymentOperationOrigin;
   /** Плановая дата вхождения; при оплате не сдвигается. */
   readonly date: IsoDate;
   /** Фактическая дата оплаты. */

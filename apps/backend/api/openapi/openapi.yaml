@@ -7897,7 +7897,7 @@ components:
         manual fact. status carries overdue as a server-computed view status
         (planned with the date already past in the property owner's timezone).
       type: object
-      required: [id, propertyId, paymentId, date, paidDate, status, type, title, amountKopecks, categoryLabel, categorySlug, updatedAt]
+      required: [id, propertyId, paymentId, origin, date, paidDate, status, type, title, amountKopecks, categoryLabel, categorySlug, updatedAt]
       properties:
         id:
           type: string
@@ -7917,6 +7917,15 @@ components:
           format: uuid
           nullable: true
           description: The originating rule; null marks it deleted or the fact manual.
+        origin:
+          type: string
+          enum: [manual, payment]
+          description: >-
+            Where the operation came from: a rule occurrence (payment) or a
+            one-off manual fact (manual). A rule occurrence keeps payment
+            after its rule is deleted — with paymentId null that pair marks
+            the deleted-rule tail (ticket #1371): the operation page shows
+            the same detail rows as before the deletion.
         date:
           type: string
           format: date

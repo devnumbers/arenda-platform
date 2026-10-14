@@ -650,6 +650,7 @@ func operationResponse(item application.OperationListItem) openapi.OperationResp
 		PropertyId:    op.PropertyID,
 		PropertyName:  propertyName,
 		PaymentId:     openAPIUUIDPtr(op.PaymentID),
+		Origin:        openapi.OperationResponseOrigin(op.Origin),
 		Date:          openapi_types.Date{Time: op.Date},
 		PaidDate:      httpsupport.DatePtrToOpenAPI(op.PaidDate),
 		Status:        openapi.OperationResponseStatus(item.ViewStatus),

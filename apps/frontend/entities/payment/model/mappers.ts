@@ -99,6 +99,7 @@ export function mapPaymentOperation(dto: OperationDto): PaymentOperation {
     id: dto.id,
     propertyId: dto.propertyId,
     paymentId: dto.paymentId,
+    origin: dto.origin,
     date: dto.date,
     paidDate: dto.paidDate ?? undefined,
     status: dto.status,

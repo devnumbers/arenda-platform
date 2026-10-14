@@ -122,6 +122,7 @@ const operationDto: OperationDto = {
   id: '0198b6a7-op00-7000-8000-000000000001',
   propertyId: '0198b6a7-1000-7000-8000-00000000prop',
   paymentId: null,
+  origin: 'manual',
   date: '2026-08-27',
   paidDate: null,
   status: 'overdue',
@@ -139,21 +140,24 @@ describe('mapPaymentOperation — DTO → entity', () => {
   it('просрочка и ручные поля нормализуются: nulls → опциональность', () => {
     expect(operation.status).toBe('overdue');
     expect(operation.paymentId).toBeNull();
+    expect(operation.origin).toBe('manual');
     expect(operation.paidDate).toBeUndefined();
     expect(operation.categorySlug).toBeUndefined();
     expect(operation.amountKopecks).toBe(320_000);
   });
 
-  it('оплаченное вхождение переносит фактическую дату и снапшот категории', () => {
+  it('оплаченное вхождение переносит фактическую дату, origin правила и снапшот категории', () => {
     const paid: OperationDto = {
       ...operationDto,
       status: 'paid',
       paidDate: '2026-08-25',
       paymentId: '0198b6a7-rule',
+      origin: 'payment',
       categorySlug: 'utilities',
     };
     const mapped = mapPaymentOperation(paid);
     expect(mapped.paidDate).toBe('2026-08-25');
+    expect(mapped.origin).toBe('payment');
     expect(mapped.categorySlug).toBe('utilities');
   });
 });

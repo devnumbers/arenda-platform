@@ -50,4 +50,4 @@ export { PaymentCardButton, type PaymentCardButtonProps } from './ui/payment-car
 export { PaymentReminderPicker, type PaymentReminderPickerProps } from './ui/payment-reminder-picker';
 // Тест-онли: fixture-билдеры для юнит-тестов, в продукте не импортируются
 // (прецедент shared/api/sse-test-fakes).
-export { makePayment, makePaymentDueItem } from './model/testing';
+export { makePayment, makePaymentDueItem, makePaymentOperation } from './model/testing';
