@@ -514,7 +514,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Завершение платежа (тикет #1340): явная мутация ставит хранимый признак завершённости (completedAt) — терминальное состояние. Гейт доступности — вычисляемая завершённость при закончившемся расписании: все операции оплачены, дата окончания наступила, открытой паузы нет. Завершённое правило не порождает операций и скрыто из лент, списков и подсчётов; страница жива прямым чтением (read-only: pause/resume/patch отвечают 409), удаление — по общему праву редактирования, оплаченные операции остаются в «Истории платежа». */
+        /** @description Завершение платежа (тикет #1377, ревизия #1340): завершение удаляет правило из БД — хранимого завершённого состояния не существует. Гейт доступности прежний — вычисляемая завершённость при закончившемся расписании: все операции оплачены, дата окончания наступила, открытой паузы нет (иначе 409). Оплаченные операции остаются в истории объекта (payment_id NULL по FK, origin 'payment'); звезда читателя падает вместе с правилом; журнал правок каскадится. Повторное завершение — приватный 404: правила больше нет. */
         post: operations["completePayment"];
         delete?: never;
         options?: never;
@@ -3145,13 +3145,8 @@ export interface components {
             reminderOffsetDays?: 1 | 3 | 7 | null;
             /** @description The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12) — returned in the reads and the lists; another user's star never lands in this actor's read. */
             isFavorite: boolean;
-            /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. */
+            /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. The feed's display-safe flag («Полностью оплачен») lives on the global feed row. */
             isCompleted: boolean;
-            /**
-             * Format: date-time
-             * @description Хранимый признак завершённости (тикет #1340): ставится только явной мутацией complete, никогда не выводится заново. NULL — правило живо; непустое значение — терминальное состояние: правило не порождает операций, скрыто из лент и подсчётов, read-only (pause/resume/patch — 409), удаление по общему праву редактирования. Вычисляемый isCompleted остаётся флагом кнопки «Завершить» ДО завершения и не меняется этой мутацией.
-             */
-            completedAt?: string | null;
             /**
              * Format: date
              * @description «Следующая дата оплаты» (ticket #991, CONTEXT.md): the earliest stored planned operation on or after the owner's today (ADR 0048), else the rule's projection. Null when the schedule has no next occurrence — an open pause or a settled rule. The object payments list resolves it on every row; the single-rule reads do not compute it and always carry null.
@@ -3219,10 +3214,10 @@ export interface components {
             created_at: string;
         };
         /**
-         * @description Род действия строки журнала (ADR 0065 §4).
+         * @description Род действия строки журнала (ADR 0065 §4): правка условий, пауза, возобновление. Завершения среди них нет — правило удалено, журнал каскадит вместе с ним (тикет #1377).
          * @enum {string}
          */
-        PaymentChangeAction: "updated" | "paused" | "resumed" | "completed";
+        PaymentChangeAction: "updated" | "paused" | "resumed";
         /**
          * @description Один уехавший поле дифа: старое→новое значение. Значения типизированы
          *     по словарю поля (ADR 0065 §2) — никогда строки-с-форматированием:
@@ -5764,14 +5759,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Payment completed */
-            200: {
+            /** @description Rule completed — the rule row is deleted (the paid operations keep their history with paymentId null) */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["PaymentResponse"];
-                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

@@ -57,17 +57,10 @@ var (
 	// ErrPaymentNotCompletable marks a complete attempt on a rule that does
 	// not pass the availability gate (тикет #1340): the computed settlement
 	// completeness has not been reached, or the rule's end date is still
-	// ahead (early exhaustion / prepayment) — «Завершить» waits.
+	// ahead (early exhaustion / prepayment) — «Завершить» waits. A completed
+	// rule is gone (тикет #1377: completing deletes), so a repeated complete
+	// never reaches this gate — the load answers ErrNotFound first.
 	ErrPaymentNotCompletable = errors.New("payments: payment is not completable")
-	// ErrAlreadyCompleted marks a complete attempt on a rule whose stored
-	// completion stamp already stands (тикет #1340): the terminal state
-	// never flips again — the contract's 409 on a repeated complete.
-	ErrAlreadyCompleted = errors.New("payments: payment already completed")
-	// ErrPaymentCompleted marks a rule mutation on a completed rule (тикет
-	// #1340): the stored completion is read-only — pause/resume/update
-	// answer the 409, the deletion keeps the common edit right (D9) and the
-	// reads stay open.
-	ErrPaymentCompleted = errors.New("payments: payment is completed")
 )
 
 // PropertyRef is the payments view of the property a use case targets: the
@@ -137,12 +130,10 @@ type PaymentStore interface {
 	Create(ctx context.Context, p domain.Payment) error
 	// Update writes the editable fields of the rule (since never among them).
 	Update(ctx context.Context, p domain.Payment) error
-	// MarkCompleted sets the stored completion stamp (тикет #1340) — the
-	// only write that ever touches it; rows affected = 0 surfaces as
-	// ErrAlreadyCompleted (the terminal state never flips again).
-	MarkCompleted(ctx context.Context, id, scope uuid.UUID) error
 	// Delete removes the rule; the caller has already resolved the fate of
-	// its planned operations (keep_overdue).
+	// its planned operations (keep_overdue). The paid operations survive
+	// with payment_id set to NULL by the FK — the completing delete (тикет
+	// #1377) and the plain one (#446) share the same tail outcome.
 	Delete(ctx context.Context, id, scope uuid.UUID) error
 	// InsertPause opens the open-ended pause [from, ∞) with the given
 	// origin (тикет #1342): the manual mutations pass PauseOriginManual,

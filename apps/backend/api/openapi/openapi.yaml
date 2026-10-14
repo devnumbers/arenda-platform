@@ -1331,14 +1331,14 @@ paths:
       security:
         - sessionCookie: []
       description: >-
-        Завершение платежа (тикет #1340): явная мутация ставит хранимый
-        признак завершённости (completedAt) — терминальное состояние. Гейт
-        доступности — вычисляемая завершённость при закончившемся расписании:
-        все операции оплачены, дата окончания наступила, открытой паузы нет.
-        Завершённое правило не порождает операций и скрыто из лент, списков и
-        подсчётов; страница жива прямым чтением (read-only: pause/resume/patch
-        отвечают 409), удаление — по общему праву редактирования, оплаченные
-        операции остаются в «Истории платежа».
+        Завершение платежа (тикет #1377, ревизия #1340): завершение удаляет
+        правило из БД — хранимого завершённого состояния не существует. Гейт
+        доступности прежний — вычисляемая завершённость при закончившемся
+        расписании: все операции оплачены, дата окончания наступила, открытой
+        паузы нет (иначе 409). Оплаченные операции остаются в истории объекта
+        (payment_id NULL по FK, origin 'payment'); звезда читателя падает
+        вместе с правилом; журнал правок каскадится. Повторное завершение —
+        приватный 404: правила больше нет.
       parameters:
         - name: propertyId
           in: path
@@ -1353,12 +1353,8 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
-          description: Payment completed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentResponse'
+        '204':
+          description: Rule completed — the rule row is deleted (the paid operations keep their history with paymentId null)
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -7347,19 +7343,8 @@ components:
             «Завершённый платёж»): no planned operations — overdue included —
             and no occurrence beyond the last materialized date of any
             status. Never stored, never written by the client; derived on
-            every read like the operation's overdue.
-        completedAt:
-          type: string
-          format: date-time
-          nullable: true
-          description: >-
-            Хранимый признак завершённости (тикет #1340): ставится только
-            явной мутацией complete, никогда не выводится заново. NULL —
-            правило живо; непустое значение — терминальное состояние: правило
-            не порождает операций, скрыто из лент и подсчётов, read-only
-            (pause/resume/patch — 409), удаление по общему праву
-            редактирования. Вычисляемый isCompleted остаётся флагом кнопки
-            «Завершить» ДО завершения и не меняется этой мутацией.
+            every read like the operation's overdue. The feed's display-safe
+            flag («Полностью оплачен») lives on the global feed row.
         nearestDate:
           type: string
           format: date
@@ -7476,12 +7461,14 @@ components:
 
     PaymentChangeAction:
       type: string
-      description: Род действия строки журнала (ADR 0065 §4).
+      description: >-
+        Род действия строки журнала (ADR 0065 §4): правка условий, пауза,
+        возобновление. Завершения среди них нет — правило удалено, журнал
+        каскадит вместе с ним (тикет #1377).
       enum:
         - updated
         - paused
         - resumed
-        - completed
 
     PaymentFieldChange:
       type: object

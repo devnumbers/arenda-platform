@@ -80,13 +80,6 @@ describe('mapPayment — DTO → entity', () => {
     expect(mapPayment({ ...paymentDto, nearestDate: null }).nearestDate).toBeNull();
   });
 
-  it('completedAt нормализуется к опциональности — штамп завершения (#1340)', () => {
-    expect(payment.completedAt).toBeUndefined();
-    const stamped = '2026-09-08T10:00:00Z';
-    expect(mapPayment({ ...paymentDto, completedAt: stamped }).completedAt).toBe(stamped);
-    expect(mapPayment({ ...paymentDto, completedAt: null }).completedAt).toBeUndefined();
-  });
-
   it('напоминание: оффсет приходит числом, null и отсутствие — «нет напоминания» (карта #822)', () => {
     expect(payment.reminderOffsetDays).toBeUndefined();
     expect(mapPayment({ ...paymentDto, reminderOffsetDays: null }).reminderOffsetDays).toBeUndefined();

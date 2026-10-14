@@ -7,7 +7,7 @@ package application_test
 // reminder rules without auto-pay — the owner's decision — against real
 // PostgreSQL. The matrix pins the window's both bounds, the statuses (paid
 // and cancelled are not the section's material), the rule flags (auto-pay
-// out, reminder-less out, completed out), the bucket order («Сначала
+// out, reminder-less out), the bucket order («Сначала
 // новые» inside), the feed's visibility predicate and the scope counters.
 
 import (
@@ -20,9 +20,9 @@ import (
 
 // seedDueRule inserts a rule with the reminder lead and the flags the
 // window matrix turns: reminderOffset nil — no reminder, autoPay the
-// owner's decision knob, completed the terminal #1340 stamp.
+// owner's decision knob.
 func (h *paymentsHarness) seedDueRule(
-	propertyID, ownerID uuid.UUID, title string, reminderOffset *int, autoPay, completed bool,
+	propertyID, ownerID uuid.UUID, title string, reminderOffset *int, autoPay bool,
 ) uuid.UUID {
 	h.t.Helper()
 	id, err := uuid.NewV7()
@@ -33,16 +33,12 @@ func (h *paymentsHarness) seedDueRule(
 	if reminderOffset != nil {
 		offset = *reminderOffset
 	}
-	var completedAt any
-	if completed {
-		completedAt = "2026-08-20 12:00:00+00"
-	}
 	if _, err := h.pool.Exec(h.ctx(),
 		`INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks,
-		                       recurrence, since, auto_pay, category_slug, reminder_offset_days, completed_at)
+		                       recurrence, since, auto_pay, category_slug, reminder_offset_days)
 		 VALUES ($1, $2, $3, 'expense', $4, 500000, '{"kind":"monthly","daysOfMonth":[25]}'::jsonb,
-		         '2026-07-01', $5, 'utilities', $6, $7)`,
-		id, ownerID, propertyID, title, autoPay, offset, completedAt,
+		         '2026-07-01', $5, 'utilities', $6)`,
+		id, ownerID, propertyID, title, autoPay, offset,
 	); err != nil {
 		h.t.Fatalf("seed due rule %s: %v", title, err)
 	}
@@ -64,7 +60,7 @@ func TestListPaymentDue_Window(t *testing.T) {
 
 	// The matrix rule (N=3): today's operation, the next future, the upper
 	// boundary (D = today + N) — and the out-by-one beyond it.
-	matrix := h.seedDueRule(h.propID, h.owner, "ЖКУ", &three, false, false)
+	matrix := h.seedDueRule(h.propID, h.owner, "ЖКУ", &three, false)
 	h.seedRuleOperation(matrix, h.propID, h.owner, day25, opPlanned, "expense", "ЖКУ", 500000)
 	h.seedRuleOperation(matrix, h.propID, h.owner, day26, opPlanned, "expense", "ЖКУ", 500000)
 	h.seedRuleOperation(matrix, h.propID, h.owner, "2026-08-28", opPlanned, "expense", "ЖКУ", 500000)
@@ -77,22 +73,18 @@ func TestListPaymentDue_Window(t *testing.T) {
 
 	// The lower boundary holds for a longer lead too: N=7 reaches the 1st of
 	// September, not the 2nd.
-	week := h.seedDueRule(h.propID, h.owner, "Страхование", &seven, false, false)
+	week := h.seedDueRule(h.propID, h.owner, "Страхование", &seven, false)
 	h.seedRuleOperation(week, h.propID, h.owner, "2026-09-01", opPlanned, "expense", "Страхование", 500000)
 	h.seedRuleOperation(week, h.propID, h.owner, "2026-09-02", opPlanned, "expense", "Страхование", 500000)
 
 	// The owner's decision: an auto-pay rule with a reminder never enters —
 	// its reminder fires, the section does not contain it.
-	autoPay := h.seedDueRule(h.propID, h.owner, "Интернет автоплатёж", &one, true, false)
+	autoPay := h.seedDueRule(h.propID, h.owner, "Интернет автоплатёж", &one, true)
 	h.seedRuleOperation(autoPay, h.propID, h.owner, day25, opPlanned, "expense", "Интернет", 500000)
 
 	// A rule without a reminder is out whatever the dates.
-	plain := h.seedDueRule(h.propID, h.owner, "Клининг", nil, false, false)
+	plain := h.seedDueRule(h.propID, h.owner, "Клининг", nil, false)
 	h.seedRuleOperation(plain, h.propID, h.owner, day25, opPlanned, "expense", "Клининг", 500000)
-
-	// A completed rule is cut by the feed's inherited gate (#1340).
-	settled := h.seedDueRule(h.propID, h.owner, "Завершённый", &one, false, true)
-	h.seedRuleOperation(settled, h.propID, h.owner, day25, opPlanned, "expense", "Завершённый", 500000)
 
 	due, err := svc.ListPaymentDue(h.ctx(), h.owner)
 	if err != nil {
@@ -141,12 +133,12 @@ func TestListPaymentDue_Order(t *testing.T) {
 	one := 1
 	three := 3
 	seven := 7
-	ruleA := h.seedDueRule(h.propID, h.owner, "Аренда", &seven, false, false)
+	ruleA := h.seedDueRule(h.propID, h.owner, "Аренда", &seven, false)
 	h.seedRuleOperation(ruleA, h.propID, h.owner, day26, opPlanned, "expense", "Аренда", 500000)
 	h.seedRuleOperation(ruleA, h.propID, h.owner, "2026-08-28", opPlanned, "expense", "Аренда", 500000)
-	ruleB := h.seedDueRule(h.propID, h.owner, "ЖКУ", &one, false, false)
+	ruleB := h.seedDueRule(h.propID, h.owner, "ЖКУ", &one, false)
 	h.seedRuleOperation(ruleB, h.propID, h.owner, day25, opPlanned, "expense", "ЖКУ", 500000)
-	ruleC := h.seedDueRule(h.propID, h.owner, "Страхование", &three, false, false)
+	ruleC := h.seedDueRule(h.propID, h.owner, "Страхование", &three, false)
 	h.seedRuleOperation(ruleC, h.propID, h.owner, "2026-08-27", opPlanned, "expense", "Страхование", 500000)
 	h.seedRuleOperation(ruleC, h.propID, h.owner, "2026-08-28", opPlanned, "expense", "Страхование", 500000)
 
@@ -181,27 +173,27 @@ func TestListPaymentDue_Visibility(t *testing.T) {
 	svc := h.globalSvc()
 
 	one := 1
-	own := h.seedDueRule(h.propID, h.owner, "ЖКУ", &one, false, false)
+	own := h.seedDueRule(h.propID, h.owner, "ЖКУ", &one, false)
 	h.seedRuleOperation(own, h.propID, h.owner, day25, opPlanned, "expense", "ЖКУ", 500000)
 
 	archived := h.seedGlobalProperty(h.owner, "Старый объект", "archived")
-	archivedRule := h.seedDueRule(archived, h.owner, "ЖКУ архива", &one, false, false)
+	archivedRule := h.seedDueRule(archived, h.owner, "ЖКУ архива", &one, false)
 	h.seedRuleOperation(archivedRule, archived, h.owner, day25, opPlanned, "expense", "ЖКУ архива", 500000)
 
 	foreignOwner := h.seedGlobalUser("Europe/Moscow")
 	foreign := h.seedGlobalProperty(foreignOwner, "Без доступа", "active")
-	foreignRule := h.seedDueRule(foreign, foreignOwner, "Чужое", &one, false, false)
+	foreignRule := h.seedDueRule(foreign, foreignOwner, "Чужое", &one, false)
 	h.seedRuleOperation(foreignRule, foreign, foreignOwner, day25, opPlanned, "expense", "Чужое", 500000)
 
 	suspendedProp := h.seedGlobalProperty(foreignOwner, "Заморожено", "active")
 	h.seedMembership(suspendedProp, h.owner, foreignOwner, "viewer", "suspended")
-	suspendedRule := h.seedDueRule(suspendedProp, foreignOwner, "Замороженное ЖКУ", &one, false, false)
+	suspendedRule := h.seedDueRule(suspendedProp, foreignOwner, "Замороженное ЖКУ", &one, false)
 	h.seedRuleOperation(suspendedRule, suspendedProp, foreignOwner, day25, opPlanned, "expense", "Замороженное ЖКУ", 500000)
 
 	partner := h.seedGlobalUser("Asia/Kamchatka")
 	shared := h.seedGlobalProperty(partner, "Чужая дача", "active")
 	h.seedMembership(shared, h.owner, partner, "viewer", "active")
-	sharedRule := h.seedDueRule(shared, partner, "Аренда", &one, false, false)
+	sharedRule := h.seedDueRule(shared, partner, "Аренда", &one, false)
 	h.seedRuleOperation(sharedRule, shared, partner, day26, opPlanned, "expense", "Аренда", 500000)
 
 	due, err := svc.ListPaymentDue(h.ctx(), h.owner)
@@ -243,10 +235,10 @@ func TestListGlobalPayments_DueCounters(t *testing.T) {
 	favorite := h.seedGlobalRule(h.propID, h.owner, "Страхование", "expense", 3200000, false, true, "insurance", nil)
 	h.seedRuleOperation(favorite, h.propID, h.owner, day25, opPlanned, "expense", "Страхование", 3200000)
 
-	reminded := h.seedDueRule(h.propID, h.owner, "ЖКУ", &one, false, false)
+	reminded := h.seedDueRule(h.propID, h.owner, "ЖКУ", &one, false)
 	h.seedRuleOperation(reminded, h.propID, h.owner, day25, opPlanned, "expense", "ЖКУ", 500000)
 	h.seedRuleOperation(reminded, h.propID, h.owner, day26, opPlanned, "expense", "ЖКУ", 500000)
-	autoPay := h.seedDueRule(h.propID, h.owner, "Интернет автоплатёж", &one, true, false)
+	autoPay := h.seedDueRule(h.propID, h.owner, "Интернет автоплатёж", &one, true)
 	h.seedRuleOperation(autoPay, h.propID, h.owner, day25, opPlanned, "expense", "Интернет", 500000)
 
 	feed, err := svc.ListGlobalPayments(h.ctx(), h.owner)
@@ -275,7 +267,7 @@ func TestListGlobalPayments_DueCountersEmpty(t *testing.T) {
 	svc := h.globalSvc()
 
 	one := 1
-	reminded := h.seedDueRule(h.propID, h.owner, "ЖКУ", &one, false, false)
+	reminded := h.seedDueRule(h.propID, h.owner, "ЖКУ", &one, false)
 	h.seedRuleOperation(reminded, h.propID, h.owner, "2026-09-15", opPlanned, "expense", "ЖКУ", 500000)
 
 	feed, err := svc.ListGlobalPayments(h.ctx(), h.owner)

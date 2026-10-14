@@ -11,9 +11,7 @@
 
 -- name: GetPaymentByID :one
 -- One rule by id within the owner's scope on the given property, with the
--- user category's current name resolved for the CategoryView. The direct
--- read stays open on a completed rule (тикет #1340): the stored completion
--- stamp travels in the row, the read-only gate lives in the mutations.
+-- user category's current name resolved for the CategoryView.
 SELECT pay.id,
        pay.owner_id,
        pay.property_id,
@@ -29,7 +27,6 @@ SELECT pay.id,
        pay.category_slug,
        pay.user_category_id,
        pay.title_is_manual,
-       pay.completed_at,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
@@ -41,9 +38,6 @@ WHERE pay.id = $1 AND pay.owner_id = $2 AND pay.property_id = $3;
 -- The property's rules in creation order (stable for the list response).
 -- search ('' = no filter) is a case-insensitive substring match on the title;
 -- the application layer escapes the ILIKE metacharacters (ESCAPE '\').
--- Завершённые правила из объектного списка скрыты (тикет #1340): страница
--- завершённого жива прямым чтением (GetPaymentByID), список показывает
--- только живые правила.
 SELECT pay.id,
        pay.owner_id,
        pay.property_id,
@@ -59,14 +53,12 @@ SELECT pay.id,
        pay.category_slug,
        pay.user_category_id,
        pay.title_is_manual,
-       pay.completed_at,
        pay.created_at,
        pay.updated_at,
        pc.name AS user_category_name
 FROM payments pay
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.owner_id = $1 AND pay.property_id = $2
-  AND pay.completed_at IS NULL
   AND (sqlc.arg('search')::text = ''
        OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
 ORDER BY pay.created_at, pay.id;
@@ -88,9 +80,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 -- Partial PATCH is resolved by the application layer; the statement always
 -- writes the full editable set (since is never among it — server-set,
 -- prototype decision №17). The favorite star is a personal state (the
--- cutover #1308) with its own insert/delete pair; the stored completion
--- stamp (тикет #1340) is not among the editable set — a completed rule is
--- read-only at the service gate, the statement cannot touch the stamp.
+-- cutover #1308) with its own insert/delete pair.
 UPDATE payments
 SET type = $3,
     title = $4,
@@ -103,15 +93,6 @@ SET type = $3,
     category_slug = $11,
     title_is_manual = $12
 WHERE id = $1 AND owner_id = $2;
-
--- name: MarkPaymentCompleted :execrows
--- Хранимый признак завершённости (тикет #1340): ставит только явная мутация
--- complete — «сейчас» базы, момент мутации. Предикат completed_at IS NULL —
--- повторный вызов мимо сервиса (гонка) меняет ноль строк: адаптер отвечает
--- ErrAlreadyCompleted, терминальное состояние никогда не перезаписывается.
-UPDATE payments
-SET completed_at = now()
-WHERE id = $1 AND owner_id = $2 AND completed_at IS NULL;
 
 -- name: DeletePayment :execrows
 -- Hard delete of the rule. Pauses cascade; operations keep their snapshots

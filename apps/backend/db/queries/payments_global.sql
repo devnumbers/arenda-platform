@@ -16,12 +16,6 @@
 -- port — the actor-scoped read carries its visibility predicate here,
 -- beside the data.
 --
--- Завершённые правила из всего хаба выведены (тикет #1340): терминальное
--- состояние (completed_at IS NOT NULL) не участвует в ленте, поиске, чипах
--- категорий и счётчиках; страница завершённого жива прямым чтением, личная
--- звезда читателя не ломает чтений. Будущий ридер «На оплату» наследует
--- тот же гейт.
---
 -- Every per-row schedule computation (nearest date, overdue) runs against
 -- the property owner's calendar date (ADR 0048): the merged feed mixes
 -- owners, so the reads take the owner→today map as parallel csv lists —
@@ -110,7 +104,6 @@ LEFT JOIN LATERAL (
 ) oldest ON true
 WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
-  AND pay.completed_at IS NULL
   AND (sqlc.arg('search')::text = ''
        OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR pc.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -147,7 +140,6 @@ JOIN (
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
-  AND pay.completed_at IS NULL
   AND (sqlc.arg('search')::text = ''
        OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
        OR pc.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
@@ -215,8 +207,7 @@ LEFT JOIN user_payment_favorites upf
        ON upf.payment_id = pay.id
       AND upf.user_id = sqlc.arg('actor')::uuid
 WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
-  AND p.status != 'archived'
-  AND pay.completed_at IS NULL;
+  AND p.status != 'archived';
 
 -- name: ListPaymentDue :many
 -- The «На оплату» section's rows (ticket #1346): one row per (rule,
@@ -267,7 +258,6 @@ JOIN operations op ON op.payment_id = pay.id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
-  AND pay.completed_at IS NULL
   AND pay.reminder_offset_days IS NOT NULL
   AND pay.auto_pay = false
   AND op.status = 'planned'
@@ -292,7 +282,6 @@ JOIN properties p ON p.id = pay.property_id
 LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived'
-  AND pay.completed_at IS NULL
   AND (pay.category_slug IS NOT NULL OR pay.user_category_id IS NOT NULL)
   AND (sqlc.arg('search')::text = ''
        OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'

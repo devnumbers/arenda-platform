@@ -316,9 +316,6 @@ func (s *PaymentService) UpdatePayment(
 			// snapshot (ADR 0065 §6 — the single content source of the
 			// «updated» entries).
 			before := rule
-			if err := ensureMutable(rule); err != nil {
-				return mutationOutcome[domain.Payment]{}, err
-			}
 			applyUpdate(&rule, cmd)
 			if err := validateRule(rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -442,9 +439,6 @@ func (s *PaymentService) PausePayment(
 			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
-			if err := ensureMutable(rule); err != nil {
-				return mutationOutcome[domain.Payment]{}, err
-			}
 			if _, active := domain.ActivePause(rule.Pauses); active {
 				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
 			}
@@ -481,9 +475,6 @@ func (s *PaymentService) ResumePayment(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
 		) (mutationOutcome[domain.Payment], error) {
 			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
-				return mutationOutcome[domain.Payment]{}, err
-			}
-			if err := ensureMutable(rule); err != nil {
 				return mutationOutcome[domain.Payment]{}, err
 			}
 			if _, active := domain.ActivePause(rule.Pauses); !active {
@@ -980,37 +971,28 @@ func (s *PaymentService) ruleCompletionInputs(
 	return lastMaterialized, false, nil
 }
 
-// ensureMutable is the terminal state's read-only gate (тикет #1340): a
-// completed rule accepts no pause, resume or terms edit — the one 409 the
-// three rule mutations answer before their own state checks (after the rent
-// gate, which always outranks the rule's own state).
-func ensureMutable(rule domain.Payment) error {
-	if rule.CompletedAt != nil {
-		return ErrPaymentCompleted
-	}
-	return nil
-}
-
-// CompletePayment sets the stored completion stamp (тикет #1340): the one
-// explicit write that ever touches it — the computed IsCompleted flag stays
-// the read-side view the clients show «Полностью оплачен» and the
-// «Завершить» button by. The gates, in order: the rent gate first (the
-// rule's state never outranks it, ADR 0053 — a rent payment completes with
-// its rental, never here), then the open pause (the completion waits for
-// the resume), then the stored stamp (a repeated complete is
-// ErrAlreadyCompleted), then the availability gate itself — the computed
-// settlement completeness with the schedule genuinely over
-// (domain.CanBeCompleted). From then on the rule generates nothing: the
-// tick and every listing skip the completed, so the verdict states
-// Tick=false explicitly — there is no plan to materialize. The operations
-// are not touched: the paid facts stay in the payment's history, and the
-// change step writes its own journals (the action journal row, the
-// change-log row with the completion's empty-diff action — the pause/resume
-// shape).
+// CompletePayment deletes the rule (тикет #1377, ревизия #1340): completing
+// is removing — the DeletePayment shape with the completion's journals, no
+// stored completed state ever existed. The gates, in order: the rent gate
+// first (the rule's state never outranks it, ADR 0053 — a rent payment
+// completes with its rental, never here), then the open pause (the
+// completion waits for the resume), then the availability gate itself — the
+// computed settlement completeness with the schedule genuinely over
+// (domain.CanBeCompleted). A repeated complete is the privacy 404: the rule
+// is gone. From the conveyor the planned removal is defensive (the gate
+// leaves none), the paid operations stay — the FK sets their payment_id to
+// NULL and origin 'payment' marks the tail (the same outcome as the
+// rental's completion #1161 and the plain delete #446). The reader's
+// favorite star falls with the rule (the FK cascade). The verdict states
+// Tick=false explicitly — the rule is gone and its plan was resolved by the
+// change step itself; the frames carry both feeds, the operations one
+// because the object's operation feed just gained the tail. No change-log
+// row: the rule's change journal cascades with the rule («История действий»
+// keeps the «Платёж завершён» row instead).
 func (s *PaymentService) CompletePayment(
 	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
-) (domain.Payment, error) {
-	return runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
+) error {
+	_, err := runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
 		func(
 			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
 		) (mutationOutcome[domain.Payment], error) {
@@ -1020,9 +1002,6 @@ func (s *PaymentService) CompletePayment(
 			if _, active := domain.ActivePause(rule.Pauses); active {
 				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
 			}
-			if rule.CompletedAt != nil {
-				return mutationOutcome[domain.Payment]{}, ErrAlreadyCompleted
-			}
 			lastMaterialized, hasPlanned, err := s.ruleCompletionInputs(ctx, scope, today, rule)
 			if err != nil {
 				return mutationOutcome[domain.Payment]{}, err
@@ -1030,22 +1009,30 @@ func (s *PaymentService) CompletePayment(
 			if !domain.CanBeCompleted(rule, today, lastMaterialized, hasPlanned) {
 				return mutationOutcome[domain.Payment]{}, ErrPaymentNotCompletable
 			}
-			if err := stores.payments.MarkCompleted(ctx, rule.ID, scope); err != nil {
-				return mutationOutcome[domain.Payment]{}, fmt.Errorf("mark payment completed: %w", err)
+			// Defensive: the gate above proves no planned rows stand — the
+			// DeletePayment shape removes them anyway, the race-proof order.
+			if err := stores.payments.DeletePlannedFrom(ctx, rule.ID, today); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
+			if err := stores.payments.DeletePlannedBefore(ctx, rule.ID, today); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
+			if err := stores.payments.Delete(ctx, rule.ID, scope); err != nil {
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("delete payment: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{
-				Response:      rule,
+				Response:      rule, // The pre-delete state; nothing re-reads it.
 				Audit:         auditdomain.ActionPaymentCompleted,
 				AuditEntityID: &rule.ID,
 				History:       new(historydomain.PaymentCompleted(rule.ID, rule.Title)),
-				// The completion's own log row: empty changes, the flip is
-				// the content (ADR 0065 §4).
-				ChangeLog: &ChangeLogWrite{PaymentID: rule.ID, Action: domain.ChangeCompleted},
 				Changed: []realtimedom.Change{
 					realtimedom.On(realtimedom.EntityPayments, propertyID),
+					// The paid operations survive as the ownerless tail — the
+					// object's operations feed changed with the rule.
+					realtimedom.On(realtimedom.EntityOperations, propertyID),
 				},
-				Tick:            false, // The terminal rule generates nothing — no plan to materialize.
-				RereadPaymentID: &rule.ID,
+				Tick: false, // The rule is gone — no plan to materialize.
 			}, nil
 		})
+	return err
 }

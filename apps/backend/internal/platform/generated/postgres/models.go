@@ -378,7 +378,6 @@ type Payment struct {
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	TitleIsManual      bool               `json:"title_is_manual"`
 	NotifyAutoPaid     bool               `json:"notify_auto_paid"`
-	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
 }
 
 type PaymentCategory struct {

@@ -356,7 +356,7 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText(title2)).toHaveCount(0);
   });
 
-  test('оплата последней операции → «Полностью оплачен» → «Завершить» → финал → скрытие из списков (#1341)', async ({
+  test('оплата последней операции → «Полностью оплачен» → «Завершить» → финал → правило удалено, хвост в ленте объекта (#1341, ревизия #1377)', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -415,22 +415,28 @@ test.describe('сквозная жизнь платежа', () => {
     await expect(page.getByText(`Платеж «${title}» завершен`)).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо' }).click();
 
-    // «Хорошо» — назад на список; завершённое правило скрыто (SQL-гейт
-    // completed_at, #1340), штамп виден по API.
+    // «Хорошо» — назад на список; правило удалено (#1377) — скрыто из
+    // списка объекта и из API-списка.
     await expect(page).toHaveURL(new RegExp(`${paymentsUrl}$`));
     await expect(page.getByText(title)).toHaveCount(0);
     const response = await page.request.get(`/api/properties/${PROPERTY}/payments`);
     const { items } = (await response.json()) as { items: ReadonlyArray<{ id: string }> };
     expect(items.some((payment) => payment.id === id)).toBe(false);
 
-    // Прямая ссылка жива — read-only: действий нет, история оплаченной
-    // операции на месте.
+    // Прямая ссылка — приватный 404: правила больше нет.
     await page.goto(paymentUrl);
-    await expect(page.getByRole('button', { name: 'Завершить' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Оплатить' })).toHaveCount(0);
-    await expect(page.getByText('Платежей больше не будет')).toBeVisible();
-    await page.getByRole('button', { name: 'Открыть историю платежа' }).click();
-    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/history$`));
-    await expect(page.getByText(title).first()).toBeVisible();
+    await expect(page.getByText('Не удалось загрузить платеж')).toBeVisible();
+
+    // Хвост правила: оплаченная операция осталась в ленте операций объекта
+    // без связи с правилом (paymentId null, origin 'payment' — #1377).
+    const opsResponse = await page.request.get(`/api/properties/${PROPERTY}/operations`);
+    expect(opsResponse.ok()).toBe(true);
+    const ops = (await opsResponse.json()) as {
+      items: ReadonlyArray<{ title: string; paymentId: string | null; origin: string }>;
+    };
+    const tail = ops.items.find((operation) => operation.title === title);
+    expect(tail).toBeDefined();
+    expect(tail?.paymentId).toBeNull();
+    expect(tail?.origin).toBe('payment');
   });
 });

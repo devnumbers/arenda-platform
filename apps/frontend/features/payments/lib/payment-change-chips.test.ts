@@ -180,12 +180,6 @@ describe('paymentChangeChips — пауза и возобновление (ADR 0
     ]);
   });
 
-  it('завершение — строка с пустым дифом (#1340)', () => {
-    expect(paymentChangeChips(entry([], { action: 'completed' }))).toEqual([
-      'Платеж завершен',
-    ]);
-  });
-
   it('обновление без дифа не даёт чипов (пустая строка не рисуется)', () => {
     expect(paymentChangeChips(entry([]))).toEqual([]);
   });

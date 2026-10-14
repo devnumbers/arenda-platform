@@ -62,10 +62,6 @@ func (noopPaymentStore) Create(context.Context, domain.Payment) error { panic("u
 
 func (noopPaymentStore) Update(context.Context, domain.Payment) error { panic("unused") }
 
-func (noopPaymentStore) MarkCompleted(context.Context, uuid.UUID, uuid.UUID) error {
-	panic("unused")
-}
-
 func (noopPaymentStore) Delete(context.Context, uuid.UUID, uuid.UUID) error { panic("unused") }
 
 func (noopPaymentStore) InsertPause(context.Context, uuid.UUID, time.Time, domain.PauseOrigin) error {

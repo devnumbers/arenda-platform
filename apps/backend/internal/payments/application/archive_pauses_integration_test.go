@@ -7,10 +7,10 @@ package application_test
 // enters the archive, and the reverse leg closing only the system pauses
 // when the object returns. The matrix per the owner's resolution: every
 // live rule pauses — rent-managed included (the pause rides the object's
-// lifecycle, ADR 0053 §3), completed rules are terminal and get nothing,
-// an open manual pause outranks the round-trip; the resume leg closes only
-// its own auto_archive pauses and journal rows (both logs) carry the
-// origin mark. The cycle archives and returns the same object twice.
+// lifecycle, ADR 0053 §3), an open manual pause outranks the round-trip;
+// the resume leg closes only its own auto_archive pauses and journal rows
+// (both logs) carry the origin mark. The cycle archives and returns the
+// same object twice.
 
 import (
 	"testing"
@@ -83,9 +83,6 @@ func TestArchivePauseBridge_PausesAllLiveRules(t *testing.T) {
 		 VALUES ($1, $2, $3, $4, '2026-08-01', 'included')`,
 		rentalID, h.owner, h.propID, rentManaged)
 	require.NoError(t, err)
-	completed := h.seedNamedPayment(t, "Завершён")
-	_, err = h.pool.Exec(h.ctx(), `UPDATE payments SET completed_at = now() WHERE id = $1`, completed)
-	require.NoError(t, err)
 
 	archivePause(t, h)
 
@@ -95,18 +92,14 @@ func TestArchivePauseBridge_PausesAllLiveRules(t *testing.T) {
 		"rent-managed rule pauses with the object (ADR 0053 §3)")
 	// Ручная пауза остаётся ручной.
 	assert.Equal(t, domain.PauseOriginManual, openPauseOrigin(t, h, manuallyPaused))
-	// Завершённое правило паузы не получает.
-	assert.Equal(t, domain.PauseOrigin(""), openPauseOrigin(t, h, completed))
 
-	// Журнал изменений: системная строка с origin, у ручной паузы и
-	// завершённого правила — ничего.
+	// Журнал изменений: системная строка с origin, у ручной паузы — ничего.
 	entries := changeRows(t, h, active)
 	require.Len(t, entries, 1)
 	assert.Equal(t, domain.ChangePaused, entries[0].Action)
 	assert.Equal(t, domain.PauseOriginAutoArchive, entries[0].Origin)
 	assert.Empty(t, entries[0].Changes)
 	assert.Empty(t, changeRows(t, h, manuallyPaused), "the manual pause writes no second row")
-	assert.Empty(t, changeRows(t, h, completed))
 
 	// «История действий»: строка с именованной причиной для каждого
 	// поставленного на паузу правила, с отметкой происхождения в контексте.
@@ -114,7 +107,6 @@ func TestArchivePauseBridge_PausesAllLiveRules(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Contains(t, rows[0].searchable, "Платёж поставлен на паузу (объект ушёл в архив): Электричество")
 	assert.Equal(t, "auto_archive", rows[0].origin)
-	assert.Empty(t, h.actionJournalRows(t, "Завершён"))
 }
 
 func TestArchivePauseBridge_ResumeClosesOnlyAuto(t *testing.T) {

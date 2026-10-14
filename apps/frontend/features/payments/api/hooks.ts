@@ -556,32 +556,35 @@ export function useResumePayment(
 }
 
 /**
- * Завершение платежа (#1340): явная мутация ставит хранимый штамп
- * completedAt — терминальное состояние (read-only: пауза/правка дают 409,
- * правило скрыто из лент и списков, страница жива прямым чтением). Гейт
- * доступности — серверный CanBeCompleted; операции не трогаются, но
- * инвалидируются вместе с правилами — журнал изменений платежа получил
- * строку completed.
+ * Завершение платежа (#1377, ревизия #1340): мутация удаляет правило —
+ * гейт доступности серверный (CanBeCompleted); оплаченные операции остаются
+ * хвостом в истории объекта, звезда читателя падает вместе с правилом,
+ * повторное завершение — приватный 404. Ответа нет (204) — финальный экран
+ * рисуется из локального состояния страницы (прецедент успеха оплаты
+ * #1072) и от чтений не зависит: перечитывать удалённое правило нечего, а
+ * ин-флайт 404 перечитываний активных наблюдателей финал убить не могут.
+ * Кэш правил снимается (не инвалидируется): следующий маунт списка/детали
+ * прочитает свежее состояние; ленты операций и хаба перечитываются сразу —
+ * хвост пришёл в ленту объекта, правило скрыто из списков и счётчиков.
  */
 export function useCompletePayment(
   propertyId: string,
   paymentId: string,
-): UseMutationResult<Payment, ApiError, void> {
+): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
   return useGuardedMutation({
     mutationFn: async () => {
-      const response = await apiClient<PaymentResponseDto>(
+      await apiClient<void>(
         `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/complete`,
         { method: 'POST' },
       );
-      return mapPayment(response);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      // Правило удалено: детали и списки правил не перечитываются (refetch
+      // детали дал бы 404 под финальным экраном) — следующий маунт прочитает
+      // свежее состояние сам.
+      queryClient.removeQueries({ queryKey: paymentKeys.all });
       void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
-      // Завершённое правило скрыто из ленты, поиска и счётчиков хаба
-      // (глоссарий «Завершённый платёж», #1340): фид перечитывается,
-      // карточки не доживают до конца staleTime.
       void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
     },
   });
