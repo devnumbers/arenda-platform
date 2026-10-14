@@ -13,6 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The due event's copy shared by the frame tests (goconst).
+const (
+	testDueTitle = "Оплатите платёж"
+	testDueBody  = "Срок оплаты: 1 октября"
+)
+
 // fixedClock pins the envelope's occurredAt.
 type fixedClock struct{}
 
@@ -96,8 +102,8 @@ func TestNotificationCreatedWithoutDeepLinkOmitsURL(t *testing.T) {
 		UserID:    user,
 		Category:  domain.CategoryPaymentsOperations,
 		EventType: domain.EventPaymentDue,
-		Title:     "Оплатите платёж",
-		Body:      "Срок оплаты: 1 октября",
+		Title:     testDueTitle,
+		Body:      testDueBody,
 	})
 
 	f := receiveFrame(t, frames)
@@ -153,6 +159,69 @@ func TestNotificationCreatedFrameOmitsEmptyContextLabel(t *testing.T) {
 
 	f := receiveFrame(t, frames)
 	assert.NotContains(t, f.Data, `"contextLabel"`, "an empty context label is omitted, not an empty string")
+}
+
+func TestNotificationCreatedFrameCarriesPaymentCategory(t *testing.T) {
+	t.Parallel()
+
+	// Тост рисует иконку категории правила (решение владельца 14.10.2026):
+	// кадр везёт снимок категории из payload — аддитивное поле конверта v1,
+	// старые клиенты его игнорируют.
+	user := uuid.Must(uuid.NewV7())
+	hub, frames := subscribedHub(t, user)
+	publisher := NewPublisher(hub, fixedClock{})
+
+	publisher.NotificationCreated(context.Background(), domain.Notification{
+		ID:        uuid.Must(uuid.NewV7()),
+		UserID:    user,
+		Category:  domain.CategoryPaymentsOperations,
+		EventType: domain.EventPaymentDue,
+		Title:     testDueTitle,
+		Body:      testDueBody,
+		Payload: domain.Payload{
+			PaymentCategory: &domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceDefault, Slug: "rent"},
+		},
+	})
+
+	f := receiveFrame(t, frames)
+	var env struct {
+		Payload json.RawMessage `json:"payload"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(f.Data), &env))
+	var payload struct {
+		PaymentCategory *struct {
+			Source string `json:"source"`
+			Slug   string `json:"slug"`
+			Name   string `json:"name"`
+		} `json:"paymentCategory"`
+	}
+	require.NoError(t, json.Unmarshal(env.Payload, &payload))
+	require.NotNil(t, payload.PaymentCategory)
+	assert.Equal(t, "default", payload.PaymentCategory.Source)
+	assert.Equal(t, "rent", payload.PaymentCategory.Slug)
+	assert.Empty(t, payload.PaymentCategory.Name)
+}
+
+func TestNotificationCreatedFrameOmitsAbsentPaymentCategory(t *testing.T) {
+	t.Parallel()
+
+	// Строки, опубликованные до снимка категории, везут payload без него —
+	// поле отсутствует, а не пустой объект.
+	user := uuid.Must(uuid.NewV7())
+	hub, frames := subscribedHub(t, user)
+	publisher := NewPublisher(hub, fixedClock{})
+
+	publisher.NotificationCreated(context.Background(), domain.Notification{
+		ID:        uuid.Must(uuid.NewV7()),
+		UserID:    user,
+		Category:  domain.CategoryPaymentsOperations,
+		EventType: domain.EventPaymentDue,
+		Title:     testDueTitle,
+		Body:      testDueBody,
+	})
+
+	f := receiveFrame(t, frames)
+	assert.NotContains(t, f.Data, `"paymentCategory"`, "an absent category snapshot is omitted, not an empty object")
 }
 
 func TestUnreadCountFrame(t *testing.T) {

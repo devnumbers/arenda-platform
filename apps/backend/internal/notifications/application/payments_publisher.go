@@ -51,7 +51,13 @@ type PaymentScanTarget struct {
 	// same-origin streaming path, '' when the object has no photo (#1275).
 	PropertyType  string
 	PropertyPhoto string
-	OwnerID       uuid.UUID
+	// Category is the rule's category snapshot (решение владельца
+	// 14.10.2026) — the payload's icon key. A live rule always carries
+	// exactly one category reference (the payments category constraint pins
+	// slug xor user category); the pointer keeps the publisher honest for
+	// the scan rows read before the columns travelled.
+	Category *domain.PaymentCategoryRef
+	OwnerID  uuid.UUID
 }
 
 // PaymentScanSource is the payments scan's window into the payments context:
@@ -410,6 +416,9 @@ func (p *PaymentsPublisher) publish(ctx context.Context, eventType domain.EventT
 			},
 			PaymentID:   &target.PaymentID,
 			PaymentDate: &dueDate,
+			// The rule category's snapshot — the feed row's, the page's and
+			// the toast's icon key (решение владельца 14.10.2026).
+			PaymentCategory: target.Category,
 		},
 		Recipients: recipients,
 	})

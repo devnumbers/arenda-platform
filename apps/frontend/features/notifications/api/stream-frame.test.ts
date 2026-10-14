@@ -66,6 +66,52 @@ describe('parseStreamFrame — notification.created', () => {
       (parseStreamFrame('notification.created', frameData({ ...base, url: '/ok/path' })) as Extract<StreamFrame, { kind: 'created' }>).url,
     ).toBe('/ok/path');
   });
+
+  it('paymentCategory — снимок категории правила для иконки тоста (решение 14.10.2026): валидный проходит, мусор — undefined', () => {
+    const base = {
+      id: '00000000-0000-0000-0000-000000000001',
+      category: 'payments_operations',
+      title: 'Оплатите платёж',
+      body: 'Срок оплаты: 1 октября',
+    };
+    const parsed = parseStreamFrame(
+      'notification.created',
+      frameData({ ...base, paymentCategory: { source: 'default', slug: 'rent' } }),
+    );
+    expect((parsed as Extract<StreamFrame, { kind: 'created' }>).paymentCategory).toStrictEqual({
+      source: 'default',
+      slug: 'rent',
+    });
+
+    const parsedCustom = parseStreamFrame(
+      'notification.created',
+      frameData({ ...base, paymentCategory: { source: 'custom', name: 'Няня' } }),
+    );
+    expect((parsedCustom as Extract<StreamFrame, { kind: 'created' }>).paymentCategory).toStrictEqual({
+      source: 'custom',
+      name: 'Няня',
+    });
+
+    // Чужой source, не-строкие слаг/имя, не-объект — кадр остаётся валидным,
+    // слот просто не проходит (тост остаётся на каноне категории).
+    for (const garbage of [
+      { source: 'builtin', slug: 'rent' },
+      { source: 'default', slug: 42 },
+      { source: 'custom', name: 42 },
+      'rent',
+    ]) {
+      const parsedGarbage = parseStreamFrame(
+        'notification.created',
+        frameData({ ...base, paymentCategory: garbage }),
+      );
+      expect(parsedGarbage?.kind).toBe('created');
+      expect((parsedGarbage as Extract<StreamFrame, { kind: 'created' }>).paymentCategory).toBeUndefined();
+    }
+
+    // Кадры до снимка категории: слота нет — факт отсутствия.
+    const parsedWithout = parseStreamFrame('notification.created', frameData(base));
+    expect((parsedWithout as Extract<StreamFrame, { kind: 'created' }>).paymentCategory).toBeUndefined();
+  });
 });
 
 describe('parseStreamFrame — notification.unread_count', () => {

@@ -263,11 +263,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.id = $1::uuid
   AND o.date = $2::date
   AND o.status = 'paid'
@@ -285,16 +288,18 @@ type GetScheduledAutoPaidPaymentParams struct {
 }
 
 type GetScheduledAutoPaidPaymentRow struct {
-	PaymentID       pgtype.UUID `json:"payment_id"`
-	Date            pgtype.Date `json:"date"`
-	Title           string      `json:"title"`
-	AmountKopecks   int64       `json:"amount_kopecks"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
 // The auto-paid boundary job's delivery-time resolution (#1169): the
@@ -322,6 +327,8 @@ func (q *Queries) GetScheduledAutoPaidPayment(ctx context.Context, arg GetSchedu
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PaymentCategorySlug,
+		&i.PaymentCategoryName,
 		&i.OwnerID,
 	)
 	return i, err
@@ -401,11 +408,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.id = $1::uuid
   AND o.date = $2::date
   AND o.status = 'planned'
@@ -421,16 +431,18 @@ type GetScheduledDuePaymentParams struct {
 }
 
 type GetScheduledDuePaymentRow struct {
-	PaymentID       pgtype.UUID `json:"payment_id"`
-	Date            pgtype.Date `json:"date"`
-	Title           string      `json:"title"`
-	AmountKopecks   int64       `json:"amount_kopecks"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
 // The due boundary job's delivery-time resolution (issue #776): the
@@ -456,6 +468,8 @@ func (q *Queries) GetScheduledDuePayment(ctx context.Context, arg GetScheduledDu
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PaymentCategorySlug,
+		&i.PaymentCategoryName,
 		&i.OwnerID,
 	)
 	return i, err
@@ -473,11 +487,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.id = $1::uuid
   AND o.date = $2::date
   AND o.status = 'planned'
@@ -492,16 +509,18 @@ type GetScheduledOverduePaymentParams struct {
 }
 
 type GetScheduledOverduePaymentRow struct {
-	PaymentID       pgtype.UUID `json:"payment_id"`
-	Date            pgtype.Date `json:"date"`
-	Title           string      `json:"title"`
-	AmountKopecks   int64       `json:"amount_kopecks"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
 // The overdue boundary job's delivery-time resolution (issue #776): the
@@ -523,6 +542,8 @@ func (q *Queries) GetScheduledOverduePayment(ctx context.Context, arg GetSchedul
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PaymentCategorySlug,
+		&i.PaymentCategoryName,
 		&i.OwnerID,
 	)
 	return i, err
@@ -608,11 +629,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.id = $1::uuid
   AND o.date = $2::date
   AND o.status = 'planned'
@@ -628,16 +652,18 @@ type GetScheduledReminderPaymentParams struct {
 }
 
 type GetScheduledReminderPaymentRow struct {
-	PaymentID       pgtype.UUID `json:"payment_id"`
-	Date            pgtype.Date `json:"date"`
-	Title           string      `json:"title"`
-	AmountKopecks   int64       `json:"amount_kopecks"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
 // The reminder boundary job's delivery-time resolution (карта #822, #824):
@@ -660,6 +686,8 @@ func (q *Queries) GetScheduledReminderPayment(ctx context.Context, arg GetSchedu
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PaymentCategorySlug,
+		&i.PaymentCategoryName,
 		&i.OwnerID,
 	)
 	return i, err
@@ -819,11 +847,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE u.timezone = $1
   AND o.date = $2::date
   AND o.status = 'paid'
@@ -843,16 +874,18 @@ type ListPaymentAutoPaidTargetsParams struct {
 }
 
 type ListPaymentAutoPaidTargetsRow struct {
-	PaymentID       pgtype.UUID `json:"payment_id"`
-	Date            pgtype.Date `json:"date"`
-	Title           string      `json:"title"`
-	AmountKopecks   int64       `json:"amount_kopecks"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
 // One zone's auto-pay-executed operations as of the zone's today (#1169,
@@ -887,6 +920,8 @@ func (q *Queries) ListPaymentAutoPaidTargets(ctx context.Context, arg ListPaymen
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PaymentCategorySlug,
+			&i.PaymentCategoryName,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -911,11 +946,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE u.timezone = $1
   AND o.date = $2::date
   AND o.status = 'planned'
@@ -932,16 +970,18 @@ type ListPaymentDueTargetsParams struct {
 }
 
 type ListPaymentDueTargetsRow struct {
-	PaymentID       pgtype.UUID `json:"payment_id"`
-	Date            pgtype.Date `json:"date"`
-	Title           string      `json:"title"`
-	AmountKopecks   int64       `json:"amount_kopecks"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
 // One zone's due-day operations as of the zone's today (решение #737, тип
@@ -975,6 +1015,8 @@ func (q *Queries) ListPaymentDueTargets(ctx context.Context, arg ListPaymentDueT
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PaymentCategorySlug,
+			&i.PaymentCategoryName,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -999,11 +1041,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE u.timezone = $1
   AND o.date < $2::date
   AND o.status = 'planned'
@@ -1019,16 +1064,18 @@ type ListPaymentOverdueTargetsParams struct {
 }
 
 type ListPaymentOverdueTargetsRow struct {
-	PaymentID       pgtype.UUID `json:"payment_id"`
-	Date            pgtype.Date `json:"date"`
-	Title           string      `json:"title"`
-	AmountKopecks   int64       `json:"amount_kopecks"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
 // One zone's overdue operations as of the zone's today (решение #737, тип
@@ -1060,6 +1107,8 @@ func (q *Queries) ListPaymentOverdueTargets(ctx context.Context, arg ListPayment
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PaymentCategorySlug,
+			&i.PaymentCategoryName,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -1084,11 +1133,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE u.timezone = $1
   AND pay.reminder_offset_days IS NOT NULL
   AND (o.date - pay.reminder_offset_days) = $2::date
@@ -1105,16 +1157,18 @@ type ListPaymentReminderTargetsParams struct {
 }
 
 type ListPaymentReminderTargetsRow struct {
-	PaymentID       pgtype.UUID `json:"payment_id"`
-	Date            pgtype.Date `json:"date"`
-	Title           string      `json:"title"`
-	AmountKopecks   int64       `json:"amount_kopecks"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
 // One zone's reminder-day operations as of the zone's today (карта #822,
@@ -1145,6 +1199,8 @@ func (q *Queries) ListPaymentReminderTargets(ctx context.Context, arg ListPaymen
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PaymentCategorySlug,
+			&i.PaymentCategoryName,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err

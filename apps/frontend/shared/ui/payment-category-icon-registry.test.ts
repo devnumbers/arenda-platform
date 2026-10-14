@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   paymentCategories,
   userCategoryDefault,
-} from '@/features/payment-categories/lib/generated/categories';
-import { categoryIconComponents } from './icon-registry';
+} from '@/shared/model/payment-category-catalog';
+import { categoryIconComponents } from './payment-category-icon-registry';
 
 describe('реестр иконок покрывает каталог #447 целиком', () => {
   it('у каждой категории каталога есть компонент иконки', () => {

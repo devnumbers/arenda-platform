@@ -278,11 +278,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE u.timezone = $1
   AND o.date = $2::date
   AND o.status = 'planned'
@@ -313,11 +316,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE u.timezone = $1
   AND o.date < $2::date
   AND o.status = 'planned'
@@ -392,11 +398,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.id = $1::uuid
   AND o.date = $2::date
   AND o.status = 'planned'
@@ -422,11 +431,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.id = $1::uuid
   AND o.date = $2::date
   AND o.status = 'planned'
@@ -458,11 +470,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE u.timezone = $1
   AND o.date = $2::date
   AND o.status = 'paid'
@@ -521,11 +536,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.id = $1::uuid
   AND o.date = $2::date
   AND o.status = 'paid'
@@ -556,11 +574,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE u.timezone = $1
   AND pay.reminder_offset_days IS NOT NULL
   AND (o.date - pay.reminder_offset_days) = $2::date
@@ -610,11 +631,14 @@ SELECT pay.id AS payment_id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
        o.owner_id
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
 JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
 WHERE pay.id = $1::uuid
   AND o.date = $2::date
   AND o.status = 'planned'

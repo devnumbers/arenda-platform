@@ -98,6 +98,16 @@ export type NotificationTariffRef = {
   readonly activeUntil: string | null;
 };
 
+/** Снимок категории правила платежа (PaymentCategoryRef, решение владельца
+ * 14.10.2026) в payload платёжных событий: дискриминированный союз —
+ * дефолтный каталог едет слагом (иконка и цвет — метаданные каталога
+ * фронта, shared/model), пользовательская — именем-снимком. Нет у строк,
+ * опубликованных до снимка, — иконка деградирует в канон предыдущего
+ * поведения. */
+export type NotificationPaymentCategoryRef =
+  | { readonly source: 'default'; readonly slug: string }
+  | { readonly source: 'custom'; readonly name: string };
+
 /**
  * Payload страницы уведомления (решение #737): ссылки и снимки имён,
  * все поля опциональны — текст-снимок title/body самодостаточен, payload
@@ -111,6 +121,9 @@ export type NotificationPayload = {
   readonly paymentId?: string;
   /** Дата операции (решение #737: payment = правило + дата операции, #749). */
   readonly paymentDate?: string;
+  /** Снимок категории правила (решение владельца 14.10.2026) — ключ иконки
+   * строки ленты, страницы и тоста. */
+  readonly paymentCategory?: NotificationPaymentCategoryRef;
   readonly taskId?: string;
   /** Id правила задачи (задача просрочена, #750): экран задачи — экран её
    * правила, переход ведёт по нему. */

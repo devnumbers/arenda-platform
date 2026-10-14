@@ -41,7 +41,12 @@ export function NotificationToast({
         onClick={closeToast}
         className="flex w-full items-start gap-4 rounded-[24px] p-4 pr-16 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
-        <NotificationCategoryIcon category={frame.category} unread={false} badge={false} />
+        <NotificationCategoryIcon
+          category={frame.category}
+          unread={false}
+          badge={false}
+          paymentCategory={frame.paymentCategory}
+        />
         <span className="flex min-w-0 flex-1 flex-col gap-2">
           <span className="flex flex-col gap-1.5">
             {(frame.contextLabel !== null || frame.occurredAt !== '') && (

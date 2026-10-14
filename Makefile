@@ -108,7 +108,7 @@ ATTRIBUTES_ARTIFACTS := \
 CATEGORIES_DIR := tools/payment-categories
 CATEGORIES_ARTIFACTS := \
 	apps/backend/internal/payments/domain/zz_categories.gen.go \
-	apps/frontend/features/payment-categories/lib/generated/categories.ts
+	apps/frontend/shared/model/payment-category-catalog.ts
 
 # Every file versions-sync owns; versions-check hashes these before/after a
 # sync run (git hash-object, the freshness-gate idiom).
