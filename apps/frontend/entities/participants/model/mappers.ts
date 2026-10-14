@@ -15,7 +15,10 @@ function mapLeg(dto: ParticipantPropertyDto): ParticipantPropertyLeg {
     role: dto.role,
     status: dto.status,
     type: dto.type,
-    photoUrl: dto.photo_url ?? null,
+    // '' — легаси-форма «фото нет» (бэк до StringPtr-фикса провода шлёт
+    // пустую строку вопреки nullable-контракту): нормализуем к null,
+    // канону заглушек.
+    photoUrl: dto.photo_url === '' ? null : dto.photo_url,
   };
 }
 

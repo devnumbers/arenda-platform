@@ -115,7 +115,9 @@ func participantResponse(p accessapp.Participant) openapi.ParticipantResponse {
 			Role:       openapi.ParticipantPropertyResponseRole(leg.Role.String()),
 			Status:     openapi.ParticipantPropertyResponseStatus(leg.Status.String()),
 			Type:       openapi.PropertyType(leg.Type),
-			PhotoUrl:   new(leg.PhotoURL),
+			// '' (фото нет) → null: контракт nullable (ADR 0065), пустая
+			// строка на проводе глушит фолбэк заглушки клиента.
+			PhotoUrl: httpsupport.StringPtr(leg.PhotoURL),
 		})
 	}
 	return resp

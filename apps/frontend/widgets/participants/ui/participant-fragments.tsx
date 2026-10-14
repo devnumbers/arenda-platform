@@ -40,7 +40,10 @@ export const RIGHTS_ROW_ACTION_CLASS = cn(
 /** Круглый аватар объекта 44px (Category Icon из Figma): фото или глиф —
  * Bold/Objects у агрегатной строки «Все объекты», глиф типа объекта
  * (Category Icon, карта #1217; без типа — Bold/Home) у конкретных
- * объектов; белое кольцо 2.5px по компоненту (2008-81468). */
+ * объектов; белое кольцо 2.5px по компоненту (2008-81468). Гард '' —
+ * канон UserAvatar: легаси-бэк мог отдать пустую строку вместо null, а
+ * <img src=""> не стреляет onError в WebKit — без него круг без глифа
+ * (страница участника, фикс 14.10.2026). */
 export function ObjectAvatarGlyph({
   photoUrl,
   type,
@@ -54,9 +57,10 @@ export function ObjectAvatarGlyph({
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
   // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
   const [photoBroken, setPhotoBroken] = useState(false);
+  const showPhoto = photoUrl !== undefined && photoUrl !== '' && !photoBroken;
   return (
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-      {photoUrl !== undefined && !photoBroken ? (
+      {showPhoto ? (
         <img
           src={photoUrl}
           alt=""

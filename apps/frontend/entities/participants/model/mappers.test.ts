@@ -73,4 +73,22 @@ describe('mapParticipant — DTO → entity', () => {
 
     expect(noEmail.email).toBeUndefined();
   });
+
+  it('легаси-форма "" в ноге (бэк до null-фикса провода) — фото нет: нормализуем к null', () => {
+    const legacy = mapParticipant({
+      ...registeredDto,
+      properties: [
+        {
+          property_id: '33333333-3333-4333-8333-333333333333',
+          title: 'Квартиры на Ленина',
+          role: 'full_access',
+          status: 'active',
+          type: 'apartment',
+          photo_url: '',
+        },
+      ],
+    });
+
+    expect(legacy.properties[0]?.photoUrl).toBeNull();
+  });
 });
