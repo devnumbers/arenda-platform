@@ -168,6 +168,8 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   // его, отказ возвращает круг к серверному состоянию с тостом (ретрай —
   // повторный выбор).
   const [photoStage, setPhotoStage] = useState<MePhotoStage | null>(null);
+  // Проценты XHR-выгрузки (план 036) — кольцо слота; null — загрузки нет.
+  const [photoProgress, setPhotoProgress] = useState<number | null>(null);
   // Фото-мутация в полёте — управление слота глушится (одна картинка на
   // профиль, параллельные загрузка и удаление недопустимы).
   const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
@@ -179,13 +181,20 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
       if (previewUrl !== null) {
         setPhotoStage({ kind: 'file', file, previewUrl });
       }
-      uploadPhoto.mutate(file, {
-        onSuccess: () => setPhotoStage(null),
-        onError: (error) => {
-          setPhotoStage(null);
-          notify.scenarios.profile.photoUpdateError(error);
+      uploadPhoto.mutate(
+        { file, onProgress: setPhotoProgress },
+        {
+          onSuccess: () => {
+            setPhotoStage(null);
+            setPhotoProgress(null);
+          },
+          onError: (error) => {
+            setPhotoStage(null);
+            setPhotoProgress(null);
+            notify.scenarios.profile.photoUpdateError(error);
+          },
         },
-      });
+      );
     });
   };
 
@@ -234,6 +243,7 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
           photoUrl={me.photoUrl}
           stage={photoStage}
           busy={photoBusy}
+          progress={photoProgress}
           onFileChosen={handlePhotoFile}
           onRemove={handlePhotoRemove}
         />

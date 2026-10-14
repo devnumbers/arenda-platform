@@ -189,15 +189,17 @@ export function useDeleteContact(
  * без рефетча), книга инвалидается как обычная мутация карточки. Бастер
  * photoBuster инкрементится рядом: путь выдачи не меняется, без него
  * <img> показал бы прежние байты из кэша браузера (private, max-age=300).
+ * onProgress — проценты XHR-выгрузки (план 036), экран пишет их в стейт
+ * кольца слота.
  */
 export function useUploadContactPhoto(): UseMutationResult<
   Contact,
   ApiError,
-  { id: string; file: File }
+  { id: string; file: File; onProgress?: (percent: number) => void }
 > {
   const queryClient = useQueryClient();
   return useGuardedMutation({
-    mutationFn: ({ id, file }) => uploadContactPhoto({ id, file }),
+    mutationFn: ({ id, file, onProgress }) => uploadContactPhoto({ id, file, onProgress }),
     onSuccess: (contact, { id }) => {
       queryClient.setQueryData(contactKeys.detail(id), contact);
       bumpContactPhotoBuster(queryClient, id);

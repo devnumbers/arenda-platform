@@ -1,6 +1,7 @@
 import { queryOptions, type UseQueryOptions } from '@tanstack/react-query';
 import { apiClient, type ApiTransport } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
+import { uploadFile } from '@/shared/api/upload';
 import { mapContact } from '@/entities/contact';
 import type { Contact } from '@/entities/contact';
 import { contactKeys } from '@/shared/api/query-keys';
@@ -154,16 +155,21 @@ export function contactDetailQueryOptions({
 
 /** Загрузка/замена фото карточки — POST /contacts/{id}/photo multipart-
  * формой с полем `file` (ADR 0065); ответ — обновлённая карточка с новым
- * photoUrl, валидация и EXIF-стриж на бэкенде. */
-export async function uploadContactPhoto(
-  { id, file }: { readonly id: string; readonly file: File },
-  transport: ApiTransport = apiClient,
-): Promise<Contact> {
-  const body = new FormData();
-  body.append('file', file);
-  const response = await transport<ContactResponse>(
+ * photoUrl, валидация и EXIF-стриж на бэкенде. Транспорт — XHR-выгрузка
+ * с onprogress (план 036): fetch не отдаёт upload-progress. */
+export async function uploadContactPhoto({
+  id,
+  file,
+  onProgress,
+}: {
+  readonly id: string;
+  readonly file: File;
+  readonly onProgress?: (percent: number) => void;
+}): Promise<Contact> {
+  const response = await uploadFile<ContactResponse>(
     `/contacts/${encodeURIComponent(id)}/photo`,
-    { method: 'POST', body },
+    file,
+    onProgress,
   );
   return mapContact(response);
 }

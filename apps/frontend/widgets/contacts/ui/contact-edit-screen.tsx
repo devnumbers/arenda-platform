@@ -266,6 +266,8 @@ function ContactEditForm({
   // photo_key у карточки, параллельные загрузка и удаление недопустимы).
   const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
   const submitting = updateContact.isPending || photoBusy;
+  // Проценты XHR-выгрузки (план 036) — кольцо слота; null — загрузки нет.
+  const [photoProgress, setPhotoProgress] = useState<number | null>(null);
 
   const submit = async (): Promise<void> => {
     setSubmitAttempted(true);
@@ -292,7 +294,7 @@ function ContactEditForm({
     const photoWork: Promise<boolean> | null =
       photoStage?.kind === 'file'
         ? uploadPhoto
-            .mutateAsync({ id: contact.id, file: photoStage.file })
+            .mutateAsync({ id: contact.id, file: photoStage.file, onProgress: setPhotoProgress })
             .then(
               () => true,
               (error: unknown) => {
@@ -316,6 +318,8 @@ function ContactEditForm({
       fieldsWork,
       photoWork ?? Promise.resolve(true),
     ]);
+
+    setPhotoProgress(null);
 
     if (photoSaved && photoStage !== null) {
       setPhotoStage(null);
@@ -377,6 +381,7 @@ function ContactEditForm({
           photoUrl={contact.photoUrl}
           photoStage={photoStage}
           photoBusy={photoBusy}
+          photoProgress={photoProgress}
           onPhotoFile={handlePhotoFile}
           onPhotoRemove={handlePhotoRemove}
           errorOf={errorOf}

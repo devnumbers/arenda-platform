@@ -7,7 +7,7 @@ import {
   photoFileTooLarge,
 } from '@/shared/lib/photo';
 import { type MePhotoStage, mePhotoDisplay, useMePhotoBuster } from '@/features/profile';
-import { Button, ConfirmDialog, PhotoRemoveBadge } from '@/shared/ui/design';
+import { Button, ConfirmDialog, PhotoProgressRing, PhotoRemoveBadge } from '@/shared/ui/design';
 import { ProfileAvatar } from './profile-avatar';
 
 /**
@@ -43,6 +43,8 @@ export type ProfilePhotoSlotProps = {
   /** Фото-мутация в полёте — управление слота глушится, диалог держит
    * pending. */
   readonly busy: boolean;
+  /** Проценты выгрузки 0–100 (план 036); null — загрузки нет, кольца нет. */
+  readonly progress?: number | null;
   /** Файл выбран (кап уже проверен) — экран запускает загрузку сразу. */
   readonly onFileChosen: (file: File) => void;
   /** Удаление подтверждено — экран сразу вызывает DELETE. */
@@ -53,6 +55,7 @@ export function ProfilePhotoSlot({
   photoUrl,
   stage,
   busy,
+  progress = null,
   onFileChosen,
   onRemove,
 }: ProfilePhotoSlotProps): JSX.Element {
@@ -108,17 +111,13 @@ export function ProfilePhotoSlot({
 
   return (
     <div className="flex flex-col items-center gap-2">
-      {hasPhoto ? (
-        // Выемку правого-верхнего края держит пара: белое кольцо 2.5px на
-        // круге (CircleIcon white) и белая подложка бейджа (канон
-        // 1299:51572/73).
-        <div className="relative">
-          {avatarButton}
+      <div className="relative">
+        {avatarButton}
+        {progress !== null && <PhotoProgressRing percent={progress} />}
+        {hasPhoto && (
           <PhotoRemoveBadge disabled={busy} onClick={() => setRemoveConfirmOpen(true)} />
-        </div>
-      ) : (
-        avatarButton
-      )}
+        )}
+      </div>
       <input
         ref={fileInputRef}
         type="file"

@@ -33,6 +33,7 @@ export function ContactForm({
   photoUrl,
   photoStage,
   photoBusy,
+  photoProgress,
   onPhotoFile,
   onPhotoRemove,
   errorOf,
@@ -50,6 +51,8 @@ export function ContactForm({
   readonly photoStage: ContactPhotoStage | null;
   /** Фото-мутация сохранения в полёте — управление слота глушится. */
   readonly photoBusy: boolean;
+  /** Проценты XHR-выгрузки 0–100 (план 036); null — загрузки нет. */
+  readonly photoProgress?: number | null;
   /** Файл выбран (кап уже проверен слотом) — экран кладёт его в stage. */
   readonly onPhotoFile: (file: File) => void;
   /** Удаление фото подтверждено — экран переставляет stage. */
@@ -91,6 +94,7 @@ export function ContactForm({
           photoUrl={photoUrl}
           stage={photoStage}
           busy={photoBusy}
+          progress={photoProgress}
           onFileChosen={onPhotoFile}
           onRemove={onPhotoRemove}
         />

@@ -108,6 +108,8 @@ export function ContactCreateScreen({
   // применяется сабмитом. На создании серверного фото нет, удаление
   // подтверждением бейджа просто сбрасывает выбор — DELETE бэк не дергает.
   const [photoStage, setPhotoStage] = useState<ContactPhotoStage | null>(null);
+  // Проценты XHR-выгрузки (план 036) — кольцо слота; null — загрузки нет.
+  const [photoProgress, setPhotoProgress] = useState<number | null>(null);
 
   const handlePhotoFile = (file: File): void => {
     void readPhotoDataUrl(file).then((previewUrl) => {
@@ -152,9 +154,12 @@ export function ContactCreateScreen({
       // повторная отправка формы создала бы дубль.
       if (photoStage?.kind === 'file') {
         await uploadPhoto
-          .mutateAsync({ id: created.id, file: photoStage.file })
+          .mutateAsync({ id: created.id, file: photoStage.file, onProgress: setPhotoProgress })
           .catch((error: unknown) => {
             notify.scenarios.propertyContacts.photoUpdateError(error);
+          })
+          .finally(() => {
+            setPhotoProgress(null);
           });
       }
       if (returnToRentalWizard && propertyId !== undefined) {
@@ -283,6 +288,7 @@ export function ContactCreateScreen({
         <ContactForm
           form={form}
           photoStage={photoStage}
+          photoProgress={photoProgress}
           photoBusy={uploadPhoto.isPending}
           onPhotoFile={handlePhotoFile}
           onPhotoRemove={handlePhotoRemove}

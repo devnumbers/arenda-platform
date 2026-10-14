@@ -5,7 +5,7 @@ import { notify } from '@/shared/lib/notifications';
 import { BoldUser } from '@/shared/assets/icons';
 import { PHOTO_FILE_TOO_LARGE_MESSAGE, photoFileTooLarge } from '@/shared/lib/photo';
 import { type ContactPhotoStage, contactPhotoDisplay, useContactPhotoBuster } from '@/features/contacts';
-import { Button, circleIconRing, CirclePhoto, ConfirmDialog, PhotoRemoveBadge } from '@/shared/ui/design';
+import { Button, circleIconRing, CirclePhoto, ConfirmDialog, PhotoProgressRing, PhotoRemoveBadge } from '@/shared/ui/design';
 
 /**
  * Слот фото контакта в форме (тикет #1229; макеты 1281:48439 /
@@ -40,6 +40,8 @@ export type ContactPhotoSlotProps = {
   readonly stage: ContactPhotoStage | null;
   /** Фото-мутация сохранения в полёте — управление слота глушится. */
   readonly busy: boolean;
+  /** Проценты выгрузки 0–100 (план 036); null — загрузки нет, кольца нет. */
+  readonly progress?: number | null;
   /** Файл выбран (кап уже проверен) — экран кладёт его в stage. */
   readonly onFileChosen: (file: File) => void;
   /** Удаление подтверждено — экран решает stage по наличию серверного фото. */
@@ -51,6 +53,7 @@ export function ContactPhotoSlot({
   photoUrl,
   stage,
   busy,
+  progress = null,
   onFileChosen,
   onRemove,
 }: ContactPhotoSlotProps): JSX.Element {
@@ -112,14 +115,13 @@ export function ContactPhotoSlot({
 
   return (
     <div className="flex flex-col items-center gap-2">
-      {hasPhoto ? (
-        <div className="relative">
-          {photoCircleButton}
+      <div className="relative">
+        {photoCircleButton}
+        {progress !== null && <PhotoProgressRing percent={progress} />}
+        {hasPhoto && (
           <PhotoRemoveBadge disabled={busy} onClick={() => setRemoveConfirmOpen(true)} />
-        </div>
-      ) : (
-        photoCircleButton
-      )}
+        )}
+      </div>
       <input
         ref={fileInputRef}
         type="file"
