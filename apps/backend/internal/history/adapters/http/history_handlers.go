@@ -114,10 +114,12 @@ func (h *HistoryHandlers) GetHistoryFilters(w http.ResponseWriter, r *http.Reque
 			Name:      p.Name,
 			Email:     p.Email,
 			FirstName: p.FirstName,
-			PhotoUrl:  new(p.PhotoURL),
-			IsOwner:   p.IsOwner,
-			Role:      openapi.HistoryParticipantRole(p.Role),
-			Status:    openapi.HistoryParticipantStatus(p.Status),
+			// '' (фото нет) → null: контракт nullable (ADR 0065), пустая
+			// строка на проводе глушит фолбэк заглушки клиента.
+			PhotoUrl: httpsupport.StringPtr(p.PhotoURL),
+			IsOwner:  p.IsOwner,
+			Role:     openapi.HistoryParticipantRole(p.Role),
+			Status:   openapi.HistoryParticipantStatus(p.Status),
 		}
 	}
 	objects := make([]openapi.HistoryObject, len(options.Objects))
@@ -169,14 +171,16 @@ func historyPageResponse(page historyapp.FeedPage) openapi.HistoryPageResponse {
 			ActorEmail:     entry.ActorEmail,
 			ActorFirstName: entry.ActorFirstName,
 			ActorLastName:  entry.ActorLastName,
-			ActorPhotoUrl:  new(entry.ActorPhotoURL),
-			ActorRole:      openapi.HistoryItemActorRole(entry.ActorRole),
-			Kind:           openapi.HistoryItemKind(entry.Kind),
-			Action:         string(entry.Action),
-			BaseAction:     openapi.HistoryItemBaseAction(entry.BaseAction),
-			Segments:       segments,
-			Context:        entry.Context,
-			CreatedAt:      entry.CreatedAt,
+			// '' (фото нет) → null: контракт nullable (ADR 0065), пустая
+			// строка на проводе глушит фолбэк заглушки клиента.
+			ActorPhotoUrl: httpsupport.StringPtr(entry.ActorPhotoURL),
+			ActorRole:     openapi.HistoryItemActorRole(entry.ActorRole),
+			Kind:          openapi.HistoryItemKind(entry.Kind),
+			Action:        string(entry.Action),
+			BaseAction:    openapi.HistoryItemBaseAction(entry.BaseAction),
+			Segments:      segments,
+			Context:       entry.Context,
+			CreatedAt:     entry.CreatedAt,
 		}
 		// Легаси-строки (details NULL) уходят без поля — «не пишется», а не
 		// пустой массив (решение #1317 §2).
