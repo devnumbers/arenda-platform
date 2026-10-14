@@ -46,6 +46,10 @@ export type PropertyAvatarProps = ComponentProps<'span'> & {
   readonly type?: PropertyType;
   /** Красная точка (просроченные операции ИЛИ «подошла к концу», #584). */
   readonly withAttentionDot?: boolean;
+  /** Ленивая подача (#1423/035). Дефолт — по поверхности: card/row/feed/
+   * filter (ряды, карточки, ленты, шиты) — lazy, hero шапок — eager;
+   * проп перекрывает дефолт. */
+  readonly loading?: 'lazy';
 };
 
 const SURFACE_BOX: Record<NonNullable<PropertyAvatarProps['surface']>, string> = {
@@ -79,11 +83,14 @@ export function PropertyAvatar({
   surface = 'card',
   type,
   withAttentionDot = false,
+  loading,
   className,
   ...props
 }: PropertyAvatarProps): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
+  // Ленивая подача по поверхности (#1423/035): жадный — только hero шапок.
+  const effectiveLoading = loading ?? (surface === 'hero' ? undefined : 'lazy');
 
   return (
     <span
@@ -98,6 +105,7 @@ export function PropertyAvatar({
       >
         <CirclePhoto
           photoUrl={photoUrl}
+          loading={effectiveLoading}
           glyph={<Glyph className={cn('text-[#D3D7D9]', SURFACE_ICON[surface])} aria-hidden />}
         />
       </span>

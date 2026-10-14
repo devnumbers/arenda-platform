@@ -17,6 +17,9 @@ export type UserAvatarProps = Omit<ComponentProps<'span'>, 'children'> & {
   /** Подложка круга (CircleIcon): white — строки на белом, muted — на
    * серых карточках. */
   readonly variant?: 'white' | 'muted';
+  /** Ленивая подача (#1423/035). Дефолт — по размеру: row (ряды списков
+   * и лент) — lazy, hero шапок — eager; проп перекрывает дефолт. */
+  readonly loading?: 'lazy';
 };
 
 const SIZE_BOX: Record<NonNullable<UserAvatarProps['size']>, string> = {
@@ -41,6 +44,7 @@ export function UserAvatar({
   photoUrl,
   size = 'row',
   variant = 'white',
+  loading,
   className,
   ...props
 }: UserAvatarProps): JSX.Element {
@@ -49,6 +53,8 @@ export function UserAvatar({
   // Клип включается по факту фото; после onError глиф остаётся в том же
   // круге — класс на отображение не влияет.
   const showPhoto = photoUrl != null && photoUrl !== '';
+  // Ленивая подача по размеру (#1423/035): жадный — только hero шапок.
+  const effectiveLoading = loading ?? (size === 'hero' ? undefined : 'lazy');
 
   return (
     <CircleIcon
@@ -59,6 +65,7 @@ export function UserAvatar({
     >
       <CirclePhoto
         photoUrl={photoUrl}
+        loading={effectiveLoading}
         glyph={<BoldUser className={SIZE_GLYPH[size]} />}
       />
     </CircleIcon>
