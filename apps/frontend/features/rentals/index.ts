@@ -48,7 +48,7 @@ export {
 } from './lib/rental-wizard-session';
 export {
   consumeRentalCompleteResume,
-  fulfilRentalCompleteResume,
+  fulfillRentalCompleteResume,
   requestRentalCompleteResume,
 } from './lib/rental-complete-resume-session';
 export type { RentalCompleteResumeAction } from './lib/rental-complete-resume-session';

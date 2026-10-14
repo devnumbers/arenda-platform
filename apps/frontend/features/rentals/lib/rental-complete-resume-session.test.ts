@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   consumeRentalCompleteResume,
-  fulfilRentalCompleteResume,
+  fulfillRentalCompleteResume,
   requestRentalCompleteResume,
 } from './rental-complete-resume-session';
 
@@ -18,43 +18,43 @@ describe('rental-complete-resume-session (продолжение статуса 
 
   it('запрос → успешное завершение в мастере → consume отдаёт действие один раз', () => {
     requestRentalCompleteResume('p1', 'archive');
-    fulfilRentalCompleteResume('p1');
+    fulfillRentalCompleteResume('p1');
     expect(consumeRentalCompleteResume('p1')).toBe('archive');
     expect(consumeRentalCompleteResume('p1')).toBeNull();
   });
 
   it('метка «ремонт» доезжает так же', () => {
     requestRentalCompleteResume('p1', 'maintenance');
-    fulfilRentalCompleteResume('p1');
+    fulfillRentalCompleteResume('p1');
     expect(consumeRentalCompleteResume('p1')).toBe('maintenance');
   });
 
   it('повторный запрос перезаписывает действие — гард сработал заново с другим статусом', () => {
     requestRentalCompleteResume('p1', 'archive');
     requestRentalCompleteResume('p1', 'maintenance');
-    fulfilRentalCompleteResume('p1');
+    fulfillRentalCompleteResume('p1');
     expect(consumeRentalCompleteResume('p1')).toBe('maintenance');
   });
 
   it('ключ — объект: чужая страница не потребляет и не гасит чужую метку', () => {
     requestRentalCompleteResume('p1', 'archive');
     expect(consumeRentalCompleteResume('p2')).toBeNull();
-    fulfilRentalCompleteResume('p1');
+    fulfillRentalCompleteResume('p1');
     expect(consumeRentalCompleteResume('p2')).toBeNull();
     expect(consumeRentalCompleteResume('p1')).toBe('archive');
   });
 
   it('fulfil без запроса — no-op', () => {
-    fulfilRentalCompleteResume('p1');
+    fulfillRentalCompleteResume('p1');
     expect(consumeRentalCompleteResume('p1')).toBeNull();
   });
 
   it('новый запрос после исполненной и потреблённой метки работает заново', () => {
     requestRentalCompleteResume('p1', 'archive');
-    fulfilRentalCompleteResume('p1');
+    fulfillRentalCompleteResume('p1');
     consumeRentalCompleteResume('p1');
     requestRentalCompleteResume('p1', 'maintenance');
-    fulfilRentalCompleteResume('p1');
+    fulfillRentalCompleteResume('p1');
     expect(consumeRentalCompleteResume('p1')).toBe('maintenance');
     expect(consumeRentalCompleteResume('p1')).toBeNull();
   });

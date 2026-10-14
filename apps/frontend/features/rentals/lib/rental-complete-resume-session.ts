@@ -12,7 +12,7 @@
  *
  * Контракт трёх ручек: гард страницы объекта ставит метку до ухода в
  * мастер (`request`), мастер после успешной мутации завершения помечает
- * её исполненной (`fulfil`), страница объекта при монтировании потребляет
+ * её исполненной (`fulfill`), страница объекта при монтировании потребляет
  * её одноразово (`consume`). Потребление всегда гасит метку: незавершённая
  * (мастер закрыли) статус не даёт — иначе возврат «назад» из мастера
  * применял бы то, чего не было; исполненная ждёт страницу объекта и
@@ -40,7 +40,7 @@ export function requestRentalCompleteResume(
 
 /** Мастер завершил аренду успешно — метка исполнена, статус можно
  * применять. Без метки — no-op (мастер открыт не из-под гарда). */
-export function fulfilRentalCompleteResume(propertyId: string): void {
+export function fulfillRentalCompleteResume(propertyId: string): void {
   const entry = resumes.get(propertyId);
   if (entry !== undefined) {
     entry.fulfilled = true;

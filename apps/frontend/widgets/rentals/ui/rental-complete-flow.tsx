@@ -17,7 +17,7 @@ import {
 import {
   buildRentalCompleteCommand,
   completePlannedEndDate,
-  fulfilRentalCompleteResume,
+  fulfillRentalCompleteResume,
   rentalCompletedTitle,
   useCompleteRental,
   useRentalSummary,
@@ -488,7 +488,7 @@ export function RentalCompleteFlow({
       // статуса — после успеха она исполнена, и страница объекта применит
       // отложенный статус (ремонт/архив) сама (решение владельца
       // 14.10.2026). Без метки — no-op.
-      fulfilRentalCompleteResume(rental.propertyId);
+      fulfillRentalCompleteResume(rental.propertyId);
       setCompleted(updated);
     } catch (error: unknown) {
       notify.scenarios.rentals.completeError(error);
