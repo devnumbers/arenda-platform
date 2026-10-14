@@ -263,7 +263,7 @@ test.describe('секция «На оплату» — экраны хаба и �
     await expect(
       page
         .getByTestId('payments-section-due')
-        .getByText('Здесь будут платежи, которые скоро нужно оплатить'),
+        .getByText('Здесь будут платежи на оплату'),
     ).toBeVisible();
   });
 });

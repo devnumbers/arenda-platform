@@ -57,7 +57,7 @@ import {
     SkeletonShowcaseSection,
 } from './sections/feedback';
 import { LiveValueSection } from './sections/live-value';
-import { DragScrollSection } from './sections/drag-scroll';
+import { SnapRailSection } from './sections/snap-rail';
 import { SearchPillSection } from './sections/search-pill';
 
 /** Витрина дизайн-слоя (ADR 0050, тикет #455): шадкн/ui поверх Radix,
@@ -121,7 +121,7 @@ export function DesignLayerShowcase(): JSX.Element {
                 <SkeletonPrimitivesSection />
                 <InfiniteQueryTailSection />
                 <LiveValueSection />
-                <DragScrollSection />
+                <SnapRailSection />
                 <ConfirmDialogSection />
                 <StickyBottomBarSection />
                 <SuccessPopupSection />

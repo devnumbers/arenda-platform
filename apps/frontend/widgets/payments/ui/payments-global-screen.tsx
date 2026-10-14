@@ -38,7 +38,7 @@ import {
   Skeleton,
   TopNav,
 } from "@/shared/ui/design";
-import { DragScrollRail } from "@/shared/ui/drag-scroll";
+import { SnapRail } from "@/shared/ui/snap-rail";
 import { globalFavoritePayments,
   globalOverduePayments,
   globalPaymentObjectHasOverdue,
@@ -390,12 +390,12 @@ function PaymentsGlobalSection({
   );
 }
 
-/** Лента секции хаба: канонный DragScrollRail (mouse-drag прокси #1349,
- * research/apple-style-drag-hub-sections.md) с bleed на мобайл-ярусе
- * (≤560): `-mx-6` гасит собственный `px-6` обёртки хаба (легитимный
- * inner -mx против контейнерного паддинга, «Column width rule»), `px-6`
- * держит карточки на визуальной линии 24, `scroll-padding-inline: 24px`
- * держит там же и snap-точки — первый/последний снап не липнет к краю. */
+/** Лента секции хаба: канонный SnapRail (Embla dragFree: 'snap' #1349,
+ * механика — DESIGN.md §8 «Drag горизонтальных snap-лент») с bleed на
+ * мобайл-ярусе (≤560): `-mx-6` гасит собственный `px-6` обёртки хаба
+ * (легитимный inner -mx против контейнерного паддинга, «Column width
+ * rule»), `px-6` держит карточки на визуальной линии 24 — контейнер Embla
+ * сидит внутри паддинга, поэтому линия 24 и есть линия снапа. */
 function SectionRail({
   testId,
   children,
@@ -404,12 +404,9 @@ function SectionRail({
   readonly children: ReactNode;
 }): JSX.Element {
   return (
-    <DragScrollRail
-      testId={testId}
-      className="max-tablet:-mx-6 max-tablet:px-6 max-tablet:[scroll-padding-inline:24px]"
-    >
+    <SnapRail testId={testId} className="max-tablet:-mx-6 max-tablet:px-6">
       {children}
-    </DragScrollRail>
+    </SnapRail>
   );
 }
 
@@ -440,7 +437,6 @@ function FavoritesSectionBody({
         return (
           <PaymentCardButton
             key={payment.id}
-            className="snap-start"
             leading={<GlobalPaymentRuleIcon payment={payment} surface="muted" />}
             title={payment.title}
             subtitle={payment.propertyName}
@@ -451,7 +447,6 @@ function FavoritesSectionBody({
         );
       })}
       <PaymentCardButton
-        className="snap-start"
         leading={
           <GlobalCardIcon>
             <BoldStar />
@@ -506,7 +501,6 @@ function OverdueSectionBody({
         return (
           <PaymentCardButton
             key={payment.id}
-            className="snap-start"
             leading={
               <CategoryIcon
                 icon={style.icon}
@@ -532,7 +526,6 @@ function OverdueSectionBody({
         );
       })}
       <PaymentCardButton
-        className="snap-start"
         leading={
           <GlobalCardIcon>
             <BoldWarning />
@@ -567,7 +560,7 @@ function DueSectionBody({
   if (due.length === 0) {
     return (
       <PaymentsGlobalPlaceholder image="/images/payments/due-empty.png">
-        Здесь будут платежи, которые скоро нужно оплатить
+        Здесь будут платежи на оплату
       </PaymentsGlobalPlaceholder>
     );
   }
@@ -580,7 +573,6 @@ function DueSectionBody({
         return (
           <PaymentCardButton
             key={item.operationId}
-            className="snap-start"
             leading={
               <CategoryIcon
                 icon={style.icon}
@@ -599,7 +591,6 @@ function DueSectionBody({
       })}
       {paymentHubSectionHasAllCard(due.length) && (
         <PaymentCardButton
-          className="snap-start"
           leading={
             <GlobalCardIcon>
               <BoldClock />
@@ -641,7 +632,6 @@ function ObjectsSectionBody({
       {objects.map((object) => (
         <PaymentCardButton
           key={object.propertyId}
-          className="snap-start"
           leading={
             // Канонный аватар «глобальных платежей» (решение #1286): фото
             // из DTO GlobalPaymentObject.photoUrl (#582) во весь круг 44 —
@@ -660,7 +650,6 @@ function ObjectsSectionBody({
       ))}
       {objects.length > 1 && (
         <PaymentCardButton
-          className="snap-start"
           leading={
             <GlobalCardIcon>
               <BoldObjects />
@@ -675,8 +664,10 @@ function ObjectsSectionBody({
   );
 }
 
-/** Пустая секция (880:17866): серая карточка с пояснением и 3D-
- * иллюстрацией из Figma справа. */
+/** Пустая секция (1043:52801/52802, сверно 13.10): серая карточка —
+ * текст-плейсхолдер слева и 3D-иллюстрация 64 из Figma справа; высота —
+ * hug по контенту, боковые поля асимметричны (28 слева / 24 справа,
+ * как в макете). */
 function PaymentsGlobalPlaceholder({
   image,
   children,
@@ -685,7 +676,7 @@ function PaymentsGlobalPlaceholder({
   readonly children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex min-h-16 w-full items-center gap-6 rounded-card bg-surface-muted px-6">
+    <div className="flex w-full items-center gap-6 rounded-card bg-surface-muted pl-7 pr-6">
       <p className="min-w-0 flex-1 text-base leading-[18px] text-content-secondary">
         {children}
       </p>
