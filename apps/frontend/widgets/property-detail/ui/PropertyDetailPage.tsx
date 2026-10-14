@@ -19,7 +19,15 @@ import {
 } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
 import { useLeaveProperty } from '@/features/participants';
-import {useRentals, rentalActionState, useCompleteRental, useDeleteRental, type RentalActionState} from '@/features/rentals';
+import {
+  consumeRentalCompleteResume,
+  requestRentalCompleteResume,
+  useDeleteRental,
+  useRentals,
+  rentalActionState,
+  type RentalActionState,
+  type RentalCompleteResumeAction,
+} from '@/features/rentals';
 import {
   operationsMonthOf,
   operationsMonthRange,
@@ -108,12 +116,13 @@ function showMutationError(error: ApiError): void {
  * Занятость (срез машины «Действий аренды», #986) приходит из аренд
  * объекта: Начать ↔ Удалить («Ожидает начала») ↔ Завершить.
  *
- * Быстрое завершение аренды (#627; Figma 1583:56380): «Завершить аренду» —
- * из шита статуса, «Управления» и кнопки блока «Аренда» — открывает
- * канон-подтверждение «Завершить аренду?»; подтверждение завершает аренду
- * сегодняшней датой без возврата залога, тост результата, деталь
- * обновляется (секция «Аренда» — обычное пустое). Полный мастер с датой
- * и залогом остаётся на детализации аренды (#534).
+ * Завершение аренды — единый путь через мастер итогов (#534; решение
+ * владельца 14.10.2026): «Завершить аренду» — из шита статуса,
+ * «Управления» и кнопки блока «Аренда» — открывает мастер
+ * /properties/[id]/rentals/complete (дата, залог, итоги); быстрый шит
+ * #627 (Figma 1583:56380) снесён. Смотрящему мастер честно отказывает
+ * (ADR 0053 §3). Гард удаления (#632) ведёт туда же — удаление объекта
+ * повторяется вручную после завершения.
  *
  * Машина «Действий аренды» (#986, карта #984; rentals/CONTEXT.md):
  * арендная строка поверхностей объекта — срез одного доменного селектора
@@ -125,15 +134,15 @@ function showMutationError(error: ApiError): void {
  *
  * Guard смены статуса (#628; Figma 1583:55882): у объекта с незавершённой
  * арендой «Объект на ремонте» и «Перевести в архив» открывают шит «Нельзя
- * изменить статус…». Подтверждение — составное действие по машине: у
- * идущей аренды «Завершить» завершает её (#627, сегодняшней датой) и тут
- * же применяет выбранный статус (решение владельца 12.09, против
- * двухшаговой аннотации макета); у «Ожидает начала» «Удалить аренду»
- * сносит аренду (#985) и тут же применяет статус (решение владельца
- * 30.09 — завершение будущей аренды не существует). Один объединённый
- * тост; отказ смены статуса после успеха первой мутации — тост ошибки,
- * аренда остаётся завершённой/удалённой. Без аренды — прежнее поведение
- * (мутация / архивный конфирм).
+ * изменить статус…». Подтверждение — по машине: у идущей аренды — уход в
+ * мастер итогов с меткой продолжения (rental-complete-resume-session),
+ * выбранный статус применяется автоматически после успешного завершения
+ * (решение владельца 14.10.2026; прежде было составное прямое завершение,
+ * решение 12.09); у «Ожидает начала» «Удалить аренду» сносит аренду
+ * (#985) и тут же применяет статус (решение владельца 30.09 — завершение
+ * будущей аренды не существует). Отказ авто-статуса — тост ошибки,
+ * повтор ручной (гард после завершения не стоит). Без аренды — прежнее
+ * поведение (мутация / архивный конфирм).
  *
  * Шит перед пином (#630; Figma 1583:57452): «Сделать основным» из
  * «Управления» не мутирует сразу — открывает шит-объяснение
@@ -224,7 +233,6 @@ export function PropertyDetailPage(): JSX.Element {
     // Ветка тоже замирает на момент открытия — так же, как у гарда #628.
     const [deleteGuardOpen, setDeleteGuardOpen] = React.useState(false);
     const [deleteGuardUpcoming, setDeleteGuardUpcoming] = React.useState(false);
-    const [completeSheetOpen, setCompleteSheetOpen] = React.useState(false);
     // Шит удаления аренды (#986; «Ожидает начала»): канон удаления
     // завершённой аренды (rental-completed-screen).
     const [deleteRentalSheetOpen, setDeleteRentalSheetOpen] = React.useState(false);
@@ -262,11 +270,9 @@ export function PropertyDetailPage(): JSX.Element {
     const rentalSectionVisible = property
         ? isRentalSectionVisible(property.status, rentalState, hasCompletedRentals)
         : true;
-    // Один сентинел и для хука, и для гарда мутации (#627): id пуст до
-    // загрузки аренд — сам хук безобиден, вызов мутации гардится в
-    // handleCompleteRental / handleDeleteRental.
+    // Сентинел хука удаления: id пуст до загрузки аренд — сам хук
+    // безобиден, вызов мутации гардится в handleDeleteRental.
     const currentRentalId = currentRental?.id ?? null;
-    const completeRental = useCompleteRental(id, currentRentalId ?? '');
     const deleteRental = useDeleteRental(id, currentRentalId ?? '');
 
     const payments = paymentsQuery.data ?? [];
@@ -349,25 +355,47 @@ export function PropertyDetailPage(): JSX.Element {
         });
     };
 
-    // Быстрое завершение (#627): сегодняшней датой, без записи о возврате
-    // залога (полный мастер с датой и залогом — на детализации аренды,
-    // #534). Повторное завершение — 409: тост ошибки, шит остаётся
-    // открытым (кнопка выходит из loading — можно повторить или отменить).
-    const handleCompleteRental = () => {
-        if (currentRentalId === null) {
+    // Продолжение смены статуса после завершения аренды (#628, решение
+    // владельца 14.10.2026): гард уводит в мастер итогов с меткой
+    // продолжения — здесь, после успешного завершения, метку потребляем
+    // одноразово и применяем статус теми же мутациями, что стояли за
+    // гардом (ремонт или архив), с их тостами. Отказ — тост ошибки,
+    // статус повторяется вручную: аренда уже завершена, гард не стоит.
+    //
+    // Чтение — строго раз на монтирование (ref): инстанс страницы,
+    // из-под гарда которого ушёл в мастер, не должен проглотить свежую
+    // метку перерендером подтверждения (эффект применения гоняется на
+    // каждом рендере — объекты мутаций нестабильны, поэтому применение
+    // гвардится ref'ом, а не deps). Незавершённая метка всё равно гаснет
+    // чтением — «назад» из мастера ничего не применяет.
+    const resumeRef = React.useRef<RentalCompleteResumeAction | null>(null);
+    React.useEffect(() => {
+        const resume = consumeRentalCompleteResume(id);
+        if (resume !== null) {
+            resumeRef.current = resume;
+        }
+    }, [id]);
+    React.useEffect(() => {
+        if (!propertyLoaded || resumeRef.current === null) {
             return;
         }
-        completeRental.mutate(
-            {completedDate: dateToIsoLocal(new Date())},
-            {
-                onSuccess: () => {
-                    setCompleteSheetOpen(false);
-                    notify.scenarios.rentals.completed();
+        const resume = resumeRef.current;
+        resumeRef.current = null;
+        if (resume === 'archive') {
+            archiveProperty.mutate(id, {
+                onSuccess: () => notify.scenarios.property.archivedAfterRental(),
+                onError: showMutationError,
+            });
+        } else {
+            updateProperty.mutate(
+                {id, data: {status: 'maintenance'}},
+                {
+                    onSuccess: () => notify.scenarios.property.maintenanceAfterRental(),
+                    onError: showMutationError,
                 },
-                onError: (error) => notify.scenarios.rentals.completeError(error),
-            },
-        );
-    };
+            );
+        }
+    }, [propertyLoaded, id, archiveProperty, updateProperty]);
 
     // Удаление аренды «Ожидает начала» (#986, «передумал до старта»):
     // DELETE уносит аренду вместе с платём (бэк #985 — 204), объект
@@ -384,59 +412,55 @@ export function PropertyDetailPage(): JSX.Element {
         });
     };
 
-    // Guard #628 — составное подтверждение по машине (#986): у идущей
-    // аренды «Завершить» завершает её сегодняшней датой (как #627) и тут
-    // же применяет выбранный под гардом статус (ремонт или архив; решение
-    // владельца 12.09). У «Ожидает начала» завершения не существует —
-    // «Удалить аренду» сносит её (DELETE #985) и тут же применяет статус
-    // (решение владельца 30.09). Кнопка в loading на всю цепочку. Отказ
-    // смены статуса после успеха первой мутации — тост ошибки, аренда
-    // остаётся завершённой/удалённой, повтор — ручной (пункт уже без
-    // гарда); отказ первой мутации — шит остаётся открытым, как в #627.
+    // Guard #628 — разводка по машине (#986). У «Ожидает начала»
+    // завершения не существует — «Удалить аренду» сносит её (DELETE #985)
+    // и тут же применяет выбранный под гардом статус (решение владельца
+    // 30.09); кнопка в loading на всю цепочку, отказ смены статуса после
+    // успеха удаления — тост ошибки, повтор ручной. У идущей аренды
+    // прямого завершения больше нет (решение владельца 14.10.2026):
+    // подтверждение уводит в мастер итогов (#534) с меткой продолжения —
+    // статус применит страница объекта после успешного завершения
+    // (эффект consume выше).
     const handleGuardConfirm = () => {
         if (guardedAction === null) {
             return;
         }
         const action = guardedAction;
-        const finishStatus = {
-            onSuccess: () => {
-                setGuardedAction(null);
-                if (action === 'archive') {
-                    notify.scenarios.property.archivedAfterRental();
-                } else {
-                    notify.scenarios.property.maintenanceAfterRental();
-                }
-            },
-            onError: (error: ApiError) => {
-                setGuardedAction(null);
-                showMutationError(error);
-            },
-        };
-        const applyStatus = () => {
-            if (action === 'archive') {
-                archiveProperty.mutate(id, finishStatus);
-            } else {
-                updateProperty.mutate(
-                    {id, data: {status: 'maintenance'}},
-                    finishStatus,
-                );
-            }
-        };
         if (guardUpcoming) {
+            const finishStatus = {
+                onSuccess: () => {
+                    setGuardedAction(null);
+                    if (action === 'archive') {
+                        notify.scenarios.property.archivedAfterRental();
+                    } else {
+                        notify.scenarios.property.maintenanceAfterRental();
+                    }
+                },
+                onError: (error: ApiError) => {
+                    setGuardedAction(null);
+                    showMutationError(error);
+                },
+            };
+            const applyStatus = () => {
+                if (action === 'archive') {
+                    archiveProperty.mutate(id, finishStatus);
+                } else {
+                    updateProperty.mutate(
+                        {id, data: {status: 'maintenance'}},
+                        finishStatus,
+                    );
+                }
+            };
             deleteRental.mutate(undefined, {
                 onSuccess: applyStatus,
                 onError: (error) => notify.scenarios.rentals.deleteError(error),
             });
             return;
         }
-        // Дальше — ветка идущей аренды: завершение сегодняшней датой.
-        completeRental.mutate(
-            {completedDate: dateToIsoLocal(new Date())},
-            {
-                onSuccess: applyStatus,
-                onError: (error) => notify.scenarios.rentals.completeError(error),
-            },
-        );
+        // Ветка идущей аренды: в мастер итогов с меткой продолжения.
+        setGuardedAction(null);
+        requestRentalCompleteResume(id, action === 'archive' ? 'archive' : 'maintenance');
+        router.push(ROUTES.propertyRentalComplete(id));
     };
 
     // Подтверждение шита пина (#630): исполняет «Сделать основным».
@@ -494,7 +518,10 @@ export function PropertyDetailPage(): JSX.Element {
                 router.push(ROUTES.propertyRentalNew(id));
                 break;
             case 'complete-rental':
-                setCompleteSheetOpen(true);
+                // Единый путь завершения (#534, решение владельца
+                // 14.10.2026): мастер итогов — быстрого шита #627 больше
+                // нет.
+                router.push(ROUTES.propertyRentalComplete(id));
                 break;
             case 'delete-rental':
                 setDeleteRentalSheetOpen(true);
@@ -681,15 +708,12 @@ export function PropertyDetailPage(): JSX.Element {
                                     <PropertyRentalBlock
                                         rental={currentRental}
                                         onExtend={() => router.push(ROUTES.propertyRentalExtend(id))}
-                                        // Смотрящему — старый путь в мастер с его
-                                        // честным отказом (writeGate ADR 0053 §3):
-                                        // шит с последующим 403 смотрителю не даёт
-                                        // ничего (решение ревью #627).
-                                        onComplete={
-                                            permissions.canMutate
-                                                ? () => setCompleteSheetOpen(true)
-                                                : () => router.push(ROUTES.propertyRentalComplete(id))
-                                        }
+                                        // Единый путь завершения — мастер итогов
+                                        // (#534, решение владельца 14.10.2026);
+                                        // смотрящему мастер честно откажет
+                                        // (writeGate ADR 0053 §3, решение
+                                        // ревью #627).
+                                        onComplete={() => router.push(ROUTES.propertyRentalComplete(id))}
                                     />
                                 ) : (
                                     <PropertySectionEmpty
@@ -889,12 +913,12 @@ export function PropertyDetailPage(): JSX.Element {
 
             {/* Guard-шит (#628, Figma 1583:55882): сменить статус объекту
              * с незавершённой арендой нельзя — подпись макета R/400 16/18.
-             * Подтверждение — составное действие по машине (#986): у
-             * идущей аренды «Завершить» завершает её (#627) и тут же
-             * применяет статус; у «Ожидает начала» «Удалить аренду»
-             * сносит аренду (#985) и тут же применяет статус (решение
-             * владельца 30.09). pending на обе мутации, закрытие
-             * глушится. */}
+             * Подтверждение — по машине (#986): у идущей аренды — уход в
+             * мастер итогов с меткой продолжения, статус применится после
+             * успешного завершения (решение владельца 14.10.2026); у
+             * «Ожидает начала» «Удалить аренду» сносит аренду (#985) и
+             * тут же применяет статус (решение владельца 30.09) — pending
+             * на всю цепочку, закрытие глушится. */}
             <ConfirmDialog
                 open={guardedAction !== null}
                 onOpenChange={(open) => {
@@ -909,16 +933,16 @@ export function PropertyDetailPage(): JSX.Element {
                     ? 'Удалите аренду, чтобы изменить статус объекта'
                     : 'Завершите аренду, чтобы изменить статус объекта'}
                 descriptionClassName="text-base leading-[18px]"
-                confirmLabel={guardUpcoming ? 'Удалить аренду' : 'Завершить'}
+                confirmLabel={guardUpcoming ? 'Удалить аренду' : 'Завершить аренду'}
                 cancelLabel="Отменить"
-                pending={completeRental.isPending || deleteRental.isPending || updateProperty.isPending || archiveProperty.isPending}
+                pending={deleteRental.isPending || updateProperty.isPending || archiveProperty.isPending}
                 onConfirm={handleGuardConfirm}
             />
 
             {/* Guard удаления (#632): «Удалить объект» у объекта с
              * незавершённой арендой не доходит до шита удаления — сперва
-             * разводка машины (#986): «Завершить аренду» открывает шит
-             * завершения #627, «Удалить аренду» — шит удаления аренды.
+             * разводка машины (#986): «Завершить аренду» ведёт в мастер
+             * итогов (#534), «Удалить аренду» — шит удаления аренды.
              * Составного действия нет (удаление необратимо): подтверждение
              * остаётся за владельцем. Тексты — по образцу гарда статуса. */}
             <ConfirmDialog
@@ -938,7 +962,11 @@ export function PropertyDetailPage(): JSX.Element {
                     if (deleteGuardUpcoming) {
                         setDeleteRentalSheetOpen(true);
                     } else {
-                        setCompleteSheetOpen(true);
+                        // В мастер итогов (#534): без метки продолжения —
+                        // удаление объекта остаётся ручным повтором после
+                        // завершения (необратимое действие — свежий
+                        // подтверждение за владельцем).
+                        router.push(ROUTES.propertyRentalComplete(id));
                     }
                 }}
             />
@@ -959,21 +987,6 @@ export function PropertyDetailPage(): JSX.Element {
                 confirmVariant="danger"
                 pending={deleteRental.isPending}
                 onConfirm={handleDeleteRental}
-            />
-
-            {/* Шит «Завершить аренду?» (#627, Figma 1583:56380): канон
-             * ConfirmDialog — подпись макета R/400 16/18. Кнопка в loading
-             * на время мутации, закрытие глушится. */}
-            <ConfirmDialog
-                open={completeSheetOpen}
-                onOpenChange={setCompleteSheetOpen}
-                title="Завершить аренду?"
-                description="Объект станет свободным, арендный платеж завершится. Данные аренды сохранятся в разделе «Прошлые аренды»"
-                descriptionClassName="text-base leading-[18px]"
-                confirmLabel="Завершить"
-                cancelLabel="Отменить"
-                pending={completeRental.isPending}
-                onConfirm={handleCompleteRental}
             />
 
             {/* Шит пина (#630, Figma 1583:57452): объяснение перед

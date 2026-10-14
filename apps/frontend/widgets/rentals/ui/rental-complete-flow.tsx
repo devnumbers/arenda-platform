@@ -17,6 +17,7 @@ import {
 import {
   buildRentalCompleteCommand,
   completePlannedEndDate,
+  fulfilRentalCompleteResume,
   rentalCompletedTitle,
   useCompleteRental,
   useRentalSummary,
@@ -483,6 +484,11 @@ export function RentalCompleteFlow({
     }
     try {
       const updated = await completeRental.mutateAsync(command);
+      // Метка продолжения (#628): мастер открыт из-под гарда смены
+      // статуса — после успеха она исполнена, и страница объекта применит
+      // отложенный статус (ремонт/архив) сама (решение владельца
+      // 14.10.2026). Без метки — no-op.
+      fulfilRentalCompleteResume(rental.propertyId);
       setCompleted(updated);
     } catch (error: unknown) {
       notify.scenarios.rentals.completeError(error);
