@@ -351,6 +351,22 @@
   border-radius: inherit;
 }
 
+/* Стекло характеристик для тех, кто просит меньше прозрачности или
+   больший контраст: почти сплошная подложка, интерполяция блюра снята. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .cardGlass {
+    background: rgba(0, 0, 0, 0.82);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .cardRing {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+  }
+}
+
 .cardRing {
   position: absolute;
   inset: 0;

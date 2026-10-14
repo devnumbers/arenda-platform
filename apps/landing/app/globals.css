@@ -144,12 +144,14 @@
 }
 
 /* Кривая и длительности модалок фронта (резолюция #449, «плавность как у
-   Apple» / HIG Motion) — читаются произвольными animate-[...] и hover-тенью
-   полей из перенесённых ui-компонентов. */
+   Apple» / HIG Motion) — читаются семантическими классами .dl-*-in/out
+   ниже и hover-тенью полей из перенесённых ui-компонентов. */
 :root {
   --dl-ease: cubic-bezier(0.32, 0.72, 0, 1);
   --dl-duration-fast: 250ms;
   --dl-duration-move: 350ms;
+  --dl-duration-card-in: 400ms;
+  --dl-duration-card-out: 220ms;
   --dl-input-border: #d3d7d9;
   --dl-overlay: rgba(23, 26, 28, 0.5);
 }
@@ -162,6 +164,84 @@
 @keyframes modal-overlay-out{ from { opacity: 1; } to { opacity: 0; } }
 @keyframes modal-sheet-out  { from { transform: translateY(0); } to { transform: translateY(100%); } }
 @keyframes modal-card-out   { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+
+/* Фазы модальных шеллов классами, не arbitrary animate-[...]: длительности
+   берутся из токенов (тюнинг в одном месте), а reduce-ветке ниже не надо
+   бороться с каскадом утилит. forwards на выходах держит последний кадр
+   (opacity 0) до размонтирования — без него панель/фон вспыхивают. */
+@layer components {
+  .dl-overlay-in {
+    animation: modal-overlay-in var(--dl-duration-move) var(--dl-ease);
+  }
+  .dl-overlay-out {
+    animation: modal-overlay-out var(--dl-duration-fast) var(--dl-ease) forwards;
+  }
+  .dl-card-in {
+    animation: modal-card-in var(--dl-duration-card-in) var(--dl-ease);
+  }
+  .dl-card-out {
+    animation: modal-card-out var(--dl-duration-card-out) var(--dl-ease) forwards;
+  }
+  /* Оверлей vaul-шита: состояние ведёт data-state (Radix-фазу closing шит
+     не использует), варианты Tailwind на чужой класс не навесить. */
+  .dl-overlay-vaul[data-state="open"] {
+    animation: modal-overlay-in var(--dl-duration-move) var(--dl-ease);
+  }
+  .dl-overlay-vaul[data-state="closed"] {
+    animation: modal-overlay-out var(--dl-duration-fast) var(--dl-ease) forwards;
+  }
+}
+
+/* Reduced motion: крупное движение модалок гасится — scale-кейфреймы
+   карточки и слайд vaul-шита на 100% высоты (у библиотеки своей ветки
+   нет, data-vaul-drawer — её Content). Осмысленность дают мгновенные
+   opacity-подмены: 1ms, не 0 — animationend/transitionend стартуют. */
+@media (prefers-reduced-motion: reduce) {
+  .dl-overlay-in,
+  .dl-overlay-out,
+  .dl-overlay-vaul,
+  .dl-card-in,
+  .dl-card-out {
+    animation-duration: 1ms;
+  }
+
+  [data-vaul-drawer] {
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Полупрозрачные поверхности для тех, кто просит меньше прозрачности
+   (apple-design §14): стекло становится почти сплошным, блюр снимается —
+   маркерные классы .glass-plate (плашки отзывов) и .glass-card (стекло
+   тарифов/аудитории, skin из components/glass.ts). Unlayered — сильнее
+   утилит Tailwind. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-plate {
+    background: rgba(0, 0, 0, 0.82);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .glass-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  :root {
+    --dl-overlay: rgba(23, 26, 28, 0.8);
+  }
+}
+
+/* Повышенный контраст: стекло — сплошное, обводки колец — плотные. */
+@media (prefers-contrast: more) {
+  .glass-plate {
+    background: rgba(0, 0, 0, 0.82);
+  }
+
+  .glass-ring::before {
+    background: rgba(255, 255, 255, 0.85);
+  }
+}
 
 @layer base {
   /* Стрипы-«вылезайки» (showcase) не должны расширять канву; clip, не hidden —

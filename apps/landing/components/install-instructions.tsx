@@ -5,6 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Image from "next/image";
 import type { StaticImageData } from "next/image";
 import { LandingButton } from "@/components/button";
+import { cn } from "@/lib/cn";
 import { IconButton } from "@/components/ui/icon-button";
 import { Cancel } from "@/components/ui/icons";
 import iconBrowserChrome from "@/assets/icons/icon-browser-chrome.webp";
@@ -132,20 +133,18 @@ export function InstallModal({
     >
       <Dialog.Portal>
         <Dialog.Overlay
-          className={
-            closing
-              ? "fixed inset-0 z-50 bg-overlay animate-[modal-overlay-out_250ms_var(--dl-ease)_forwards]"
-              : "fixed inset-0 z-50 bg-overlay animate-[modal-overlay-in_350ms_var(--dl-ease)]"
-          }
+          className={cn(
+            "fixed inset-0 z-50 bg-overlay",
+            closing ? "dl-overlay-out" : "dl-overlay-in",
+          )}
         />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
           <Dialog.Content
             aria-describedby={undefined}
-            className={`relative flex max-h-[92dvh] w-full max-w-[400px] flex-col gap-6 overflow-y-auto rounded-[40px] bg-white p-6 font-sans outline-none ${
-              closing
-                ? "animate-[modal-card-out_220ms_var(--dl-ease)_forwards]"
-                : "animate-[modal-card-in_400ms_var(--dl-ease)]"
-            }`}
+            className={cn(
+              "relative flex max-h-[92dvh] w-full max-w-[400px] flex-col gap-6 overflow-y-auto overscroll-y-contain rounded-[40px] bg-white p-6 font-sans outline-none",
+              closing ? "dl-card-out" : "dl-card-in",
+            )}
           >
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-3 pr-12">

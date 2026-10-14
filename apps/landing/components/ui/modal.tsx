@@ -166,8 +166,8 @@ export function ModalContent({
             // без него анимация, доиграв раньше таймера unmount, отдаёт
             // базовые стили и панель/фон вспыхивают на полную яркость.
             closing
-              ? "animate-[modal-overlay-out_250ms_var(--dl-ease)_forwards]"
-              : "animate-[modal-overlay-in_350ms_var(--dl-ease)]",
+              ? "dl-overlay-out"
+              : "dl-overlay-in",
           )}
         />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
@@ -180,8 +180,8 @@ export function ModalContent({
               // отдаёт приоритет последнему).
               "relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none",
               closing
-                ? "animate-[modal-card-out_220ms_var(--dl-ease)_forwards]"
-                : "animate-[modal-card-in_400ms_var(--dl-ease)]",
+                ? "dl-card-out"
+                : "dl-card-in",
               className,
             )}
           >
@@ -197,8 +197,7 @@ export function ModalContent({
       <Drawer.Overlay
         className={cn(
           "fixed inset-0 z-50 bg-overlay",
-          "data-[state=open]:animate-[modal-overlay-in_350ms_var(--dl-ease)]",
-          "data-[state=closed]:animate-[modal-overlay-out_250ms_var(--dl-ease)]",
+          "dl-overlay-vaul",
         )}
       />
       <Drawer.Content

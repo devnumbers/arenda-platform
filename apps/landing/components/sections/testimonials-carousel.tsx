@@ -240,7 +240,7 @@ function onSlideKeydown(
 // полная (tab:block).
 function ReviewPlate({ review }: { review: Review }) {
   return (
-    <div className="absolute inset-x-2 bottom-2 flex flex-col gap-4 rounded-[24px] bg-black/[0.24] p-6 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] backdrop-blur-[16px]">
+    <div className="glass-plate absolute inset-x-2 bottom-2 flex flex-col gap-4 rounded-[24px] bg-black/[0.24] p-6 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] backdrop-blur-[16px]">
       {review.quoteShort ? (
         <>
           <blockquote className="hidden text-m font-medium leading-6 text-white tab:block">
