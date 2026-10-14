@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Contact } from '@/entities/contact';
-import { contactValueRows } from './contact-detail-model';
+import { contactInfoView, contactValueRows } from './contact-detail-model';
 
 const contact: Contact = {
   id: 'c1',
@@ -40,6 +40,39 @@ describe('contactValueRows', () => {
     ).toStrictEqual([
       { key: 'phone', value: '+7 (993) 123-12-12', label: 'Телефон' },
       { key: 'messenger', value: 'username', label: 'Мессенджер' },
+    ]);
+  });
+});
+
+describe('contactInfoView — карточка «Информация» (#1334, макет 3304:76141)', () => {
+  it('заполненные поля — строки без подписи пустоты', () => {
+    const view = contactInfoView(contact);
+
+    expect(view.emptyCaption).toBeNull();
+    expect(view.rows.map((row) => row.key)).toStrictEqual(['phone', 'email', 'messenger']);
+  });
+
+  it('пусты все три поля связи — подпись «Нет информации», строк нет', () => {
+    const view = contactInfoView({
+      ...contact,
+      phone: '',
+      email: '',
+      messengerUsername: '',
+    });
+
+    expect(view.emptyCaption).toBe('Нет информации');
+    expect(view.rows).toStrictEqual([]);
+  });
+
+  it('частичная заполненность — только непустые строки, подписи нет (решение при чартинге)', () => {
+    expect(contactInfoView({ ...contact, email: '', messengerUsername: '' }).rows).toStrictEqual([
+      { key: 'phone', value: '+7 (993) 123-12-12', label: 'Телефон' },
+    ]);
+    expect(
+      contactInfoView({ ...contact, phone: '', messengerUsername: '' }).emptyCaption,
+    ).toBeNull();
+    expect(contactInfoView({ ...contact, phone: '', email: '' }).rows).toStrictEqual([
+      { key: 'messenger', value: 'username', label: 'Телеграм' },
     ]);
   });
 });

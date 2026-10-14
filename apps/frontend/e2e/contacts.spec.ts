@@ -60,6 +60,9 @@ test.describe('жизненный цикл контакта', () => {
     // обязательности aria-hidden и из accname исключён (design TextField).
     await page.getByRole('textbox', { name: 'Имя', exact: true }).fill(contactName);
     await page.getByRole('textbox', { name: 'Роль' }).fill('сантехник');
+    // Телефон — для пина копирующей плашки на деталке (слово владельца
+    // 12.10.2026: вся строка значения копирует).
+    await page.getByRole('textbox', { name: 'Телефон' }).fill('+7 (993) 123-12-12');
     // Сабмит двумя поверхностями — ✓ в шапке и полноширинная кнопка,
     // появляющаяся по готовности формы; жмём нижнюю.
     await page.getByRole('button', { name: 'Создать контакт' }).last().click();
@@ -71,22 +74,25 @@ test.describe('жизненный цикл контакта', () => {
     await page.getByRole('searchbox', { name: 'Поиск контактов' }).fill(contactName);
     await expect(page.getByText(contactName, { exact: true })).toBeVisible();
     // Тост уходит сам за 5с (TOAST_AUTO_CLOSE_MS) и висит поверх шапки,
-    // перехватывая клик по «Закрыть поиск» — гасим крестиком, как юзер
-    // (ускоренный путь до истечения).
-    await page.locator('.Toastify').getByRole('button', { name: 'Закрыть' }).click();
+    // перехватывая клик по «Закрыть поиск» — гасим крестиком, как юзер;
+    // холодный рефetch списка после создания может занять больше 5с —
+    // тогда тост уже аутклоузился, и гасить нечего (флейк 12.10.2026).
+    const toastClose = page.locator('.Toastify').getByRole('button', { name: 'Закрыть' });
+    await toastClose.click({ timeout: 2000 }).catch(() => {});
     await page.getByRole('button', { name: 'Закрыть поиск' }).click();
     const row = page.getByText(contactName, { exact: true });
     await expect(row).toBeVisible();
     await row.click();
 
-    // Деталка: заголовок-имя и роль на карточке.
+    // Деталка: заголовок-имя и роль на фоне страницы (компоновка #1333).
     await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}$/);
     await expect(page.getByText('Контакт', { exact: true })).toBeVisible();
     await expect(page.getByText('сантехник', { exact: true })).toBeVisible();
 
-    // Правка через кебаб: роль меняется, сохранение возвращает на деталку.
-    await page.getByRole('button', { name: 'Меню контакта' }).click();
-    await page.getByRole('menuitem', { name: 'Изменить' }).click();
+    // Правка тапом по карточке «Информация» (#1333, карта #1332: правка
+    // переехала из кебаба, за кебабом — только удаление): роль меняется,
+    // сохранение возвращает на деталку.
+    await page.getByRole('link', { name: 'Информация' }).click();
     await expect(page.getByText('Изменить контакт', { exact: true })).toBeVisible();
     await page.getByRole('textbox', { name: 'Роль' }).fill(updatedRole);
     // Нижняя полноширинная кнопка; exact отсекает шапочное «Сохранить изменения».
@@ -97,8 +103,24 @@ test.describe('жизненный цикл контакта', () => {
 
     await captureScreen(page, testInfo, 'contact-detail-updated');
 
-    // Удаление через кебаб с подтверждением; возврат на список без карточки.
+    // Тап по плашке значения копирует и не уводит на правку (#1333, слово
+    // владельца 12.10.2026): URL на месте, строка переходит в состояние
+    // «Скопировано» (aria-label всей строки-кнопки; буферу не нужен
+    // permission — подсказка канона useCopiedHint горит независимо).
+    await page.getByText('+7 (993) 123-12-12', { exact: true }).click();
+    await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}$/);
+    await expect(page.getByRole('button', { name: 'Скопировано', exact: true })).toBeVisible();
+    // Правка остаётся на тапе по заголовку карточки.
+    await page.getByRole('link', { name: 'Информация' }).click();
+    await expect(page.getByText('Изменить контакт', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}$/);
+
+    // Удаление через кебаб с подтверждением; кебаб — только удаление
+    // (#1333): пункта «Изменить» у него больше нет. Возврат на список
+    // без карточки.
     await page.getByRole('button', { name: 'Меню контакта' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Изменить' })).toHaveCount(0);
     await page.getByRole('menuitem', { name: 'Удалить' }).click();
     await expect(page.getByText('Удалить контакт?')).toBeVisible();
     await page.getByRole('button', { name: 'Удалить', exact: true }).click();

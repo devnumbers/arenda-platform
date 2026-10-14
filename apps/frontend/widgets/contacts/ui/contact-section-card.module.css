@@ -1,0 +1,13 @@
+/* Кликабельность всей площади секционной карточки контакта (#1333, канон
+ * оверлея — PropertySectionCard.module.css): оверлей-ссылка лежит под
+ * контентом, а контент пропускает клики сквозь себя (pointer-events:
+ * none), возвращая их интерактивным элементам — тап мимо кнопки
+ * копирования ведёт на правку карточки, тап по кнопке остаётся у кнопки. */
+.content {
+  position: relative;
+  pointer-events: none;
+}
+
+.content :is(a, button, [role='button'], [role='checkbox'], input, select, label, summary) {
+  pointer-events: auto;
+}

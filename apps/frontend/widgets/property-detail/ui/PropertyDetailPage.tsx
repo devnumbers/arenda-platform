@@ -29,7 +29,7 @@ import {
   usePropertyOperationsSummary,
   usePropertyOverdueOperations,
 } from '@/features/payments';
-import {useContacts} from '@/features/contacts';
+import {useContact, useContacts} from '@/features/contacts';
 import {
   useActiveTasks,
   useCompleteTask,
@@ -276,6 +276,10 @@ export function PropertyDetailPage(): JSX.Element {
     const paymentGroups = propertyPaymentGroups(payments, overduePaymentIds, today);
     const contacts = contactsQuery.data ?? [];
     const tenant = currentRental?.tenant ?? null;
+    // Фото арендатора — из его карточки отдельным запросом (без арендатора
+    // запрос спит); почему списком книги его не достать — у пропа
+    // tenantPhotoUrl PropertyContactsBlock (#1335).
+    const tenantContactQuery = useContact(tenant?.contactId ?? '');
     // Арендатор уже показан отдельной строкой с бейджем роли — из книги
     // его исключаем, чтобы человек не дублировался (макет 1185:40820);
     // максимум 3 строки блока: арендатор + 2 контакта (решение владельца
@@ -750,6 +754,7 @@ export function PropertyDetailPage(): JSX.Element {
                             ) : tenant !== null || propertyContacts.length > 0 ? (
                                 <PropertyContactsBlock
                                     tenant={tenant}
+                                    tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
                                     contacts={propertyContacts}
                                     onOpenContact={(contactId) =>
                                         router.push(ROUTES.propertyContact(id, contactId))

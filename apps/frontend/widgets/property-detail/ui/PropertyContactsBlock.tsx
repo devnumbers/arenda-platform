@@ -11,6 +11,12 @@ import { UserAvatar } from '@/shared/ui/design';
 type PropertyContactsBlockProps = {
   /** Арендатор текущей аренды (бейдж-подпись роли «Арендатор»). */
   readonly tenant: RentalTenant | null;
+  /** Фото контакта-арендатора — из его карточки отдельным запросом
+   * (ADR 0065, решение #1286; прецедент страницы аренды): в списке книги
+   * его искать нельзя — арендатор из списка вырезан, чтобы не
+   * дублировать строку (#1335), а keyset-порция видит не всю книгу.
+   * undefined — карточки нет или у неё нет фото. */
+  readonly tenantPhotoUrl: string | undefined;
   readonly contacts: ReadonlyArray<Contact>;
   readonly onOpenContact: (contactId: string) => void;
 };
@@ -27,8 +33,8 @@ function TenantRowButton({
   onSelect,
 }: {
   readonly tenant: RentalTenant;
-  /** Фото контакта-арендатора из книги (ADR 0065, решение #1286);
-   * undefined — контакта нет в книге или у него нет фото. */
+  /** Фото контакта-арендатора — из его карточки (ADR 0065, решение
+   * #1286); undefined — карточки нет или у неё нет фото. */
   readonly photoUrl: string | undefined;
   readonly onSelect: () => void;
 }): JSX.Element {
@@ -58,6 +64,7 @@ function TenantRowButton({
  */
 export function PropertyContactsBlock({
   tenant,
+  tenantPhotoUrl,
   contacts,
   onOpenContact,
 }: PropertyContactsBlockProps): JSX.Element {
@@ -66,7 +73,7 @@ export function PropertyContactsBlock({
       {tenant !== null && (
         <TenantRowButton
           tenant={tenant}
-          photoUrl={contacts.find((contact) => contact.id === tenant.contactId)?.photoUrl}
+          photoUrl={tenantPhotoUrl}
           onSelect={() => onOpenContact(tenant.contactId)}
         />
       )}
