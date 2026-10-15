@@ -187,12 +187,18 @@ func (s *SubscriptionService) livePendingPayment(ctx context.Context, userID uui
 // wants to survive the fall to basic when the cancelled period expires: it
 // must be one of the owner's active properties, and the validation — like the
 // change itself — runs inside the lifecycle transaction over the
-// properties-context bridge.
+// properties-context bridge. A repeat cancellation of an already-cancelled
+// subscription succeeds as an idempotent no-op (issue #1451): nothing is
+// validated, changed, transition-logged or audited, the stored state — the
+// keep choice and any scheduled change included — stays as it is.
 func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uuid.UUID, keepPropertyID *uuid.UUID) error {
 	return s.runLifecycleTx(ctx, func(stores *txStores) error {
 		sub, err := stores.subscriptionForUpdate(ctx, userID)
 		if err != nil {
 			return err
+		}
+		if sub.Status == domain.SubscriptionStatusCancelled {
+			return nil
 		}
 		// Service subscriptions are assigned and withdrawn by an admin (#255);
 		// the user cannot cancel what they do not pay for.
@@ -347,7 +353,10 @@ func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.U
 
 // ChangeTariff serves POST /subscription/change (issue #249). A downgrade is
 // scheduled for the end of the paid period and auto-renew is enabled so the
-// new tariff renews on the normal cycle (ADR 0008 §3). A same-tariff request
+// new tariff renews on the normal cycle (ADR 0008 §3) — the user plans it
+// from every state that still owns the decision (issue #1451, ADR 0066):
+// active, cancelled inside its paid remainder and a live grace window. A
+// same-tariff request
 // on an active subscription is rejected; upgrades and same-tariff grace
 // renewals go through the payment flow (issue #250): the pending payment is
 // persisted before the provider is called, so a crash between the provider
@@ -440,7 +449,7 @@ func (s *SubscriptionService) planTariffChange(
 		return changeTariffPlan{}, domain.ErrInvalidSubscriptionState
 	}
 	if !needsPayment {
-		return changeTariffPlan{}, scheduleDeferredDowngrade(ctx, tariff, stores, userID, sub, currentTariff, newTariff, req.Period)
+		return changeTariffPlan{}, scheduleDeferredDowngrade(ctx, tariff, stores, userID, sub, currentTariff, newTariff, req.Period, now)
 	}
 
 	if err := s.checkPaymentInitiable(sub, now); err != nil {
@@ -551,13 +560,17 @@ func (s *SubscriptionService) checkPaymentInitiable(sub domain.Subscription, now
 
 // scheduleDeferredDowngrade schedules a downgrade for the end of the paid
 // period with auto-renew on, so the new tariff renews on the normal cycle
-// (ADR 0008 §3), recording the transition and its audit entry. The
+// (ADR 0008 §3), recording the transition and its audit entry. The user can
+// plan it from every live state that still owns the decision (issue #1451):
+// an active subscription, a cancelled one inside its paid remainder and a
+// live grace window — the domain owns those guards and rejects an expired
+// grace window itself. The
 // assignment is the «Тариф изменён» event's trigger (карта #734, #752):
 // the owner learns the change was assigned and when it takes effect —
 // the application of the scheduled change at period end stays silent.
 func scheduleDeferredDowngrade(
 	ctx context.Context, tariff *tariffEvents, stores *txStores, userID uuid.UUID, sub domain.Subscription,
-	currentTariff, newTariff domain.Tariff, period domain.SubscriptionPeriod,
+	currentTariff, newTariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time,
 ) error {
 	// A deferred change needs a paid period to defer to; the domain
 	// rejects the same condition, but the valid_until read below must not
@@ -567,7 +580,7 @@ func scheduleDeferredDowngrade(
 	}
 	applied, err := stores.applyTransition(ctx, &sub,
 		func(s *domain.Subscription) error {
-			return s.ScheduleDowngrade(currentTariff, newTariff, period, *s.ValidUntil)
+			return s.ScheduleDowngrade(currentTariff, newTariff, period, *s.ValidUntil, now)
 		},
 		transitionSpec{
 			reason:            domain.TransitionReasonDowngradeScheduled,

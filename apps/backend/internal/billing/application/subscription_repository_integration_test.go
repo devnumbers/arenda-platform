@@ -330,6 +330,28 @@ func TestSubscriptionRepository_Integration_ListSelection(t *testing.T) {
 		s.Status = domain.SubscriptionStatusCancelled
 		s.ValidUntil = &until
 	})
+	// The boundary-charge batch of issue #1451: a cancelled row carrying a due
+	// deferred change — planned from the cancelled state, the paid remainder
+	// has ended. The not-due twin (a live remainder) stays out of the batch.
+	cancelledPendingDue := seed("cancelled with pending change due", func(s *domain.Subscription) {
+		// The schema CHECK keeps pending_change_at at or after valid_until.
+		until := now.Add(-2 * time.Hour)
+		changeAt := now.Add(-time.Hour)
+		s.Status = domain.SubscriptionStatusCancelled
+		s.ValidUntil = &until
+		s.AutoRenewEnabled = true
+		s.PendingTariffID = &basic.ID
+		s.PendingChangeAt = &changeAt
+	})
+	seed("cancelled with pending change not due", func(s *domain.Subscription) {
+		until := now.Add(24 * time.Hour)
+		changeAt := now.Add(48 * time.Hour)
+		s.Status = domain.SubscriptionStatusCancelled
+		s.ValidUntil = &until
+		s.AutoRenewEnabled = true
+		s.PendingTariffID = &basic.ID
+		s.PendingChangeAt = &changeAt
+	})
 	// A deferred change rides an auto-renewing subscription (ScheduleDowngrade
 	// enables auto-renew), so the due one also lands in the renewal batch —
 	// the renewal phase charges a paid target at apply time.
@@ -386,6 +408,12 @@ func TestSubscriptionRepository_Integration_ListSelection(t *testing.T) {
 		PendingChangeDue: new(now),
 		Limit:            100,
 	}
+	// The boundary-charge batch of issue #1451.
+	dueScheduledSel := billingapp.SubscriptionSelection{
+		Status:           domain.SubscriptionStatusCancelled,
+		PendingChangeDue: new(now),
+		Limit:            100,
+	}
 
 	for _, tc := range []struct {
 		name string
@@ -399,8 +427,12 @@ func TestSubscriptionRepository_Integration_ListSelection(t *testing.T) {
 		{name: "expired grace", sel: graceSel, want: []uuid.UUID{graceExpired.UserID}},
 		{name: "grace reminder window", sel: reminderSel, want: []uuid.UUID{graceInWindow.UserID}},
 		{name: "expired non-renewing", sel: nonRenewingSel, want: []uuid.UUID{nonRenewing.UserID}},
-		{name: "expired cancelled", sel: cancelledSel, want: []uuid.UUID{cancelledExpired.UserID}},
+		{
+			name: "expired cancelled, oldest window first", sel: cancelledSel,
+			want: []uuid.UUID{cancelledPendingDue.UserID, cancelledExpired.UserID},
+		},
 		{name: "pending changes due", sel: pendingSel, want: []uuid.UUID{pendingDue.UserID}},
+		{name: "cancelled boundary charges due", sel: dueScheduledSel, want: []uuid.UUID{cancelledPendingDue.UserID}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

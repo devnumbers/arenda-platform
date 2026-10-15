@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (grace semantics amended by ADR 0055: one active property in grace, billing archive and restoration)
+Accepted (grace semantics amended by ADR 0055: one active property in grace, billing archive and restoration; deferred-downgrade planning from cancelled and live grace amended by ADR 0066)
 
 ## Context
 
@@ -99,7 +99,9 @@ A background billing worker runs on a configurable interval:
   `ChangeTariff` payment flow (a same-tariff change is rejected for `active`
   subscriptions but allowed in grace). Scheduling a downgrade from grace is
   rejected: grace is a transient state, so deferred changes cannot be planned
-  into it.
+  into it. (Amended by ADR 0066: a downgrade planned from a *live* grace
+  window is allowed and applies when the window ends; an expired window still
+  plans nothing.)
 - When the grace period expires: forces a downgrade to basic and archives
   excess properties (force-completing open leases as described above).
 

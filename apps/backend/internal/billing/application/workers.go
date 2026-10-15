@@ -298,46 +298,65 @@ func (w *Workers) applyScheduledChange(ctx context.Context, listed domain.Subscr
 			applied = true
 			return nil
 		}
-		target, err := stores.tariffs.GetByID(ctx, *sub.PendingTariffID)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrTariffNotFound
-			}
-			return fmt.Errorf("get pending tariff: %w", err)
-		}
-		period := domain.PeriodMonth
-		if sub.PendingPeriod != nil {
-			period = *sub.PendingPeriod
-		}
-		price, err := target.Price(period)
+		appliedFree, err := applyFreeScheduledChange(ctx, stores, &sub, now)
 		if err != nil {
 			return err
 		}
-		if price > 0 {
+		if !appliedFree {
 			// A paid target is charged at apply time; charging belongs to the
 			// renewal phase running right after this one.
 			return nil
-		}
-
-		transition, err := stores.applyTransition(ctx, &sub,
-			func(s *domain.Subscription) error { return s.ApplyScheduledDowngrade(target, period, now) },
-			transitionSpec{
-				reason:    domain.TransitionReasonScheduledChangeApplied,
-				initiator: domain.InitiatorSystem,
-			},
-		)
-		if err != nil {
-			return err
-		}
-		if transitionChangedTariff(transition, target.ID) {
-			if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade, nil); err != nil {
-				return fmt.Errorf("enforce tariff limit after scheduled downgrade: %w", err)
-			}
 		}
 		applied = true
 		return nil
 	})
 	return applied, err
+}
+
+// applyFreeScheduledChange applies the due free-target scheduled change to
+// the locked subscription — the one free apply every phase shares (the
+// scheduled-changes phase, the boundary phases of issue #1451): the target
+// tariff switches, the validity extends from now, auto-renew stays on, the
+// transition is logged and the target limit enforced. It reports whether the
+// change was applied; a paid target reports false — its charge at apply time
+// or its fall to basic belongs to the caller.
+func applyFreeScheduledChange(
+	ctx context.Context, stores *txStores, sub *domain.Subscription, now time.Time,
+) (bool, error) {
+	target, err := stores.tariffs.GetByID(ctx, *sub.PendingTariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return false, ErrTariffNotFound
+		}
+		return false, fmt.Errorf("get pending tariff: %w", err)
+	}
+	period := domain.PeriodMonth
+	if sub.PendingPeriod != nil {
+		period = *sub.PendingPeriod
+	}
+	price, err := target.Price(period)
+	if err != nil {
+		return false, err
+	}
+	if price > 0 {
+		return false, nil
+	}
+	transition, err := stores.applyTransition(ctx, sub,
+		func(s *domain.Subscription) error { return s.ApplyScheduledDowngrade(target, period, now) },
+		transitionSpec{
+			reason:    domain.TransitionReasonScheduledChangeApplied,
+			initiator: domain.InitiatorSystem,
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+	if transitionChangedTariff(transition, target.ID) {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade, nil); err != nil {
+			return false, fmt.Errorf("enforce tariff limit after scheduled downgrade: %w", err)
+		}
+	}
+	return true, nil
 }
 
 // ProcessRenewals drives the expiry of paid periods (ADR 0008): subscriptions
@@ -359,7 +378,24 @@ func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, erro
 
 	processed := 0
 	renewSel := w.phases.renewalDue(now, w.config.WorkerBatchSize)
-	n, err := w.processSubscriptionBatch(ctx, now, "renew", renewSel, w.renewSubscription)
+	n, err := w.processSubscriptionBatch(ctx, now, "renew", renewSel, func(ctx context.Context, sub domain.Subscription, now time.Time) error {
+		return w.renewSubscription(ctx, sub, now, renewSel)
+	})
+	if err != nil {
+		return processed, err
+	}
+	processed += n
+
+	// The boundary-charge leg of issue #1451: cancelled subscriptions whose
+	// due scheduled downgrade targets a paid tariff are charged at apply time
+	// through the same two-transaction renewal shape (ADR 0008 §3) — the
+	// scheduling consented to the charge by enabling auto-renew. A free
+	// target never reaches this leg: the expiry legs below apply it first.
+	dueScheduled := w.phases.scheduledDowngradeChargeDue(now, w.config.WorkerBatchSize)
+	chargeScheduled := func(ctx context.Context, sub domain.Subscription, now time.Time) error {
+		return w.renewSubscription(ctx, sub, now, dueScheduled)
+	}
+	n, err = w.processSubscriptionBatch(ctx, now, "charge scheduled downgrades", dueScheduled, chargeScheduled)
 	if err != nil {
 		return processed, err
 	}
@@ -369,21 +405,27 @@ func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, erro
 	if err != nil {
 		return processed, fmt.Errorf("get basic tariff for non-renewing expiry: %w", err)
 	}
-	expire := func(sel SubscriptionSelection, trigger string) func(context.Context, domain.Subscription, time.Time) error {
+	// The keep choice is honoured only by an actual fall to basic: a
+	// cancelled leg carrying a due scheduled change never falls (the free
+	// target applies, the paid one is charged), so its keep choice — consumed
+	// by the scheduling — is already gone.
+	expire := func(sel SubscriptionSelection, trigger string, waitForCharge bool) func(context.Context, domain.Subscription, time.Time) error {
 		return func(ctx context.Context, sub domain.Subscription, now time.Time) error {
-			return w.expireSubscription(ctx, sub, basicTariff, trigger, sel)
+			return w.expireSubscription(ctx, sub, basicTariff, trigger, sel, now, waitForCharge)
 		}
 	}
 
 	nonRenewingSel := w.phases.nonRenewingExpired(now, w.config.WorkerBatchSize)
-	n, err = w.processSubscriptionBatch(ctx, now, "expire non-renewing", nonRenewingSel, expire(nonRenewingSel, triggerNonRenewingExpired))
+	expireNonRenewing := expire(nonRenewingSel, triggerNonRenewingExpired, false)
+	n, err = w.processSubscriptionBatch(ctx, now, "expire non-renewing", nonRenewingSel, expireNonRenewing)
 	if err != nil {
 		return processed, err
 	}
 	processed += n
 
 	cancelledSel := w.phases.cancelledExpired(now, w.config.WorkerBatchSize)
-	n, err = w.processSubscriptionBatch(ctx, now, "expire cancelled", cancelledSel, expire(cancelledSel, triggerCancelledExpired))
+	expireCancelled := expire(cancelledSel, triggerCancelledExpired, true)
+	n, err = w.processSubscriptionBatch(ctx, now, "expire cancelled", cancelledSel, expireCancelled)
 	if err != nil {
 		return processed, err
 	}
@@ -518,13 +560,15 @@ func (w *Workers) processSubscriptionBatch(
 	return processed, nil
 }
 
-// renewSubscription charges one expired auto-renewing subscription in the
-// two-transaction pattern: the planning transaction locks the subscription,
-// resolves the renewal terms and persists the pending payment (the durable
-// record that survives a crash before the provider call); the provider calls
-// run outside any transaction; a second transaction finalizes the payment and
-// applies its subscription effects.
-func (w *Workers) renewSubscription(ctx context.Context, sub domain.Subscription, now time.Time) error {
+// renewSubscription charges one expired subscription in the two-transaction
+// pattern: the planning transaction locks the subscription, resolves the
+// renewal terms and persists the pending payment (the durable record that
+// survives a crash before the provider call); the provider calls run outside
+// any transaction; a second transaction finalizes the payment and applies its
+// subscription effects. The selection names the batch the lock re-checks —
+// the renewal onset for the renewal phase, the cancelled boundary-charge
+// batch of issue #1451 for its leg.
+func (w *Workers) renewSubscription(ctx context.Context, sub domain.Subscription, now time.Time, sel SubscriptionSelection) error {
 	var plan renewalPlan
 	// The planning transaction runs with the lifecycle bridges: its free-terms
 	// path can lower a tariff limit, and that archiving belongs to the same
@@ -534,7 +578,7 @@ func (w *Workers) renewSubscription(ctx context.Context, sub domain.Subscription
 	grace := newGraceEvents(w.publisher, w.log)
 	err := grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
 		var planErr error
-		plan, planErr = w.planRenewal(ctx, grace, stores, sub, now, w.phases.renewalDue(now, 1))
+		plan, planErr = w.planRenewal(ctx, grace, stores, sub, now, sel)
 		return planErr
 	})
 	if err != nil || !plan.ready {
@@ -701,17 +745,32 @@ func renewalTerms(ctx context.Context, stores *txStores, sub domain.Subscription
 // properties archived, the shared expiry outcome. A free non-basic target
 // (none is seeded today, the branch keeps the phase total) renews in place or
 // applies a pending free change without a payment.
+//
+// A due scheduled change renews into its free target through the scheduled
+// apply, never through the permanent basic fall — even when the target is
+// basic (issue #1451): the assignment promised the switch, not the end of the
+// paid track. The renewal onset only sees such a row when the
+// scheduled-changes phase left it due this tick (a failed batch, a cancelled
+// row's boundary-charge leg), and the apply must stay correct wherever it
+// runs.
 func (w *Workers) applyFreeRenewal(
 	ctx context.Context, stores *txStores, sub domain.Subscription,
 	tariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time,
 ) error {
+	pendingApply := sub.HasPendingChange()
 	reason := domain.TransitionReasonExpired
-	if tariff.Name != domain.TariffBasic {
+	if pendingApply || tariff.Name != domain.TariffBasic {
 		reason = domain.TransitionReasonScheduledChangeApplied
+	}
+	trigger := triggerFreeDowngrade
+	if pendingApply {
+		trigger = triggerScheduledDowngrade
 	}
 	applied, err := stores.applyTransition(ctx, &sub,
 		func(s *domain.Subscription) error {
 			switch {
+			case pendingApply:
+				return s.ApplyScheduledDowngrade(tariff, period, now)
 			case tariff.Name == domain.TariffBasic:
 				s.DowngradeToBasic(tariff.ID)
 				return nil
@@ -737,7 +796,7 @@ func (w *Workers) applyFreeRenewal(
 		return err
 	}
 	if transitionChangedTariff(applied, sub.TariffID) {
-		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, triggerFreeDowngrade, nil); err != nil {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, trigger, nil); err != nil {
 			return fmt.Errorf("enforce tariff limit after free renewal: %w", err)
 		}
 	}
@@ -1000,7 +1059,7 @@ func (w *Workers) ProcessExpiredGrace(ctx context.Context, now time.Time) (int, 
 	graceSel := w.phases.graceExpired(now, w.config.WorkerBatchSize)
 	return w.processSubscriptionBatch(ctx, now, "expire grace", graceSel,
 		func(ctx context.Context, sub domain.Subscription, now time.Time) error {
-			return w.expireSubscription(ctx, sub, basicTariff, triggerGraceExpired, graceSel)
+			return w.expireSubscription(ctx, sub, basicTariff, triggerGraceExpired, graceSel, now, false)
 		})
 }
 
@@ -1074,8 +1133,17 @@ func (w *Workers) remindGraceExpiring(ctx context.Context, listed domain.Subscri
 // cancel time, when the falling subscription carries one (issue #617) — and
 // enforces the recipient slots. An out-of-selection subscription is a no-op,
 // not an error.
+//
+// A live pending change outranks the basic fall (issue #1451): a free target
+// applies as the scheduled downgrade — the assigned change replaces the fall.
+// A paid target waits for the boundary-charge leg only on the cancelled leg
+// (waitForCharge) — that leg runs earlier in the same tick and charges the
+// target the scheduling consented to; on the grace and non-renewing legs no
+// charge machinery serves the row, so a paid target converges on the basic
+// fall the way it did before the deferred downgrade reached those states.
 func (w *Workers) expireSubscription(
-	ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, trigger string, sel SubscriptionSelection,
+	ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, trigger string,
+	sel SubscriptionSelection, now time.Time, waitForCharge bool,
 ) error {
 	return w.runLifecycleTx(ctx, func(stores *txStores) error {
 		sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, sel)
@@ -1084,6 +1152,21 @@ func (w *Workers) expireSubscription(
 		}
 		if !inBatch {
 			return nil
+		}
+		if sub.HasPendingChange() {
+			applied, err := applyFreeScheduledChange(ctx, stores, &sub, now)
+			if err != nil {
+				return err
+			}
+			if applied || waitForCharge {
+				// Applied: the scheduled apply replaced the fall. Not applied
+				// with waitForCharge: a paid target the boundary-charge leg of
+				// the renewal phase owns — falling to basic would discard a
+				// plan the boundary charge may still deliver.
+				return nil
+			}
+			// A paid target no charge machinery serves: the plain basic fall
+			// below.
 		}
 		// The keep choice is read before the downgrade consumes it: it names
 		// the property the basic-limit enforcement below must keep alive.

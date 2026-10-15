@@ -112,6 +112,23 @@ func (s *phaseScheduler) pendingChangesDue(now time.Time, limit int) Subscriptio
 	}
 }
 
+// scheduledDowngradeChargeDue is the boundary-charge batch of issue #1451:
+// cancelled subscriptions carrying a due deferred change. The change was
+// planned from the cancelled state (issue #1451) with auto-renew on, so a
+// paid target is charged at apply time by the renewal machinery (ADR 0008
+// §3) — the free targets never reach this batch, the boundary phases apply
+// them before it runs. The pending-due bound implies the paid remainder has
+// ended (pending_change_at >= valid_until is a schema CHECK), so no validity
+// bound is needed; the auto-renew flag is not a condition — a pending change
+// on a cancelled row exists only where the scheduling enabled it.
+func (s *phaseScheduler) scheduledDowngradeChargeDue(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusCancelled,
+		PendingChangeDue: new(now),
+		Limit:            limit,
+	}
+}
+
 // The dunning retry schedule of spec #419 (ticket #431): two planned
 // auto-retries of the failed renewal charge inside the grace window, +24 h and
 // +72 h from the grace entry. Product constants, not config — no new settings
