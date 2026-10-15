@@ -3,6 +3,7 @@ import {
   expect,
   openCabinetWithSeededSession,
   paymentCreatedEntry,
+  SEEDED_APARTMENT_PROPERTY_ID,
   seedJournalEntry,
   test,
 } from './fixtures';
@@ -146,5 +147,70 @@ test.describe('Изоляция скролла', () => {
     await wheelBursts(page, listBox.x + listBox.width / 2, listBox.y + 8);
 
     expect((await docScroll(page)).root).toBe(before.root);
+  });
+
+  test('край ленты гасит жест: категории объекта', async ({ page, seededUser }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/operations/categories`);
+    const feed = page.locator('.min-h-0.flex-1.overflow-y-auto');
+    await expect(feed).toBeVisible();
+    const style = await feed.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { overscrollY: cs.overscrollBehaviorY, scrollbar: cs.scrollbarWidth };
+    });
+    expect(style.overscrollY).toBe('contain');
+    expect(style.scrollbar).toBe('none');
+
+    // Поведенчески: прокрутка вниз по ленте (сама лента и/или цепочка)
+    // и всплески за оба края — документ не двигается (contain гасит
+    // цепочку на ленте; страница-маршрут лока не имеет и не должна).
+    const feedBox = await feed.boundingBox();
+    if (feedBox === null) {
+      throw new Error('лента категорий не найдена');
+    }
+    await page.mouse.move(feedBox.x + feedBox.width / 2, feedBox.y + feedBox.height / 2);
+    for (let i = 0; i < 12; i += 1) {
+      await page.mouse.wheel(0, 700);
+    }
+    await page.waitForTimeout(300);
+    const before = await docScroll(page);
+    await wheelBursts(page, feedBox.x + feedBox.width / 2, feedBox.y + 8);
+    await wheelBursts(page, feedBox.x + feedBox.width / 2, feedBox.y + feedBox.height - 8);
+    expect(await docScroll(page)).toEqual(before);
+  });
+
+  test('край ленты гасит жест: шит фильтров (contain и скрытый скроллбар)', async ({ page, seededUser }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await execE2eSql('DELETE FROM action_journal;');
+    await seedJournalEntry(
+      paymentCreatedEntry('b2000000-0000-4000-8000-000000000001', 0, 'Аренда'),
+      seededUser,
+    );
+    await page.goto('/history');
+    await expect(page.getByText('Платёж создан: Аренда')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Настройки' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Фильтры истории' });
+    await expect(dialog).toBeVisible();
+    const list = dialog.locator('.overflow-y-auto');
+    const style = await list.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { overscrollY: cs.overscrollBehaviorY, scrollbar: cs.scrollbarWidth };
+    });
+    expect(style.overscrollY).toBe('contain');
+    expect(style.scrollbar).toBe('none');
+  });
+
+  test('скроллбар ленты календаря скрыт: пикер периода', async ({ page, seededUser }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/ui-kit');
+    await page.getByRole('button', { name: 'Открыть пикер периода' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Выберите период' });
+    await expect(dialog).toBeVisible();
+    const list = dialog.locator('.overflow-y-auto');
+    const scrollbar = await list.evaluate((el) => getComputedStyle(el).scrollbarWidth);
+    expect(scrollbar).toBe('none');
   });
 });

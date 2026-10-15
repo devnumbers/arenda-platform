@@ -380,7 +380,7 @@ export function HistoryFiltersSheet({
         <TopNavTitle title={title} />
       </TopNav>
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-width:none]">
         <div className="mx-auto w-full max-w-column px-6 pb-[136px] pt-6 tablet:mt-[72px]">
           {optionsQuery.isPending ? (
             <HistoryFiltersSheetSkeleton />

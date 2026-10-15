@@ -71,7 +71,7 @@ export function PropertyAddressSearch({
       role="dialog"
       aria-modal="true"
       aria-label="Поиск адреса"
-      className={cn(fullscreenSurfaceClass, 'overflow-y-auto')}
+      className={cn(fullscreenSurfaceClass, 'overflow-y-auto overscroll-y-contain [scrollbar-width:none]')}
     >
       <TopNav
         variant="search"

@@ -256,7 +256,7 @@ export function PaymentDayPicker({
         <TopNavTitle title="Выберите день" />
       </TopNav>
       <PageContent className="relative flex h-[calc(100dvh-72px)] flex-col pb-0">
-        <div className="flex-1 min-h-0 overflow-y-auto pb-6">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain [scrollbar-width:none] pb-6">
           <div className="pt-6">
             <MonthDaysGrid
               days={30}

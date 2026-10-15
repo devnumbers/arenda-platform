@@ -383,7 +383,7 @@ export function CalendarDatePicker({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none]"
       >
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
@@ -762,7 +762,7 @@ export function CalendarRangePicker({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none]"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] [scrollbar-width:none]"
       >
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
