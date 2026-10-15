@@ -47,6 +47,7 @@ import {
 import { dateToIsoLocal, type IsoRange } from '@/shared/lib/calendar';
 import { cn } from '@/shared/lib/cn';
 import { OWN_USER_NAME_SUFFIX } from '@/shared/lib/display-name';
+import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import {
   Button,
   CalendarRangePicker,
@@ -254,6 +255,11 @@ export function HistoryFiltersSheet({
   pinnedParticipantId,
   pinnedPropertyId,
 }: HistoryFiltersSheetProps): JSX.Element {
+  // Лок фона: поверхность непрозрачно накрывает ленту — жест у края
+  // внутренней ленты не должен уезжать в цепочку скролла страницы
+  // (канон useBodyScrollLock, решение владельца 2026-10-13; конвенция
+  // слоёв — тикет #1417).
+  useBodyScrollLock();
   const [draft, setDraft] = useState<HistoryFilters>(() => applied);
   // Раскрытие групп — локально, свёрнуто по умолчанию (аннотация макета
   // 2177-60527: страница открывается свёрнутой).

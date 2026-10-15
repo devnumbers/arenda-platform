@@ -7,6 +7,7 @@ import { Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
+import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import { pluralize } from '@/shared/lib/pluralize';
 import {
   allInvitedProperties,
@@ -248,6 +249,11 @@ function InviteObjectsPicker({
   readonly onClose: () => void;
   readonly onConfirm: (selection: ReadonlySet<string>) => void;
 }): JSX.Element {
+  // Лок фона: поверхность непрозрачно накрывает ленту — жест у края
+  // внутренней ленты не должен уезжать в цепочку скролла страницы
+  // (канон useBodyScrollLock, решение владельца 2026-10-13; конвенция
+  // слоёв — тикет #1417).
+  useBodyScrollLock();
   const [draft, setDraft] = useState<ReadonlySet<string>>(initialSelection);
 
   const optionIds = options.map((option) => option.id);

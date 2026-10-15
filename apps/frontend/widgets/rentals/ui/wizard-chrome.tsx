@@ -8,6 +8,7 @@ import {
   paymentReminderOptionLabel,
 } from '@/entities/payment';
 import { cn } from '@/shared/lib/cn';
+import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import {
   Button,
   Checkbox,
@@ -213,6 +214,11 @@ export function PaymentDayPicker({
   readonly onClose: () => void;
   readonly onConfirm: (paymentDay: RentalPaymentDay | undefined) => void;
 }): JSX.Element {
+  // Лок фона: поверхность непрозрачно накрывает ленту — жест у края
+  // внутренней ленты не должен уезжать в цепочку скролла страницы
+  // (канон useBodyScrollLock, решение владельца 2026-10-13; конвенция
+  // слоёв — тикет #1417).
+  useBodyScrollLock();
   const [draftDay, setDraftDay] = useState<number | undefined>(
     typeof initial === 'number' ? initial : undefined,
   );
