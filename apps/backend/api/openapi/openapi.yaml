@@ -9645,13 +9645,17 @@ components:
         cancellation and the resume stay locked until the payment resolves or
         expires. `invalid_keep_property` — the cancellation's keepPropertyId
         is not one of the owner's active properties (issue #617).
+        `cancel_not_available` — the cancellation was requested on the free
+        basic tariff: there is nothing to cancel, the subscription stays as it
+        is (issue #1467); the admin cancellation is not guarded by this code.
         `resume_not_available` — the resume endpoint was called on a
         subscription that is not cancelled or whose paid period has already
         expired: restoration of an expired period goes through paying for a
-        tariff (issue #617). `resume_required` — the tariff change asked a
-        cancelled subscription with a live paid remainder to pay for the
-        tariff and period it is already on: the paid remainder is kept only
-        through the free resume (issue #691).
+        tariff (issue #617); a cancelled free tariff answers with the same
+        code and the free-subscription detail (issue #1467). `resume_required`
+        — the tariff change asked a cancelled subscription with a live paid
+        remainder to pay for the tariff and period it is already on: the paid
+        remainder is kept only through the free resume (issue #691).
       content:
         application/json:
           schema:

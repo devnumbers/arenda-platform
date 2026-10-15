@@ -459,11 +459,17 @@ func (s *Subscription) Cancel(keepPropertyID *uuid.UUID) error {
 // resume is the counterpart of the paid reactivation (ADR 0008: restoration
 // goes through paying for a tariff) — that one stays for periods that have
 // already expired. The keep choice of the undone cancellation is dropped.
+// A cancelled subscription with no period at all is the free tariff (issue
+// #1467): it never had anything to resume, so the refusal names the free
+// subscription with its own sentinel for the HTTP edge's context text.
 func (s *Subscription) Resume(now time.Time) error {
 	if s.Status != SubscriptionStatusCancelled {
 		return ErrResumeNotAvailable
 	}
-	if s.ValidUntil == nil || now.After(*s.ValidUntil) {
+	if s.ValidUntil == nil {
+		return ErrResumeNotAvailableFreeTariff
+	}
+	if now.After(*s.ValidUntil) {
 		return ErrResumeNotAvailable
 	}
 	s.Status = SubscriptionStatusActive

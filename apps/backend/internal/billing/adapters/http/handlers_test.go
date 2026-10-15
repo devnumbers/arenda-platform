@@ -1351,16 +1351,28 @@ func TestResumeSubscription_Returns204(t *testing.T) {
 }
 
 // TestResumeSubscription_ErrorMapping proves the resume conflicts map to 409
-// with the contract codes (issue #617).
+// with the contract codes (issue #617): the free-tariff refusal keeps the
+// resume_not_available code and carries the honest free-subscription detail
+// (issue #1467).
 func TestResumeSubscription_ErrorMapping(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name string
-		err  error
-		want int
-		code string
+		name   string
+		err    error
+		want   int
+		code   string
+		detail string
 	}{
-		{name: "not resumable", err: domain.ErrResumeNotAvailable, want: http.StatusConflict, code: "resume_not_available"},
+		{
+			name: "not resumable", err: domain.ErrResumeNotAvailable,
+			want: http.StatusConflict, code: "resume_not_available",
+			detail: "Возобновление недоступно: оплаченный период истёк, оплатите тариф",
+		},
+		{
+			name: "free tariff", err: domain.ErrResumeNotAvailableFreeTariff,
+			want: http.StatusConflict, code: "resume_not_available",
+			detail: "Подписка бесплатная — возобновлять нечего. Подключите Про или Бизнес, чтобы продолжить",
+		},
 		{name: "pending payment", err: billingapp.ErrPendingPaymentExists, want: http.StatusConflict, code: "pending_payment_exists"},
 		{name: "no subscription", err: billingapp.ErrSubscriptionNotFound, want: http.StatusNotFound},
 	}
@@ -1381,13 +1393,17 @@ func TestResumeSubscription_ErrorMapping(t *testing.T) {
 				return
 			}
 			var problem struct {
-				Code string `json:"code"`
+				Code   string `json:"code"`
+				Detail string `json:"detail"`
 			}
 			if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
 				t.Fatalf("decode problem: %v", err)
 			}
 			if problem.Code != tc.code {
 				t.Errorf("problem code = %q, want %q", problem.Code, tc.code)
+			}
+			if tc.detail != "" && problem.Detail != tc.detail {
+				t.Errorf("problem detail = %q, want %q", problem.Detail, tc.detail)
 			}
 		})
 	}
@@ -1409,17 +1425,25 @@ func TestCancelSubscription_RequiresOwner(t *testing.T) {
 
 // TestCancelSubscription_ErrorMapping proves the service sentinels map to the
 // frozen contract statuses: 404 for a missing subscription, 409 for an invalid
-// state.
+// state, and 409 cancel_not_available with the honest detail for the
+// free-tariff refusal (issue #1467).
 func TestCancelSubscription_ErrorMapping(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name string
-		err  error
-		want int
+		name   string
+		err    error
+		want   int
+		code   string
+		detail string
 	}{
 		{name: "no subscription", err: billingapp.ErrSubscriptionNotFound, want: http.StatusNotFound},
 		{name: "already cancelled", err: domain.ErrInvalidSubscriptionState, want: http.StatusConflict},
-		{name: "invalid keep property", err: billingapp.ErrInvalidKeepProperty, want: http.StatusConflict},
+		{name: "invalid keep property", err: billingapp.ErrInvalidKeepProperty, want: http.StatusConflict, code: "invalid_keep_property"},
+		{
+			name: "free tariff", err: billingapp.ErrCancelNotAvailable,
+			want: http.StatusConflict, code: "cancel_not_available",
+			detail: "Базовый тариф бесплатный — отключать нечего",
+		},
 		{name: "infrastructure", err: errors.New("connection reset"), want: http.StatusInternalServerError},
 	}
 	for _, tc := range cases {
@@ -1434,6 +1458,22 @@ func TestCancelSubscription_ErrorMapping(t *testing.T) {
 
 			if w.Code != tc.want {
 				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+			if tc.code == "" {
+				return
+			}
+			var problem struct {
+				Code   string `json:"code"`
+				Detail string `json:"detail"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+				t.Fatalf("decode problem: %v", err)
+			}
+			if problem.Code != tc.code {
+				t.Errorf("problem code = %q, want %q", problem.Code, tc.code)
+			}
+			if tc.detail != "" && problem.Detail != tc.detail {
+				t.Errorf("problem detail = %q, want %q", problem.Detail, tc.detail)
 			}
 		})
 	}

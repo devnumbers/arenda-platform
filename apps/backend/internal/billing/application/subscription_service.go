@@ -190,7 +190,10 @@ func (s *SubscriptionService) livePendingPayment(ctx context.Context, userID uui
 // properties-context bridge. A repeat cancellation of an already-cancelled
 // subscription succeeds as an idempotent no-op (issue #1451): nothing is
 // validated, changed, transition-logged or audited, the stored state — the
-// keep choice and any scheduled change included — stays as it is.
+// keep choice and any scheduled change included — stays as it is. Cancelling
+// the free basic tariff is refused with ErrCancelNotAvailable (issue #1467):
+// the request cannot be executed, the subscription stays as it is — the admin
+// cancellation keeps its own judgment and stays outside this guard.
 func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uuid.UUID, keepPropertyID *uuid.UUID) error {
 	return s.runLifecycleTx(ctx, func(stores *txStores) error {
 		sub, err := stores.subscriptionForUpdate(ctx, userID)
@@ -205,21 +208,15 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 		if !sub.IsPaidSource() {
 			return domain.ErrInvalidSubscriptionState
 		}
+		if err := rejectFreeTariffCancel(ctx, stores, sub); err != nil {
+			return err
+		}
 		if err := rejectLivePendingPayment(ctx, stores, userID, s.clock.Now().UTC()); err != nil {
 			return err
 		}
 		if keepPropertyID != nil {
-			if stores.archiver == nil {
-				// The bridge is wired in every composition root; refusing
-				// loudly beats storing an unvalidated id (issue #617).
-				return errors.New("cancel keep property: properties bridge is not wired")
-			}
-			exists, err := stores.archiver.ActivePropertyExists(ctx, userID, *keepPropertyID)
-			if err != nil {
-				return fmt.Errorf("validate keep property: %w", err)
-			}
-			if !exists {
-				return ErrInvalidKeepProperty
+			if err := validateKeepPropertyChoice(ctx, stores, userID, *keepPropertyID); err != nil {
+				return err
 			}
 		}
 
@@ -242,6 +239,40 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uui
 		}
 		return nil
 	})
+}
+
+// rejectFreeTariffCancel refuses the user's cancellation of the free basic
+// tariff (issue #1467): the request cannot be executed, the subscription
+// stays as it is. The guard lives on the user path only — the admin
+// cancellation keeps its own judgment (#1467).
+func rejectFreeTariffCancel(ctx context.Context, stores *txStores, sub domain.Subscription) error {
+	currentTariff, err := currentTariffOf(ctx, stores, sub)
+	if err != nil {
+		return err
+	}
+	if !currentTariff.IsPaid() {
+		return ErrCancelNotAvailable
+	}
+	return nil
+}
+
+// validateKeepPropertyChoice checks the cancel keep choice (issue #617) over
+// the properties-context bridge: the named property must be one of the
+// owner's active ones.
+func validateKeepPropertyChoice(ctx context.Context, stores *txStores, userID, keepPropertyID uuid.UUID) error {
+	if stores.archiver == nil {
+		// The bridge is wired in every composition root; refusing
+		// loudly beats storing an unvalidated id (issue #617).
+		return errors.New("cancel keep property: properties bridge is not wired")
+	}
+	exists, err := stores.archiver.ActivePropertyExists(ctx, userID, keepPropertyID)
+	if err != nil {
+		return fmt.Errorf("validate keep property: %w", err)
+	}
+	if !exists {
+		return ErrInvalidKeepProperty
+	}
+	return nil
 }
 
 // ResumeSubscription undoes a cancellation without a charge (issue #617): a

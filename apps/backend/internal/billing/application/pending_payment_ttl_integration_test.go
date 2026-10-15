@@ -102,9 +102,14 @@ func TestPendingPaymentTTL_Blocks_Integration(t *testing.T) {
 	if !errors.Is(err, billingapp.ErrPendingPaymentExists) {
 		t.Fatalf("ChangeTariff(other) err = %v, want ErrPendingPaymentExists", err)
 	}
+	// The free-tariff guard outranks the pending lock (issue #1467): the
+	// subscription sits on the free basic tariff, so the cancellation is
+	// refused before the pending payment is consulted. The paid-tariff
+	// pairing — a live pending blocks the cancellation — stays with
+	// TestCancelSubscription_LivePendingBlocked.
 	cancelErr := h.subscriptionsSvc.CancelSubscription(h.ctx(), sub.UserID, nil)
-	if !errors.Is(cancelErr, billingapp.ErrPendingPaymentExists) {
-		t.Fatalf("CancelSubscription err = %v, want ErrPendingPaymentExists", cancelErr)
+	if !errors.Is(cancelErr, billingapp.ErrCancelNotAvailable) {
+		t.Fatalf("CancelSubscription err = %v, want ErrCancelNotAvailable", cancelErr)
 	}
 }
 

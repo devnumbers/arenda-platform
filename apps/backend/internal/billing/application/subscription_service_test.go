@@ -93,6 +93,21 @@ func (h *subscriptionHarness) seedPaidSubscription(t *testing.T, name domain.Tar
 	return sub
 }
 
+// seedFreeBasicSubscription creates the free basic subscription a
+// newly-registered owner gets: paid source, active, no validity period.
+func (h *subscriptionHarness) seedFreeBasicSubscription(t *testing.T) domain.Subscription {
+	t.Helper()
+	userID := uuid.Must(uuid.NewV7())
+	sub, err := domain.NewBasicSubscription(userID, h.tariffID(t, domain.TariffBasic))
+	if err != nil {
+		t.Fatalf("NewBasicSubscription() error = %v", err)
+	}
+	if _, err := h.stores.subscriptions.Create(t.Context(), sub); err != nil {
+		t.Fatalf("seed Create() error = %v", err)
+	}
+	return sub
+}
+
 // requireCancelledSubscription asserts the cancelled subscription keeps the
 // paid period with auto-renew off and stays mutable until the period ends.
 func (h *subscriptionHarness) requireCancelledSubscription(t *testing.T, sub domain.Subscription) {
@@ -232,6 +247,56 @@ func TestSubscriptionService_CancelSubscription_ServiceSourceRejected(t *testing
 
 	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); !errors.Is(err, domain.ErrInvalidSubscriptionState) {
 		t.Fatalf("err = %v, want domain.ErrInvalidSubscriptionState", err)
+	}
+}
+
+// TestSubscriptionService_CancelSubscription_FreeTariffRefused proves the
+// free-tariff guard (issue #1467): cancelling the free basic tariff is a
+// request that cannot be executed — the user path refuses it with
+// ErrCancelNotAvailable and the subscription stays as it is.
+func TestSubscriptionService_CancelSubscription_FreeTariffRefused(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedFreeBasicSubscription(t)
+
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); !errors.Is(err, ErrCancelNotAvailable) {
+		t.Fatalf("err = %v, want ErrCancelNotAvailable", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("Status = %q, want untouched active", stored.Status)
+	}
+	if stored.ValidUntil != nil {
+		t.Errorf("ValidUntil = %v, want nil", *stored.ValidUntil)
+	}
+	if pending, transitionCount, auditCount := h.sideEffects(t, sub.ID); pending || transitionCount != 0 || auditCount != 0 {
+		t.Errorf("refused cancel left side effects: pending=%v transitions=%d audit=%d", pending, transitionCount, auditCount)
+	}
+}
+
+// TestSubscriptionService_CancelSubscription_CancelledFreeTariffIsStillNoOp
+// proves the #1451 idempotent no-op outranks the free-tariff guard: a legacy
+// cancelled basic subscription — the state the unguarded API could produce —
+// keeps answering the repeat cancellation with the no-op, not the 409.
+func TestSubscriptionService_CancelSubscription_CancelledFreeTariffIsStillNoOp(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedFreeBasicSubscription(t)
+	sub.Status = domain.SubscriptionStatusCancelled
+	if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
+		t.Fatalf("seed Update() error = %v", err)
+	}
+
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
+		t.Fatalf("repeat CancelSubscription() error = %v, want nil (idempotent no-op)", err)
+	}
+
+	if pending, transitionCount, auditCount := h.sideEffects(t, sub.ID); pending || transitionCount != 0 || auditCount != 0 {
+		t.Errorf("no-op cancel left side effects: pending=%v transitions=%d audit=%d", pending, transitionCount, auditCount)
 	}
 }
 
@@ -864,6 +929,23 @@ func TestSubscriptionService_ResumeSubscription_Rejections(t *testing.T) {
 
 		if err := h.svc.ResumeSubscription(t.Context(), sub.UserID); !errors.Is(err, domain.ErrResumeNotAvailable) {
 			t.Fatalf("err = %v, want domain.ErrResumeNotAvailable", err)
+		}
+	})
+
+	t.Run("a cancelled free tariff names the free subscription", func(t *testing.T) {
+		t.Parallel()
+		h := newSubscriptionHarness(t)
+		sub := h.seedFreeBasicSubscription(t)
+		sub.Status = domain.SubscriptionStatusCancelled
+		if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
+			t.Fatalf("seed Update() error = %v", err)
+		}
+
+		// Issue #1467: the free tariff never had a paid period — the refusal
+		// carries the free-subscription sentinel the HTTP edge answers with
+		// the honest text, not the expired-period one.
+		if err := h.svc.ResumeSubscription(t.Context(), sub.UserID); !errors.Is(err, domain.ErrResumeNotAvailableFreeTariff) {
+			t.Fatalf("err = %v, want domain.ErrResumeNotAvailableFreeTariff", err)
 		}
 	})
 

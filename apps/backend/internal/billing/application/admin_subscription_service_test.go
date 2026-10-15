@@ -477,6 +477,29 @@ func TestAdminCancelSubscription_CancelsWithAdminAttribution(t *testing.T) {
 	}
 }
 
+// TestAdminCancelSubscription_FreeTariffNotGuarded proves the admin path sits
+// outside the user's free-tariff refusal (issue #1467): the admin may cancel
+// a paid-source basic subscription — the very state the user path refuses
+// with ErrCancelNotAvailable — themselves.
+func TestAdminCancelSubscription_FreeTariffNotGuarded(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedFreeBasicSubscription(t)
+	adminID := uuid.Must(uuid.NewV7())
+
+	if err := h.svc.CancelSubscriptionAsAdmin(t.Context(), adminID, sub.UserID); err != nil {
+		t.Fatalf("CancelSubscriptionAsAdmin(basic) error = %v, want the unguarded admin cancel", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusCancelled {
+		t.Errorf("Status = %q, want cancelled", stored.Status)
+	}
+}
+
 // TestAdminListTransitions_ResolvesTariffNames proves the transition-history
 // view (issue #255): the newest-first log with the tariff names resolved and
 // the payment reference kept.
