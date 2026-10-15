@@ -390,7 +390,9 @@ test.describe('машина «Действий аренды» на страни�
     await expect(
       page.getByRole('heading', { name: 'Подведем итоги аренды' }),
     ).toBeVisible();
-    await page.getByRole('button', { name: 'Завершить аренду' }).click();
+    // Финальная кнопка шага итогов — «Подвести итоги» (макет 1433:60681,
+    // hero-экран <561); «Завершить аренду» — вход в мастер, не его финал.
+    await page.getByRole('button', { name: 'Подвести итоги' }).click();
     await expect(page.getByRole('heading', { name: /завершена$/ })).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо' }).click();
 
