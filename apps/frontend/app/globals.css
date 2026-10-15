@@ -301,6 +301,12 @@
     --default-transition-duration: var(--dl-duration-fast);
     --default-transition-timing-function: var(--dl-ease);
     --ease-apple: var(--dl-ease);
+    /* Скелетон-пульс на кривой дома (аудит #1418, план 014): единственный
+       регулярный keyframe-дефолт Tailwind шёл с чужой кривой (0.4, 0.6, 1)
+       мимо токен-канона. Длительность 2s и opacity-природа — без изменений;
+       reduced-motion не укорачивает: это бесконечный индикатор статуса,
+       укорачивание дало бы строб (решение #1349). */
+    --animate-pulse: pulse 2s var(--dl-ease) infinite;
 }
 
 /* Модалка-карточка ≥768px: переход-модель шита «Еще» (решение 22.09),

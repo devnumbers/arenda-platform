@@ -168,7 +168,7 @@ function FaqEntry({
         <SmallArrowDown
           aria-hidden
           className={cn(
-            'shrink-0 text-content-tertiary transition-transform duration-300 ease-out',
+            'shrink-0 text-content-tertiary transition-transform duration-300 ease-out motion-reduce:duration-150',
             expanded && 'rotate-180',
           )}
         />
@@ -180,7 +180,7 @@ function FaqEntry({
       <div
         inert={!expanded}
         className={cn(
-          'grid transition-[grid-template-rows,opacity] duration-300 ease-out',
+          'grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:duration-150',
           expanded ? 'opacity-100 [grid-template-rows:1fr]' : 'opacity-0 [grid-template-rows:0fr]',
         )}
       >
