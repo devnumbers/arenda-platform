@@ -127,7 +127,7 @@ export function ParticipantsInviteScreen(): JSX.Element {
         </h1>
         <p className="mt-2 text-sm leading-4 text-content-secondary">
           Укажите электронную почту и выберите роль — просмотр или
-          редактирование. Мы отправим приглашение в ваш объект
+          управление. Мы отправим приглашение в ваш объект
         </p>
 
         <div className="mt-8">
