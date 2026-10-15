@@ -48,6 +48,13 @@ export function readTasksFeedFilter(params: TasksFeedFilterParamsSource): TasksF
   };
 }
 
+/** Фильтр включён: выбраны объекты или «Общие задачи» — чип «Объект»
+ * активен (решение владельца 2026-09-05), лента читает суженный срез,
+ * пустой результат — состояние «под фильтром», а не «Задач нет». */
+export function isActiveTasksFeedFilter(filter: TasksFeedFilter): boolean {
+  return filter.propertyIds.length > 0 || filter.withoutProperty;
+}
+
 /** Параметры адреса для фильтра — запись через useTasksFeedFilter. */
 export function tasksFeedFilterParams(filter: TasksFeedFilter): Record<string, string> {
   const params: Record<string, string> = {};

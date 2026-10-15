@@ -17,6 +17,7 @@ import { useProperties } from '@/features/properties';
 import {
   canMutateFeedTask,
   groupTasks,
+  isActiveTasksFeedFilter,
   mutableFeedTasks,
   useCompleteAllGlobalTasks,
   useCompleteGlobalTask,
@@ -47,6 +48,7 @@ import {
   TopNav,
 } from '@/shared/ui/design';
 import { TaskRow } from '@/features/tasks';
+import { tasksFeedEmptyState } from '../lib/tasks-feed-gate';
 import { TaskSectionCard } from './task-section-card';
 import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
 import {
@@ -88,6 +90,12 @@ import { SortChip, sortPickerGroups } from './tasks-sort';
  * (решение владельца 2026-09-05, перекрывает «чип = имя объекта» из
  * решения 7 #522). «+» — создание задачи (#525): та же форма, что на
  * объекте, вход без предвыбранного объекта — маршрут /tasks/new.
+ * Пустота различает «совсем нет задач» и «под фильтром»: без фильтра —
+ * канон «Задач нет» с CTA, чипы и «+» спрятаны (анатомия 3235-74057);
+ * под фильтром — минимальное «Задач не найдено. Попробуйте изменить
+ * фильтр» по канону пустого периода операций (#474), чипы с «Объект»
+ * и «+» остаются — фильтр меняют тем же чипом (решение владельца
+ * 15.10.2026). Гейт — чистый шов lib/tasks-feed-gate.
  */
 export function TasksFeedScreen({
   initialSort,
@@ -152,8 +160,15 @@ export function TasksFeedScreen({
   const sections =
     today !== undefined ? groupTasks(active, completedItems, today, sort) : [];
 
-  const showEmpty =
-    activeQuery.isSuccess && completedQuery.isSuccess && active.length === 0 && completedTotal === 0;
+  // Гейт пустых состояний (чистый шов, тест в lib/tasks-feed-gate):
+  // 'feed' — совсем без задач и без фильтра, 'filtered' — пусто под
+  // фильтром «Объект»; чипы и «+» прячет только 'feed'.
+  const empty = tasksFeedEmptyState({
+    filter,
+    loaded: activeQuery.isSuccess && completedQuery.isSuccess,
+    hasTasks: active.length > 0 || completedTotal > 0,
+  });
+  const showEmpty = empty === 'feed';
 
   const toggleTask = (task: Task): void => {
     if (task.status === 'completed') {
@@ -275,7 +290,7 @@ export function TasksFeedScreen({
              * (синий, макет 1726-86913), подпись всегда «Объект» —
              * названия чип не показывает (правка владельца 2026-09-05). */}
             <ChipButton
-              selected={filter.propertyIds.length > 0 || filter.withoutProperty}
+              selected={isActiveTasksFeedFilter(filter)}
               trailingIcon={<SmallArrowDown />}
               onClick={() => {
                 setFilterDraft(filter);
@@ -302,6 +317,18 @@ export function TasksFeedScreen({
             <TasksStateCard
               title="Не удалось загрузить выполненные"
               onRetry={() => void completedQuery.refetch()}
+            />
+          ) : empty === 'filtered' ? (
+            // Пусто под фильтром «Объект» — канон пустого периода операций
+            // (#474): иллюстрация и одна строка без заголовка и CTA; чипы
+            // и «+» выше остаются — фильтр меняют тем же чипом «Объект»
+            // (решение владельца 15.10.2026). Иллюстрация круглая —
+            // канон задач (imageRounded), у платежей она квадратная.
+            <EmptyState
+              imageSrc="/images/tasks/empty-tasks.webp"
+              imageRounded
+              className="pt-16 pb-16"
+              description="Задач не найдено. Попробуйте изменить фильтр"
             />
           ) : showEmpty ? (
             <EmptyState

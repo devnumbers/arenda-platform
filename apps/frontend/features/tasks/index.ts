@@ -43,6 +43,7 @@ export { useTasksFeedFilter } from './lib/use-tasks-feed-filter';
 export { useTasksSort } from './lib/use-tasks-sort';
 export {
   EMPTY_TASKS_FEED_FILTER,
+  isActiveTasksFeedFilter,
   type TasksFeedFilter,
 } from './lib/tasks-feed-filter';
 export {

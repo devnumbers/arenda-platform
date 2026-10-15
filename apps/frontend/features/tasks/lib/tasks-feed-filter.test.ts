@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isActiveTasksFeedFilter,
   readTasksFeedFilter,
   tasksFeedFilterParams,
   tasksFeedPropertyParam,
@@ -123,5 +124,19 @@ describe('tasksFeedFilterParams', () => {
   it('имена параметров — стабильный контракт', () => {
     expect(tasksFeedPropertyParam).toBe('property');
     expect(tasksFeedWithoutPropertyParam).toBe('withoutProperty');
+  });
+});
+
+describe('isActiveTasksFeedFilter', () => {
+  it('пустой фильтр — не активен («Все задачи»)', () => {
+    expect(isActiveTasksFeedFilter(ALL)).toBe(false);
+  });
+
+  it('выбран объект — активен', () => {
+    expect(isActiveTasksFeedFilter({ propertyIds: [FIRST], withoutProperty: false })).toBe(true);
+  });
+
+  it('только «Общие задачи» — тоже активен (решение владельца 15.10.2026)', () => {
+    expect(isActiveTasksFeedFilter({ propertyIds: [], withoutProperty: true })).toBe(true);
   });
 });
