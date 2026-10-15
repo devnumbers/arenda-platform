@@ -370,6 +370,34 @@
     }
 }
 
+/* Дропдаун-меню (аудит #1418): свой кейфрейм вместо modal-card-in —
+   скейл 0.95 от ТОЧКИ ТРИГГЕРА (origin ставит Radix в переменную
+   --radix-dropdown-menu-content-transform-origin). Длительности — бюджет
+   дропдаунов канона: вход 150ms, выход 120ms, обе на --dl-ease. */
+@keyframes menu-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes menu-out {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(0.97);
+    }
+}
+
 /* Однократное проявление одиночного элемента (#1349): кнопка «+» хаба
    после резолва данных, иллюстрации плейсхолдеров. Fade-семейство канона
    §8 — reduced-motion не гейтится; целые поверхности по-прежнему не
@@ -632,6 +660,14 @@ body:has(.modal-overlay[data-state='open']) .screen-shell {
     .modal-surface[data-state='closed'] {
         animation-duration: 150ms;
         transition-duration: 150ms;
+    }
+}
+
+/* Дропдаун-меню (аудит #1418, план 009): вход 150ms и так в бюджете,
+   выход 120ms укорачивается до канонных 150ms. */
+@media (prefers-reduced-motion: reduce) {
+    [data-radix-dropdown-menu-content] {
+        animation-duration: 150ms;
     }
 }
 

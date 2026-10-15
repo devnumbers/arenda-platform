@@ -32,7 +32,9 @@ export function MenuContent({ className, sideOffset = 4, align = 'end', ...props
           // Figma 1535-77633: карточка radius 24, паддинг 12px 2px, зазор
           // пунктов 2px, тень 0 8px 24px rgba(0,0,0,0.12).
           'z-50 flex w-fit flex-col gap-0.5 rounded-card bg-surface px-0.5 py-3 font-sans shadow-[0_8px_24px_rgba(23,26,28,0.12)] outline-none',
-          'data-[state=open]:animate-[modal-card-in_150ms_var(--dl-ease)]',
+          '[transform-origin:var(--radix-dropdown-menu-content-transform-origin,center)]',
+          'data-[state=open]:animate-[menu-in_150ms_var(--dl-ease)]',
+          'data-[state=closed]:animate-[menu-out_120ms_var(--dl-ease)]',
           className,
         )}
         {...props}

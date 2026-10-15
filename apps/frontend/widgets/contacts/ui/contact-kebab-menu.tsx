@@ -3,7 +3,7 @@
 import type { JSX } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Kebab, TrashBin } from '@/shared/assets/icons';
-import { IconButton } from '@/shared/ui/design';
+import { IconButton, MenuContent } from '@/shared/ui/design';
 
 /**
  * Кебаб-меню карточки контакта (#510 → перекомпоновка #1333, макет
@@ -26,16 +26,9 @@ export function ContactKebabMenu({
       <DropdownMenu.Trigger asChild>
         <IconButton icon={<Kebab className="h-6 w-6" />} label="Меню контакта" />
       </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          sideOffset={4}
-          collisionPadding={24}
-          className="z-50 min-w-[250px] rounded-3xl bg-white p-2 shadow-[0_8px_32px_rgba(23,26,28,0.16)] outline-none"
-        >
-          <MenuItem onSelect={onDelete} icon={<TrashBin className="h-[18px] w-[17px]" />} label="Удалить" />
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
+      <MenuContent align="end" sideOffset={4} collisionPadding={24} className="min-w-[250px]">
+        <MenuItem onSelect={onDelete} icon={<TrashBin className="h-[18px] w-[17px]" />} label="Удалить" />
+      </MenuContent>
     </DropdownMenu.Root>
   );
 }
