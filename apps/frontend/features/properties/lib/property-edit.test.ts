@@ -71,7 +71,7 @@ describe('initialPropertyEditDraft', () => {
 });
 
 describe('buildPropertyEditCommand', () => {
-  it('полный черновик даёт команду: обрезанные строки, описание пустого — undefined', () => {
+  it('полный черновик даёт команду: обрезанные строки, очищенное описание — пустой строкой', () => {
     const draft = {
       type: 'apartment' as PropertyType,
       name: '  Квартира  ',
@@ -83,7 +83,7 @@ describe('buildPropertyEditCommand', () => {
       name: 'Квартира',
       type: 'apartment',
       address: 'Ленина, 34',
-      description: undefined,
+      description: '',
       attributes: { area_total: 45.5, rooms: '2' },
     });
   });
@@ -115,9 +115,21 @@ describe('buildPropertyEditCommand', () => {
       name: '',
       type: 'apartment',
       address: 'Ленина, 34',
-      description: undefined,
+      description: '',
       attributes: {},
     });
+  });
+
+  it('очищенное описание объекта уходит пустой строкой — сервер его удалит (слово владельца 15.10, карта #1444)', () => {
+    // omit означал бы «не менять» — старое описание переживало очистку.
+    const draft = {
+      type: 'apartment' as PropertyType,
+      name: 'Квартира',
+      address: 'Ленина, 34',
+      description: '   ',
+      attributes: {},
+    };
+    expect(buildPropertyEditCommand(draft, stubCatalog)?.description).toBe('');
   });
 
   it('некорректная характеристика блокирует команду', () => {

@@ -208,3 +208,68 @@ test('открытие «с конца»: последние записи объ
   }));
   expect(metrics.distanceToBottom).toBeLessThan(120);
 });
+
+test('правки объекта: пояснения по-русски, смена типа без «удалено», длинное описание не вылезает (карта #1444)', async ({ page, seededUser }, testInfo) => {
+  test.setTimeout(60_000);
+  await execE2eSql('DELETE FROM action_journal;');
+  await openCabinetWithSeededSession(page, seededUser);
+
+  // Реальные PATCH-и: дифф пишет бекенд при записи (детали — готовые
+  // строки, ADR 0061 §5). Сценарий брифа владельца 15.10: квартира с
+  // характеристиками меняет тип на дом — подмена набора не пишет
+  // «удалено», значения enum-полей читаются по-русски.
+  const withAttrs = await page.request.patch(`/api/properties/${APARTMENT_ID}`, {
+    data: { attributes: { balcony: 'loggia', area_total: 50 } },
+  });
+  expect(withAttrs.status()).toBe(200);
+  const toHouse = await page.request.patch(`/api/properties/${APARTMENT_ID}`, {
+    data: { type: 'house', attributes: { area_total: 50, land_area: 6, material: 'brick' } },
+  });
+  expect(toHouse.status()).toBe(200);
+  // Повторная смена — обратный путь тоже без шума удалений.
+  const backToApartment = await page.request.patch(`/api/properties/${APARTMENT_ID}`, {
+    data: { type: 'apartment', attributes: { area_total: 50, balcony: 'loggia' } },
+  });
+  expect(backToApartment.status()).toBe(200);
+  // Длинное описание одним неразрывным куском — перенос, не вылезание.
+  const longDescription = 'А'.repeat(200);
+  const withDescription = await page.request.patch(`/api/properties/${APARTMENT_ID}`, {
+    data: { description: longDescription },
+  });
+  expect(withDescription.status()).toBe(200);
+  // Очищенное описание уходит пустой строкой — сервер удаляет, история
+  // читает «Описание: удалено» (слово владельца 15.10, карта #1444).
+  const clearedDescription = await page.request.patch(`/api/properties/${APARTMENT_ID}`, {
+    data: { description: '' },
+  });
+  expect(clearedDescription.status()).toBe(200);
+
+  await page.goto(`/history/properties/${APARTMENT_ID}`);
+  await expect(page.getByText('Объект изменён: Квартира на Ленина').first()).toBeVisible();
+
+  // Баг 1 (карта #1444): значения атрибутов — русские метки каталога, не
+  // wire-ключи («loggia»/«brick»).
+  await expect(page.getByText('Балкон: «Лоджия»').first()).toBeVisible();
+  await expect(page.getByText('Материал: «Кирпичный»')).toBeVisible();
+
+  // Баг 3 (карта #1444): смена типа и повторная смена — строки «Тип» без
+  // шума подмены набора; единственное «удалено» в ленте — честное удаление
+  // описания из шага выше.
+  await expect(page.getByText('Тип: «Квартира» → «Дом»')).toBeVisible();
+  await expect(page.getByText('Тип: «Дом» → «Квартира»')).toBeVisible();
+  await expect(page.getByText('Описание: удалено')).toBeVisible();
+  await expect(page.getByText(/удалено/)).toHaveCount(1);
+
+  // Баг 2 (карта #1444): пояснение с длинным описанием переносится —
+  // ни элемент, ни страница не вылезают за вьюпорт по горизонтали.
+  const descriptionLine = page.getByText(new RegExp(`Описание: «${longDescription}»`));
+  await expect(descriptionLine).toBeVisible();
+  const wrap = await descriptionLine.evaluate((el) => ({
+    element: el.scrollWidth - el.clientWidth,
+    page: document.documentElement.scrollWidth - window.innerWidth,
+  }));
+  expect(wrap.element).toBeLessThanOrEqual(1);
+  expect(wrap.page).toBeLessThanOrEqual(0);
+
+  await captureScreen(page, testInfo, 'history-property-update-diff');
+});

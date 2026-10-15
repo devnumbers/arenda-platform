@@ -2145,7 +2145,7 @@ func propertyUpdateHistoryEntry(propertyID uuid.UUID, before, after domain.Prope
 			New:   domain.PropertyTypeLabel(after.Type),
 		})
 	}
-	changes = append(changes, attributeChanges(before.Attributes, after.Attributes, after.Type)...)
+	changes = append(changes, attributeChanges(before.Attributes, after.Attributes, before.Type, after.Type)...)
 	if len(changes) == 0 {
 		return historydomain.Entry{}, false
 	}
@@ -2158,13 +2158,26 @@ func propertyUpdateHistoryEntry(propertyID uuid.UUID, before, after domain.Prope
 // the detail lines of the new row template read it (history cannot import
 // the catalog: направление зависимости properties → history). A PATCH that
 // changes the type and the attributes together labels by the NEW type —
-// the same type applyPropertyUpdate validated the values against.
-func attributeChanges(before, after domain.Attributes, propType domain.PropertyType) []historydomain.AttributeChange {
+// the same type applyPropertyUpdate validated the values against. Values
+// are display-ready (the AttributeChange contract): enum options read their
+// RU labels, the value's own catalog first (an old value is old-type, a new
+// value new-type), the edit's other type second — a type change diffs
+// across two catalogs. Removals of keys outside the NEW type's catalog are
+// the type swap itself, not a user deletion (the form submits the new
+// type's keyset whole, карта #1444): a type change keeps them out of the
+// diff; a removal at a steady type stays an honest «удалено».
+func attributeChanges(before, after domain.Attributes, beforeType, afterType domain.PropertyType) []historydomain.AttributeChange {
 	if before == nil {
 		before = domain.Attributes{}
 	}
 	if after == nil {
 		after = domain.Attributes{}
+	}
+	// The new type's keyset guards the removal loop; nil (an unknown type)
+	// means no catalog to argue from, so nothing counts as swap noise.
+	newKeys := map[string]bool{}
+	for _, key := range domain.CatalogKeys(afterType) {
+		newKeys[key] = true
 	}
 	changes := make([]historydomain.AttributeChange, 0, len(after))
 	for key, newVal := range after {
@@ -2174,20 +2187,41 @@ func attributeChanges(before, after domain.Attributes, propType domain.PropertyT
 		}
 		changes = append(changes, historydomain.AttributeChange{
 			Key:   key,
-			Label: domain.AttributeFieldLabel(propType, key),
-			Old:   oldVal,
-			New:   newVal,
+			Label: domain.AttributeFieldLabel(afterType, key),
+			Old:   attributeDisplayValue(beforeType, afterType, key, oldVal),
+			New:   attributeDisplayValue(afterType, beforeType, key, newVal),
 		})
 	}
 	for key, oldVal := range before {
 		if _, exists := after[key]; !exists {
+			if beforeType != afterType && !newKeys[key] {
+				continue
+			}
 			changes = append(changes, historydomain.AttributeChange{
 				Key:   key,
-				Label: domain.AttributeFieldLabel(propType, key),
-				Old:   oldVal,
+				Label: domain.AttributeFieldLabel(afterType, key),
+				Old:   attributeDisplayValue(beforeType, afterType, key, oldVal),
 			})
 		}
 	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Key < changes[j].Key })
 	return changes
+}
+
+// attributeDisplayValue renders one attribute value display-ready for the
+// history details: an enum option reads its RU label from the generated
+// catalog — the value's own type first, the edit's other type second;
+// numbers, free strings and booleans travel verbatim (detailValue renders
+// them, «да»/«нет» included). A lookup miss keeps the raw wire value — the
+// catalog can only translate what it knows.
+func attributeDisplayValue(primary, fallback domain.PropertyType, key string, value any) any {
+	if s, ok := value.(string); ok {
+		if label := domain.AttributeEnumLabel(primary, key, s); label != "" {
+			return label
+		}
+		if label := domain.AttributeEnumLabel(fallback, key, s); label != "" {
+			return label
+		}
+	}
+	return value
 }
