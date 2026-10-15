@@ -1,5 +1,6 @@
 export { ParticipantScreenSkeleton } from './ui/participants-skeletons';
 export { ParticipantLoading } from './ui/participants-loading';
+export { ParticipantsListLoading } from './ui/participants-list-loading';
 export { ParticipantsListScreen } from './ui/participants-list-screen';
 export { ParticipantsSearchScreen } from './ui/participants-search-screen';
 export { ParticipantScreen } from './ui/participant-screen';
