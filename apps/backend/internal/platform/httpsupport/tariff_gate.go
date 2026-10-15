@@ -20,8 +20,8 @@ type PaidSectionsGate interface {
 
 // WriteTariffRequired answers the canonical "needs a paid tariff" refusal:
 // 402 PaymentRequired with the machine code "tariff_required" — the wire
-// shape the route middleware and the access handlers mapping the
-// use-case-level gate's verdict (ADR 0064, ревизия #1462) share.
+// shape the route middleware and the handlers mapping a use-case-level
+// gate's verdict (ADR 0064, ревизии #1462 и #1465) share.
 func WriteTariffRequired(ctx context.Context, w http.ResponseWriter) {
 	WriteProblem(ctx, w, http.StatusPaymentRequired,
 		ProblemWithCode(ctx, "Paid tariff required",
@@ -33,10 +33,10 @@ func WriteTariffRequired(ctx context.Context, w http.ResponseWriter) {
 // the answer is 402 PaymentRequired with the machine code "tariff_required",
 // the same canonical "needs a paid tariff" status as the property-limit 402.
 // Mounted over the generated paid-section routes via r.With (the AdminOnly
-// precedent). Since ревизия #1462 the mount covers the global participants
-// section and the history journal; the per-object access group is gated
-// inside its use cases instead — its verdict is role-aware, the middleware
-// has no access to it.
+// precedent). Since ревизия #1465 the mount covers only the global
+// participants section; the per-object access group (ревизия #1462) and the
+// history journal (ревизия #1465) are gated inside their use cases instead —
+// their verdicts are role-aware, the middleware has no access to the role.
 func PaidSectionsMiddleware(gate PaidSectionsGate, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

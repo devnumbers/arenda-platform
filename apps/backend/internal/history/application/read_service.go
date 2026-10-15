@@ -6,29 +6,21 @@
 // rows outside the reader's scope never leave the database; this service
 // proves the property_ids scope before the store is touched so one invisible
 // id hides the whole request (the privacy 404, the tasks feed's #547
-// discipline).
+// discipline) and the tariff gate decides on the already-resolved roles
+// (ADR 0064, ревизия #1465).
 
 package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
-)
-
-// The contract's read errors: ErrInvalidInput is the 400 (malformed cursor,
-// unknown vocabulary, bad page size, oversized query), ErrNotFound — the
-// privacy 404 (an invisible or unknown property id: the request's existence
-// is not revealed).
-var (
-	ErrInvalidInput = errors.New("history: invalid input")
-	ErrNotFound     = errors.New("history: not found")
 )
 
 // The feed page bounds (канон #597/#633): 50-row default, 100 ceiling.
@@ -48,6 +40,16 @@ type EntryReader interface {
 	List(ctx context.Context, actor uuid.UUID, q JournalQuery) ([]domain.FeedEntry, error)
 	FilterParticipants(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) ([]domain.FilterParticipant, error)
 	FilterObjects(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) ([]domain.FilterObject, error)
+}
+
+// PaidSectionsGate resolves whether the actor's subscription covers the
+// platform's paid sections (ADR 0064). Consumer-side port (ADR 0035): the
+// billing module's adapter satisfies it alongside the middleware's and the
+// access use cases' ports — the same verdict, consumed here where the
+// journal's read scope is already resolved. A user without a subscription
+// counts as basic; the gate only blocks, never grants.
+type PaidSectionsGate interface {
+	CanUsePaidFeatures(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
 // JournalQuery is the store-level page request: every filter already
@@ -103,12 +105,17 @@ type FiltersOptions struct {
 type HistoryReadService struct {
 	reader EntryReader
 	policy sharedpolicy.Policy
+	gate   PaidSectionsGate
 }
 
 // NewHistoryReadService creates the reading service. The policy proves the
-// requested property scope before the store is touched.
-func NewHistoryReadService(reader EntryReader, policy sharedpolicy.Policy) *HistoryReadService {
-	return &HistoryReadService{reader: reader, policy: policy}
+// requested property scope before the store is touched; the tariff gate
+// decides the paid scope on the already-resolved roles (ADR 0064, ревизия
+// #1465). A nil gate disables the check — the package convention for
+// optional dependencies (mirrors the access use cases); the composition root
+// always wires the billing adapter.
+func NewHistoryReadService(reader EntryReader, policy sharedpolicy.Policy, gate PaidSectionsGate) *HistoryReadService {
+	return &HistoryReadService{reader: reader, policy: policy, gate: gate}
 }
 
 // Feed returns one page of the reader's journal feed.
@@ -133,7 +140,7 @@ func (s *HistoryReadService) Feed(ctx context.Context, actor uuid.UUID, q FeedQu
 	if err != nil {
 		return FeedPage{}, err
 	}
-	if err := s.provePropertiesVisible(ctx, actor, q.PropertyIDs); err != nil {
+	if err := s.proveReadScope(ctx, actor, q.PropertyIDs); err != nil {
 		return FeedPage{}, err
 	}
 
@@ -199,7 +206,7 @@ func foldCursors(q FeedQuery) (before, after *CursorKey, err error) {
 
 // Filters returns the filter-sheet options for the reader's scope.
 func (s *HistoryReadService) Filters(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (FiltersOptions, error) {
-	if err := s.provePropertiesVisible(ctx, actor, propertyIDs); err != nil {
+	if err := s.proveReadScope(ctx, actor, propertyIDs); err != nil {
 		return FiltersOptions{}, err
 	}
 	participants, err := s.reader.FilterParticipants(ctx, actor, propertyIDs)
@@ -213,20 +220,55 @@ func (s *HistoryReadService) Filters(ctx context.Context, actor uuid.UUID, prope
 	return FiltersOptions{Participants: participants, Objects: objects}, nil
 }
 
-// provePropertiesVisible runs every listed property through its view gate
-// before the store is touched: one invisible or unknown id is the privacy
-// ErrNotFound of the whole request — a mixed list never leaks which ids
-// exist (the tasks feed's #547 discipline). Suspended access hides the
-// property the same way («suspended — недоступно»).
-func (s *HistoryReadService) provePropertiesVisible(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) error {
+// proveReadScope runs every listed property through its view gate and the
+// tariff gate before the store is touched, one role resolution per id (ADR
+// 0028 — no second resolve). Privacy answers first: one invisible or unknown
+// id is the privacy ErrNotFound of the whole request — a mixed list never
+// leaks which ids exist (the tasks feed's #547 discipline), suspended access
+// hides the property the same way («suspended — недоступно»). Only then does
+// ensureTariffAllowsScope decide the tariff verdict (ревизия #1465).
+func (s *HistoryReadService) proveReadScope(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) error {
+	roles := make([]sharedpolicy.Role, 0, len(propertyIDs))
 	for _, propertyID := range propertyIDs {
 		role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
 		if err != nil {
 			return fmt.Errorf("resolve history read role: %w", err)
 		}
+		roles = append(roles, role)
 		if sharedpolicy.GateFor(role, sharedpolicy.CanView) != sharedpolicy.GateAllow {
 			return ErrNotFound
 		}
+	}
+	return s.ensureTariffAllowsScope(ctx, actor, roles)
+}
+
+// ensureTariffAllowsScope is the role-aware tariff gate of the journal reads
+// (ADR 0064, ревизия #1465): on a non-paid tariff a read passes only in the
+// narrowed membership scope — every listed property must be one the reader
+// participates in as a member. The owner's own object refuses («свой объект
+// не в истории» буквально, любая поверхность), and so does the un-narrowed
+// request: the global feed is owner-scope by construction and stays paid for
+// everyone. By the time this runs the privacy pass has discarded the
+// suspended and foreign ids, so a visible role here is the owner or an
+// active member — the strict rule reduces to «no owned id in the list». A
+// gate storage error propagates for the HTTP layer's 500 — the gate never
+// fails open.
+func (s *HistoryReadService) ensureTariffAllowsScope(ctx context.Context, actor uuid.UUID, roles []sharedpolicy.Role) error {
+	if s.gate == nil {
+		return nil
+	}
+	paid, err := s.gate.CanUsePaidFeatures(ctx, actor)
+	if err != nil {
+		return fmt.Errorf("paid sections gate: %w", err)
+	}
+	if paid {
+		return nil
+	}
+	if len(roles) == 0 {
+		return ErrTariffRequired
+	}
+	if slices.Contains(roles, sharedpolicy.RoleOwner) {
+		return ErrTariffRequired
 	}
 	return nil
 }

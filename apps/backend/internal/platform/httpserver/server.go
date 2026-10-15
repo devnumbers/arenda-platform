@@ -328,14 +328,15 @@ func New(deps Deps) http.Handler {
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/audit-logs", wrapper.ListAdminUserAuditLogs)
 
 	// Paid-sections tariff gate (карта #997, ADR 0064): the same override
-	// trick as AdminOnly above — the paid participants and history routes
-	// re-register with the tariff middleware over the generated ones,
-	// answering 402 tariff_required below a paid tariff. The per-object
-	// access group (/properties/{propertyId}/access/*) is NOT mounted here
-	// since ревизия #1462: its gate is role-aware and lives in the access
-	// use cases after the already-resolved role — a property member reads
-	// the list on the basic tariff («пригласили — значит пользуется»), the
-	// owner's reads and manage mutations refuse with 402 inside the handlers.
+	// trick as AdminOnly above — the paid participants routes re-register
+	// with the tariff middleware over the generated ones, answering 402
+	// tariff_required below a paid tariff. Two groups are NOT mounted here:
+	// the per-object access group since ревизия #1462 and the history
+	// journal since ревизия #1465 — their gates are role-aware and live in
+	// the use cases after the already-resolved role (a property member reads
+	// the access list and the narrowed history on the basic tariff, «
+	// пригласили — значит пользуется»; the owner's reads refuse with 402
+	// inside the handlers).
 	paidSections := httpsupport.PaidSectionsMiddleware(deps.PaidSectionsGate, deps.Logger)
 
 	// Idempotency-Key на creation-роутах (тикет Т3 карты #1112): тот же
@@ -363,11 +364,11 @@ func New(deps Deps) http.Handler {
 	r.With(paidSections).Get("/participants/{participantId}", wrapper.GetParticipant)
 	r.With(paidSections).Post("/participants/{participantId}/properties", wrapper.AddParticipantProperties)
 
-	// Screen 3 (#1000): the «История действий» journal — both read endpoints
-	// of the section; every nested page and the filter sheet serve from
-	// these two.
-	r.With(paidSections).Get("/history", wrapper.GetHistory)
-	r.With(paidSections).Get("/history/filters", wrapper.GetHistoryFilters)
+	// Screen 3 (#1000), the «История действий» journal, left the middleware
+	// mount in ревизия #1465: both read endpoints serve every page and the
+	// filter sheet, and the participant's narrowed reads must pass on the
+	// basic tariff — the role-aware verdict lives in HistoryReadService
+	// (the handlers answer its ErrTariffRequired with the same 402 body).
 
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can
