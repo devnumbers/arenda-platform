@@ -31,11 +31,6 @@ export function useSwapPhase<Value>({
   }, []);
 
   const swap = (next: Value) => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setValue(next);
-      setPhase("idle");
-      return;
-    }
     if (swapTimer.current !== null) {
       window.clearTimeout(swapTimer.current);
     }

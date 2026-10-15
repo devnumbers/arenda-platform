@@ -31,8 +31,9 @@ import s from "./showcase.module.css";
 // докат 360мс к ближайшей карточке; быстрый бросок добавляет одну
 // карточку по направлению (порог по скорости, как у Swiper). Клик по
 // боковой карточке/плашке ведёт её в центр одним переходом независимо
-// от дистанции; клик и wheel во время анимации игнорируются, drag
-// перехватывает движение. Shift+Scroll и горизонтальный трекпад —
+// от дистанции; клик в полёте перебивает переход с текущей позиции
+// (канон DESIGN.md §3), wheel в полёте глотается, drag перехватывает
+// движение. Shift+Scroll и горизонтальный трекпад —
 // скролл по расстоянию пальца: каждые ~220px накопленного пальцевого
 // пути = одна карточка, моментум (затухающие дельты) не летает, свайп
 // всегда даёт карточку (механика и константы — в блоке WHEEL ниже),
@@ -257,12 +258,12 @@ export function Showcase() {
   const slideNodes = useRef<Array<HTMLElement | null>>([]);
   const plateNodes = useRef<Array<HTMLElement | null>>([]);
   const stateRef = useRef<EngineState | null>(null);
-  const reducedRef = useRef(false);
-
-  const reduced = useCallback(() => reducedRef.current, []);
 
   // Один проход отрисовки: k по дистанции до позиций покоя, транслейт
   // фотодорожки, центровка ряда плашек. Источник истины — st.p.
+  // Чтения (clientWidth) — ДО любых записей стилей: запись после чтения
+  // форсирует sync-layout посреди кадра (порядок «сначала читаем, потом
+  // пишем» держит один layout на кадр).
   const render = useCallback(() => {
     const viewport = viewportRef.current;
     const photoTrack = photoTrackRef.current;
@@ -271,6 +272,7 @@ export function Showcase() {
     const st = stateRef.current;
     if (!viewport || !photoTrack || !strip || !zone || !st) return;
     const { m, step, snapArr } = snapModel(tierOf(), viewport.clientWidth);
+    const zoneW = zone.clientWidth;
     const p = st.p;
     const k = st.k;
     let dirty = false;
@@ -288,6 +290,7 @@ export function Showcase() {
         plateNodes.current[g]?.setAttribute("style", `--k:${kk}`);
       }
     }
+    zone.classList.toggle(s.moving ?? "", st.anim !== null || st.dragging);
     photoTrack.style.transform = `translate3d(${(-p).toFixed(2)}px,0,0)`;
     // Плашки: транслейт линейно по p между позициями покоя — плашечный
     // ряд скользит с той же кривой, что и фото (frac линеен по p), и
@@ -300,7 +303,7 @@ export function Showcase() {
     const next = snapArr[Math.min(gLo + 1, G - 1)] ?? 0;
     const span = Math.max(next - (snapArr[gLo] ?? 0), 1);
     const frac = clamp((p - (snapArr[gLo] ?? 0)) / span, 0, 1);
-    const tx = zone.clientWidth / 2 - (gLo * pitch + m.plate / 2) - frac * pitch;
+    const tx = zoneW / 2 - (gLo * pitch + m.plate / 2) - frac * pitch;
     strip.style.transform = `translateX(${tx.toFixed(1)}px)`;
   }, []);
 
@@ -345,6 +348,7 @@ export function Showcase() {
       } else {
         st.anim = null;
         renormalize();
+        render(); // снимает .moving (фриз блюра) после посадки
         // Непрерывный скролл: расстояние, набранное пальцем во время
         // анимации, продолжает серию — лок на время перехода, не тишина.
         if (st.wheelAcc >= WHEEL_STEP_PX && st.wheelSign !== 0) {
@@ -369,11 +373,11 @@ export function Showcase() {
         renormalize();
         return;
       }
-      st.anim = { from: st.p, to, t0: performance.now(), dur: reduced() ? 0 : STEP_MS };
+      st.anim = { from: st.p, to, t0: performance.now(), dur: STEP_MS };
       cancelAnimationFrame(st.raf);
       frameLoop();
     },
-    [frameLoop, reduced, render, renormalize],
+    [frameLoop, render, renormalize],
   );
 
   // Один wheel-шаг в направлении dir: сосед от ближайшей позиции покоя.
@@ -395,12 +399,14 @@ export function Showcase() {
 
   // Выбор карточки по индексу узла ленты: кликнутая едет в центр одним
   // переходом, сколько бы шагов ни было (кратчайший обход кольца копий).
-  // Клик во время анимации или drag игнорируется — как у Яндекса.
+  // Клик в полёте перебивает переход с текущей позиции (канон DESIGN.md
+  // §3 «клик или захват мыши в полёте перебивает переход», animateTo
+  // всегда стартует от живого p); drag перехватывает движение раньше.
   const selectNode = useCallback(
     (g: number) => {
       const viewport = viewportRef.current;
       const st = stateRef.current;
-      if (!viewport || !st || st.anim || st.dragging) return;
+      if (!viewport || !st || st.dragging) return;
       const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
       const cur = nearestIndex(st.p, snapArr);
       let delta = g - cur;
@@ -411,16 +417,6 @@ export function Showcase() {
     },
     [animateTo],
   );
-
-  useEffect(() => {
-    const rm = window.matchMedia("(prefers-reduced-motion: reduce)");
-    reducedRef.current = rm.matches;
-    const onRmChange = () => {
-      reducedRef.current = rm.matches;
-    };
-    rm.addEventListener("change", onRmChange);
-    return () => rm.removeEventListener("change", onRmChange);
-  }, []);
 
   // Стартовая центровка и пересборка базы на смену яруса.
   useEffect(() => {
@@ -642,7 +638,7 @@ export function Showcase() {
             </p>
           </div>
         </Reveal>
-        <Reveal delay={100} className="w-full">
+        <Reveal delay={80} className="w-full">
           <div
             ref={zoneRef}
             className={`${s.carousel} ${s.zone}`}
@@ -738,7 +734,7 @@ export function Showcase() {
             </div>
           </div>
         </Reveal>
-        <Reveal delay={200}>
+        <Reveal delay={120}>
           <LandingLink href="/login">Попробовать</LandingLink>
         </Reveal>
       </div>

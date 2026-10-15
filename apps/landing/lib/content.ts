@@ -35,7 +35,11 @@ export const STEPS: Step[] = [
   },
 ];
 
-export type TariffFeature = { icon: "home" | "objects" | "team"; title: string; text: string };
+export type TariffFeature = {
+  icon: "home" | "objects" | "team" | "history";
+  title: string;
+  text: string;
+};
 
 export type Tariff = {
   id: "basic" | "pro" | "business";
@@ -45,6 +49,10 @@ export type Tariff = {
   yearlyTotal: number; // ₽ за год
   features: TariffFeature[];
   cta: string;
+  // Куда ведёт CTA карточки: «Подключить» — на экран «Выбрать тариф»
+  // кабинета; tariff и период карточка добавляет в query сама
+  // (tariff-cards.tsx), кабинет предвыбирает их из URL
+  // (tariffChangeUrlOverrides); /login у базового — полный переход.
   href: string;
 };
 
@@ -82,9 +90,14 @@ export const TARIFFS: Tariff[] = [
         title: "Совместный доступ",
         text: "Приглашайте партнеров и управляйте объектами вместе",
       },
+      {
+        icon: "history",
+        title: "История действий",
+        text: "Отслеживайте любые изменения в объектах",
+      },
     ],
     cta: "Подключить",
-    href: "/subscription",
+    href: "/profile/tariff/change",
   },
   {
     id: "business",
@@ -103,9 +116,14 @@ export const TARIFFS: Tariff[] = [
         title: "Совместный доступ",
         text: "Приглашайте партнеров и управляйте объектами вместе",
       },
+      {
+        icon: "history",
+        title: "История действий",
+        text: "Отслеживайте любые изменения в объектах",
+      },
     ],
     cta: "Подключить",
-    href: "/subscription",
+    href: "/profile/tariff/change",
   },
 ];
 
@@ -185,7 +203,7 @@ export const FAQ: FaqGroup[] = [
         question:
           "Нужно ли оплачивать тариф тому, кому я хочу дать доступ",
         answer:
-          "Нет. Совместный доступ входит в тариф владельца объекта — приглашённому отдельная подписка не нужна.",
+          "Если у пользователя базовый тариф, вы можете пригласить его только в один свой объект. Если вы хотите дать доступ к нескольким своим объектам другому пользователю — ему понадобится тариф «Про» или выше",
       },
       {
         question: "Как оформить возврат средств",

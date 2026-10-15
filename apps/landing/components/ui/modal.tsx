@@ -142,7 +142,7 @@ export function ModalContent({
       {/* Канва модалок не привязана к ярусам хрома: карточка от 768
        * (useIsDesktop) — литерал, не токен tablet: (тот с 481). */}
       <SheetDragHandle className="min-[768px]:hidden" />
-      <div className="flex flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <div className="flex flex-col gap-4 overflow-y-auto overscroll-y-contain p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {titleBlock}
         {description !== undefined && (
           <DialogDescription className={cn("text-sm text-content-secondary", descriptionClassName)}>
@@ -166,8 +166,8 @@ export function ModalContent({
             // без него анимация, доиграв раньше таймера unmount, отдаёт
             // базовые стили и панель/фон вспыхивают на полную яркость.
             closing
-              ? "animate-[modal-overlay-out_250ms_var(--dl-ease)_forwards]"
-              : "animate-[modal-overlay-in_350ms_var(--dl-ease)]",
+              ? "dl-overlay-out"
+              : "dl-overlay-in",
           )}
         />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
@@ -180,8 +180,8 @@ export function ModalContent({
               // отдаёт приоритет последнему).
               "relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none",
               closing
-                ? "animate-[modal-card-out_220ms_var(--dl-ease)_forwards]"
-                : "animate-[modal-card-in_400ms_var(--dl-ease)]",
+                ? "dl-card-out"
+                : "dl-card-in",
               className,
             )}
           >
@@ -197,8 +197,7 @@ export function ModalContent({
       <Drawer.Overlay
         className={cn(
           "fixed inset-0 z-50 bg-overlay",
-          "data-[state=open]:animate-[modal-overlay-in_350ms_var(--dl-ease)]",
-          "data-[state=closed]:animate-[modal-overlay-out_250ms_var(--dl-ease)]",
+          "dl-overlay-vaul",
         )}
       />
       <Drawer.Content

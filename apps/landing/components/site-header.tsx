@@ -78,7 +78,9 @@ function HeaderFallback() {
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 px-2 pt-2">
+    // Горизонтальные отступы уважают safe-area (viewport-fit=cover):
+    // в ландшафте на «чёлке» плашка не уходит под вырез.
+    <header className="sticky top-0 z-50 pt-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
       <ScrollShadow className="group mx-auto max-w-[1520px]">
         <Suspense fallback={<HeaderFallback />}>
           <HeaderContent />

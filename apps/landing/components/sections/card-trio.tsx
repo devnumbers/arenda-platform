@@ -48,7 +48,7 @@ export function CardTrio({
         {cards.map((card, index) => (
           <Reveal
             key={card.title}
-            delay={index * 100}
+            delay={index * 80}
             className="h-full tab:w-[320px] tab:shrink-0"
           >
             <article className="flex h-auto w-full flex-col gap-12 overflow-clip rounded-[32px] bg-surface p-8 tab:h-[500px] tab:justify-between desk:h-[550px] desk:rounded-[40px] desk:p-10">

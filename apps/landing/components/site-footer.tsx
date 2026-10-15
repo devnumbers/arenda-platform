@@ -15,7 +15,10 @@ export function SiteFooter() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="px-8 pb-9 desk:px-20 desk:pb-20">
+    <footer
+      id="support"
+      className="scroll-mt-[88px] px-8 pb-9 desk:scroll-mt-[104px] desk:px-20 desk:pb-20"
+    >
       <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-8 desk:gap-16">
         <Link href="/" aria-label="Рентли — на главную" className="w-fit">
           <Logo className="h-14 w-auto" />

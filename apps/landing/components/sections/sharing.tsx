@@ -30,7 +30,7 @@ export function Sharing() {
             </p>
           </div>
         </Reveal>
-        <Reveal delay={100}>
+        <Reveal delay={80}>
           {/* Планшет/мобайл — свои размеры и позиции фото (в процентах от
               ширины панели); на десктопе — абсолютная композиция по макету. */}
           <div className="relative mt-8 h-[500px] rounded-[32px] bg-primary-light tab:h-[450px] desk:mt-14 desk:h-[450px] desk:rounded-[40px]">

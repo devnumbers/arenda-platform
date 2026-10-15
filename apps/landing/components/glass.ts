@@ -11,7 +11,8 @@ export const GLASS_GRADIENT =
   "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(217,217,217,0.1) 100%)";
 // Кожа стеклянной карточки целиком: коническое кольцо .glass-ring, белые
 // inset-блики и background blur; плоским серым карточкам не достаётся.
-export const GLASS_SKIN = `glass-ring backdrop-blur-[10px] shadow-[inset_0px_-5px_4px_0px_rgba(255,255,255,0.25),inset_0px_4px_4px_0px_rgba(255,255,255,0.25)]`;
+// Маркер .glass-card ведёт reduced-transparency-ветку в globals.css.
+export const GLASS_SKIN = `glass-ring glass-card backdrop-blur-[10px] shadow-[inset_0px_-5px_4px_0px_rgba(255,255,255,0.25),inset_0px_4px_4px_0px_rgba(255,255,255,0.25)]`;
 // Заливки карточек по новым кадрам: «Собственники»/«Базовый» — сплошной
 // #F3F4F6 (2967:75914/75983), «Бизнес»/«Про» — тёмный градиент 50→30
 // (2967:75920/75995), «Агентства»/«Бизнес» — синий 63,147,255→43,127,255
