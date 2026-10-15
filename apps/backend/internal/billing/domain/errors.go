@@ -27,6 +27,13 @@ var (
 	// cancelled state, or its paid period has already expired — restoration
 	// of an expired period goes through paying for a tariff (ADR 0008).
 	ErrResumeNotAvailable = errors.New("resume not available")
+	// ErrResumeNotAvailableFreeTariff is the free-tariff cause of the resume
+	// refusal (issue #1467): the cancelled subscription carries no paid period
+	// at all — it is the free basic tariff — so there is nothing to resume
+	// and the honest answer names the free subscription instead of an expired
+	// period. The resume decision itself does not change; the HTTP edge only
+	// picks the context detail by this sentinel.
+	ErrResumeNotAvailableFreeTariff = errors.New("resume not available on the free tariff")
 	// ErrResumeRequired is returned when a cancelled subscription with a live
 	// paid remainder is asked to pay for the tariff and period it is already
 	// on (issue #691): while the period is paid, only the free resume

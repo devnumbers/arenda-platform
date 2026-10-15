@@ -36,6 +36,13 @@ var (
 	// keepPropertyId (issue #617) that is not one of the user's active
 	// properties — a foreign id, an archived or a missing one.
 	ErrInvalidKeepProperty = errors.New("invalid keep property")
+	// ErrCancelNotAvailable is the user path's free-tariff refusal (issue
+	// #1467): the subscription's current tariff is the free basic plan, so
+	// there is nothing to cancel — the request cannot be executed and the
+	// subscription stays as it is. The admin cancellation keeps its own
+	// judgment and stays outside this guard. The already-cancelled no-op
+	// (#1451) outranks it for every tariff.
+	ErrCancelNotAvailable = errors.New("cancel not available")
 	// ErrAlreadyExists is returned when the pending-payments unique index
 	// rejects a duplicate initiation; the caller resolves it to the existing
 	// pending payment instead of failing.

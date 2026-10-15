@@ -714,9 +714,17 @@ func TestSubscriptionResume(t *testing.T) {
 		if err := sub.Resume(now); !errors.Is(err, ErrResumeNotAvailable) {
 			t.Errorf("Resume(now) after expiry error = %v, want ErrResumeNotAvailable", err)
 		}
+	})
+
+	t.Run("names the free subscription when no paid period ever was", func(t *testing.T) {
+		t.Parallel()
+		// The free tariff (issue #1467): a cancelled basic subscription never
+		// had a paid period — the refusal is about the free subscription, not
+		// an expired period, so it carries its own sentinel the HTTP edge
+		// answers with the honest text.
 		withoutPeriod := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: nil}
-		if err := withoutPeriod.Resume(now); !errors.Is(err, ErrResumeNotAvailable) {
-			t.Errorf("Resume(now) without period error = %v, want ErrResumeNotAvailable", err)
+		if err := withoutPeriod.Resume(now); !errors.Is(err, ErrResumeNotAvailableFreeTariff) {
+			t.Errorf("Resume(now) without period error = %v, want ErrResumeNotAvailableFreeTariff", err)
 		}
 	})
 }

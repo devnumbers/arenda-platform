@@ -982,23 +982,8 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
 				"Выбранный объект недоступен: выберите активный объект",
 				"invalid_keep_property"))
-	case errors.Is(err, domain.ErrResumeNotAvailable):
-		// The free resume (issue #617): the subscription is not cancelled or
-		// its paid period has expired — restoration goes through paying for a
-		// tariff (issue #429).
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
-				"Возобновление недоступно: оплаченный период истёк, оплатите тариф",
-				"resume_not_available"))
-	case errors.Is(err, domain.ErrResumeRequired):
-		// The paid-path closure of issue #691: while the paid period is live,
-		// paying for the tariff and period the cancelled subscription is
-		// already on is refused — the free resume restores it without a
-		// charge.
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
-				"Период уже оплачен: возобновите подписку бесплатно",
-				"resume_required"))
+	case writeCancelResumeConflict(w, r, err):
+		// The cancellation/resume refusal family, mapped inside.
 	case errors.Is(err, billingapp.ErrBindingSessionLimitExceeded):
 		// The per-user binding-session limit (ticket #427): the sliding
 		// window releases the oldest sessions over time, so the standard
@@ -1041,6 +1026,53 @@ func writeBillingError(w http.ResponseWriter, r *http.Request, err error) {
 	default:
 		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
+}
+
+// writeCancelResumeConflict maps the cancellation and resume refusal family
+// to their 409 contract codes and texts. It reports whether err belonged to
+// the family, so the shared billing table can fall through to its other
+// mappings otherwise. The free-tariff pair (issue #1467) sits with the
+// refusals it contextualizes.
+func writeCancelResumeConflict(w http.ResponseWriter, r *http.Request, err error) bool {
+	switch {
+	case errors.Is(err, billingapp.ErrCancelNotAvailable):
+		// The free-tariff guard (issue #1467): cancelling the free basic
+		// tariff is a request that cannot be executed — the honest refusal
+		// replaces the old effectless 204.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Базовый тариф бесплатный — отключать нечего",
+				"cancel_not_available"))
+	case errors.Is(err, domain.ErrResumeNotAvailableFreeTariff):
+		// The cancelled free tariff (issue #1467): basic never had a paid
+		// period, so the expired-period text would lie — the honest answer
+		// names the free subscription under the same resume_not_available
+		// code the screens route by.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Подписка бесплатная — возобновлять нечего. Подключите Про или Бизнес, чтобы продолжить",
+				"resume_not_available"))
+	case errors.Is(err, domain.ErrResumeNotAvailable):
+		// The free resume (issue #617): the subscription is not cancelled or
+		// its paid period has expired — restoration goes through paying for a
+		// tariff (issue #429).
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Возобновление недоступно: оплаченный период истёк, оплатите тариф",
+				"resume_not_available"))
+	case errors.Is(err, domain.ErrResumeRequired):
+		// The paid-path closure of issue #691: while the paid period is live,
+		// paying for the tariff and period the cancelled subscription is
+		// already on is refused — the free resume restores it without a
+		// charge.
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.ProblemWithCode(r.Context(), httpsupport.ProblemTitleConflict,
+				"Период уже оплачен: возобновите подписку бесплатно",
+				"resume_required"))
+	default:
+		return false
+	}
+	return true
 }
 
 // writeDetailProblem answers with the fixed user-facing detail of a known
