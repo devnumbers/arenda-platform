@@ -301,8 +301,8 @@ prototype/page-transitions-867; #1419 — стенда не осталось, к
 
 | # | План | Severity | Status |
 | --- | --- | --- | --- |
-| 018 | [Хаптика исходов: модуль + каналы](018-action-outcome-haptics.md) | MEDIUM | TODO |
-| 019 | [Модель кнопок: канон в DESIGN.md](019-button-model-canon.md) | LOW | TODO |
+| 018 | [Хаптика исходов: модуль + каналы](018-action-outcome-haptics.md) | MEDIUM | DONE |
+| 019 | [Модель кнопок: канон в DESIGN.md](019-button-model-canon.md) | LOW | DONE |
 
 ## Порядок исполнения
 
