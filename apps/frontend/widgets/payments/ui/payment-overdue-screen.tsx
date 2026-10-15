@@ -69,7 +69,10 @@ export function PaymentOverdueScreen({
             <PaymentsRowsSkeleton />
           )}
 
-          {overdueQuery.isError && (
+          {/* Гард «данных нет» (§7, политика ошибки перечитывания #1422):
+           * ErrorCard — только провал без данных; перечитывание при
+           * удержанных данных константного ключа контент не подменяет. */}
+          {(overdueQuery.isError && overdueQuery.data === undefined) && (
             <PaymentsStateCard
               title="Не удалось загрузить просроченные"
               hint="Проверьте подключение и попробуйте снова"
@@ -85,7 +88,7 @@ export function PaymentOverdueScreen({
             />
           )}
 
-          {!overdueQuery.isPending && !overdueQuery.isError && (
+          {!overdueQuery.isPending && (!overdueQuery.isError || overdueQuery.data !== undefined) && (
             <>
               {operations.length === 0 ? (
                 // Иллюстрированное пустое состояние — как на общей странице
