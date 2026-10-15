@@ -449,6 +449,9 @@ const EDIT_ROW_NO_SHADOW = "0px 0px 0px rgba(23,26,28,0)";
  * reduced-motion — 150ms (DESIGN.md §8). */
 const EDIT_ROW_LIFT_S = 0.35;
 const EDIT_ROW_REDUCED_S = 0.15;
+/** Шаг перестановки стрелками: клавиатурное повторяющееся действие —
+ * канон §1 «drastically reduce»; лифт и drag не трогает. */
+const EDIT_ROW_KEYBOARD_S = 0.15;
 /** cubic-bezier(0.32, 0.72, 0, 1) — единая кривая дома (--dl-ease). */
 const EDIT_ROW_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
 
@@ -604,7 +607,18 @@ function FavoritesEditRow({
     onToggleSelected();
   };
 
-  const duration = reducedMotion ? EDIT_ROW_REDUCED_S : EDIT_ROW_LIFT_S;
+  // Захват с клавиатуры — отдельный признак: шаг перестановки стрелками
+  // едет коротким таймингом (канон §1 «drastically reduce»), лифт и
+  // pointer-жесты — задокументированным 0.35s. Сбрасывается теми же
+  // событиями, что и grab: Space/Escape в handleKeyDown, старт
+  // pointer-захвата и уход фокуса ручки (см. onPointerDown/onBlur ниже).
+  const [keyboardGrab, setKeyboardGrab] = useState(false);
+
+  const duration = reducedMotion
+    ? EDIT_ROW_REDUCED_S
+    : keyboardGrab
+      ? EDIT_ROW_KEYBOARD_S
+      : EDIT_ROW_LIFT_S;
   // Единый лифт для тача и клавиатуры: whileDrag и animate дают один
   // и тот же подъём — scale плюс тень.
   const lift = {
@@ -629,6 +643,7 @@ function FavoritesEditRow({
       // тоггл на нём отпускает ручку, лифт и анонсы флапают, пока
       // клавиша зажата.
       if (!event.repeat) {
+        setKeyboardGrab(!grabbed);
         onGrabChange(!grabbed);
       }
       return;
@@ -646,6 +661,7 @@ function FavoritesEditRow({
     }
     if (event.key === "Escape") {
       event.preventDefault();
+      setKeyboardGrab(false);
       onGrabChange(false);
     }
   };
@@ -733,11 +749,15 @@ function FavoritesEditRow({
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => {
               gripGestureRef.current = true;
+              // Pointer-захват всегда едет лифт-таймингом, даже если до
+              // этого строку брали с клавиатуры и бросили уходом фокуса.
+              setKeyboardGrab(false);
               controls.start(event);
             }}
             onKeyDown={handleKeyDown}
             onBlur={() => {
               if (grabbed) {
+                setKeyboardGrab(false);
                 onGrabChange(false);
               }
             }}
