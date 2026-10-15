@@ -1,6 +1,6 @@
 'use client';
 
-import type { ComponentProps, JSX, ReactNode } from 'react';
+import { useRef, type ComponentProps, type JSX, type ReactNode } from 'react';
 import {
   Content,
   Item,
@@ -23,9 +23,11 @@ export const MenuTrigger = Trigger;
 export type MenuContentProps = ComponentProps<typeof Content>;
 
 export function MenuContent({ className, sideOffset = 4, align = 'end', ...props }: MenuContentProps): JSX.Element {
+  const contentRef = useRef<HTMLDivElement>(null);
   return (
     <Portal>
       <Content
+        ref={contentRef}
         sideOffset={sideOffset}
         align={align}
         className={cn(
@@ -37,6 +39,24 @@ export function MenuContent({ className, sideOffset = 4, align = 'end', ...props
           'data-[state=closed]:animate-[menu-out_120ms_var(--dl-ease)]',
           className,
         )}
+        // Повторное открытие в окне exit-анимации: слой меню в exit ещё
+        // смонтирован (Presence ждёт animationend), и его dismiss на
+        // document-уровне срабатывает ПОЗЖЕ toggle'а триггера в том же
+        // pointerdown — гася его: быстрый повторный клик по триггеру не
+        // открывает меню (поймано e2e сортировок, план 009). pointerdown
+        // по триггеру dismiss не запрещаем — его toggle уже отыграл; клик
+        // мимо триггера закрывает меню как раньше.
+        onPointerDownOutside={(event) => {
+          const contentId = contentRef.current?.id;
+          const target = event.detail.originalEvent.target;
+          if (
+            contentId !== undefined &&
+            target instanceof Element &&
+            target.closest(`[aria-controls="${contentId}"]`) !== null
+          ) {
+            event.preventDefault();
+          }
+        }}
         {...props}
       />
     </Portal>
