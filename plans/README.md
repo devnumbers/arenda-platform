@@ -75,8 +75,8 @@
 
 | # | План | Severity | Status |
 | --- | --- | --- | --- |
-| 005 | [Лок фона фуллскрин-поверхностей](005-fullscreen-surface-scroll-lock.md) | HIGH | TODO |
-| 006 | [Внутренние ленты: contain и скрытые скроллбары](006-internal-feed-containment.md) | MEDIUM | TODO |
+| 005 | [Лок фона фуллскрин-поверхностей](005-fullscreen-surface-scroll-lock.md) | HIGH | DONE |
+| 006 | [Внутренние ленты: contain и скрытые скроллбары](006-internal-feed-containment.md) | MEDIUM | DONE |
 
 ## Порядок исполнения
 
