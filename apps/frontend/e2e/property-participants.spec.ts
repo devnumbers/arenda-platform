@@ -17,10 +17,10 @@ import {
 // «Пригласить/История/Отозвать доступ всем» и синий CTA приглашения, у
 // приглашённого — кебаб только с «Историей объекта» и красный CTA
 // «Покинуть объект»; бейджи «Аккаунт не создан»/«Превышен лимит
-// объектов»; D15 — на basic кебаб объекта без пунктов шаринга (пункт
-// вернёт #1464), а пер-объектные маршруты открыты: участник на basic
-// пользуется страницей полностью, владелец уходит на интерстишал шаринга
-// #1470 разводкой #1463. Сид: владелец «Квартиры на Ленина»
+// объектов»; D15 снято (#1464) — пункт «Совместного доступа» в кебабе
+// объекта виден всем, клик разводит по роли и тарифу #1463: владелец на
+// basic уходит на интерстишал шаринга #1470, участник пользуется
+// страницей. Сид: владелец «Квартиры на Ленина»
 // (33333333-…) Иван Иванов с двумя участниками — Мария Петрова
 // (full_access, member …931) и Сергей Сидоров (viewer, member …932); их
 // собственные сессии — E2E_MEMBER_/E2E_VIEWER_SESSION_TOKEN.
@@ -426,7 +426,7 @@ test('«Покинуть объект» (D6): подтверждение, сам
   }
 });
 
-test('D15: на basic кебаб объекта без «Совместного доступа»; клик в «Управлении» и deep-link ведут на интерстишал шаринга #1463; сид восстанавливается', async ({ page, seededUser }) => {
+test('D15 снято #1464: пункт «Совместного доступа» в кебабе виден всем; клик разводит по роли и тарифу #1463 — владелец на basic на интерстишал, участник на страницу; сид восстанавливается', async ({ page, seededUser }) => {
   const OWNER_SUBSCRIPTION_ID = '99999999-9999-4999-8999-999999999901';
   // Перевод владельца на basic (не удаление подписки: «подписки нет» —
   // 404 → null, и optimistic-умолчание фронта считает это платным).
@@ -443,22 +443,26 @@ test('D15: на basic кебаб объекта без «Совместного 
     await page.goto(`/properties/${APARTMENT_ID}`);
 
     // /subscription разрешился basic'ом: секция «Управление» отрисована,
-    // строка пина скрыта (canPin=false) — кебаб считается тем же isPaid,
-    // гонки нет.
+    // строка пина скрыта (canPin=false).
     await expect(page.getByRole('button', { name: 'Редактировать объект' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Сделать основным' })).toHaveCount(0);
 
-    // Кебаб владельца на basic: статусные мутации живы, шаринг скрыт
-    // полностью (2235-100924 минус пункты шаринга; пункт вернёт #1464).
+    // Кебаб владельца на basic: статусные мутации живы, пункт «Совместного
+    // доступа» виден — D15 «платная функция не приманивает» снято #1464
+    // (состав 2235-100924 у любой роли).
     await screenHeader(page).getByRole('button', { name: 'Действия с объектом' }).click();
     await expect(page.getByRole('menuitem', { name: 'Об объекте' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Изменить статус' })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: 'Совместный доступ' })).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    await page.getByRole('menuitem', { name: 'Совместный доступ' }).click();
 
-    // Клик «Совместного доступа» в «Управлении» (секция не прятала пункт
-    // и в D15) — разводка #1463: интерстишал /profile/tariff/sharing
+    // Клик из кебаба — разводка #1463: интерстишал /profile/tariff/sharing
     // (#1470) без загрузки страницы, мигания нет.
+    await expect(page).toHaveURL(/\/profile\/tariff\/sharing$/);
+    await expect(screenHeader(page).getByText('Участники объекта')).toHaveCount(0);
+
+    // Второй вход — клик «Совместного доступа» в «Управлении» (секция не
+    // прятала пункт и в D15): та же разводка, тот же интерстишал.
+    await page.goto(`/properties/${APARTMENT_ID}`);
     await page.getByRole('button', { name: 'Совместный доступ' }).click();
     await expect(page).toHaveURL(/\/profile\/tariff\/sharing$/);
     await expect(screenHeader(page).getByText('Участники объекта')).toHaveCount(0);
@@ -477,6 +481,31 @@ test('D15: на basic кебаб объекта без «Совместного 
     await execE2eSql(
       `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = '${previousTariff}') ` +
         `WHERE id = '${OWNER_SUBSCRIPTION_ID}'`,
+    );
+  }
+
+  // Вторая ветка разводки — участник на basic: клик «Совместного доступа»
+  // ведёт на страницу («пригласили — значит пользуется», бекенд-гейт
+  // роль-осведомлённый #1462); полный пользовательский путь страницы —
+  // в соседнем тесте.
+  const MARIA_SUBSCRIPTION_ID = '99999999-9999-4999-8999-999999999902';
+  const previousMemberTariff = await execE2eSql(
+    `SELECT t.name FROM user_subscriptions s JOIN tariffs t ON t.id = s.tariff_id WHERE s.id = '${MARIA_SUBSCRIPTION_ID}'`,
+  );
+  await execE2eSql(
+    `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = 'basic') ` +
+      `WHERE id = '${MARIA_SUBSCRIPTION_ID}'`,
+  );
+  try {
+    await openCabinetWithSessionToken(page, seededMemberSessionToken());
+    await page.goto(`/properties/${APARTMENT_ID}`);
+    await page.getByRole('button', { name: 'Совместный доступ' }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT_ID}/participants$`));
+    await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = '${previousMemberTariff}') ` +
+        `WHERE id = '${MARIA_SUBSCRIPTION_ID}'`,
     );
   }
 });

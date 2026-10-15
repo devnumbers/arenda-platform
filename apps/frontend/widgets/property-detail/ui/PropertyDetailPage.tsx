@@ -636,7 +636,6 @@ export function PropertyDetailPage(): JSX.Element {
                         <PropertyDetailKebab
                             status={status}
                             canMutate={permissions.canMutate}
-                            canUseSharing={isPaid}
                             onAction={handleAction}
                         />
                     ) : undefined
