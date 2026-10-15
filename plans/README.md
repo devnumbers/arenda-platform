@@ -177,17 +177,17 @@ DONE — не ре-аудитировался; изоляция скролла �
 
 | # | План | Severity | Status |
 | --- | --- | --- | --- |
-| 007 | [Пресс-канон дизайн-слоя](007-press-feedback-canon.md) | HIGH | TODO |
-| 008 | [Sweep `.pressable` по рядам/карточкам](008-press-sweep-rows-cards.md) | MEDIUM | TODO |
-| 009 | [Меню: скейл от триггера + выход](009-menu-trigger-origin.md) | MEDIUM | TODO |
-| 010 | [Тосты: exit из текущей позиции + каскад reduced](010-toast-exit-from-current.md) | HIGH | TODO |
-| 011 | [hub-collapse: прямые записи вместо :root-переменной](011-hub-collapse-direct-writes.md) | HIGH | TODO |
-| 012 | [Модальные поверхности: переход-модель + токены + vaul + reduced](012-modal-surfaces-transition-model.md) | MEDIUM | TODO |
-| 013 | [CollapsibleSection → grid-rows + группы фильтров](013-collapsible-grid-rows.md) | MEDIUM | TODO |
-| 014 | [Reduced-motion: остаточное покрытие](014-reduced-motion-coverage.md) | MEDIUM | TODO |
-| 015 | [text-field: лейбл на transform](015-text-field-label-transform.md) | MEDIUM | TODO |
-| 016 | [Избранное: клавиатурный шаг без 350ms](016-favorites-keyboard-step.md) | MEDIUM | TODO |
-| 017 | [PTR: спиннер мимо React-рендера](017-ptr-spinner-direct-writes.md) | LOW | TODO |
+| 007 | [Пресс-канон дизайн-слоя](007-press-feedback-canon.md) | HIGH | DONE |
+| 008 | [Sweep `.pressable` по рядам/карточкам](008-press-sweep-rows-cards.md) | MEDIUM | DONE |
+| 009 | [Меню: скейл от триггера + выход](009-menu-trigger-origin.md) | MEDIUM | DONE |
+| 010 | [Тосты: exit из текущей позиции + каскад reduced](010-toast-exit-from-current.md) | HIGH | DONE |
+| 011 | [hub-collapse: прямые записи вместо :root-переменной](011-hub-collapse-direct-writes.md) | HIGH | DONE |
+| 012 | [Модальные поверхности: переход-модель + токены + vaul + reduced](012-modal-surfaces-transition-model.md) | MEDIUM | DONE |
+| 013 | [CollapsibleSection → grid-rows + группы фильтров](013-collapsible-grid-rows.md) | MEDIUM | DONE |
+| 014 | [Reduced-motion: остаточное покрытие](014-reduced-motion-coverage.md) | MEDIUM | DONE |
+| 015 | [text-field: лейбл на transform](015-text-field-label-transform.md) | MEDIUM | DONE |
+| 016 | [Избранное: клавиатурный шаг без 350ms](016-favorites-keyboard-step.md) | MEDIUM | DONE |
+| 017 | [PTR: спиннер мимо React-рендера](017-ptr-spinner-direct-writes.md) | LOW | DONE |
 
 ## Порядок исполнения
 
