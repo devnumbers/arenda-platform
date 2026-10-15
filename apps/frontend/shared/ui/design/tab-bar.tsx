@@ -99,15 +99,18 @@ export function TabBar({
     <>
       <nav
         aria-label="Нижняя навигация"
-        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 w-full bg-white font-sans desktop:hidden"
+        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 w-full bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans desktop:hidden"
       >
         {/* Табы во всю ширину вьюпорта — футер существует только там, где
-         * нет ПК-хрома (1023 и уже), кап-колонка не нужна. Фолбэк 12px в
-         * safe-area — тот же, что у шита «Еще»: полоса и лист заканчиваются
-         * на одной высоте (research §4). Бар живёт НАД оверлеем шита
-         * (z-50 против z-40) — одна поверхность с листом, не темнеет и
-         * кликабелен в любой фазе анимации. pointer-events-auto обязателен:
-         * открытый шит (dismissable-layer Radix) ставит body
+         * нет ПК-хрома (1023 и уже), кап-колонка не нужна. Паддинг nav —
+         * единственный носитель safe-area бара: ряд TabBarRow (72px) ничего
+         * о ней не знает и переиспользуется шитом «Еще». Фолбэк 12px в
+         * max() — тот же, что у листа и StickyBottomBar (research §4): все
+         * трое считают одну высоту 72px + max(12px, env), поэтому полоса,
+         * лист и панель сходятся на любой устройстве. Бар живёт НАД
+         * оверлеем шита (z-50 против z-40) — одна поверхность с листом, не
+         * темнеет и кликабелен в любой фазе анимации. pointer-events-auto
+         * обязателен: открытый шит (dismissable-layer Radix) ставит body
          * pointer-events:none — без явного значения бар «прозрачен» для
          * кликов, хотя стоит выше шита. */}
         <TabBarRow
