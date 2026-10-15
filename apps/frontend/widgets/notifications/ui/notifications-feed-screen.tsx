@@ -200,7 +200,7 @@ export function NotificationsFeedScreen({
           {feedQuery.isPending ? (
             <NotificationsFeedSkeleton />
           ) : feedQuery.isError ? (
-            <NotificationsErrorCard onRetry={() => void feedQuery.refetch()} />
+            <NotificationsErrorCard onRetry={() => void feedQuery.refetch()} loading={feedQuery.isFetching} />
           ) : showEmptyAll ? (
             <EmptyState
               imageSrc="/images/notifications/empty-bell.png"

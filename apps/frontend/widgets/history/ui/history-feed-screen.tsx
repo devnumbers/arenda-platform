@@ -521,7 +521,7 @@ export function HistoryFeedScreen({
             * (§7). */
           historyFeedSkeleton(propertyId)
         ) : feedQuery.isError ? (
-          <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} className="mt-6" />
+          <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} loading={feedQuery.isFetching} className="mt-6" />
         ) : entries.length === 0 ? (
           searching || !isDefaultHistoryFilters(filters) ? (
             /* Без совпадений — серая строка без иллюстрации (макет

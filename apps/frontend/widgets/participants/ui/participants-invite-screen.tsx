@@ -101,6 +101,7 @@ export function ParticipantsInviteScreen(): JSX.Element {
       <ErrorCard
         title="Не удалось загрузить объекты"
         onRetry={() => void propertiesQuery.refetch()}
+        loading={propertiesQuery.isFetching}
         className="mt-6"
       />
     );

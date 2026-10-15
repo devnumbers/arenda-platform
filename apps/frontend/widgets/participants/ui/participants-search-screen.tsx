@@ -78,6 +78,7 @@ export function ParticipantsSearchScreen(): JSX.Element {
           <ErrorCard
             title="Не удалось загрузить участников"
             onRetry={() => void participantsQuery.refetch()}
+            loading={participantsQuery.isFetching}
             className="mt-6"
           />
         ) : !searching ? (

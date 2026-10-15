@@ -80,7 +80,7 @@ export function ContactBookSearchScreen(): JSX.Element {
         {(contactsQuery.isPending || (searching && contactsQuery.isFetching && contacts.length === 0)) ? (
           <ContactsSkeleton />
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} loading={contactsQuery.isFetching} />
         ) : !searching ? (
           <ContactsSearchHint />
         ) : contacts.length === 0 ? (

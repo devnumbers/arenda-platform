@@ -32,6 +32,7 @@ import {
   Button,
   CollapsibleSection,
   EmptyState,
+  ErrorCard,
   IconButton,
   Menu,
   MenuContent,
@@ -201,11 +202,13 @@ export function TasksOfPropertyScreen({
             <TasksStateCard
               title="Не удалось загрузить задачи"
               onRetry={() => void activeQuery.refetch()}
+              loading={activeQuery.isFetching}
             />
           ) : completedQuery.isError ? (
             <TasksStateCard
               title="Не удалось загрузить выполненные"
               onRetry={() => void completedQuery.refetch()}
+              loading={completedQuery.isFetching}
             />
           ) : showEmpty ? (
             <EmptyState
@@ -303,25 +306,16 @@ function TaskSection({
 }
 
 /** Карточка состояния с действием — ошибка загрузки с кнопкой «Повторить».
- * Общая с экраном правки задачи (#502). */
+ * Общая с экраном правки задачи (#502) — делегация канона ErrorCard
+ * (план 031 #1442). */
 export function TasksStateCard({
   title,
   onRetry,
+  loading = false,
 }: {
   readonly title: string;
   readonly onRetry: () => void;
+  readonly loading?: boolean;
 }): JSX.Element {
-  return (
-    <section className="mx-6 rounded-card bg-surface-muted px-6 py-6">
-      <h2 className="text-xl font-semibold leading-6 text-content">{title}</h2>
-      <p className="mt-2 text-sm leading-4 text-content-secondary">
-        Проверьте подключение и попробуйте еще раз
-      </p>
-      <div className="mt-4">
-        <Button size="small" variant="secondary" onClick={onRetry}>
-          Повторить
-        </Button>
-      </div>
-    </section>
-  );
+  return <ErrorCard title={title} onRetry={onRetry} loading={loading} />;
 }

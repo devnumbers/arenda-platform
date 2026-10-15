@@ -105,6 +105,7 @@ export function NotificationDetailScreen({
         ) : detailQuery.isError || !detail ? (
           <NotificationsErrorCard
             onRetry={() => void detailQuery.refetch()}
+            loading={detailQuery.isFetching}
             title={
               detailQuery.error.status === 404
                 ? 'Уведомление не найдено'

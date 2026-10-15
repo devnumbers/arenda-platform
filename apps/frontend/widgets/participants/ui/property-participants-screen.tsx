@@ -444,6 +444,7 @@ export function PropertyParticipantsScreen({
             <ErrorCard
               title="Не удалось загрузить участников"
               onRetry={() => void membersQuery.refetch()}
+              loading={membersQuery.isFetching}
               className="mt-6"
             />
           )

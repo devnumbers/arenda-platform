@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
-import { Button, Skeleton } from '@/shared/ui/design';
+import { ErrorCard, Skeleton } from '@/shared/ui/design';
 
 /**
  * Состояния экрана «Уведомления» (#744): скелет ленты с паритетом групп
@@ -64,30 +64,21 @@ export function NotificationsFeedSkeleton(): JSX.Element {
 }
 
 /** Ошибка загрузки ленты/страницы уведомления: карточка с повторой (канон
- * состояния, §7). title переопределяется контекстом — 404 страницы
- * уведомления (#745) говорит «Уведомление не найдено». */
+ * состояния, §7) — делегация канона ErrorCard (план 031 #1442). title
+ * переопределяется контекстом — 404 страницы уведомления (#745) говорит
+ * «Уведомление не найдено». */
 export function NotificationsErrorCard({
   onRetry,
   className,
   title = 'Не удалось загрузить уведомления',
+  loading = false,
 }: {
   readonly onRetry: () => void;
   readonly className?: string;
   readonly title?: string;
+  readonly loading?: boolean;
 }): JSX.Element {
-  return (
-    <section className={cn('mx-6 rounded-card bg-surface-muted px-6 py-6', className)}>
-      <h2 className="text-xl font-semibold leading-6 text-content">{title}</h2>
-      <p className="mt-2 text-sm leading-4 text-content-secondary">
-        Проверьте подключение и попробуйте еще раз
-      </p>
-      <div className="mt-4">
-        <Button size="small" variant="secondary" onClick={onRetry}>
-          Повторить
-        </Button>
-      </div>
-    </section>
-  );
+  return <ErrorCard title={title} onRetry={onRetry} loading={loading} className={className} />;
 }
 
 /** Скелет страницы уведомления (#745): паритет анатомии детали — иконка 96,

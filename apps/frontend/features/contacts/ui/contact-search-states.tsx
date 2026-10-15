@@ -17,13 +17,15 @@ export const CONTACTS_SEARCH_DEBOUNCE_MS = 300;
 /** Карточка ошибки загрузки с повтором — канон design ErrorCard (#697). */
 export function ContactsErrorCard({
   onRetry,
+  loading = false,
   className,
 }: {
   readonly onRetry: () => void;
+  readonly loading?: boolean;
   readonly className?: string;
 }): JSX.Element {
   return (
-    <ErrorCard title="Не удалось загрузить контакты" onRetry={onRetry} className={className} />
+    <ErrorCard title="Не удалось загрузить контакты" onRetry={onRetry} loading={loading} className={className} />
   );
 }
 

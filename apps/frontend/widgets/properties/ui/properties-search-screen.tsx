@@ -9,7 +9,6 @@ import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { usePropertiesSearch } from '@/features/properties';
 import { PropertyAvatar } from '@/entities/property';
 import {
-  Button,
   EmptyState,
   IconButton,
   InfiniteQueryTail,
@@ -18,6 +17,7 @@ import {
   SearchField,
   SkeletonListRow,
   TopNav,
+  ErrorCard,
   skeletonRowWidths,
 } from '@/shared/ui/design';
 
@@ -82,7 +82,7 @@ export function PropertiesSearchScreen(): JSX.Element {
         {(searchQuery.isPending || (searching && searchQuery.isFetching && properties.length === 0)) ? (
           <PropertiesSearchSkeleton />
         ) : searchQuery.isError ? (
-          <PropertiesSearchErrorCard onRetry={() => void searchQuery.refetch()} />
+          <PropertiesSearchErrorCard onRetry={() => void searchQuery.refetch()} loading={searchQuery.isFetching} />
         ) : !searching ? (
           <EmptyState
             imageSrc="/images/payments/payments-objects-search.png"
@@ -141,22 +141,21 @@ function PropertiesSearchSkeleton(): JSX.Element {
   );
 }
 
-/** Карточка ошибки с повтором (канон поисков). */
-function PropertiesSearchErrorCard({ onRetry }: { readonly onRetry: () => void }): JSX.Element {
+/** Карточка ошибки с повтором (канон поисков) — делегация канона ErrorCard
+ * (план 031 #1442: построчные копии сведены, фаза повтора — через канон). */
+function PropertiesSearchErrorCard({
+  onRetry,
+  loading = false,
+}: {
+  readonly onRetry: () => void;
+  readonly loading?: boolean;
+}): JSX.Element {
   return (
-    <section className="mx-6 rounded-card bg-surface-muted px-6 py-6">
-      <h2 className="text-xl font-semibold leading-6 text-content">
-        Не удалось загрузить результаты
-      </h2>
-      <p className="mt-2 text-sm leading-4 text-content-secondary">
-        Проверьте подключение и попробуйте еще раз
-      </p>
-      <div className="mt-4">
-        <Button size="small" variant="secondary" onClick={onRetry}>
-          Повторить
-        </Button>
-      </div>
-    </section>
+    <ErrorCard
+      title="Не удалось загрузить результаты"
+      onRetry={onRetry}
+      loading={loading}
+    />
   );
 }
 

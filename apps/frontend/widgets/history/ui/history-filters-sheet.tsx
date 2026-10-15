@@ -449,6 +449,7 @@ export function HistoryFiltersSheet({
                 <ErrorCard
                   title="Не удалось загрузить фильтры"
                   onRetry={() => void optionsQuery.refetch()}
+                loading={optionsQuery.isFetching}
                 />
               ) : (
                 <>

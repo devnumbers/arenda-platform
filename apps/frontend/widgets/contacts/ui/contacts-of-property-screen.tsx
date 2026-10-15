@@ -182,7 +182,7 @@ export function ContactsOfPropertyScreen({
             <ContactsBookSkeleton />
           </>
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} loading={contactsQuery.isFetching} />
         ) : searchOpen && !searching ? (
           <ContactsSearchHint />
         ) : searching && contacts.length === 0 ? (
