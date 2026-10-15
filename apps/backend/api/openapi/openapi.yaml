@@ -1325,6 +1325,45 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /properties/{propertyId}/payments/{paymentId}/complete:
+    post:
+      operationId: completePayment
+      security:
+        - sessionCookie: []
+      description: >-
+        Завершение платежа (тикет #1377, ревизия #1340; ревизия 2 — #1426):
+        завершение удаляет правило из БД — хранимого завершённого состояния не
+        существует. Гейт доступности один — арендный (ревизия 2 сняла дату
+        окончания, «всё оплачено» и открытую паузу: завершение доступно как
+        удаление, до endDate и с непогашенными плановыми). Все неоплаченные
+        плановые сносятся без вопросов; оплаченные операции остаются в истории
+        объекта (payment_id NULL по FK, origin 'payment'); звезда читателя
+        падает вместе с правилом; журнал правок каскадится. Повторное
+        завершение — приватный 404: правила больше нет.
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Rule completed — the rule row is deleted (the paid operations keep their history with paymentId null)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /properties/{propertyId}/payments/{paymentId}/operations:
     get:
       operationId: listPaymentOperations
@@ -2154,8 +2193,10 @@ paths:
         counts the favorite rules of the whole visible scope and
         overdueOperationsCount sums the overdue operations across it — the
         «Все избранные (N)» and «Все просроченные (N)» cards of the main
-        screen; neither depends on a search. Reminders and «На оплату» do not
-        exist in this contract (out of scope of map #573). Reads never tick.
+        screen; neither depends on a search. dueOperationsCount and
+        dueNearestDays carry the «На оплату» card (ticket #1346) — the
+        reminder window over the reminder rules without auto-pay; the
+        section's list itself is GET /payments/due. Reads never tick.
       security:
         - sessionCookie: []
       responses:
@@ -2167,6 +2208,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaymentsGlobalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /payments/due:
+    get:
+      operationId: listPaymentDue
+      summary: List the actor's visible «На оплату» rows (the section page)
+      description: >
+        The «На оплату» section's read (ticket #1346): one row per (rule,
+        operation) pair standing in the reminder window — unpaid planned
+        operations with D−N ≤ today ≤ D (today the property owner's
+        calendar, ADR 0048) on the rules with an enabled reminder
+        (reminder_offset_days 1/3/7) and NO auto-pay (the owner's decision —
+        the reminder may fire for auto-pay rules, the section does not
+        contain them). The rules of archived properties are not in the
+        section; completed rules are cut (the feed's inherited gate);
+        overdue operations (D < today) are not here — they live in «Все
+        просроченные». An open pause keeps no window operations (the tick
+        removed the future planned, occurrences inside a pause are not
+        generated), so a paused rule contributes nothing. The rows arrive in
+        the buckets' fixed order (daysLeft asc), «Сначала новые» inside one
+        (dueDate desc, the operation's id the tiebreak); the bucket labels
+        are the client's rendering of daysLeft — the server builds no
+        labels. The whole window comes back in one read (the section is
+        small by construction) — no pagination; dueOperationsCount repeats
+        the rows' count, the same figure GET /payments's counters carry.
+        The section is read-only: paying lives on the property endpoints.
+        Reads never tick, no realtime frames (D18) — the clients re-read.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The visible window rows in the buckets' fixed order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsDueResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
   /payments/search:
@@ -7313,7 +7390,8 @@ components:
             «Завершённый платёж»): no planned operations — overdue included —
             and no occurrence beyond the last materialized date of any
             status. Never stored, never written by the client; derived on
-            every read like the operation's overdue.
+            every read like the operation's overdue. The feed's display-safe
+            flag («Полностью оплачен») lives on the global feed row.
         nearestDate:
           type: string
           format: date
@@ -7415,13 +7493,25 @@ components:
             пустой массив (состояние и есть содержимое строки).
           items:
             $ref: '#/components/schemas/PaymentFieldChange'
+        origin:
+          type: string
+          nullable: true
+          enum: [auto_archive]
+          description: |
+            Отметка происхождения системной строки (тикет #1342): null или
+            отсутствие — ручное действие пользователя (все строки до тикета);
+            auto_archive — системные пауза/снятие архивного моста: объект
+            ушёл в архив или вернулся из него.
         created_at:
           type: string
           format: date-time
 
     PaymentChangeAction:
       type: string
-      description: Род действия строки журнала (ADR 0065 §4).
+      description: >-
+        Род действия строки журнала (ADR 0065 §4): правка условий, пауза,
+        возобновление. Завершения среди них нет — правило удалено, журнал
+        каскадит вместе с ним (тикет #1377).
       enum:
         - updated
         - paused
@@ -7468,7 +7558,7 @@ components:
         the global «Платежи» card's data: the rule, its property label, the
         nearest schedule date and the overdue aggregates.
       type: object
-      required: [id, propertyId, propertyName, title, amountKopecks, type, category, autoPay, isFavorite, favoriteOrder, today, nearestDate, overdueOperationCount, overdueDays, oldestOverdueOperationId]
+      required: [id, propertyId, propertyName, title, amountKopecks, type, category, autoPay, isFavorite, favoriteOrder, today, nearestDate, isCompleted, overdueOperationCount, overdueDays, oldestOverdueOperationId]
       properties:
         id:
           type: string
@@ -7523,6 +7613,19 @@ components:
             today, else the rule's projection — a bare schedule order without
             a view status. Null when the schedule has no next occurrence
             (an open pause or a settled rule).
+        isCompleted:
+          type: boolean
+          description: >
+            The row's display-complete flag (ticket #1341) — the hub card's
+            «Полностью оплачен»: the computed settlement completeness
+            (CONTEXT.md, «Завершённый платёж») with the open-pause exception
+            resolved server-side. The raw computed flag answers «завершён»
+            behind an open pause's cut cursor (the glossary's exception), and
+            the feed row carries no pauses for the client to repeat the
+            resolution the payment screen does by the end date — the flag
+            ships pause-free. The stored-completed rules are hidden from the
+            feed entirely; the payment detail read carries the raw flag
+            (PaymentResponse.isCompleted).
         overdueOperationCount:
           type: integer
           description: >
@@ -7550,7 +7653,7 @@ components:
         The global «Платежи» feed (ticket #575) with the main screen's
         counters. Money is integer kopecks (ADR 0008).
       type: object
-      required: [items, favoriteCount, overdueOperationsCount]
+      required: [items, favoriteCount, overdueOperationsCount, dueOperationsCount, dueNearestDays]
       properties:
         items:
           type: array
@@ -7567,6 +7670,100 @@ components:
           description: >
             The overdue operations summed across the whole visible scope —
             the «Все просроченные (N)» card; never narrowed by a search.
+        dueOperationsCount:
+          type: integer
+          description: >
+            The «На оплату» operations across the whole visible scope
+            (ticket #1346) — the reminder-window (D−N ≤ today ≤ D) planned
+            operations of the rules with a reminder and no auto-pay — the
+            «На оплату (N)» card; never narrowed by a search. Overdue
+            operations are not counted here (the «Все просроченные» card's
+            own number).
+        dueNearestDays:
+          type: integer
+          nullable: true
+          description: >
+            The smallest days-left (dueDate − today, ADR 0048) among the
+            «На оплату» operations (ticket #1346) — the card's label source:
+            «Сегодня» (0), «Завтра» (1), «Через N дней» (2..7). Null when
+            the window is empty.
+
+    PaymentDueItem:
+      description: >
+        One «На оплату» row (ticket #1346): the (rule, operation) pair
+        standing in the reminder window — the section page's card data. The
+        bucket is the client's rendering of daysLeft (the server builds no
+        labels): 0 → «Сегодня», 1 → «Завтра», 2..3 → «Через 3 дня», 4..7 →
+        «Через 7 дней»; the rows arrive in the buckets' fixed order,
+        «Сначала новые» inside one.
+      type: object
+      required: [paymentId, operationId, propertyId, propertyName, title, amountKopecks, type, category, today, dueDate, daysLeft, reminderOffsetDays]
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+          description: >
+            The payment rule's id — the card's link target (the payment
+            screen), not the operation's own page.
+        operationId:
+          type: string
+          format: uuid
+          description: >
+            The window operation's id — the row's identity (a rule can carry
+            two window rows: today's and the next future one).
+        propertyId:
+          type: string
+          format: uuid
+        propertyName:
+          type: string
+          description: The display name of the bound property — the section card's object label.
+        title:
+          type: string
+        amountKopecks:
+          type: integer
+          format: int64
+        type:
+          type: string
+          enum: [income, expense]
+        category:
+          $ref: '#/components/schemas/CategoryView'
+        today:
+          type: string
+          format: date
+          description: >
+            The property owner's calendar date (ADR 0048) the window math
+            ran against.
+        dueDate:
+          type: string
+          format: date
+          description: The window operation's date (D) — the card's deadline display.
+        daysLeft:
+          type: integer
+          description: >
+            dueDate − today (0..7 by the window's construction) — the bucket
+            key and the hub card's «Через N дней» source.
+        reminderOffsetDays:
+          type: integer
+          enum: [1, 3, 7]
+          description: The rule's reminder lead time (1/3/7) — the window's own N.
+
+    PaymentsDueResponse:
+      description: >
+        The «На оплату» section (ticket #1346): the whole window in one read
+        — the section is small by construction (the materialization keeps at
+        most two window operations per rule, the reminder is armed on a
+        fraction of the rules). dueOperationsCount repeats the rows' count —
+        the same figure the feed's counters carry.
+      type: object
+      required: [items, dueOperationsCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentDueItem'
+        dueOperationsCount:
+          type: integer
+          description: The window operations' count — the rows' own.
 
     PaymentsFavoriteOrderUpdate:
       description: >
@@ -7746,7 +7943,7 @@ components:
         manual fact. status carries overdue as a server-computed view status
         (planned with the date already past in the property owner's timezone).
       type: object
-      required: [id, propertyId, paymentId, date, paidDate, status, type, title, amountKopecks, categoryLabel, categorySlug, updatedAt]
+      required: [id, propertyId, paymentId, origin, date, paidDate, status, type, title, amountKopecks, categoryLabel, categorySlug, updatedAt]
       properties:
         id:
           type: string
@@ -7766,6 +7963,15 @@ components:
           format: uuid
           nullable: true
           description: The originating rule; null marks it deleted or the fact manual.
+        origin:
+          type: string
+          enum: [manual, payment]
+          description: >-
+            Where the operation came from: a rule occurrence (payment) or a
+            one-off manual fact (manual). A rule occurrence keeps payment
+            after its rule is deleted — with paymentId null that pair marks
+            the deleted-rule tail (ticket #1371): the operation page shows
+            the same detail rows as before the deletion.
         date:
           type: string
           format: date

@@ -15,7 +15,6 @@ import { propertyPermissions } from '@/entities/property';
 import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import {
   formatOverdueDays,
-  isDatePaused,
   PaymentRowButton,
 } from '@/entities/payment';
 import {
@@ -49,10 +48,12 @@ const SECTION_LIMIT = 3;
  * Экран «Платежи объекта» (#463, Figma 1043:57610/1043:62920): три секции —
  * «Просроченные операции» (строки, красные срок и сумма), «Платежи»,
  * «Автоплатежи». Каждая секция показывает максимум 3 платежа в порядке
- * ближайшего вхождения; паузные правила на экране не выводятся (страница
- * платежа — их место), а её заголовок-стрелка ведёт на страницу секции со
- * полным списком. Закреплённая кнопка «Добавить» открывает шит выбора;
- * скрыта у смотрящего (история 47) и на архивном объекте (#446).
+ * ближайшего вхождения; паузные правила видны наравне со всеми — с
+ * подзаголовком «На паузе», в конце секции, слоты лимита занимают как все
+ * (решение владельца 12.10, #1353 — отмена правила #463/1043:57611), а её
+ * заголовок-стрелка ведёт на страницу секции со полным списком. Закреплённая
+ * кнопка «Добавить» открывает шит выбора; скрыта у смотрящего (история 47)
+ * и на архивном объекте (#446).
  *
  * Статус просрочки считает сервер (ADR 0048), подпись дней — клиентская
  * проекция (lib/overdue-days).
@@ -79,15 +80,14 @@ export function PaymentsOfPropertyScreen({
   // долгов поверх первой порции на плашках не бейджим.
   const overduePaymentIds = overduePaymentIdsOf(overdue);
 
-  // Паузные правила не выводятся на экране (1043:57611) — их место на
-  // странице платежа; накопленный ими долг остаётся в секции просроченных.
-  const active = payments.filter((payment) => !isDatePaused(payment.pauses, today));
+  // Паузные видны наравне со всеми (докстринг сверху); накопленный ими
+  // долг остаётся в секции просроченных.
   const sortedRegular = sortPaymentsByNextOccurrence(
-    active.filter((payment) => !payment.autoPay),
+    payments.filter((payment) => !payment.autoPay),
     today,
   );
   const sortedAuto = sortPaymentsByNextOccurrence(
-    active.filter((payment) => payment.autoPay),
+    payments.filter((payment) => payment.autoPay),
     today,
   );
 

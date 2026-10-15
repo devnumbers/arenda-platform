@@ -85,9 +85,11 @@ export type OperationDetailRow = {
 
 /** Строки секции «Подробнее». У операции правила — сравнение срока с
  * фактом (1419:25859 / 1419:25645): фактическая и плановая оплата,
- * отклонение, статус. У операции без правила — manual-факт (#569) или
- * хвост удалённого правила (1858-105181, #571): правила больше нет,
- * сравнивать не с чем — «Дата операции» и статус без строк задержки. */
+ * отклонение, статус. У операции без правила ветвим по происхождению:
+ * manual-факт (#569) — «Дата операции» и статус без строк сравнения;
+ * хвост удалённого правила (paymentId null + origin payment, #1371) —
+ * те же строки, что до удаления: отклонение считается по датам самой
+ * операции, правило не нужно (семантика в доккомментарии экрана). */
 export function operationDetailRows(
   operation: PaymentOperation,
   today: IsoDate,
@@ -100,7 +102,7 @@ export function operationDetailRows(
           text: operation.status === 'paid' ? 'Выполнена' : 'Запланирована',
         };
 
-  if (operation.paymentId === null) {
+  if (operation.paymentId === null && operation.origin !== 'payment') {
     return [
       { label: 'Дата операции', text: formatDayMonthWithYear(operation.date, today) },
       status,

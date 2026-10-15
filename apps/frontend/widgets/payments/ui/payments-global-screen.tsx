@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Add,
+  BoldClock,
   BoldObjects,
   BoldStar,
   BoldWarning,
@@ -21,10 +22,11 @@ import {
   PaymentsAddSheet,
   useGlobalPaymentObjects,
   useGlobalPayments,
+  usePaymentsDue,
 } from "@/features/payments";
-import type { GlobalPayment } from "@/entities/payment";
+import type { GlobalPayment, PaymentDueItem } from "@/entities/payment";
 import type { PropertyType } from "@/entities/property";
-import { PaymentCardButton } from "@/entities/payment";
+import { dueDaysLabel, PaymentCardButton } from "@/entities/payment";
 import {
   Button,
   EmptyState,
@@ -36,8 +38,8 @@ import {
   Skeleton,
   TopNav,
 } from "@/shared/ui/design";
-import {
-  globalFavoritePayments,
+import { SnapRail } from "@/shared/ui/snap-rail";
+import { globalFavoritePayments,
   globalOverduePayments,
   globalPaymentObjectHasOverdue,
   nearestDateLine,
@@ -64,20 +66,19 @@ const SECTION_CARDS_LIMIT = 4;
  * состав — решения владельца #574, макеты 879:9679/880:17866, пустое
  * состояние — 1041-51463/1041-51460/1036-37530; новый первый блок — макет
  * 3226-75059, хедер 3229-94522, тикет #1235).
- * Секции (порядок макета): «Избранные», «Просроченные», «Платежи объектов»;
- * четвёртая секция макета «На оплату» — новая функциональность (выборки
- * «к оплате» ни в контракте фида #575, ни страницы-приёмника шеврона нет) —
- * вынесена отдельным тикетом #1251, здесь не реализуется. Заголовок
- * с шевроном открывает страницу категории, замыкающая карточка «Все …»
- * ведёт туда же и видна от трёх карточек секции (решение владельца
- * #1339, единообразно для всех секций). Карточки платежей — канон
- * PaymentCardButton (168.5,
- * горизонтальная лента): иконка категории, сумма, дата-«Ближайший» (просто
- * дата графика, без статуса; у просроченных — «N дней» красным и красный
- * (!) на иконке). Пустая секция — карточка-плейсхолдер с 3D-иллюстрацией
- * из Figma. Совсем без объектов — глобальное пустое состояние с CTA
- * «Добавить объект». Поиск — пилюля «Найти платёж» на страницу поиска
- * (#581); иконка-слайдеры справа — декор макета, не кликается.
+ * Секции (порядок макета 1036:37525): «Избранные», «Просроченные»,
+ * «На оплату» (#1347 — между «Просроченными» и «Платежами объектов»),
+ * «Платежи объектов». Заголовок с шевроном открывает страницу категории,
+ * замыкающая карточка «Все …» ведёт туда же и видна от трёх карточек
+ * секции (решение владельца #1339, единообразно для всех секций).
+ * Карточки платежей — канон PaymentCardButton (168.5, горизонтальная
+ * лента): иконка категории, сумма, дата-«Ближайший» (просто дата графика,
+ * без статуса; у просроченных — «N дней» красным и красный (!) на иконке;
+ * у «На оплату» — метка «Сегодня/Завтра/Через N дней» синим, 1036:37525).
+ * Пустая секция — карточка-плейсхолдер с 3D-иллюстрацией из Figma. Совсем
+ * без объектов — глобальное пустое состояние с CTA «Добавить объект».
+ * Поиск — пилюля «Найти платёж» на страницу поиска (#581); иконка-слайдеры
+ * справа — декор макета, не кликается.
  * «+» создания (макет 3226-75059) — в ряду заголовка и в правом слоте
  * компакт-бара; видна, когда в книге есть хоть один объект с правом правки
  * (#703), на глобальной пустоте скрыта — действие там CTA состояния.
@@ -93,14 +94,18 @@ export function PaymentsGlobalScreen(): JSX.Element {
   const feedQuery = useGlobalPayments();
   const objectsQuery = useGlobalPaymentObjects();
   const propertiesQuery = useProperties();
+  const dueQuery = usePaymentsDue();
 
   // Скелетон — пока данных нет вовсе (первая загрузка); ошибка без данных
   // показывает карточку повтора, не скелетон (канон состояний).
   const pending =
-    (feedQuery.data === undefined || objectsQuery.data === undefined) &&
+    (feedQuery.data === undefined ||
+      objectsQuery.data === undefined ||
+      dueQuery.data === undefined) &&
     !feedQuery.isError &&
-    !objectsQuery.isError;
-  const error = feedQuery.isError || objectsQuery.isError;
+    !objectsQuery.isError &&
+    !dueQuery.isError;
+  const error = feedQuery.isError || objectsQuery.isError || dueQuery.isError;
   const objects = objectsQuery.data ?? [];
   // Глобальное пустое (1041-51463/1041-51460/1036-37530): видимых
   // объектов нет — платежам негде
@@ -137,6 +142,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
   const retry = (): void => {
     void feedQuery.refetch();
     void objectsQuery.refetch();
+    void dueQuery.refetch();
   };
 
   const openPayment = (payment: GlobalPayment): void =>
@@ -144,12 +150,15 @@ export function PaymentsGlobalScreen(): JSX.Element {
 
   // Два экземпляра узла: у ряда заголовка свой testid — слоты TopNav
   // рендерят свой узел в трёх местах (крыло, инлайн-компакт, мобайл-клон),
-  // общий testid давал бы строгую неоднозначность в e2e.
+  // общий testid давал бы строгую неоднозначность в e2e. Fade-in 250мс:
+  // кнопка приезжает после резолва справочника — короткий фейд закрывает
+  // шов телепорта (#1349, dl-fade-in в globals.css; fade — канон §8).
   const addButton = (
     <IconButton
       icon={<Add />}
       label="Создать платёж"
       data-testid="payments-create"
+      className="animate-[dl-fade-in_250ms_var(--dl-ease)_both]"
       onClick={openAdd}
     />
   );
@@ -158,6 +167,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
       icon={<Add />}
       label="Создать платёж"
       data-testid="payments-create-compact"
+      className="animate-[dl-fade-in_250ms_var(--dl-ease)_both]"
       onClick={openAdd}
     />
   );
@@ -199,6 +209,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
 
             {pending && (
               <>
+                <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
@@ -259,6 +270,31 @@ export function PaymentsGlobalScreen(): JSX.Element {
                         }
                         onSelectPayment={openPayment}
                         onOpenAll={() => router.push(ROUTES.paymentsOverdue)}
+                      />
+                    </PaymentsGlobalSection>
+
+                    <PaymentsGlobalSection
+                      testId="payments-section-due"
+                      title="На оплату"
+                      onOpen={() => router.push(ROUTES.paymentsDue)}
+                    >
+                      <DueSectionBody
+                        due={(dueQuery.data?.items ?? []).slice(
+                          0,
+                          SECTION_CARDS_LIMIT,
+                        )}
+                        dueOperationsCount={
+                          feedQuery.data?.dueOperationsCount ?? 0
+                        }
+                        onSelectPayment={(item) =>
+                          router.push(
+                            ROUTES.propertyPayment(
+                              item.propertyId,
+                              item.paymentId,
+                            ),
+                          )
+                        }
+                        onOpenAll={() => router.push(ROUTES.paymentsDue)}
                       />
                     </PaymentsGlobalSection>
 
@@ -358,6 +394,30 @@ function PaymentsGlobalSection({
   );
 }
 
+/** Лента секции хаба: канонный SnapRail (нативный тач + drag-прокси мыши
+ * #1349, механика — DESIGN.md §8 «Drag горизонтальных snap-лент») с bleed
+ * на мобайл-ярусе (≤560): `-mx-6` гасит собственный `px-6` обёртки хаба
+ * (легитимный inner -mx против контейнерного паддинга, «Column width
+ * rule»), `px-6` держит карточки на визуальной линии 24, а
+ * `scroll-padding-inline: 24px` делает линию 24 линией снапа нативного
+ * скролла и drag-прокси. */
+function SectionRail({
+  testId,
+  children,
+}: {
+  readonly testId: string;
+  readonly children: ReactNode;
+}): JSX.Element {
+  return (
+    <SnapRail
+      testId={testId}
+      className="max-tablet:-mx-6 max-tablet:px-6 max-tablet:[scroll-padding-inline:24px]"
+    >
+      {children}
+    </SnapRail>
+  );
+}
+
 /** Тело секции «Избранные»: лента карточек + замыкающая «Все избранные»
  * (синяя звезда, счётчик целого скоупа) от трёх карточек — решение
  * владельца #1339, — либо плейсхолдер (880:18354). */
@@ -381,12 +441,11 @@ function FavoritesSectionBody({
   }
 
   return (
-    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <SectionRail testId="payments-rail-favorites">
       {favorites.map((payment) => {
         return (
           <PaymentCardButton
             key={payment.id}
-            className="snap-start"
             leading={<GlobalPaymentRuleIcon payment={payment} surface="muted" />}
             title={payment.title}
             subtitle={payment.propertyName}
@@ -398,7 +457,6 @@ function FavoritesSectionBody({
       })}
       {paymentHubSectionHasAllCard(favorites.length) && (
         <PaymentCardButton
-          className="snap-start"
           leading={
             <GlobalCardIcon>
               <BoldStar />
@@ -410,7 +468,7 @@ function FavoritesSectionBody({
           onSelect={onOpenAll}
         />
       )}
-    </div>
+    </SectionRail>
   );
 }
 
@@ -444,7 +502,7 @@ function OverdueSectionBody({
   }
 
   return (
-    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <SectionRail testId="payments-rail-overdue">
       {overdue.map((payment) => {
         const style = categoryStyle(
           payment.category.source,
@@ -454,7 +512,6 @@ function OverdueSectionBody({
         return (
           <PaymentCardButton
             key={payment.id}
-            className="snap-start"
             leading={
               <CategoryIcon
                 icon={style.icon}
@@ -481,7 +538,6 @@ function OverdueSectionBody({
       })}
       {paymentHubSectionHasAllCard(overdue.length) && (
         <PaymentCardButton
-          className="snap-start"
           leading={
             <GlobalCardIcon>
               <BoldWarning />
@@ -493,7 +549,73 @@ function OverdueSectionBody({
           onSelect={onOpenAll}
         />
       )}
-    </div>
+    </SectionRail>
+  );
+}
+
+/** Тело секции «На оплату» (#1347, макет 1036:37525): карточки строк окна
+ * напоминаний #1346 — иконка категории, сумма, метка дня «Сегодня/Завтра/
+ * Через N дней» синим (accentDescription), название и объект; тап ведёт
+ * на страницу ПРАВИЛА (сегмент read-only, оплата — на объектных экранах).
+ * Замыкающая «Все платежи на оплату» (синие часы, счётчик целого скоупа)
+ * — по правилу ≥3 (решение владельца #1339). */
+function DueSectionBody({
+  due,
+  dueOperationsCount,
+  onSelectPayment,
+  onOpenAll,
+}: {
+  readonly due: ReadonlyArray<PaymentDueItem>;
+  readonly dueOperationsCount: number;
+  readonly onSelectPayment: (item: PaymentDueItem) => void;
+  readonly onOpenAll: () => void;
+}): JSX.Element {
+  if (due.length === 0) {
+    return (
+      <PaymentsGlobalPlaceholder image="/images/payments/due-empty.png">
+        Здесь будут платежи на оплату
+      </PaymentsGlobalPlaceholder>
+    );
+  }
+
+  return (
+    <SectionRail testId="payments-rail-due">
+      {due.map((item) => {
+        const style = categoryStyle(item.category.source, item.category.slug);
+
+        return (
+          <PaymentCardButton
+            key={item.operationId}
+            leading={
+              <CategoryIcon
+                icon={style.icon}
+                color={style.color}
+                surface="muted"
+              />
+            }
+            title={item.title}
+            subtitle={item.propertyName}
+            amountKopecks={item.amountKopecks}
+            description={dueDaysLabel(item.daysLeft)}
+            accentDescription
+            onSelect={() => onSelectPayment(item)}
+          />
+        );
+      })}
+      {paymentHubSectionHasAllCard(due.length) && (
+        <PaymentCardButton
+          leading={
+            <GlobalCardIcon>
+              <BoldClock />
+            </GlobalCardIcon>
+          }
+          title="Все платежи на оплату"
+          subtitle={paymentsCountLabel(dueOperationsCount)}
+          accentTitle
+          onSelect={onOpenAll}
+        />
+      )}
+    </SectionRail>
   );
 }
 
@@ -519,11 +641,10 @@ function ObjectsSectionBody({
   readonly onOpenAll: () => void;
 }): JSX.Element {
   return (
-    <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <SectionRail testId="payments-rail-objects">
       {objects.map((object) => (
         <PaymentCardButton
           key={object.propertyId}
-          className="snap-start"
           leading={
             // Канонный аватар «глобальных платежей» (решение #1286): фото
             // из DTO GlobalPaymentObject.photoUrl (#582) во весь круг 44 —
@@ -542,7 +663,6 @@ function ObjectsSectionBody({
       ))}
       {paymentHubSectionHasAllCard(objects.length) && (
         <PaymentCardButton
-          className="snap-start"
           leading={
             <GlobalCardIcon>
               <BoldObjects />
@@ -553,12 +673,14 @@ function ObjectsSectionBody({
           onSelect={onOpenAll}
         />
       )}
-    </div>
+    </SectionRail>
   );
 }
 
-/** Пустая секция (880:17866): серая карточка с пояснением и 3D-
- * иллюстрацией из Figma справа. */
+/** Пустая секция (1043:52801/52802, сверно 13.10): серая карточка —
+ * текст-плейсхолдер слева и 3D-иллюстрация 64 из Figma справа; высота —
+ * hug по контенту, боковые поля асимметричны (28 слева / 24 справа,
+ * как в макете). */
 function PaymentsGlobalPlaceholder({
   image,
   children,
@@ -567,16 +689,18 @@ function PaymentsGlobalPlaceholder({
   readonly children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex min-h-16 w-full items-center gap-6 rounded-card bg-surface-muted px-6">
+    <div className="flex w-full items-center gap-6 rounded-card bg-surface-muted pl-7 pr-6">
       <p className="min-w-0 flex-1 text-base leading-[18px] text-content-secondary">
         {children}
       </p>
+      {/* Fade-in 350мс (dl-fade-in): иллюстрация проявляется вместе с
+       * секцией при первом показе — разом всплывающие 3D-картинки (#1349). */}
       <Image
         src={image}
         alt=""
         width={64}
         height={64}
-        className="h-16 w-16 shrink-0"
+        className="h-16 w-16 shrink-0 animate-[dl-fade-in_350ms_var(--dl-ease)_both]"
       />
     </div>
   );
@@ -609,15 +733,19 @@ function PaymentsGlobalEmpty({
 }
 
 /** Секция-заглушка хаба «Платежи» (#605): каркас PaymentsGlobalSection —
- * заголовок и лента плиток-карточек на время загрузки. Экспорт для
- * route-loading (#609). */
+ * заголовок и лента плиток-карточек на время загрузки. Ряд плиток несёт
+ * тот же bleed ≤560, что и живая лента (SectionRail), — на мобайл-ярусе
+ * данные занимают место скелетона без сдвига в край (#1349). Плитка 137px —
+ * точная высота живой PaymentCardButton (паритет #605: данные занимают
+ * место скелетона без сдвига; 16+44+12+30+4+15+16, двухстрочный заголовок).
+ * Экспорт для route-loading (#609). */
 export function PaymentsGlobalSectionSkeleton(): JSX.Element {
   return (
     <section className="flex flex-col gap-4" aria-hidden>
       <Skeleton className="h-6 w-40" />
-      <div className="flex gap-2">
-        <Skeleton className="h-[132px] w-[168.5px] shrink-0" />
-        <Skeleton className="h-[132px] w-[168.5px] shrink-0" />
+      <div className="flex gap-2 max-tablet:-mx-6 max-tablet:px-6">
+        <Skeleton className="h-[137px] w-[168.5px] shrink-0" />
+        <Skeleton className="h-[137px] w-[168.5px] shrink-0" />
       </div>
     </section>
   );

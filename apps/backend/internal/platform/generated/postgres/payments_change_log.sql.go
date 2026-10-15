@@ -14,9 +14,9 @@ import (
 const insertPaymentChangeLog = `-- name: InsertPaymentChangeLog :exec
 
 INSERT INTO payment_change_log (
-    id, payment_id, owner_id, property_id, actor_id, action, changes
+    id, payment_id, owner_id, property_id, actor_id, action, changes, origin
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
 `
 
 type InsertPaymentChangeLogParams struct {
@@ -27,6 +27,7 @@ type InsertPaymentChangeLogParams struct {
 	ActorID    pgtype.UUID `json:"actor_id"`
 	Action     string      `json:"action"`
 	Changes    []byte      `json:"changes"`
+	Origin     pgtype.Text `json:"origin"`
 }
 
 // The payment change log queries (ADR 0065, ticket #1188): the append-only
@@ -46,12 +47,13 @@ func (q *Queries) InsertPaymentChangeLog(ctx context.Context, arg InsertPaymentC
 		arg.ActorID,
 		arg.Action,
 		arg.Changes,
+		arg.Origin,
 	)
 	return err
 }
 
 const listPaymentChanges = `-- name: ListPaymentChanges :many
-SELECT id, payment_id, actor_id, action, changes, created_at
+SELECT id, payment_id, actor_id, action, changes, origin, created_at
 FROM payment_change_log
 WHERE payment_id = $1 AND owner_id = $2 AND property_id = $3
 ORDER BY created_at DESC, id DESC
@@ -71,6 +73,7 @@ type ListPaymentChangesRow struct {
 	ActorID   pgtype.UUID        `json:"actor_id"`
 	Action    string             `json:"action"`
 	Changes   []byte             `json:"changes"`
+	Origin    pgtype.Text        `json:"origin"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -95,6 +98,7 @@ func (q *Queries) ListPaymentChanges(ctx context.Context, arg ListPaymentChanges
 			&i.ActorID,
 			&i.Action,
 			&i.Changes,
+			&i.Origin,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -108,7 +112,7 @@ func (q *Queries) ListPaymentChanges(ctx context.Context, arg ListPaymentChanges
 }
 
 const listPaymentChangesAfter = `-- name: ListPaymentChangesAfter :many
-SELECT id, payment_id, actor_id, action, changes, created_at
+SELECT id, payment_id, actor_id, action, changes, origin, created_at
 FROM payment_change_log
 WHERE payment_id = $1 AND owner_id = $2 AND property_id = $3
   AND (created_at, id) > ($4, $5::uuid)
@@ -131,6 +135,7 @@ type ListPaymentChangesAfterRow struct {
 	ActorID   pgtype.UUID        `json:"actor_id"`
 	Action    string             `json:"action"`
 	Changes   []byte             `json:"changes"`
+	Origin    pgtype.Text        `json:"origin"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -160,6 +165,7 @@ func (q *Queries) ListPaymentChangesAfter(ctx context.Context, arg ListPaymentCh
 			&i.ActorID,
 			&i.Action,
 			&i.Changes,
+			&i.Origin,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -173,7 +179,7 @@ func (q *Queries) ListPaymentChangesAfter(ctx context.Context, arg ListPaymentCh
 }
 
 const listPaymentChangesBefore = `-- name: ListPaymentChangesBefore :many
-SELECT id, payment_id, actor_id, action, changes, created_at
+SELECT id, payment_id, actor_id, action, changes, origin, created_at
 FROM payment_change_log
 WHERE payment_id = $1 AND owner_id = $2 AND property_id = $3
   AND (created_at, id) < ($4, $5::uuid)
@@ -196,6 +202,7 @@ type ListPaymentChangesBeforeRow struct {
 	ActorID   pgtype.UUID        `json:"actor_id"`
 	Action    string             `json:"action"`
 	Changes   []byte             `json:"changes"`
+	Origin    pgtype.Text        `json:"origin"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -224,6 +231,7 @@ func (q *Queries) ListPaymentChangesBefore(ctx context.Context, arg ListPaymentC
 			&i.ActorID,
 			&i.Action,
 			&i.Changes,
+			&i.Origin,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

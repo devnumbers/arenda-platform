@@ -5,7 +5,6 @@ import {
     useEffect,
     useRef,
     useState,
-    type CSSProperties,
     type JSX,
     type RefObject,
 } from 'react';
@@ -98,7 +97,6 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
     const isFetching = useIsFetching();
 
     const [phase, setPhase] = useState<Phase>('idle');
-    const [pullY, setPullY] = useState(0);
 
     // Touch tracking + current phase live in refs so window-level listeners
     // bind once and are never recreated mid-gesture (a recreated listener
@@ -107,7 +105,7 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
     const viewportRef = useRef<number>(0);
     const trackingRef = useRef(false);
     const phaseRef = useRef<Phase>(phase);
-    const pullRef = useRef<number>(pullY);
+    const pullRef = useRef<number>(0);
     // Latest visual offset actually applied to the content node — the pull
     // and every spring write through `applyContentTransform`, so this is the
     // truthful "where the content is now" (a pin spring can still be in
@@ -119,9 +117,6 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
     useEffect(() => {
         phaseRef.current = phase;
     }, [phase]);
-    useEffect(() => {
-        pullRef.current = pullY;
-    }, [pullY]);
 
     // Deadline caps spinner visibility so a hung backend can't trap the user.
     const refreshDeadlineRef = useRef<number | null>(null);
@@ -144,6 +139,49 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         animRef.current = null;
     }, []);
 
+    // The spinner reveal follows the gesture imperatively — the same
+    // frame-by-frame path as the content transform. Writing it through
+    // React state re-rendered the component on every `touchmove` (up to
+    // 120/s on ProMotion) for a style change (#1349).
+    const spinnerRef = useRef<HTMLSpanElement | null>(null);
+    const spinnerFadeRef = useRef<Animation | null>(null);
+
+    const applySpinnerReveal = useCallback((visualPx: number): void => {
+        const el = spinnerRef.current;
+        if (el === null) return;
+        const reveal = spinnerReveal(visualPx);
+        el.style.opacity = String(reveal);
+        el.style.transform = `translate(-50%, 0) scale(${reveal})`;
+    }, []);
+
+    /** Mirrored exit for the `.refreshing` fade-in: the spinner dissolves
+     * over the house duration/curve (WAAPI не читает var() — зеркало
+     * `--dl-duration-fast`/`--dl-ease`, как в LiveValue; #1349), while the
+     * content springs back, instead of hard-cutting the moment the class
+     * drops. */
+    const fadeSpinnerOut = useCallback((): void => {
+        const el = spinnerRef.current;
+        if (el === null) return;
+        spinnerFadeRef.current?.cancel();
+        // Pin the currently visible opacity inline BEFORE the `.refreshing`
+        // class drops, or the base class would cut it to 0 first.
+        if (el.style.opacity === '') {
+            el.style.opacity = '1';
+        }
+        const fade = el.animate(
+            [{ opacity: el.style.opacity }, { opacity: '0' }],
+            { duration: 250, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' },
+        );
+        spinnerFadeRef.current = fade;
+        fade.onfinish = (): void => {
+            el.style.opacity = '';
+            el.style.transform = '';
+            if (spinnerFadeRef.current === fade) {
+                spinnerFadeRef.current = null;
+            }
+        };
+    }, []);
+
     /** Spring the content from `from` to `to` with the release velocity. */
     const springTo = useCallback(
         (from: number, to: number, velocityPxPerS: number, onDone?: () => void): void => {
@@ -153,14 +191,23 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
                 stiffness: SPRING_STIFFNESS,
                 damping: SPRING_DAMPING,
                 velocity: velocityPxPerS,
-                onUpdate: (latest: number) => applyContentTransform(latest),
+                onUpdate: (latest: number) => {
+                    applyContentTransform(latest);
+                    // Below-threshold release: the reveal rides the same
+                    // spring down instead of freezing at the last pull
+                    // value (#1349). During refreshing the spinner is owned
+                    // by the `.refreshing` class — reveal writes stay off.
+                    if (to === 0 && phaseRef.current !== 'refreshing') {
+                        applySpinnerReveal(latest);
+                    }
+                },
                 onComplete: () => {
                     animRef.current = null;
                     onDone?.();
                 },
             });
         },
-        [applyContentTransform, stopAnimation],
+        [applyContentTransform, applySpinnerReveal, stopAnimation],
     );
 
     // Fallback overscroll guard: toggled on <html> while a pull is in flight.
@@ -186,10 +233,10 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
     );
 
     const reset = useCallback((): void => {
+        fadeSpinnerOut();
         setPhase('idle');
-        setPullY(0);
         setOverscrollGuard(false);
-    }, [setOverscrollGuard]);
+    }, [fadeSpinnerOut, setOverscrollGuard]);
 
     // Resolve the spinner once fetches settle OR the deadline elapses.
     useEffect(() => {
@@ -238,6 +285,9 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             // Gesture begins only when the page is pinned to the top.
             if (window.scrollY > 0) return;
             stopAnimation();
+            // A spinner fade-out from the previous refresh may still be
+            // running — a new pull owns the inline styles from here.
+            spinnerFadeRef.current?.cancel();
             startYRef.current = touch.clientY;
             viewportRef.current = window.innerHeight;
             velocity.reset();
@@ -255,6 +305,7 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
                 if (phaseRef.current !== 'refreshing') {
                     stopAnimation();
                     applyContentTransform(0);
+                    applySpinnerReveal(0);
                     reset();
                 }
                 return;
@@ -264,10 +315,11 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             const visual = rubberBandOffset(deltaY, viewportRef.current);
             velocity.add(event.timeStamp, visual);
             pullRef.current = visual;
-            setPullY(visual);
             setPhase(visual >= PTR_THRESHOLD_PX ? 'armed' : 'pulling');
-            // Content follows the finger frame-by-frame.
+            // Content follows the finger frame-by-frame — both the content
+            // transform and the spinner reveal are imperative writes.
             applyContentTransform(visual);
+            applySpinnerReveal(visual);
 
             // Suppress native overscroll bounce only while actively pulling at
             // the top of the page.
@@ -318,7 +370,7 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             window.removeEventListener('touchend', onTouchEnd);
             window.removeEventListener('touchcancel', onTouchCancel);
         };
-    }, [isActive, applyContentTransform, beginRefresh, reset, setOverscrollGuard, springTo, stopAnimation]);
+    }, [isActive, applyContentTransform, applySpinnerReveal, beginRefresh, reset, setOverscrollGuard, springTo, stopAnimation]);
 
     // Clean up the inline transform, running animation and overscroll guard
     // if the component unmounts mid-gesture.
@@ -332,24 +384,15 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
 
     if (!isActive) return null;
 
-    // Progressive spinner reveal during the pull: opacity and scale ramp
-    // together over the first half of the threshold (native
-    // UIRefreshControl reveals; it does not rotate until refreshing).
-    // `translate(-50%, 0)` keeps the spinner horizontally centered and
-    // must be preserved by the inline transform.
-    const reveal = spinnerReveal(pullY);
-    const spinnerStyle: CSSProperties =
-        phase === 'refreshing'
-            ? {}
-            : {
-                  opacity: reveal,
-                  transform: `translate(-50%, 0) scale(${reveal})`,
-              };
+    // The reveal is written imperatively (applySpinnerReveal): the pull
+    // path never re-renders. `phase` re-renders only on phase changes; the
+    // `.refreshing` class takes the spinner to full opacity with its
+    // fade-in transition.
 
     const spinnerClass = clsx(styles.spinner, phase === 'refreshing' && styles.refreshing);
 
     return (
-        <span className={spinnerClass} style={spinnerStyle} aria-hidden="true">
+        <span ref={spinnerRef} className={spinnerClass} aria-hidden="true">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="none">
                 {Array.from({ length: 12 }, (_, spoke) => (
                     <line

@@ -49,8 +49,15 @@ type Querier interface {
 	// of nothing clears the whole visible personal order).
 	ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error)
 	// Resume: close the open interval with today's date (the resume day is
-	// already outside the pause, [from, to)).
+	// already outside the pause, [from, to)). The owner's resume closes any
+	// open pause — manual or system: while the property is archived the
+	// conveyor refuses the mutation, so an open auto_archive pause here means
+	// the property is active again and the bridge has already closed its own.
 	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
+	// The archive bridge's reverse leg (тикет #1342): the property returned
+	// from the archive — close only the system auto_archive pause; the owner's
+	// manual pauses stay open. Same [from, to) semantics as the manual resume.
+	CloseAutoArchivePaymentPause(ctx context.Context, arg CloseAutoArchivePaymentPauseParams) (int64, error)
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	// Завершение (ревизия ADR 0053 #1161): дата завершения, возврат залога и
 	// Архив условий удалённого Платежа — один UPDATE; ссылка payment_id
@@ -678,7 +685,8 @@ type Querier interface {
 	InsertPaymentFavorite(ctx context.Context, arg InsertPaymentFavoriteParams) error
 	// The open-ended pause [from, ∞): exactly one may exist per rule — the
 	// partial unique index (to_date IS NULL) makes a double pause a constraint
-	// violation even past the application check.
+	// violation even past the application check. Origin distinguishes the
+	// owner's manual pause from the archive bridge's system one (тикет #1342).
 	InsertPaymentPause(ctx context.Context, arg InsertPaymentPauseParams) error
 	// The id, owner and payment link are app-side (UUIDv7, the denormalized
 	// scope owner, the gateway-minted rent payment).
@@ -1090,6 +1098,31 @@ type Querier interface {
 	// first — the keyset continuation the index
 	// (payment_id, created_at DESC, id DESC) serves.
 	ListPaymentChangesBefore(ctx context.Context, arg ListPaymentChangesBeforeParams) ([]ListPaymentChangesBeforeRow, error)
+	// The «На оплату» section's rows (ticket #1346): one row per (rule,
+	// operation) pair standing in the reminder window — planned operations with
+	// D−N ≤ today ≤ D on the rules with the reminder armed (1/3/7) and auto-pay
+	// OFF (решение владельца: напоминание у автоплатёжных стреляет, но в секции
+	// их нет), the feed's own visibility predicate and archive cut, completed
+	// rules cut (the #1340 gate the future reader inherits). The window joins
+	// the rule's operations laterally the feed's way: the driver is
+	// idx_payments_reminder_offset on the rules side, the per-rule operation
+	// scan rides idx_operations_payment_date with the sargable date bounds —
+	// no owner-side operation index needed at this scale.
+	//
+	// The pause needs no gate: occurrences inside a pause are never generated
+	// and the tick removed the future planned when the pause opened, so a
+	// paused rule keeps no in-window operation (the same structural cut the
+	// derivation rides for the timezone shifts, ADR 0048 п.5). Overdue
+	// operations (D < today) are out by the lower bound — they live in «Все
+	// просроченные». Days-left is the window's own math (D − today, 0..7 by
+	// construction); the reading order runs the real days ascending (решение
+	// владельца 13.10, #1347: the page groups the rows per real day, the chip
+	// reverses the group order client-side) with the operation's id the
+	// same-day tiebreak. No window: the section comes back whole — the
+	// materialization keeps at most two window operations per rule (today's
+	// and the next future one), the reminder is armed on a fraction of the
+	// rules.
+	ListPaymentDue(ctx context.Context, arg ListPaymentDueParams) ([]ListPaymentDueRow, error)
 	// One zone's due-day operations as of the zone's today (решение #737, тип
 	// №2: в день срока): planned, dated exactly today, on rules without the
 	// auto-pay mode — an auto-pay rule's due occurrence is extinguished by the
@@ -1340,7 +1373,8 @@ type Querier interface {
 	// (payment_id, date), status for the future-planned rebuild.
 	ListTickOperationStatuses(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickOperationStatusesRow, error)
 	// Pause intervals of the listed payments (ADR 0002 of the prototype: the
-	// holes are reproducible from the rule plus intervals).
+	// holes are reproducible from the rule plus intervals). Origin rides along
+	// (тикет #1342): the archive bridge closes only its own auto_archive pauses.
 	ListTickPausesByPaymentIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickPausesByPaymentIDsRow, error)
 	// The owner's payment rules on non-archived properties, with the user
 	// category's current name resolved for the materialization snapshot. Pauses
@@ -1538,12 +1572,23 @@ type Querier interface {
 	// order — a +24 h retry boundary stays consumed/unconsumed exactly as it was
 	// before the shift.
 	ShiftSubscriptionPaymentsCreatedAt(ctx context.Context, arg ShiftSubscriptionPaymentsCreatedAtParams) (int64, error)
-	// The main screen's two counters over the whole visible scope (ticket
-	// #575): the actor's favorite rules — the «Все избранные (N)» card, the
-	// personal set of the reading actor (the cutover #1308, D12) — and the
-	// overdue operations summed across the feed's rules — the «Все
-	// просроченные (N)» card. Neither is narrowed by a search: the counters
+	// The main screen's three counters over the whole visible scope (ticket
+	// #575; the due pair — ticket #1346): the actor's favorite rules — the
+	// «Все избранные (N)» card, the personal set of the reading actor (the
+	// cutover #1308, D12) — the overdue operations summed across the feed's
+	// rules — the «Все просроченные (N)» card — and the «На оплату» window:
+	// its operations and the nearest days-left, the «На оплату (N)» card's
+	// number and label source. None is narrowed by a search: the counters
 	// describe the scope, the search screens' rows are the feed query's.
+	//
+	// The due aggregates ride their own lateral beside the overdue one, both
+	// sargable-narrow — the overdue leg scans the planned-before-today tail, the
+	// due leg the reminder window (the rule terms fold into the WHERE: a NULL
+	// reminder makes the date bound NULL, the lateral comes back empty) — and
+	// neither ever narrows the outer WHERE: the favorites and the overdue keep
+	// counting the whole scope. No pause gate: an open pause keeps no planned
+	// operations in the window (the tick removed the future ones, occurrences
+	// inside the pause are not generated).
 	// The personal favorite join (the cutover #1308): COUNT over the actor's
 	// joined rows — a stranger's star never lands in the actor's counter.
 	SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPaymentCountersParams) (SumGlobalPaymentCountersRow, error)

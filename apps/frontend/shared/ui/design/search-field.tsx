@@ -37,7 +37,11 @@ export function SearchField({
     >
       <input
         type="search"
-        className="min-w-0 flex-1 border-none bg-transparent text-sm leading-4 text-content outline-none placeholder:text-content-tertiary [&::-webkit-search-cancel-button]:hidden"
+        /* Кегль — гард-токен --font-size-input (16px), не шкала текста:
+         * iOS Safari зумит страницу при фокусе в инпут <16px и не
+         * возвращает (maximumScale сознательно не ставится — WCAG 1.4.4;
+         * tokens.css). Figma 706:12561 рисует 14/16 — гард сильнее макета. */
+        className="min-w-0 flex-1 border-none bg-transparent text-[length:var(--font-size-input)] leading-[var(--line-height-input)] text-content outline-none placeholder:text-content-tertiary [&::-webkit-search-cancel-button]:hidden"
         placeholder={placeholder}
         disabled={disabled}
         value={value}

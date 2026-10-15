@@ -148,10 +148,10 @@ func fixtureOperation(status domain.OperationStatus) domain.Operation {
 	op := domain.Operation{
 		ID: id, PropertyID: propID, PaymentID: &paymentID,
 		Origin: domain.OriginPayment, Date: date, Status: status,
-		Type: domain.TypeExpense, Title: "ЖКУ", AmountKopecks: 500000,
+		Type: domain.TypeExpense, Title: testTitleZhku, AmountKopecks: 500000,
 		CategoryLabel: "Коммунальные услуги",
 	}
-	slug := "utilities"
+	slug := testSlugUtilities
 	op.CategorySlug = &slug
 	if status == domain.StatusPaid {
 		paid := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
@@ -642,6 +642,43 @@ func TestGetOperation_ReturnsOperationAndMapsErrors(t *testing.T) {
 		if body.Id != paidOp.ID || body.Status != openapi.OperationResponseStatusPaid {
 			t.Errorf("wire = %s/%s, want the requested id with the computed paid status",
 				body.Id, body.Status)
+		}
+		if body.Origin != openapi.OperationResponseOriginPayment {
+			t.Errorf("origin = %q, want payment — the origin travels to the wire so the deleted-rule "+
+				"tail stays distinguishable from a manual fact (ticket #1371)", body.Origin)
+		}
+	})
+
+	t.Run("manual origin travels to the wire", func(t *testing.T) {
+		t.Parallel()
+		manual := fixtureOperation(domain.StatusPaid)
+		manual.Origin = domain.OriginManual
+		manual.PaymentID = nil
+		svc := &fakeOperationsManager{
+			get: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (application.OperationListItem, error) {
+				return application.OperationListItem{
+					Operation:  manual,
+					ViewStatus: domain.ViewStatusPaid,
+				}, nil
+			},
+		}
+		h := NewOperationsHandlers(svc, nil)
+
+		req := httptest.NewRequestWithContext(
+			httpsupport.WithUserID(t.Context(), uuid.Must(uuid.NewV7())), http.MethodGet, "/operation", nil,
+		)
+		w := httptest.NewRecorder()
+		h.GetOperation(w, req, manual.PropertyID, manual.ID)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+		}
+		var body openapi.OperationResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body.Origin != openapi.OperationResponseOriginManual {
+			t.Errorf("origin = %q, want manual", body.Origin)
 		}
 	})
 

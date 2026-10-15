@@ -73,7 +73,7 @@ export function PaymentRowButton({
       aria-pressed={pressed}
       className={cn(
         'group/row flex w-full cursor-pointer items-center py-2 outline-none',
-        'transition-all focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        'transition-opacity focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         'hover:opacity-80 active:opacity-80 px-3',
         variant === 'gray' ? 'bg-surface-muted' : 'bg-surface',
         onSelect === undefined && 'cursor-default',

@@ -44,11 +44,24 @@ describe('paymentRowSubtitle', () => {
     expect(result).toStrictEqual({ kind: 'paused' });
   });
 
-  it('у завершённого платежа (endDate в прошлом, сервер дал null) — нет подзаголовка', () => {
+  it('у вычисляемой завершённости (флаг сервера) — «Полностью оплачен» вместо даты (#1341)', () => {
     const result = paymentRowSubtitle(
       makePayment({ endDate: '2026-08-01', isCompleted: true, nearestDate: null }),
       '2026-08-27',
     );
-    expect(result).toStrictEqual({ kind: 'none' });
+    expect(result).toStrictEqual({ kind: 'completed' });
+  });
+
+  it('пауза сильнее флага завершённости: за вырезанным курсором паузы флаг отвечает «завершён» (глоссарий), строка честно показывает паузу', () => {
+    const result = paymentRowSubtitle(
+      makePayment({
+        endDate: '2026-08-01',
+        isCompleted: true,
+        nearestDate: null,
+        pauses: [{ from: '2026-08-01' }],
+      }),
+      '2026-08-27',
+    );
+    expect(result).toStrictEqual({ kind: 'paused' });
   });
 });

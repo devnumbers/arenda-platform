@@ -460,6 +460,10 @@ func injectPropertyServiceAccess(propertiesMod *wire.Properties, accessMod *wire
 func injectPropertyListProjections(propertiesMod *wire.Properties, paymentsMod *wire.Payments, rentalsMod *wire.Rentals) {
 	propertiesMod.PropertyService.SetRentalOccupancyReader(rentalsMod.OccupancyReader)
 	propertiesMod.PropertyService.SetOverdueOperationsReader(paymentsMod.OverdueOperations)
+	// The archive round-trip's system pauses (тикет #1342): the archive
+	// pauses the object's live payment rules in its own transaction, the
+	// restore closes only the auto_archive ones.
+	propertiesMod.PropertyService.SetArchivePausesBridge(paymentsMod.ArchivePauses)
 	// Deletion guard (issue #632): the property delete consults the rentals
 	// context in its own transaction — the unfinished rental conflicts, the
 	// completed ones are torn down before the property row.

@@ -27,6 +27,7 @@ export function projectedOperation(
     id: `projected:${date}`,
     propertyId: payment.propertyId,
     paymentId: payment.id,
+    origin: 'payment',
     date,
     status: 'planned',
     type: payment.type,

@@ -35,6 +35,7 @@ type PaymentManager interface {
 	DeletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID, keepOverdue bool) error
 	PausePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	ResumePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	CompletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) error
 	SetPaymentFavorite(ctx context.Context, actor, propertyID, paymentID uuid.UUID, favorite bool) (domain.Payment, error)
 	CompletedStatus(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (bool, error)
 	PaymentFlags(ctx context.Context, actor, propertyID uuid.UUID) (completed, managed, rentalCompleted map[uuid.UUID]bool, err error)
@@ -318,6 +319,24 @@ func (h *PaymentHandlers) ResumePayment(w http.ResponseWriter, r *http.Request, 
 	h.respondWithPayment(w, r, actor, propertyID, payment, http.StatusOK)
 }
 
+// CompletePayment implements POST /properties/{propertyId}/payments/{paymentId}/complete
+// (тикет #1377, ревизия #1340): the completion deletes the rule — the answer
+// is the delete shape's 204; the rule's page and journal die with the rule,
+// the paid operations keep their history.
+func (h *PaymentHandlers) CompletePayment(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.CompletePayment(r.Context(), actor, propertyID, paymentID); err != nil {
+		h.handlePaymentError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // SetPaymentFavorite implements PUT /properties/{propertyId}/payments/{paymentId}/favorite
 // (ticket #461): the atomic favorite star write; the updated rule travels back.
 func (h *PaymentHandlers) SetPaymentFavorite(w http.ResponseWriter, r *http.Request, propertyID, paymentID openapi_types.UUID) {
@@ -403,13 +422,20 @@ func paymentChangesResponse(page application.ChangeLogPage) (openapi.PaymentChan
 				New:   newValue,
 			}
 		}
-		items[i] = openapi.PaymentChangeItem{
+		item := openapi.PaymentChangeItem{
 			Id:        entry.ID,
 			ActorId:   entry.ActorID,
 			Action:    openapi.PaymentChangeAction(entry.Action),
 			Changes:   changes,
 			CreatedAt: entry.CreatedAt,
 		}
+		// Отметка происхождения системной строки (тикет #1342); ручное
+		// действие едет по проводу null'ом (и отсутствием поля).
+		if entry.Origin != "" {
+			origin := openapi.PaymentChangeItemOrigin(entry.Origin)
+			item.Origin = &origin
+		}
+		items[i] = item
 	}
 	resp := openapi.PaymentChangesResponse{Items: items}
 	if page.NextCursor != "" {

@@ -110,7 +110,7 @@ func TestTick_ActivePauseExcludesOccurrences(t *testing.T) {
 	// debt accumulated before the pause is untouched.
 	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
 	paymentID := h.seedPayment(day22, `{"kind":"daily"}`, true)
-	h.seedPause(paymentID, "2026-08-24", nil)
+	h.seedPause(paymentID, "2026-08-24")
 
 	h.runTick()
 

@@ -53,6 +53,7 @@ async function createMonthlyPaymentToday(
   seededUser: Parameters<typeof openCabinetWithSeededSession>[1],
   title: string,
   day: string,
+  landOnPayment = false,
 ): Promise<string> {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(PAYMENTS_URL);
@@ -103,8 +104,17 @@ async function createMonthlyPaymentToday(
     page.getByText(new RegExp(day === '31' ? 'Первый платеж .*, далее последний день каждого месяца' : `Первый платеж .*, далее каждый месяц ${day} числа`)),
   ).toBeVisible();
   await expect(page.getByText(`-1\u00A0990 ₽`)).toBeVisible();
-  await page.getByRole('button', { name: 'Хорошо, закрыть' }).click();
-  await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
+  // landOnPayment — маршрут владельца (#1433): «Посмотреть платеж» кладёт
+  // страницу платежа в историю через push, и следующий goBack после смерти
+  // правила выпадает на шаг создания — детерминированный replace списка
+  // этот угол и проверяет.
+  if (landOnPayment) {
+    await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
+  } else {
+    await page.getByRole('button', { name: 'Хорошо, закрыть' }).click();
+    await expect(page).toHaveURL(new RegExp(`${PAYMENTS_URL}$`));
+  }
 
   const response = await page.request.get(`/api/properties/${PROPERTY}/payments`);
   expect(response.ok()).toBe(true);
@@ -354,5 +364,93 @@ test.describe('сквозная жизнь платежа', () => {
 
     // Ни правила, ни просрочек.
     await expect(page.getByText(title2)).toHaveCount(0);
+  });
+
+  test('оплата последней операции → «Полностью оплачен» → «Завершить» → финал → правило удалено, «Хорошо» — на список платежей (#1341, ревизии #1377/#1433)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    const run = String(testInfo.retry);
+    const title = `E2E завершение платежа ${run}`;
+    // UTC-канон сидов и прогонов (#796): день выбирается в браузере (TZ
+    // прогона UTC), локальная дата узла у владельца MSK уходит вперёд в
+    // полночном окне.
+    const day = String(new Date().getUTCDate());
+    // Маршрут владельца (#1433): на страницу платежа — через «Посмотреть
+    // платеж» экрана успеха (push в историю), как в живом сценарии.
+    const id = await createMonthlyPaymentToday(page, seededUser, title, day, true);
+    const paymentUrl = `/properties/${PROPERTY}/payments/${id}`;
+    const paymentsUrl = `/properties/${PROPERTY}/payments`;
+
+    // Срочное правило: endDate = сегодня — после оплаты единственного
+    // вхождения вычисляемый флаг отвечает «завершён» в тот же день, и это
+    // сценарий, где кнопка «Завершить» приглашает (мутация гейтов не
+    // имеет — ревизия 2 #1426). Будущее вхождение, материализованное тиком
+    // создания ещё до endDate, снимается — за закончившимся расписанием
+    // его быть не должно (SQL-правка мимо валидации правки, которая такую
+    // endDate отвергла бы).
+    expect(await execE2eSql(`UPDATE payments SET end_date = CURRENT_DATE WHERE id = '${id}'`)).toBe(
+      'UPDATE 1',
+    );
+    expect(
+      await execE2eSql(
+        `DELETE FROM operations WHERE payment_id = '${id}' AND status = 'planned' AND date > CURRENT_DATE`,
+      ),
+    ).toBe('DELETE 1');
+
+    // Оплата единственного вхождения: мы уже на странице платежа —
+    // «Посмотреть платеж» привёл сюда (#1433).
+    await page.getByRole('button', { name: 'Оплатить' }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`),
+    );
+    await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
+    await expect(page.getByText('Платеж оплачен')).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
+
+    // Вычисляемая завершённость: блок ближайшего — «Платежей больше не
+    // будет», «Оплатить» заменена «Завершить» (#1341, макет 3249:74119);
+    // returnTo уже вернул на страницу платежа.
+    await expect(page.getByText('Платежей больше не будет')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Оплатить' })).toHaveCount(0);
+    const completeButton = page.getByRole('button', { name: 'Завершить' });
+    await expect(completeButton).toBeEnabled();
+
+    // Шторка подтверждения (3249:75723) → финальный экран (3249:75665).
+    // Локатор открытия — текст описания: заголовок в шторке задвоен
+    // (sr-only DialogTitle канона Modal + видимый <p> по макету), голый
+    // getByText даёт strict-violation (#860).
+    await completeButton.click();
+    await expect(page.getByText(/Новых операций по платежу больше не будет/)).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Завершить' }).click();
+    await expect(page.getByText(`Платеж «${title}» завершен`)).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо' }).click();
+
+    // «Хорошо» — детерминированный replace на список платежей объекта
+    // (#1433): goBack по истории выпадал на шаг создания, когда платёж
+    // открыт «Посмотреть платеж» из экрана успеха. Правило удалено
+    // (#1377) — скрыто из списка объекта и из API-списка.
+    await expect(page).toHaveURL(new RegExp(`${paymentsUrl}$`));
+    await expect(page.getByText(title)).toHaveCount(0);
+    const response = await page.request.get(`/api/properties/${PROPERTY}/payments`);
+    const { items } = (await response.json()) as { items: ReadonlyArray<{ id: string }> };
+    expect(items.some((payment) => payment.id === id)).toBe(false);
+
+    // Прямая ссылка — приватный 404: правила больше нет.
+    await page.goto(paymentUrl);
+    await expect(page.getByText('Не удалось загрузить платеж')).toBeVisible();
+
+    // Хвост правила: оплаченная операция осталась в ленте операций объекта
+    // без связи с правилом (paymentId null, origin 'payment' — #1377).
+    const opsResponse = await page.request.get(`/api/properties/${PROPERTY}/operations`);
+    expect(opsResponse.ok()).toBe(true);
+    const ops = (await opsResponse.json()) as {
+      items: ReadonlyArray<{ title: string; paymentId: string | null; origin: string }>;
+    };
+    const tail = ops.items.find((operation) => operation.title === title);
+    expect(tail).toBeDefined();
+    expect(tail?.paymentId).toBeNull();
+    expect(tail?.origin).toBe('payment');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PaymentOperation } from '@/entities/payment';
+import { makePaymentOperation } from '@/entities/payment';
 import {
   groupOperationsByDate,
   groupPaidOperations,
@@ -7,23 +7,16 @@ import {
   serializeHistoryOrderToParams,
 } from './operations-history';
 
-const paid = (id: string, date: string): PaymentOperation => ({
-  id,
-  propertyId: 'p1',
-  paymentId: 'pay1',
-  date,
-  paidDate: date,
-  status: 'paid',
-  type: 'expense',
-  title: 'Аренда',
-  amountKopecks: 4500000,
-  categoryLabel: 'Арендная плата',
-  categorySlug: 'rent',
-});
+/**
+ * Модель истории операций (группировки, сортировки, парс order-параметров).
+ */
+
+const paid = (id: string, date: string) =>
+  makePaymentOperation({ id, date, paidDate: date });
 
 /** Оплаченный вперёд: плановая дата вхождения (период, за который платят)
  * расходится с фактической датой оплаты (решение #933/#994). */
-const paidAhead = (id: string, date: string, paidDate: string): PaymentOperation => ({
+const paidAhead = (id: string, date: string, paidDate: string) => ({
   ...paid(id, date),
   paidDate,
 });

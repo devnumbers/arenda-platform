@@ -82,7 +82,13 @@ export function flickTriggersRefresh(pullPx: number, velocityPxPerS: number): bo
 /** Sliding-window velocity tracker over (timeMs, positionPx) touch samples. */
 export type VelocityTracker = {
     readonly add: (timeMs: number, positionPx: number) => void;
-    readonly velocityPxPerS: () => number;
+    /** Signed px/s over the window. `nowMs` — момент жеста, на который
+     * считается скорость (отпускание указателя): сэмплы старше окна от
+     * ЭТОГО момента мертвы — пауза перед отпусканием гасит скорость
+     * (без этого stale-всплеск последнего движения переживал паузу и давал
+     * ложный флик, #1349). Без аргумента — прежнее поведение (окно от
+     * последнего сэмпла, PTR). */
+    readonly velocityPxPerS: (nowMs?: number) => number;
     readonly reset: () => void;
 };
 
@@ -95,10 +101,16 @@ export function createVelocityTracker(windowMs = VELOCITY_WINDOW_MS): VelocityTr
             const cutoff = timeMs - windowMs;
             samples = samples.filter((sample) => sample.timeMs >= cutoff);
         },
-        velocityPxPerS: () => {
-            if (samples.length < 2) return 0;
-            const first = samples[0];
-            const last = samples[samples.length - 1];
+        velocityPxPerS: (nowMs) => {
+            // Чистое чтение: окно считается на локальной копии, кэш сэмплов
+            // не переписывается (геттер без побочных эффектов).
+            const windowed =
+                nowMs !== undefined
+                    ? samples.filter((sample) => sample.timeMs >= nowMs - windowMs)
+                    : samples;
+            if (windowed.length < 2) return 0;
+            const first = windowed[0];
+            const last = windowed[windowed.length - 1];
             if (first === undefined || last === undefined) return 0;
             const dtMs = last.timeMs - first.timeMs;
             if (dtMs <= 0) return 0;

@@ -11,7 +11,7 @@ import { propertyTypeIcons, type PropertyType } from '@/entities/property';
 import { CircleIcon, circleIconRing, EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
 import { CategoryIcon, categoryStyle, type CategoryIconSurface } from '@/features/payment-categories';
 import { daysOverdue } from '../lib/overdue-days';
-import { paymentRowSubtitle } from '../lib/payment-row-subtitle';
+import { paymentRowSubtitle, PAYMENT_COMPLETED_LABEL } from '../lib/payment-row-subtitle';
 
 /**
  * Иконка категории строки правила глобальных платежей (#575): красная
@@ -153,7 +153,11 @@ export function PaymentObjectAvatar({
  * секции, где виден весь список.
  */
 
-const headingClass = 'text-xl font-semibold leading-6 text-content';
+// Заголовок секции — 20/24. text-left явный: заголовки-стрелки живут
+// внутри <button>, а UA-стиль кнопки центрирует текст — на узком экране
+// двухстрочный заголовок («Просроченные операции») рендерился по центру
+// карточки.
+const headingClass = 'text-left text-xl font-semibold leading-6 text-content';
 /** Пояснение секции (Mobile/Text/M/400, 1043:62920): 14/16, серый. */
 const hintClass = 'text-sm leading-4 text-content-secondary';
 
@@ -401,12 +405,13 @@ export function OverdueOperationRow({
 }
 
 /** Строка правила-платежа в секциях (1323:61133): подзаголовок — дата
- * следующего вхождения или «На паузе» (opacity по истории 22); звезда
- * избранного — ПЕРЕД подзаголовком и во всех состояниях; у платежа с
- * накопленной просрочкой — красная точка-уведомление на иконке
- * (State=Expired, обе поверхности). Поверхность gray — строки на серых
- * блоках (кант серый), white — внутри страницы, открытой кликом по серому
- * блоку (кант белый). Выбор строки открывает страницу платежа (#465). */
+ * следующего вхождения, «На паузе» (opacity по истории 22) или «Полностью
+ * оплачен» при вычисляемой завершённости (#1341); звезда избранного —
+ * ПЕРЕД подзаголовком и во всех состояниях; у платежа с накопленной
+ * просрочкой — красная точка-уведомление на иконке (State=Expired, обе
+ * поверхности). Поверхность gray — строки на серых блоках (кант серый),
+ * white — внутри страницы, открытой кликом по серому блоку (кант белый).
+ * Выбор строки открывает страницу платежа (#465). */
 export function PaymentRow({
   payment,
   today,
@@ -427,9 +432,11 @@ export function PaymentRow({
   const dateText =
     subtitle.kind === 'paused'
       ? 'На паузе'
-      : subtitle.kind === 'date'
-        ? formatDayMonthWithYear(subtitle.iso, today)
-        : undefined;
+      : subtitle.kind === 'completed'
+        ? PAYMENT_COMPLETED_LABEL
+        : subtitle.kind === 'date'
+          ? formatDayMonthWithYear(subtitle.iso, today)
+          : undefined;
 
   return (
     <PaymentRowButton

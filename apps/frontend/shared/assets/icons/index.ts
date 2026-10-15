@@ -130,6 +130,9 @@ export { default as Play } from './play.svg';
 export { default as Repeat } from './repeat.svg';
 export { default as Calendar } from './calendar.svg';
 export { default as TimeHistory } from './time-history.svg';
+// Завершение платежа (#1341): действие «Завершить» — Icon/R/EndPay
+// (3249:75590, владелец), currentColor.
+export { default as EndPay } from './end-pay.svg';
 
 // Футер новых экранов (#460, Figma 1185:40813): табы «Объекты /
 // Уведомления / Еще» — монохромные Regular-иконки 24×24 (currentColor):

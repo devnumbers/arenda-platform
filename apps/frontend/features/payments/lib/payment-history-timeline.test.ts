@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { makePaymentOperation } from '@/entities/payment';
 import type {
   IsoDate,
   PaymentChangeEntry,
@@ -16,20 +17,20 @@ function localMomentIso(year: number, month1: number, day: number, hour = 12): s
 }
 
 function operation(overrides: Partial<PaymentOperation> = {}): PaymentOperation {
-  return {
+  return makePaymentOperation({
     id: 'op-1',
     propertyId: 'p-1',
     paymentId: 'pay-1',
     date: '2026-09-01',
     paidDate: '2026-09-01',
     status: 'paid',
-    type: 'expense',
     title: 'Юрист',
     amountKopecks: 250_000,
     categoryLabel: 'Юридические услуги',
+    categorySlug: undefined,
     updatedAt: '2026-09-01T12:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 /** Правка одним полем; сценарные строки — вторым аргументом. */
@@ -41,7 +42,7 @@ function change(
   ],
   action: PaymentChangeEntry['action'] = 'updated',
 ): PaymentChangeEntry {
-  return { id, action, changes, createdAt };
+  return { id, action, changes, origin: null, createdAt };
 }
 
 describe('buildPaymentHistoryTimeline — группы по датам (макет 3214-73216)', () => {

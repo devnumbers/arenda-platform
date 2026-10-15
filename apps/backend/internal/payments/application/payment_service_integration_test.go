@@ -535,6 +535,12 @@ func TestArchivedProperty_IsFinancialReadOnly(t *testing.T) {
 	if _, err := h.svc.PausePayment(h.ctx(), h.owner, h.propID, created.ID); !errors.Is(err, paymentsapp.ErrArchivedProperty) {
 		t.Fatalf("pause on archived = %v, want ErrArchivedProperty", err)
 	}
+	// Возобновление системной автопаузы архивного объекта — тот же 409
+	// (тикет #1342): правило с автопаузой оживить, пока объект в архиве,
+	// нельзя ни вручную, ни повторной паузой.
+	if _, err := h.svc.ResumePayment(h.ctx(), h.owner, h.propID, created.ID); !errors.Is(err, paymentsapp.ErrArchivedProperty) {
+		t.Fatalf("resume on archived = %v, want ErrArchivedProperty", err)
+	}
 	if err := h.svc.DeletePayment(h.ctx(), h.owner, h.propID, created.ID, true); !errors.Is(err, paymentsapp.ErrArchivedProperty) {
 		t.Fatalf("delete on archived = %v, want ErrArchivedProperty", err)
 	}

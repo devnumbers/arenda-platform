@@ -81,17 +81,50 @@ describe('propertyPaymentGroups', () => {
     expect(groups[0]?.items.map((item) => item.overdue)).toEqual([true, false]);
   });
 
-  it('паузные правила не выводятся — их место на странице платежа', () => {
+  it('паузные правила выводятся как обычные — в конце группы (решение владельца 12.10, #1353)', () => {
+    // Форма данных как у бекенда: у паузных nearestDate = null.
     const payments = [
       paymentFixture({
-        id: 'p1',
+        id: 'paused-early',
         pauses: [{ from: '2026-09-01' }],
       }),
-      paymentFixture({ id: 'p2' }),
+      paymentFixture({ id: 'dated', nearestDate: '2026-09-15' }),
+      paymentFixture({
+        id: 'paused-late',
+        pauses: [{ from: '2026-09-01' }],
+      }),
     ];
     const groups = propertyPaymentGroups(payments, new Set(), '2026-09-11');
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.items.map((item) => item.payment.id)).toEqual(['p2']);
+    // Паузный круг ничем не отличается: без точки просрочки, в конце
+    // группы (дат у паузных нет — сортировка кладёт их за датированными).
+    expect(groups[0]?.items.map((item) => item.payment.id)).toEqual([
+      'dated',
+      'paused-early',
+      'paused-late',
+    ]);
+    expect(groups[0]?.items.map((item) => item.overdue)).toEqual([false, false, false]);
+  });
+
+  it('объект только с паузными — группа выводится, полоса без пустых групп (#1353)', () => {
+    const groups = propertyPaymentGroups(
+      [paymentFixture({ id: 'paused', pauses: [{ from: '2026-09-01' }] })],
+      new Set(),
+      '2026-09-11',
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.items.map((item) => item.payment.id)).toEqual(['paused']);
+  });
+
+  it('паузные занимают слоты лимита как все: поверх лимита не проходят', () => {
+    const dated = Array.from({ length: 7 }, (_, index) =>
+      paymentFixture({ id: `d${index}`, nearestDate: `2026-09-${String(index + 10)}` }),
+    );
+    const paused = paymentFixture({ id: 'paused', pauses: [{ from: '2026-09-01' }] });
+    const groups = propertyPaymentGroups([...dated, paused], new Set(), '2026-09-11');
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.items).toHaveLength(7);
+    expect(groups[0]?.items.map((item) => item.payment.id)).not.toContain('paused');
   });
 
   it('пустая группа не выводится: только автоплатежи — одна группа', () => {
