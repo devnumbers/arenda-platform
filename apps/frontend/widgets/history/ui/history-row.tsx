@@ -40,7 +40,9 @@ const TONE_BAR: Record<HistoryBaseActionTone, string> = {
  * строка не кнопка, переходом служат только синие фрагменты. Под заголовком
  * — серые (#6F787C) строки-пояснения details, собранные сервером при записи
  * и отрендеренные дословно; у строк без пояснений (записанные до D1 и
- * действия без диффов) — один заголовок. Время — справа по нижней строке
+ * действия без диффов) — один заголовок. Длинные фрагменты заголовка и
+ * пояснений переносятся, многострочные значения (описание объекта) читаются
+ * как набрано (карта #1444). Время — справа по нижней строке
  * текста (items-end).
  *
  * Свежая строка live-влития (#880, механика F демо #879): мягкое
@@ -62,7 +64,12 @@ export function HistoryRow({ entry, fresh = false }: { readonly entry: HistoryEn
           aria-label={baseActionLabel(entry.baseAction)}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="text-xs leading-[15px] text-content">
+          {/* Длинные фрагменты переносятся, а не растягивают строку ленты
+           *  (бриф владельца 15.10, карта #1444); канон переноса —
+           *  overflow-wrap: break-word, прецедент PropertyInfoCard
+           *  (коммит 6ddbca31b). Пояснения — pre-wrap: многострочное
+           *  описание читается как набрано. */}
+          <p className="break-words text-xs leading-[15px] text-content">
             {entry.segments.map((segment, index) => {
               const href = segment.link ? historySegmentHref(segment.link, entry.propertyId) : null;
               return href ? (
@@ -86,7 +93,7 @@ export function HistoryRow({ entry, fresh = false }: { readonly entry: HistoryEn
             )}
           </p>
           {entry.details?.map((line, index) => (
-            <p key={index} className="text-xs leading-[15px] text-content-secondary">
+            <p key={index} className="whitespace-pre-wrap break-words text-xs leading-[15px] text-content-secondary">
               {line}
             </p>
           ))}

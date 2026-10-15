@@ -58,6 +58,10 @@ const (
 	attrAreaTotal         = "area_total"
 	attrFloor             = "floor"
 	attrLandArea          = "land_area"
+	attrBathroom          = "bathroom"
+	attrBathroomCombined  = "combined"
+	attrBathroomIndoor    = "indoor"
+	attrMaterial          = "material"
 )
 
 // TestCreateProperty_WithValidAttributes verifies that a fully valid attribute

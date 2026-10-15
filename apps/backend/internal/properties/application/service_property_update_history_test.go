@@ -72,12 +72,14 @@ func TestPropertyUpdateHistoryEntry(t *testing.T) {
 			wantDetails: historydomain.DetailLines{`Описание: «Тихий двор, рядом метро»`},
 		},
 		{
+			// Значения enum-полей читаются по-русски: метка опции каталога
+			// (бриф владельца 15.10, карта #1444), не wire-ключ.
 			name:   "single_group_attributes_changed",
 			before: historyEntryProperty(func(p *domain.Property) { p.Attributes = domain.Attributes{attrBalcony: attrBalconyLoggia} }),
 			after:  historyEntryProperty(func(p *domain.Property) { p.Attributes = domain.Attributes{attrBalcony: attrBalconyNone} }),
 			wantOK: true,
 			wantDetails: historydomain.DetailLines{
-				`Балкон: «` + attrBalconyLoggia + `» → «` + attrBalconyNone + `»`,
+				`Балкон: «Лоджия» → «Нет»`,
 			},
 		},
 		{
@@ -86,7 +88,7 @@ func TestPropertyUpdateHistoryEntry(t *testing.T) {
 			before:      historyEntryProperty(nil),
 			after:       historyEntryProperty(func(p *domain.Property) { p.Type = domain.PropertyTypeHouse }),
 			wantOK:      true,
-			wantDetails: historydomain.DetailLines{`Тип: «Квартира» → «Дом»`},
+			wantDetails: historydomain.DetailLines{detailTypeApartmentToHouse},
 		},
 		{
 			name:   "two_groups_ordered_lines",
@@ -116,10 +118,32 @@ func TestPropertyUpdateHistoryEntry(t *testing.T) {
 				`Название: «` + fixtureOldName + `» → «` + renamedName + `»`,
 				`Адрес: «` + fixtureOldAddress + `» → «` + renamedAddress + `»`,
 				`Описание: «Тихий двор, рядом метро»`,
-				`Тип: «Квартира» → «Дом»`,
-				// Метки характеристик читаются по НОВОМУ типу: у дома нет
-				// балкона — деталь читает сырой ключ (attributeLabel).
-				`balcony: «` + attrBalconyLoggia + `» → «` + attrBalconyNone + `»`,
+				detailTypeApartmentToHouse,
+				// Значение enum-поля переводится каталогом своего типа (старое
+				// — по старому типу объекта, новое — по новому); метка поля —
+				// по новому типу: у дома балкона нет, деталь читает сырой
+				// ключ (фолбэк attributeLabel). Через форму такой PATCH не
+				// приходит — это контракт чистой функции.
+				`balcony: «Лоджия» → «Нет»`,
+			},
+		},
+		{
+			// Сценарий владельца (бриф 15.10, карта #1444): смена типа без
+			// шума — строка «Тип» плюс реальные значения нового типа;
+			// никаких «Балкон: удалено» от подмены набора характеристик.
+			name: "type_change_row_has_no_removal_noise",
+			before: historyEntryProperty(func(p *domain.Property) {
+				p.Attributes = domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)}
+			}),
+			after: historyEntryProperty(func(p *domain.Property) {
+				p.Type = domain.PropertyTypeHouse
+				p.Attributes = domain.Attributes{attrAreaTotal: float64(50), attrLandArea: float64(6), attrMaterial: "brick"}
+			}),
+			wantOK: true,
+			wantDetails: historydomain.DetailLines{
+				detailTypeApartmentToHouse,
+				`Площадь участка: «6»`,
+				`Материал: «Кирпичный»`,
 			},
 		},
 		{
@@ -191,29 +215,36 @@ func assertPropertyUpdateCase(t *testing.T, tt propertyUpdateCase, entry history
 const (
 	labelBalcony   = "Балкон"
 	labelAreaTotal = "Общая площадь"
+
+	// Пояснение смены типа «Квартира → Дом», повторяющееся в таблицах.
+	detailTypeApartmentToHouse = `Тип: «Квартира» → «Дом»`
 )
 
 func TestAttributeChanges(t *testing.T) {
 	t.Parallel()
 
-	// The label comes from the generated catalog by the property's type;
-	// an apartment has no land_area, so that key's label falls back empty
-	// (the detail line then reads the raw key).
+	// The label comes from the generated catalog by the property's (new)
+	// type; an apartment has no land_area, so that key's label falls back
+	// empty (the detail line then reads the raw key).
 	tests := []struct {
-		name     string
-		propType domain.PropertyType
-		before   domain.Attributes
-		after    domain.Attributes
-		want     []historydomain.AttributeChange
+		name       string
+		beforeType domain.PropertyType
+		afterType  domain.PropertyType
+		before     domain.Attributes
+		after      domain.Attributes
+		want       []historydomain.AttributeChange
 	}{
 		{
 			// Changed and added keys in one edit; the result is sorted by the
 			// catalog key regardless of the map iteration order, and the
 			// unchanged key is dropped.
-			name:     "changed_and_added_keys_sorted_by_key",
-			propType: domain.PropertyTypeHouse,
-			before:   domain.Attributes{attrFloor: float64(3), attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
-			after:    domain.Attributes{attrFloor: float64(5), attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(45), attrLandArea: float64(6)},
+			name:       "changed_and_added_keys_sorted_by_key",
+			beforeType: domain.PropertyTypeHouse,
+			afterType:  domain.PropertyTypeHouse,
+			before:     domain.Attributes{attrFloor: float64(3), attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
+			after: domain.Attributes{
+				attrFloor: float64(5), attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(45), attrLandArea: float64(6),
+			},
 			want: []historydomain.AttributeChange{
 				{Key: attrAreaTotal, Label: labelAreaTotal, Old: float64(50), New: float64(45)},
 				// У дома нет поля floor — метка пуста, деталь прочитает сырой
@@ -223,39 +254,80 @@ func TestAttributeChanges(t *testing.T) {
 			},
 		},
 		{
-			name:     "removed_key_carries_only_the_old_value",
-			propType: domain.PropertyTypeApartment,
-			before:   domain.Attributes{attrBalcony: attrBalconyLoggia},
-			after:    domain.Attributes{},
-			want:     []historydomain.AttributeChange{{Key: attrBalcony, Label: labelBalcony, Old: attrBalconyLoggia, New: nil}},
+			name:       "removed_key_carries_only_the_old_value",
+			beforeType: domain.PropertyTypeApartment,
+			afterType:  domain.PropertyTypeApartment,
+			before:     domain.Attributes{attrBalcony: attrBalconyLoggia},
+			after:      domain.Attributes{},
+			want:       []historydomain.AttributeChange{{Key: attrBalcony, Label: labelBalcony, Old: "Лоджия", New: nil}},
 		},
 		{
 			// A nil before-side folds to an empty map: the whole new set reads
 			// as additions.
-			name:     "nil_before_reads_every_key_as_added",
-			propType: domain.PropertyTypeApartment,
-			before:   nil,
-			after:    domain.Attributes{attrAreaTotal: float64(50)},
-			want:     []historydomain.AttributeChange{{Key: attrAreaTotal, Label: labelAreaTotal, Old: nil, New: float64(50)}},
+			name:       "nil_before_reads_every_key_as_added",
+			beforeType: domain.PropertyTypeApartment,
+			afterType:  domain.PropertyTypeApartment,
+			before:     nil,
+			after:      domain.Attributes{attrAreaTotal: float64(50)},
+			want:       []historydomain.AttributeChange{{Key: attrAreaTotal, Label: labelAreaTotal, Old: nil, New: float64(50)}},
 		},
 		{
 			// A nil after-side folds the same way: the whole old set reads as
 			// removals (a cleared attribute set).
-			name:     "nil_after_reads_every_key_as_removed",
-			propType: domain.PropertyTypeApartment,
-			before:   domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
-			after:    nil,
+			name:       "nil_after_reads_every_key_as_removed",
+			beforeType: domain.PropertyTypeApartment,
+			afterType:  domain.PropertyTypeApartment,
+			before:     domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
+			after:      nil,
 			want: []historydomain.AttributeChange{
 				{Key: attrAreaTotal, Label: labelAreaTotal, Old: float64(50), New: nil},
-				{Key: attrBalcony, Label: labelBalcony, Old: attrBalconyLoggia, New: nil},
+				{Key: attrBalcony, Label: labelBalcony, Old: "Лоджия", New: nil},
 			},
 		},
 		{
-			name:     "equal_maps_diff_to_an_empty_change_list",
-			propType: domain.PropertyTypeApartment,
-			before:   domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
-			after:    domain.Attributes{attrAreaTotal: float64(50), attrBalcony: attrBalconyLoggia},
-			want:     []historydomain.AttributeChange{},
+			name:       "equal_maps_diff_to_an_empty_change_list",
+			beforeType: domain.PropertyTypeApartment,
+			afterType:  domain.PropertyTypeApartment,
+			before:     domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
+			after:      domain.Attributes{attrAreaTotal: float64(50), attrBalcony: attrBalconyLoggia},
+			want:       []historydomain.AttributeChange{},
+		},
+		{
+			// Значения enum-полей читаются метками каталога СВОЕГО типа:
+			// старое — по старому типу объекта, новое — по новому (смена
+			// типа диффует через два каталога; у санузла дома свой набор
+			// опций).
+			name:       "enum_values_read_labels_of_their_own_type",
+			beforeType: domain.PropertyTypeApartment,
+			afterType:  domain.PropertyTypeHouse,
+			before:     domain.Attributes{attrBathroom: attrBathroomCombined},
+			after:      domain.Attributes{attrBathroom: attrBathroomIndoor},
+			want: []historydomain.AttributeChange{
+				{Key: attrBathroom, Label: "Санузел", Old: "Совмещенный", New: "В доме"},
+			},
+		},
+		{
+			// Смена типа: ключи, отсутствующие в каталоге нового типа, не
+			// пишут строк-удалений — подмена набора характеристик следует за
+			// типом, это не действие пользователя (бриф владельца 15.10,
+			// карта #1444).
+			name:       "type_change_drops_removals_outside_the_new_catalog",
+			beforeType: domain.PropertyTypeApartment,
+			afterType:  domain.PropertyTypeHouse,
+			before:     domain.Attributes{attrBalcony: attrBalconyLoggia, attrAreaTotal: float64(50)},
+			after:      domain.Attributes{attrLandArea: float64(6), attrAreaTotal: float64(50)},
+			want:       []historydomain.AttributeChange{{Key: attrLandArea, Label: "Площадь участка", Old: nil, New: float64(6)}},
+		},
+		{
+			// Удаление ключа, живущего в обоих каталогах, при смене типа —
+			// честная правка (пользователь очистил поле в форме нового
+			// типа), метка — по новому типу.
+			name:       "type_change_keeps_removals_inside_the_new_catalog",
+			beforeType: domain.PropertyTypeApartment,
+			afterType:  domain.PropertyTypeHouse,
+			before:     domain.Attributes{attrAreaTotal: float64(50)},
+			after:      domain.Attributes{},
+			want:       []historydomain.AttributeChange{{Key: attrAreaTotal, Label: labelAreaTotal, Old: float64(50), New: nil}},
 		},
 	}
 
@@ -263,7 +335,7 @@ func TestAttributeChanges(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := attributeChanges(tt.before, tt.after, tt.propType)
+			got := attributeChanges(tt.before, tt.after, tt.beforeType, tt.afterType)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("attributeChanges = %v, want %v", got, tt.want)
 			}
