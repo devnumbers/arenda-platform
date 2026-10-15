@@ -6,5 +6,5 @@ import { PropertiesLoading } from '@/widgets/properties';
  * кадр, что и fallback Suspense-границы страницы.
  */
 export default function Loading(): JSX.Element {
-    return <PropertiesLoading />;
+  return <PropertiesLoading />;
 }

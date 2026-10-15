@@ -481,14 +481,14 @@ error-редьюсер без гарда данных — `query.js:375-385`). �
 
 | # | План | Severity | Status |
 | --- | --- | --- | --- |
-| 026 | [Хаб «Объекты»: серверный префетч (§15)](026-properties-hub-server-prefetch.md) | HIGH | TODO |
-| 027 | [Хаб «Участники»: префетч с тарифным гейтом](027-participants-hub-server-prefetch.md) | MEDIUM | TODO |
-| 028 | [Хаб «Профиль»: префетч useMe](028-profile-hub-server-prefetch.md) | LOW | TODO |
-| 029 | [Поиск: пустой результат не отвечает за летящий запрос](029-search-stale-empty.md) | MEDIUM | TODO |
-| 030 | [Ошибка перечитывания не свопит удержанные данные](030-held-data-error-policy.md) | MEDIUM | TODO |
-| 031 | [ErrorCard: фидбек повтора + унификация копий](031-error-card-pending.md) | MEDIUM | TODO |
-| 032 | [Хвост ленты: повтор при провале порции](032-tail-page-error-retry.md) | LOW | TODO |
-| 033 | [8 loading.tsx: докблоки без Suspense-границы](033-loading-tsx-comment-drift.md) | LOW | TODO |
+| 026 | [Хаб «Объекты»: серверный префетч (§15)](026-properties-hub-server-prefetch.md) | HIGH | DONE |
+| 027 | [Хаб «Участники»: префетч с тарифным гейтом](027-participants-hub-server-prefetch.md) | MEDIUM | DONE |
+| 028 | [Хаб «Профиль»: префетч useMe](028-profile-hub-server-prefetch.md) | LOW | DONE |
+| 029 | [Поиск: пустой результат не отвечает за летящий запрос](029-search-stale-empty.md) | MEDIUM | DONE |
+| 030 | [Ошибка перечитывания не свопит удержанные данные](030-held-data-error-policy.md) | MEDIUM | DONE |
+| 031 | [ErrorCard: фидбек повтора + унификация копий](031-error-card-pending.md) | MEDIUM | DONE |
+| 032 | [Хвост ленты: повтор при провале порции](032-tail-page-error-retry.md) | LOW | DONE |
+| 033 | [8 loading.tsx: докблоки без Suspense-границы](033-loading-tsx-comment-drift.md) | LOW | DONE |
 
 ## Порядок исполнения
 

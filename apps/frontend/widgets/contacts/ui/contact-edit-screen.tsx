@@ -147,7 +147,11 @@ export function ContactEditScreen({
                 void boundPropertyQuery.refetch();
               }
             }}
-            loading={contactQuery.isFetching}
+            loading={
+              contactQuery.isFetching
+              || propertyQuery.isFetching
+              || boundPropertyQuery.isFetching
+            }
           />
         </PageContent>
       </>

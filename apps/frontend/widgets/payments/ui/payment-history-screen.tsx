@@ -288,6 +288,10 @@ function FeedTail({
           operationsQuery.hasNextPage === true || changesQuery?.hasNextPage === true,
         isFetchingNextPage:
           operationsQuery.isFetchingNextPage || (changesQuery?.isFetchingNextPage ?? false),
+        // Провал порции — канон хвоста (план 032 #1442): ручная проекция
+        // двух запросов несёт isError сама, иначе немой цикл автоповтора
+        // жив и карточки повтора в хвосте не будет.
+        isError: operationsQuery.isError || (changesQuery?.isError ?? false),
         fetchNextPage: () =>
           Promise.all([
             operationsQuery.hasNextPage ? operationsQuery.fetchNextPage() : Promise.resolve(),
