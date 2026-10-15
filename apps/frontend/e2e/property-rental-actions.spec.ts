@@ -390,9 +390,11 @@ test.describe('машина «Действий аренды» на страни�
     await expect(
       page.getByRole('heading', { name: 'Подведем итоги аренды' }),
     ).toBeVisible();
-    // Финальная кнопка шага итогов — «Подвести итоги» (макет 1433:60681,
-    // hero-экран <561); «Завершить аренду» — вход в мастер, не его финал.
+    // На телефоне (<561) шаг 3 — hero-экран: «Подвести итоги» открывает
+    // обзор (1433:60681 → 1433:61074); сабмит — «Завершить аренду» внизу
+    // обзора (на ≥561 обзор сразу и кнопка одна).
     await page.getByRole('button', { name: 'Подвести итоги' }).click();
+    await page.getByRole('button', { name: 'Завершить аренду' }).click();
     await expect(page.getByRole('heading', { name: /завершена$/ })).toBeVisible();
     await page.getByRole('button', { name: 'Хорошо' }).click();
 
