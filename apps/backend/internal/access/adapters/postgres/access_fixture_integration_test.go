@@ -178,7 +178,7 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 	slots := accessapp.NewSlotCoordinator(memberRepo, ownerResolver, limiter,
 		ownedProps, nil, auditapp.Noop{}, beginner, nil, nil)
 	factory := accessapp.NewTxStoreFactory(memberRepo, invitationRepo, auditapp.Noop{}, historyapp.Noop{}, accessUoW{beginner})
-	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, nil, factory, nil)
+	access := accessapp.NewAccessService(memberRepo, ownerResolver, ownerResolver, userLookup, policy, slots, nil, nil, factory, nil)
 	invites := accessapp.NewInvitationService(access, memberRepo, invitationRepo, ownerResolver, ownerResolver,
 		userLookup, policy, slots, nil, nil, ownerResolver, factory, nil, nil, emailResolver)
 	// The mutation side with the real SQL revoke-scope gate (issue #1310);

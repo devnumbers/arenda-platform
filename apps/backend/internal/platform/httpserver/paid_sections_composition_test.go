@@ -18,15 +18,17 @@ import (
 )
 
 // The composition security test of the paid-sections tariff gate on the
-// gated sections (карта #997): the group's routes are re-registered over the
-// generated OpenAPI router with PaidSectionsMiddleware (chi matches the last
-// registration — the AdminOnly precedent). No handler re-checks the tariff,
-// so a routing refactor that silently drops a re-registration would expose
-// the section to the basic tariff. These tests drive the production router
-// built by httpserver.New — the full middleware chain (session → tariff gate
-// → handler) — and pin both directions: a basic session is refused with 402
-// tariff_required on every route of the groups, and a paid session reaches
-// the handlers.
+// gated sections (карта #997; ADR 0064): the groups' routes are re-registered
+// over the generated OpenAPI router with PaidSectionsMiddleware (chi matches
+// the last registration — the AdminOnly precedent). No handler of these two
+// groups re-checks the tariff, so a routing refactor that silently drops a
+// re-registration would expose the section to the basic tariff. These tests
+// drive the production router built by httpserver.New — the full middleware
+// chain (session → tariff gate → handler) — and pin both directions: a basic
+// session is refused with 402 tariff_required on every route of the groups,
+// and a paid session reaches the handlers. The per-object access group left
+// the middleware mount in ревизия #1462 — its role-aware gate lives in the
+// access use cases and is pinned by the access context's own tests.
 
 // Session cookie values the stub loader resolves; fixed values keep the
 // routing under test deterministic.
@@ -138,15 +140,18 @@ func doPaidSectionsRequest(t *testing.T, router http.Handler, cookie, method, pa
 // and the history journal — of the production router with a basic tariff
 // session and demands exactly 402 tariff_required. Exceptions are not
 // intended in the groups (ADR 0064): every consumer of the participants
-// group lives inside the gated section («Покинуть объект» goes through
-// /properties/{id}/access/members/self excluded on screen 1), the journal
-// serves entirely from its two read endpoints.
+// group lives inside the gated section. The per-object access group is not
+// composition-covered since ревизия #1462: its gate is role-aware and lives
+// in the access use cases after the already-resolved role — the routing
+// refactor that once dropped a re-registration there can no longer expose
+// the section, the refusal is owned by the handlers themselves
+// (access application tests pin the verdicts, the handler tests pin the
+// 402 tariff_required wire shape).
 func TestPaidSectionsComposition_BasicRefusedOnEveryGatedRoute(t *testing.T) {
 	t.Parallel()
 	router := newPaidSectionsRouter(t, false)
 
 	const participantID = "0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001"
-	const memberID = "0197aaaa-bbbb-7ccc-8ddd-eeeeffff0002"
 	cases := []struct {
 		name   string
 		method string
@@ -158,7 +163,6 @@ func TestPaidSectionsComposition_BasicRefusedOnEveryGatedRoute(t *testing.T) {
 		{"participant page", http.MethodGet, "/participants/" + participantID},
 		{"revoke participant", http.MethodDelete, "/participants/" + participantID},
 		{"grant more properties", http.MethodPost, "/participants/" + participantID + "/properties"},
-		{"object member card", http.MethodGet, "/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0003/access/members/" + memberID},
 		{"journal feed", http.MethodGet, "/history"},
 		{"filter options", http.MethodGet, "/history/filters"},
 	}

@@ -301,11 +301,14 @@ func (s *ParticipantMutationService) grantOne(
 	ctx context.Context, stores *txStores, actor uuid.UUID, target grantTarget, role domain.Role, propertyID uuid.UUID,
 	suspended *[]domain.Membership,
 ) (ParticipantGrantResult, error) {
-	owner, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	owner, actorRole, err := s.access.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		// Not in the actor's manage scope: the gate signals it with the
 		// privacy-preserving not-found — a per-property skip, not a batch
-		// failure. Any other error is infrastructural and aborts the batch.
+		// failure. Any other error is infrastructural and aborts the batch;
+		// that includes the tariff refusal ErrTariffRequired — unreachable
+		// behind the participants group's route middleware, which answers 402
+		// to the owner before the use case runs (ADR 0064, ревизия #1462).
 		if !errors.Is(err, domain.ErrMemberNotFound) {
 			return ParticipantGrantResult{}, fmt.Errorf("resolve manage scope: %w", err)
 		}

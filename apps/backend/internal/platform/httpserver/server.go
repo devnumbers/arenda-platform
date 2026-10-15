@@ -328,21 +328,15 @@ func New(deps Deps) http.Handler {
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/audit-logs", wrapper.ListAdminUserAuditLogs)
 
 	// Paid-sections tariff gate (карта #997, ADR 0064): the same override
-	// trick as AdminOnly above — the paid property-access routes re-register
-	// with the tariff middleware over the generated ones, answering 402
-	// tariff_required below a paid tariff. DELETE .../access/members/self is
-	// intentionally left as generated: «Покинуть объект» lives on the property
-	// detail page, outside the paid sections.
+	// trick as AdminOnly above — the paid participants and history routes
+	// re-register with the tariff middleware over the generated ones,
+	// answering 402 tariff_required below a paid tariff. The per-object
+	// access group (/properties/{propertyId}/access/*) is NOT mounted here
+	// since ревизия #1462: its gate is role-aware and lives in the access
+	// use cases after the already-resolved role — a property member reads
+	// the list on the basic tariff («пригласили — значит пользуется»), the
+	// owner's reads and manage mutations refuse with 402 inside the handlers.
 	paidSections := httpsupport.PaidSectionsMiddleware(deps.PaidSectionsGate, deps.Logger)
-	r.With(paidSections).Post("/properties/{propertyId}/access/invitations", wrapper.CreatePropertyAccessInvitation)
-	r.With(paidSections).Delete("/properties/{propertyId}/access/invitations/{invitationId}", wrapper.DeletePropertyAccessInvitation)
-	r.With(paidSections).Patch("/properties/{propertyId}/access/invitations/{invitationId}", wrapper.UpdatePropertyAccessInvitation)
-	r.With(paidSections).Post("/properties/{propertyId}/access/invitations/{invitationId}/resend", wrapper.ResendPropertyAccessInvitation)
-	r.With(paidSections).Get("/properties/{propertyId}/access/members", wrapper.ListPropertyAccessMembers)
-	r.With(paidSections).Get("/properties/{propertyId}/access/members/{memberId}", wrapper.GetPropertyAccessMember)
-	r.With(paidSections).Post("/properties/{propertyId}/access/members", wrapper.CreatePropertyAccessMember)
-	r.With(paidSections).Delete("/properties/{propertyId}/access/members/{memberId}", wrapper.DeletePropertyAccessMember)
-	r.With(paidSections).Patch("/properties/{propertyId}/access/members/{memberId}", wrapper.UpdatePropertyAccessMember)
 
 	// Idempotency-Key на creation-роутах (тикет Т3 карты #1112): тот же
 	// override-приём, что AdminOnly/paidSections выше — повтор с тем же

@@ -256,6 +256,13 @@ type invitationFixture struct {
 }
 
 func newInvitationFixture() *invitationFixture {
+	return newInvitationFixtureWithGate(nil)
+}
+
+// newInvitationFixtureWithGate wires the fixture with an explicit
+// PaidSectionsGate (nil — the gate disabled, the package convention); the
+// tariff-gate tests pass their stub to pin the verdicts.
+func newInvitationFixtureWithGate(gate PaidSectionsGate) *invitationFixture {
 	repo := newMemRepo()
 	invitations := &memInvitationsRepo{removalScope: repo.inManageScope}
 	owners := staticResolver{}
@@ -272,7 +279,7 @@ func newInvitationFixture() *invitationFixture {
 		nil, auditapp.Noop{}, noopBeginner{}, nil, nil)
 	realtime := &realtimetest.RecordingPublisher{}
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, nil,
-		newTestFactory(repo, invitations, auditapp.Noop{}), nil)
+		gate, newTestFactory(repo, invitations, auditapp.Noop{}), nil)
 	access.SetRealtimePublisher(realtime)
 	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
 		coordinator, mailer, nil, fakeTitles(testNevskyTitle),

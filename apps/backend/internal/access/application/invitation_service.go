@@ -125,7 +125,7 @@ func (s *InvitationService) InviteByEmail(
 	if err != nil {
 		return InviteOutcome{}, err
 	}
-	owner, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	owner, actorRole, err := s.access.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		return InviteOutcome{}, err
 	}
@@ -223,7 +223,7 @@ func (s *InvitationService) createPendingInvitation(
 // sent before last_sent_at is updated, so a send failure does not burn the
 // cooldown window.
 func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propertyID, invitationID uuid.UUID) error {
-	_, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	_, actorRole, err := s.access.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func (s *InvitationService) ChangeInvitationRole(
 	actor, propertyID, invitationID uuid.UUID,
 	role domain.Role,
 ) (domain.Invitation, error) {
-	_, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	_, actorRole, err := s.access.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		return domain.Invitation{}, err
 	}
@@ -338,7 +338,7 @@ func (s *InvitationService) ChangeInvitationRole(
 // CancelInvitation silently cancels a pending invitation: the row is deleted
 // and no email is sent, so the same email can be invited again freely.
 func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propertyID, invitationID uuid.UUID) error {
-	_, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	_, actorRole, err := s.access.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		return err
 	}

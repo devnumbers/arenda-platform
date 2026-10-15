@@ -18,12 +18,25 @@ type PaidSectionsGate interface {
 	CanUsePaidFeatures(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
+// WriteTariffRequired answers the canonical "needs a paid tariff" refusal:
+// 402 PaymentRequired with the machine code "tariff_required" — the wire
+// shape the route middleware and the access handlers mapping the
+// use-case-level gate's verdict (ADR 0064, ревизия #1462) share.
+func WriteTariffRequired(ctx context.Context, w http.ResponseWriter) {
+	WriteProblem(ctx, w, http.StatusPaymentRequired,
+		ProblemWithCode(ctx, "Paid tariff required",
+			"Этот раздел доступен на платных тарифах", "tariff_required"))
+}
+
 // PaidSectionsMiddleware blocks requests to the paid platform sections when
 // the authenticated user's subscription does not cover them (карта #997):
 // the answer is 402 PaymentRequired with the machine code "tariff_required",
 // the same canonical "needs a paid tariff" status as the property-limit 402.
 // Mounted over the generated paid-section routes via r.With (the AdminOnly
-// precedent); the self-leave route stays outside the mount.
+// precedent). Since ревизия #1462 the mount covers the global participants
+// section and the history journal; the per-object access group is gated
+// inside its use cases instead — its verdict is role-aware, the middleware
+// has no access to it.
 func PaidSectionsMiddleware(gate PaidSectionsGate, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,9 +57,7 @@ func PaidSectionsMiddleware(gate PaidSectionsGate, logger *slog.Logger) func(htt
 					slog.String("user_id", userID.String()),
 					slog.String("method", r.Method),
 					slog.String("path", r.URL.Path))
-				WriteProblem(r.Context(), w, http.StatusPaymentRequired,
-					ProblemWithCode(r.Context(), "Paid tariff required",
-						"Этот раздел доступен на платных тарифах", "tariff_required"))
+				WriteTariffRequired(r.Context(), w)
 				return
 			}
 
