@@ -68,7 +68,7 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
               содержащим блоком для fixed-хрома — сайдбар, пилюли и TabBar
               уходят вглубь вместе с контентом; порталы (модалки, шиты,
               тосты) вне оболочки и не масштабируются. */}
-          <div className="screen-shell flex min-h-screen flex-col tablet:pt-[72px]">
+          <div className="screen-shell flex min-h-dvh flex-col tablet:pt-[72px]">
             <DesktopSidebar />
             <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
               {children}
