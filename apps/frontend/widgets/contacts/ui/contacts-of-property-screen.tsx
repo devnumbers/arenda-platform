@@ -174,7 +174,7 @@ export function ContactsOfPropertyScreen({
       )}
 
       <PageContent>
-        {contactsQuery.isPending ? (
+        {(contactsQuery.isPending || (searching && contactsQuery.isFetching && contacts.length === 0)) ? (
           <>
             {sortChipRow}
             {/* Скелетон — книга объекта: алфавитные группы с буквами

@@ -77,7 +77,7 @@ export function ContactBookSearchScreen(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        {contactsQuery.isPending && searching ? (
+        {(contactsQuery.isPending || (searching && contactsQuery.isFetching && contacts.length === 0)) ? (
           <ContactsSkeleton />
         ) : contactsQuery.isError ? (
           <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />

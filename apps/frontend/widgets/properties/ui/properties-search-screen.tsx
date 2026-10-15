@@ -79,7 +79,7 @@ export function PropertiesSearchScreen(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        {searchQuery.isPending && searching ? (
+        {(searchQuery.isPending || (searching && searchQuery.isFetching && properties.length === 0)) ? (
           <PropertiesSearchSkeleton />
         ) : searchQuery.isError ? (
           <PropertiesSearchErrorCard onRetry={() => void searchQuery.refetch()} />

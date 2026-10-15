@@ -88,10 +88,14 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
   const emptyQuery = value.trim() === '';
   // Скелетон — только пока данных нет вовсе (первый запрос): правка запроса
   // держит прежние результаты (keepPreviousData) и не дёргает экран; ошибка
-  // без данных показывает карточку повтора, не скелетон.
+  // без данных показывает карточку повтора, не скелетон. Пустые прежние
+  // результаты держать нельзя (лгут о летящем запросе, план 029 #1442) —
+  // пока запрос текущего критерия летит и показывать нечего, скелетон.
   const pending =
     !emptyQuery
-    && (searchQuery.data === undefined || categoriesQuery.data === undefined)
+    && (searchQuery.data === undefined
+      || categoriesQuery.data === undefined
+      || (searchQuery.isFetching && items.length === 0))
     && !searchQuery.isError
     && !categoriesQuery.isError;
   const showResults = !emptyQuery && !pending && !searchQuery.isError && !categoriesQuery.isError;
