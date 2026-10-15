@@ -430,7 +430,7 @@ func TestApplyTransition_ScheduledTariffChange(t *testing.T) {
 	applied, err := h.apply(t, &sub,
 		func(s *domain.Subscription) error {
 			businessTariff, proTariff := h.tariffByName(t, domain.TariffBusiness), h.tariffByName(t, domain.TariffPro)
-			return s.ScheduleDowngrade(businessTariff, proTariff, domain.PeriodMonth, *s.ValidUntil)
+			return s.ScheduleDowngrade(businessTariff, proTariff, domain.PeriodMonth, *s.ValidUntil, time.Now())
 		},
 		transitionSpec{
 			reason:            domain.TransitionReasonDowngradeScheduled,

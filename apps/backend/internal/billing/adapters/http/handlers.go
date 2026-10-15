@@ -365,8 +365,9 @@ func (h *BillingHandlers) ResumeSubscription(w http.ResponseWriter, r *http.Requ
 }
 
 // ChangeTariff implements POST /subscription/change (issue #249): downgrade
-// scheduling, same-tariff rejection and the temporary payment-unavailable
-// answer for upgrades until the payment flow lands (#250).
+// scheduling — from active, cancelled and live grace states since #1451 —
+// same-tariff rejection and the temporary payment-unavailable answer for
+// upgrades until the payment flow lands (#250).
 func (h *BillingHandlers) ChangeTariff(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := httpsupport.OwnerIDFromContext(r)
 	if !ok {

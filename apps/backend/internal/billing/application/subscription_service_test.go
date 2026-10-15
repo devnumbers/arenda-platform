@@ -183,23 +183,41 @@ func TestSubscriptionService_CancelSubscription_NotFound(t *testing.T) {
 	}
 }
 
-func TestSubscriptionService_CancelSubscription_AlreadyCancelledRejected(t *testing.T) {
+// TestSubscriptionService_CancelSubscription_AlreadyCancelledIsNoOp pins the
+// issue #1451 edge: a repeated «Отключить тариф» on a cancelled subscription
+// succeeds without touching anything — no second transition, no audit entry,
+// the keep choice and any scheduled change preserved.
+func TestSubscriptionService_CancelSubscription_AlreadyCancelledIsNoOp(t *testing.T) {
 	t.Parallel()
 	h := newSubscriptionHarness(t)
-	sub := h.seedPaidSubscription(t, domain.TariffPro)
+	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
+	keepID := uuid.Must(uuid.NewV7())
+	if err := sub.Cancel(&keepID); err != nil {
+		t.Fatalf("seed Cancel() error = %v", err)
+	}
+	if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
+		t.Fatalf("seed Update() error = %v", err)
+	}
 
 	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
-		t.Fatalf("first CancelSubscription() error = %v", err)
+		t.Fatalf("second CancelSubscription() error = %v, want nil (idempotent no-op)", err)
 	}
-	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); !errors.Is(err, domain.ErrInvalidSubscriptionState) {
-		t.Fatalf("second err = %v, want domain.ErrInvalidSubscriptionState", err)
-	}
-	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
 	if err != nil {
-		t.Fatalf("ListBySubscriptionID() error = %v", err)
+		t.Fatalf("GetByUserID() error = %v", err)
 	}
-	if len(transitions) != 1 {
-		t.Fatalf("transitions = %d, want 1 (rejected retry appends nothing)", len(transitions))
+	if stored.Status != domain.SubscriptionStatusCancelled {
+		t.Errorf("Status = %q, want cancelled", stored.Status)
+	}
+	if stored.KeepPropertyID == nil || *stored.KeepPropertyID != keepID {
+		t.Errorf("KeepPropertyID = %v, want preserved %v", stored.KeepPropertyID, keepID)
+	}
+	if stored.HasPendingChange() {
+		t.Error("pending change appeared on a no-op cancel, want none")
+	}
+	if pending, transitionCount, auditCount := h.sideEffects(t, sub.ID); pending || transitionCount != 0 || auditCount != 0 {
+		t.Errorf("no-op cancel left side effects: pending=%v transitions=%d audit=%d", pending, transitionCount, auditCount)
 	}
 }
 
@@ -490,7 +508,12 @@ func TestSubscriptionService_ChangeTariff_UnknownTariffRejected(t *testing.T) {
 	}
 }
 
-func TestSubscriptionService_ChangeTariff_CancelledSubscriptionRejected(t *testing.T) {
+// TestSubscriptionService_ChangeTariff_CancelledSchedulesDeferredDowngrade
+// pins the issue #1451 scenario: choosing a cheaper tariff on a cancelled
+// subscription with a live paid remainder plans the deferred downgrade for the
+// end of that remainder — no 409, no charge, the old tariff and its limits
+// stay until valid_until.
+func TestSubscriptionService_ChangeTariff_CancelledSchedulesDeferredDowngrade(t *testing.T) {
 	t.Parallel()
 	h := newSubscriptionHarness(t)
 	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
@@ -501,12 +524,85 @@ func TestSubscriptionService_ChangeTariff_CancelledSubscriptionRejected(t *testi
 		t.Fatalf("seed Update() error = %v", err)
 	}
 
+	result, err := h.svc.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff() on cancelled error = %v, want a scheduled downgrade", err)
+	}
+	if result.PaymentID != uuid.Nil || result.ConfirmURL != "" {
+		t.Errorf("result = %+v, want zero values (no charge on the deferred path)", result)
+	}
+
+	h.requireDowngradeScheduled(t, sub)
+	h.requireDowngradeScheduledTransition(t, sub)
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusCancelled {
+		t.Errorf("Status = %q, want cancelled (scheduling does not lift the cancellation)", stored.Status)
+	}
+}
+
+// TestSubscriptionService_ChangeTariff_GraceSchedulesDeferredDowngrade pins the
+// grace half of issue #1451: a cheaper tariff chosen inside a live grace window
+// plans the same deferred downgrade, due when the window ends.
+func TestSubscriptionService_ChangeTariff_GraceSchedulesDeferredDowngrade(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
+	graceUntil := h.now.Add(48 * time.Hour)
+	sub.Status = domain.SubscriptionStatusGrace
+	sub.ValidUntil = &graceUntil
+	if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
+		t.Fatalf("seed Update() error = %v", err)
+	}
+
+	if _, err := h.svc.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	}); err != nil {
+		t.Fatalf("ChangeTariff() in live grace error = %v, want a scheduled downgrade", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.PendingTariffID == nil || *stored.PendingTariffID != h.tariffID(t, domain.TariffPro) {
+		t.Errorf("PendingTariffID = %v, want pro", stored.PendingTariffID)
+	}
+	if stored.PendingChangeAt == nil || !stored.PendingChangeAt.Equal(graceUntil) {
+		t.Errorf("PendingChangeAt = %v, want the grace deadline %v", stored.PendingChangeAt, graceUntil)
+	}
+	if stored.Status != domain.SubscriptionStatusGrace {
+		t.Errorf("Status = %q, want grace (scheduling does not end the window)", stored.Status)
+	}
+}
+
+// TestSubscriptionService_ChangeTariff_ExpiredGraceRejected pins the edge of
+// the same decision: a grace window that already ran out plans nothing — the
+// worker downgrade to basic is due, the state is past planning.
+func TestSubscriptionService_ChangeTariff_ExpiredGraceRejected(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
+	expired := h.now.Add(-time.Hour)
+	sub.Status = domain.SubscriptionStatusGrace
+	sub.ValidUntil = &expired
+	if err := h.stores.subscriptions.Update(t.Context(), sub); err != nil {
+		t.Fatalf("seed Update() error = %v", err)
+	}
+
 	_, err := h.svc.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
 		TariffName: domain.TariffPro,
 		Period:     domain.PeriodMonth,
 	})
 	if !errors.Is(err, domain.ErrInvalidSubscriptionState) {
-		t.Fatalf("err = %v, want domain.ErrInvalidSubscriptionState", err)
+		t.Fatalf("err = %v, want domain.ErrInvalidSubscriptionState (the grace window has expired)", err)
 	}
 }
 

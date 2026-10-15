@@ -215,8 +215,22 @@ func (s *Subscription) HasPendingChange() bool {
 // period ends. It requires a valid_until date and enables auto-renew so the new
 // tariff keeps renewing on the normal cycle after it is applied. The new tariff
 // must be a downgrade from the current tariff.
-func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period SubscriptionPeriod, changeAt time.Time) error {
-	if s.Status != SubscriptionStatusActive {
+//
+// The user can plan from every state that still owns a live decision
+// (issue #1451): an active subscription, a cancelled one inside its paid
+// remainder — the deferred downgrade replaces that remainder's fall to basic —
+// and a subscription inside its live grace window (an expired one is already
+// due its own downgrade to basic). Scheduling consumes the cancel keep choice:
+// the subscription will never fall to basic, so there is nothing left for the
+// choice to keep alive.
+func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period SubscriptionPeriod, changeAt, now time.Time) error {
+	switch s.Status {
+	case SubscriptionStatusActive, SubscriptionStatusCancelled:
+	case SubscriptionStatusGrace:
+		if !s.IsInGrace(now) {
+			return ErrInvalidSubscriptionState
+		}
+	default:
 		return ErrInvalidSubscriptionState
 	}
 	if period != PeriodMonth && period != PeriodYear {
@@ -241,6 +255,7 @@ func (s *Subscription) ScheduleDowngrade(currentTariff, newTariff Tariff, period
 	s.PendingChangeAt = &changeAt
 	s.PendingPeriod = &period
 	s.AutoRenewEnabled = true
+	s.KeepPropertyID = nil
 	return nil
 }
 
@@ -320,7 +335,7 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 }
 
 // ApplyScheduledDowngrade applies a deferred downgrade at the end of the paid
-// period. It requires the subscription to be active with a matching pending
+// period. It requires the subscription to carry a matching pending
 // change that is already due: the pending tariff and period must equal the
 // requested ones and pending_change_at must be set at or before now.
 // Per ADR 0008 §3 this is the free path: a scheduled downgrade to a free
@@ -330,6 +345,13 @@ func (s *Subscription) ApplyRenewal(paymentID uuid.UUID, period SubscriptionPeri
 // target period is charged at apply time via the renewal path and never
 // reaches this method. LastAppliedPaymentID is intentionally left untouched
 // because no payment is involved here.
+//
+// The apply reaches active subscriptions from the scheduled-changes phase and
+// cancelled or grace ones from the boundary phases (issue #1451): the assigned
+// downgrade replaces the fall to basic those states were due, whatever time
+// already ran past the boundary. The cancel keep choice is consumed with the
+// apply — the subscription never falls to basic, so nothing is left for the
+// choice to keep alive.
 func (s *Subscription) ApplyScheduledDowngrade(newTariff Tariff, period SubscriptionPeriod, now time.Time) error {
 	if period != PeriodMonth && period != PeriodYear {
 		return ErrInvalidPeriod
@@ -337,7 +359,9 @@ func (s *Subscription) ApplyScheduledDowngrade(newTariff Tariff, period Subscrip
 	if s.TariffID == newTariff.ID {
 		return ErrAlreadyOnTariff
 	}
-	if s.Status != SubscriptionStatusActive {
+	switch s.Status {
+	case SubscriptionStatusActive, SubscriptionStatusCancelled, SubscriptionStatusGrace:
+	default:
 		return ErrInvalidSubscriptionState
 	}
 	if s.PendingTariffID == nil || *s.PendingTariffID != newTariff.ID {
@@ -358,6 +382,7 @@ func (s *Subscription) ApplyScheduledDowngrade(newTariff Tariff, period Subscrip
 	s.PendingTariffID = nil
 	s.PendingChangeAt = nil
 	s.PendingPeriod = nil
+	s.KeepPropertyID = nil
 	return nil
 }
 
@@ -401,12 +426,21 @@ func (s *Subscription) SetAutoRenew(enabled bool) error {
 // Cancel terminates the paid subscription at the end of the already paid period.
 // The validity date is retained so the worker can downgrade the subscription to
 // basic once the period expires. Auto-renew is disabled immediately and any
-// scheduled tariff change is dropped: a cancelled subscription no longer
-// switches tariffs, it runs out its paid period and falls to basic. The
+// scheduled tariff change is dropped: cancelling re-plans the subscription's
+// end — it runs out its paid period and falls to basic. Planning a tariff
+// change afterwards is a fresh user action (issue #1451). The
 // optional keepPropertyID (issue #617) records which property the owner wants
 // to survive that fall; the expiry worker honours it when applying the basic
 // limit.
+//
+// Cancelling an already-cancelled subscription is an idempotent no-op
+// (issue #1451): the state — the keep choice and any scheduled change
+// included — stays exactly as it is, and no second transition is owed. The
+// screen repeats the «Отключить тариф» action without an error.
 func (s *Subscription) Cancel(keepPropertyID *uuid.UUID) error {
+	if s.Status == SubscriptionStatusCancelled {
+		return nil
+	}
 	if s.Status != SubscriptionStatusActive && s.Status != SubscriptionStatusGrace {
 		return ErrInvalidSubscriptionState
 	}

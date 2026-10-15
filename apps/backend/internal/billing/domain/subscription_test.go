@@ -196,6 +196,7 @@ func TestSubscriptionScheduleDowngrade(t *testing.T) {
 	currentTariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
 	newTariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
 	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	now := validUntil.Add(-24 * time.Hour)
 
 	sub := Subscription{
 		ID:               uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
@@ -208,7 +209,7 @@ func TestSubscriptionScheduleDowngrade(t *testing.T) {
 
 	currentTariff := Tariff{ID: currentTariffID, Name: TariffPro, ActivePropertyLimit: 50, MonthlyPriceKopecks: 5000}
 	newTariff := Tariff{ID: newTariffID, Name: TariffBasic, ActivePropertyLimit: 5, MonthlyPriceKopecks: 1000}
-	if err := sub.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil); err != nil {
+	if err := sub.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil, now); err != nil {
 		t.Fatalf("ScheduleDowngrade() error = %v", err)
 	}
 	if sub.PendingTariffID == nil || *sub.PendingTariffID != newTariffID {
@@ -224,27 +225,84 @@ func TestSubscriptionScheduleDowngrade(t *testing.T) {
 		t.Error("ScheduleDowngrade should enable auto-renew")
 	}
 
-	if err := sub.ScheduleDowngrade(currentTariff, Tariff{ID: currentTariffID}, PeriodMonth, validUntil); !errors.Is(err, ErrAlreadyOnTariff) {
+	sameTariff := Tariff{ID: currentTariffID}
+	if err := sub.ScheduleDowngrade(currentTariff, sameTariff, PeriodMonth, validUntil, now); !errors.Is(err, ErrAlreadyOnTariff) {
 		t.Errorf("ScheduleDowngrade same tariff error = %v, want ErrAlreadyOnTariff", err)
 	}
 
 	subNoValid := Subscription{TariffID: currentTariffID, Status: SubscriptionStatusActive}
-	if err := subNoValid.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil); !errors.Is(err, ErrInvalidTariffChange) {
+	if err := subNoValid.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil, now); !errors.Is(err, ErrInvalidTariffChange) {
 		t.Errorf("ScheduleDowngrade without valid_until error = %v, want ErrInvalidTariffChange", err)
 	}
 
-	if err := sub.ScheduleDowngrade(currentTariff, newTariff, "invalid", validUntil); !errors.Is(err, ErrInvalidPeriod) {
+	if err := sub.ScheduleDowngrade(currentTariff, newTariff, "invalid", validUntil, now); !errors.Is(err, ErrInvalidPeriod) {
 		t.Errorf("ScheduleDowngrade invalid period error = %v, want ErrInvalidPeriod", err)
 	}
 
-	subCancelled := Subscription{TariffID: currentTariffID, Status: SubscriptionStatusCancelled, ValidUntil: &validUntil}
-	if err := subCancelled.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil); !errors.Is(err, ErrInvalidSubscriptionState) {
-		t.Errorf("ScheduleDowngrade cancelled status error = %v, want ErrInvalidSubscriptionState", err)
+	beforeUntil := validUntil.Add(-time.Second)
+	if err := sub.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, beforeUntil, now); !errors.Is(err, ErrInvalidTariffChange) {
+		t.Errorf("ScheduleDowngrade before valid_until error = %v, want ErrInvalidTariffChange", err)
 	}
 
 	subGrace := Subscription{TariffID: currentTariffID, Status: SubscriptionStatusGrace, ValidUntil: &validUntil}
-	if err := subGrace.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil); !errors.Is(err, ErrInvalidSubscriptionState) {
-		t.Errorf("ScheduleDowngrade grace status error = %v, want ErrInvalidSubscriptionState", err)
+	if err := subGrace.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil, now); err != nil {
+		t.Errorf("ScheduleDowngrade in live grace error = %v, want nil (issue #1451)", err)
+	}
+
+	expired := now.Add(-time.Second)
+	subGraceExpired := Subscription{TariffID: currentTariffID, Status: SubscriptionStatusGrace, ValidUntil: &expired}
+	scheduleErr := subGraceExpired.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, expired, now)
+	if !errors.Is(scheduleErr, ErrInvalidSubscriptionState) {
+		t.Errorf("ScheduleDowngrade in expired grace error = %v, want ErrInvalidSubscriptionState", scheduleErr)
+	}
+}
+
+// TestSubscriptionScheduleDowngradeFromCancelled pins the issue #1451
+// semantics: a cancelled subscription inside its paid remainder plans the
+// cheaper tariff for the end of that remainder instead of falling to basic.
+// The change applies at valid_until (pending_change_at equals it, the schema
+// CHECK allows equality), auto-renew switches on — the new tariff keeps
+// renewing on the normal cycle once applied (ADR 0008 §3) — and the cancel
+// keep choice is consumed: the subscription will never fall to basic, so
+// there is nothing left for the choice to keep alive.
+func TestSubscriptionScheduleDowngradeFromCancelled(t *testing.T) {
+	t.Parallel()
+	currentTariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	newTariffID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	keepID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18")
+	validUntil := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	now := validUntil.Add(-24 * time.Hour)
+
+	sub := Subscription{
+		ID:             uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14"),
+		TariffID:       currentTariffID,
+		Status:         SubscriptionStatusCancelled,
+		ValidUntil:     &validUntil,
+		KeepPropertyID: &keepID,
+	}
+
+	currentTariff := Tariff{ID: currentTariffID, Name: TariffBusiness, ActivePropertyLimit: -1, MonthlyPriceKopecks: 99000}
+	newTariff := Tariff{ID: newTariffID, Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000}
+	if err := sub.ScheduleDowngrade(currentTariff, newTariff, PeriodMonth, validUntil, now); err != nil {
+		t.Fatalf("ScheduleDowngrade() on cancelled error = %v", err)
+	}
+	if sub.PendingTariffID == nil || *sub.PendingTariffID != newTariffID {
+		t.Errorf("PendingTariffID = %v, want %s", sub.PendingTariffID, newTariffID)
+	}
+	if sub.PendingChangeAt == nil || !sub.PendingChangeAt.Equal(validUntil) {
+		t.Errorf("PendingChangeAt = %v, want %v (the end of the paid remainder)", sub.PendingChangeAt, validUntil)
+	}
+	if sub.PendingPeriod == nil || *sub.PendingPeriod != PeriodMonth {
+		t.Errorf("PendingPeriod = %v, want %s", sub.PendingPeriod, PeriodMonth)
+	}
+	if !sub.AutoRenewEnabled {
+		t.Error("ScheduleDowngrade from cancelled should enable auto-renew (the target keeps renewing, ADR 0008 §3)")
+	}
+	if sub.KeepPropertyID != nil {
+		t.Errorf("KeepPropertyID = %v, want nil: the keep choice only makes sense for the fall to basic", *sub.KeepPropertyID)
+	}
+	if sub.Status != SubscriptionStatusCancelled {
+		t.Errorf("Status = %v, want cancelled (scheduling does not lift the cancellation)", sub.Status)
 	}
 }
 
@@ -505,9 +563,23 @@ func TestSubscriptionCancel(t *testing.T) {
 		t.Error("expected pending change fields cleared on cancel")
 	}
 
-	cancelled := Subscription{Status: SubscriptionStatusCancelled}
-	if err := cancelled.Cancel(nil); !errors.Is(err, ErrInvalidSubscriptionState) {
-		t.Errorf("second Cancel() error = %v, want ErrInvalidSubscriptionState", err)
+	// A repeated cancellation is an idempotent no-op (issue #1451): the
+	// already-cancelled subscription keeps its state — the keep choice and any
+	// scheduled change included — and no second transition is owed.
+	cancelled := Subscription{
+		Status:           SubscriptionStatusCancelled,
+		ValidUntil:       &validUntil,
+		AutoRenewEnabled: true,
+		PendingTariffID:  &pendingID,
+		PendingChangeAt:  &pendingAt,
+		PendingPeriod:    &period,
+	}
+	before := cancelled
+	if err := cancelled.Cancel(nil); err != nil {
+		t.Errorf("second Cancel() error = %v, want nil (idempotent no-op, issue #1451)", err)
+	}
+	if !reflect.DeepEqual(cancelled, before) {
+		t.Errorf("second Cancel() mutated the subscription: got %+v, want %+v", cancelled, before)
 	}
 }
 
@@ -1157,8 +1229,6 @@ func TestSubscriptionApplyScheduledDowngradePreconditions(t *testing.T) {
 		name   string
 		mutate func(*Subscription)
 	}{
-		{"status grace", func(s *Subscription) { s.Status = SubscriptionStatusGrace }},
-		{"status cancelled", func(s *Subscription) { s.Status = SubscriptionStatusCancelled }},
 		{"pending tariff mismatch", func(s *Subscription) { s.PendingTariffID = &otherID }},
 		{"no pending tariff", func(s *Subscription) { s.PendingTariffID = nil }},
 		{"pending period mismatch", func(s *Subscription) { s.PendingPeriod = &otherPeriod }},
@@ -1181,6 +1251,85 @@ func TestSubscriptionApplyScheduledDowngradePreconditions(t *testing.T) {
 				t.Errorf("ApplyScheduledDowngrade mutated fields on precondition failure: got %+v, want %+v", sub, before)
 			}
 		})
+	}
+}
+
+// TestSubscriptionApplyScheduledDowngradeFromCancelledAndGrace pins the worker
+// side of issue #1451: the scheduled change applies on a cancelled subscription
+// and on a grace one at the boundary — the downgrade replaces the fall to
+// basic, the status returns to active and the pending fields clear. The free
+// path extends validity from the apply moment; no payment is involved, so
+// LastAppliedPaymentID stays untouched.
+func TestSubscriptionApplyScheduledDowngradeFromCancelledAndGrace(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+	basicID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
+	proID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13")
+	paymentID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19")
+	keepID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18")
+	expired := now.Add(-time.Hour)
+
+	basic := Tariff{ID: basicID, Name: TariffBasic, ActivePropertyLimit: 1, MonthlyPriceKopecks: 0}
+
+	newSub := func(status SubscriptionStatus) Subscription {
+		pendingTariffID := basicID
+		pendingChangeAt := expired
+		pendingPeriod := PeriodMonth
+		return Subscription{
+			ID:                   uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15"),
+			UserID:               userID,
+			TariffID:             proID,
+			Source:               SubscriptionSourcePaid,
+			Status:               status,
+			ValidUntil:           &expired,
+			AutoRenewEnabled:     true,
+			LastAppliedPaymentID: &paymentID,
+			PendingTariffID:      &pendingTariffID,
+			PendingChangeAt:      &pendingChangeAt,
+			PendingPeriod:        &pendingPeriod,
+			KeepPropertyID:       &keepID,
+		}
+	}
+
+	for _, status := range []SubscriptionStatus{SubscriptionStatusCancelled, SubscriptionStatusGrace} {
+		t.Run(string(status), func(t *testing.T) {
+			t.Parallel()
+			sub := newSub(status)
+			if err := sub.ApplyScheduledDowngrade(basic, PeriodMonth, now); err != nil {
+				t.Fatalf("ApplyScheduledDowngrade() on %s error = %v", status, err)
+			}
+			requireScheduledDowngradeApplied(t, &sub, basicID, paymentID, now.AddDate(0, 1, 0))
+		})
+	}
+}
+
+// requireScheduledDowngradeApplied asserts the aggregate shape after a
+// successful scheduled apply on a cancelled or grace subscription: active on
+// the target, validity extended from now, auto-renew on, the pending fields
+// and the keep choice consumed, no payment recorded on the free path.
+func requireScheduledDowngradeApplied(t *testing.T, sub *Subscription, basicID, paymentID uuid.UUID, wantValidUntil time.Time) {
+	t.Helper()
+	if sub.TariffID != basicID {
+		t.Errorf("TariffID = %v, want %v", sub.TariffID, basicID)
+	}
+	if sub.Status != SubscriptionStatusActive {
+		t.Errorf("Status = %v, want active", sub.Status)
+	}
+	if sub.ValidUntil == nil || !sub.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("ValidUntil = %v, want %v", sub.ValidUntil, wantValidUntil)
+	}
+	if !sub.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = false, want true (the target keeps renewing, ADR 0008 §3)")
+	}
+	if sub.PendingTariffID != nil || sub.PendingChangeAt != nil || sub.PendingPeriod != nil {
+		t.Error("expected pending change cleared")
+	}
+	if sub.KeepPropertyID != nil {
+		t.Error("KeepPropertyID survived the scheduled apply, want consumed")
+	}
+	if sub.LastAppliedPaymentID == nil || *sub.LastAppliedPaymentID != paymentID {
+		t.Errorf("LastAppliedPaymentID = %v, want untouched %v (no payment on the free path)", sub.LastAppliedPaymentID, paymentID)
 	}
 }
 

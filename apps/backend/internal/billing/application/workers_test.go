@@ -1276,6 +1276,298 @@ func TestWorkers_CancelledExpiryHonoursKeepChoice(t *testing.T) {
 	}
 }
 
+// seedCancelledWithPending stores a cancelled subscription carrying a due
+// deferred change — the issue #1451 state: the user cancelled, then planned
+// the cheaper tariff for the end of the paid remainder. ChangeAt defaults to
+// the (already past) valid_until; auto-renew is on, the way the scheduling
+// left it (ADR 0008 §3).
+func (h *workersHarness) seedCancelledWithPending(
+	t *testing.T, currentTariff, targetTariff domain.Tariff,
+) domain.Subscription {
+	t.Helper()
+	return h.seedSubscription(t, func(s *domain.Subscription) {
+		s.TariffID = currentTariff.ID
+		s.AutoRenewEnabled = true
+		if err := s.Cancel(nil); err != nil {
+			t.Fatalf("seed cancel: %v", err)
+		}
+		if err := s.ScheduleDowngrade(currentTariff, targetTariff, domain.PeriodMonth, *s.ValidUntil, h.now); err != nil {
+			t.Fatalf("seed schedule: %v", err)
+		}
+	})
+}
+
+// TestWorkers_CancelledBoundaryAppliesFreeDowngrade proves the issue #1451
+// boundary: a cancelled subscription whose due scheduled change targets a free
+// tariff applies it instead of falling to basic — active on the target, the
+// validity extended from now, auto-renew on, the scheduled-change-applied
+// transition logged, the target limit enforced.
+func TestWorkers_CancelledBoundaryAppliesFreeDowngrade(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	archiver := &fakeArchiverSource{}
+	slots := &fakeSlotSource{}
+	h.workers.SetLifecycleBridges(archiver, slots)
+
+	sub := h.seedCancelledWithPending(t, h.pro, h.basic)
+
+	count, err := h.workers.ProcessRenewals(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ProcessRenewals() = %d, want 1", count)
+	}
+
+	requireBoundaryScheduledApply(t, h, sub, h.basic.ID, h.now.AddDate(0, 1, 0))
+	if got := archiver.recorded(); len(got) != 1 || got[0].limit != h.basic.ActivePropertyLimit {
+		t.Errorf("archive calls = %+v, want one at the basic limit", got)
+	}
+	if got := slots.recorded(); len(got) != 1 || got[0] != triggerScheduledDowngrade {
+		t.Errorf("slot calls = %v, want one %s", got, triggerScheduledDowngrade)
+	}
+}
+
+// requireBoundaryScheduledApply asserts the stored subscription after the
+// boundary applied its due free-target change: active on the target, the
+// validity extended from now, auto-renew on, pending and keep consumed, one
+// scheduled_change_applied transition logged.
+func requireBoundaryScheduledApply(
+	t *testing.T, h *workersHarness, sub domain.Subscription, targetTariffID uuid.UUID, wantValidUntil time.Time,
+) {
+	t.Helper()
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusActive || stored.TariffID != targetTariffID {
+		t.Fatalf("subscription = %s/%s, want active on %s (the scheduled apply, not the basic fall)",
+			stored.Status, stored.TariffID, targetTariffID)
+	}
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantValidUntil) {
+		t.Errorf("ValidUntil = %v, want %v", stored.ValidUntil, wantValidUntil)
+	}
+	if !stored.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = false, want true (ADR 0008 §3)")
+	}
+	if stored.HasPendingChange() || stored.KeepPropertyID != nil {
+		t.Errorf("pending/keep = %v/%v, want both consumed", stored.PendingTariffID, stored.KeepPropertyID)
+	}
+	transitions := h.transitionsOf(t, sub)
+	if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonScheduledChangeApplied {
+		t.Fatalf("transitions = %+v, want one scheduled_change_applied", transitions)
+	}
+}
+
+// TestWorkers_CancelledBoundaryChargesPaidDowngrade proves the paid half of
+// the same boundary (ADR 0008 §3): the cancelled subscription's due paid
+// target is charged at apply time by the renewal machinery — the scheduling
+// consented to it by enabling auto-renew — and the switch applies on success.
+func TestWorkers_CancelledBoundaryChargesPaidDowngrade(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	archiver := &fakeArchiverSource{}
+	h.setLifecycleBridges(archiver, &fakeSlotSource{})
+
+	sub := h.seedCancelledWithPending(t, h.business, h.pro)
+	method := h.seedActiveMethod(t, sub, testProviderFake, "token_good")
+
+	count, err := h.workers.ProcessRenewals(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ProcessRenewals() = %d, want 1", count)
+	}
+
+	payment := h.singlePaymentOf(t, sub.UserID)
+	if payment.TariffID != h.pro.ID || payment.Status != domain.PaymentStatusSucceeded {
+		t.Fatalf("payment = tariff %s status %s, want pro/succeeded (charged at the boundary)", payment.TariffID, payment.Status)
+	}
+	if payment.PaymentMethodID == nil || *payment.PaymentMethodID != method.ID {
+		t.Errorf("payment method = %v, want the active method", payment.PaymentMethodID)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusActive || stored.TariffID != h.pro.ID {
+		t.Fatalf("subscription = %s/%s, want active/pro applied at charge time", stored.Status, stored.TariffID)
+	}
+	if stored.HasPendingChange() {
+		t.Error("pending change survived the charged apply")
+	}
+	if got := archiver.recorded(); len(got) != 1 || got[0].limit != h.pro.ActivePropertyLimit {
+		t.Errorf("archive calls = %+v, want one at the pro limit", got)
+	}
+}
+
+// TestWorkers_CancelledBoundaryPaidDowngradeWithoutMethodEntersGrace proves
+// the no-method edge of the charged boundary: nothing is chargeable, so the
+// subscription enters the grace window the same way an active renewal does
+// (ADR 0008 §3 — on failure the subscription enters grace and the pending
+// change is consumed on entry).
+func TestWorkers_CancelledBoundaryPaidDowngradeWithoutMethodEntersGrace(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	h.workers.SetLifecycleBridges(&fakeArchiverSource{}, &fakeSlotSource{})
+
+	sub := h.seedCancelledWithPending(t, h.business, h.pro)
+
+	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	h.requireGraceEnteredOverNothingChargeable(t, sub)
+}
+
+// TestWorkers_CancelledBoundaryPaidDowngradeSurvivesUncertainCharge proves the
+// boundary never basic-falls a cancelled subscription whose paid target is
+// still unresolved at the provider: the row stays cancelled with its pending
+// change until the charge settles.
+func TestWorkers_CancelledBoundaryPaidDowngradeSurvivesUncertainCharge(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	h.workers.SetLifecycleBridges(&fakeArchiverSource{}, &fakeSlotSource{})
+
+	sub := h.seedCancelledWithPending(t, h.business, h.pro)
+	h.seedActiveMethod(t, sub, testProviderFake, "token_stuck")
+	h.provider.chargeFn = func(req ChargeRequest) (ChargeResult, error) {
+		return ChargeResult{ProviderPaymentID: req.ProviderPaymentID, Status: domain.PaymentStatusPending}, nil
+	}
+
+	if _, err := h.workers.ProcessRenewals(t.Context(), h.now); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusCancelled || stored.TariffID != h.business.ID {
+		t.Fatalf("subscription = %s/%s, want cancelled/business (the charge is unresolved)", stored.Status, stored.TariffID)
+	}
+	if !stored.HasPendingChange() {
+		t.Fatal("pending change vanished on an unresolved charge, want kept for the next tick")
+	}
+}
+
+// TestWorkers_ExpiredGraceAppliesFreeDowngrade proves the grace half of the
+// issue #1451 boundary: a grace subscription whose window ended with a due
+// free-target change applies it instead of the plain basic fall.
+func TestWorkers_ExpiredGraceAppliesFreeDowngrade(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	archiver := &fakeArchiverSource{}
+	slots := &fakeSlotSource{}
+	h.workers.SetLifecycleBridges(archiver, slots)
+
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.Status = domain.SubscriptionStatusGrace
+		until := h.now.Add(-time.Hour)
+		s.ValidUntil = &until
+		s.AutoRenewEnabled = true
+		target := h.basic.ID
+		s.PendingTariffID = &target
+		s.PendingChangeAt = &until
+		period := domain.PeriodMonth
+		s.PendingPeriod = &period
+	})
+
+	count, err := h.workers.ProcessExpiredGrace(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessExpiredGrace() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ProcessExpiredGrace() = %d, want 1", count)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.Status != domain.SubscriptionStatusActive || stored.TariffID != h.basic.ID {
+		t.Fatalf("subscription = %s/%s, want active/basic (the scheduled apply)", stored.Status, stored.TariffID)
+	}
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(h.now.AddDate(0, 1, 0)) {
+		t.Errorf("ValidUntil = %v, want a month from now", stored.ValidUntil)
+	}
+	transitions := h.transitionsOf(t, sub)
+	if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonScheduledChangeApplied {
+		t.Fatalf("transitions = %+v, want one scheduled_change_applied", transitions)
+	}
+	if got := slots.recorded(); len(got) != 1 || got[0] != triggerScheduledDowngrade {
+		t.Errorf("slot calls = %v, want one %s", got, triggerScheduledDowngrade)
+	}
+}
+
+// TestWorkers_ExpiredGracePaidDowngradeFallsToBasic pins the grace edge the
+// deferred downgrade does not reach: a paid target whose window expired with
+// no successful charge converges on the ADR 0008 grace expiry — the basic
+// fall. The pending change is consumed with it; paying for a tariff stays the
+// way back.
+func TestWorkers_ExpiredGracePaidDowngradeFallsToBasic(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	h.workers.SetLifecycleBridges(&fakeArchiverSource{}, &fakeSlotSource{})
+
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.TariffID = h.business.ID
+		s.Status = domain.SubscriptionStatusGrace
+		until := h.now.Add(-time.Hour)
+		s.ValidUntil = &until
+		target := h.pro.ID
+		s.PendingTariffID = &target
+		s.PendingChangeAt = &until
+		period := domain.PeriodMonth
+		s.PendingPeriod = &period
+	})
+
+	count, err := h.workers.ProcessExpiredGrace(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessExpiredGrace() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ProcessExpiredGrace() = %d, want 1", count)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.TariffID != h.basic.ID || stored.ValidUntil != nil || stored.AutoRenewEnabled ||
+		stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("subscription = %+v, want the basic fall", stored)
+	}
+	if stored.HasPendingChange() {
+		t.Error("pending change survived the fall to basic")
+	}
+}
+
+// TestWorkers_RenewalAppliesDueFreeScheduledChangeInPlace proves the renewal
+// phase totals the free-target boundary on its own: a due free scheduled
+// change that reaches the renewal onset (the scheduled-changes phase failed
+// this tick) applies in place through the scheduled apply — never through the
+// permanent basic fall the plain basic renewal takes.
+func TestWorkers_RenewalAppliesDueFreeScheduledChangeInPlace(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	h.workers.SetLifecycleBridges(&fakeArchiverSource{}, &fakeSlotSource{})
+
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		target := h.basic.ID
+		changeAt := h.now.Add(-time.Hour)
+		period := domain.PeriodMonth
+		s.PendingTariffID = &target
+		s.PendingChangeAt = &changeAt
+		s.PendingPeriod = &period
+	})
+
+	count, err := h.workers.ProcessRenewals(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ProcessRenewals() = %d, want 1", count)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.TariffID != h.basic.ID || stored.Status != domain.SubscriptionStatusActive {
+		t.Fatalf("subscription = %s/%s, want basic/active applied in place", stored.TariffID, stored.Status)
+	}
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(h.now.AddDate(0, 1, 0)) {
+		t.Errorf("ValidUntil = %v, want a month from now (the scheduled apply, not the permanent fall)", stored.ValidUntil)
+	}
+	if !stored.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = false, want true (the scheduled apply keeps renewing)")
+	}
+	transitions := h.transitionsOf(t, sub)
+	if len(transitions) != 1 || transitions[0].Reason != domain.TransitionReasonScheduledChangeApplied {
+		t.Fatalf("transitions = %+v, want one scheduled_change_applied", transitions)
+	}
+}
+
 // containsAll reports whether every label occurs in the slice.
 func containsAll(got []string, want ...string) bool {
 	for _, w := range want {

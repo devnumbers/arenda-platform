@@ -542,6 +542,113 @@ func TestWorkers_Integration_NonRenewingAndCancelledExpireToBasic(t *testing.T) 
 	}
 }
 
+// TestWorkers_Integration_CancelledDeferredDowngradeChargedAtBoundary proves
+// the issue #1451 acceptance end to end on the real schema: choosing a cheaper
+// paid tariff on a cancelled subscription with a live remainder schedules the
+// deferred change — the pair that answered 409 «Некорректное состояние
+// подписки» on stage — and at the boundary the renewal machinery charges the
+// consented target and applies the switch.
+func TestWorkers_Integration_CancelledDeferredDowngradeChargedAtBoundary(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	archiver, _ := wireBridges(h)
+	// The boundary charge applies through the success-application seam, whose
+	// archiving rides the payment service's own bridges.
+	h.paymentsSvc.SetLifecycleBridges(archiver, nil)
+	userID, sub := seedPaidProSubscription(t, h)
+	business, err := h.tariffs.GetByName(h.ctx(), domain.TariffBusiness)
+	if err != nil {
+		t.Fatalf("GetByName(business) error = %v", err)
+	}
+	sub.TariffID = business.ID
+	if err := h.subscriptions.Update(h.ctx(), sub); err != nil {
+		t.Fatalf("move to business: %v", err)
+	}
+
+	requireCancelledDeferredDowngradeScheduled(t, h, userID)
+
+	// The boundary: the paid remainder ends and the consented charge lands.
+	seedActiveMethod(t, h, userID, "rebill_ok")
+	h.clock.now = sub.ValidUntil.Add(time.Hour)
+	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+
+	pro, err := h.tariffs.GetByName(h.ctx(), domain.TariffPro)
+	if err != nil {
+		t.Fatalf("GetByName(pro) error = %v", err)
+	}
+	requireBoundaryChargeApplied(t, h, userID, pro, archiver)
+}
+
+// requireBoundaryChargeApplied asserts the state after the boundary charged
+// the consented target: one succeeded payment at the target's yearly price,
+// the subscription active on it with the change applied and a year of
+// validity from the boundary, one archive call at the target's limit.
+func requireBoundaryChargeApplied(
+	t *testing.T, h *integrationHarness, userID uuid.UUID, pro domain.Tariff, archiver *capturingArchiver,
+) {
+	t.Helper()
+	payments, err := h.payments.ListByUserID(h.ctx(), userID)
+	if err != nil || len(payments) != 1 {
+		t.Fatalf("payments = %d (err %v), want the single boundary charge", len(payments), err)
+	}
+	if payments[0].Status != domain.PaymentStatusSucceeded ||
+		payments[0].TariffID != pro.ID ||
+		payments[0].AmountKopecks != pro.YearlyPriceKopecks {
+		t.Errorf("payment = %s tariff %s amount %d, want succeeded pro %d",
+			payments[0].Status, payments[0].TariffID, payments[0].AmountKopecks, pro.YearlyPriceKopecks)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() after the boundary error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusActive || stored.TariffID != pro.ID {
+		t.Errorf("subscription = %s/%s, want active/pro applied at the boundary", stored.Status, stored.TariffID)
+	}
+	if stored.HasPendingChange() {
+		t.Error("pending change survived the charged apply")
+	}
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(h.clock.Now().AddDate(1, 0, 0)) {
+		t.Errorf("ValidUntil = %v, want a year from the boundary", stored.ValidUntil)
+	}
+	if got := archiver.recorded(); len(got) != 1 || got[0].limit != pro.ActivePropertyLimit {
+		t.Errorf("archive calls = %+v, want one at the pro limit", got)
+	}
+}
+
+// requireCancelledDeferredDowngradeScheduled pins the scheduling half of the
+// issue #1451 acceptance: the cancellation followed by the cheaper-tariff
+// choice succeeds without a charge and leaves the cancelled subscription with
+// the change scheduled at the remainder's end and auto-renew on.
+func requireCancelledDeferredDowngradeScheduled(t *testing.T, h *integrationHarness, userID uuid.UUID) {
+	t.Helper()
+	if err := h.subscriptionsSvc.CancelSubscription(h.ctx(), userID, nil); err != nil {
+		t.Fatalf("CancelSubscription() error = %v", err)
+	}
+	result, err := h.subscriptionsSvc.ChangeTariff(h.ctx(), userID, billingapp.ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	})
+	if err != nil {
+		t.Fatalf("ChangeTariff() on cancelled error = %v, want a scheduled downgrade", err)
+	}
+	if result.PaymentID != uuid.Nil || result.ConfirmURL != "" {
+		t.Errorf("result = %+v, want zero values (scheduling is never charged)", result)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusCancelled || !stored.HasPendingChange() {
+		t.Fatalf("subscription = %s pending %v, want cancelled with the change scheduled",
+			stored.Status, stored.PendingTariffID)
+	}
+	if !stored.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = false, want true (the target keeps renewing, ADR 0008 §3)")
+	}
+}
+
 // TestWorkers_Integration_BridgeFailureRollsBack proves the atomicity of the
 // rewritten expiry path on a real database: an archiving failure rolls the
 // subscription change back with its transition, and the next tick — with the
