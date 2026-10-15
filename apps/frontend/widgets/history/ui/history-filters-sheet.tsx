@@ -598,7 +598,7 @@ function FilterGroupCard({
         </label>
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-center py-4 pl-2 pr-5 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary"
+          className="pressable flex min-w-0 flex-1 cursor-pointer items-center py-4 pl-2 pr-5 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
           onClick={onToggleExpanded}
           aria-expanded={expanded}
         >

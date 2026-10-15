@@ -160,7 +160,7 @@ function FaqEntry({
         aria-expanded={expanded}
         onClick={onToggle}
         className={cn(
-          'flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-3 text-left font-sans outline-none',
+          'pressable flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-3 text-left font-sans outline-none hover:opacity-80',
           'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-card',
         )}
       >

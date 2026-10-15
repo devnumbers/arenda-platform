@@ -32,9 +32,11 @@ import { ProfileAvatar } from './profile-avatar';
 const PHOTO_INPUT_ACCEPT = 'image/jpeg,image/png,image/webp';
 
 /** Кнопка-круг (клик по фото открывает пикер): фокус-ринг по канону
- * IconButton, в полёте глушится без затемнения — круг «как был». */
+ * IconButton, в полёте глушится без затемнения — круг «как был». Отклик —
+ * канон рядов: пресс-скейл + приглушение на наведении (работает и с фото,
+ * и с пустым кругом, затемнения фона под фото не видно). */
 const PHOTO_BUTTON_CLASS =
-  'flex cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none';
+  'pressable flex cursor-pointer rounded-full outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none';
 
 export type ProfilePhotoSlotProps = {
   /** same-origin стриминговый путь выдачи (ADR 0065), null — фото нет. */

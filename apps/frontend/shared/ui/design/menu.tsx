@@ -74,6 +74,13 @@ export function MenuItem({ className, icon, children, ...props }: MenuItemProps)
       className={cn(
         'flex h-11 cursor-pointer select-none items-center gap-1.5 rounded-button px-5 text-sm font-medium text-content outline-none transition-colors',
         'data-[highlighted]:bg-surface-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        // Нажатие темнее ховера — сет DesktopMenuButton (невыбранной):
+        // hover bg-surface-muted, при нажатии bg-surface-muted-hover.
+        // Комбинированный вариант гарантирует шаг поверх data-highlighted
+        // на десктопе (одинаковая специфичность пары решила бы порядок
+        // stylesheet, а не нажатие); голый active закрывает тач-тап без
+        // highlighted.
+        'active:bg-surface-muted-hover active:data-[highlighted]:bg-surface-muted-hover',
         className,
       )}
       {...props}

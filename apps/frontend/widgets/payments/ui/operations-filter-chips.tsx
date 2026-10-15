@@ -110,20 +110,32 @@ export function OperationsPeriodChip({
   readonly period: OperationsPeriod | null;
   readonly onOpen?: () => void;
 }): JSX.Element {
-  const className = clsx(
-    "inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium cursor-pointer",
-    period !== null ? "bg-primary text-white" : "bg-surface-muted text-content",
-  );
+  const variantClass =
+    period !== null
+      ? 'bg-primary text-white'
+      : 'bg-surface-muted text-content';
   const label = operationsPeriodChipLabel(period);
   if (onOpen === undefined) {
     return (
-      <span aria-hidden className={className}>
+      <span aria-hidden className={clsx('inline-flex h-11 items-center rounded-pill px-5 text-sm font-medium cursor-pointer', variantClass)}>
         {label}
       </span>
     );
   }
+  // Кнопка — канон чипа (ChipButton): пресс-скейл + шаги hover/active своего
+  // варианта (синий применённый — первичная пара, серый — muted-пара).
   return (
-    <button type="button" onClick={onOpen} className={className}>
+    <button
+      type="button"
+      onClick={onOpen}
+      className={clsx(
+        'pressable inline-flex h-11 cursor-pointer items-center rounded-pill px-5 text-sm font-medium',
+        variantClass,
+        period !== null
+          ? 'hover:bg-primary-hover active:bg-primary-active'
+          : 'hover:bg-surface-muted-hover active:bg-surface-muted-active',
+      )}
+    >
       {label}
     </button>
   );
