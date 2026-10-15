@@ -321,7 +321,7 @@ export function RentalDetailBody({
               type="button"
               onClick={() => router.push(ROUTES.propertyRentalPast(propertyId))}
               aria-label="Открыть прошлые аренды"
-              className="mx-6 flex h-14 cursor-pointer items-center justify-center rounded-card bg-surface-muted text-base leading-[18px] text-content outline-none transition-opacity hover:opacity-90 active:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
+              className="pressable mx-6 flex h-14 cursor-pointer items-center justify-center rounded-card bg-surface-muted text-base leading-[18px] text-content outline-none hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
             >
               Прошлые аренды
             </button>

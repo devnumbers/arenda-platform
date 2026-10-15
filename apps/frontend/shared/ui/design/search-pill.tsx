@@ -41,7 +41,7 @@ export function SearchPill({
       {...activatorProps}
       data-testid={testId}
       className={cn(
-        'flex h-14 w-full cursor-pointer items-center rounded-pill bg-surface-muted pl-[18px] text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary active:opacity-90',
+        'pressable flex h-14 w-full cursor-pointer items-center rounded-pill bg-surface-muted pl-[18px] text-left outline-none hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary',
         className,
       )}
     >

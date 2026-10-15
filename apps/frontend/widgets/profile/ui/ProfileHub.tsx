@@ -66,8 +66,8 @@ function HubRowButton({
     <div
       {...activatorProps}
       className={cn(
-        'flex w-full cursor-pointer items-center px-3 py-1 text-left outline-none',
-        'transition-opacity hover:opacity-80 active:opacity-80',
+        'pressable flex w-full cursor-pointer items-center px-3 py-1 text-left outline-none',
+        'hover:opacity-80',
         'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
       )}
     >

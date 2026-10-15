@@ -267,7 +267,7 @@ function ContactValueRowView({
     <div
       {...activatorProps}
       aria-label={copied ? 'Скопировано' : `Скопировать: ${row.label}`}
-      className="flex w-full cursor-pointer items-center gap-3 py-3 pl-6 pr-3 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dl-surface-muted)]"
+      className="pressable flex w-full cursor-pointer items-center gap-3 py-3 pl-6 pr-3 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dl-surface-muted)]"
     >
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">

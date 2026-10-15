@@ -314,7 +314,7 @@ function NotificationEntityLink({
   return (
     <Link
       href={href}
-      className="flex min-h-[52px] items-center gap-3 rounded-button outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary active:opacity-80"
+      className="pressable flex min-h-[52px] items-center gap-3 rounded-button outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
     >
       <NotificationEntityCardBody icon={icon} name={name} detail={detail} />
     </Link>

@@ -380,7 +380,7 @@ function PaymentsGlobalSection({
         <button
           type="button"
           onClick={onOpen}
-          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+          className="pressable flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
         >
           {title}
           <SmallArrowDown

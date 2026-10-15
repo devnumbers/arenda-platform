@@ -41,9 +41,9 @@ export function ParticipantRowButton({
     <div
       {...activatorProps}
       className={cn(
-        'group/row flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none',
-        'transition-opacity focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-        'hover:opacity-80 active:opacity-80',
+        'pressable group/row flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none',
+        'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        'hover:opacity-80',
         onSelect === undefined && 'cursor-default',
         className,
       )}

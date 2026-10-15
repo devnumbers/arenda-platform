@@ -257,7 +257,7 @@ export function PaymentMethodList({
           data-testid="add-payment-method"
           onClick={handleAdd}
           disabled={add.isPending}
-          className="flex min-h-[68px] w-full cursor-pointer items-center gap-3 px-3 py-3 text-left font-sans outline-none transition-opacity hover:opacity-80 active:opacity-80 disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="pressable flex min-h-[68px] w-full cursor-pointer items-center gap-3 px-3 py-3 text-left font-sans outline-none hover:opacity-80 disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           <span className="flex h-11 w-11 shrink-0 items-center justify-center">
             <Add className="h-6 w-6" aria-hidden />

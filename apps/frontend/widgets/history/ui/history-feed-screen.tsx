@@ -54,7 +54,7 @@ const FRESH_VISIBLE_MS = 2600;
 /** Канон строки-ссылки (хаб «Совместный доступ»): подложка hover/active
  * не меняется, только прозрачность; фокус-ринг с клавиатуры. */
 const HEADER_LINK =
-  'flex min-w-0 items-center gap-2 rounded-m outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary';
+  'pressable flex min-w-0 items-center gap-2 rounded-m outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary';
 
 /**
  * Экран «История действий» (карта #704, тикеты #709+#710; макеты
@@ -621,7 +621,7 @@ export function HistoryFeedScreen({
           <button
             type="button"
             onClick={scrollToFresh}
-            className="pointer-events-auto flex items-center gap-1.5 rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)] outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+            className="pressable pointer-events-auto flex items-center gap-1.5 rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)] outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
           >
             <ArrowDown className="h-4 w-4" aria-hidden />
             Есть новые

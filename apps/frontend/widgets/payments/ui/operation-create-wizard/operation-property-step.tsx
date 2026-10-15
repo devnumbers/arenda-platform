@@ -76,7 +76,7 @@ function ObjectRowButton({
       role="radio"
       aria-checked={checked}
       onClick={onCheck}
-      className="flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
+      className="pressable flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
     >
       <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
         <CirclePhoto
