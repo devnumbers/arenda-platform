@@ -213,6 +213,10 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Код"
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
+              autoCapitalize="none"
+              autoCorrect="off"
+              enterKeyHint="done"
               value={codeStep.value}
               onChange={codeStep.handleChange}
               onClear={codeStep.clear}
@@ -240,6 +244,7 @@ function PhoneChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Новый телефон"
               type="tel"
               inputMode="tel"
+              enterKeyHint="done"
               placeholder="+7 (999) 000-00-00"
               value={phone}
               onChange={handlePhoneChange}

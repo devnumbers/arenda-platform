@@ -304,6 +304,10 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Код"
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
+              autoCapitalize="none"
+              autoCorrect="off"
+              enterKeyHint="done"
               value={currentCodeStep.value}
               onChange={currentCodeStep.handleChange}
               onClear={currentCodeStep.clear}
@@ -334,6 +338,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               type="email"
               inputMode="email"
               autoComplete="email"
+              enterKeyHint="done"
               value={newEmail}
               onChange={handleNewEmailChange}
               onClear={handleNewEmailClear}
@@ -360,6 +365,10 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Код"
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
+              autoCapitalize="none"
+              autoCorrect="off"
+              enterKeyHint="done"
               value={newCodeStep.value}
               onChange={newCodeStep.handleChange}
               onClear={newCodeStep.clear}

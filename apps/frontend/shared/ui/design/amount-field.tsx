@@ -156,6 +156,7 @@ export function AmountFieldView({
           type="text"
           inputMode="decimal"
           autoComplete="off"
+          enterKeyHint="done"
           spellCheck={false}
           pattern="[0-9]*"
           size={1}
