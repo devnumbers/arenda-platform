@@ -39,7 +39,7 @@ Adding a new slice: user scenario → feature; domain model shared across scenar
 
 - Все мутации — через `useGuardedMutation` (`features/<name>/api/hooks.ts`): синхронный лок закрывает окно до перерисовки; `mutate` дропает вызов в полёте, `mutateAsync` — join. Прямой `useMutation` вне features-хууков и реализации `useGuardedMutation` запрещён гейтом `no-restricted-imports` (#1120; гейт #1146, реестр: `docs/agents/tooling.md`).
 - Кнопка глохнет на всё время мутации: инвариант канон-кнопок `disabled === true || loading` (ADR 0050 «loading дизейблит»); явный `disabled` только добавляет причину гашения, но не отменяет loading — антипаттерн `disabled ?? loading` запрещён (#1119, #1099). Для `asChild`-ссылок гашение невозможно — осознанная граница канона.
-- В проп `loading` подставляется только `isPending` мутации; `isFetching` и фоновые рефетчи кнопки не гасят (#1114).
+- В проп `loading` подставляется только `isPending` мутации; `isFetching` и фоновые рефетчи кнопки не гасят (#1114). Граница: retry-кнопка в error-состоянии глохнет на фетч самого повтора (`isFetching` того запроса) — это «работа этой кнопки в полёте», а не чужой фоновый рефетч (модель #1420, DESIGN.md §8).
 - Creation-мутации шлют `Idempotency-Key` (UUID на логическую попытку); бекенд бронирует ключ — реплей и ретрай дают тот же результат (#1121, #1122).
 - e2e на мутирующих поверхностях: два `click()` одним evaluate-таском + счётчик запросов (route-мок) + SQL-правда «ровно одна строка» (#1113). Канон-спека: `e2e/double-submit-guard.spec.ts`.
 

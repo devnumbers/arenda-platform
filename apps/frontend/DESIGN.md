@@ -708,6 +708,33 @@ UIScrollView на таче — оригинал браузера, а не ими
   элемента строку не активирует); роль, фокус и Tab-порядок — как у
   ссылки/кнопки (aria-hidden-оверлей вне tab-порядка, ссылка для
   скринридера одна — заголовок).
+- **Модель взаимодействия кнопок — пресс / async / хаптика** (тикет
+  #1420, решение владельца 14.10.2026):
+  *Пресс* — отклик на нажатие исполняет CSS `:active`: класс
+  `.pressable` (scale 0.97 на `--dl-duration-press` 150ms, планы
+  007/008) — он же и есть «отклик на pointer-down» канона Apple §1, JS
+  не нужен. JS-состояние нажатия на кнопках не вводится:
+  `onPointerDown` зарезервирован за интент-эффектами (prefetch
+  `useNavIntentLink`) и прерыванием жестов (колесо); click —
+  единственная точка коммита действия; release ничего не анимирует —
+  transition ретаргетится сам. Осознанные цветовые диалекты вне
+  `.pressable`: TabBar/навигация, radio/checkbox, round-action.
+  *Async* — `loading` = «работа, запущенная этой кнопкой, в полёте»:
+  кнопка глушится машинно (`disabled || loading`, ADR 0050), текст и
+  иконки видимы, спиннера нет (решение 30.09). Инженерные правила —
+  CODING_STANDARDS «Mutations and buttons» (гард двойного сабмита,
+  isPending, Idempotency-Key). Поверх: pending-ConfirmDialog глушит
+  закрытие диалога; двухфазные внешние процессы (подключение банка) —
+  паттерн трёх состояний idle / pending / error-retry (secondary small,
+  прецедент `profile/tariff/payment-methods/add`).
+  *Хаптика* — исходы действия (успех/ошибка) вибрируют вместе с
+  видимым сигналом: тост (`notify`, включая promise-путь) или попап
+  успеха (`SuccessPopup`, `ParticipantSuccessPopup`) — модуль
+  `action-haptics.ts` (план 018; Apple §13: каузальность и utility).
+  Коммит без видимого сигнала не хаптится; пресс не хаптится;
+  info/warning/loading молчат. Только Android (`navigator.vibrate`),
+  iOS — честный no-op, как у тика колеса (`wheel-haptics.ts`,
+  решение 14.10).
 - Touch-safe hover: Tailwind `hover:` уже эмитится внутри
   `@media (hover: hover)`; в CSS Modules каждое `:hover` — внутри media-блока.
 - Focus: полям ввода кольцо не положено (caret — аффорданс); кнопки и ссылки
