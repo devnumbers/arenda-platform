@@ -4,11 +4,18 @@ import {
   type Tariff,
 } from '@/entities/billing';
 import { getTariffLabel, isPaidTariff, type TariffName } from '@/entities/user';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { formatMoneyKopecks, ratioToPercent } from '@/shared/lib/format-money';
+import type { ApiError } from '@/shared/api/errors';
+import { dayMonth } from './tariff-overview';
 
 /** Вид-модель экрана «Выбрать тариф» (#623, макеты 1919-74867 год,
  * 1929-76367 месяц, 1929-75957 pending): цены и подписи строк, дефолт
  * выбора, надпись «Текущий» и состояние футера. Компонент только рисует. */
+
+/** Безлимитный лимит активных объектов тарифа (business) — зеркало
+ * UnlimitedPropertyLimit домена бэка. */
+const UNLIMITED_PROPERTY_LIMIT = -1;
 
 /** Бейдж «−25%» сегмента «Год» (#623: считать из данных, не константа) —
  * максимальная по платным тарифам выгода года против помесячной оплаты,
@@ -116,11 +123,15 @@ export function currentBadgeVisible(
  * тарифе и периоде при живом остатке — бесплатная «Возобновить» (#691:
  * платная реактивация оплаченного периода закрыта, остаток восстанавливает
  * бесплатное возобновление #617), на истёкшем периоде — платная
- * реактивация (#429) с кнопкой цены. */
+ * реактивация (#429) с кнопкой цены; более дешёвый тариф на «Остановлен»
+ * и в живом grace — подтверждение отложенного даунгрейда с датой
+ * применения (#1452, ADR 0066), после планирования — существующий экран
+ * «Тариф изменен» с датой вступления. */
 export type TariffChangeFooter =
   | { kind: 'connect'; label: string }
   | { kind: 'connected' }
   | { kind: 'resume'; label: string }
+  | { kind: 'downgrade'; title: string; description: string; confirmLabel: string }
   | { kind: 'disable' };
 
 export function tariffChangeFooter(
@@ -152,11 +163,116 @@ export function tariffChangeFooter(
       label: `Возобновить ${getTariffLabel(selectedTariff.name)}`,
     };
   }
+  if (
+    (subscription.status === 'cancelled' || subscription.status === 'grace') &&
+    classifyTariffChange(subscription.tariff, selectedTariff) === 'downgrade' &&
+    subscription.validUntil !== undefined &&
+    new Date(subscription.validUntil).getTime() > now.getTime()
+  ) {
+    return {
+      kind: 'downgrade',
+      title: `Сменить тариф на ${getTariffLabel(selectedTariff.name)}?`,
+      description: downgradeConfirmDescription(
+        subscription.status,
+        subscription.validUntil,
+        selectedTariff,
+        selectedPeriod,
+        now,
+      ),
+      confirmLabel: 'Сменить тариф',
+    };
+  }
 
   return {
     kind: 'connect',
     label: `Подключить за ${tariffPriceLine(selectedTariff, selectedPeriod)}`,
   };
+}
+
+/** Направление смены тарифа — зеркало ClassifyTariffChange бэка
+ * (domain/tariff.go): лимит объектов, при равенстве месячная цена, затем
+ * годовая; полное равенство — Same (вне скоупа #1450, при текущих ценах
+ * недостижимо). */
+export type TariffChangeDirection = 'upgrade' | 'downgrade' | 'same';
+
+export function classifyTariffChange(
+  current: Tariff,
+  next: Tariff,
+): TariffChangeDirection {
+  const nextBetter = isTariffBetter(next, current);
+  const currentBetter = isTariffBetter(current, next);
+  if (nextBetter && !currentBetter) {
+    return 'upgrade';
+  }
+  if (currentBetter && !nextBetter) {
+    return 'downgrade';
+  }
+  return 'same';
+}
+
+/** Строгая «лучшесть» тарифа — зеркало isTariffBetter бэка. */
+function isTariffBetter(a: Tariff, b: Tariff): boolean {
+  const aUnlimited = a.activePropertyLimit === UNLIMITED_PROPERTY_LIMIT;
+  const bUnlimited = b.activePropertyLimit === UNLIMITED_PROPERTY_LIMIT;
+  if (aUnlimited !== bUnlimited) {
+    return aUnlimited;
+  }
+  if (a.activePropertyLimit !== b.activePropertyLimit) {
+    return a.activePropertyLimit > b.activePropertyLimit;
+  }
+  if (a.monthlyPriceKopecks !== b.monthlyPriceKopecks) {
+    return a.monthlyPriceKopecks > b.monthlyPriceKopecks;
+  }
+  if (a.yearlyPriceKopecks !== b.yearlyPriceKopecks) {
+    return a.yearlyPriceKopecks > b.yearlyPriceKopecks;
+  }
+  return false;
+}
+
+/** Описание подтверждения даунгрейда (#1452, ADR 0066): дата применения —
+ * конец оплаченного остатка («Остановлен») или дедлайн grace-окна, бэк
+ * запишет тот же validUntil в pending_change_at; списание целевого тарифа
+ * на границе раскрываем сразу — планирование ничего не списывает, но
+ * назначение согласовывает платёж целевого на границе. Язык «Изменения
+ * вступят в силу» — как на существующем экране успеха. */
+function downgradeConfirmDescription(
+  status: Subscription['status'],
+  validUntil: string,
+  target: Tariff,
+  period: PaymentPeriod,
+  now: Date,
+): string {
+  const date = dayMonth(validUntil, dateToIsoLocal(now));
+  const appliesAt =
+    status === 'cancelled'
+      ? `Изменения вступят в силу ${date} — в конце оплаченного периода.`
+      : `Изменения вступят в силу ${date}.`;
+  return (
+    `${appliesAt} Тогда же спишем ${tariffPriceLine(target, period)}`
+    + ` за тариф ${getTariffLabel(target.name)}. Сейчас ничего не списываем.`
+  );
+}
+
+const HUMAN_CONFLICT_CODES: ReadonlySet<string> = new Set([
+  // Закодированные 409 бэка (ProblemWithCode) уже несут человеческий
+  // текст — «Период уже оплачен: возобновите подписку бесплатно»,
+  // «Возобновление недоступно: оплаченный период истёк, оплатите тариф».
+  'resume_required',
+  'resume_not_available',
+]);
+
+/** Человеческое описание тоста об ошибке действия (#1452, край #1450 п.4):
+ * сырой detail честного 409 («Некорректное состояние подписки») в тост не
+ * показывается — у действия свой человеческий конфликтный текст; не-409
+ * сохраняют detail бэка. */
+export function tariffActionErrorDescription(
+  error: ApiError,
+  conflictText: string,
+): string {
+  if (error.status === 409 && !HUMAN_CONFLICT_CODES.has(error.code)) {
+    return conflictText;
+  }
+  return error.detail;
 }
 
 /** Карточка возможностей тарифа (#623, макеты 1919-74867 год, обновлены

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { ApiError } from '@/shared/api/errors';
 import type { Subscription, Tariff } from '@/entities/billing';
 import {
+  classifyTariffChange,
   currentBadgeVisible,
+  tariffActionErrorDescription,
   tariffChangeDefaults,
   tariffChangeFooter,
   tariffChangeUrlOverrides,
@@ -270,5 +273,187 @@ describe('tariffChangeFooter', () => {
         'month',
       ),
     ).toStrictEqual({ kind: 'connected' });
+  });
+});
+
+describe('classifyTariffChange — зеркало ClassifyTariffChange бэка (#1452)', () => {
+  it('лимит решает раньше цен: безлимит бьёт любой конечный лимит', () => {
+    const cheapUnlimited: Tariff = {
+      ...businessTariff,
+      monthlyPriceKopecks: 100,
+      yearlyPriceKopecks: 1000,
+    };
+    expect(classifyTariffChange(proTariff, cheapUnlimited)).toBe('upgrade');
+    expect(classifyTariffChange(cheapUnlimited, proTariff)).toBe('downgrade');
+  });
+
+  it('равные лимиты различает месячная цена', () => {
+    const cheaperSameLimit: Tariff = { ...proTariff, monthlyPriceKopecks: 400 };
+    expect(classifyTariffChange(proTariff, cheaperSameLimit)).toBe('downgrade');
+    expect(classifyTariffChange(cheaperSameLimit, proTariff)).toBe('upgrade');
+  });
+
+  it('равные лимит и месячная цена различаются годовой', () => {
+    const cheaperYear: Tariff = { ...proTariff, yearlyPriceKopecks: 400000 };
+    expect(classifyTariffChange(proTariff, cheaperYear)).toBe('downgrade');
+    expect(classifyTariffChange(cheaperYear, proTariff)).toBe('upgrade');
+  });
+
+  it('равные тарифы — Same (вне скоупа #1450, при текущих ценах недостижимо)', () => {
+    const twin: Tariff = { ...proTariff, id: 'twin' };
+    expect(classifyTariffChange(proTariff, twin)).toBe('same');
+  });
+});
+
+describe('tariffChangeFooter — отложенный даунгрейд на «Остановлен» и grace (#1452, ADR 0066)', () => {
+  const now = new Date('2026-09-15T12:00:00Z');
+  const cancelledBusiness = subscription({
+    status: 'cancelled',
+    tariff: businessTariff,
+    autoRenewEnabled: false,
+  });
+
+  it('отменённая Бизнес × более дешёвый Про — подтверждение с датой применения', () => {
+    expect(tariffChangeFooter(cancelledBusiness, proTariff, 'month', now)).toStrictEqual({
+      kind: 'downgrade',
+      title: 'Сменить тариф на Про?',
+      description:
+        'Изменения вступят в силу 10 октября — в конце оплаченного периода. '
+        + 'Тогда же спишем 490 ₽ в месяц за тариф Про. Сейчас ничего не списываем.',
+      confirmLabel: 'Сменить тариф',
+    });
+  });
+
+  it('годовой целевой тариф несёт свою цену', () => {
+    expect(tariffChangeFooter(cancelledBusiness, proTariff, 'year', now)).toStrictEqual({
+      kind: 'downgrade',
+      title: 'Сменить тариф на Про?',
+      description:
+        'Изменения вступят в силу 10 октября — в конце оплаченного периода. '
+        + 'Тогда же спишем 4\u00A0400 ₽ в год за тариф Про. Сейчас ничего не списываем.',
+      confirmLabel: 'Сменить тариф',
+    });
+  });
+
+  it('grace × более дешёвый — то же подтверждение с дедлайном окна', () => {
+    expect(
+      tariffChangeFooter(
+        subscription({
+          status: 'grace',
+          tariff: businessTariff,
+          autoRenewEnabled: true,
+        }),
+        proTariff,
+        'month',
+        now,
+      ),
+    ).toStrictEqual({
+      kind: 'downgrade',
+      title: 'Сменить тариф на Про?',
+      description:
+        'Изменения вступят в силу 10 октября. '
+        + 'Тогда же спишем 490 ₽ в месяц за тариф Про. Сейчас ничего не списываем.',
+      confirmLabel: 'Сменить тариф',
+    });
+  });
+
+  it('свой тариф и период на отменённой — бесплатное возобновление раньше даунгрейда (#691)', () => {
+    expect(
+      tariffChangeFooter(
+        subscription({ status: 'cancelled', tariff: businessTariff, autoRenewEnabled: false }),
+        businessTariff,
+        'month',
+        now,
+      ),
+    ).toStrictEqual({ kind: 'resume', label: 'Возобновить Бизнес' });
+  });
+
+  it('более дорогой на отменённой — платёжный путь реактивации (#429), без подтверждения', () => {
+    expect(
+      tariffChangeFooter(
+        subscription({ status: 'cancelled', tariff: proTariff, autoRenewEnabled: false }),
+        businessTariff,
+        'month',
+        now,
+      ),
+    ).toStrictEqual({ kind: 'connect', label: 'Подключить за 990 ₽ в месяц' });
+  });
+
+  it('активная подписка × более дешёвый — прежнее отложенное планирование, без подтверждения', () => {
+    expect(
+      tariffChangeFooter(
+        subscription({ tariff: businessTariff }),
+        proTariff,
+        'month',
+        now,
+      ),
+    ).toStrictEqual({ kind: 'connect', label: 'Подключить за 490 ₽ в месяц' });
+  });
+
+  it('истёкший остаток отменённой — транзит до тика воркера, платёжный путь', () => {
+    expect(
+      tariffChangeFooter(
+        subscription({
+          status: 'cancelled',
+          tariff: businessTariff,
+          autoRenewEnabled: false,
+          validUntil: '2026-09-01T12:00:00Z',
+        }),
+        proTariff,
+        'month',
+        now,
+      ),
+    ).toStrictEqual({ kind: 'connect', label: 'Подключить за 490 ₽ в месяц' });
+  });
+
+  it('истёкшее grace-окно планированию не подлежит — платёжный путь до тика воркера', () => {
+    expect(
+      tariffChangeFooter(
+        subscription({
+          status: 'grace',
+          tariff: businessTariff,
+          validUntil: '2026-09-01T12:00:00Z',
+        }),
+        proTariff,
+        'month',
+        now,
+      ),
+    ).toStrictEqual({ kind: 'connect', label: 'Подключить за 490 ₽ в месяц' });
+  });
+});
+
+describe('tariffActionErrorDescription — человеческие тосты 409 (#1452, край #1450 п.4)', () => {
+  const conflictText = 'Сейчас нельзя сменить тариф';
+
+  it('честный 409 без кода показывает человеческий текст, не сырой detail', () => {
+    const error = new ApiError(
+      'about:blank',
+      'Некорректное состояние подписки',
+      undefined,
+      409,
+    );
+    expect(tariffActionErrorDescription(error, conflictText)).toBe(conflictText);
+  });
+
+  it('закодированные resume-ошибки бэка уже человеческие — проходят как есть', () => {
+    const error = new ApiError(
+      'resume_required',
+      'Период уже оплачен: возобновите подписку бесплатно',
+      undefined,
+      409,
+    );
+    expect(tariffActionErrorDescription(error, conflictText)).toBe(
+      'Период уже оплачен: возобновите подписку бесплатно',
+    );
+  });
+
+  it('не-конфликты сохраняют detail бэка', () => {
+    const error = new ApiError(
+      'network_error',
+      'Не удалось выполнить запрос. Проверьте подключение к интернету.',
+    );
+    expect(tariffActionErrorDescription(error, conflictText)).toBe(
+      'Не удалось выполнить запрос. Проверьте подключение к интернету.',
+    );
   });
 });

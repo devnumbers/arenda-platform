@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Button,
+  ConfirmDialog,
   RadioGroup,
   RadioGroupItem,
   Skeleton,
@@ -30,6 +31,7 @@ import { ROUTES } from '@/shared/config/routes';
 import type { ApiError } from '@/shared/api/errors';
 import {
   currentBadgeVisible,
+  tariffActionErrorDescription,
   tariffChangeDefaults,
   tariffChangeFooter,
   tariffChangeUrlOverrides,
@@ -54,11 +56,15 @@ import { ResumeSuccessScreen } from './resume-success-screen';
  * тарифе и периоде), бесплатная «Возобновить» в «Остановлен» на своём
  * тарифе и периоде при живом остатке (#691: платная реактивация оплаченного
  * периода закрыта — после resume экран успеха возобновления), выбор
- * базового — во флоу отключения (#622). Живая pending-оплата заменяет футер
+ * базового — во флоу отключения (#622), более дешёвый тариф на
+ * «Остановлен» и в живом grace — подтверждение отложенного даунгрейда
+ * с датой применения (#1452, ADR 0066), после планирования — экран
+ * «Тариф изменен» с датой вступления. Живая pending-оплата заменяет футер
  * блоком «Вернуться к оплате» с таймером: плашка не меняется при
  * переключениях (аннотация макета), по истечении срока refetch разблокирует
  * выбор. Дефолт выбора: своя подписка — свой тариф и период, после
- * регистрации — «Год» + «Про» (решение владельца). */
+ * регистрации — «Год» + «Про» (решение владельца). Сырой detail честного
+ * 409 в тосты не идёт — человеческие тексты по краю #1450 п.4. */
 export function TariffChangeScreen(): JSX.Element {
   const {
     data: tariffs,
@@ -130,6 +136,7 @@ function TariffChangeContent({
   const changeTariff = useChangeTariff();
   const resume = useResumeSubscription();
   const [resumed, setResumed] = useState(false);
+  const [downgradeOpen, setDowngradeOpen] = useState(false);
 
   // Глубокая ссылка с лендинга («Подключить» карточки тарифа) называет
   // тариф и период в query — она старше дефолтов; обычный вход без query
@@ -177,7 +184,12 @@ function TariffChangeContent({
       })
       .catch((error: ApiError) => {
         notify.close(loadingToastId);
-        notify.scenarios.tariff.changeError({ description: error.detail });
+        notify.scenarios.tariff.changeError({
+          description: tariffActionErrorDescription(
+            error,
+            'Сейчас нельзя сменить тариф. Обновите страницу и попробуйте ещё раз',
+          ),
+        });
       });
   };
 
@@ -186,7 +198,12 @@ function TariffChangeContent({
       .mutateAsync()
       .then(() => setResumed(true))
       .catch((error: ApiError) =>
-        notify.scenarios.tariff.resumeError({ description: error.detail }),
+        notify.scenarios.tariff.resumeError({
+          description: tariffActionErrorDescription(
+            error,
+            'Сейчас нельзя возобновить тариф. Попробуйте ещё раз',
+          ),
+        }),
       );
   };
 
@@ -244,12 +261,25 @@ function TariffChangeContent({
               onConnect={handleConnect}
               onResume={handleResume}
               onDisable={() => router.push(ROUTES.profileTariffDisable)}
+              onDowngrade={() => setDowngradeOpen(true)}
               loading={changeTariff.isPending}
               resuming={resume.isPending}
             />
           )
         )}
       </StickyBottomBar>
+
+      {footer?.kind === 'downgrade' && (
+        <ConfirmDialog
+          open={downgradeOpen}
+          onOpenChange={setDowngradeOpen}
+          title={footer.title}
+          description={footer.description}
+          confirmLabel={footer.confirmLabel}
+          pending={changeTariff.isPending}
+          onConfirm={handleConnect}
+        />
+      )}
     </>
   );
 }
@@ -377,6 +407,7 @@ function ChangeFooter({
   onConnect,
   onResume,
   onDisable,
+  onDowngrade,
   loading,
   resuming,
 }: {
@@ -384,6 +415,7 @@ function ChangeFooter({
   readonly onConnect: () => void;
   readonly onResume: () => void;
   readonly onDisable: () => void;
+  readonly onDowngrade: () => void;
   readonly loading: boolean;
   readonly resuming: boolean;
 }): JSX.Element {
@@ -391,7 +423,8 @@ function ChangeFooter({
     return <Button disabled>Подключен</Button>;
   }
   if (footer.kind === 'disable') {
-    // Выбор Базового с платной подписки — во флоу отключения (#622).
+    // Выбор Базового с платной подписки — во флоу отключения (#622);
+    // на отменённой бэк отвечает идемпотентным no-op (#1451).
     return <Button onClick={onDisable}>Отключить тариф</Button>;
   }
   if (footer.kind === 'resume') {
@@ -400,6 +433,15 @@ function ChangeFooter({
     return (
       <Button loading={resuming} onClick={onResume}>
         {footer.label}
+      </Button>
+    );
+  }
+  if (footer.kind === 'downgrade') {
+    // Отложенный даунгрейд на «Остановлен»/grace (#1452): кнопка открывает
+    // подтверждение с датой применения, списывает не сейчас, а на границе.
+    return (
+      <Button loading={loading} onClick={onDowngrade}>
+        {footer.confirmLabel}
       </Button>
     );
   }
