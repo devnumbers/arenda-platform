@@ -64,6 +64,19 @@
   --breakpoint-tab: 481px;
   --breakpoint-desk: 1200px;
 
+  /* Кривые моушена лендинга — namespace --ease-* даёт утилиты
+     ease-enter/ease-inout/ease-menu/ease-desk. Значения — существующие
+     замерные, сведение в токены не меняет ни одного из них:
+     enter — въезды Reveal; inout — симметричные подмены (steps/тарифы,
+     «хореография apple.com»); menu — мобильное меню (замер globalnav
+     apple.com); desk — десктопные переходы отзывов («чуток плавнее на
+     ПК», решение владельца). Кривая карусельного движка (0,0,0.58,1)
+     живёт в components/carousel-ease.ts, модальная — в --dl-ease. */
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-menu: cubic-bezier(0.4, 0, 0.6, 1);
+  --ease-desk: cubic-bezier(0.45, 0, 0.2, 1);
+
   --color-primary: #2b7fff;
   --color-primary-hover: #2175f5;
   --color-primary-active: #176beb;
@@ -104,7 +117,7 @@
   /* Въезд текста шага секции «Как начать пользоваться» (steps.tsx) —
      фейд с мягким подъёмом на ease-in-out (хореография apple.com:
      фото кроссфейдится сразу, текст догоняет). */
-  --animate-steps-text-in: steps-text-in 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-steps-text-in: steps-text-in 280ms var(--ease-inout);
 
   @keyframes steps-text-in {
     from {
@@ -120,7 +133,7 @@
   /* Въезд цены тарифа при смене Год/Месяц (tariff-cards.tsx) — тот же
      @keyframes, что у текста steps: уход вверх-фейд 180мс, подмена,
      въезд снизу 280мс. */
-  --animate-tariff-price-in: steps-text-in 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-tariff-price-in: steps-text-in 280ms var(--ease-inout);
 
   /* Утилиты дизайн-слоя фронта (apps/frontend shared/styles/tokens.css) —
      перенесены под ui-компоненты модалки «Задать вопрос» (карта #1010);
@@ -144,12 +157,14 @@
 }
 
 /* Кривая и длительности модалок фронта (резолюция #449, «плавность как у
-   Apple» / HIG Motion) — читаются произвольными animate-[...] и hover-тенью
-   полей из перенесённых ui-компонентов. */
+   Apple» / HIG Motion) — читаются семантическими классами .dl-*-in/out
+   ниже и hover-тенью полей из перенесённых ui-компонентов. */
 :root {
   --dl-ease: cubic-bezier(0.32, 0.72, 0, 1);
   --dl-duration-fast: 250ms;
   --dl-duration-move: 350ms;
+  --dl-duration-card-in: 400ms;
+  --dl-duration-card-out: 220ms;
   --dl-input-border: #d3d7d9;
   --dl-overlay: rgba(23, 26, 28, 0.5);
 }
@@ -163,6 +178,66 @@
 @keyframes modal-sheet-out  { from { transform: translateY(0); } to { transform: translateY(100%); } }
 @keyframes modal-card-out   { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
 
+/* Фазы модальных шеллов классами, не arbitrary animate-[...]: длительности
+   берутся из токенов (тюнинг в одном месте), а reduce-ветке ниже не надо
+   бороться с каскадом утилит. forwards на выходах держит последний кадр
+   (opacity 0) до размонтирования — без него панель/фон вспыхивают. */
+@layer components {
+  .dl-overlay-in {
+    animation: modal-overlay-in var(--dl-duration-move) var(--dl-ease);
+  }
+  .dl-overlay-out {
+    animation: modal-overlay-out var(--dl-duration-fast) var(--dl-ease) forwards;
+  }
+  .dl-card-in {
+    animation: modal-card-in var(--dl-duration-card-in) var(--dl-ease);
+  }
+  .dl-card-out {
+    animation: modal-card-out var(--dl-duration-card-out) var(--dl-ease) forwards;
+  }
+  /* Оверлей vaul-шита: состояние ведёт data-state (Radix-фазу closing шит
+     не использует), варианты Tailwind на чужой класс не навесить. */
+  .dl-overlay-vaul[data-state="open"] {
+    animation: modal-overlay-in var(--dl-duration-move) var(--dl-ease);
+  }
+  .dl-overlay-vaul[data-state="closed"] {
+    animation: modal-overlay-out var(--dl-duration-fast) var(--dl-ease) forwards;
+  }
+}
+
+/* Полупрозрачные поверхности для тех, кто просит меньше прозрачности
+   (apple-design §14): стекло становится почти сплошным, блюр снимается —
+   маркерные классы .glass-plate (плашки отзывов) и .glass-card (стекло
+   тарифов/аудитории, skin из components/glass.ts). Unlayered — сильнее
+   утилит Tailwind. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-plate {
+    background: rgba(0, 0, 0, 0.82);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .glass-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  :root {
+    --dl-overlay: rgba(23, 26, 28, 0.8);
+  }
+}
+
+/* Повышенный контраст: стекло — сплошное, обводки колец — плотные. */
+@media (prefers-contrast: more) {
+  .glass-plate {
+    background: rgba(0, 0, 0, 0.82);
+  }
+
+  .glass-ring::before {
+    background: rgba(255, 255, 255, 0.85);
+  }
+}
+
 @layer base {
   /* Стрипы-«вылезайки» (showcase) не должны расширять канву; clip, не hidden —
      hidden создаёт скролл-контейнер и ломает sticky-хедер (канон #709). */
@@ -173,6 +248,34 @@
 
   body {
     @apply bg-white font-sans text-ink antialiased;
+  }
+
+  /* Мобильно-платформенный слой (практики Эмиля Ковальски, mobile-native):
+     серая вспышка на тапе — самый громкий сигнал «это сайт» — она спорит
+     с собственным press-фидбеком кнопок (:active, канон доски 2864-5099);
+     прозрачный tap-highlight возвращает нажатию задуманный отклик. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+    /* Ландшафтный Safari не вправе раздувать шрифты (baseline скилла). */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Тап без задержки двойного нажатия (iOS Safari добивает часть
+     элементов 300мс) и без выделения подписи контрола долгим нажатием.
+     user-select только на контролах: текст контента копируется. */
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Лендинг только светлый: без явного color-scheme тёмная ОС рендерит
+     UA-виджеты (скроллбары, автозаполнение полей) в тёмной теме. */
+  :root {
+    color-scheme: light;
   }
 }
 
@@ -273,10 +376,6 @@ html body[data-scroll-locked] {
    съедает 0ms-длительность transform. */
 @utility slide-jump {
   transition: transform 0ms linear, opacity 360ms ease-out;
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
 }
 
 /* Десктопный переход карусели отзывов — плавнее тачевого (решение
@@ -284,25 +383,15 @@ html body[data-scroll-locked] {
    тачах): дольше (440 против 360ms) и с мягким входом и выходом
    (cubic-bezier(0.45,0,0.2,1)) — у яндексовского ease-out резкий разгон
    первых ~15% пути читался как рывок на въезде карточки. Утилитой, не
-   arbitrary-классом (см. slide-jump); reduce — внутри утилиты, чтобы не
-   бороться с motion-reduce:transition-none за порядок каскада. */
+   arbitrary-классом (см. slide-jump). */
 @utility slide-desk {
   transition:
-    transform 440ms cubic-bezier(0.45, 0, 0.2, 1),
-    opacity 440ms cubic-bezier(0.45, 0, 0.2, 1);
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
+    transform 440ms var(--ease-desk),
+    opacity 440ms var(--ease-desk);
 }
 
 @utility slide-jump-desk {
-  transition: transform 0ms linear, opacity 440ms
-    cubic-bezier(0.45, 0, 0.2, 1);
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
+  transition: transform 0ms linear, opacity 440ms var(--ease-desk);
 }
 
 /* Мобильный переход карусели отзывов (≤480) — скорость Яндекса
@@ -310,8 +399,4 @@ html body[data-scroll-locked] {
    Swiper = ease). Утилитой по тем же причинам, что slide-jump. */
 @utility slide-mob {
   transition: transform 600ms ease, opacity 600ms ease;
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
 }

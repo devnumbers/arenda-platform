@@ -134,11 +134,13 @@ const IDLE_OPACITY = 0.4;
 function useClickCarousel(count: number, freezeMs: number) {
   const [active, setActiveState] = useState({ index: 0, previous: 0 });
   const [frozen, setFrozen] = useState<number | null>(null);
-  // Слайд, только что вышедший из заморозки: его перестановка на конечную
-  // позицию (за обрез) обязана быть мгновенной — с обычным transition он
-  // уползает через видимую зону с растущей прозрачностью (поймано
-  // приёмкой прыжка «через одну»).
-  const [thawed, setThawed] = useState<number | null>(null);
+  // Слайды, только что вышедшие из заморозки: их перестановка на конечную
+  // позицию (за обрез) обязана быть мгновенной — с обычным transition они
+  // уползают через видимую зону с растущей прозрачностью (поймано приёмкой
+  // прыжка «через одну»). Массив, не скаляр: перезапись заморозки новым
+  // дальним кликом выпускает прежнюю замороженную, пока таймер первой ещё
+  // идёт (два дальних клика подряд в окне freezeMs).
+  const [thawed, setThawed] = useState<number[]>([]);
   const frozenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -151,19 +153,23 @@ function useClickCarousel(count: number, freezeMs: number) {
 
   const setActive = (index: number) => {
     const k = (index - active.index + count) % count;
+    // Выходящая из заморозки карточка (истёкший таймер, ближний клик или
+    // перезапись дальним) прыгает на своё место покоя без анимации
+    // transform — она стоит в стопке и двигаться должна незаметно.
+    const released = frozen !== null ? [frozen] : [];
     if (k >= 2) {
       setFrozen(active.index);
-      setThawed(null);
+      setThawed(released);
       if (frozenTimer.current) {
         clearTimeout(frozenTimer.current);
       }
       frozenTimer.current = setTimeout(() => {
         setFrozen(null);
-        setThawed(active.index);
+        setThawed([active.index]);
       }, freezeMs);
     } else {
       setFrozen(null);
-      setThawed(null);
+      setThawed(released);
     }
     setActiveState((prev) => ({ index, previous: prev.index }));
   };
@@ -171,7 +177,7 @@ function useClickCarousel(count: number, freezeMs: number) {
   const relOf = (index: number, of: number) => (index - of + count) % count;
   const stateOf = (index: number) => ({
     rel: relOf(index, active.index),
-    jumping: relOf(index, active.previous) === count - 1 || index === thawed,
+    jumping: relOf(index, active.previous) === count - 1 || thawed.includes(index),
     frozen: index === frozen,
   });
 
@@ -234,7 +240,7 @@ function onSlideKeydown(
 // полная (tab:block).
 function ReviewPlate({ review }: { review: Review }) {
   return (
-    <div className="absolute inset-x-2 bottom-2 flex flex-col gap-4 rounded-[24px] bg-black/[0.24] p-6 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] backdrop-blur-[16px]">
+    <div className="glass-plate absolute inset-x-2 bottom-2 flex flex-col gap-4 rounded-[24px] bg-black/[0.24] p-6 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] backdrop-blur-[16px]">
       {review.quoteShort ? (
         <>
           <blockquote className="hidden text-m font-medium leading-6 text-white tab:block">
@@ -316,12 +322,18 @@ function TestimonialsStripCard({ review }: { review: Review }) {
 // колесо/трекпад — шаг (нативный addEventListener passive:false — React
 // onWheel пассивен, preventDefault кидал ошибку консоли); тап по
 // полоске — шаг (левая назад, правая вперёд); вертикальный тач остаётся
-// скроллом страницы (touch-action: pan-y); лента бесконечная.
+// скроллом страницы (touch-action: pan-y); лента бесконечная. Переход
+// перебиваем (канон DESIGN.md §3): захват в полёте подхватывает ленту
+// с живой интерполированной позиции, тап по полоске и колесо в полёте
+// перецеливают переход с неё же.
 // Шаг ленты подобран под полоску соседа Яндекса (30px на 390): при
 // scale 0.905 видимая полуширина карточки 144.8, край активной на
 // +160 — шаг 310 = 160 + 144.8 + 5.2 зазора даёт ту же 30px полосу.
 const MOB_STEP = 310;
-const MOB_MS = 600;
+// Слой (will-change) на слайдах держится только на время перехода/жеста:
+// постоянные слои — 10 фотокарточек на страницу впустую (5 мобайл + 5
+// десктоп), память на дешёвых телефонах.
+const MOB_LAYER_MS = 620;
 const MOB_DRAG_ACTIVATE_PX = 5;
 // Порог долгого свайпа — половина слайда (longSwipes Яндекса).
 const MOB_LONG_SWIPE_PX = 160;
@@ -363,65 +375,80 @@ function mobStateOf(index: number, activeIndex: number, previous: number) {
 
 function TestimonialsMobileCarousel() {
   const [active, setActiveState] = useState({ index: 0, previous: 0 });
-  const [animating, setAnimating] = useState(false);
   // Мосты для нативного wheel-листенера (React вешает wheel пассивным —
   // preventDefault внутри onWheel JSX невозможен и кидает ошибку консоли).
   const activeRef = useRef(0);
-  const animatingRef = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drag = useRef<{
     id: number;
     startX: number;
+    // g на момент захвата: захват в полёте подхватывает ленту с живой
+    // интерполированной позиции (дробной), а не с реставра покоя.
+    g0: number;
     lastX: number;
     lastT: number;
     v: number;
     moved: boolean;
   } | null>(null);
 
+  useEffect(() => {
+    activeRef.current = active.index;
+  }, [active.index]);
+
+  // Слой (will-change) на слайдах живёт только на время перехода/жеста:
+  // постоянный will-change держит 5 фотослоёв впустую. Съём таймером с
+  // запасом к 600ms перехода; длинный жест перезаводит таймер на каждом
+  // move. Повторный armLayers без записи стиля, если слой уже навешен.
+  const layerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Только refs внутри — useCallback([]) держит ссылку стабильной для goTo.
+  const armLayers = useCallback(() => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+    for (const el of root.querySelectorAll<HTMLElement>("[data-mob-slide]")) {
+      if (el.style.willChange !== "transform") {
+        el.style.willChange = "transform";
+      }
+    }
+    if (layerTimer.current) {
+      clearTimeout(layerTimer.current);
+    }
+    layerTimer.current = setTimeout(() => {
+      layerTimer.current = null;
+      for (const el of root.querySelectorAll<HTMLElement>("[data-mob-slide]")) {
+        el.style.willChange = "";
+      }
+    }, MOB_LAYER_MS);
+  }, []);
   useEffect(
     () => () => {
-      if (animTimer.current) {
-        clearTimeout(animTimer.current);
+      if (layerTimer.current) {
+        clearTimeout(layerTimer.current);
       }
     },
     [],
   );
-  useEffect(() => {
-    activeRef.current = active.index;
-  }, [active.index]);
-  useEffect(() => {
-    animatingRef.current = animating;
-  }, [animating]);
 
-  const goTo = useCallback(
-    (index: number) => {
-    if (animating) {
-      return;
-    }
+  const goTo = useCallback((index: number) => {
+    armLayers();
     const next = ((index % COUNT) + COUNT) % COUNT;
-    setAnimating(true);
     setActiveState((prev) => ({ index: next, previous: prev.index }));
-    if (animTimer.current) {
-      clearTimeout(animTimer.current);
-    }
-    animTimer.current = setTimeout(() => setAnimating(false), MOB_MS);
-    },
-    [animating],
-  );
+  }, [armLayers]);
   const goToRef = useRef<(index: number) => void>(() => {});
   useEffect(() => {
     goToRef.current = goTo;
-  }, [goTo, animating, active.index]);
+  }, [goTo]);
   // Трекпад/горизонтальное колесо — шаг (пассивный React-листенер не
   // может preventDefault: гориз. свайп трекпада уводил бы в историю).
+  // В полёте шаг перебивает переход с текущей позиции (канон DESIGN.md §3).
   useEffect(() => {
     const el = rootRef.current;
     if (!el) {
       return;
     }
     const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaX) < 40 || animatingRef.current) {
+      if (Math.abs(event.deltaX) < 40) {
         return;
       }
       event.preventDefault();
@@ -452,13 +479,29 @@ function TestimonialsMobileCarousel() {
     }
   };
 
+  // Живой (интерполированный переходом) кольцевой прогресс ленты: q_any
+  // слайда читается из его текущего transform — захват в полёте продолжает
+  // с той позиции, где лента сейчас, а не с рестава покоя.
+  const liveG = (): number => {
+    const root = rootRef.current;
+    const index = activeRef.current;
+    const el = root?.querySelector<HTMLElement>(`[data-mob-slide="${index}"]`);
+    if (!el) {
+      return index;
+    }
+    const matrix = new DOMMatrix(getComputedStyle(el).transform);
+    return index - matrix.m41 / MOB_STEP;
+  };
+
   const onPointerDown = (event: React.PointerEvent) => {
-    if (animating || event.pointerType === "mouse") {
+    if (event.pointerType === "mouse") {
       return;
     }
+    armLayers();
     drag.current = {
       id: event.pointerId,
       startX: event.clientX,
+      g0: liveG(),
       lastX: event.clientX,
       lastT: event.timeStamp,
       v: 0,
@@ -471,6 +514,7 @@ function TestimonialsMobileCarousel() {
     if (!d || event.pointerId !== d.id) {
       return;
     }
+    armLayers(); // длинный жест переживает таймер слоя — перезаводим
     const dx = event.clientX - d.startX;
     if (!d.moved) {
       if (Math.abs(dx) < MOB_DRAG_ACTIVATE_PX) {
@@ -483,7 +527,7 @@ function TestimonialsMobileCarousel() {
     d.lastX = event.clientX;
     d.lastT = event.timeStamp;
     // Палец вправо — лента к предыдущей (g убывает), влево — к следующей.
-    applyG(activeRef.current - dx / MOB_STEP, true);
+    applyG(d.g0 - dx / MOB_STEP, true);
   };
 
   // Возврат к покою: инлайновый transition:none снимается (возвращается
@@ -512,15 +556,22 @@ function TestimonialsMobileCarousel() {
     if (!d.moved) {
       return;
     }
+    // База решения — ближайшая к живой позиции покой (в полёте она бывает
+    // и не та, с которой стартовал жест); бросок и долгий свайп двигают
+    // на одну от неё.
+    const gNow = d.g0 - (event.clientX - d.startX) / MOB_STEP;
+    let target = Math.round(gNow);
     const delta = event.clientX - d.startX;
-    let target = active.index;
     if (delta <= -MOB_LONG_SWIPE_PX || d.v <= -MOB_FLICK_V) {
-      target = active.index + 1;
+      target = Math.round(gNow) + 1;
     } else if (delta >= MOB_LONG_SWIPE_PX || d.v >= MOB_FLICK_V) {
-      target = active.index - 1;
+      target = Math.round(gNow) - 1;
     }
+    target = ((target % COUNT) + COUNT) % COUNT;
+    // Инлайновые transition:none снимаются до setState: конечные
+    // transform'ы доезжают переходом с той позиции, где палец отпустил.
     settle();
-    if (target !== active.index) {
+    if (target !== activeRef.current) {
       goTo(target);
     }
   };
@@ -553,8 +604,8 @@ function MobileSlides({
 }) {
   return REVIEWS.map((review, index) => {
     const { q, jumping } = mobStateOf(index, activeIndex, previous);
-    const transition = jumping ? "slide-jump" : "slide-mob motion-reduce:transition-none";
-    const className = `absolute left-1/2 top-0 -ml-[160px] h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition} will-change-[transform] motion-reduce:transition-none`;
+    const transition = jumping ? "slide-jump" : "slide-mob";
+    const className = `absolute left-1/2 top-0 -ml-[160px] h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition}`;
     const style: React.CSSProperties = {
       transform: mobTransformOf(q),
       zIndex: q === 0 ? 2 : Math.abs(q) === 1 ? 1 : 0,
@@ -638,6 +689,38 @@ const DESK_EXTRA = 38;
 
 export function TestimonialsDesktop() {
   const { active, setActive, stateOf } = useClickCarousel(COUNT, DESK_FREEZE_MS);
+  // Слои — как в моб-канве: навешиваются на переход, снимаются таймером
+  // (чуть длиннее растворения — DESK_FREEZE_MS и так с запасом к 440ms).
+  const stripRef = useRef<HTMLDivElement>(null);
+  const layerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (layerTimer.current) {
+        clearTimeout(layerTimer.current);
+      }
+    },
+    [],
+  );
+  const activate = (index: number) => {
+    const root = stripRef.current;
+    if (root) {
+      for (const el of root.querySelectorAll<HTMLElement>("[data-desk-slide]")) {
+        if (el.style.willChange !== "transform, opacity") {
+          el.style.willChange = "transform, opacity";
+        }
+      }
+      if (layerTimer.current) {
+        clearTimeout(layerTimer.current);
+      }
+      layerTimer.current = setTimeout(() => {
+        layerTimer.current = null;
+        for (const el of root.querySelectorAll<HTMLElement>("[data-desk-slide]")) {
+          el.style.willChange = "";
+        }
+      }, DESK_FREEZE_MS);
+    }
+    setActive(index);
+  };
   const review = REVIEWS[active];
   if (!review) {
     return null;
@@ -674,62 +757,77 @@ export function TestimonialsDesktop() {
           400 по центру (top 25 = половина разницы). overflow-clip, не
           hidden: hidden делает ленту скролл-контейнером — программный
           scrollIntoView (клик по обрезанной карточке) сдвигает ряд. */}
-      <div className="relative h-[450px] w-[978px] shrink-0 overflow-clip">
-        {REVIEWS.map((item, index) => {
-          const { rel, jumping, frozen } = stateOf(index);
-          const transition = jumping
-            ? DESK_JUMP_TRANSITION_CLASS
-            : DESK_TRANSITION_CLASS;
-          const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition} will-change-[transform,opacity] motion-reduce:transition-none`;
-          const style = slideStyle(rel, DESK_STEP, DESK_EXTRA, ACTIVE_SCALE, frozen);
-          // Кликабельны только видимые позиции — очередь №1 и №2 (№3 за
-          // обрезом; у Яндекса за срезом тоже никто не кликает).
-          const interactive = (rel === 1 || rel === 2) && !frozen;
-          const photo = (
-            <Image
-              src={item.photo}
-              alt={rel === COUNT - 1 ? "" : item.alt}
-              fill
-              sizes="338px"
-              className="object-cover"
-            />
-          );
-
-          if (rel === COUNT - 1 || frozen) {
-            return (
-              <div
-                key={item.name}
-                aria-hidden
-                className={`${className} pointer-events-none`}
-                style={style}
-              >
-                {photo}
-              </div>
-            );
-          }
-          if (interactive) {
-            return (
-              <div
-                key={item.name}
-                role="button"
-                tabIndex={0}
-                onClick={() => setActive(index)}
-                onKeyDown={onSlideKeydown(setActive, index)}
-                aria-label={`Показать отзыв — ${item.name}`}
-                className={`${className} cursor-pointer`}
-                style={style}
-              >
-                {photo}
-              </div>
-            );
-          }
-          return (
-            <div key={item.name} className={className} style={style}>
-              {photo}
-            </div>
-          );
-        })}
+      <div ref={stripRef} className="relative h-[450px] w-[978px] shrink-0 overflow-clip">
+        <DesktopSlides stateOf={stateOf} activate={activate} />
       </div>
     </div>
   );
+}
+
+// Слайды десктопной ленты — отдельный компонент без ref-доступов:
+// react-hooks/refs консервативно запрещает вызовы компонентных функций
+// в render-выражениях компонента с ref-доступом (тот же развод, что у
+// MobileSlides выше).
+function DesktopSlides({
+  stateOf,
+  activate,
+}: {
+  stateOf: (index: number) => { rel: number; jumping: boolean; frozen: boolean };
+  activate: (index: number) => void;
+}) {
+  return REVIEWS.map((item, index) => {
+    const { rel, jumping, frozen } = stateOf(index);
+    const transition = jumping
+      ? DESK_JUMP_TRANSITION_CLASS
+      : DESK_TRANSITION_CLASS;
+    const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition}`;
+    const style = slideStyle(rel, DESK_STEP, DESK_EXTRA, ACTIVE_SCALE, frozen);
+    // Кликабельны только видимые позиции — очередь №1 и №2 (№3 за
+    // обрезом; у Яндекса за срезом тоже никто не кликает).
+    const interactive = (rel === 1 || rel === 2) && !frozen;
+    const photo = (
+      <Image
+        src={item.photo}
+        alt={rel === COUNT - 1 ? "" : item.alt}
+        fill
+        sizes="338px"
+        className="object-cover"
+      />
+    );
+
+    if (rel === COUNT - 1 || frozen) {
+      return (
+        <div
+          key={item.name}
+          aria-hidden
+          className={`${className} pointer-events-none`}
+          style={style}
+        >
+          {photo}
+        </div>
+      );
+    }
+    if (interactive) {
+      return (
+        <div
+          key={item.name}
+          data-desk-slide={index}
+          role="button"
+          tabIndex={0}
+          onClick={() => activate(index)}
+          onKeyDown={onSlideKeydown(activate, index)}
+          aria-label={`Показать отзыв — ${item.name}`}
+          className={`${className} cursor-pointer`}
+          style={style}
+        >
+          {photo}
+        </div>
+      );
+    }
+    return (
+      <div key={item.name} className={className} style={style}>
+        {photo}
+      </div>
+    );
+  });
 }

@@ -9,6 +9,7 @@ export type {
   NotificationCategory,
   NotificationDetail,
   NotificationEntityRef,
+  NotificationPaymentCategoryRef,
   NotificationPayload,
   NotificationTariffRef,
 } from './model/types';
@@ -27,5 +28,5 @@ export type {
   NotificationCategoryPreferences,
   NotificationSettingsCategory,
 } from './model/settings-catalog';
-export { mapNotification, mapNotificationDetail, mapCategoryPreferences } from './model/mappers';
+export { mapNotification, mapNotificationDetail, mapCategoryPreferences, toPaymentCategory } from './model/mappers';
 export { NotificationCategoryIcon } from './ui/notification-category-icon';

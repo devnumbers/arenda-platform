@@ -161,8 +161,11 @@ func (s *PaymentStore) Delete(ctx context.Context, id, scope uuid.UUID) error {
 	return nil
 }
 
-// InsertPause opens the open-ended pause; the pause id is minted here.
-func (s *PaymentStore) InsertPause(ctx context.Context, paymentID uuid.UUID, from time.Time) error {
+// InsertPause opens the open-ended pause with the given origin (тикет
+// #1342); the pause id is minted here.
+func (s *PaymentStore) InsertPause(
+	ctx context.Context, paymentID uuid.UUID, from time.Time, origin domain.PauseOrigin,
+) error {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return fmt.Errorf("mint pause id: %w", err)
@@ -171,8 +174,24 @@ func (s *PaymentStore) InsertPause(ctx context.Context, paymentID uuid.UUID, fro
 		ID:        pgconv.UUIDToPgtype(id),
 		PaymentID: pgconv.UUIDToPgtype(paymentID),
 		FromDate:  pgconv.DateToPgtype(from),
+		Origin:    string(origin),
 	}); err != nil {
 		return fmt.Errorf("insert pause of payment %s: %w", paymentID, err)
+	}
+	return nil
+}
+
+// CloseAutoArchivePause closes only the open auto_archive pause with the
+// restore day — the archive bridge's reverse leg (тикет #1342): the owner's
+// manual pauses stay open. Rows affected is not checked: a rule without an
+// open system pause (never paused, manual pause, already closed) is simply
+// not visited by the bridge's writes.
+func (s *PaymentStore) CloseAutoArchivePause(ctx context.Context, paymentID uuid.UUID, resumeDay time.Time) error {
+	if _, err := s.q().CloseAutoArchivePaymentPause(ctx, postgres.CloseAutoArchivePaymentPauseParams{
+		PaymentID: pgconv.UUIDToPgtype(paymentID),
+		ToDate:    pgconv.DateToPgtype(resumeDay),
+	}); err != nil {
+		return fmt.Errorf("close auto-archive pause of payment %s: %w", paymentID, err)
 	}
 	return nil
 }

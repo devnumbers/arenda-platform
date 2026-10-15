@@ -22,7 +22,7 @@ async function browserToday(page: Page): Promise<string> {
 // Следующая дата оплаты — серверная истина на «Платежах объекта» (#993,
 // баг #967): предоплата ближайшего вхождения переставляет плановую на
 // следующую, и хаб со страницей секции показывают уже новую дату — ту же,
-// что секция «Ближайшая операция» страницы платежа. До #993 хаб проецировал
+// что секция «Ближайший платеж» страницы платежа. До #993 хаб проецировал
 // правило клиентским портом от «сегодня» устройства: оплаченное будущее
 // вхождение он рисовал бы заново (старая дата), ADR 0048.
 //
@@ -143,7 +143,7 @@ test.describe('следующая дата оплаты из серверног�
     }).toBe(true);
     const afterLabel = formatDayMonthWithYear(nextOccurrence, await browserToday(page));
 
-    // ── Страница платежа («Ближайшая операция») и хаб — одна и та же новая
+    // ── Страница платежа («Ближайший платеж») и хаб — одна и та же новая
     // дата; старой (оплаченной) на поверхностях нет — регрессия #967 ──
     await page.goto(`/properties/${PROPERTY}/payments/${created.id}`);
     // Секция — по её уникальному заголовку, дата — внутри этой секции:
@@ -152,10 +152,10 @@ test.describe('следующая дата оплаты из серверног�
     // падали на двух совпадениях, прогоны 30.09); реальный дубль секции
     // дал бы два видимых и упал бы так же.
     const nearestSection = page.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Ближайшая операция' }),
+      has: page.getByRole('heading', { name: 'Ближайший платеж' }),
     });
     await expect(
-      nearestSection.getByRole('heading', { name: 'Ближайшая операция' }),
+      nearestSection.getByRole('heading', { name: 'Ближайший платеж' }),
     ).toBeVisible();
     await expect(nearestSection.getByText(afterLabel, { exact: true })).toBeVisible();
 

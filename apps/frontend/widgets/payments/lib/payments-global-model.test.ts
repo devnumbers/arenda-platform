@@ -8,9 +8,21 @@ import {
   overdueDaysLine,
   overdueOperationsCountLabel,
   paymentHubAddTarget,
+  paymentHubSectionHasAllCard,
   paymentsCountLabel,
 } from './payments-global-model';
 import { makeGlobalPayment as item } from './global-payment-fixtures';
+
+describe('paymentHubSectionHasAllCard — замыкающая карточка секции хаба (#1339)', () => {
+  it.each([
+    [1, false],
+    [2, false],
+    [3, true],
+    [4, true],
+  ])('%i карточки в секции — замыкание %s', (cards, shows) => {
+    expect(paymentHubSectionHasAllCard(cards)).toBe(shows);
+  });
+});
 
 describe('globalFavoritePayments', () => {
   it('оставляет только избранные', () => {
@@ -82,6 +94,10 @@ describe('nearestDateLine — дата «Ближайший» без стату�
   it('нет следующего вхождения (пауза/завершён) — строки нет', () => {
     expect(nearestDateLine(item({ nearestDate: null }))).toBeUndefined();
   });
+
+  it('отображаемая завершённость фида — «Полностью оплачен» вместо даты (#1341)', () => {
+    expect(nearestDateLine(item({ nearestDate: null, isCompleted: true }))).toBe('Полностью оплачен');
+  });
 });
 
 describe('overdueDaysLine', () => {
@@ -121,6 +137,17 @@ describe('globalPaymentObjectHasOverdue', () => {
         object({ autoPayRules: [{ paymentId: 'p', hasOverdue: false }] }),
       ),
     ).toBe(false);
+  });
+});
+
+describe('paymentHubSectionHasAllCard — замыкающая карточка секции хаба (#1339)', () => {
+  it.each([
+    [1, false],
+    [2, false],
+    [3, true],
+    [4, true],
+  ])('%i карточки в секции — замыкание %s', (cards, shows) => {
+    expect(paymentHubSectionHasAllCard(cards)).toBe(shows);
   });
 });
 

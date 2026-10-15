@@ -21,6 +21,9 @@ export type PaymentReminderOffset = 1 | 3 | 7;
 /** Статус вхождения; `overdue` — серверная проекция planned с прошедшей датой. */
 export type PaymentOperationStatus = 'planned' | 'paid' | 'overdue';
 
+/** Происхождение операции: вхождение правила или ручной факт (#569). */
+export type PaymentOperationOrigin = 'manual' | 'payment';
+
 /** Якорь расписания живёт в регулярности; генерация идёт с даты заведения. */
 export type Recurrence =
   | { kind: 'daily' }
@@ -74,11 +77,11 @@ export type Payment = {
   readonly isCompleted: boolean;
   /** «Следующая дата оплаты» (CONTEXT.md, #991): серверная истина строки
    * списка — хранённая плановая от сегодня владельца (ADR 0048), иначе
-   * проекция; null — открытая пауза или завершённое правило. Список объекта
-   * вычисляет её на каждом правиле; одиночные чтения (страница платежа,
-   * ответы мутаций) всегда несут null — считать его «нет даты» там нельзя.
-   * Подпись и сортировку строк (хаб, страницы секций) клиент строит из неё,
-   * не из проекции правила (#993). */
+   * проекция; null — открытая пауза или вычисляемо-завершённое правило.
+   * Список объекта вычисляет её на каждом правиле; одиночные чтения
+   * (страница платежа, ответы мутаций) всегда несут null — считать его
+   * «нет даты» там нельзя. Подпись и сортировку строк (хаб, страницы
+   * секций) клиент строит из неё, не из проекции правила (#993). */
   readonly nearestDate: IsoDate | null;
   /** Платёж управляется арендой (ADR 0053, #818): сумму, день оплаты,
    * автоплатёж и плановое окончание задаёт аренда — мутации правила
@@ -101,6 +104,11 @@ export type PaymentOperation = {
   readonly propertyId: string;
   /** Правило-источник; null — «платёж удалён» или ручной факт. */
   readonly paymentId: string | null;
+  /** Происхождение: вхождение правила (payment) или ручной факт (manual).
+   * Вхождение хранит payment и после удаления правила — пара
+   * «paymentId null + origin payment» маркирует хвост удалённого
+   * правила (#1371): страница показывает те же строки, что до удаления. */
+  readonly origin: PaymentOperationOrigin;
   /** Плановая дата вхождения; при оплате не сдвигается. */
   readonly date: IsoDate;
   /** Фактическая дата оплаты. */
@@ -224,6 +232,13 @@ export type GlobalPayment = {
   readonly favoriteOrder: number | null;
   readonly today: IsoDate;
   readonly nearestDate: IsoDate | null;
+  /** Отображаемый флаг завершённости строки фида (#1341) — «Полностью
+   * оплачен» карточек: вычисляемая завершённость правила с серверным
+   * разрешением исключения открытой паузы (сырой флаг за вырезанным
+   * курсором паузы отвечает «завершён» — глоссарий, «Завершённый
+   * платёж»; строка фида пауз не несёт). Завершённые (штамп) правила
+   * из фида скрыты целиком. */
+  readonly isCompleted: boolean;
   readonly overdueOperationCount: number;
   readonly overdueDays: number | null;
   /** Старейшая просроченная операция — цель ссылки просроченной карточки
@@ -232,11 +247,56 @@ export type GlobalPayment = {
 };
 
 /** Фид главного экрана «Платежи» (#575): все видимые правила плюс счётчики
- * целого скоупа для карточек «Все избранные»/«Все просроченные». */
+ * целого скоупа для карточек «Все избранные»/«Все просроченные»/«На
+ * оплату». */
 export type GlobalPaymentFeed = {
   readonly items: ReadonlyArray<GlobalPayment>;
   readonly favoriteCount: number;
   readonly overdueOperationsCount: number;
+  /** Карточка «На оплату (N)» (#1346): операций в окне напоминаний по
+   * всему видимому скоупу (правила с напоминанием и без автоплатежа) и
+   * ближайший остаток дней (dueDate − today, 0..7) — источник метки
+   * «Сегодня/Завтра/Через N дней»; null — окно пусто, карточка без метки.
+   * Поиском не сужается, как остальные счётчики. */
+  readonly dueOperationsCount: number;
+  readonly dueNearestDays: number | null;
+};
+
+/** Одна строка секции «На оплату» (#1346): пара (правило, операция),
+ * стоящая в окне напоминания D−N ≤ today ≤ D (напоминание включено,
+ * автоплатежа нет — решение владельца). Просроченные в секцию не попадают;
+ * сегмент read-only — оплата живёт на объектных экранах. */
+export type PaymentDueItem = {
+  /** Правило — цель ссылки карточки (страница платежа). */
+  readonly paymentId: string;
+  /** Операция окна — идентичность строки (у правила их до двух:
+   * «сегодня» и следующее будущее). */
+  readonly operationId: string;
+  readonly propertyId: string;
+  readonly propertyName: string;
+  readonly title: string;
+  readonly amountKopecks: number;
+  readonly type: PaymentType;
+  readonly category: PaymentCategoryView;
+  /** today владельца объекта (ADR 0048), по которому считалось окно. */
+  readonly today: IsoDate;
+  /** Дата операции (D) — срок на карточке. */
+  readonly dueDate: IsoDate;
+  /** dueDate − today (0..7 по построению окна) — ключ дневной группы. */
+  readonly daysLeft: number;
+  /** Горизонт напоминания правила (1|3|7) — само N окна. */
+  readonly reminderOffsetDays: PaymentReminderOffset;
+};
+
+/** Ответ секции «На оплату» (#1346): всё окно одним чтением (секция мала
+ * по построению материализации — до двух операций окна на правило), строки
+ * по реальным дням по возрастанию (решение владельца 13.10, #1347 —
+ * страница группирует по daysLeft, чип разворачивает порядок групп),
+ * внутри дня — id операции; dueOperationsCount повторяет число строк — та
+ * же цифра, что в счётчиках фида. */
+export type PaymentsDue = {
+  readonly items: ReadonlyArray<PaymentDueItem>;
+  readonly dueOperationsCount: number;
 };
 
 /** Ответ поиска глобальных платежей (#575): совпавшие строки — состав
@@ -282,7 +342,8 @@ export type GlobalPaymentObject = {
  */
 
 /** Род строки журнала: правка условий, пауза, возобновление. Создание и
- * удаление строк не пишут (ADR 0065 §4). */
+ * удаление строк не пишут (ADR 0065 §4); завершение тоже — правило
+ * удалено, журнал каскадит (#1377). */
 export type PaymentChangeAction = 'updated' | 'paused' | 'resumed';
 
 /** Ссылка на категорию в дифе — снапшот лейбла на момент правки (канон
@@ -318,10 +379,15 @@ export type PaymentFieldChange =
 
 /** Строка журнала изменений (ADR 0065): кто и какое действие совершил
  * (actor остаётся на DTO — экран актора не показывает) и какие поля
- * двинулись. createdAt — полный момент действия, ISO date-time. */
+ * двинулись. createdAt — полный момент действия, ISO date-time.
+ * origin (#1342) — отметка системной строки архивного моста: null — ручное
+ * действие (все строки до тикета). */
+export type PaymentChangeOrigin = 'auto_archive';
+
 export type PaymentChangeEntry = {
   readonly id: string;
   readonly action: PaymentChangeAction;
   readonly changes: ReadonlyArray<PaymentFieldChange>;
+  readonly origin: PaymentChangeOrigin | null;
   readonly createdAt: string;
 };

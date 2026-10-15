@@ -46,12 +46,13 @@ func (p *Publisher) NotificationCreated(ctx context.Context, n domain.Notificati
 		V:          sse.EnvelopeVersion,
 		OccurredAt: p.clk.Now().UTC().Format(time.RFC3339),
 		Payload: sse.MarshalPayload(createdPayload{
-			ID:           n.ID.String(),
-			Category:     string(n.Category),
-			ContextLabel: n.ContextLabel,
-			Title:        n.Title,
-			Body:         n.Body,
-			URL:          notificationsapp.DeepLinkFor(n),
+			ID:              n.ID.String(),
+			Category:        string(n.Category),
+			ContextLabel:    n.ContextLabel,
+			Title:           n.Title,
+			Body:            n.Body,
+			URL:             notificationsapp.DeepLinkFor(n),
+			PaymentCategory: n.Payload.PaymentCategory,
 		}),
 	})
 	if err != nil {
@@ -89,6 +90,11 @@ type createdPayload struct {
 	Title        string `json:"title"`
 	Body         string `json:"body"`
 	URL          string `json:"url,omitempty"`
+	// PaymentCategory is the payment events' rule-category snapshot
+	// (решение владельца 14.10.2026) — the toast icon's key. Additive to
+	// envelope v1: old clients ignore the extra field; absent for the rows
+	// published before the snapshot travelled.
+	PaymentCategory *domain.PaymentCategoryRef `json:"paymentCategory,omitempty"`
 }
 
 type unreadPayload struct {

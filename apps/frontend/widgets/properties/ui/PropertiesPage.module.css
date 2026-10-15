@@ -1,11 +1,11 @@
 /* Список-хаб «Объектов» (#586): карточки с зазором 16 (макет 1590:88756).
- * Горизонтальный отступ контента (24px) несёт обёртка экрана в
- * PropertiesPage. */
+ * Горизонтальный отступ контента (24px) и вертикальный ритм первого
+ * экрана (16/24/24, макет 3225-77283) несёт обёртка экрана в
+ * PropertiesPage — списки своих вертикалей не держат. */
 .list {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -16,7 +16,6 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin: 0;
   padding: 0;
   list-style: none;
 }

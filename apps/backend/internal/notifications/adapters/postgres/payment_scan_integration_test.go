@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,6 +62,39 @@ func insertScanReminderPayment(
 		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}',
 			'2026-08-01', $4, $5, 'maintenance')`,
 		id, ownerID, propertyID, autoPay, reminderOffsetDays)
+	require.NoError(t, err)
+	return id
+}
+
+// insertScanPaymentWithCategory adds a payment rule row with an explicit
+// category reference: the default catalog's slug, or — with a name — the
+// owner's custom category row the rule points at. The scan target's
+// category snapshot (решение владельца 14.10.2026) reads exactly this
+// reference.
+func insertScanPaymentWithCategory(
+	t *testing.T, pool *pgxpool.Pool, ownerID, propertyID uuid.UUID, autoPay bool,
+	categorySlug string, customCategoryName *string,
+) uuid.UUID {
+	t.Helper()
+	id := uuid.Must(uuid.NewV7())
+	var slug, userCategoryID any
+	if categorySlug != "" {
+		slug = categorySlug
+	}
+	if customCategoryName != nil {
+		userCategory := uuid.Must(uuid.NewV7())
+		_, err := pool.Exec(context.Background(), `
+			INSERT INTO payment_categories (id, owner_id, name) VALUES ($1, $2, $3)`,
+			userCategory, ownerID, *customCategoryName)
+		require.NoError(t, err)
+		userCategoryID = userCategory
+	}
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO payments (id, owner_id, property_id, type, title, amount_kopecks, recurrence,
+			since, auto_pay, category_slug, user_category_id)
+		VALUES ($1, $2, $3, 'expense', 'Обслуживание', 250000, '{"kind": "monthly"}',
+			'2026-08-01', $4, $5, $6)`,
+		id, ownerID, propertyID, autoPay, slug, userCategoryID)
 	require.NoError(t, err)
 	return id
 }
@@ -957,4 +991,51 @@ func TestPaymentScanStore_AutoPaidTenOclockBoundaryTickVsJob(t *testing.T) {
 		time.Date(2026, 9, 20, 7, 0, 30, 0, time.UTC))
 	require.NoError(t, err)
 	assert.Empty(t, paymentTargetsOfProps(targets, prop), "no backfill of yesterday's charge")
+}
+
+// The rule category's snapshot travels in the scan target (решение
+// владельца 14.10.2026): the default catalog's slug or the custom
+// category's name — the publisher copies it into the payload's icon key,
+// both the sweep legs and the boundary jobs' reloads.
+func TestPaymentScanStore_TargetCarriesRuleCategory(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPushDB(t)
+	ctx := context.Background()
+
+	msk := createUserInZone(t, pool, "Europe/Moscow")
+	prop := createLivePropertyFor(t, pool, msk, "Квартира на Ленина", "Москва, Тверская 1")
+
+	customName := "Няня"
+	defaultRule := insertScanPaymentWithCategory(t, pool, msk, prop, false, "utilities", nil)
+	customRule := insertScanPaymentWithCategory(t, pool, msk, prop, false, "", &customName)
+	insertScanOperation(t, pool, msk, prop, defaultRule, "2026-09-19", "planned")
+	insertScanOperation(t, pool, msk, prop, customRule, "2026-09-19", "planned")
+
+	store := NewPaymentScanStore(pool)
+	now := time.Date(2026, 9, 19, 7, 0, 0, 0, time.UTC)
+	targets, err := store.ListDueTargets(ctx, "Europe/Moscow", time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC), now)
+	require.NoError(t, err)
+	got := paymentTargetsOfProps(targets, prop)
+	require.Len(t, got, 2)
+
+	categoryByRule := map[uuid.UUID]*domain.PaymentCategoryRef{}
+	for _, target := range got {
+		categoryByRule[target.PaymentID] = target.Category
+	}
+	assert.Equal(t,
+		&domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceDefault, Slug: "utilities"},
+		categoryByRule[defaultRule])
+	assert.Equal(t,
+		&domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceCustom, Name: "Няня"},
+		categoryByRule[customRule])
+
+	// The boundary job's reload answers with the same snapshot.
+	today := time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC)
+	due, live, err := store.GetScheduledDuePayment(ctx, defaultRule, today, now)
+	require.NoError(t, err)
+	assert.True(t, live)
+	assert.Equal(t,
+		&domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceDefault, Slug: "utilities"},
+		due.Category)
 }

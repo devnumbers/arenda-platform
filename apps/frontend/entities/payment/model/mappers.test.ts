@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/shared/api/dto';
-import { mapGlobalPaymentObject, mapGlobalPaymentSearch, mapPayment, mapPaymentOperation } from './mappers';
+import {
+  mapGlobalPaymentFeed,
+  mapGlobalPaymentObject,
+  mapGlobalPaymentSearch,
+  mapPayment,
+  mapPaymentOperation,
+  mapPaymentsDue,
+} from './mappers';
 
 type PaymentDto = components['schemas']['PaymentResponse'];
 type OperationDto = components['schemas']['OperationResponse'];
@@ -108,6 +115,7 @@ const operationDto: OperationDto = {
   id: '0198b6a7-op00-7000-8000-000000000001',
   propertyId: '0198b6a7-1000-7000-8000-00000000prop',
   paymentId: null,
+  origin: 'manual',
   date: '2026-08-27',
   paidDate: null,
   status: 'overdue',
@@ -125,21 +133,24 @@ describe('mapPaymentOperation — DTO → entity', () => {
   it('просрочка и ручные поля нормализуются: nulls → опциональность', () => {
     expect(operation.status).toBe('overdue');
     expect(operation.paymentId).toBeNull();
+    expect(operation.origin).toBe('manual');
     expect(operation.paidDate).toBeUndefined();
     expect(operation.categorySlug).toBeUndefined();
     expect(operation.amountKopecks).toBe(320_000);
   });
 
-  it('оплаченное вхождение переносит фактическую дату и снапшот категории', () => {
+  it('оплаченное вхождение переносит фактическую дату, origin правила и снапшот категории', () => {
     const paid: OperationDto = {
       ...operationDto,
       status: 'paid',
       paidDate: '2026-08-25',
       paymentId: '0198b6a7-rule',
+      origin: 'payment',
       categorySlug: 'utilities',
     };
     const mapped = mapPaymentOperation(paid);
     expect(mapped.paidDate).toBe('2026-08-25');
+    expect(mapped.origin).toBe('payment');
     expect(mapped.categorySlug).toBe('utilities');
   });
 });
@@ -157,10 +168,77 @@ const globalItemDto: components['schemas']['PaymentGlobalItem'] = {
   favoriteOrder: 1,
   today: '2026-09-09',
   nearestDate: '2026-09-15',
+  isCompleted: false,
   overdueOperationCount: 0,
   overdueDays: null,
   oldestOverdueOperationId: null,
 };
+
+describe('mapGlobalPaymentFeed — счётчики «На оплату» (#1346)', () => {
+  it('карточка «На оплату (N)» едет рядом с избранными и просроченными', () => {
+    const feed = mapGlobalPaymentFeed({
+      items: [globalItemDto],
+      favoriteCount: 2,
+      overdueOperationsCount: 5,
+      dueOperationsCount: 3,
+      dueNearestDays: 1,
+    });
+    expect(feed.dueOperationsCount).toBe(3);
+    expect(feed.dueNearestDays).toBe(1);
+    expect(feed.favoriteCount).toBe(2);
+    expect(feed.overdueOperationsCount).toBe(5);
+  });
+
+  it('пустое окно — null ближайшего дня, метки нет', () => {
+    const feed = mapGlobalPaymentFeed({
+      items: [],
+      favoriteCount: 0,
+      overdueOperationsCount: 0,
+      dueOperationsCount: 0,
+      dueNearestDays: null,
+    });
+    expect(feed.dueOperationsCount).toBe(0);
+    expect(feed.dueNearestDays).toBeNull();
+  });
+});
+
+describe('mapPaymentsDue — секция «На оплату» (#1346)', () => {
+  const dueItemDto: components['schemas']['PaymentDueItem'] = {
+    paymentId: '0198b6a7-due-rule',
+    operationId: '0198b6a7-due-op',
+    propertyId: '0198b6a7-1000-7000-8000-00000000prop',
+    propertyName: 'Моя квартира',
+    title: 'ЖКУ',
+    amountKopecks: 500_000,
+    type: 'expense',
+    category: { source: 'default', slug: 'utilities', label: 'ЖКУ' },
+    today: '2026-09-08',
+    dueDate: '2026-09-10',
+    daysLeft: 2,
+    reminderOffsetDays: 3,
+  };
+
+  it('строка несёт пару (правило, операция), окно и категорию', () => {
+    const due = mapPaymentsDue({ items: [dueItemDto], dueOperationsCount: 1 });
+    expect(due.dueOperationsCount).toBe(1);
+    const item = due.items[0];
+    expect(item?.paymentId).toBe('0198b6a7-due-rule');
+    expect(item?.operationId).toBe('0198b6a7-due-op');
+    expect(item?.propertyName).toBe('Моя квартира');
+    expect(item?.title).toBe('ЖКУ');
+    expect(item?.amountKopecks).toBe(500_000);
+    expect(item?.category).toStrictEqual({
+      source: 'default',
+      slug: 'utilities',
+      id: undefined,
+      label: 'ЖКУ',
+    });
+    expect(item?.today).toBe('2026-09-08');
+    expect(item?.dueDate).toBe('2026-09-10');
+    expect(item?.daysLeft).toBe(2);
+    expect(item?.reminderOffsetDays).toBe(3);
+  });
+});
 
 describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #581, курсор #597, total #599)', () => {
   const searchDto: components['schemas']['PaymentsSearchGlobalResponse'] = {
@@ -185,6 +263,15 @@ describe('mapGlobalPaymentSearch — DTO → entity (поиск #575, чипы #
       id: undefined,
       label: 'Арендная плата',
     });
+  });
+
+  it('isCompleted переносится как есть — «Полностью оплачен» карточки (#1341)', () => {
+    expect(search.items[0]?.isCompleted).toBe(false);
+    const settled = mapGlobalPaymentSearch({
+      ...searchDto,
+      items: [{ ...globalItemDto, isCompleted: true }],
+    });
+    expect(settled.items[0]?.isCompleted).toBe(true);
   });
 
   it('чипы — чистые категории: по одной на категорию, без направления и счётчика (#602)', () => {

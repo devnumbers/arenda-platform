@@ -19,14 +19,20 @@ function TariffsShell({ children }: { children: ReactNode }) {
 }
 
 // «Тарифы» — макет 2846-153710. Для авторизованного кнопка его тарифа
-// превращается в «Ваш тариф» (требование владельца, карта #888).
+// превращается в «Ваш тариф» (требование владельца, карта #888) — у платных
+// только на периоде его подписки (решение владельца 14.10: на другом
+// периоде карточка снова покупается).
 export async function Tariffs() {
   const me = await getMe();
 
   return (
     <TariffsShell>
-      <Reveal delay={100} className="flex w-full flex-col items-center">
-        <TariffCards tariffs={TARIFFS} currentTariff={me?.tariff} />
+      <Reveal delay={80} className="flex w-full flex-col items-center">
+        <TariffCards
+          tariffs={TARIFFS}
+          currentTariff={me?.tariff}
+          currentPeriod={me?.period}
+        />
       </Reveal>
     </TariffsShell>
   );
@@ -38,7 +44,7 @@ export async function Tariffs() {
 export function TariffsFallback() {
   return (
     <TariffsShell>
-      <Reveal delay={100} className="flex w-full flex-col items-center">
+      <Reveal delay={80} className="flex w-full flex-col items-center">
         <TariffCards tariffs={TARIFFS} />
       </Reveal>
     </TariffsShell>

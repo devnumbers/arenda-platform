@@ -60,6 +60,7 @@ type fakeGlobalPaymentsManager struct {
 	) (application.GlobalPaymentSearch, error)
 	objects func(ctx context.Context, actor uuid.UUID, query string) ([]application.GlobalPaymentObjectCard, error)
 	save    func(ctx context.Context, actor uuid.UUID, paymentIDs []uuid.UUID) error
+	due     func(ctx context.Context, actor uuid.UUID) (application.PaymentDueList, error)
 }
 
 func (f *fakeGlobalPaymentsManager) ListGlobalPayments(
@@ -96,6 +97,15 @@ func (f *fakeGlobalPaymentsManager) SaveFavoriteOrder(
 		return errors.New("unexpected SaveFavoriteOrder call")
 	}
 	return f.save(ctx, actor, paymentIDs)
+}
+
+func (f *fakeGlobalPaymentsManager) ListPaymentDue(
+	ctx context.Context, actor uuid.UUID,
+) (application.PaymentDueList, error) {
+	if f.due == nil {
+		return application.PaymentDueList{}, errors.New("unexpected ListPaymentDue call")
+	}
+	return f.due(ctx, actor)
 }
 
 // globalRequest builds an authenticated request for the parameterless global
@@ -152,10 +162,13 @@ func TestListGlobalPayments_WireCounters(t *testing.T) {
 
 	svc := &fakeGlobalPaymentsManager{
 		list: func(_ context.Context, _ uuid.UUID) (application.GlobalPaymentFeed, error) {
+			nearest := 1
 			return application.GlobalPaymentFeed{
 				Items:                  []application.GlobalPaymentItem{wireFeedItem()},
 				FavoriteCount:          1,
 				OverdueOperationsCount: 7,
+				DueOperationsCount:     3,
+				DueNearestDays:         &nearest,
 			}, nil
 		},
 	}
@@ -173,6 +186,9 @@ func TestListGlobalPayments_WireCounters(t *testing.T) {
 	}
 	if body.FavoriteCount != 1 || body.OverdueOperationsCount != 7 {
 		t.Errorf("counters = (%d, %d), want (1, 7)", body.FavoriteCount, body.OverdueOperationsCount)
+	}
+	if body.DueOperationsCount != 3 || body.DueNearestDays == nil || *body.DueNearestDays != 1 {
+		t.Errorf("due counters = (%d, %v), want (3, 1) — «Завтра»", body.DueOperationsCount, body.DueNearestDays)
 	}
 	row := body.Items[0]
 	if row.Category.Slug == nil || *row.Category.Slug != "insurance" || row.Category.Label != "Страхование" {
@@ -209,6 +225,108 @@ func TestListGlobalPayments_NullNearestAndOverdueTravelAsNulls(t *testing.T) {
 	}
 	if body.Items[0].NearestDate != nil || body.Items[0].OverdueDays != nil {
 		t.Errorf("nullable fields = (%v, %v), want JSON nulls", body.Items[0].NearestDate, body.Items[0].OverdueDays)
+	}
+}
+
+// The «На оплату» section's wire shape (ticket #1346): every row carries
+// the (rule, operation) pair identity, the bucket source (daysLeft) and the
+// window's own figures (today, dueDate, the reminder lead); the count
+// repeats the rows.
+func TestListPaymentDue_WireShape(t *testing.T) {
+	t.Parallel()
+
+	ruleID := uuid.Must(uuid.NewV7())
+	operationID := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	today := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	dueDate := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	row := dueWireRow(t, application.PaymentDueItem{
+		ID:                 ruleID,
+		OperationID:        operationID,
+		PropertyID:         propertyID,
+		PropertyName:       "Квартира",
+		Type:               domain.TypeExpense,
+		Title:              testTitleZhku,
+		AmountKopecks:      500000,
+		Category:           defaultCategoryRef(testSlugUtilities),
+		Today:              today,
+		DueDate:            dueDate,
+		DaysLeft:           2,
+		ReminderOffsetDays: 3,
+	})
+	if row.PaymentId != ruleID || row.OperationId != operationID || row.PropertyId != propertyID {
+		t.Errorf("ids = (%s, %s, %s), want the seeded pair", row.PaymentId, row.OperationId, row.PropertyId)
+	}
+	if row.Title != testTitleZhku || row.AmountKopecks != 500000 || row.PropertyName != "Квартира" {
+		t.Errorf("labels = (%q, %d, %q), want the rule's own", row.Title, row.AmountKopecks, row.PropertyName)
+	}
+	if row.DaysLeft != 2 || row.ReminderOffsetDays != 3 {
+		t.Errorf("window = (daysLeft %d, offset %d), want (2, 3)", row.DaysLeft, row.ReminderOffsetDays)
+	}
+	if !row.Today.Equal(today) || !row.DueDate.Equal(dueDate) {
+		t.Errorf("dates = (%v, %v), want (%v, %v)", row.Today, row.DueDate, today, dueDate)
+	}
+	if row.Category.Slug == nil || *row.Category.Slug != testSlugUtilities {
+		t.Errorf("category = %+v, want the utilities slug", row.Category)
+	}
+}
+
+// dueWireRow drives GET /payments/due through the handler over a canned
+// single-row section and returns the decoded first row (the wire shape's
+// test harness).
+func dueWireRow(t *testing.T, item application.PaymentDueItem) openapi.PaymentDueItem {
+	t.Helper()
+
+	svc := &fakeGlobalPaymentsManager{
+		due: func(_ context.Context, _ uuid.UUID) (application.PaymentDueList, error) {
+			return application.PaymentDueList{
+				Items:              []application.PaymentDueItem{item},
+				DueOperationsCount: 1,
+			}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	h.ListPaymentDue(w, globalRequest(t.Context(), "/payments/due"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body openapi.PaymentsDueResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.DueOperationsCount != 1 || len(body.Items) != 1 {
+		t.Fatalf("response = (%d rows, count %d), want (1, 1)", len(body.Items), body.DueOperationsCount)
+	}
+	return body.Items[0]
+}
+
+// The empty window answers the empty section with the zero count — the
+// card's number the feed repeats.
+func TestListPaymentDue_EmptySection(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeGlobalPaymentsManager{
+		due: func(_ context.Context, _ uuid.UUID) (application.PaymentDueList, error) {
+			return application.PaymentDueList{Items: []application.PaymentDueItem{}}, nil
+		},
+	}
+	h := NewGlobalPaymentHandlers(svc, nil)
+
+	w := httptest.NewRecorder()
+	h.ListPaymentDue(w, globalRequest(t.Context(), "/payments/due"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var body openapi.PaymentsDueResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 0 || body.DueOperationsCount != 0 {
+		t.Errorf("empty section = (%d rows, count %d), want (0, 0)", len(body.Items), body.DueOperationsCount)
 	}
 }
 

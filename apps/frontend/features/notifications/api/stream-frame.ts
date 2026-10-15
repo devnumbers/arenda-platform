@@ -1,4 +1,9 @@
-import { NOTIFICATION_CATEGORIES, type NotificationCategory } from '@/entities/notification';
+import {
+  NOTIFICATION_CATEGORIES,
+  toPaymentCategory,
+  type NotificationCategory,
+  type NotificationPaymentCategoryRef,
+} from '@/entities/notification';
 
 /**
  * Разбор кадров SSE-стрима (GET /notifications/stream, #742, ADR 0060) на
@@ -22,6 +27,10 @@ export type StreamFrame =
         /** Deeplink события от бэка; в тосте не используется (тап ведёт на
          * страницу уведомления), но валидируется same-origin-гардом. */
         readonly url: string | null;
+        /** Снимок категории правила платёжных событий (решение владельца
+         * 14.10.2026) — ключ иконки тоста; нет в кадре (старые строки) —
+         * иконка деградирует в канон категории. */
+        readonly paymentCategory?: NotificationPaymentCategoryRef;
         readonly occurredAt: string;
     }
   | { readonly kind: 'unread-count'; readonly count: number; readonly occurredAt: string };
@@ -46,6 +55,7 @@ type CreatedPayload = {
   title?: string;
   body?: string;
   url?: string;
+  paymentCategory?: unknown;
 };
 
 type UnreadPayload = {
@@ -120,6 +130,7 @@ export function parseStreamFrame(event: string, data: string): StreamFrame | nul
       title,
       body: typeof created.body === 'string' ? created.body : '',
       url: urlOrNull(created.url),
+      paymentCategory: toPaymentCategory(created.paymentCategory),
       occurredAt,
     };
   }

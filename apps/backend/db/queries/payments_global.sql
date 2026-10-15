@@ -152,14 +152,31 @@ WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
        OR pay.type = sqlc.arg('type_filter')::text);
 
 -- name: SumGlobalPaymentCounters :one
--- The main screen's two counters over the whole visible scope (ticket
--- #575): the actor's favorite rules — the «Все избранные (N)» card, the
--- personal set of the reading actor (the cutover #1308, D12) — and the
--- overdue operations summed across the feed's rules — the «Все
--- просроченные (N)» card. Neither is narrowed by a search: the counters
+-- The main screen's three counters over the whole visible scope (ticket
+-- #575; the due pair — ticket #1346): the actor's favorite rules — the
+-- «Все избранные (N)» card, the personal set of the reading actor (the
+-- cutover #1308, D12) — the overdue operations summed across the feed's
+-- rules — the «Все просроченные (N)» card — and the «На оплату» window:
+-- its operations and the nearest days-left, the «На оплату (N)» card's
+-- number and label source. None is narrowed by a search: the counters
 -- describe the scope, the search screens' rows are the feed query's.
+--
+-- The due aggregates ride their own lateral beside the overdue one, both
+-- sargable-narrow — the overdue leg scans the planned-before-today tail, the
+-- due leg the reminder window (the rule terms fold into the WHERE: a NULL
+-- reminder makes the date bound NULL, the lateral comes back empty) — and
+-- neither ever narrows the outer WHERE: the favorites and the overdue keep
+-- counting the whole scope. No pause gate: an open pause keeps no planned
+-- operations in the window (the tick removed the future ones, occurrences
+-- inside the pause are not generated).
 SELECT COUNT(upf.payment_id)::bigint AS favorite_count,
-       COALESCE(SUM(agg.overdue_count), 0)::bigint AS overdue_operations_count
+       COALESCE(SUM(overdue.overdue_count), 0)::bigint AS overdue_operations_count,
+       COALESCE(SUM(due.due_count), 0)::bigint AS due_operations_count,
+       -- -1 = empty window (the card hides the label): bare MIN(int) — CASE,
+       -- array_agg and friends included — infers NOT NULL in sqlc, so the
+       -- out-of-range sentinel (days-left is 0..7 by construction) travels
+       -- and the adapter translates it back to null.
+       COALESCE(MIN(due.nearest_days_left), -1)::int AS due_nearest_days
 FROM payments pay
 JOIN properties p ON p.id = pay.property_id
 JOIN (
@@ -172,7 +189,18 @@ LEFT JOIN LATERAL (
     WHERE op.payment_id = pay.id
       AND op.status = 'planned'
       AND op.date < t.today
-) agg ON true
+) overdue ON true
+LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS due_count,
+           MIN(op.date) - t.today AS nearest_days_left
+    FROM operations op
+    WHERE op.payment_id = pay.id
+      AND op.status = 'planned'
+      AND pay.reminder_offset_days IS NOT NULL
+      AND pay.auto_pay = false
+      AND op.date >= t.today
+      AND op.date <= t.today + pay.reminder_offset_days
+) due ON true
 -- The personal favorite join (the cutover #1308): COUNT over the actor's
 -- joined rows — a stranger's star never lands in the actor's counter.
 LEFT JOIN user_payment_favorites upf
@@ -180,6 +208,62 @@ LEFT JOIN user_payment_favorites upf
       AND upf.user_id = sqlc.arg('actor')::uuid
 WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
   AND p.status != 'archived';
+
+-- name: ListPaymentDue :many
+-- The «На оплату» section's rows (ticket #1346): one row per (rule,
+-- operation) pair standing in the reminder window — planned operations with
+-- D−N ≤ today ≤ D on the rules with the reminder armed (1/3/7) and auto-pay
+-- OFF (решение владельца: напоминание у автоплатёжных стреляет, но в секции
+-- их нет), the feed's own visibility predicate and archive cut, completed
+-- rules cut (the #1340 gate the future reader inherits). The window joins
+-- the rule's operations laterally the feed's way: the driver is
+-- idx_payments_reminder_offset on the rules side, the per-rule operation
+-- scan rides idx_operations_payment_date with the sargable date bounds —
+-- no owner-side operation index needed at this scale.
+--
+-- The pause needs no gate: occurrences inside a pause are never generated
+-- and the tick removed the future planned when the pause opened, so a
+-- paused rule keeps no in-window operation (the same structural cut the
+-- derivation rides for the timezone shifts, ADR 0048 п.5). Overdue
+-- operations (D < today) are out by the lower bound — they live in «Все
+-- просроченные». Days-left is the window's own math (D − today, 0..7 by
+-- construction); the reading order runs the real days ascending (решение
+-- владельца 13.10, #1347: the page groups the rows per real day, the chip
+-- reverses the group order client-side) with the operation's id the
+-- same-day tiebreak. No window: the section comes back whole — the
+-- materialization keeps at most two window operations per rule (today's
+-- and the next future one), the reminder is armed on a fraction of the
+-- rules.
+SELECT pay.id,
+       op.id AS operation_id,
+       pay.property_id,
+       p.name AS property_name,
+       pay.type,
+       pay.title,
+       pay.amount_kopecks,
+       pay.category_slug,
+       pay.user_category_id,
+       pc.name AS user_category_name,
+       t.today::date AS owner_today,
+       op.date::date AS due_date,
+       (op.date - t.today)::int AS days_left,
+       pay.reminder_offset_days
+FROM payments pay
+JOIN properties p ON p.id = pay.property_id
+JOIN (
+       SELECT unnest(string_to_array(sqlc.arg('owner_ids')::text, ',')::uuid[]) AS owner_id,
+              unnest(string_to_array(sqlc.arg('todays')::text, ',')::date[]) AS today
+     ) AS t ON t.owner_id = pay.owner_id
+JOIN operations op ON op.payment_id = pay.id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE actor_can_read_property(pay.property_id, sqlc.arg('actor')::uuid)
+  AND p.status != 'archived'
+  AND pay.reminder_offset_days IS NOT NULL
+  AND pay.auto_pay = false
+  AND op.status = 'planned'
+  AND op.date >= t.today
+  AND op.date <= t.today + pay.reminder_offset_days
+ORDER BY days_left ASC, op.date DESC, op.id DESC;
 
 -- name: SumGlobalPaymentSearchCategories :many
 -- The matched categories of the payment rules search (ticket #575): one

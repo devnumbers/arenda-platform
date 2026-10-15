@@ -136,11 +136,12 @@ const (
 	// bulk tick never writes audit (the extended ADR 0020 gap). The old
 	// recurring_operation.* vocabulary above belongs to the removed finance
 	// context; payment.* is the Payments context of ADR 0047.
-	ActionPaymentCreated Action = "payment.created"
-	ActionPaymentUpdated Action = "payment.updated"
-	ActionPaymentDeleted Action = "payment.deleted"
-	ActionPaymentPaused  Action = "payment.paused"
-	ActionPaymentResumed Action = "payment.resumed"
+	ActionPaymentCreated   Action = "payment.created"
+	ActionPaymentUpdated   Action = "payment.updated"
+	ActionPaymentDeleted   Action = "payment.deleted"
+	ActionPaymentPaused    Action = "payment.paused"
+	ActionPaymentResumed   Action = "payment.resumed"
+	ActionPaymentCompleted Action = "payment.completed"
 	// ActionOperationPaid records the manual «Оплатить сейчас» of an
 	// operation (ticket #461): planned → paid with paid_date = today in the
 	// owner's timezone. The auto-pay day payment is tick bulk, never audited

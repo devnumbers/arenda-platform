@@ -27,6 +27,9 @@ const (
 // feedInsuranceTitle is the recurring seeded rule title (goconst).
 const feedInsuranceTitle = "Страхование"
 
+// feedObjectProperty is the fallback row fixture's property name (goconst).
+const feedObjectProperty = "Объект"
+
 // fakeGlobalCalendar answers the owner→today map with canned dates.
 type fakeGlobalCalendar struct {
 	todays map[uuid.UUID]time.Time
@@ -47,8 +50,10 @@ type fakeGlobalReader struct {
 	lastDates  map[uuid.UUID]time.Time
 	rulesByID  map[uuid.UUID]domain.Payment
 	countRules int64
+	due        []PaymentDueItem
 
 	countCalled     bool
+	dueCalled       bool
 	gotTodays       map[uuid.UUID]time.Time
 	gotQuery        GlobalPaymentRulesQuery
 	gotSumQuery     GlobalPaymentRulesQuery
@@ -72,6 +77,14 @@ func (f *fakeGlobalReader) SumGlobalPaymentCounters(
 	_ context.Context, _ uuid.UUID, _ map[uuid.UUID]time.Time,
 ) (GlobalPaymentCounters, error) {
 	return f.counters, nil
+}
+
+func (f *fakeGlobalReader) ListPaymentDue(
+	_ context.Context, _ uuid.UUID, todays map[uuid.UUID]time.Time,
+) ([]PaymentDueItem, error) {
+	f.dueCalled = true
+	f.gotTodays = todays
+	return f.due, nil
 }
 
 func (f *fakeGlobalReader) SumGlobalPaymentSearchCategories(
@@ -228,7 +241,7 @@ func TestListGlobalPaymentsNearestDateFallback(t *testing.T) {
 	rowFor := func(payment domain.Payment) GlobalPaymentRuleRow {
 		return GlobalPaymentRuleRow{
 			ID: payment.ID, OwnerID: owner, PropertyID: property,
-			PropertyName: "Объект", Type: domain.TypeExpense, Title: payment.Title,
+			PropertyName: feedObjectProperty, Type: domain.TypeExpense, Title: payment.Title,
 			AmountKopecks: 1, Today: today,
 		}
 	}
@@ -255,6 +268,90 @@ func TestListGlobalPaymentsNearestDateFallback(t *testing.T) {
 	}
 	if got := feed.Items[1].NearestDate; got != nil {
 		t.Errorf("paused nearest = %v, want nil", got)
+	}
+}
+
+// The feed's display-complete flag (ticket #1341, «Полностью оплачен» на
+// карточках хаба): settled-правило (всё материализовано, endDate прошла)
+// едет true; строки с planned и просрочкой — false; исключение открытой
+// паузы (глоссарий: за вырезанным курсором вычисление отвечает
+// «завершён») резолвится здесь — паузная строка остаётся false, фид не
+// несёт пауз, клиенту нечем повторить это решение.
+func TestListGlobalPaymentsCompletedFlag(t *testing.T) {
+	t.Parallel()
+
+	owner := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+	today := utcDate(2026, time.September, 8)
+	lastMaterialized := utcDate(2026, time.September, 1)
+
+	recurrence, err := domain.NewMonthlyRecurrence([]int{1}, false)
+	if err != nil {
+		t.Fatalf("monthly recurrence: %v", err)
+	}
+	end := utcDate(2026, time.September, 5)
+	settledRule := domain.Payment{
+		ID: uuid.Must(uuid.NewV7()), OwnerID: owner, PropertyID: property,
+		Title: "Завершённое", AmountKopecks: 1, Recurrence: recurrence,
+		Since:   utcDate(2026, time.August, 1),
+		EndDate: &end,
+	}
+	pausedSettled := domain.Payment{
+		ID: uuid.Must(uuid.NewV7()), OwnerID: owner, PropertyID: property,
+		Title: "Пауза", AmountKopecks: 1, Recurrence: recurrence,
+		Since:   utcDate(2026, time.August, 1),
+		EndDate: &end,
+		Pauses:  []domain.PauseInterval{{From: utcDate(2026, time.September, 1)}},
+	}
+
+	nextPlanned := utcDate(2026, time.September, 15)
+	rowFor := func(payment domain.Payment) GlobalPaymentRuleRow {
+		return GlobalPaymentRuleRow{
+			ID: payment.ID, OwnerID: owner, PropertyID: property,
+			PropertyName: feedObjectProperty, Type: domain.TypeExpense, Title: payment.Title,
+			AmountKopecks: 1, Today: today,
+		}
+	}
+	settledRow, pausedRow := rowFor(settledRule), rowFor(pausedSettled)
+	plannedRow := GlobalPaymentRuleRow{
+		ID: uuid.Must(uuid.NewV7()), OwnerID: owner, PropertyID: property,
+		PropertyName: feedObjectProperty, Type: domain.TypeExpense, Title: "Плановое",
+		AmountKopecks: 1, Today: today, NextPlannedDate: &nextPlanned,
+	}
+	overdueRow := GlobalPaymentRuleRow{
+		ID: uuid.Must(uuid.NewV7()), OwnerID: owner, PropertyID: property,
+		PropertyName: feedObjectProperty, Type: domain.TypeExpense, Title: "Долг",
+		AmountKopecks: 1, Today: today, OverdueCount: 2,
+	}
+	reader := &fakeGlobalReader{
+		owners: []uuid.UUID{owner},
+		rules:  []GlobalPaymentRuleRow{settledRow, pausedRow, plannedRow, overdueRow},
+		lastDates: map[uuid.UUID]time.Time{
+			settledRule.ID:   lastMaterialized,
+			pausedSettled.ID: lastMaterialized,
+		},
+		rulesByID: map[uuid.UUID]domain.Payment{
+			settledRule.ID:   settledRule,
+			pausedSettled.ID: pausedSettled,
+		},
+	}
+	service := NewGlobalPaymentService(reader, fakeGlobalCalendar{todays: map[uuid.UUID]time.Time{owner: today}}, txStoreFactory{})
+
+	feed, err := service.ListGlobalPayments(t.Context(), uuid.Must(uuid.NewV7()))
+	if err != nil {
+		t.Fatalf("ListGlobalPayments: %v", err)
+	}
+	if !feed.Items[0].IsCompleted {
+		t.Errorf("settled row: isCompleted = false, want true (endDate прошла, за курсором ничего)")
+	}
+	if feed.Items[1].IsCompleted {
+		t.Errorf("paused row: isCompleted = true, want false (открытая пауза решает экран)")
+	}
+	if feed.Items[2].IsCompleted {
+		t.Errorf("planned row: isCompleted = true, want false (есть planned)")
+	}
+	if feed.Items[3].IsCompleted {
+		t.Errorf("overdue row: isCompleted = true, want false (незакрытая просрочка)")
 	}
 }
 

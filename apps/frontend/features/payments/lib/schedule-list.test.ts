@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PaymentOperation, PaymentSchedule } from '@/entities/payment';
+import { makePaymentOperation } from '@/entities/payment';
+import type { PaymentSchedule } from '@/entities/payment';
 import {
   extendProjection,
   materializedEntries,
@@ -13,18 +14,7 @@ const monthly: PaymentSchedule = {
   pauses: [],
 };
 
-const op = (id: string, date: string): PaymentOperation => ({
-  id,
-  propertyId: 'p1',
-  paymentId: 'pay1',
-  date,
-  status: 'planned',
-  type: 'expense',
-  title: 'Аренда',
-  amountKopecks: 4500000,
-  categoryLabel: 'Арендная плата',
-  categorySlug: 'rent',
-});
+const op = (id: string, date: string) => makePaymentOperation({ id, date });
 
 describe('materializedEntries / projectionCursor', () => {
   it('материализованные операции идут первыми, курсор — строго после последней', () => {

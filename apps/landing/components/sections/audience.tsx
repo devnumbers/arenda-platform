@@ -83,7 +83,7 @@ export function Audience() {
         {CARDS.map((card, index) => (
           <Reveal
             key={card.title}
-            delay={index * 100}
+            delay={index * 80}
             className="h-full tab:w-[320px] tab:shrink-0"
           >
             <article

@@ -6,6 +6,15 @@ import {
   screenHeader,
   test,
 } from './fixtures';
+import { paymentCategoryBySlug } from '@/features/payment-categories';
+
+/** toHaveCSS сравнивает вычисленный цвет строкой rgb(...), каталог хранит
+ * hex — конвертация для ассерта. */
+function hexToRgbCss(hex: string): string {
+  const value = hex.replace('#', '');
+  const num = parseInt(value, 16);
+  return `rgb(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255})`;
+}
 
 // Экран ленты уведомлений по макетам 3178/3183 (#1170–#1172, карта #1162):
 // кебаб-меню из трёх пунктов с мутацией «Прочитать все» (#1171) и пустые
@@ -117,5 +126,59 @@ test.describe('лента уведомлений — меню и пустые с
       page.getByRole('heading', { level: 1, name: 'Уведомления', exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Все', exact: true })).toHaveCount(0);
+  });
+});
+
+test.describe('лента — кругляш платёжных событий (#1348)', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  // Регрессионный замок решения владельца 14.10 (#1348): снимок категории
+  // платежа рисуется векторной иконкой каталога на цветной подложке даже
+  // когда в payload есть фото объекта (иконка главнее фото); строка без
+  // снимка (старая лента) каталожного кругляша не получает.
+  test('снимок категории — иконка каталога вместо фото; строка без снимка — без каталожного кругляша', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await execE2eSql('DELETE FROM notifications;');
+    const withSnapshot = `
+INSERT INTO notifications (id, user_id, category, event_type, title, body, context_label, payload, dedup_key, created_at)
+VALUES ('b1348000-0000-4000-8000-000000000001', '${OWNER_ID}', 'payments_operations', 'payment_due',
+        'Платёж со снимком категории',
+        'Платёж «Водоснабжение» по объекту «Квартира на Ленина»: 2 500 ₽. Срок оплаты: 5 октября',
+        'Квартира на Ленина',
+        '{"property": {"id": "22222222-2222-4222-8222-222222222222", "name": "Квартира на Ленина", "photo": "/api/properties/22222222-2222-4222-8222-222222222222/photo"}, "payment_id": "33333333-3333-4333-8333-333333333333", "payment_category": {"source": "default", "slug": "water-supply"}}'::jsonb,
+        'e2e:notif:1348-1', now() - interval '1 hours')
+ON CONFLICT DO NOTHING`;
+    const withoutSnapshot = `
+INSERT INTO notifications (id, user_id, category, event_type, title, body, context_label, payload, dedup_key, created_at)
+VALUES ('b1348000-0000-4000-8000-000000000002', '${OWNER_ID}', 'payments_operations', 'payment_due',
+        'Платёж без снимка категории',
+        'Платёж «Аренда» по объекту «Квартира на Ленина»: 45 000 ₽. Срок оплаты: 5 октября',
+        'Квартира на Ленина',
+        '{"property": {"id": "22222222-2222-4222-8222-222222222222", "name": "Квартира на Ленина", "photo": "/api/properties/22222222-2222-4222-8222-222222222222/photo"}, "payment_id": "33333333-3333-4333-8333-333333333333"}'::jsonb,
+        'e2e:notif:1348-2', now() - interval '2 hours')
+ON CONFLICT DO NOTHING`;
+    await execE2eSql(withSnapshot + '; ' + withoutSnapshot);
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/notifications');
+
+    const snapshotRow = page.getByRole('button', { name: /Платёж со снимком категории/ });
+    await expect(snapshotRow).toBeVisible();
+    // Кругляш снимка — инлайн-подложка цвета каталога; фото объекта не
+    // рисуется вовсе (не onError-откат, а приоритет решения владельца).
+    const entry = paymentCategoryBySlug('water-supply');
+    if (entry === undefined) throw new Error('water-supply отсутствует в каталоге');
+    const catalogCircle = snapshotRow.locator('div[style*="background-color"]');
+    await expect(catalogCircle).toHaveCount(1);
+    await expect(catalogCircle).toHaveCSS('background-color', hexToRgbCss(entry.color));
+    await expect(snapshotRow.locator('img')).toHaveCount(0);
+    await captureScreen(page, testInfo, 'notifications-payment-category-icon');
+
+    // Старая строка без снимка: каталожного кругляша нет — деградация в
+    // фото/стандарт, инлайн-подложки не появляется.
+    const legacyRow = page.getByRole('button', { name: /Платёж без снимка категории/ });
+    await expect(legacyRow).toBeVisible();
+    await expect(legacyRow.locator('div[style*="background-color"]')).toHaveCount(0);
   });
 });

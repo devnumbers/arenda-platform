@@ -27,6 +27,9 @@ const (
 	// TestSlugUtilities is the utilities slug of the operation fixtures
 	// (the category snapshot the manual-creation tests freeze).
 	testSlugUtilities = "utilities"
+	// TestTitleZhku is the utilities rule's title across the global and
+	// operation fixtures.
+	testTitleZhku = "ЖКУ"
 )
 
 // fakePaymentManager is the func-backed PaymentManager double: every use case
@@ -41,6 +44,7 @@ type fakePaymentManager struct {
 	list     func(ctx context.Context, actor, propertyID uuid.UUID, search string) ([]application.PaymentListItem, error)
 	pause    func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
 	resume   func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) (domain.Payment, error)
+	complete func(ctx context.Context, actor, propertyID, paymentID uuid.UUID) error
 	update   func(
 		ctx context.Context, actor, propertyID, paymentID uuid.UUID, cmd application.UpdatePaymentCommand,
 	) (domain.Payment, error)
@@ -164,6 +168,13 @@ func (f *fakePaymentManager) ResumePayment(ctx context.Context, actor, propertyI
 		return domain.Payment{}, errors.New("unexpected ResumePayment call")
 	}
 	return f.resume(ctx, actor, propertyID, paymentID)
+}
+
+func (f *fakePaymentManager) CompletePayment(ctx context.Context, actor, propertyID, paymentID uuid.UUID) error {
+	if f.complete == nil {
+		return errors.New("unexpected CompletePayment call")
+	}
+	return f.complete(ctx, actor, propertyID, paymentID)
 }
 
 func (f *fakePaymentManager) SetPaymentFavorite(
@@ -903,6 +914,34 @@ func TestGetPayment_CarriesRentalCompleted(t *testing.T) {
 	}
 }
 
+func TestCompletePayment_MapsContract(t *testing.T) {
+	t.Parallel()
+	actor := uuid.Must(uuid.NewV7())
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+
+	var gotActor, gotProperty, gotPayment uuid.UUID
+	h := NewPaymentHandlers(&fakePaymentManager{
+		complete: func(_ context.Context, a, p, id uuid.UUID) error {
+			gotActor, gotProperty, gotPayment = a, p, id
+			return nil
+		},
+	}, nil)
+	w := httptest.NewRecorder()
+	h.CompletePayment(w, paymentRequest(t, http.MethodPost, actor, ""), propertyID, paymentID)
+	// The completion deletes the rule (тикет #1377): the delete shape's 204
+	// with no body — the rule is gone, nothing travels back.
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body: %s", w.Code, w.Body.String())
+	}
+	if gotActor != actor || gotProperty != propertyID || gotPayment != paymentID {
+		t.Fatalf("service received (%s, %s, %s), want the handler's ids", gotActor, gotProperty, gotPayment)
+	}
+	if w.Body.Len() != 0 {
+		t.Fatalf("body = %q, want empty", w.Body.String())
+	}
+}
+
 func TestDeletePayment_KeepOverdueDefault(t *testing.T) {
 	t.Parallel()
 	actor := uuid.Must(uuid.NewV7())
@@ -979,6 +1018,9 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 				pause: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domain.Payment, error) {
 					return domain.Payment{}, tc.err
 				},
+				complete: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
+					return tc.err
+				},
 			}, nil)
 			w := httptest.NewRecorder()
 			h.GetPayment(w, paymentRequest(t, http.MethodGet, actor, ""),
@@ -995,6 +1037,13 @@ func TestPaymentHandlers_ErrorMapping(t *testing.T) {
 				propertyID, paymentID)
 			if w2.Code != tc.wantStatus {
 				t.Fatalf("pause: status = %d, want %d; body: %s", w2.Code, tc.wantStatus, w2.Body.String())
+			}
+
+			w3 := httptest.NewRecorder()
+			h.CompletePayment(w3, paymentRequest(t, http.MethodPost, actor, ""),
+				propertyID, paymentID)
+			if w3.Code != tc.wantStatus {
+				t.Fatalf("complete: status = %d, want %d; body: %s", w3.Code, tc.wantStatus, w3.Body.String())
 			}
 		})
 	}
@@ -1138,6 +1187,65 @@ func TestListPaymentChanges_ErrorMapping(t *testing.T) {
 				t.Fatalf("status = %d, body = %s, want %d", w.Code, w.Body, tc.wants)
 			}
 		})
+	}
+}
+
+// TestListPaymentChanges_OriginMark pins the origin's wire shape (тикет
+// #1342): the archive bridge's system row travels with "auto_archive", the
+// manual row with null.
+func TestListPaymentChanges_OriginMark(t *testing.T) {
+	t.Parallel()
+	propertyID := uuid.Must(uuid.NewV7())
+	paymentID := uuid.Must(uuid.NewV7())
+	actorID := uuid.Must(uuid.NewV7())
+	systemID := uuid.Must(uuid.NewV7())
+	manualID := uuid.Must(uuid.NewV7())
+	at := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+
+	f := &fakePaymentManager{}
+	f.paymentChanges = func(
+		_ context.Context, _, _, _ uuid.UUID, _ application.ChangesQuery,
+	) (application.ChangeLogPage, error) {
+		return application.ChangeLogPage{
+			Items: []domain.ChangeEntry{
+				{
+					ID: systemID, ActorID: actorID, Action: domain.ChangePaused,
+					Origin: domain.PauseOriginAutoArchive, CreatedAt: at,
+				},
+				{
+					ID: manualID, ActorID: actorID, Action: domain.ChangePaused,
+					CreatedAt: at,
+				},
+			},
+		}, nil
+	}
+
+	w := httptest.NewRecorder()
+	NewPaymentHandlers(f, nil).ListPaymentChanges(w, httptest.NewRequestWithContext(
+		httpsupport.WithUserID(t.Context(), actorID), http.MethodGet, "/", nil,
+	), propertyID, paymentID, openapi.ListPaymentChangesParams{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s, want 200", w.Code, w.Body)
+	}
+	var body struct {
+		Items []struct {
+			ID     string  `json:"id"`
+			Action string  `json:"action"`
+			Origin *string `json:"origin"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 2 {
+		t.Fatalf("items = %d, want 2", len(body.Items))
+	}
+	if body.Items[0].ID != systemID.String() || body.Items[0].Origin == nil ||
+		*body.Items[0].Origin != "auto_archive" {
+		t.Errorf("system row = %+v, want origin auto_archive", body.Items[0])
+	}
+	if body.Items[1].ID != manualID.String() || body.Items[1].Origin != nil {
+		t.Errorf("manual row = %+v, want origin null", body.Items[1])
 	}
 }
 

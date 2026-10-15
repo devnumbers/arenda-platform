@@ -22,9 +22,33 @@ type CloseActivePaymentPauseParams struct {
 }
 
 // Resume: close the open interval with today's date (the resume day is
-// already outside the pause, [from, to)).
+// already outside the pause, [from, to)). The owner's resume closes any
+// open pause — manual or system: while the property is archived the
+// conveyor refuses the mutation, so an open auto_archive pause here means
+// the property is active again and the bridge has already closed its own.
 func (q *Queries) CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error) {
 	result, err := q.db.Exec(ctx, closeActivePaymentPause, arg.PaymentID, arg.ToDate)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const closeAutoArchivePaymentPause = `-- name: CloseAutoArchivePaymentPause :execrows
+UPDATE payment_pauses SET to_date = $2
+WHERE payment_id = $1 AND to_date IS NULL AND origin = 'auto_archive'
+`
+
+type CloseAutoArchivePaymentPauseParams struct {
+	PaymentID pgtype.UUID `json:"payment_id"`
+	ToDate    pgtype.Date `json:"to_date"`
+}
+
+// The archive bridge's reverse leg (тикет #1342): the property returned
+// from the archive — close only the system auto_archive pause; the owner's
+// manual pauses stay open. Same [from, to) semantics as the manual resume.
+func (q *Queries) CloseAutoArchivePaymentPause(ctx context.Context, arg CloseAutoArchivePaymentPauseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeAutoArchivePaymentPause, arg.PaymentID, arg.ToDate)
 	if err != nil {
 		return 0, err
 	}
@@ -335,21 +359,28 @@ func (q *Queries) InsertPaymentFavorite(ctx context.Context, arg InsertPaymentFa
 }
 
 const insertPaymentPause = `-- name: InsertPaymentPause :exec
-INSERT INTO payment_pauses (id, payment_id, from_date, to_date)
-VALUES ($1, $2, $3, NULL)
+INSERT INTO payment_pauses (id, payment_id, from_date, to_date, origin)
+VALUES ($1, $2, $3, NULL, $4)
 `
 
 type InsertPaymentPauseParams struct {
 	ID        pgtype.UUID `json:"id"`
 	PaymentID pgtype.UUID `json:"payment_id"`
 	FromDate  pgtype.Date `json:"from_date"`
+	Origin    string      `json:"origin"`
 }
 
 // The open-ended pause [from, ∞): exactly one may exist per rule — the
 // partial unique index (to_date IS NULL) makes a double pause a constraint
-// violation even past the application check.
+// violation even past the application check. Origin distinguishes the
+// owner's manual pause from the archive bridge's system one (тикет #1342).
 func (q *Queries) InsertPaymentPause(ctx context.Context, arg InsertPaymentPauseParams) error {
-	_, err := q.db.Exec(ctx, insertPaymentPause, arg.ID, arg.PaymentID, arg.FromDate)
+	_, err := q.db.Exec(ctx, insertPaymentPause,
+		arg.ID,
+		arg.PaymentID,
+		arg.FromDate,
+		arg.Origin,
+	)
 	return err
 }
 

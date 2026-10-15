@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
+  Cancel,
   Check,
   Edit,
+  EndPay,
   Pause,
   Play,
   Repeat,
@@ -39,6 +41,7 @@ import {
   nearestOccurrence,
   oldestUnpaidOperation,
   paymentTypeLabel,
+  useCompletePayment,
   usePausePayment,
   usePaymentOperationsByStatus,
   usePaymentOperationsPaged,
@@ -53,15 +56,21 @@ import {
   ModalContent,
   PageContent,
   RoundActionButton,
+  StatusIcon,
+  StickyBottomBar,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
 import {
   OverdueOperationRow,
+  PAYMENT_HISTORY_EMPTY_HINT,
   PaymentsGroup,
   PaymentsStateCard,
 } from './payments-sections';
-import { paymentDetailActions } from '../lib/payment-detail-actions-model';
+import {
+  paymentDetailActions,
+  type PaymentDetailAction,
+} from '../lib/payment-detail-actions-model';
 import { PaymentDetailSkeleton } from './payments-skeletons';
 
 /**
@@ -70,20 +79,38 @@ import { PaymentDetailSkeleton } from './payments-skeletons';
  * иконка категории #447, повторяемость; на паузе — opacity 50% и тип
  * « • На паузе»), круглые кнопки «На паузу» (confirm-шторка) ↔
  * «Возобновить» (без подтверждения), «Изменить», «Оплатить» и три секции:
- * «Ближайшая операция» (заголовок-стрелка ведёт на график — стрелка
+ * «Ближайший платеж» (заголовок-стрелка ведёт на график — стрелка
  * возвращена макетом 3214:76417, клик строки сохранён #1073, у паузы
  * тоже), «Просроченные платежи» (максимум 3; пустое состояние — «У вас
  * нет просроченных платежей») и «История платежа» с превью оплаченных —
  * только сами операции, без плашек изменений, строки ведут на операцию
- * (копии секций — макет 3214:76417, #1194). Дата ближайшего вхождения —
+ * (копии секций — макет 3214:76417, #1194). Секция истории рисуется
+ * всегда: без оплаченных — «Платежей еще не было» в карточке (решение
+ * владельца #1427). Дата ближайшего вхождения —
  * клиентская проекция порта вхождений (entities/payment/lib/occurrences);
  * просрочки приходят с сервера — статус overdue считает он по TZ
  * собственника (ADR 0048).
+ *
+ * Завершение платежа (#1341, макеты 3249:74119/75723/75665; ревизия #1377):
+ * при вычисляемой завершённости (серверный isCompleted — глоссарий
+ * «Завершённый платёж») «Оплатить» заменяется на «Завершить» (EndPay) с
+ * confirm-шторкой; мутация удаляет правило — успех рисует финальный экран
+ * с «Хорошо» → replace списка платежей объекта (#1433; goBack выпадал на
+ * шаг создания при входе «Посмотреть платеж» из успеха визарда),
+ * страница ниже уже не существует (прямая ссылка — 404), финал живёт на
+ * локальном состоянии и не зависит от refetch детали.
  *
  * Копии секций — макет 3214:76417 (#1194): ближайшее снова доменное
  * «Ближайшая операция» (решение #1073 «Ближайший платеж» изменено
  * макетом), история — «История платежа»; исключение остаётся только у
  * «Просроченные платежи» (payments/GLOSSARY.md).
+
+ * Лексика и постоянный блок истории — решение владельца #1338 (12.10):
+ * все заголовки страницы — «платеж»-словарь («Ближайший платеж» — макет
+ * 3214:76417 держал доменное «Ближайшая операция»), блок истории стоит
+ * всегда и без paid-операций несёт подзаголовок «Платежей еще не было» —
+ * тот же текст, что у пустого подэкрана (пустые состояния — макеты
+ * 3166:78535/1127:31705; payments/GLOSSARY.md).
  *
  * Доступ (ADR 0028): смотрящий — чтение, звезда неактивна, круглых кнопок
  * нет; архив финансово read-only (#446). Завершённое правило (endDate в
@@ -125,6 +152,10 @@ export function PaymentDetailScreen({
   // правки (история 47), архив финансово read-only (#446).
   const canMutate = propertyPermissions(property).canEdit;
 
+  // Объект в архиве (#1342): «Возобновить» задизейблена с пояснением —
+  // мутации правила архивного объекта сервер отвечает 409.
+  const propertyArchived = property?.status === 'archived';
+
   // Звезда — личное состояние читателя (D12 #1308): гейт по праву просмотра,
   // не мутации, — зритель ведёт своё избранное наравне с владельцем; архив
   // гасит (сервер отвечает 409, канон пина #1307).
@@ -132,6 +163,30 @@ export function PaymentDetailScreen({
 
   const loading = paymentQuery.isPending || propertyQuery.isPending;
   const failed = paymentQuery.isError || propertyQuery.isError;
+
+  // Успех завершения живёт на уровне экрана (#1341, прецедент успеха
+  // оплаты #1072): в этом состоянии рисуется свой финальный экран
+  // (3249:75665) с крестиком вместо шапки платежа. Правило к этому моменту
+  // удалено (#1377) — финал рисуется из локального состояния независимо
+  // от refetch детали (тот отвечает 404 и финал убить не должен).
+  const [completedResult, setCompletedResult] = useState<Payment | null>(null);
+
+  if (completedResult !== null) {
+    return (
+      <PaymentCompleteSuccess
+        completed={completedResult}
+        onClose={() => {
+          setCompletedResult(null);
+          // Детерминированный replace на список платежей объекта (решение
+          // владельца #1433): goBack по истории выпадал на шаг создания,
+          // когда платёж открыт «Посмотреть платеж» из экрана успеха
+          // визарда — предыдущая запись истории не обязана быть списком.
+          // Прецедент удаления через правку (#446, router.replace).
+          router.replace(ROUTES.propertyPayments(propertyId));
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -186,6 +241,8 @@ export function PaymentDetailScreen({
               propertyId={propertyId}
               payment={payment}
               canMutate={canMutate}
+              propertyArchived={propertyArchived}
+              onCompleted={setCompletedResult}
             />
           )}
         </div>
@@ -200,10 +257,14 @@ function PaymentDetailBody({
   propertyId,
   payment,
   canMutate,
+  propertyArchived,
+  onCompleted,
 }: {
   readonly propertyId: string;
   readonly payment: Payment;
   readonly canMutate: boolean;
+  readonly propertyArchived: boolean;
+  readonly onCompleted: (completed: Payment) => void;
 }): JSX.Element {
   const router = useRouter();
   const overdueQuery = usePaymentOperationsByStatus(propertyId, payment.id, 'overdue');
@@ -211,9 +272,20 @@ function PaymentDetailBody({
 
   const today = dateToIsoLocal(new Date());
   const paused = isDatePaused(payment.pauses, today);
-  // Завершённость для состава кнопок — клиентский предикат (история 44
-  // спеки #453): серверный isCompleted у бессрочной паузы уже true.
-  const completed = isPaymentCompleted(payment, today);
+  // Два уровня завершённости (глоссарий «Завершённый платёж»): endedRule —
+  // клиентский предикат «расписание закончилось» (история 44 спеки #453,
+  // паузы нет); settled — серверный вычисляемый флаг, им живёт замена
+  // «Оплатить» → «Завершить» (#1341). Само завершение удаляет правило
+  // (#1377) — хранимого read-only состояния на странице не бывает.
+  const endedRule = isPaymentCompleted(payment, today);
+  const settled = payment.isCompleted;
+
+  // Состав кнопок держит модель (#818, #1341, #1342; правка владельца
+  // 13.10): на архивном объекте строка не рендерится вовсе — кнопок и
+  // пояснения нет, состояние несут бейдж карточки и списки; у смотрящего
+  // строки тоже нет.
+  const actions = paymentDetailActions(payment, paused, endedRule, settled, propertyArchived);
+  const showActions = actions.length > 0 && canMutate;
 
   // undefined — списки ещё грузятся, кнопка без состояния; null — гасить
   // нечего (завершённое правило без долга), «Оплатить» отключена.
@@ -232,14 +304,14 @@ function PaymentDetailBody({
         <PaymentHeroCard payment={payment} paused={paused} />
       </div>
 
-      {canMutate && (
+      {showActions && (
         <div className="px-6">
           <PaymentActionsRow
             propertyId={propertyId}
             payment={payment}
-            paused={paused}
-            completed={completed}
+            actions={actions}
             payable={payable}
+            onCompleted={onCompleted}
           />
         </div>
       )}
@@ -340,33 +412,34 @@ function PaymentHeroCard({
   );
 }
 
-/** Круглые кнопки мутаций (3214:76430, макет #1194): пауза с
- * confirm-шторкой ↔ возобновление, «Изменить», «Оплатить» — переход на
- * страницу операции. Состав держит paymentDetailActions (#818): у
- * управляемого арендой платежа вместо «Изменить» — «Изменить аренду»
- * (#1158), у завершённой аренды остаётся только «Оплатить». */
+/** Круглые кнопки мутаций (3249:74119, макет #1341; раньше 3214:76430 —
+ * макет #1194): пауза с confirm-шторкой ↔ возобновление, «Изменить»,
+ * «Оплатить» — переход на страницу операции; при вычисляемой
+ * завершённости «Оплатить» заменяется на «Завершить» (иконка EndPay) с
+ * confirm-шторкой (3249:75723) и финальным экраном. Состав держит
+ * paymentDetailActions (#818): у управляемого арендой платежа вместо
+ * «Изменить» — «Изменить аренду» (#1158), у завершённой аренды остаётся
+ * только «Оплатить», «Завершить» нет (complete гейтится арендой). */
 function PaymentActionsRow({
   propertyId,
   payment,
-  paused,
-  completed,
+  actions,
   payable,
+  onCompleted,
 }: {
   readonly propertyId: string;
   readonly payment: Payment;
-  readonly paused: boolean;
-  readonly completed: boolean;
+  readonly actions: ReadonlyArray<PaymentDetailAction>;
   readonly payable: PaymentOperation | null | undefined;
+  readonly onCompleted: (completed: Payment) => void;
 }): JSX.Element {
   const router = useRouter();
   const pausePayment = usePausePayment(propertyId, payment.id);
   const resumePayment = useResumePayment(propertyId, payment.id);
-
-  // Состав кнопок держит чистая модель (#818): управляемый арендой платёж —
-  // только «Оплатить» (правка/пауза дают 409, экран их скрывает).
-  const actions = paymentDetailActions(payment, paused, completed);
+  const completePayment = useCompletePayment(propertyId, payment.id);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
 
   const confirmPause = async (): Promise<void> => {
     try {
@@ -384,6 +457,18 @@ function PaymentActionsRow({
       notify.scenarios.payments.resumed();
     } catch (error) {
       notify.scenarios.payments.resumeError(error);
+    }
+  };
+
+  const confirmComplete = async (): Promise<void> => {
+    try {
+      // Ответа нет (204 — правило удалено): финал рисуется из локальной
+      // сущности (#1377, прецедент успеха оплаты #1072).
+      await completePayment.mutateAsync();
+      setConfirmCompleteOpen(false);
+      onCompleted(payment);
+    } catch (error) {
+      notify.scenarios.payments.completeError(error);
     }
   };
 
@@ -430,6 +515,15 @@ function PaymentActionsRow({
             onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
           />
         )}
+        {actions.includes('complete') && (
+          <RoundActionButton
+            variant="primary"
+            icon={<EndPay />}
+            caption="Завершить"
+            loading={completePayment.isPending}
+            onClick={() => setConfirmCompleteOpen(true)}
+          />
+        )}
         {actions.includes('pay') && (
           <RoundActionButton
             variant="primary"
@@ -473,18 +567,77 @@ function PaymentActionsRow({
           </div>
         </ModalContent>
       </Modal>
+
+      {/* Confirm-шторка завершения (3249:75723, #1341): иконка категории,
+       * заголовок и текст по макету; сборка канона Modal с sr-only title
+       * (прецедент шита одного сеанса «Устройств» — макет ведёт иконкой).
+       * Ревизия #1377: «платеж удалится» в тексте — теперь буквально
+       * правда, мутация удаляет правило. */}
+      <Modal open={confirmCompleteOpen} onOpenChange={setConfirmCompleteOpen}>
+        <ModalContent title="Завершить платеж?" titleSrOnly>
+          <CompleteSheetBody payment={payment}>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="secondary"
+                disabled={completePayment.isPending}
+                onClick={() => setConfirmCompleteOpen(false)}
+              >
+                Отменить
+              </Button>
+              <Button
+                loading={completePayment.isPending}
+                onClick={() => void confirmComplete()}
+              >
+                Завершить
+              </Button>
+            </div>
+          </CompleteSheetBody>
+        </ModalContent>
+      </Modal>
     </>
   );
 }
 
-/** Секция «Ближайшая операция» (3214:76417, #1194; раньше «Ближайший
- * платеж» — решение #1073 изменено макетом): одна плановая дата по
- * клиентской проекции или «На паузе»; у завершённого правила вхождений
- * больше нет — пустое состояние (история 43). Клик по строке всегда
- * открывает график — и для материализованной плановой, и для проекции
- * (решение владельца #1073): секция — вид правилу, не отдельной операции;
- * заголовок со стрелкой ведёт туда же (3214:76436 — стрелка возвращена
- * макетом, цель — решение #1073). */
+/** Тело шторки завершения без кнопок (3249:75723): кружок категории 48
+ * (глиф ~26), заголовок H3 и описание R/400 16/18 — вертикали макета
+ * (зазоры 20 между блоками, 8 внутри); кнопки — children вызывающего. */
+function CompleteSheetBody({
+  payment,
+  children,
+}: {
+  readonly payment: Payment;
+  readonly children: ReactNode;
+}): JSX.Element {
+  const style = categoryStyle(payment.category.source, payment.category.slug);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <CategoryIcon
+        icon={style.icon}
+        color={style.color}
+        className="h-12 w-12 [&>svg]:h-6.5 [&>svg]:w-6.5"
+      />
+      <div className="flex flex-col gap-2">
+        <p className="m-0 text-xl font-semibold leading-6 text-content">Завершить платеж?</p>
+        <p className="m-0 text-base leading-[18px] text-content-secondary">
+          Новых операций по платежу больше не будет. После завершения, платеж удалится. Все
+          операции по платежу сохранятся, их можно будет посмотреть в истории операций
+        </p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Секция «Ближайший платеж» (лексика — решение владельца #1338): одна
+ * плановая дата по клиентской проекции или «На паузе»; при вычисляемой
+ * завершённости (#1341, макет 3249:74119) секция — блок с подзаголовком
+ * «Платежей больше не будет» без стрелки: графика впереди нет, вхождений
+ * больше не будет. Клик по строке всегда открывает график — и для
+ * материализованной плановой, и для проекции (решение владельца #1073):
+ * секция — вид правилу, не отдельной операции; заголовок со стрелкой
+ * ведёт туда же (3214:76436 — стрелка возвращена макетом, цель — решение
+ * #1073). */
 function NextPaymentSection({
   propertyId,
   payment,
@@ -504,10 +657,10 @@ function NextPaymentSection({
   // «График»); проекция — только пока ничего не материализовано. Активная
   // пауза — «На паузе» в подзаголовке (история 37), при этом проекция не
   // считается: на паузе дат нет. Завершённое правило (isCompleted —
-  // серверный вычисляемый флаг, CONTEXT.md) — пустое состояние сразу после
-  // оплаты последнего вхождения, не дожидаясь endDate; иначе проекция
-  // порождала бы уже оплаченные даты заново (баг «следующий платеж 31
-  // августа» после полной оплаты короткого правила).
+  // серверный вычисляемый флаг, CONTEXT.md) — блок «Платежей больше не
+  // будет» сразу после оплаты последнего вхождения, не дожидаясь endDate;
+  // иначе проекция порождала бы уже оплаченные даты заново (баг
+  // «следующий платеж 31 августа» после полной оплаты короткого правила).
   const nearest = paused
     ? { kind: 'paused' as const }
     : payment.isCompleted
@@ -520,14 +673,18 @@ function NextPaymentSection({
 
   return (
     <PaymentsGroup
-      title="Ближайшая операция"
-      open={{ label: 'Открыть график платежей', onOpen: openSchedule }}
+      title="Ближайший платеж"
+      // У завершённого правила стрелки нет (3249:74119, Show Arrow=false):
+      // секция — состояние, не навигация.
+      open={
+        nearest === undefined
+          ? undefined
+          : { label: 'Открыть график платежей', onOpen: openSchedule }
+      }
+      emptyHint={nearest === undefined ? 'Платежей больше не будет' : undefined}
     >
-      {nearest === undefined ? (
-        // Авторский текст: состояния завершённого правила во Figma этой
-        // страницы нет («Платежей еще не было» — история, не график).
-        <p className="px-6 pb-4 text-sm text-content-secondary">Платеж завершен</p>
-      ) : nearest.kind === 'paused' ? (
+      {/* null-дети — пустая секция PaymentsGroup: подзаголовок макета. */}
+      {nearest === undefined ? null : nearest.kind === 'paused' ? (
         <NextPaymentRow
           payment={payment}
           title={payment.title}
@@ -587,19 +744,71 @@ function NextPaymentRow({
   );
 }
 
-/** Предел превью секции «История операций»; полный список — подэкран
+/** Финальный экран завершения (3249:75665, #1341): крестик вместо шапки,
+ * кружок категории 96 с зелёным бейджем «выполнено» (композиция канона
+ * успеха — 1858:105549, как в визардах), заголовок «Платеж «Название»
+ * завершен», кнопка «Хорошо» прижата к низу. Экран-состояние страницы
+ * платежа: «Хорошо» и крестик — детерминированный replace списка платежей
+ * объекта (#1433, решение владельца; goBack выпадал на шаг создания),
+ * правило удалено (#1377), в списках ниже его уже нет, прямая ссылка
+ * отвечает 404. */
+function PaymentCompleteSuccess({
+  completed,
+  onClose,
+}: {
+  readonly completed: Payment;
+  readonly onClose: () => void;
+}): JSX.Element {
+  const style = categoryStyle(completed.category.source, completed.category.slug);
+
+  return (
+    <>
+      <TopNav
+        leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />}
+      />
+      <PageContent>
+        <div className="flex flex-col items-center gap-8 px-6 pt-16">
+          {/* Композиция фрейма 1858:105549: кружок категории 96 (глиф ~52),
+           * бейдж ~52 накладывается в угол (61, 61). */}
+          <span className="relative block h-24 w-24">
+            <CategoryIcon
+              icon={style.icon}
+              color={style.color}
+              className="h-24 w-24 [&>svg]:h-13 [&>svg]:w-13"
+            />
+            <StatusIcon
+              status="good"
+              className="absolute top-[61px] left-[61px] h-13 w-13"
+            />
+          </span>
+          <h1 className="text-center text-xl leading-6 font-semibold break-words text-content">
+            {`Платеж «${completed.title}» завершен`}
+          </h1>
+        </div>
+      </PageContent>
+      <StickyBottomBar>
+        <Button className="w-full" onClick={onClose}>
+          Хорошо
+        </Button>
+      </StickyBottomBar>
+    </>
+  );
+}
+
+/** Предел превью секции «История платежа»; полный список — подэкран
  * (#466). */
 const HISTORY_PREVIEW_LIMIT = 3;
 
-/** Секция «История платежа» (макет 3214:76417, #1194; раньше «История
- * операций» — решение владельца #1073 изменено макетом): стрелка ведёт
- * в подэкран истории (#466), под ней — превью оплаченных операций,
- * новейшие сверху (порция desc по фактической дате, канон истории #994).
- * В превью — только сами операции, без плашек изменений; у строки — дата
- * факта и знаковая сумма (расход с минусом — канон 1302:52209), клик —
- * страница операции. Пустая история секции не имеет: без paid-операций
- * секция не рисуется — подэкран остаётся доступен по прямому URL, путь к
- * графику при этом держат заголовок и строка ближайшего. */
+/** Секция «История платежа» (#1194; лексика блока и подэкрана совпадает —
+ * решение владельца #1338): стрелка ведёт в подэкран истории (#466), под
+ * ней — превью оплаченных операций, новейшие сверху (порция desc по
+ * фактической дате, канон истории #994). В превью — только сами
+ * операции, без плашек изменений; у строки — дата факта и знаковая сумма
+ * (расход с минусом — канон 1302:52209), клик — страница операции. Блок
+ * рендерится всегда (макеты 3166:78535/1127:31705, #1338): без
+ * paid-операций — серый подзаголовок «Платежей еще не было», тот же
+ * текст, что у пустого подэкрана; путь к графику при этом держат
+ * заголовок и строка ближайшего. */
 function HistorySection({
   propertyId,
   paymentId,
@@ -639,9 +848,6 @@ function HistorySection({
   }
 
   const preview = historyQuery.data.slice(0, HISTORY_PREVIEW_LIMIT);
-  if (preview.length === 0) {
-    return null;
-  }
 
   return (
     <PaymentsGroup
@@ -650,15 +856,20 @@ function HistorySection({
         label: 'Открыть историю платежа',
         onOpen: () => router.push(ROUTES.propertyPaymentHistory(propertyId, paymentId)),
       }}
+      // Гейт подзаголовка внутри PaymentsGroup — children === null: без
+      // paid-операций блок стоит с текстом пустого подэкрана (#1338).
+      emptyHint={PAYMENT_HISTORY_EMPTY_HINT}
     >
-      {preview.map((operation) => (
-        <HistoryPreviewRow
-          key={operation.id}
-          operation={operation}
-          today={today}
-          onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
-        />
-      ))}
+      {preview.length > 0
+        ? preview.map((operation) => (
+            <HistoryPreviewRow
+              key={operation.id}
+              operation={operation}
+              today={today}
+              onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+            />
+          ))
+        : null}
     </PaymentsGroup>
   );
 }

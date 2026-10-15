@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { makePayment, type Payment, type PaymentOperation } from '@/entities/payment';
+import {
+  makePayment,
+  makePaymentOperation,
+  type Payment,
+  type PaymentOperation,
+} from '@/entities/payment';
 import {
   isOperationPayable,
   isPaymentCompleted,
@@ -9,18 +14,13 @@ import {
 } from './payment-page-model';
 
 function operation(overrides: Partial<PaymentOperation>): PaymentOperation {
-  return {
+  return makePaymentOperation({
     id: 'op-1',
     propertyId: 'p-1',
     paymentId: 'pay-1',
     date: '2026-08-01',
-    status: 'planned',
-    type: 'expense',
-    title: 'Арендная плата',
-    amountKopecks: 4500000,
-    categoryLabel: 'Аренда',
     ...overrides,
-  };
+  });
 }
 
 /** Правило страницы платежа: идентификаторы согласованы с локальной
@@ -110,14 +110,7 @@ describe('nearestOccurrence', () => {
 });
 
 describe('isOperationPayable', () => {
-  const base = {
-    propertyId: 'prop-1',
-    paymentId: 'pay-1',
-    type: 'income',
-    title: 'Арендная плата',
-    amountKopecks: 5_600_000,
-    categoryLabel: 'Арендная плата',
-  } as const;
+  const base = makePaymentOperation({ type: 'income', amountKopecks: 5_600_000 });
   const overdueOlder: PaymentOperation = {
     ...base, id: 'op-old', date: '2026-11-01', status: 'overdue', categorySlug: 'rent',
   };

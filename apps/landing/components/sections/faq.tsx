@@ -33,7 +33,7 @@ export function Faq() {
         <div className="mt-8 flex flex-col gap-3 desk:mt-14 desk:gap-5">
           <FaqList groups={FAQ} />
         </div>
-        <Reveal delay={150} className="w-full">
+        <Reveal delay={120} className="w-full">
           <div className="mt-24 flex flex-col items-center gap-8 text-center desk:mt-14 desk:ml-[264px] desk:items-start desk:text-left">
             <p className="text-h4 text-balance">Не нашли ответ на свой вопрос?</p>
             {/* Кнопка открывает модалку «Задать вопрос» (форма уходит письмом

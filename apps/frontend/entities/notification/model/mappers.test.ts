@@ -195,6 +195,42 @@ describe('mapNotificationDetail', () => {
     });
   });
 
+  it('payment_category — снимок категории правила (решение 14.10.2026): дефолт слагом, пользовательская именем, мусор не проходит', () => {
+    const mapped = mapNotificationDetail(
+      detailDto({
+        payload: {
+          payment_category: { source: 'default', slug: 'rent' },
+        },
+      }),
+    );
+    expect(mapped.payload.paymentCategory).toStrictEqual({ source: 'default', slug: 'rent' });
+
+    const mappedCustom = mapNotificationDetail(
+      detailDto({
+        payload: {
+          payment_category: { source: 'custom', name: 'Няня' },
+        },
+      }),
+    );
+    expect(mappedCustom.payload.paymentCategory).toStrictEqual({ source: 'custom', name: 'Няня' });
+
+    // Чужой source, не-строкие слаг/имя, не-объект — слот не проходит вовсе.
+    for (const garbage of [
+      { source: 'builtin', slug: 'rent' },
+      { source: 'default', slug: 42 },
+      { source: 'custom', name: 42 },
+      'rent',
+    ]) {
+      const mappedGarbage = mapNotificationDetail(detailDto({ payload: { payment_category: garbage } }));
+      expect(mappedGarbage.payload.paymentCategory).toBeUndefined();
+    }
+
+    // Нет снимка — нет ключа (факт отсутствия): старые строки деградируют
+    // в канон предыдущего поведения.
+    const mappedWithout = mapNotificationDetail(detailDto({ payload: {} }));
+    expect('paymentCategory' in mappedWithout.payload).toBe(false);
+  });
+
   it('строка ленты несёт payload-снимки (#1275) — лента читает фото объекта без хода на страницу', () => {
     const mapped = mapNotification(
       itemDto({

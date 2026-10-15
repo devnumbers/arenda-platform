@@ -58,7 +58,7 @@ export function Textarea({
         ref={textareaRef}
         id={textareaId}
         className={cn(
-          "w-full resize-none overflow-hidden rounded-button bg-surface-muted px-[18px] py-[10px] text-base leading-[18px] text-content outline-none transition-shadow placeholder:text-content-secondary",
+          "w-full resize-none overflow-hidden rounded-button bg-surface-muted px-[18px] py-[10px] text-base leading-[18px] text-content outline-none transition-shadow duration-200 placeholder:text-content-secondary",
           "min-h-[92px]",
           !disabled && error === undefined && "hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]",
           error !== undefined && "bg-surface-danger hover:shadow-none",

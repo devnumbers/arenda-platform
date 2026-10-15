@@ -5,8 +5,10 @@ export {
   mapGlobalPaymentSearch,
   mapPayment,
   mapPaymentChangeEntry,
+  mapPaymentDueItem,
   mapPaymentOperation,
   mapOperationsSummary,
+  mapPaymentsDue,
 } from './model/mappers';
 export type {
   GlobalPayment,
@@ -25,6 +27,7 @@ export type {
   PaymentChangeCategoryRef,
   PaymentChangeEntry,
   PaymentCreateCommand,
+  PaymentDueItem,
   PaymentFieldChange,
   PaymentOperation,
   PaymentOperationStatus,
@@ -32,8 +35,11 @@ export type {
   PaymentSchedule,
   PaymentType,
   PaymentUpdateCommand,
+  PaymentsDue,
   Recurrence,
 } from './model/types';
+export { dueDaysLabel, groupDueByDay } from './lib/due-days';
+export type { DueDayGroup } from './lib/due-days';
 export { firstOccurrence, isDatePaused, nextOccurrenceAfter, nextOccurrencesAfter, occurrencesBetween } from './lib/occurrences';
 export { PAYMENT_REMINDER_OPTIONS, paymentReminderOptionLabel } from './lib/reminder-offsets';
 export { addDays, inclusiveDays } from '@/shared/lib/calendar';
@@ -42,6 +48,6 @@ export { recurrenceLabel } from './lib/recurrence-label';
 export { PaymentRowButton, type PaymentRowButtonProps } from './ui/payment-row-button';
 export { PaymentCardButton, type PaymentCardButtonProps } from './ui/payment-card-button';
 export { PaymentReminderPicker, type PaymentReminderPickerProps } from './ui/payment-reminder-picker';
-// Тест-онли: fixture-билдер для юнит-тестов, в продукте не импортируется
+// Тест-онли: fixture-билдеры для юнит-тестов, в продукте не импортируются
 // (прецедент shared/api/sse-test-fakes).
-export { makePayment } from './model/testing';
+export { makePayment, makePaymentDueItem, makePaymentOperation } from './model/testing';

@@ -10,6 +10,7 @@ import { formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-for
 import { pluralize } from '@/shared/lib/pluralize';
 import type { GlobalPayment, GlobalPaymentObject } from '@/entities/payment';
 import { globalOverdueList } from './overdue-global-model';
+import { PAYMENT_COMPLETED_LABEL } from './payment-row-subtitle';
 
 /** Цель «+» создания платежа на глобальном хабе (макет 3226-75059,
  * тикет #1235): единственный редактируемый объект — шит единого входа
@@ -33,6 +34,15 @@ export function paymentHubAddTarget(
   return editableIds.length === 1
     ? { kind: 'sheet', propertyId: single }
     : { kind: 'objects' };
+}
+
+/** Замыкающая карточка секции хаба — «Все избранные», «Все просроченные»,
+ * «Показать все» (решение владельца #1339): видна только когда в секции
+ * три и больше карточек; одна-две обходятся без замыкания — страница
+ * категории остаётся доступной с шеврона заголовка. Правило единообразное
+ * для всех секций; будущая «На оплату» (#1251) наследует его. */
+export function paymentHubSectionHasAllCard(cards: number): boolean {
+  return cards >= 3;
 }
 
 /** Избранные правила: звезда, порядок — сохранённые позиции favoriteOrder
@@ -73,8 +83,14 @@ export function overdueOperationsCountLabel(count: number): string {
 /** Дата-«Ближайший» (699:9446): просто дата графика, без статуса; у правила
  * без следующего вхождения строки нет (879:17555, Show Description=false).
  * Год — вне текущего (правило владельца 13.10): today — серверное поле
- * контракта (ADR 0048), «Ближайший» бывает и в январе. */
+ * контракта (ADR 0048), «Ближайший» бывает и в январе. Отображаемая
+ * завершённость фида (#1341) — «Полностью оплачен»: сервер разрешает
+ * исключение открытой паузы на своей стороне, флаг строки отображению
+ * точно соответствует. */
 export function nearestDateLine(item: GlobalPayment): string | undefined {
+  if (item.isCompleted) {
+    return PAYMENT_COMPLETED_LABEL;
+  }
   return item.nearestDate === null
     ? undefined
     : formatDayMonthWithYear(item.nearestDate, item.today);

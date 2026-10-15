@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState, type JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -32,6 +32,7 @@ import {
   currentBadgeVisible,
   tariffChangeDefaults,
   tariffChangeFooter,
+  tariffChangeUrlOverrides,
   tariffPriceLine,
   TARIFF_CHANGE_CARDS,
   yearlyDiscountPercent,
@@ -130,7 +131,14 @@ function TariffChangeContent({
   const resume = useResumeSubscription();
   const [resumed, setResumed] = useState(false);
 
-  const defaults = tariffChangeDefaults(subscription);
+  // Глубокая ссылка с лендинга («Подключить» карточки тарифа) называет
+  // тариф и период в query — она старше дефолтов; обычный вход без query
+  // открывается на своих (или Год+Про после регистрации).
+  const searchParams = useSearchParams();
+  const defaults = {
+    ...tariffChangeDefaults(subscription),
+    ...tariffChangeUrlOverrides(searchParams),
+  };
   const [period, setPeriod] = useState<PaymentPeriod>(defaults.period);
   const [selectedName, setSelectedName] = useState<TariffName>(defaults.tariff);
 

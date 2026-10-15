@@ -179,13 +179,19 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
   // Чистая пустота (пилюля и ряд сортировки спрятаны, подвесших нет):
   // обёртка отдаёт вертикаль и бока канону EmptyState (pt-14/px-8, анатомия
   // 3235-74057) — свои px-6/pt-6 на этой ветке съезжали пустоту на 24 вниз
-  // и в бока относительно других хабов. С рядом «Архива» или подвесшими
-  // обёртка прежняя — их контент несёт паддинг сам (списки без своих
-  // отступов, см. PropertiesPage.module.css).
+  // и в бока относительно других хабов (до решения 14.10.2026 обёртка
+  // несла pt-6). С рядом «Архива» или подвесшими обёртка прежняя — их
+  // контент несёт паддинг сам (списки без своих отступов, см.
+  // PropertiesPage.module.css).
   const bareEmpty = isEmpty && !showSortRow && !showSuspended;
 
   const content = (
-    <div className={cn('flex flex-col gap-4', !bareEmpty && 'px-6 pt-6')}>
+    // Ритм первого экрана хаба (макет 3225-77283, решение владельца
+    // 14.10.2026): заголовок → поиск 16 (pt-4), поиск → чипы 24, чипы →
+    // контент 24 — явные отступы вместо gap обёртки: зазор списка к
+    // блюр-карточкам подвесших (#702) остаётся 16 (продолжение списка,
+    // не новый блок), а ветки без пилюли/списка держат свою геометрию.
+    <div className={cn('flex flex-col', !bareEmpty && 'px-6 pt-4')}>
       {/* Пилюля поиска — канон SearchPill, «+» в хвосте больше нет
        * (макет 3225-77232: создание в шапке); на подтверждённой пустоте
        * спрятана (#1004): искать нечего, создание остаётся в CTA пустого
@@ -199,25 +205,37 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
       )}
 
       {showSortRow && (
-        <PropertiesSortRow
-          sort={sort}
-          onChange={changeSort}
-          showChip={!isEmpty}
-          showArchive={showArchive}
-          onOpenArchive={() => router.push(ROUTES.propertyArchive)}
-        />
+        <div className={cn(!isEmpty && 'mt-6')}>
+          <PropertiesSortRow
+            sort={sort}
+            onChange={changeSort}
+            showChip={!isEmpty}
+            showArchive={showArchive}
+            onOpenArchive={() => router.push(ROUTES.propertyArchive)}
+          />
+        </div>
       )}
 
-      {isLoading && <PropertiesLoading/>}
+      {isLoading && (
+        <div className="mt-6">
+          <PropertiesLoading/>
+        </div>
+      )}
 
-      {!isLoading && isError && <PropertiesErrorState onRetry={() => void refetch()} isLoading={isFetching}/>}
+      {!isLoading && isError && (
+        <div className="mt-6">
+          <PropertiesErrorState onRetry={() => void refetch()} isLoading={isFetching}/>
+        </div>
+      )}
 
       {!isLoading && !isError && isEmpty && (
-        <PropertiesEmptyState canAdd={canAdd} isLoading={isActionLoading} onAdd={openCreate}/>
+        <div className={cn(!bareEmpty && 'mt-4')}>
+          <PropertiesEmptyState canAdd={canAdd} isLoading={isActionLoading} onAdd={openCreate}/>
+        </div>
       )}
 
       {showList && (
-        <ul className={styles.list} data-testid="properties-list">
+        <ul className={cn(styles.list, 'mt-6')} data-testid="properties-list">
           {visible.map((property) => (
             <li key={property.id}>
               <PropertyCard
@@ -231,9 +249,13 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
 
       {/* Подвесшие общие объекты (#702): блюр-карточки вместо сноски
        * hidden_shared_count — после обычных карточек, в серверном
-       * FIFO-порядке. */}
+       * FIFO-порядке; зазор 16 — продолжение списка (тот же зазор, что
+       * между карточками), а не ритм 24 нового блока. */}
       {showSuspended && (
-        <ul className={styles.suspendedList} data-testid="suspended-properties-list">
+        <ul
+          className={cn(styles.suspendedList, showList && 'mt-4')}
+          data-testid="suspended-properties-list"
+        >
           {suspendedShared.map((placeholder) => (
             <li key={placeholder.propertyId}>
               <SuspendedPropertyCard

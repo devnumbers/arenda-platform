@@ -171,6 +171,7 @@ function NotificationDetailBody({
         category={detail.category}
         eventType={detail.eventType}
         unread={false}
+        paymentCategory={detail.payload.paymentCategory}
         variant="page"
       />
       <div className="flex flex-col gap-3 [word-break:break-word]">

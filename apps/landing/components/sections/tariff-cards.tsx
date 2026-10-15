@@ -16,12 +16,17 @@ import { useSwapPhase } from "@/components/use-swap-phase";
 import iconHomeMain from "@/assets/icons/icon-home-main.svg";
 import iconObjects from "@/assets/icons/icon-objects.svg";
 import iconTeam from "@/assets/icons/icon-team.svg";
+import iconTimeHistory from "@/assets/icons/icon-time-history.svg";
+import type { SubscriptionPeriod } from "@/lib/auth";
 import type { Tariff, TariffFeature } from "@/lib/content";
 
-// «Тарифы» — макеты 2846-153711 (десктоп: 3×320×550, r40, p-40),
-// 2859-4349 (планшет: ряд 3×320×453, r32, p-32), 2859-2231 (мобайл:
-// стопка по контенту, r32, p-32). Шкурки по новым кадрам карточек
-// 2967:75983/75995/76015 разошлись: «Базовый» — плоская #F3F4F6,
+// «Тарифы» — макеты 3448-78571 (десктоп: 3×320×597, r40, p-40: шапка
+// (название + цена), кнопка CTA сразу под ней, фичи ниже — кадр перенёс
+// кнопку из подвала карточки вверх; «Про» и «Бизнес» получили третью
+// фичу «История действий» с Icon/R/TimeHistory; фиксированная высота
+// только на десктопе, на мобиле/планшете карточки по контенту и тянутся
+// в ряд по самой высокой). Шкурки по кадрам
+// карточек 2967:75983/75995/76015: «Базовый» — плоская #F3F4F6,
 // обводка/стекло/блики/блюр сняты; «Про» и «Бизнес» остаются
 // стеклянными (коническое кольцо .glass-ring, стеклянный градиент,
 // белые inset-блики, blur 10), градиенты заливок новые: тёмный
@@ -32,15 +37,20 @@ import type { Tariff, TariffFeature } from "@/lib/content";
 // сегмент — белая пилюля, переезжающая между Год/Месяц за 300мс
 // (iOS-сегментконтрол); бейдж «−25%» живёт в сегменте «Год» всегда.
 // Цена при переключении меняется в хореографии steps (180мс уход →
-// 280мс въезд, токен --animate-tariff-price-in); prefers-reduced-motion
-// глушит и пилюлю, и смену цены. Кнопка «Ваш тариф» — White Disabled
-// (серый текст).
+// 280мс въезд, токен --animate-tariff-price-in). Кнопка «Ваш тариф» —
+// White Disabled
+// (серый текст) и только на периоде подписки (currentPeriod из /me): на
+// другом периоде платная карточка снова покупается (решение владельца
+// 14.10). CTA платных карточек ведёт на экран «Выбрать тариф»
+// кабинета с tariff и текущим периодом в query — экран предвыбирает
+// их из URL (гость доводится логином через from= прокси кабинета).
 const PRICE_OUT_MS = 180;
 
 const FEATURE_ICONS: Record<TariffFeature["icon"], { src: string; alt: string }> = {
   home: { src: iconHomeMain.src, alt: "Иконка объекта" },
   objects: { src: iconObjects.src, alt: "Иконка объектов" },
   team: { src: iconTeam.src, alt: "Иконка команды" },
+  history: { src: iconTimeHistory.src, alt: "Иконка истории действий" },
 };
 
 const CARD_THEMES = {
@@ -75,9 +85,11 @@ type Billing = "yearly" | "monthly";
 export function TariffCards({
   tariffs,
   currentTariff,
+  currentPeriod,
 }: {
   tariffs: Tariff[];
   currentTariff?: string;
+  currentPeriod?: SubscriptionPeriod;
 }) {
   const [billing, setBilling] = useState<Billing>("yearly");
   const {
@@ -102,7 +114,17 @@ export function TariffCards({
   // без сетки-обёртки (иначе снап и бросок перескакивали бы по две
   // карточки на узких планшетах, где ход длиннее шага).
   const cards = tariffs.map((tariff, index) => {
-    const isCurrent = currentTariff === tariff.id;
+    // «Ваш тариф» — только на текущем тарифе. У платных маркер живёт
+    // только на периоде самой подписки: на другом периоде карточка снова
+    // покупается — её CTA и есть способ сменить период (решение владельца
+    // 14.10). «Базовый» от периода не зависит. Неизвестный период (ответ
+    // /me без currentPeriod) — показываем маркер как раньше, чтобы не
+    // спрятать его из-за неполных данных.
+    const isCurrent =
+      currentTariff === tariff.id &&
+      (tariff.id === "basic" ||
+        currentPeriod === undefined ||
+        (billing === "yearly" ? "year" : "month") === currentPeriod);
     const theme = CARD_THEMES[tariff.id];
     // «Бесплатно» от периода не зависит — анимируем смену только
     // у платных карточек, константную цену не дёргаем.
@@ -113,18 +135,33 @@ export function TariffCards({
         : displayedBilling === "yearly"
           ? `${tariff.yearlyPerMonth} ₽ в месяц`
           : `${tariff.monthly} ₽ в месяц`;
+    // CTA платной карточки ведёт на «Выбрать тариф» с предвыбором этого
+    // тарифа и текущего периода переключателя (словарь лендинга yearly/
+    // monthly переводится в словарь кабинета year/month, который читает
+    // tariffChangeUrlOverrides); у базового — /login.
+    const ctaHref =
+      tariff.id === "basic"
+        ? tariff.href
+        : `${tariff.href}?tariff=${tariff.id}&period=${
+            billing === "yearly" ? "year" : "month"
+          }`;
     return (
       <Reveal
         key={tariff.id}
-        delay={index * 100}
-        className="h-full tab:w-[320px] tab:shrink-0"
+        delay={index * 80}
+        /* self-stretch, не h-full: в авторазмерном ряду (планшетная
+           полоса, сетки мобайл/десктоп) процентная высота против
+           неопределённой строки даёт auto — «Базовый» оставался ниже
+           платных карточек; stretch вытягивает обёртку по самой
+           высокой, article h-full добивает уже от неё. */
+        className="self-stretch tab:w-[320px] tab:shrink-0"
       >
         <article
           style={{
             backgroundImage: theme.backgroundImage,
             backgroundColor: theme.backgroundColor,
           }}
-          className={`${theme.glass ? GLASS_SKIN : ""} relative flex h-auto w-full flex-col justify-between gap-8 overflow-clip rounded-[32px] p-8 tab:h-[453px] tab:w-[320px] desk:h-[550px] desk:gap-12 desk:rounded-[40px] desk:p-10 ${theme.text}`}
+          className={`${theme.glass ? GLASS_SKIN : ""} relative flex h-full w-full flex-col gap-8 overflow-clip rounded-[32px] p-8 tab:w-[320px] desk:h-[597px] desk:rounded-[40px] desk:p-10 ${theme.text}`}
         >
           <div className="flex flex-col gap-[15px]">
             <h3 className="text-s leading-5 desk:text-r desk:leading-[22px]">
@@ -135,27 +172,48 @@ export function TariffCards({
               onAnimationEnd={animated ? settlePrice : undefined}
               className={`flex flex-col gap-2.5 ${
                 animated && pricePhase === "leaving"
-                  ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+                  ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout"
                   : animated && pricePhase === "entering"
-                    ? "animate-tariff-price-in motion-reduce:animate-none"
+                    ? "animate-tariff-price-in"
                     : ""
               }`}
             >
               <p className="text-[32px] font-semibold leading-9">{price}</p>
-              {/* Строка года резервируется и в «Месяце» (invisible):
-                  без неё justify-between карточки сдвигает блок фич
-                  на 16px при каждом переключении. */}
-              {tariff.id !== "basic" && (
-                <p
-                  className={`text-s leading-5 desk:text-r desk:leading-[22px] ${theme.sub} ${
-                    displayedBilling === "yearly" ? "" : "invisible"
-                  }`}
-                >
-                  При оплате {tariff.yearlyTotal.toLocaleString("ru-RU")} ₽ за год
-                </p>
-              )}
+              {/* Строка года резервируется (invisible) и у «Базового», и в
+                  «Месяце»: кнопка CTA стоит сразу под шапкой (кадр
+                  3448-78571) — без резерва кнопки карточек разъезжались бы
+                  по высоте, у «Базового» на 20px выше платных. */}
+              <p
+                className={`text-s leading-5 desk:text-r desk:leading-[22px] ${theme.sub} ${
+                  tariff.id !== "basic" && displayedBilling === "yearly" ? "" : "invisible"
+                }`}
+              >
+                {tariff.id !== "basic"
+                  ? `При оплате ${tariff.yearlyTotal.toLocaleString("ru-RU")} ₽ за год`
+                  : /* Резерв высоты у бесплатной карточки — пустой <p>
+                       высоты не имеет, строка живёт неразрывным пробелом. */
+                    "\u00A0"}
+              </p>
             </div>
           </div>
+          {isCurrent ? (
+            // aria-disabled-ссылка остаётся фокусируемой: мышь
+            // глушит pointer-events-none, Enter с клавиатуры —
+            // preventDefault (паттерн ARIA disabled-link).
+            <LandingLink
+              variant="white"
+              href={ctaHref}
+              aria-disabled
+              onClick={(event) => event.preventDefault()}
+              className="pointer-events-none w-full text-gray-2!"
+            >
+              Ваш тариф
+            </LandingLink>
+          ) : (
+            <LandingLink variant="white" href={ctaHref} className="w-full">
+              {tariff.cta}
+            </LandingLink>
+          )}
           <div className="flex flex-col gap-6">
             {tariff.features.map((feature) => (
               <div key={feature.title} className="flex items-start gap-4">
@@ -175,24 +233,6 @@ export function TariffCards({
               </div>
             ))}
           </div>
-          {isCurrent ? (
-            // aria-disabled-ссылка остаётся фокусируемой: мышь
-            // глушит pointer-events-none, Enter с клавиатуры —
-            // preventDefault (паттерн ARIA disabled-link).
-            <LandingLink
-              variant="white"
-              href={tariff.href}
-              aria-disabled
-              onClick={(event) => event.preventDefault()}
-              className="pointer-events-none w-full text-gray-2!"
-            >
-              Ваш тариф
-            </LandingLink>
-          ) : (
-            <LandingLink variant="white" href={tariff.href} className="w-full">
-              {tariff.cta}
-            </LandingLink>
-          )}
         </article>
       </Reveal>
     );
@@ -217,7 +257,7 @@ export function TariffCards({
         >
           <span
             aria-hidden
-            className="absolute inset-y-0.5 left-0.5 w-[125px] rounded-[14px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+            className="absolute inset-y-0.5 left-0.5 w-[125px] rounded-[14px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition-transform duration-300 ease-inout"
             style={{
               transform:
                 billing === "yearly"

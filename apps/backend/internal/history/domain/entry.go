@@ -103,11 +103,12 @@ const (
 	ActionRentalCompleted Action = "rental.completed"
 	ActionRentalDeleted   Action = "rental.deleted"
 
-	ActionPaymentCreated Action = "payment.created"
-	ActionPaymentUpdated Action = "payment.updated"
-	ActionPaymentDeleted Action = "payment.deleted"
-	ActionPaymentPaused  Action = "payment.paused"
-	ActionPaymentResumed Action = "payment.resumed"
+	ActionPaymentCreated   Action = "payment.created"
+	ActionPaymentUpdated   Action = "payment.updated"
+	ActionPaymentDeleted   Action = "payment.deleted"
+	ActionPaymentPaused    Action = "payment.paused"
+	ActionPaymentResumed   Action = "payment.resumed"
+	ActionPaymentCompleted Action = "payment.completed"
 
 	ActionOperationCreated Action = "operation.created"
 	ActionOperationPaid    Action = "operation.paid"

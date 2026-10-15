@@ -146,6 +146,46 @@ func TestParticipantResponseWireShape(t *testing.T) {
 	assert.Equal(t, "all_properties", string(pendingResp.AggregateStatus))
 }
 
+// TestParticipantResponsePhotoWireContract pins the nullable photo contract
+// of the property legs (ADR 0065): a leg without a photo carries null on the
+// wire — the empty string passes for «фото есть» on the client, <img src="">
+// never fires onError in WebKit/Safari and the placeholder glyph is blanked
+// (the white circle on the participants page). A leg with a photo carries
+// the streaming path verbatim.
+func TestParticipantResponsePhotoWireContract(t *testing.T) {
+	t.Parallel()
+
+	photoID := uuid.Must(uuid.NewV7())
+	resp := participantResponse(accessapp.Participant{
+		UserID:          uuid.Must(uuid.NewV7()),
+		Email:           "u1@x.ru",
+		AggregateStatus: domain.ParticipantStatusAllProperties,
+		Properties: []accessapp.ParticipantProperty{
+			// Объект без фото: SQL COALESCE даёт '' — на проводе null.
+			{PropertyID: uuid.Must(uuid.NewV7()), Title: "Квартира", Role: domain.RoleViewer, Status: domain.ParticipantEntryActive},
+			// Объект с фото: путь стриминга доходит до провода дословно.
+			{
+				PropertyID: photoID, Title: "Офис", Role: domain.RoleViewer, Status: domain.ParticipantEntryActive,
+				PhotoURL: "/api/properties/" + photoID.String() + "/photo",
+			},
+		},
+	})
+
+	raw, err := json.Marshal(resp)
+	require.NoError(t, err)
+	var body struct {
+		Properties []struct {
+			// Объект без фото — null на проводе (контракт nullable, ADR 0065).
+			PhotoURL *string `json:"photo_url"`
+		} `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &body))
+	require.Len(t, body.Properties, 2)
+	assert.Nil(t, body.Properties[0].PhotoURL)
+	require.NotNil(t, body.Properties[1].PhotoURL)
+	assert.Equal(t, "/api/properties/"+photoID.String()+"/photo", *body.Properties[1].PhotoURL)
+}
+
 // TestListParticipantsHandler checks the 200 wire of the list and the 401
 // without a session.
 func TestListParticipantsHandler(t *testing.T) {

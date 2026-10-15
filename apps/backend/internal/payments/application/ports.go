@@ -132,13 +132,21 @@ type PaymentStore interface {
 	// Update writes the editable fields of the rule (since never among them).
 	Update(ctx context.Context, p domain.Payment) error
 	// Delete removes the rule; the caller has already resolved the fate of
-	// its planned operations (keep_overdue).
+	// its planned operations (keep_overdue). The paid operations survive
+	// with payment_id set to NULL by the FK — the completing delete (тикет
+	// #1377) and the plain one (#446) share the same tail outcome.
 	Delete(ctx context.Context, id, scope uuid.UUID) error
-	// InsertPause opens the open-ended pause [from, ∞).
-	InsertPause(ctx context.Context, paymentID uuid.UUID, from time.Time) error
+	// InsertPause opens the open-ended pause [from, ∞) with the given
+	// origin (тикет #1342): the manual mutations pass PauseOriginManual,
+	// the archive bridge passes PauseOriginAutoArchive.
+	InsertPause(ctx context.Context, paymentID uuid.UUID, from time.Time, origin domain.PauseOrigin) error
 	// CloseActivePause closes the open pause with to=resumeDay — the resume
 	// day is already outside the half-open interval.
 	CloseActivePause(ctx context.Context, paymentID uuid.UUID, resumeDay time.Time) error
+	// CloseAutoArchivePause closes only the open auto_archive pause with
+	// to=resumeDay — the archive bridge's reverse leg (тикет #1342): the
+	// owner's manual pauses stay open when the property returns.
+	CloseAutoArchivePause(ctx context.Context, paymentID uuid.UUID, resumeDay time.Time) error
 	// DeletePlannedFrom removes the rule's planned operations with date >=
 	// from (deletion always drops the future planned).
 	DeletePlannedFrom(ctx context.Context, paymentID uuid.UUID, from time.Time) error
@@ -169,11 +177,14 @@ type PaymentStore interface {
 // diff. The conveyor fills the actor, the owner scope and the property from
 // its own context and records the row inside the same transaction; an empty
 // Changes is the pause/resume shape (the state flip is the content). A nil
-// verdict (creation, deletion, the favorite star) writes no row.
+// verdict (creation, deletion, the favorite star) writes no row. Origin
+// marks the archive bridge's system rows (тикет #1342); empty is the manual
+// action — the stored NULL.
 type ChangeLogWrite struct {
 	PaymentID uuid.UUID
 	Action    domain.ChangeAction
 	Changes   []domain.FieldChange
+	Origin    domain.PauseOrigin
 }
 
 // ChangeLogKey is the change-log cursor's keyset key: the row's (created_at,
@@ -468,12 +479,20 @@ type GlobalPaymentRuleRow struct {
 	FavoriteOrder *int64
 }
 
-// GlobalPaymentCounters are the main screen's two scope counters (ticket
-// #575): the «Все избранные (N)» and «Все просроченные (N)» cards. They
-// describe the whole visible scope — a search never narrows them.
+// GlobalPaymentCounters are the main screen's scope counters (ticket #575,
+// the due pair — ticket #1346): the «Все избранные (N)» and «Все
+// просроченные (N)» cards plus the «На оплату» card. They describe the
+// whole visible scope — a search never narrows them.
 type GlobalPaymentCounters struct {
 	FavoriteCount          int64
 	OverdueOperationsCount int64
+	// DueOperationsCount is the «На оплату» operations summed across the
+	// window rules (reminder on, auto-pay off — the owner's decision);
+	// DueNearestDays the smallest days-left among them (D − today, 0..7) —
+	// the card's «Сегодня»/«Завтра»/«Через N дней» source; nil when the
+	// window is empty.
+	DueOperationsCount int64
+	DueNearestDays     *int
 }
 
 // GlobalPaymentObject is one visible non-archived property of the «Объекты»
@@ -513,6 +532,15 @@ type GlobalPaymentReader interface {
 	SumGlobalPaymentCounters(
 		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time,
 	) (GlobalPaymentCounters, error)
+	// ListPaymentDue returns the actor's visible «На оплату» rows (ticket
+	// #1346) — the (rule, operation) pairs in the reminder window
+	// (D−N ≤ today ≤ D, today the row's owner's): reminder rules without
+	// auto-pay, completed excluded, archived excluded. The window predicate
+	// and the (daysLeft, dueDate desc, id desc) order live in the store's
+	// SQL; the rows answer as the response items.
+	ListPaymentDue(
+		ctx context.Context, actor uuid.UUID, todays map[uuid.UUID]time.Time,
+	) ([]PaymentDueItem, error)
 	// SumGlobalPaymentSearchCategories returns the matched categories of the
 	// search — the chips' category identities, one per category (ticket
 	// #602), the largest match count first.

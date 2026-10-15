@@ -45,6 +45,15 @@ type GlobalPaymentItem struct {
 	// without a view status. Nil when the schedule has no next occurrence
 	// (an open pause or a settled rule).
 	NearestDate *time.Time
+	// IsCompleted is the display-complete flag of the row (ticket #1341):
+	// the computed settlement completeness (domain.IsCompleted — the
+	// glossary's «Завершённый платёж») with the open-pause exception
+	// resolved on the server — the pause's cut occurrences make the raw
+	// flag vacuously true, and the feed row carries no pauses for the
+	// client to repeat the resolution the payment screen does by the end
+	// date. The hub card shows «Полностью оплачен» by it; the payment
+	// detail read carries the raw flag (PaymentResponse.isCompleted).
+	IsCompleted bool
 	// OverdueCount is the rule's overdue operations; OverdueDays the age of
 	// the oldest one in days (at least 1) — the «N дней» line; nil when the
 	// rule has no overdue operations.
@@ -57,12 +66,20 @@ type GlobalPaymentItem struct {
 }
 
 // GlobalPaymentFeed is the global «Платежи» feed (ticket #575) with the
-// main screen's counters: the sections' rows plus the «Все избранные (N)»
-// and «Все просроченные (N)» cards' numbers.
+// main screen's counters: the sections' rows plus the «Все избранные (N)»,
+// «Все просроченные (N)» and — since ticket #1346 — «На оплату» cards'
+// numbers.
 type GlobalPaymentFeed struct {
 	Items                  []GlobalPaymentItem
 	FavoriteCount          int64
 	OverdueOperationsCount int64
+	// DueOperationsCount and DueNearestDays are the «На оплату» card's
+	// number and label source (ticket #1346): the window operations of the
+	// reminder rules without auto-pay across the whole visible scope, the
+	// nearest days-left (D − today, 0..7) — «Сегодня»/«Завтра»/«Через N
+	// дней»; nil when the window is empty.
+	DueOperationsCount int64
+	DueNearestDays     *int
 }
 
 // GlobalPaymentSearch is the global payment rules search's response (ticket
@@ -157,6 +174,8 @@ func (s *GlobalPaymentService) ListGlobalPayments(ctx context.Context, actor uui
 		Items:                  items,
 		FavoriteCount:          counters.FavoriteCount,
 		OverdueOperationsCount: counters.OverdueOperationsCount,
+		DueOperationsCount:     counters.DueOperationsCount,
+		DueNearestDays:         counters.DueNearestDays,
 	}, nil
 }
 
@@ -467,7 +486,8 @@ func (s *GlobalPaymentService) feedItems(
 // stored next planned fall back to the pure projection through the shared
 // NearestDateOfPayment seam (ticket #991) — the open pause and the settled
 // rule being the true nulls; the overdue age is the owner today minus the
-// oldest overdue date.
+// oldest overdue date; the display-complete flag rides the same rule-body
+// loads (ticket #1341).
 func (s *GlobalPaymentService) enrichItems(
 	ctx context.Context, rows []GlobalPaymentRuleRow,
 ) ([]GlobalPaymentItem, error) {
@@ -477,7 +497,7 @@ func (s *GlobalPaymentService) enrichItems(
 			fallback = append(fallback, i)
 		}
 	}
-	projected, err := s.projectedDates(ctx, rows, fallback)
+	projections, err := s.projectedDates(ctx, rows, fallback)
 	if err != nil {
 		return nil, err
 	}
@@ -500,8 +520,13 @@ func (s *GlobalPaymentService) enrichItems(
 		switch {
 		case row.NextPlannedDate != nil:
 			item.NearestDate = row.NextPlannedDate
-		case projected[row.ID] != nil:
-			item.NearestDate = projected[row.ID]
+		default:
+			projection := projections[row.ID]
+			item.NearestDate = projection.next
+			// A stored next planned or any unpaid occurrence keeps the rule
+			// unfinished; the settled/paused resolution lives where the rule
+			// body is in hand.
+			item.IsCompleted = projection.completed
 		}
 		if row.OldestOverdueDate != nil && row.OverdueCount > 0 {
 			days := int(row.Today.Sub(*row.OldestOverdueDate).Hours() / 24)
@@ -513,15 +538,27 @@ func (s *GlobalPaymentService) enrichItems(
 	return items, nil
 }
 
+// feedProjection is the rule-body resolution of a fallback row: the pure
+// projection's next occurrence and the display-complete flag (ticket
+// #1341).
+type feedProjection struct {
+	next      *time.Time
+	completed bool
+}
+
 // projectedDates resolves the projection fallback for the rows without a
 // stored next planned (ticket #991): the shared NearestDateOfPayment seam
 // over each rule's fresh body — the newest materialized date is the cursor,
 // absent facts fall to it as nils. A rule gone mid-read projects nothing —
-// its row shows no next.
+// its row shows no next. The same bodies answer the display-complete flag:
+// the true null (nothing projected) is an open pause or a settled rule, and
+// the pause wins — the raw domain.IsCompleted answers «завершён» behind an
+// open pause's cut cursor (the glossary's exception), the feed row carries
+// no pauses, so the flag ships pause-free (ticket #1341).
 func (s *GlobalPaymentService) projectedDates(
 	ctx context.Context, rows []GlobalPaymentRuleRow, fallback []int,
-) (map[uuid.UUID]*time.Time, error) {
-	projected := make(map[uuid.UUID]*time.Time, len(fallback))
+) (map[uuid.UUID]feedProjection, error) {
+	projected := make(map[uuid.UUID]feedProjection, len(fallback))
 	if len(fallback) == 0 {
 		return projected, nil
 	}
@@ -547,9 +584,17 @@ func (s *GlobalPaymentService) projectedDates(
 			lastDate = &d
 		}
 		next := NearestDateOfPayment(rule, row.Today, NearestDateInputs{LastMaterialized: lastDate})
-		if next != nil {
-			projected[row.ID] = next
+		entry := feedProjection{next: next}
+		if next == nil {
+			if _, active := domain.ActivePause(rule.Pauses); !active {
+				// Overdue operations are planned too — an unsettled debt
+				// keeps the rule unfinished (the feed's fallback rows have
+				// no stored next planned, so the overdue count is the whole
+				// hasPlanned story here).
+				entry.completed = domain.IsCompleted(rule, row.Today, lastDate, row.OverdueCount > 0)
+			}
 		}
+		projected[row.ID] = entry
 	}
 	return projected, nil
 }

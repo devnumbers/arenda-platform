@@ -10,7 +10,14 @@
 //     apps/backend/internal/payments/domain/zz_categories.gen.go
 //
 //   Frontend TS:
-//     apps/frontend/features/payment-categories/lib/generated/categories.ts
+//     apps/frontend/shared/model/payment-category-catalog.ts
+//
+// The frontend artifact lives on the shared layer (not in the
+// payment-categories feature): the notifications entity renders the
+// category icon, and FSD cross-slice imports are banned above shared —
+// shared is the only home both the payments feature and the notifications
+// entity can read (решение владельца 14.10.2026, тикет #1348). The feature
+// keeps a re-export barrel at the historical path.
 //
 // This generator is idempotent: running it twice produces byte-identical files
 // (the catalog is static data — no time-dependent literals).
@@ -68,9 +75,11 @@ function main() {
       join(repoRoot, 'apps/backend/internal/payments/domain/zz_categories.gen.go'),
       gofmt(emitGo(catalog)),
     ),
-    // Frontend TS.
+    // Frontend TS — on the shared layer: the notifications entity reads the
+    // catalog too (FSD bans cross-slice imports above shared); the feature
+    // keeps a re-export barrel at the historical path.
     () => writeArtifact(
-      join(repoRoot, 'apps/frontend/features/payment-categories/lib/generated/categories.ts'),
+      join(repoRoot, 'apps/frontend/shared/model/payment-category-catalog.ts'),
       emitFrontendTs(catalog),
     ),
   ];

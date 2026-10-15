@@ -442,7 +442,7 @@ func (s *PaymentService) PausePayment(
 			if _, active := domain.ActivePause(rule.Pauses); active {
 				return mutationOutcome[domain.Payment]{}, ErrAlreadyPaused
 			}
-			if err := stores.payments.InsertPause(ctx, rule.ID, today); err != nil {
+			if err := stores.payments.InsertPause(ctx, rule.ID, today, domain.PauseOriginManual); err != nil {
 				return mutationOutcome[domain.Payment]{}, fmt.Errorf("insert pause: %w", err)
 			}
 			return mutationOutcome[domain.Payment]{
@@ -922,14 +922,26 @@ func (s *PaymentService) ruleCompleted(
 	return s.ruleCompletedToday(ctx, scope, today, payment)
 }
 
-// ruleCompletedToday gathers the operation aggregates the pure domain check
-// needs: any planned operation (the overdue view status included — an
-// unsettled debt keeps the rule unfinished) and the newest materialized date
-// across both stored statuses. Three bounded queries over the rule's own
-// rows; with planned present the rest is unnecessary.
+// ruleCompletedToday computes the settlement flag for a loaded rule over the
+// operation aggregates (ruleCompletionInputs).
 func (s *PaymentService) ruleCompletedToday(
 	ctx context.Context, scope uuid.UUID, today time.Time, payment domain.Payment,
 ) (bool, error) {
+	lastMaterialized, hasPlanned, err := s.ruleCompletionInputs(ctx, scope, today, payment)
+	if err != nil {
+		return false, err
+	}
+	return domain.IsCompleted(payment, today, lastMaterialized, hasPlanned), nil
+}
+
+// ruleCompletionInputs gathers the operation aggregates the pure completion
+// predicates need: any planned operation (the overdue view status included —
+// an unsettled debt keeps the rule unfinished) and the newest materialized
+// date across both stored statuses. Bounded queries over the rule's own
+// rows; with planned present the rest is unnecessary.
+func (s *PaymentService) ruleCompletionInputs(
+	ctx context.Context, scope uuid.UUID, today time.Time, payment domain.Payment,
+) (lastMaterialized *time.Time, hasPlanned bool, err error) {
 	overdue := domain.ViewStatusOverdue
 	planned := domain.ViewStatusPlanned
 	for _, status := range []*domain.OperationViewStatus{&overdue, &planned} {
@@ -939,10 +951,10 @@ func (s *PaymentService) ruleCompletedToday(
 			Today:  today,
 		})
 		if err != nil {
-			return false, fmt.Errorf("completion status check: %w", err)
+			return nil, false, fmt.Errorf("completion status check: %w", err)
 		}
 		if len(ops) > 0 {
-			return false, nil
+			return nil, true, nil
 		}
 	}
 	newest, err := s.operations.ListByPayment(ctx, scope, payment.PropertyID, payment.ID, OperationsListQuery{
@@ -950,12 +962,68 @@ func (s *PaymentService) ruleCompletedToday(
 		Today: today,
 	})
 	if err != nil {
-		return false, fmt.Errorf("completion last operation: %w", err)
+		return nil, false, fmt.Errorf("completion last operation: %w", err)
 	}
-	var lastMaterialized *time.Time
 	if len(newest) > 0 {
 		date := newest[0].Date
 		lastMaterialized = &date
 	}
-	return domain.IsCompleted(payment, today, lastMaterialized, false), nil
+	return lastMaterialized, false, nil
+}
+
+// CompletePayment deletes the rule (тикет #1377, ревизия #1340; ревизия 2 —
+// #1426): completing is removing — the DeletePayment shape with the
+// completion's journals, no stored completed state ever existed. The one
+// gate is the rent gate (the rule's state never outranks it, ADR 0053 — a
+// rent payment completes with its rental, never here); everything else the
+// delete admits, the completion admits too — before endDate, with unpaid
+// planned (overdue included) and through an open pause alike (the owner's
+// word 14.10: «это просто удаление платежа»). A repeated complete is the
+// privacy 404: the rule is gone. All unpaid planned rows go with the rule
+// without questions — the paid operations stay, the FK sets their payment_id
+// to NULL and origin 'payment' marks the tail (the same outcome as the
+// rental's completion #1161 and the plain delete #446). The reader's
+// favorite star falls with the rule (the FK cascade). The verdict states
+// Tick=false explicitly — the rule is gone and its plan was resolved by the
+// change step itself; the frames carry both feeds, the operations one
+// because the object's operation feed just gained the tail. No change-log
+// row: the rule's change journal cascades with the rule («История действий»
+// keeps the «Платёж завершён» row instead).
+func (s *PaymentService) CompletePayment(
+	ctx context.Context, actor, propertyID, paymentID uuid.UUID,
+) error {
+	_, err := runMutation(s.conveyor(), ctx, actor, propertyID, paymentID, s.writeGate,
+		func(
+			ctx context.Context, stores *txStores, scope uuid.UUID, rule domain.Payment, today time.Time,
+		) (mutationOutcome[domain.Payment], error) {
+			if err := ensureNotRentalManaged(ctx, stores, scope, rule.ID); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
+			// The DeletePayment shape: every unpaid planned row (overdue
+			// included) goes with the rule, no questions — the paid
+			// operations stay as the ownerless tail.
+			if err := stores.payments.DeletePlannedFrom(ctx, rule.ID, today); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
+			if err := stores.payments.DeletePlannedBefore(ctx, rule.ID, today); err != nil {
+				return mutationOutcome[domain.Payment]{}, err
+			}
+			if err := stores.payments.Delete(ctx, rule.ID, scope); err != nil {
+				return mutationOutcome[domain.Payment]{}, fmt.Errorf("delete payment: %w", err)
+			}
+			return mutationOutcome[domain.Payment]{
+				Response:      rule, // The pre-delete state; nothing re-reads it.
+				Audit:         auditdomain.ActionPaymentCompleted,
+				AuditEntityID: &rule.ID,
+				History:       new(historydomain.PaymentCompleted(rule.ID, rule.Title)),
+				Changed: []realtimedom.Change{
+					realtimedom.On(realtimedom.EntityPayments, propertyID),
+					// The paid operations survive as the ownerless tail — the
+					// object's operations feed changed with the rule.
+					realtimedom.On(realtimedom.EntityOperations, propertyID),
+				},
+				Tick: false, // The rule is gone — no plan to materialize.
+			}, nil
+		})
+	return err
 }

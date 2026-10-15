@@ -15,10 +15,12 @@ import type {
   Payment,
   PaymentChangeCategoryRef,
   PaymentChangeEntry,
+  PaymentDueItem,
   PaymentFieldChange,
   PaymentOperation,
   PaymentReminderOffset,
   PaymentType,
+  PaymentsDue,
   Recurrence,
 } from './types';
 
@@ -31,6 +33,8 @@ type GlobalPaymentObjectDto = components['schemas']['PaymentObjectItem'];
 type GlobalPaymentSearchDto = components['schemas']['PaymentsSearchGlobalResponse'];
 type PaymentChangeItemDto = components['schemas']['PaymentChangeItem'];
 type PaymentFieldChangeDto = components['schemas']['PaymentFieldChange'];
+type PaymentDueItemDto = components['schemas']['PaymentDueItem'];
+type PaymentsDueDto = components['schemas']['PaymentsDueResponse'];
 
 /** DTO категории → доменная вью: nullables нормализуются к опциональности.
  * Один хелпер для строки правила и чипа поиска — чип та же CategoryView
@@ -92,6 +96,7 @@ export function mapPaymentOperation(dto: OperationDto): PaymentOperation {
     id: dto.id,
     propertyId: dto.propertyId,
     paymentId: dto.paymentId,
+    origin: dto.origin,
     date: dto.date,
     paidDate: dto.paidDate ?? undefined,
     status: dto.status,
@@ -135,6 +140,9 @@ export function mapGlobalPayment(dto: GlobalPaymentDto): GlobalPayment {
     favoriteOrder: dto.favoriteOrder,
     today: dto.today,
     nearestDate: dto.nearestDate,
+    // Отображаемый флаг «Полностью оплачен» (#1341): исключение открытой
+    // паузы разрешено сервером — строка фида пауз не несёт.
+    isCompleted: dto.isCompleted,
     overdueOperationCount: dto.overdueOperationCount,
     overdueDays: dto.overdueDays,
     oldestOverdueOperationId: dto.oldestOverdueOperationId,
@@ -146,6 +154,37 @@ export function mapGlobalPaymentFeed(dto: GlobalPaymentFeedDto): GlobalPaymentFe
     items: dto.items.map(mapGlobalPayment),
     favoriteCount: dto.favoriteCount,
     overdueOperationsCount: dto.overdueOperationsCount,
+    // Карточка «На оплату» (#1346): null («окно пусто, метки нет») — часть
+    // семантики, как остальные nullable счётчиков.
+    dueOperationsCount: dto.dueOperationsCount,
+    dueNearestDays: dto.dueNearestDays,
+  };
+}
+
+/** Строка «На оплату» (#1346): reminderOffsetDays едет из контракта уже
+ * суженным (enum 1|3|7 — словарь схемы), маппер только нормализует
+ * категорию. */
+export function mapPaymentDueItem(dto: PaymentDueItemDto): PaymentDueItem {
+  return {
+    paymentId: dto.paymentId,
+    operationId: dto.operationId,
+    propertyId: dto.propertyId,
+    propertyName: dto.propertyName,
+    title: dto.title,
+    amountKopecks: dto.amountKopecks,
+    type: dto.type,
+    category: mapCategoryView(dto.category),
+    today: dto.today,
+    dueDate: dto.dueDate,
+    daysLeft: dto.daysLeft,
+    reminderOffsetDays: dto.reminderOffsetDays,
+  };
+}
+
+export function mapPaymentsDue(dto: PaymentsDueDto): PaymentsDue {
+  return {
+    items: dto.items.map(mapPaymentDueItem),
+    dueOperationsCount: dto.dueOperationsCount,
   };
 }
 
@@ -235,12 +274,15 @@ function mapFieldChange(dto: PaymentFieldChangeDto): PaymentFieldChange {
 }
 
 /** Строка журнала изменений платежа (ADR 0065, экран «История платежа»
- * #1195): actor остаётся на DTO — экран актора не показывает. */
+ * #1195): actor остаётся на DTO — экран актора не показывает. origin —
+ * отметка системной строки архивного моста (#1342), ручной строке едет
+ * null. */
 export function mapPaymentChangeEntry(dto: PaymentChangeItemDto): PaymentChangeEntry {
   return {
     id: dto.id,
     action: dto.action,
     changes: dto.changes.map(mapFieldChange),
+    origin: dto.origin ?? null,
     createdAt: dto.created_at,
   };
 }

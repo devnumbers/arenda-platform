@@ -23,7 +23,9 @@ const (
 	scanPropertyPhoto = "/api/properties/0194a3f8-0000-7000-8000-0000000000ff/photo"
 	// The fixture rule title and the shared due/reminder body the due-leg
 	// and reminder-leg tests assert.
-	scanRentTitle        = "Аренда квартиры"
+	scanRentTitle = "Аренда квартиры"
+	// The default catalog's slug of the fixture rule (goconst).
+	scanRentSlug         = "rent"
 	scanRentReminderBody = "Платёж «Аренда квартиры» по объекту «Квартира на Ленина»: 2\u00a0500 ₽. Срок оплаты: 20 сентября"
 )
 
@@ -246,6 +248,9 @@ func TestPaymentsPublisher_PublishesDuePayment(t *testing.T) {
 		PropertyType:    scanPropertyType,
 		PropertyPhoto:   scanPropertyPhoto,
 		OwnerID:         uuid.Must(uuid.NewV7()),
+		// The rule category's snapshot — the icon the row and the page render
+		// from (решение владельца 14.10.2026).
+		Category: &domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceDefault, Slug: scanRentSlug},
 	}
 	h.source.due[zoneMSK] = []PaymentScanTarget{target}
 	member1, member2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
@@ -286,6 +291,13 @@ func TestPaymentsPublisher_PublishesDuePayment(t *testing.T) {
 		assert.Equal(t, rule, *n.Payload.PaymentID)
 		require.NotNil(t, n.Payload.PaymentDate)
 		assert.Equal(t, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), *n.Payload.PaymentDate)
+		// The rule category's snapshot travels by the default catalog's slug —
+		// the frontend catalog keys the icon and the background by it
+		// (решение владельца 14.10.2026).
+		require.NotNil(t, n.Payload.PaymentCategory)
+		assert.Equal(t, domain.PaymentCategorySourceDefault, n.Payload.PaymentCategory.Source)
+		assert.Equal(t, scanRentSlug, n.Payload.PaymentCategory.Slug)
+		assert.Empty(t, n.Payload.PaymentCategory.Name)
 		assert.Nil(t, n.Payload.Actor, "a system scan has no initiator")
 	}
 	assert.Len(t, h.queue.emails, 3)
@@ -322,6 +334,41 @@ func TestPaymentsPublisher_PublishesOverduePayment(t *testing.T) {
 		"Платёж «Интернет» по объекту «Квартира на Ленина» просрочен: 1\u00a0000,50 ₽. Срок оплаты был 18 сентября",
 		n.Body)
 	assert.Equal(t, domain.DedupKey("payment_overdue:"+rule.String()+":2026-09-18"), n.DedupKey)
+	// A target scanned without a category publishes without the snapshot —
+	// the client keeps the previous canon (фолбэк решения 14.10.2026).
+	assert.Nil(t, n.Payload.PaymentCategory)
+}
+
+func TestPaymentsPublisher_CategorySnapshotFollowsTheRule(t *testing.T) {
+	t.Parallel()
+
+	// Снимок категории правила в payload платёжных событий (решение
+	// владельца 14.10.2026): дефолтная категория едет слагом каталога,
+	// пользовательская — именем-снимком; иконку и цвет по слагу резолвит
+	// фронтенд-каталог, у пользовательской — дефолт пользовательских.
+	h := newPaymentScanHarness([]ScanZone{{Timezone: zoneMSK}})
+	defaultTarget := dueTarget(uuid.Must(uuid.NewV7()), time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), scanRentTitle)
+	defaultTarget.Category = &domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceDefault, Slug: scanRentSlug}
+	customTarget := dueTarget(uuid.Must(uuid.NewV7()), time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), "Няня")
+	customTarget.Category = &domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceCustom, Name: "Няня"}
+	h.source.due[zoneMSK] = []PaymentScanTarget{defaultTarget, customTarget}
+
+	p := NewPaymentsPublisher(h.pipeline, h.zones, h.source, h.scheduler)
+	require.NoError(t, p.RunZoneScans(context.Background(), scanNow))
+	require.Len(t, h.feed.inserted, 2)
+
+	categoryByRule := map[uuid.UUID]*domain.PaymentCategoryRef{}
+	for _, n := range h.feed.inserted {
+		require.NotNil(t, n.Payload.PaymentID)
+		require.NotNil(t, n.Payload.PaymentCategory, "a live rule always carries exactly one category reference")
+		categoryByRule[*n.Payload.PaymentID] = n.Payload.PaymentCategory
+	}
+	assert.Equal(t,
+		&domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceDefault, Slug: scanRentSlug},
+		categoryByRule[defaultTarget.PaymentID])
+	assert.Equal(t,
+		&domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceCustom, Name: "Няня"},
+		categoryByRule[customTarget.PaymentID])
 }
 
 func TestPaymentsPublisher_DueAndOverdueInOneSweep(t *testing.T) {

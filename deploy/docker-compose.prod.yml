@@ -101,6 +101,12 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:13002:8080"
+    volumes:
+      # Дисковый кэш image-оптимизатора (/_next/image) переживает замену
+      # образа: без volume каждый деплой стартует с холодным кэшем и первые
+      # посетители платят за sharp-оптимизацию каждой картинки. Прогрев
+      # после деплоя — apps/landing/scripts/warm-images.mjs.
+      - landing-image-cache:/app/.next/cache
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/healthz || exit 1"]
       interval: 10s
@@ -153,3 +159,4 @@ networks:
 
 volumes:
   postgres-data:
+  landing-image-cache:

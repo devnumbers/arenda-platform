@@ -247,14 +247,14 @@ export function ParticipantsListScreen({
            * нейтральный скелетон, без флэша пустоты (гейт чтения списка —
            * ADR 0064 ревизия #1313). */
           <>
-            <div className="mt-4 px-6">{sortChip}</div>
+            <div className="mb-6 mt-6 px-6">{sortChip}</div>
             <ParticipantsListSkeleton />
           </>
         ) : listPending ? (
           <>
             {/* Чип сортировки реальный — вне фазы загрузки (§7, прецедент
              * книги контактов): контент встаёт на его место без сдвига. */}
-            <div className="mt-4 px-6">{sortChip}</div>
+            <div className="mb-6 mt-6 px-6">{sortChip}</div>
             <ParticipantsListSkeleton />
           </>
         ) : !isPaid ? (
@@ -281,7 +281,9 @@ export function ParticipantsListScreen({
           />
         ) : (
           <>
-            <div className="mb-4 mt-4 px-6">{sortChip}</div>
+            {/* Ритм первого экрана хаба (макет 3225-77283, решение
+             * владельца 14.10.2026): поиск → чипы 24, чипы → контент 24. */}
+            <div className="mb-6 mt-6 px-6">{sortChip}</div>
             <div className="flex flex-col px-6" data-testid="participants-list">
               {sortParticipantsByName(participants, sortOrder).map((participant) => (
                 <ParticipantRowButton

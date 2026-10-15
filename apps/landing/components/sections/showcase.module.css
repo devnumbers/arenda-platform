@@ -202,8 +202,17 @@
   transition: background-color 200ms ease;
 }
 
-.plate:hover {
-  background: #e9eaec;
+/* Hover — только для мыши: на таче :hover залипает серым до чужого тапа
+   (практики mobile-native; hover: Tailwind здесь недоступен — CSS-модуль).
+   Нажатию отвечает :active — tap-highlight глобально прозрачен. */
+@media (hover: hover) and (pointer: fine) {
+  .plate:hover {
+    background: #e9eaec;
+  }
+}
+
+.plate:active {
+  background: #dfe0e2;
 }
 
 .plateIcon {
@@ -310,6 +319,13 @@
   pointer-events: none;
 }
 
+/* Нажатие по карточке-кнопке: лёгкое притухание вместо вспышки тапа
+   (тач; при drag-захвате :active уходит на .scroller — на движение
+   не влияет). */
+.slide:active {
+  opacity: 0.92;
+}
+
 /* Стеклянная карточка характеристик */
 .card {
   position: relative;
@@ -333,6 +349,33 @@
   -webkit-backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
   backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
   border-radius: inherit;
+}
+
+/* В движении (драг/переход, класс ставит render() в showcase.tsx) блюр
+   стекла заморожен на покойном центральном значении: интерполяция блюра
+   перерастеризует стекло каждый кадр — самая дорогая часть морфа (в
+   Safari особенно), а ступеньку приезда глаз в движении не читает. */
+.moving .cardGlass {
+  -webkit-backdrop-filter: blur(var(--blur));
+  backdrop-filter: blur(var(--blur));
+}
+
+/* Стекло характеристик для тех, кто просит меньше прозрачности или
+   больший контраст: почти сплошная подложка, блюр снят целиком —
+   включая motion-фриз выше (селектор .moving .cardGlass специфичнее). */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .cardGlass,
+  .moving .cardGlass {
+    background: rgba(0, 0, 0, 0.82);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .cardRing {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+  }
 }
 
 .cardRing {

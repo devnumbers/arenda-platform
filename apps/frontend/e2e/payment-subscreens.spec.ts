@@ -104,7 +104,7 @@ test.describe('подэкран «График платежей»', () => {
     // фильтр по role-селектору отделяет их от кнопки заголовка).
     await page
       .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Ближайшая операция' }) })
+      .filter({ has: page.getByRole('heading', { name: 'Ближайший платеж' }) })
       .locator('[role="button"]')
       .first()
       .click();

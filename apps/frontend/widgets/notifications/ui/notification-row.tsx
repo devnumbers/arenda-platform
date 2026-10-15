@@ -37,6 +37,7 @@ export function NotificationRow({
         category={notification.category}
         eventType={notification.eventType}
         unread={unread}
+        paymentCategory={notification.payload?.paymentCategory}
         photoUrl={notification.payload?.property?.photo}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-2">

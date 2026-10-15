@@ -23,6 +23,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // viewport-fit=cover: без него env(safe-area-inset-*) всегда 0 — нижний
+  // паддинг vaul-шита (modal.tsx) не отъезжает от home-indicator.
+  viewportFit: "cover",
+  // Клавиатура Android Chrome сжимает layout viewport: поля формы в нижнем
+  // шите остаются над клавиатурой (дефолт resizes-visual накрывает их).
+  interactiveWidget: "resizes-content",
   themeColor: "#ffffff",
 };
 

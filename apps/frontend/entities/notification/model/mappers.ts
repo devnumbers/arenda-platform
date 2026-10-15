@@ -11,6 +11,7 @@ import type {
   NotificationCategory,
   NotificationDetail,
   NotificationEntityRef,
+  NotificationPaymentCategoryRef,
   NotificationPayload,
   NotificationTariffRef,
 } from './types';
@@ -91,6 +92,23 @@ function toId(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** Снимок категории правила платёжных событий (решение владельца
+ * 14.10.2026): дискриминированный союз — дефолт едет слагом, пользовательская
+ * именем; своя строка у каждого source обязательна — снимок без
+ * различающего поля иконку не нарисует и слотом не проходит. Единственный
+ * словарь снимка: его же читает парсер SSE-кадра (тост). */
+export function toPaymentCategory(value: unknown): NotificationPaymentCategoryRef | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { source, slug, name } = value as Record<string, unknown>;
+  if (source === 'default' && typeof slug === 'string') {
+    return { source, slug };
+  }
+  if (source === 'custom' && typeof name === 'string') {
+    return { source, name };
+  }
+  return undefined;
+}
+
 /** Опциональные поля, не пришедшие с бэка, не остаются явными
  * undefined-ключами — в карточках и действиях работает факт отсутствия. */
 function withoutUndefinedSlots<T extends object>(value: T): T {
@@ -105,6 +123,7 @@ function toPayload(raw: Record<string, unknown>): NotificationPayload {
     actor: toEntityRef(raw.actor),
     rentalId: toId(raw.rental_id),
     paymentId: toId(raw.payment_id),
+    paymentCategory: toPaymentCategory(raw.payment_category),
     taskId: toId(raw.task_id),
     membershipId: toId(raw.membership_id),
     tariff: toTariffRef(raw.tariff),

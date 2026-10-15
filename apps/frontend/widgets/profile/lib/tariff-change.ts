@@ -67,6 +67,34 @@ export function tariffChangeDefaults(subscription: Subscription): {
   return { tariff: 'pro', period: 'year' };
 }
 
+const URL_TARIFFS: ReadonlySet<string> = new Set(['pro', 'business']);
+const URL_PERIODS: ReadonlySet<string> = new Set(['year', 'month']);
+
+/** Предвыбор из query глубокой ссылки лендинга: карточка «Подключить»
+ * ведёт на экран с ?tariff=pro|business&period=year|month (правка
+ * владельца 14.10: клик должен открывать выбор именно этого тарифа).
+ * Читается только валидное: выбор базового извне не проводим — это флоу
+ * отключения (#622), период без тарифа не применяется (ссылка лендинга
+ * всегда шлёт пару), мусор и чужие значения игнорируются. */
+export function tariffChangeUrlOverrides(searchParams: {
+  readonly get: (name: string) => string | null;
+} | null): {
+  tariff?: TariffName;
+  period?: PaymentPeriod;
+} {
+  const tariff = searchParams?.get('tariff');
+  if (tariff == null || !URL_TARIFFS.has(tariff)) {
+    return {};
+  }
+  const period = searchParams?.get('period');
+  return {
+    tariff: tariff as TariffName,
+    ...(period != null && URL_PERIODS.has(period)
+      ? { period: period as PaymentPeriod }
+      : {}),
+  };
+}
+
 /** Надпись «Текущий» (аннотация макета 1929-76367): на платном тарифе —
  * только при совпадении периода, на базовом живёт при любом периоде
  * (правило владельца: базовый вне периодов). */

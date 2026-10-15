@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
+import { makePaymentOperation } from '@/entities/payment';
 import type { PaymentOperation } from '@/entities/payment';
 import {
   operationDelayRow,
@@ -17,19 +18,15 @@ import {
  */
 
 function operation(overrides: Partial<PaymentOperation> = {}): PaymentOperation {
-  return {
+  return makePaymentOperation({
     id: 'op-1',
     propertyId: 'prop-1',
     paymentId: 'pay-1',
     date: '2026-11-10',
-    status: 'planned',
     type: 'income',
-    title: 'Арендная плата',
     amountKopecks: 5_600_000,
-    categoryLabel: 'Арендная плата',
-    categorySlug: 'rent',
     ...overrides,
-  };
+  });
 }
 
 describe('operationSubtitle', () => {
@@ -119,9 +116,10 @@ describe('operationHeroAmount', () => {
 });
 
 describe('operationDetailRows', () => {
-  it('manual-операция (paymentId null) — «Дата операции» + «Статус: Выполнена» (1858-105181)', () => {
+  it('manual-факт (paymentId null, origin manual) — «Дата операции» + «Статус: Выполнена» (1858-105181)', () => {
     const manual = operation({
       paymentId: null,
+      origin: 'manual',
       status: 'paid',
       paidDate: '2026-11-10',
     });
@@ -131,9 +129,10 @@ describe('operationDetailRows', () => {
     ]);
   });
 
-  it('manual-операция прошлого года — дата с годом; оплата и задержка не показываются', () => {
+  it('manual-факт прошлого года — дата с годом; оплата и задержка не показываются', () => {
     const manual = operation({
       paymentId: null,
+      origin: 'manual',
       status: 'paid',
       date: '2025-11-10',
       paidDate: '2025-11-13',
@@ -144,11 +143,50 @@ describe('operationDetailRows', () => {
     ]);
   });
 
-  it('manual-операция с удалённого правила — просроченный статус красным', () => {
-    const orphan = operation({ paymentId: null, status: 'overdue' });
-    expect(operationDetailRows(orphan, '2026-11-13')).toEqual([
+  it('manual-факт просрочен — статус красным, без строк задержки', () => {
+    const manual = operation({ paymentId: null, origin: 'manual', status: 'overdue' });
+    expect(operationDetailRows(manual, '2026-11-13')).toEqual([
       { label: 'Дата операции', text: '10 ноября' },
       { label: 'Статус', text: 'Просрочена', danger: true },
+    ]);
+  });
+
+  it('хвост удалённого правила просрочен — плановая, задержка и статус красным, как до удаления (#1371)', () => {
+    const tail = operation({ paymentId: null, origin: 'payment', status: 'overdue' });
+    expect(operationDetailRows(tail, '2026-11-13')).toEqual([
+      { label: 'Плановая оплата', text: '10 ноября' },
+      { label: 'Задержана на', text: '3 дня' },
+      { label: 'Статус', text: 'Просрочена', danger: true },
+    ]);
+  });
+
+  it('хвост удалённого правила оплачен — фактическая, плановая, задержка, статус (#1371)', () => {
+    const tail = operation({
+      paymentId: null,
+      origin: 'payment',
+      status: 'paid',
+      paidDate: '2026-11-13',
+    });
+    expect(operationDetailRows(tail, '2026-11-13')).toEqual([
+      { label: 'Фактическая оплата', text: '13 ноября' },
+      { label: 'Плановая оплата', text: '10 ноября' },
+      { label: 'Задержана на', text: '3 дня' },
+      { label: 'Статус', text: 'Выполнена' },
+    ]);
+  });
+
+  it('хвост удалённого правила оплачен раньше срока — «Заранее на» (#1371)', () => {
+    const tail = operation({
+      paymentId: null,
+      origin: 'payment',
+      status: 'paid',
+      paidDate: '2026-11-08',
+    });
+    expect(operationDetailRows(tail, '2026-11-13')).toEqual([
+      { label: 'Фактическая оплата', text: '8 ноября' },
+      { label: 'Плановая оплата', text: '10 ноября' },
+      { label: 'Заранее на', text: '2 дня' },
+      { label: 'Статус', text: 'Выполнена' },
     ]);
   });
 

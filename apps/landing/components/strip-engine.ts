@@ -14,7 +14,6 @@ import { easeOut } from "@/components/carousel-ease";
 // полёте перебивает переход и подхватывает ленту с текущей позиции.
 // Конечная лента: набор позиций покоя — k×step, последняя прижимает
 // правый край стрипа к правому краю контентной колонки.
-// prefers-reduced-motion — переходы мгновенные.
 //
 // Отличие от исходной карусели аренды: захват указателя отложен до
 // первых 5px протяжки — тап без движения не перехватывает клик, поэтому
@@ -137,9 +136,7 @@ export function createStripEngine(
     dragStartP: 0,
     dragSamples: [],
   };
-  let reduced = false;
   let resizeRaf = 0;
-
   // Источник истины — st.p; один проход отрисовки кладёт её в дорожку.
   const render = () => {
     track.style.transform = `translate3d(${(-st.p).toFixed(2)}px,0,0)`;
@@ -177,7 +174,7 @@ export function createStripEngine(
       from: st.p,
       to,
       t0: performance.now(),
-      dur: reduced ? 0 : narrow ? STEP_MS_NARROW : STEP_MS,
+      dur: narrow ? STEP_MS_NARROW : STEP_MS,
     };
     cancelAnimationFrame(st.raf);
     frameLoop();
@@ -274,7 +271,12 @@ export function createStripEngine(
       }
     }
     if (!st.dragMoved) {
-      return; // тап без движения — ничего не делает
+      // Тап без движения перебивает полёт (жест перехватывает движение,
+      // канон) — лента доезжает до ближайшей позиции покоя, а не застывает
+      // между карточками до следующего жеста. На покое это no-op.
+      const { pos } = model(viewport, track, config);
+      animateTo(pos[nearestIndex(st.p, pos)] ?? st.p);
+      return;
     }
     const { pos } = model(viewport, track, config);
     let best = nearestIndex(st.p, pos);
@@ -328,13 +330,6 @@ export function createStripEngine(
     stepBy(e.deltaX > 0 ? 1 : -1);
   };
 
-  const rm = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const onRmChange = () => {
-    reduced = rm.matches;
-  };
-  reduced = rm.matches;
-
-  rm.addEventListener("change", onRmChange);
   viewport.addEventListener("pointerdown", onPointerDown);
   viewport.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
@@ -346,7 +341,6 @@ export function createStripEngine(
 
   return {
     destroy() {
-      rm.removeEventListener("change", onRmChange);
       viewport.removeEventListener("pointerdown", onPointerDown);
       viewport.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);

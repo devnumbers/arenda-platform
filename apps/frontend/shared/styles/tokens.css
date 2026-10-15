@@ -102,6 +102,15 @@
   --dl-duration-fast: 250ms;
   --dl-duration-move: 350ms;
 
+  /* Длительности модалки (keyframes modal-* в globals.css). Значения —
+     прежние литералы, поднятые в токены (#1349): 400/220 сознательно вне
+     шкалы 250/350 — смена требует фил-чека владельца; reduced-motion
+     укорачивает через media-блок globals.css (класс-хук .modal-surface). */
+  --motion-modal-overlay-in: 350ms;
+  --motion-modal-overlay-out: 250ms;
+  --motion-modal-card-in: 400ms;
+  --motion-modal-card-out: 220ms;
+
   /* Канон realtime-оживания значения (тикет #880, решение владельца 25.09
      по прототипу #879): dim → hold на перечитывание → blur-кроссфейд +
      вспышка. Фазы удлинены сознательно — последовательность «читается

@@ -41,8 +41,9 @@ WHERE pay.owner_id = $1
 
 -- name: ListTickPausesByPaymentIDs :many
 -- Pause intervals of the listed payments (ADR 0002 of the prototype: the
--- holes are reproducible from the rule plus intervals).
-SELECT id, payment_id, from_date, to_date
+-- holes are reproducible from the rule plus intervals). Origin rides along
+-- (тикет #1342): the archive bridge closes only its own auto_archive pauses.
+SELECT id, payment_id, from_date, to_date, origin
 FROM payment_pauses
 WHERE payment_id = ANY($1::uuid[])
 ORDER BY payment_id, from_date;

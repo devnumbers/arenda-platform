@@ -74,7 +74,7 @@ func TestListPayments_NearestDate(t *testing.T) {
 
 	paused := h.seedNearestRule("Пауза", "2026-08-01", dailyKind, "")
 	h.seedRuleOperation(paused, h.propID, h.owner, dayAug20, opPaid, typeExpense, "Пауза", nearestAmount)
-	h.seedPause(paused, dayAug25, nil)
+	h.seedPause(paused, dayAug25)
 
 	settled := h.seedNearestRule("Завершённый", "2026-08-01", dailyKind, "2026-08-10")
 	h.seedRuleOperation(settled, h.propID, h.owner, "2026-08-10", opPaid, typeExpense, "Завершённый", nearestAmount)

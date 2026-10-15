@@ -2,24 +2,35 @@
 
 import { useState, type JSX } from 'react';
 import Image from 'next/image';
-import { BoldKey, NotificationDot, StatusIconDanger } from '@/shared/assets/icons';
+import { BoldKey, BoldOther, NotificationDot, StatusIconDanger } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { categoryStyle } from '@/shared/model/payment-category-style';
 import { circleIconRing } from '@/shared/ui/design';
+import { categoryIconComponents } from '@/shared/ui/payment-category-icon-registry';
 import { notificationHasWarningBadge } from '../model/event-badge';
-import type { NotificationCategory } from '../model/types';
+import type { NotificationCategory, NotificationPaymentCategoryRef } from '../model/types';
 
 /**
  * Иконка категории строки ленты (#744, Figma 651:6743 Category Icon
  * + 2329:149013) и страницы уведомления (#745, Figma 2333:184048): круг
- * с белым кольцом 2.5, внутри 3D-иллюстрация категории (PNG-эталоны из
- * макета, канон §10 — не генерируются) или канонный BoldKey у платежей
- * (в макете 2329:149014 платежи — белая bold-иконка на синем, 3D для
- * категории нет); красная точка непрочитанного — канон NotificationDot
- * в левом-верхнем углу (как у PropertyAvatar), только у строки.
+ * с белым кольцом 2.5, внутри — снимок категории правила платежа (решение
+ * владельца 14.10.2026: подложка цветом каталога #447, белый bold-глиф —
+ * канон CategoryIcon карточек платежей, тикет #1348), либо фото объекта,
+ * либо 3D-иллюстрация категории (PNG-эталоны из макета, канон §10 — не
+ * генерируются), либо канонный BoldKey у платежей (в макете 2329:149014
+ * платежи — белая bold-иконка на синем, 3D для категории нет); красная
+ * точка непрочитанного — канон NotificationDot в левом-верхнем углу (как
+ * у PropertyAvatar), только у строки.
  *
- * Вариант row: круг 44, 3D 28 / BoldKey 24 (пропорции макета строки),
+ * Приоритет кругляша: снимок категории правила (payment_category из
+ * payload, платёжные события) → фото объекта из payload (#1275) →
+ * 3D-иллюстрация/BoldKey категории. Снимка нет (строки до #1348) —
+ * предыдущий канон: у платёжных фото объекта в ленте и BoldKey на странице.
+ * Битое фото (фото/объект удалили после публикации) — откат по onError.
+ *
+ * Вариант row: круг 44, 3D 28 / bold-глиф 24 (пропорции макета строки),
  * Warning-бейдж 24 (Figma 2329:149016, Icon/Color/DangerWhite). Вариант
- * page: круг 96, 3D 61 / BoldKey 52 (те же пропорции на круге 96),
+ * page: круг 96, 3D 61 / bold-глиф 52 (те же пропорции на круге 96),
  * бейдж 32, точка непрочитанного не рисуется — страница сама читает
  * уведомление. Белый кант бейджа красится через text-surface
  * (stroke="currentColor" в SVG — канон StatusIcon), отделяя бейдж от
@@ -64,6 +75,7 @@ export function NotificationCategoryIcon({
   eventType,
   unread,
   photoUrl,
+  paymentCategory,
   variant = 'row',
   badge = true,
 }: {
@@ -73,6 +85,11 @@ export function NotificationCategoryIcon({
    * тост передаёт только badge=false. */
   readonly eventType?: string;
   readonly unread: boolean;
+  /** Снимок категории правила платежа из payload (решение владельца
+   * 14.10.2026, #1348): есть — иконка и цвет каталога #447 в круге вместо
+   * фото объекта и 3D-иллюстрации; нет (строки до снимка) — предыдущий
+   * канон. */
+  readonly paymentCategory?: NotificationPaymentCategoryRef;
   /** Снимок фото объекта из payload (#1275): есть — фото в круге вместо
    * 3D-иллюстрации категории; битое (фото/объект удалили после публикации)
    * — откат к иллюстрации категории по onError. */
@@ -86,10 +103,28 @@ export function NotificationCategoryIcon({
 }): JSX.Element {
   const visual = CATEGORY_VISUALS[category];
   const sizes = ICON_SIZES[variant];
+  // Снимок категории правила — иконка и цвет каталога #447 (канон
+  // CategoryIcon карточек платежей); у пользовательской категории слага
+  // нет — style резолвится в дефолт пользовательских. Неизвестное имя
+  // глифа молча падает туда же.
+  const paymentStyle =
+    paymentCategory === undefined
+      ? undefined
+      : categoryStyle(
+          paymentCategory.source,
+          paymentCategory.source === 'default' ? paymentCategory.slug : undefined,
+        );
+  const PaymentGlyph =
+    paymentStyle === undefined ? undefined : (categoryIconComponents[paymentStyle.icon] ?? BoldOther);
   // Битое фото (404 стрима после удаления) — откат к 3D-иллюстрации
   // категории: строка ленты не остаётся с пустым кругом (#1275).
   const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl !== undefined && !photoBroken;
+  const showPhoto = PaymentGlyph === undefined && photoUrl !== undefined && !photoBroken;
+  const circleBackground = showPhoto
+    ? 'bg-surface-muted'
+    : PaymentGlyph === undefined
+      ? visual.className
+      : undefined;
   // Размер живёт на внешнем wrapper: точка и бейдж якорятся к кругу, а сам
   // wrapper не растягивается флекс-родителем (страница #745 — колонка).
   return (
@@ -98,10 +133,13 @@ export function NotificationCategoryIcon({
         className={cn(
           'flex h-full w-full items-center justify-center overflow-hidden rounded-pill',
           circleIconRing.white,
-          showPhoto ? 'bg-surface-muted' : visual.className,
+          circleBackground,
         )}
+        style={paymentStyle !== undefined ? { backgroundColor: paymentStyle.color } : undefined}
       >
-        {showPhoto ? (
+        {PaymentGlyph !== undefined && paymentStyle !== undefined ? (
+          <PaymentGlyph className={cn(sizes.boldKey, 'text-white')} />
+        ) : showPhoto ? (
           // <img>, не next/image: путь same-origin стриминга бэка
           // (ADR 0065), оптимизатору не передаётся — канон PropertyAvatar.
           <img

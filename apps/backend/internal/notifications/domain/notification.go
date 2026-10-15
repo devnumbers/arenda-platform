@@ -173,6 +173,32 @@ type TariffRef struct {
 	ActiveUntil   *time.Time `json:"active_until,omitempty"`
 }
 
+// The category reference's source values — the payments contract's
+// CategoryView vocabulary: the default catalog's entry or the owner's custom
+// category.
+const (
+	PaymentCategorySourceDefault = "default"
+	PaymentCategorySourceCustom  = "custom"
+)
+
+// PaymentCategoryRef is the payment rule's category snapshot in the payment
+// events' payload (решение владельца 14.10.2026): the category as of the
+// publication moment — the default catalog's entry travels by slug, a
+// custom category by its name snapshot. The icon and the background color
+// are the frontend catalog's metadata keyed by the slug (контракт платежей:
+// they never travel in a response); a custom category has no catalog entry
+// and renders the user default. Editing the rule's category later repaints
+// nothing — the snapshot, like every payload line, belongs to the
+// publication moment (решение #737).
+type PaymentCategoryRef struct {
+	Source string `json:"source"`
+	// Slug is the default catalog's key ('rent', 'utilities', …); empty for
+	// a custom category.
+	Slug string `json:"slug,omitempty"`
+	// Name is the custom category's name snapshot; empty for a default one.
+	Name string `json:"name,omitempty"`
+}
+
 // Payload carries the feed row's links and name snapshots (решение #737):
 // property (id + имя-снимок), actor, tariff, and the bare entity ids of the
 // transition targets. All fields are optional — the text snapshot in
@@ -187,7 +213,13 @@ type Payload struct {
 	// payload payment = id правила + дата операции) — the calendar date the
 	// «Оплатить» button's live check pins the occurrence to (#743).
 	PaymentDate *time.Time `json:"payment_date,omitempty"`
-	TaskID      *uuid.UUID `json:"task_id,omitempty"`
+	// PaymentCategory is the payment events' rule-category snapshot (решение
+	// владельца 14.10.2026) — the icon the feed row, the page and the toast
+	// render from. Nil for the rows published before the snapshot travelled:
+	// the client keeps the previous canon (the property photo in the feed,
+	// the category glyph on the page).
+	PaymentCategory *PaymentCategoryRef `json:"payment_category,omitempty"`
+	TaskID          *uuid.UUID          `json:"task_id,omitempty"`
 	// TaskRuleID is the task's producing rule (the tasks events, #750): an
 	// active task's screens are its rule's screens, so the «переход к
 	// задаче» navigation needs the rule id alongside the task id.

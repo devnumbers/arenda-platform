@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { paymentDraftStorageKey } from '@/features/payments';
 import {
   captureScreen,
+  execE2eSql,
   expect,
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
@@ -11,7 +12,8 @@ import {
 
 // Экран «Платежи объекта» (#463, Figma 1043:57610/1043:62920): три секции —
 // «Просроченные операции / Платежи / Автоплатежи», максимум 3 строки в
-// секции, паузные правила не выводятся, заголовки-стрелки ведут на
+// секции, паузные правила видны наравне со всеми — подзаголовком «На паузе»
+// в конце секции (#1353, отмена правила #463), заголовки-стрелки ведут на
 // страницы секций.
 // Скриншоты — материал для сверки с Figma.
 
@@ -41,7 +43,7 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByText('Платежи объекта', { exact: true })).toBeVisible();
   });
 
-  test('три секции, максимум 3 строки, паузные скрыты', async ({
+  test('три секции, максимум 3 строки', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -51,6 +53,13 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Платежи', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Автоплатежи' })).toBeVisible();
+
+    // Заголовки секций — кнопки: UA-центрирование кнопки не должно
+    // протекать в h2 — на узком экране двухстрочный «Просроченные
+    // операции» рендерился по центру карточки.
+    await expect(
+      page.getByRole('heading', { name: 'Просроченные операции' }),
+    ).toHaveCSS('text-align', 'left');
 
     // Строки секций считаем по текстам с суммой (заголовок-стрелка —
     // кнопка без «₽»; строки операций не кликабельны и роли button не
@@ -70,10 +79,12 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(autoRows.first()).toBeVisible();
     expect(await autoRows.count()).toBeLessThanOrEqual(3);
 
-    // Паузное правило не выводится: строк «На паузе» нет ни в одной секции
-    // (его просроченный долг при этом остаётся в секции просроченных).
-    await expect(page.getByTestId('section-payments').getByText('На паузе')).toHaveCount(0);
-    await expect(page.getByTestId('section-auto').getByText('На паузе')).toHaveCount(0);
+    // Паузные правила видны наравне со всеми (#1353, отмена #463): «На
+    // паузе» допущен в обеих секциях. На сидовой квартире состав
+    // недетерминирован — сценарии создают правила, и паузный «Домофон»
+    // (ручной) сидит за лимитом 3 среди датированных, как «Техосмотр»
+    // ниже; детерминированную видимость паузной строки проверяет
+    // отдельный тест на одноразовом объекте.
 
     // Завершённое правило (вхождений нет) — в конце сортировки, за лимитом.
     await expect(page.getByText('Техосмотр')).toHaveCount(0);
@@ -81,6 +92,95 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
 
     await captureScreen(page, testInfo, 'payments-filled-mobile');
+  });
+
+  // Одноразовый объект фикстуры #1353 — удаляется в afterAll (прецедент
+  // API-фикстур payment-rental-gate).
+  let fixturePropertyId: string | null = null;
+
+  interface CreatedIdResponse {
+    id: string;
+  }
+
+  test.afterAll(async () => {
+    if (fixturePropertyId === null) return;
+    await execE2eSql(`
+      DELETE FROM payment_pauses WHERE payment_id IN
+        (SELECT id FROM payments WHERE property_id = '${fixturePropertyId}');
+      DELETE FROM payments WHERE property_id = '${fixturePropertyId}';
+      DELETE FROM properties WHERE id = '${fixturePropertyId}';
+    `);
+  });
+
+  test('паузное правило видно в полосе объекта и в секции «Платежи» (#1353)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    // Состав секций под контролем теста: сидовая квартира обрастает
+    // правилами сценариев, паузный там детерминированно за лимитом 3.
+    // Одноразовый объект API-постом (сид не мутируем — прецедент
+    // payment-edit-delete), пауза — API-маршрутом поставки на паузу.
+    const property = await page.request.post('/api/properties', {
+      data: { type: 'apartment', address: 'Москва, Тестовая, 1' },
+    });
+    expect(property.ok(), 'создание одноразового объекта').toBe(true);
+    const { id: propertyId } = (await property.json()) as CreatedIdResponse;
+    fixturePropertyId = propertyId;
+
+    const createPayment = async (title: string): Promise<string> => {
+      const created = await page.request.post(
+        `/api/properties/${propertyId}/payments`,
+        {
+          data: {
+            type: 'expense',
+            title,
+            amountKopecks: 100_000,
+            recurrence: { kind: 'monthly', daysOfMonth: [20], lastDay: false },
+            categorySlug: 'other',
+            autoPay: false,
+          },
+        },
+      );
+      expect(created.ok(), `создание правила «${title}»`).toBe(true);
+      return ((await created.json()) as CreatedIdResponse).id;
+    };
+    await createPayment('Вывоз мусора');
+    const pausedId = await createPayment('Обслуживание домофонии');
+    const paused = await page.request.post(
+      `/api/properties/${propertyId}/payments/${pausedId}/pause`,
+    );
+    expect(paused.ok(), 'поставка на паузу').toBe(true);
+
+    // Экран «Платежи объекта»: паузная строка — с подзаголовком «На паузе»,
+    // в конце секции (дат у паузных нет), слот лимита занимает как все.
+    await page.goto(`/properties/${propertyId}/payments`);
+    const sectionPayments = page.getByTestId('section-payments');
+    const datedRow = sectionPayments.getByText('Вывоз мусора');
+    const pausedRow = sectionPayments.getByText('Обслуживание домофонии');
+    await expect(datedRow).toBeVisible();
+    await expect(pausedRow).toBeVisible();
+    await expect(sectionPayments.getByText('На паузе')).toBeVisible();
+    // Симметричный fallback: пропавший бокс роняет сравнение в любую сторону.
+    expect((await pausedRow.boundingBox())?.y ?? Infinity).toBeGreaterThan(
+      (await datedRow.boundingBox())?.y ?? -Infinity,
+    );
+    // Обе строки в секции — до #1353 паузная отфильтровывалась.
+    expect(await sectionPayments.getByText('₽').count()).toBe(2);
+    // У автоплатежей паузных нет: секция пуста, «На паузе» в ней не живёт.
+    await expect(
+      page.getByText('Предупредим о платеже, потом автоматически отметим оплату'),
+    ).toBeVisible();
+    await expect(page.getByTestId('section-auto').getByText('На паузе')).toHaveCount(0);
+
+    // Полоса объекта «Регулярные платежи»: паузный круг — обычный, без
+    // отличий от активных; группа одна, оба круга на месте.
+    await page.goto(`/properties/${propertyId}`);
+    const icons = page.getByTestId('property-payments-icons');
+    await expect(icons.getByText('Платежи', { exact: true })).toBeVisible();
+    await expect(icons.getByText('Автоплатежи')).toHaveCount(0);
+    // Круг — CategoryIcon с одним глифом; бейджей у fresh-правил нет.
+    expect(await icons.locator('svg').count()).toBe(2);
   });
 
   test('заголовок секции ведёт на страницу секции', async ({ page, seededUser }) => {

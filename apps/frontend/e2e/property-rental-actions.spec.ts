@@ -10,11 +10,12 @@ import {
 // Машина «Действий аренды» на странице объекта (#986, карта #984):
 // аренды нет → «Начать аренду», «Ожидает начала» → «Удалить аренду»
 // (бэк #985: DELETE = 204, платёж сносится вместе с арендой), «идёт» →
-// «Завершить аренду» (#627). Гард статуса #628 у «Ожидает начала» —
-// составное «Удалить аренду + применить статус» (решение владельца
-// 30.09: завершение будущей аренды не существует); гард удаления #632
-// ведёт в шит той же машины. Правки аренды на объекте нет — только со
-// страницы аренды (#987).
+// «Завершить аренду» — единый путь через мастер итогов #534 (решение
+// владельца 14.10.2026, быстрый шит #627 снесён). Гард статуса #628 у
+// «Ожидает начала» — составное «Удалить аренду + применить статус»
+// (решение владельца 30.09: завершение будущей аренды не существует);
+// гард удаления #632 ведёт в шит той же машины. Правки аренды на
+// объекте нет — только со страницы аренды (#987).
 //
 // Объект на ремонте арендную машину срезает (#1050, карта #1047): секция
 // «Аренда» на детали не рисуется вовсе, в «Управлении» нет арендной
@@ -362,7 +363,7 @@ test.describe('машина «Действий аренды» на страни�
     expect(paymentsCount).toBe('0');
   });
 
-  test('идёт: «Завершить аренду» — шит #627 завершает, блок пустеет', async ({
+  test('идёт: «Завершить аренду» — мастер итогов #534 завершает, блок пустеет', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -376,11 +377,29 @@ test.describe('машина «Действий аренды» на страни�
     await expect(page.getByTestId('property-rental-block')).toBeVisible();
 
     await manage.getByRole('button', { name: 'Завершить аренду' }).click();
-    const completeSheet = page.getByRole('dialog', { name: 'Завершить аренду?' });
-    await expect(completeSheet).toBeVisible();
-    await completeSheet.getByRole('button', { name: 'Завершить', exact: true }).click();
+    // Единый путь (решение владельца 14.10.2026): не шит, а мастер итогов.
+    await expect(page).toHaveURL(/\/rentals\/complete$/);
+    await expect(
+      page.getByRole('heading', { name: 'Завершить аренду?' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Сегодня' }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    // Без залога шаг — комментарий (канон #1386), готов сразу.
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Подведем итоги аренды' }),
+    ).toBeVisible();
+    // На телефоне (<561) шаг 3 — hero-экран: «Подвести итоги» открывает
+    // обзор (1433:60681 → 1433:61074); сабмит — «Завершить аренду» внизу
+    // обзора (на ≥561 обзор сразу и кнопка одна).
+    await page.getByRole('button', { name: 'Подвести итоги' }).click();
+    await page.getByRole('button', { name: 'Завершить аренду' }).click();
+    await expect(page.getByRole('heading', { name: /завершена$/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо' }).click();
 
-    await expect(page.getByText('Аренда завершена')).toBeVisible();
+    // Финал уводит на карточку объекта (#1388): блок пустеет.
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY_ID}$`));
     await expect(page.getByText('Аренда не добавлена')).toBeVisible();
 
     // Server-truth: completed_date = сегодня (POST /complete прошёл).

@@ -48,10 +48,11 @@ export function TasksLoading(): JSX.Element {
           </div>
 
           {/* Ряд чипов — зеркало живого экрана (макет 3226-74077): «⋮»
-           * слева перед чипами, зазоры 6, ряд в 24 под заголовком. Кебаб
-           * в покое — в общем (владельческом) состоянии ленты он есть,
-           * и без него чипы при загрузке сдвигало бы влево. */}
-          <div className="mt-6 flex items-center gap-1.5 pl-6">
+           * слева перед чипами, зазоры 6, зазор от заголовка 16 — единый
+           * тип первого блока на всех хабах (решение владельца 14.10.2026).
+           * Кебаб в покое — в общем (владельческом) состоянии ленты он
+           * есть, и без него чипы при загрузке сдвигало бы влево. */}
+          <div className="mt-4 flex items-center gap-1.5 pl-6">
             <IconButton icon={<VerticalMenu />} label="Действия со списком" variant="muted" />
             <SortChip sort={DEFAULT_TASKS_SORT} />
             <ChipButton trailingIcon={<SmallArrowDown />}>Объект</ChipButton>

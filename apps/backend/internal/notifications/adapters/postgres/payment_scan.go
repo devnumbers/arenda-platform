@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
@@ -63,7 +64,8 @@ func (s *PaymentScanStore) ListDueTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+			row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -87,7 +89,8 @@ func (s *PaymentScanStore) ListOverdueTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+			row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -111,7 +114,8 @@ func (s *PaymentScanStore) ListAutoPaidTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+			row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -150,20 +154,21 @@ func (s *PaymentScanStore) ListScheduledAutoPaidTargets(
 func (s *PaymentScanStore) GetScheduledAutoPaidPayment(
 	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
 ) (application.PaymentScanTarget, bool, error) {
-	row, err := postgres.New(s.db).GetScheduledAutoPaidPayment(ctx, postgres.GetScheduledAutoPaidPaymentParams{
-		Column1: pgconv.UUIDToPgtype(paymentID),
-		Column2: pgconv.DateToPgtype(date),
-		Column3: pgconv.TimePtrToPgtype(&now),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return application.PaymentScanTarget{}, false, nil
-		}
-		return application.PaymentScanTarget{}, false, fmt.Errorf("load scheduled auto-paid payment %s: %w", paymentID, err)
+	row, live, err := scheduledPaymentOutcome(func() (postgres.GetScheduledAutoPaidPaymentRow, error) {
+		return postgres.New(s.db).GetScheduledAutoPaidPayment(ctx, postgres.GetScheduledAutoPaidPaymentParams{
+			Column1: pgconv.UUIDToPgtype(paymentID),
+			Column2: pgconv.DateToPgtype(date),
+			Column3: pgconv.TimePtrToPgtype(&now),
+		})
+	}, "scheduled auto-paid payment "+paymentID.String())
+	if !live {
+		return application.PaymentScanTarget{}, false, err
 	}
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.OwnerID), true, nil
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
+	), true, nil
 }
 
 // ListScheduledDueTargets lists the operations whose due boundary — the
@@ -226,20 +231,21 @@ func (s *PaymentScanStore) ListScheduledOverdueTargets(
 func (s *PaymentScanStore) GetScheduledDuePayment(
 	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
 ) (application.PaymentScanTarget, bool, error) {
-	row, err := postgres.New(s.db).GetScheduledDuePayment(ctx, postgres.GetScheduledDuePaymentParams{
-		Column1: pgconv.UUIDToPgtype(paymentID),
-		Column2: pgconv.DateToPgtype(date),
-		Column3: pgconv.TimePtrToPgtype(&now),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return application.PaymentScanTarget{}, false, nil
-		}
-		return application.PaymentScanTarget{}, false, fmt.Errorf("load scheduled due payment %s: %w", paymentID, err)
+	row, live, err := scheduledPaymentOutcome(func() (postgres.GetScheduledDuePaymentRow, error) {
+		return postgres.New(s.db).GetScheduledDuePayment(ctx, postgres.GetScheduledDuePaymentParams{
+			Column1: pgconv.UUIDToPgtype(paymentID),
+			Column2: pgconv.DateToPgtype(date),
+			Column3: pgconv.TimePtrToPgtype(&now),
+		})
+	}, "scheduled due payment "+paymentID.String())
+	if !live {
+		return application.PaymentScanTarget{}, false, err
 	}
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.OwnerID), true, nil
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
+	), true, nil
 }
 
 // GetScheduledOverduePayment reloads one operation at its overdue boundary
@@ -249,20 +255,21 @@ func (s *PaymentScanStore) GetScheduledDuePayment(
 func (s *PaymentScanStore) GetScheduledOverduePayment(
 	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
 ) (application.PaymentScanTarget, bool, error) {
-	row, err := postgres.New(s.db).GetScheduledOverduePayment(ctx, postgres.GetScheduledOverduePaymentParams{
-		Column1: pgconv.UUIDToPgtype(paymentID),
-		Column2: pgconv.DateToPgtype(date),
-		Column3: pgconv.TimePtrToPgtype(&now),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return application.PaymentScanTarget{}, false, nil
-		}
-		return application.PaymentScanTarget{}, false, fmt.Errorf("load scheduled overdue payment %s: %w", paymentID, err)
+	row, live, err := scheduledPaymentOutcome(func() (postgres.GetScheduledOverduePaymentRow, error) {
+		return postgres.New(s.db).GetScheduledOverduePayment(ctx, postgres.GetScheduledOverduePaymentParams{
+			Column1: pgconv.UUIDToPgtype(paymentID),
+			Column2: pgconv.DateToPgtype(date),
+			Column3: pgconv.TimePtrToPgtype(&now),
+		})
+	}, "scheduled overdue payment "+paymentID.String())
+	if !live {
+		return application.PaymentScanTarget{}, false, err
 	}
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.OwnerID), true, nil
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
+	), true, nil
 }
 
 // ListReminderTargets lists the zone's planned operations of rules with a
@@ -286,7 +293,8 @@ func (s *PaymentScanStore) ListReminderTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.OwnerID))
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+			row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID))
 	}
 	return targets, nil
 }
@@ -326,29 +334,42 @@ func (s *PaymentScanStore) ListScheduledReminderTargets(
 func (s *PaymentScanStore) GetScheduledReminderPayment(
 	ctx context.Context, paymentID uuid.UUID, date, now time.Time,
 ) (application.PaymentScanTarget, bool, error) {
-	row, err := postgres.New(s.db).GetScheduledReminderPayment(ctx, postgres.GetScheduledReminderPaymentParams{
-		Column1: pgconv.UUIDToPgtype(paymentID),
-		Column2: pgconv.DateToPgtype(date),
-		Column3: pgconv.TimePtrToPgtype(&now),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return application.PaymentScanTarget{}, false, nil
-		}
-		return application.PaymentScanTarget{}, false, fmt.Errorf("load scheduled reminder payment %s: %w", paymentID, err)
+	row, live, err := scheduledPaymentOutcome(func() (postgres.GetScheduledReminderPaymentRow, error) {
+		return postgres.New(s.db).GetScheduledReminderPayment(ctx, postgres.GetScheduledReminderPaymentParams{
+			Column1: pgconv.UUIDToPgtype(paymentID),
+			Column2: pgconv.DateToPgtype(date),
+			Column3: pgconv.TimePtrToPgtype(&now),
+		})
+	}, "scheduled reminder payment "+paymentID.String())
+	if !live {
+		return application.PaymentScanTarget{}, false, err
 	}
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.OwnerID), true, nil
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
+	), true, nil
 }
 
 // paymentScanTarget maps one scan row's fields to the application target.
 // The three sqlc legs (due, reminder, overdue) share the select shape but
-// not the generated row type, so the mapping travels by value.
+// not the generated row type, so the mapping travels by value. The rule's
+// category reference travels as the payload's icon snapshot (решение
+// владельца 14.10.2026): the default catalog's slug or the custom
+// category's name — the category constraint pins exactly one, the nil
+// answer keeps the shape honest for rows read before the columns travelled.
 func paymentScanTarget(
 	paymentID pgtype.UUID, date pgtype.Date, title string, amountKopecks int64,
-	propertyID pgtype.UUID, propertyName, propertyAddress, propertyType, propertyPhoto string, ownerID pgtype.UUID,
+	propertyID pgtype.UUID, propertyName, propertyAddress, propertyType, propertyPhoto string,
+	categorySlug, categoryName pgtype.Text, ownerID pgtype.UUID,
 ) application.PaymentScanTarget {
+	var category *domain.PaymentCategoryRef
+	switch {
+	case categoryName.Valid:
+		category = &domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceCustom, Name: categoryName.String}
+	case categorySlug.Valid:
+		category = &domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceDefault, Slug: categorySlug.String}
+	}
 	return application.PaymentScanTarget{
 		PaymentID:       pgconv.UUIDFromPgtype(paymentID),
 		DueDate:         pgconv.DateFromPgtype(date),
@@ -359,6 +380,25 @@ func paymentScanTarget(
 		PropertyAddress: propertyAddress,
 		PropertyType:    propertyType,
 		PropertyPhoto:   propertyPhoto,
+		Category:        category,
 		OwnerID:         pgconv.UUIDFromPgtype(ownerID),
 	}
+}
+
+// scheduledPaymentOutcome resolves one boundary job's reload (the four
+// GetScheduled* legs): a gone row is quiet — live=false with a nil error,
+// the job finishes without publishing; any other error carries the leg's
+// diagnosis. The generated row types differ per leg, hence the generic.
+func scheduledPaymentOutcome[T any](
+	load func() (T, error), diagnos string,
+) (row T, live bool, err error) {
+	row, err = load()
+	if err == nil {
+		return row, true, nil
+	}
+	var zero T
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, false, nil
+	}
+	return zero, false, fmt.Errorf("load %s: %w", diagnos, err)
 }
