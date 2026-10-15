@@ -412,26 +412,44 @@
     }
 }
 
-/* Сворачиваемая секция дизайн-слоя (#499): раскрытие/скрытие по высоте
-   контента — переменную ведёт Radix Collapsible. */
-@keyframes collapsible-down {
-    from {
-        height: 0;
-    }
+/* Сворачиваемая секция дизайн-слоя (#499; аудит #1418): grid-rows 0fr→1fr
+   + opacity на transition (канон #620, как tariff-faq) — без высотных
+   keyframes: ре-клик посреди закрытия разворачивает секцию из текущей
+   позиции. Стражи Presence — по модели шита «Еще» (без визуального
+   эффекта, имена in/out разные — Presence ждёт animationend). */
+@keyframes collapsible-presence-in {
+    from { --collapsible-presence: 0; }
+    to   { --collapsible-presence: 1; }
+}
 
-    to {
-        height: var(--radix-collapsible-content-height);
+@keyframes collapsible-presence-out {
+    from { --collapsible-presence: 0; }
+    to   { --collapsible-presence: 1; }
+}
+
+.collapsible-content[data-state='open'] {
+    animation: collapsible-presence-in 200ms linear;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition:
+        grid-template-rows 200ms var(--dl-ease),
+        opacity 200ms var(--dl-ease);
+}
+
+@starting-style {
+    .collapsible-content[data-state='open'] {
+        grid-template-rows: 0fr;
+        opacity: 0;
     }
 }
 
-@keyframes collapsible-up {
-    from {
-        height: var(--radix-collapsible-content-height);
-    }
-
-    to {
-        height: 0;
-    }
+.collapsible-content[data-state='closed'] {
+    animation: collapsible-presence-out 150ms linear;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-rows 150ms var(--dl-ease),
+        opacity 150ms var(--dl-ease);
 }
 
 /* Шит «Еще» TabBar (Figma 1721:57140, #560). Motion-модель 2026-09-22 —
@@ -668,6 +686,16 @@ body:has(.modal-overlay[data-state='open']) .screen-shell {
 @media (prefers-reduced-motion: reduce) {
     [data-radix-dropdown-menu-content] {
         animation-duration: 150ms;
+    }
+}
+
+/* Сворачиваемая секция (план 013): Presence-стражи и переход укорачиваются
+   до канонных 150ms — движение grid-rows+opacity остаётся. */
+@media (prefers-reduced-motion: reduce) {
+    .collapsible-content[data-state='open'],
+    .collapsible-content[data-state='closed'] {
+        animation-duration: 150ms;
+        transition-duration: 150ms;
     }
 }
 

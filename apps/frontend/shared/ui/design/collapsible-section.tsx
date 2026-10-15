@@ -62,7 +62,7 @@ export function CollapsibleSection({
       </CollapsibleTrigger>
       <CollapsibleContent
         className={cn(
-          'overflow-hidden data-[state=open]:animate-[collapsible-down_200ms_var(--dl-ease)] data-[state=closed]:animate-[collapsible-up_150ms_var(--dl-ease)]',
+          'collapsible-content overflow-hidden',
         )}
       >
         {children}

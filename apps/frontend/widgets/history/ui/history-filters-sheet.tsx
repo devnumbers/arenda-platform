@@ -14,7 +14,6 @@ import {
   Key,
   LockSmall,
   SmallArrowDown,
-  SmallArrowUp,
   Team,
   TimeHistory,
   TrashBin,
@@ -609,15 +608,26 @@ function FilterGroupCard({
           <span className="shrink-0 text-[13px] font-medium leading-[15px] text-content-tertiary">
             {count}/{rows.length}
           </span>
-          {expanded ? (
-            <SmallArrowUp className="ml-1 h-6 w-6 shrink-0" aria-hidden />
-          ) : (
-            <SmallArrowDown className="ml-1 h-6 w-6 shrink-0" aria-hidden />
-          )}
+          <SmallArrowDown
+            className={cn(
+              'ml-1 h-6 w-6 shrink-0 text-content-tertiary transition-transform duration-200 ease-apple',
+              expanded && 'rotate-180',
+            )}
+            aria-hidden
+          />
         </button>
       </div>
-      {expanded && (
-        <div className="pb-1">
+      {/* Раскрытие группы — канон 0fr→1fr + opacity (тариф-faq #620,
+          тайминги дизайн-слоя 200/150): контент всегда в DOM, свёрнутый
+          выводится из tab-порядка inert'ом, шеврон проворачивается. */}
+      <div
+        inert={!expanded}
+        className={cn(
+          'grid transition-[grid-template-rows,opacity] ease-apple',
+          expanded ? 'opacity-100 [grid-template-rows:1fr] duration-200' : 'opacity-0 [grid-template-rows:0fr] duration-150',
+        )}
+      >
+        <div className="overflow-hidden pb-1">
           {sections.map((section, sectionIndex) => (
             <Fragment key={section.title ?? `section-${sectionIndex}`}>
               {section.title !== undefined && (
@@ -640,7 +650,7 @@ function FilterGroupCard({
             </Fragment>
           ))}
         </div>
-      )}
+      </div>
     </section>
   );
 }
