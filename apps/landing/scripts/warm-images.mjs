@@ -8,6 +8,15 @@
 // ровно те варианты, что запросят браузеры) и GET-ит каждый с современным
 // Accept — кэш тёплый до первого живого посетителя.
 //
+// Строго последовательно, с паузами и ретраями с бэкоффом в том числе на
+// HTTP-ошибки (решение владельца 15.10 по прогону стейджа): параллельная
+// заливка холодных 4k AVIF @ q95 валила контейнер лендинга — 8 потоков
+// дали 18/134 (Caddy массово 502, апстрим OOM/рестарт), 2 потока — стену
+// 502 после ~40-й картинки (41/134), причём падали и мгновенные иконки.
+// Одиночное 4k-кодирование контейнер держит спокойно (~2–3 с), поэтому
+// Sequence + бэкофф — рабочий профиль: тот же прогон последовательно дал
+// 134/134 без единого провала.
+//
 // Запуск: node scripts/warm-images.mjs [baseUrl]
 //   node scripts/warm-images.mjs https://dev.rentlee.ru
 //   node scripts/warm-images.mjs            # дефолт http://localhost:3000
@@ -18,9 +27,12 @@ const BASE = (process.argv[2] ?? "http://localhost:3000").replace(/\/$/, "");
 const PAGES = ["/", "/privacy", "/terms"];
 const ACCEPT =
   "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
-const CONCURRENCY = 8;
-const TIMEOUT_MS = 15000;
-const RETRIES = 1;
+const TIMEOUT_MS = 120000;
+const GAP_MS = 500;
+const MAX_ATTEMPTS = 5;
+const BACKOFF_MS = [5000, 15000, 30000, 30000];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function extractImageUrls(html) {
   const urls = new Set();
@@ -36,28 +48,6 @@ function extractImageUrls(html) {
     urls.add(url);
   }
   return [...urls];
-}
-
-async function warm(url) {
-  for (let attempt = 0; attempt <= RETRIES; attempt += 1) {
-    try {
-      const res = await fetch(new URL(url, BASE), {
-        headers: { Accept: ACCEPT },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-      // Тело нужно дочитать — иначе соединение не освободится и кэш
-      // может не успеть записаться до закрытия потока.
-      await res.arrayBuffer();
-      if (res.ok) {
-        return { url, ok: true, status: res.status, cached: res.headers.get("x-nextjs-cache") };
-      }
-      return { url, ok: false, status: res.status };
-    } catch (error) {
-      if (attempt === RETRIES) {
-        return { url, ok: false, status: String(error) };
-      }
-    }
-  }
 }
 
 const pages = [];
@@ -76,24 +66,54 @@ for (const path of PAGES) {
 const urls = [...new Set(pages.flatMap(extractImageUrls))];
 console.log(`${BASE}: ${urls.length} уникальных вариантов картинок, грею…`);
 
-const results = [];
 let index = 0;
-async function worker() {
-  while (index < urls.length) {
-    const current = urls[index];
-    index += 1;
-    results.push(await warm(current));
-  }
-}
-await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+let hits = 0;
+const failed = [];
 
-const failed = results.filter((r) => !r.ok);
-const hit = results.filter((r) => r.ok && r.cached === "HIT").length;
+for (const url of urls) {
+  index += 1;
+  let ok = false;
+  let hit = false;
+  let last = "";
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const res = await fetch(new URL(url, BASE), {
+        headers: { Accept: ACCEPT },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      // Тело нужно дочитать — иначе соединение не освободится и кэш
+      // может не успеть записаться до закрытия потока.
+      await res.arrayBuffer();
+      if (res.ok) {
+        ok = true;
+        hit = res.headers.get("x-nextjs-cache") === "HIT";
+        break;
+      }
+      // 502 от Caddy — апстрим переживает рестарт/затишье: не выходить
+      // сразу, подождать и попробовать снова.
+      last = `HTTP ${res.status}`;
+    } catch (error) {
+      last = String(error).slice(0, 100);
+    }
+    if (attempt < MAX_ATTEMPTS - 1) {
+      await sleep(BACKOFF_MS[attempt] ?? BACKOFF_MS[BACKOFF_MS.length - 1]);
+    }
+  }
+  if (ok) {
+    if (hit) hits += 1;
+    console.log(`[${index}/${urls.length}] ${hit ? "HIT" : "ок "} ${url}`);
+  } else {
+    failed.push({ url, last });
+    console.error(`[${index}/${urls.length}] НЕ СОГРЕЛОСЬ [${last}] ${url}`);
+  }
+  await sleep(GAP_MS);
+}
+
 console.log(
-  `Согрето: ${results.length - failed.length}/${results.length}` +
-    (hit > 0 ? ` (из них уже в кэше: ${hit})` : ""),
+  `Согрето: ${index - failed.length}/${index}` +
+    (hits > 0 ? ` (из них уже в кэше: ${hits})` : ""),
 );
 for (const f of failed) {
-  console.error(`  НЕ СОГРЕЛОСЬ [${f.status}] ${f.url}`);
+  console.error(`  НЕ СОГРЕЛОСЬ [${f.last}] ${f.url}`);
 }
 process.exit(failed.length > 0 ? 1 : 0);
