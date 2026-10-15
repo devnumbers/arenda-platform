@@ -379,12 +379,12 @@ prototype/page-transitions-867; #1419 — стенда не осталось, к
 
 | # | План | Severity | Status |
 | --- | --- | --- | --- |
-| 020 | [TabBar: низ уважает safe-area](020-tab-bar-safe-area.md) | HIGH | TODO |
-| 021 | [Viewport: `interactive-widget=resizes-content`](021-viewport-keyboard-resize.md) | MEDIUM | TODO |
-| 022 | [Клавиатура: `enterKeyHint` и автозаполнение OTP](022-keyboard-hints-otp.md) | MEDIUM | TODO |
-| 023 | [Шелл: `min-h-dvh` вместо единственного `min-h-screen`](023-shell-dvh.md) | LOW | TODO |
-| 024 | [Гарантия 16px: флоор на токене + поиск на таче](024-input-font-floor.md) | MEDIUM | TODO |
-| 025 | [e2e: мобильный проект Playwright, опт-ин](025-e2e-mobile-project.md) | LOW | TODO |
+| 020 | [TabBar: низ уважает safe-area](020-tab-bar-safe-area.md) | HIGH | DONE |
+| 021 | [Viewport: `interactive-widget=resizes-content`](021-viewport-keyboard-resize.md) | MEDIUM | DONE |
+| 022 | [Клавиатура: `enterKeyHint` и автозаполнение OTP](022-keyboard-hints-otp.md) | MEDIUM | DONE |
+| 023 | [Шелл: `min-h-dvh` вместо единственного `min-h-screen`](023-shell-dvh.md) | LOW | DONE |
+| 024 | [Гарантия 16px: флоор на токене + поиск на таче](024-input-font-floor.md) | MEDIUM | DONE |
+| 025 | [e2e: мобильный проект Playwright, опт-ин](025-e2e-mobile-project.md) | LOW | DONE |
 
 ## Порядок исполнения
 
