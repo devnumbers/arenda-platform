@@ -8,12 +8,13 @@ import { getMe } from "@/lib/auth";
 import { NAV } from "@/lib/nav";
 
 // Действие справа: гость — «Войти» на /login кабинета; авторизованный —
-// «Профиль» (макет 2859-4421, аннотация «Когда вошел в профиль»).
-// Обычные <a>, не next/link: /login и /profile живут в кабинетном
-// приложении за Caddy — нужен полный переход, а не роутер лендинга.
+// «Профиль» на хаб объектов /properties (решение владельца 15.10,
+// ранее — макет 2859-4421 на /profile). Обычные <a>, не next/link:
+// /login и /properties живут в кабинетном приложении за Caddy —
+// нужен полный переход, а не роутер лендинга.
 function HeaderAction({ authed }: { authed: boolean }) {
   return authed ? (
-    <LandingLink size="md" variant="gray" href="/profile">
+    <LandingLink size="md" variant="gray" href="/properties">
       Профиль
     </LandingLink>
   ) : (
