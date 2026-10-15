@@ -96,7 +96,7 @@ function SkeletonHubRow(): JSX.Element {
   );
 }
 
-function ProfileHubSkeleton(): JSX.Element {
+export function ProfileHubSkeleton(): JSX.Element {
   return (
     <div role="status" aria-label="Загрузка профиля" className="flex flex-col gap-8 px-6 pb-6">
       <div className="flex flex-col items-center gap-4">
