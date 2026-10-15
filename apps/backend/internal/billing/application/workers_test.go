@@ -1526,6 +1526,51 @@ func TestWorkers_ExpiredGracePaidDowngradeFallsToBasic(t *testing.T) {
 	}
 }
 
+// TestWorkers_NonRenewingPaidDowngradeFallsToBasic pins the convergence the
+// decision keeps for the leg no charge machinery serves on the active side
+// too: an auto-renew-off subscription with a due paid target never gets
+// charged (the renewal onset skips it), so the boundary falls to basic and
+// the pending change is consumed with it.
+func TestWorkers_NonRenewingPaidDowngradeFallsToBasic(t *testing.T) {
+	t.Parallel()
+	h := newWorkersHarness(t, Config{})
+	h.workers.SetLifecycleBridges(&fakeArchiverSource{}, &fakeSlotSource{})
+
+	sub := h.seedSubscription(t, func(s *domain.Subscription) {
+		s.TariffID = h.business.ID
+		s.AutoRenewEnabled = false
+		target := h.pro.ID
+		changeAt := h.now.Add(-time.Hour)
+		period := domain.PeriodMonth
+		s.PendingTariffID = &target
+		s.PendingChangeAt = &changeAt
+		s.PendingPeriod = &period
+	})
+
+	count, err := h.workers.ProcessRenewals(t.Context(), h.now)
+	if err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ProcessRenewals() = %d, want 1", count)
+	}
+	stored := h.storedSubscription(t, sub)
+	if stored.TariffID != h.basic.ID || stored.ValidUntil != nil || stored.AutoRenewEnabled ||
+		stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("subscription = %+v, want the basic fall", stored)
+	}
+	if stored.HasPendingChange() {
+		t.Error("pending change survived the fall to basic")
+	}
+	payments, err := h.stores.payments.ListByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("list payments: %v", err)
+	}
+	if len(payments) != 0 {
+		t.Errorf("payments = %d, want none (nothing was chargeable on the non-renewing fall)", len(payments))
+	}
+}
+
 // TestWorkers_RenewalAppliesDueFreeScheduledChangeInPlace proves the renewal
 // phase totals the free-target boundary on its own: a due free scheduled
 // change that reaches the renewal onset (the scheduled-changes phase failed

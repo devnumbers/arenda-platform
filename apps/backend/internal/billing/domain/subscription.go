@@ -407,16 +407,18 @@ func (s *Subscription) MarkPaymentApplied(paymentID uuid.UUID) {
 }
 
 // SetAutoRenew toggles automatic subscription renewal. Enabling auto-renew is
-// only allowed when the subscription has a validity period and is not
-// cancelled: a cancelled subscription never renews — restoration goes through
-// paying for a tariff (ADR 0008, billing CONTEXT.md).
+// only allowed when the subscription has a validity period. A cancelled
+// subscription rejects the toggle both ways (issue #1451): it never renews on
+// its own, and once a downgrade is scheduled the flag belongs to that
+// scheduling — it is the consent that has the target tariff charged at the
+// boundary — so the owner cannot withdraw it behind the worker's back.
 func (s *Subscription) SetAutoRenew(enabled bool) error {
+	if s.Status == SubscriptionStatusCancelled {
+		return ErrInvalidSubscriptionState
+	}
 	if enabled {
 		if s.ValidUntil == nil {
 			return ErrCannotEnableAutoRenew
-		}
-		if s.Status == SubscriptionStatusCancelled {
-			return ErrInvalidSubscriptionState
 		}
 	}
 	s.AutoRenewEnabled = enabled

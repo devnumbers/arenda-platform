@@ -731,6 +731,45 @@ func TestSubscriptionService_ResumeSubscription_RestoresCancelledInsidePaidPerio
 	requireResumedAudit(t, h, sub)
 }
 
+// TestSubscriptionService_ResumeSubscription_KeepsScheduledDowngrade pins the
+// interaction the ticket names (issue #1451): a downgrade planned on the
+// cancelled state survives the free resume and stays due at the period end —
+// the boundary applies it to the now-active subscription.
+func TestSubscriptionService_ResumeSubscription_KeepsScheduledDowngrade(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	sub := h.seedPaidSubscription(t, domain.TariffBusiness)
+	if err := h.svc.CancelSubscription(t.Context(), sub.UserID, nil); err != nil {
+		t.Fatalf("CancelSubscription() error = %v", err)
+	}
+	if _, err := h.svc.ChangeTariff(t.Context(), sub.UserID, ChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	}); err != nil {
+		t.Fatalf("ChangeTariff() on cancelled error = %v", err)
+	}
+	if err := h.svc.ResumeSubscription(t.Context(), sub.UserID); err != nil {
+		t.Fatalf("ResumeSubscription() error = %v", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), sub.UserID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("Status = %q, want active after the resume", stored.Status)
+	}
+	if stored.PendingTariffID == nil || *stored.PendingTariffID != h.tariffID(t, domain.TariffPro) {
+		t.Errorf("PendingTariffID = %v, want pro (the resume keeps the planned downgrade)", stored.PendingTariffID)
+	}
+	if stored.PendingChangeAt == nil || !stored.PendingChangeAt.Equal(*sub.ValidUntil) {
+		t.Errorf("PendingChangeAt = %v, want the period end %v", stored.PendingChangeAt, sub.ValidUntil)
+	}
+	if !stored.AutoRenewEnabled {
+		t.Error("AutoRenewEnabled = false, want true")
+	}
+}
+
 // requireResumedTransitionLog asserts the log holds cancelled then resumed,
 // the resume the newest user-initiated entry with the cancelled from-side.
 // The fake transition repo lists in insertion order — the real repository

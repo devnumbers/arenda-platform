@@ -521,11 +521,15 @@ func TestSubscriptionSetAutoRenew(t *testing.T) {
 		t.Errorf("SetAutoRenew(true) without ValidUntil error = %v, want ErrCannotEnableAutoRenew", err)
 	}
 
-	// A cancelled subscription never renews: restoration goes through paying
-	// for a tariff (ADR 0008).
+	// A cancelled subscription rejects the toggle both ways (issue #1451): it
+	// never renews, and once a downgrade is scheduled the flag belongs to that
+	// scheduling — the consent that has the target charged at the boundary.
 	subCancelled := Subscription{Status: SubscriptionStatusCancelled, ValidUntil: &validUntil}
 	if err := subCancelled.SetAutoRenew(true); !errors.Is(err, ErrInvalidSubscriptionState) {
 		t.Errorf("SetAutoRenew(true) on cancelled error = %v, want ErrInvalidSubscriptionState", err)
+	}
+	if err := subCancelled.SetAutoRenew(false); !errors.Is(err, ErrInvalidSubscriptionState) {
+		t.Errorf("SetAutoRenew(false) on cancelled error = %v, want ErrInvalidSubscriptionState", err)
 	}
 }
 

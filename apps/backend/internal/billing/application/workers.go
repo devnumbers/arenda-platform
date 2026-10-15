@@ -298,46 +298,65 @@ func (w *Workers) applyScheduledChange(ctx context.Context, listed domain.Subscr
 			applied = true
 			return nil
 		}
-		target, err := stores.tariffs.GetByID(ctx, *sub.PendingTariffID)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrTariffNotFound
-			}
-			return fmt.Errorf("get pending tariff: %w", err)
-		}
-		period := domain.PeriodMonth
-		if sub.PendingPeriod != nil {
-			period = *sub.PendingPeriod
-		}
-		price, err := target.Price(period)
+		appliedFree, err := applyFreeScheduledChange(ctx, stores, &sub, now)
 		if err != nil {
 			return err
 		}
-		if price > 0 {
+		if !appliedFree {
 			// A paid target is charged at apply time; charging belongs to the
 			// renewal phase running right after this one.
 			return nil
-		}
-
-		transition, err := stores.applyTransition(ctx, &sub,
-			func(s *domain.Subscription) error { return s.ApplyScheduledDowngrade(target, period, now) },
-			transitionSpec{
-				reason:    domain.TransitionReasonScheduledChangeApplied,
-				initiator: domain.InitiatorSystem,
-			},
-		)
-		if err != nil {
-			return err
-		}
-		if transitionChangedTariff(transition, target.ID) {
-			if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade, nil); err != nil {
-				return fmt.Errorf("enforce tariff limit after scheduled downgrade: %w", err)
-			}
 		}
 		applied = true
 		return nil
 	})
 	return applied, err
+}
+
+// applyFreeScheduledChange applies the due free-target scheduled change to
+// the locked subscription — the one free apply every phase shares (the
+// scheduled-changes phase, the boundary phases of issue #1451): the target
+// tariff switches, the validity extends from now, auto-renew stays on, the
+// transition is logged and the target limit enforced. It reports whether the
+// change was applied; a paid target reports false — its charge at apply time
+// or its fall to basic belongs to the caller.
+func applyFreeScheduledChange(
+	ctx context.Context, stores *txStores, sub *domain.Subscription, now time.Time,
+) (bool, error) {
+	target, err := stores.tariffs.GetByID(ctx, *sub.PendingTariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return false, ErrTariffNotFound
+		}
+		return false, fmt.Errorf("get pending tariff: %w", err)
+	}
+	period := domain.PeriodMonth
+	if sub.PendingPeriod != nil {
+		period = *sub.PendingPeriod
+	}
+	price, err := target.Price(period)
+	if err != nil {
+		return false, err
+	}
+	if price > 0 {
+		return false, nil
+	}
+	transition, err := stores.applyTransition(ctx, sub,
+		func(s *domain.Subscription) error { return s.ApplyScheduledDowngrade(target, period, now) },
+		transitionSpec{
+			reason:    domain.TransitionReasonScheduledChangeApplied,
+			initiator: domain.InitiatorSystem,
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+	if transitionChangedTariff(transition, target.ID) {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade, nil); err != nil {
+			return false, fmt.Errorf("enforce tariff limit after scheduled downgrade: %w", err)
+		}
+	}
+	return true, nil
 }
 
 // ProcessRenewals drives the expiry of paid periods (ADR 0008): subscriptions
@@ -1135,12 +1154,19 @@ func (w *Workers) expireSubscription(
 			return nil
 		}
 		if sub.HasPendingChange() {
-			handled, err := w.applyBoundaryScheduledChange(ctx, stores, &sub, now, waitForCharge)
-			if err != nil || handled {
+			applied, err := applyFreeScheduledChange(ctx, stores, &sub, now)
+			if err != nil {
 				return err
 			}
-			// A paid target no charge machinery serves falls through to the
-			// plain basic fall below.
+			if applied || waitForCharge {
+				// Applied: the scheduled apply replaced the fall. Not applied
+				// with waitForCharge: a paid target the boundary-charge leg of
+				// the renewal phase owns — falling to basic would discard a
+				// plan the boundary charge may still deliver.
+				return nil
+			}
+			// A paid target no charge machinery serves: the plain basic fall
+			// below.
 		}
 		// The keep choice is read before the downgrade consumes it: it names
 		// the property the basic-limit enforcement below must keep alive.
@@ -1159,52 +1185,6 @@ func (w *Workers) expireSubscription(
 		}
 		return nil
 	})
-}
-
-// applyBoundaryScheduledChange applies the due free-target scheduled change of
-// a cancelled or grace subscription at the boundary (issue #1451): the same
-// free apply the scheduled-changes phase runs for active rows. It reports
-// whether the boundary was handled: a paid target is handled on the cancelled
-// leg only — left untouched for the boundary-charge leg of the renewal phase,
-// which runs earlier in the same tick; on the legs no charge machinery serves
-// it reports false and the caller's basic fall takes over.
-func (w *Workers) applyBoundaryScheduledChange(
-	ctx context.Context, stores *txStores, sub *domain.Subscription, now time.Time, waitForCharge bool,
-) (bool, error) {
-	target, err := stores.tariffs.GetByID(ctx, *sub.PendingTariffID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return false, ErrTariffNotFound
-		}
-		return false, fmt.Errorf("get pending tariff: %w", err)
-	}
-	period := domain.PeriodMonth
-	if sub.PendingPeriod != nil {
-		period = *sub.PendingPeriod
-	}
-	price, err := target.Price(period)
-	if err != nil {
-		return false, err
-	}
-	if price > 0 {
-		return waitForCharge, nil
-	}
-	transition, err := stores.applyTransition(ctx, sub,
-		func(s *domain.Subscription) error { return s.ApplyScheduledDowngrade(target, period, now) },
-		transitionSpec{
-			reason:    domain.TransitionReasonScheduledChangeApplied,
-			initiator: domain.InitiatorSystem,
-		},
-	)
-	if err != nil {
-		return false, err
-	}
-	if transitionChangedTariff(transition, target.ID) {
-		if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade, nil); err != nil {
-			return false, fmt.Errorf("enforce tariff limit after boundary scheduled downgrade: %w", err)
-		}
-	}
-	return true, nil
 }
 
 // ProcessPendingUpgradePayments finalizes stale pending tariff-change payments
