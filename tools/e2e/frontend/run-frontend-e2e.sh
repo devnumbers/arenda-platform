@@ -290,7 +290,7 @@ status=0
   E2E_BACKEND_LOG="$BACKEND_LOG" \
   E2E_PG_CONTAINER="$PG_CONTAINER" \
   E2E_ENCRYPTION_KEY="$E2E_ENCRYPTION_KEY" \
-  npx playwright test "$@"
+  npx playwright test --project="${E2E_PROJECT:-chromium}" "$@"
 ) || status=$?
 
 if [ "$status" -eq 0 ]; then
