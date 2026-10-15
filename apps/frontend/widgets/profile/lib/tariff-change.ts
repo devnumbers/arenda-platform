@@ -253,23 +253,26 @@ function downgradeConfirmDescription(
   );
 }
 
-const HUMAN_CONFLICT_CODES: ReadonlySet<string> = new Set([
-  // Закодированные 409 бэка (ProblemWithCode) уже несут человеческий
-  // текст — «Период уже оплачен: возобновите подписку бесплатно»,
-  // «Возобновление недоступно: оплаченный период истёк, оплатите тариф».
-  'resume_required',
-  'resume_not_available',
+const NO_MACHINE_CODE: ReadonlySet<string> = new Set([
+  // Незакодированные 409: у бека это честные конфликты состояния
+  // (writeDetailProblem → table detail вроде «Некорректное состояние
+  // подписки») без machine-readable code — клиент видит about:blank;
+  // unknown — дефолт клиента для ответа без problem+json.
+  'about:blank',
+  'unknown',
 ]);
 
 /** Человеческое описание тоста об ошибке действия (#1452, край #1450 п.4):
- * сырой detail честного 409 («Некорректное состояние подписки») в тост не
- * показывается — у действия свой человеческий конфликтный текст; не-409
- * сохраняют detail бэка. */
+ * сырой detail честного 409 в тост не показывается — у действия свой
+ * человеческий конфликтный текст; закодированные 409 бека
+ * (ProblemWithCode) несут уже человеческий текст («Период уже оплачен…»,
+ * «Есть неоплаченный платёж…») — проходят как есть; не-409 сохраняют
+ * detail бека. */
 export function tariffActionErrorDescription(
   error: ApiError,
   conflictText: string,
 ): string {
-  if (error.status === 409 && !HUMAN_CONFLICT_CODES.has(error.code)) {
+  if (error.status === 409 && NO_MACHINE_CODE.has(error.code)) {
     return conflictText;
   }
   return error.detail;

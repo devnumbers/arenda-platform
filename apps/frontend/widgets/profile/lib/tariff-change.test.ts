@@ -447,6 +447,23 @@ describe('tariffActionErrorDescription — человеческие тосты 4
     );
   });
 
+  it('закодированный 409 чужого правила (pending_payment_exists) — тоже текст бэка', () => {
+    const error = new ApiError(
+      'pending_payment_exists',
+      'Есть неоплаченный платёж: дождитесь его завершения или вернитесь к оплате',
+      undefined,
+      409,
+    );
+    expect(tariffActionErrorDescription(error, conflictText)).toBe(
+      'Есть неоплаченный платёж: дождитесь его завершения или вернитесь к оплате',
+    );
+  });
+
+  it('409 без problem+json (unknown) — человеческий текст действия', () => {
+    const error = new ApiError('unknown', 'Ошибка сервера (код 409)', undefined, 409);
+    expect(tariffActionErrorDescription(error, conflictText)).toBe(conflictText);
+  });
+
   it('не-конфликты сохраняют detail бэка', () => {
     const error = new ApiError(
       'network_error',
