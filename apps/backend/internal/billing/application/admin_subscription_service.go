@@ -201,7 +201,10 @@ func (s *SubscriptionService) ExtendGrace(ctx context.Context, adminID, userID u
 // (issue #255) with the same semantics as the user's own cancellation: the
 // tariff keeps working until valid_until, auto-renew switches off immediately
 // and any scheduled change is dropped. Paid subscriptions only — a service
-// subscription is withdrawn by reassignment, not cancellation.
+// subscription is withdrawn by reassignment, not cancellation. The free-tariff
+// guard of the user path (issue #1467) does not apply here: the admin may
+// cancel a paid-source basic subscription themselves, so the semantics
+// diverge exactly there.
 func (s *SubscriptionService) CancelSubscriptionAsAdmin(ctx context.Context, adminID, userID uuid.UUID) error {
 	return s.runInTx(ctx, func(stores *txStores) error {
 		sub, err := stores.subscriptionForUpdate(ctx, userID)
