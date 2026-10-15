@@ -200,36 +200,43 @@ test('чужие карточки: ряд владельца — имя, у бе
 });
 
 test('без подписки (404 /subscription): кнопки создания живые, ведут на смену тарифа #768', async ({ page, seededUser }) => {
-  // Состояние сид-Марии из обхода #760 воспроизводим перехватом: до фикса
-  // 404 держал react-query в вечном pending, и кнопки создания хаба были
-  // disabled навсегда.
-  await page.route('**/api/subscription', (route) =>
-    route.fulfill({
-      status: 404,
-      contentType: 'application/problem+json',
-      body: JSON.stringify({ code: 'not_found', detail: 'Подписка не найдена' }),
-    }),
-  );
-  await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/properties');
+  // Состояние сид-Марии из обхода #760 («подписки нет») воспроизводим в БД
+  // с восстановлением в finally (канон participants-list): серверный
+  // префетч хаба (§15, план 026 #1442) выносит фетч подписки из браузера —
+  // сетевой перехват 404 до него больше не доходит (прецедент
+  // history-filters: ветка под перехватом недостижима).
+  const OWNER_SUBSCRIPTION_ID = '99999999-9999-4999-8999-999999999901';
+  await execE2eSql(`DELETE FROM user_subscriptions WHERE id = '${OWNER_SUBSCRIPTION_ID}'`);
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/properties');
 
-  // Список рисуется, «+» шапки не disabled и носит защитную подписку
-  // (canAdd=false при «подписки нет» — тот же путь, что лимит тарифа).
-  await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
-  const headerAdd = page.getByTestId('properties-create');
-  await expect(headerAdd).toBeVisible();
-  await expect(headerAdd).toBeEnabled();
-  await expect(headerAdd).toHaveAttribute(
-    'aria-label',
-    'Достигнут лимит объектов по тарифу — сменить тариф',
-  );
+    // Список рисуется, «+» шапки не disabled и носит защитную подписку
+    // (canAdd=false при «подписки нет» — тот же путь, что лимит тарифа).
+    await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
+    const headerAdd = page.getByTestId('properties-create');
+    await expect(headerAdd).toBeVisible();
+    await expect(headerAdd).toBeEnabled();
+    await expect(headerAdd).toHaveAttribute(
+      'aria-label',
+      'Достигнут лимит объектов по тарифу — сменить тариф',
+    );
 
-  // Защитный путь: тап ведёт на «Выбрать тариф», где пикер рисуется
-  // (фолбэк «подписки нет ≡ базовый»), а не ошибка загрузки.
-  await headerAdd.click();
-  await expect(page).toHaveURL(/\/profile\/tariff\/change$/);
-  const tariffRadio = page.getByRole('radiogroup', { name: 'Тариф' });
-  await expect(tariffRadio.getByText('Базовый', { exact: true })).toBeVisible();
-  await expect(page.getByText('Текущий', { exact: true })).toBeVisible();
-  await expect(page.getByText('Не удалось загрузить данные тарифов')).toHaveCount(0);
+    // Защитный путь: тап ведёт на «Выбрать тариф», где пикер рисуется
+    // (фолбэк «подписки нет ≡ базовый»), а не ошибка загрузки.
+    await headerAdd.click();
+    await expect(page).toHaveURL(/\/profile\/tariff\/change$/);
+    const tariffRadio = page.getByRole('radiogroup', { name: 'Тариф' });
+    await expect(tariffRadio.getByText('Базовый', { exact: true })).toBeVisible();
+    await expect(page.getByText('Текущий', { exact: true })).toBeVisible();
+    await expect(page.getByText('Не удалось загрузить данные тарифов')).toHaveCount(0);
+  } finally {
+    await execE2eSql(
+      `INSERT INTO user_subscriptions (id, user_id, tariff_id, source, status, current_period)
+       VALUES ('${OWNER_SUBSCRIPTION_ID}', '11111111-1111-4111-8111-111111111111',
+               (SELECT id FROM tariffs WHERE name = 'pro'), 'service', 'active', 'month')
+       ON CONFLICT (id) DO UPDATE
+       SET tariff_id = EXCLUDED.tariff_id, status = EXCLUDED.status, current_period = EXCLUDED.current_period`,
+    );
+  }
 });
