@@ -267,12 +267,12 @@
     }
 }
 
+/* Дефект 1 плана 010 (#1418): у exit-кейфреймов нет from — стартовый кадр
+   берётся из текущего вычисленного состояния элемента (canonical CSS).
+   Доигравший вход тост уходит как раньше (он и так в центре с opacity 1),
+   недо-въехавший (вытеснение showDisplacingToast в окне 350ms) — из своей
+   фактической позиции, без телепорта в центр. */
 @keyframes toast-exit-right {
-    from {
-        opacity: 1;
-        transform: translate3d(0, 0, 0);
-    }
-
     to {
         opacity: 0;
         transform: translate3d(120%, 0, 0);
@@ -292,11 +292,6 @@
 }
 
 @keyframes toast-exit-up {
-    from {
-        opacity: 1;
-        transform: translate3d(0, 0, 0);
-    }
-
     to {
         opacity: 0;
         transform: translate3d(0, calc(-100% - 32px), 0);
@@ -323,6 +318,20 @@
     }
 }
 
+/* Дефект 2 плана 010 (#1418): платформа первой, доступность второй —
+   reduced-блок стоит НИЖЕ mobile и выигрывает каскад на обоих носителях
+   (раньше mobile-блок внизу перебивал animation-name, и reduced-motion
+   на телефоне молча не работал). Тела блоков не менялись. */
+@media (max-width: 767px) {
+    .toastEnter {
+        animation-name: toast-enter-down;
+    }
+
+    .toastExit {
+        animation-name: toast-exit-up;
+    }
+}
+
 /* Канон §8: reduced-motion анимации не отключает, а укорачивает до
    ~150ms — остаётся кроссфейд без движения. */
 @media (prefers-reduced-motion: reduce) {
@@ -336,15 +345,5 @@
         animation-duration: 150ms;
         animation-name: toast-fade-out;
         animation-timing-function: var(--dl-ease);
-    }
-}
-
-@media (max-width: 767px) {
-    .toastEnter {
-        animation-name: toast-enter-down;
-    }
-
-    .toastExit {
-        animation-name: toast-exit-up;
     }
 }
