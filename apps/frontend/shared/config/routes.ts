@@ -241,6 +241,11 @@ export const ROUTES = {
   profileTariffDisable: '/profile/tariff/disable',
   profileTariffChange: '/profile/tariff/change',
   profileTariffChangeSuccess: '/profile/tariff/change/success',
+  /** Интерстишал «Совместный доступ недоступен» (карта #1459, #1470):
+   * цель разводки тарифного гейта шаринга (#1463) — клик «Совместного
+   * доступа» владельцем на basic и страховка страницы участников; экран
+   * строит #1470, до него маршрут ведёт на 404. */
+  profileTariffSharing: '/profile/tariff/sharing',
   profilePaymentMethods: '/profile/tariff/payment-methods',
   profilePaymentMethodsAdd: '/profile/tariff/payment-methods/add',
   profilePayments: '/profile/tariff/payments',

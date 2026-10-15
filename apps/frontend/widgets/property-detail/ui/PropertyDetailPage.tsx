@@ -44,8 +44,8 @@ import {
   useUncompleteTask,
 } from '@/features/tasks';
 import {dateToIsoLocal} from '@/shared/lib/calendar';
-import {useSubscription} from '@/features/subscription';
-import {isPaidTariff} from '@/entities/user';
+import {sharingGateRedirect} from '@/shared/lib/paid-sections';
+import {usePaidTariff} from '@/features/subscription';
 import type {ApiError} from '@/shared/api/errors';
 import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
 import {
@@ -179,7 +179,7 @@ export function PropertyDetailPage(): JSX.Element {
     // Текущая (незавершённая) аренда — источник блока «Аренда» (#589) и
     // арендатора в «Контактах»; точный источник — аренды самого объекта.
     const rentalsQuery = useRentals(id, { enabled: propertyLoaded });
-    const subscriptionQuery = useSubscription();
+    const isPaid = usePaidTariff();
 
     // Данные секций (#589): правила платежей с точками просрочки, сводка
     // оплаченных операций за текущий месяц (+ all-time — выбор между
@@ -322,9 +322,6 @@ export function PropertyDetailPage(): JSX.Element {
     const sectionCta = propertySectionCta(permissions);
     // «Основной объект» — платная возможность: строк пина в «Управлении»
     // у базового тарифа нет (звезда-апселл в шапке снесена, #1240).
-    const isPaid = subscriptionQuery.data
-        ? isPaidTariff(subscriptionQuery.data.tariff.name)
-        : true;
     const isPinned = property?.pinned_at != null;
 
     const manageActions = property
@@ -554,7 +551,16 @@ export function PropertyDetailPage(): JSX.Element {
                 });
                 break;
             case 'access':
-                router.push(ROUTES.propertyParticipants(id));
+                // Разводка тарифного гейта шаринга (#1463, решение
+                // владельца 15.10.2026): владелец на basic — интерстишал
+                // «Совместный доступ недоступен» (#1470) без загрузки
+                // страницы (мигания нет); участник объекта пользуется
+                // страницей на любом тарифе («пригласили — значит
+                // пользуется», ADR 0064).
+                router.push(
+                    sharingGateRedirect(permissions.canManageMembers, isPaid)
+                    ?? ROUTES.propertyParticipants(id),
+                );
                 break;
             case 'leave':
                 setLeaveOpen(true);
