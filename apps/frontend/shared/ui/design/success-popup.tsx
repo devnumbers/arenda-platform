@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import type { JSX } from 'react';
 import {
   DialogClose,
@@ -11,6 +12,7 @@ import {
 } from '@radix-ui/react-dialog';
 import { Cancel, StatusIconGood } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { outcomeHaptic } from './action-haptics';
 import { IconButton } from './icon-button';
 
 /**
@@ -34,6 +36,11 @@ export type SuccessPopupProps = {
 };
 
 export function SuccessPopup({ open, onOpenChange, message }: SuccessPopupProps): JSX.Element {
+  useEffect(() => {
+    if (open) {
+      outcomeHaptic('success');
+    }
+  }, [open]);
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <DialogPortal>

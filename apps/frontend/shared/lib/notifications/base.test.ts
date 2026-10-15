@@ -10,7 +10,11 @@ const toast = vi.hoisted(() => ({
   promise: vi.fn(),
 }));
 
+const outcomeHaptic = vi.hoisted(() => vi.fn());
+
 vi.mock('react-toastify/unstyled', () => ({ toast }));
+
+vi.mock('@/shared/ui/design/action-haptics', () => ({ outcomeHaptic }));
 
 vi.mock('@/shared/ui/toast/ToastProvider', () => ({
   TOAST_AUTO_CLOSE_MS: 5000,
@@ -72,5 +76,56 @@ describe('notify — вытесняющий показ (решение влад�
 
     expect(toast.dismiss).toHaveBeenCalledTimes(1);
     expect(toast.dismiss).toHaveBeenCalledWith('t-9');
+  });
+});
+
+describe('notify — хаптика исходов (план 018: вибрация вместе с видимым сигналом)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** Прогон микрофлотча: промисы promise-пути сеттлятся в микроочереди. */
+  async function flushMicrotasks(): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+
+  it('success и error (обе перегрузки) зовут хаптику исхода', () => {
+    notify.success('A');
+    notify.error('B');
+    notify.error(new Error('C'));
+
+    expect(outcomeHaptic).toHaveBeenCalledWith('success');
+    expect(outcomeHaptic).toHaveBeenCalledWith('error');
+    expect(outcomeHaptic).toHaveBeenCalledTimes(3);
+  });
+
+  it('info/warning/loading молчат — utility §13', () => {
+    notify.info('D');
+    notify.warning('E');
+    notify.loading('F');
+
+    expect(outcomeHaptic).not.toHaveBeenCalled();
+  });
+
+  it('promise: resolved зовёт success-хаптику', async () => {
+    notify.promise(Promise.resolve(1), {
+      loading: 'Загрузка',
+      success: 'Готово',
+      error: 'Ошибка',
+    });
+    await flushMicrotasks();
+
+    expect(outcomeHaptic).toHaveBeenCalledWith('success');
+  });
+
+  it('promise: rejected зовёт error-хаптику', async () => {
+    notify.promise(Promise.reject(new Error('x')), {
+      loading: 'Загрузка',
+      success: 'Готово',
+      error: 'Ошибка',
+    });
+    await flushMicrotasks();
+
+    expect(outcomeHaptic).toHaveBeenCalledWith('error');
   });
 });

@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect } from 'react';
 import type { JSX } from 'react';
 import { Cancel } from '@/shared/assets/icons';
 import { IconButton, Modal, ModalContent, StatusIcon } from '@/shared/ui/design';
+import { outcomeHaptic } from '@/shared/ui/design/action-haptics';
 
 /**
  * Попап успеха поверх поверхностей участника (#698): зелёная «печать» 48
@@ -18,6 +20,9 @@ export function ParticipantSuccessPopup({
   readonly title: string;
   readonly onClose: () => void;
 }): JSX.Element {
+  useEffect(() => {
+    outcomeHaptic('success');
+  }, []);
   return (
     <Modal open onOpenChange={(open) => open || onClose()}>
       <ModalContent title={title} titleSrOnly>
