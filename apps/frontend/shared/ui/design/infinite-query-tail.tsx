@@ -2,6 +2,7 @@
 
 import type { JSX } from 'react';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
+import { ErrorCard } from './error-card';
 import { LoadingMoreIndicator } from './loading-more-indicator';
 import type { SkeletonTone } from './skeleton-parts';
 
@@ -13,6 +14,9 @@ export type InfiniteQueryTailQuery = {
   readonly hasNextPage: boolean | undefined;
   readonly isFetchingNextPage: boolean;
   readonly fetchNextPage: () => Promise<unknown>;
+  /** Провал порции (v5: error при живых страницах). Опционален — срез
+   * структурный, проекция графика платежей его не передаёт. */
+  readonly isError?: boolean;
 };
 
 /**
@@ -39,7 +43,7 @@ export function InfiniteQueryTail({
   const hasNext = query.hasNextPage === true;
   const sentinelRef = useInfiniteScroll(
     () => {
-      if (hasNext && !query.isFetchingNextPage) {
+      if (hasNext && !query.isFetchingNextPage && !query.isError) {
         void query.fetchNextPage();
       }
     },
@@ -49,6 +53,20 @@ export function InfiniteQueryTail({
 
   if (!hasNext) {
     return null;
+  }
+  if (query.isError) {
+    // Провал порции: sentinel снят (рвёт немой автоповтор обсервера),
+    // повтор — канон-карточка с фазой (план 031); fetchNextPage доигрывает
+    // следующую страницу, прежние страницы не трогаются (v5 refetch()
+    // перечитывал бы все загруженные).
+    return (
+      <ErrorCard
+        title="Не удалось загрузить еще"
+        onRetry={() => void query.fetchNextPage()}
+        loading={query.isFetchingNextPage}
+        className={className}
+      />
+    );
   }
   return (
     <>
