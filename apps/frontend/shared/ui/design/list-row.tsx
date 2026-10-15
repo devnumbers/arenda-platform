@@ -80,8 +80,8 @@ export function ListRow({
       onClick={interactive ? onSelect : undefined}
       onKeyDown={onKeyDown}
       className={cn(
-        'group/row flex w-full cursor-pointer items-center gap-3 px-6 py-2 text-left font-sans outline-none',
-        'transition-colors focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        'pressable group/row flex w-full cursor-pointer items-center gap-3 px-6 py-2 text-left font-sans outline-none',
+        'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         onSelect === undefined && 'cursor-default',
         disabled && 'pointer-events-none opacity-50',
         className,
@@ -91,7 +91,7 @@ export function ListRow({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span
           className={cn(
-            'truncate text-base font-medium text-content group-hover/row:text-content-secondary',
+            'truncate text-base font-medium text-content transition-colors group-hover/row:text-content-secondary',
             titleClassName,
           )}
         >

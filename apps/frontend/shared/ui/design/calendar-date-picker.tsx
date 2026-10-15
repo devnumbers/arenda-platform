@@ -516,7 +516,7 @@ function MonthJumpChip({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-pill bg-surface-muted px-5 text-base font-medium text-content outline-none transition-colors hover:bg-surface-muted-hover active:bg-surface-muted-hover focus-visible:ring-2 focus-visible:ring-primary"
+      className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-pill bg-surface-muted px-5 text-base font-medium text-content outline-none transition-colors hover:bg-surface-muted-hover active:bg-surface-muted-active focus-visible:ring-2 focus-visible:ring-primary"
     >
       {label}
       <SmallArrowDown className="h-6 w-6 text-content-secondary" aria-hidden />

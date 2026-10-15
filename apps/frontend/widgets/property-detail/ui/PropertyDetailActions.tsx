@@ -74,7 +74,7 @@ export function PropertyManageSection({
           key={item.key}
           type="button"
           onClick={() => onAction(item.key)}
-          className={`flex h-[52px] w-full cursor-pointer items-center rounded-button px-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary hover:bg-surface-muted-hover active:bg-surface-muted-hover ${
+          className={`flex h-[52px] w-full cursor-pointer items-center rounded-button px-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary hover:bg-surface-muted-hover active:bg-surface-muted-active ${
             item.danger ? 'text-danger' : 'text-content'
           }`}
         >
@@ -104,7 +104,7 @@ const sheetRowClass =
   'flex h-14 w-full cursor-pointer items-center justify-center rounded-button outline-none transition-colors focus-visible:ring-4 focus-visible:ring-primary';
 
 /** Пункты статусов — серые контейнеры (var(--light-gray)). */
-const sheetItemClass = `${sheetRowClass} bg-surface-muted hover:bg-surface-muted-hover active:bg-surface-muted-hover`;
+const sheetItemClass = `${sheetRowClass} bg-surface-muted hover:bg-surface-muted-hover active:bg-surface-muted-active`;
 
 /** Шит смены статуса (Figma 1554:100371/100758 — без аренды,
  * 1581:53679 — на ремонте): строки-контейнеры 56 с иконкой и подписью,

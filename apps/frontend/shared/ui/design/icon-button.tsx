@@ -15,13 +15,13 @@ import { cn } from '@/shared/lib/cn';
  * с клавиатуры.
  */
 const iconButtonVariants = cva(
-  'inline-flex shrink-0 cursor-pointer items-center justify-center rounded-pill font-sans outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50',
+  'pressable inline-flex shrink-0 cursor-pointer items-center justify-center rounded-pill font-sans outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
         primary: 'text-content hover:bg-surface-muted active:bg-surface-muted-hover',
         secondary:
-          'text-content-tertiary hover:bg-surface-muted hover:text-content-secondary active:bg-surface-muted active:text-content-secondary',
+          'text-content-tertiary hover:bg-surface-muted hover:text-content-secondary active:bg-surface-muted-active active:text-content-secondary',
         danger: 'text-danger',
         muted: 'bg-surface-muted text-content hover:bg-surface-muted-hover active:bg-surface-muted-active',
       },
