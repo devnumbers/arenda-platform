@@ -23,6 +23,7 @@ describe('shouldFireOutcomeHaptic', () => {
 
 describe('outcomeHaptic', () => {
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     Reflect.deleteProperty(navigator, 'vibrate');
     resetOutcomeHaptic();
@@ -44,6 +45,12 @@ describe('outcomeHaptic', () => {
 
   it('без API — no-op без исключений', () => {
     Reflect.deleteProperty(navigator, 'vibrate');
+    expect(() => outcomeHaptic('success')).not.toThrow();
+    expect(() => outcomeHaptic('error')).not.toThrow();
+  });
+
+  it('без navigator (SSR) — no-op без исключений', () => {
+    vi.stubGlobal('navigator', undefined);
     expect(() => outcomeHaptic('success')).not.toThrow();
     expect(() => outcomeHaptic('error')).not.toThrow();
   });
