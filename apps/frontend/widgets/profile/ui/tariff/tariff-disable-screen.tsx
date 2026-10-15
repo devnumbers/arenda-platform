@@ -27,6 +27,7 @@ import {
   disableConfirmTitle,
   tariffDisableObjectsCard,
 } from '@/widgets/profile/lib/tariff-disable';
+import { tariffActionErrorDescription } from '@/widgets/profile/lib/tariff-change';
 import { NO_SUBSCRIPTION } from '@/widgets/profile/lib/no-subscription';
 import {
   tariffAboutCard,
@@ -116,7 +117,14 @@ function TariffDisableContent({
         setCancelled(true);
       })
       .catch((error: ApiError) =>
-        notify.scenarios.tariff.disableError({ description: error.detail }),
+        notify.scenarios.tariff.disableError({
+          // Сырой detail честного 409 в тост не идёт (#1452, край #1450 п.4);
+          // повторное отключение на отменённой — идемпотентный no-op (#1451).
+          description: tariffActionErrorDescription(
+            error,
+            'Сейчас нельзя отключить тариф. Попробуйте ещё раз',
+          ),
+        }),
       );
   };
 
