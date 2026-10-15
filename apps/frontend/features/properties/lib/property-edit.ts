@@ -40,7 +40,8 @@ export function initialPropertyEditDraft(property: Property): PropertyEditDraft 
 /** Команда правки объекта; undefined — обязательные поля (тип, адрес)
  * пусты или характеристики не проходят каталог. Название необязательно
  * (#1001): очищенное уходит пустой строкой — сервер регенерирует имя из
- * типа. */
+ * типа. Описание очищенное уходит пустой строкой — сервер его удаляет
+ * (слово владельца 15.10, карта #1444). */
 export function buildPropertyEditCommand(
   draft: PropertyEditDraft,
   attributeCatalog: PropertyAttributesPort,
@@ -71,7 +72,11 @@ export function buildPropertyEditCommand(
     name,
     type,
     address,
-    description: draft.description.trim() || undefined,
+    // Очищенное описание уходит пустой строкой (слово владельца 15.10,
+    // карта #1444): omit по контракту означает «не менять», и старый текст
+    // переживал очистку; сервер пишет пустую строку, из ответа поле
+    // исчезает, история читает «Описание: удалено».
+    description: draft.description.trim(),
     attributes,
   };
 }
@@ -106,7 +111,9 @@ export function propertyEditDirty(
     command.name !== property.name
     || command.type !== property.type
     || command.address !== property.address
-    || command.description !== (property.description ?? undefined)
+    // Описание в команде всегда строка: отсутствующее на объекте — пустая,
+    // иначе нетронутая форма считалась бы грязной.
+    || command.description !== (property.description ?? '')
     || !attributesEqual(coerceAttributes(command.attributes), coerceAttributes(property.attributes))
   );
 }

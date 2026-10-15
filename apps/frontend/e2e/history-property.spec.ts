@@ -237,6 +237,12 @@ test('правки объекта: пояснения по-русски, сме�
     data: { description: longDescription },
   });
   expect(withDescription.status()).toBe(200);
+  // Очищенное описание уходит пустой строкой — сервер удаляет, история
+  // читает «Описание: удалено» (слово владельца 15.10, карта #1444).
+  const clearedDescription = await page.request.patch(`/api/properties/${APARTMENT_ID}`, {
+    data: { description: '' },
+  });
+  expect(clearedDescription.status()).toBe(200);
 
   await page.goto(`/history/properties/${APARTMENT_ID}`);
   await expect(page.getByText('Объект изменён: Квартира на Ленина').first()).toBeVisible();
@@ -246,11 +252,13 @@ test('правки объекта: пояснения по-русски, сме�
   await expect(page.getByText('Балкон: «Лоджия»').first()).toBeVisible();
   await expect(page.getByText('Материал: «Кирпичный»')).toBeVisible();
 
-  // Баг 3 (карта #1444): смена типа и повторная смена — строки «Тип», и
-  // ни одного «удалено» от подмены набора характеристик.
+  // Баг 3 (карта #1444): смена типа и повторная смена — строки «Тип» без
+  // шума подмены набора; единственное «удалено» в ленте — честное удаление
+  // описания из шага выше.
   await expect(page.getByText('Тип: «Квартира» → «Дом»')).toBeVisible();
   await expect(page.getByText('Тип: «Дом» → «Квартира»')).toBeVisible();
-  await expect(page.getByText(/удалено/)).toHaveCount(0);
+  await expect(page.getByText('Описание: удалено')).toBeVisible();
+  await expect(page.getByText(/удалено/)).toHaveCount(1);
 
   // Баг 2 (карта #1444): пояснение с длинным описанием переносится —
   // ни элемент, ни страница не вылезают за вьюпорт по горизонтали.

@@ -67,9 +67,18 @@ func TestPropertyUpdateHistoryEntry(t *testing.T) {
 		{
 			name:        "single_group_description",
 			before:      historyEntryProperty(nil),
-			after:       historyEntryProperty(func(p *domain.Property) { p.Description = "Тихий двор, рядом метро" }),
+			after:       historyEntryProperty(func(p *domain.Property) { p.Description = fixtureDescription }),
 			wantOK:      true,
-			wantDetails: historydomain.DetailLines{`Описание: «Тихий двор, рядом метро»`},
+			wantDetails: historydomain.DetailLines{`Описание: «` + fixtureDescription + `»`},
+		},
+		{
+			// Очищенное описание (фронт шлёт пустую строку, слово владельца
+			// 15.10, карта #1444) — строка удаления, не «→ «»».
+			name:        "description_cleared_reads_removal",
+			before:      historyEntryProperty(func(p *domain.Property) { p.Description = fixtureDescription }),
+			after:       historyEntryProperty(nil),
+			wantOK:      true,
+			wantDetails: historydomain.DetailLines{`Описание: удалено`},
 		},
 		{
 			// Значения enum-полей читаются по-русски: метка опции каталога
@@ -218,6 +227,9 @@ const (
 
 	// Пояснение смены типа «Квартира → Дом», повторяющееся в таблицах.
 	detailTypeApartmentToHouse = `Тип: «Квартира» → «Дом»`
+
+	// Текст описания фикстуры, повторяющийся в ожиданиях таблиц (goconst).
+	fixtureDescription = "Тихий двор, рядом метро"
 )
 
 func TestAttributeChanges(t *testing.T) {
