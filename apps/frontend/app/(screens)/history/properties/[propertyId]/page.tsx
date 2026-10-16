@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import type { JSX } from 'react';
 import type { Metadata } from 'next';
-import { HistoryFeedLoading, HistoryFeedScreen } from '@/widgets/history';
+import { HistoryFeedLoading, HistoryFeedScreen, HistoryObjectGate } from '@/widgets/history';
 
 /** «История объекта» (карта #838, тикет #840): та же лента «Истории
  * действий», прибитая к одному объекту — property_ids = один uuid
@@ -14,7 +14,9 @@ import { HistoryFeedLoading, HistoryFeedScreen } from '@/widgets/history';
  * query-параметрах, поэтому клиентский экран со useSearchParams стоит за
  * Suspense-границей — требование App Router (прецедент /history). Фолбэк
  * границы — с хромом экрана (#1281, карта #1324): скелетон без шапки
- * «прыгал» в хром при приходе контента. */
+ * «прыгал» в хром при приходе контента. Страница под тарифной разводкой
+ * #1466: proxy-паттерн объектных поверхностей снят — участник объекта
+ * читает на любом тарифе, владельца на basic уводит HistoryObjectGate. */
 export const metadata: Metadata = {
   title: 'История объекта — Рентли',
   description: 'Лента действий одного объекта',
@@ -26,8 +28,10 @@ export default async function HistoryPropertyRoutePage({
   const { propertyId } = await params;
 
   return (
-    <Suspense fallback={<HistoryFeedLoading propertyId={propertyId} />}>
-      <HistoryFeedScreen propertyId={propertyId} />
-    </Suspense>
+    <HistoryObjectGate propertyId={propertyId}>
+      <Suspense fallback={<HistoryFeedLoading propertyId={propertyId} />}>
+        <HistoryFeedScreen propertyId={propertyId} />
+      </Suspense>
+    </HistoryObjectGate>
   );
 }

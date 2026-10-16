@@ -47,20 +47,30 @@ describe('paidSectionGateRedirect', () => {
         ).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
     });
 
-    it('gates the history journal on the basic tariff', () => {
+    it('gates the history feed, and nothing else of the history section (карта #1459 #1466): объектные поверхности выпускают basic — разводку делает экран, proxy роль не знает', () => {
         expect(paidSectionGateRedirect('/history', 'basic')).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
-    });
-
-    it('gates deep routes of the history section, both nested entities', () => {
+        expect(paidSectionGateRedirect('/history/', 'basic')).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
         expect(
             paidSectionGateRedirect('/history/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001', 'basic'),
-        ).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
+        ).toBeNull();
         expect(
             paidSectionGateRedirect(
                 '/history/participants/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0002',
                 'basic',
             ),
-        ).toBe(EXPECTED_TARIFF_CHANGE_REDIRECT);
+        ).toBeNull();
+        expect(
+            paidSectionGateRedirect(
+                '/history/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001',
+                null,
+            ),
+        ).toBeNull();
+        expect(
+            paidSectionGateRedirect(
+                '/history/participants/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0001/properties/0197aaaa-bbbb-7ccc-8ddd-eeeeffff0002',
+                null,
+            ),
+        ).toBeNull();
     });
 
     it('passes a paid tariff through', () => {
