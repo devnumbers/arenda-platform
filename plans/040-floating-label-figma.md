@@ -42,12 +42,15 @@
 
 ## TDD seams
 
-- Новый `shared/ui/design/text-field.test.tsx`: рендер `TextField`
-  (пустого и со значением), у лейбла в покое — `top-[19px]`, `text-base`,
-  `leading-[18px]`; в floated-состояниях (`peer-focus:…`,
-  `peer-[:not(:placeholder-shown)]:…`) — `top-[10px]`, `text-[13px]`,
-  `leading-[15px]`; в классах лейбла нет `scale-`, `translate-y-`,
-  `origin-top-left`, `transition-all`; есть
+- Новый `shared/ui/design/text-field-label.test.ts`: контракт-страж читает
+  `text-field.tsx` (прецеденты файл-стражей: press-feedback.test.ts
+  плана 039, DL_EASE-страж snap-rail-physics; рендер компонента невозможен
+  каноном тестов «node без DOM», а хуки useId/useLayoutEffect не дают
+  вызвать его функцией) и поверяет блок классов лейбла: в покое
+  `top-[19px] text-base leading-[18px]`; в floated-состояниях
+  (`peer-focus:…`, `peer-[:not(:placeholder-shown)]:…`) —
+  `top-[10px]`, `text-[13px]`, `leading-[15px]`; в классах нет `scale-`,
+  `translate-y-`, `origin-top-left`, `transition-all`; есть
   `transition-[top,font-size,line-height]` и `motion-reduce:duration-150`.
   Красный на текущем коде (там scale/translate), зелёный после правки.
 
