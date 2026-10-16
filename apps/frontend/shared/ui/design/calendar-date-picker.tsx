@@ -45,7 +45,6 @@ import {
 } from '@/shared/lib/calendar';
 import { formatRangeBound } from '@/shared/lib/date-format';
 import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
-import { compensatedScrollTop } from './calendar-feed-anchor';
 import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '@/shared/ui/design/month-grid';
 
 /** Полноэкранный пикер даты (общий компонент дизайн-слоя, вырос из пикера
@@ -117,26 +116,51 @@ import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '
  * нижние панели во всю ширину, на ПК ≥1024 — колонка 560; решение
  * владельца 28.09 после аудита #877, канон DESIGN.md §5). */
 
-/** Порог дорисовки вперёд: до нижнего края осталось ~2 месяца прокрутки. */
-const APPEND_THRESHOLD_PX = 1000;
+/** Порог дорисовки вперёд: до нижнего края осталось ~5 экранов —
+ * запас на флик (план 042, feel-check владельца 16.10). */
+const APPEND_THRESHOLD_PX = 1500;
+
+/** Число порций prepend под текущую скорость прокрутки (план 042):
+ * одна порция на медленном скролле; под фликом — столько, сколько
+ * моментум съест за ~600мс после события: под душащим CPU scroll-события
+ * доезжают с лагом в сотни мс, и одна порция за событие не поспевает
+ * (замер 16.10: 7 событий на 90 000px флика). */
+function flingChunks(
+  previous: { st: number; t: number } | null,
+  now: number,
+  scrollTop: number,
+  chunkPx: number,
+): number {
+  if (previous === null || now <= previous.t) {
+    return 1;
+  }
+  const pxPerMs = (previous.st - scrollTop) / (now - previous.t);
+  return Math.min(8, Math.max(1, Math.ceil((pxPerMs * 600) / chunkPx)));
+}
+
+/** Приблизительная высота порции prepend (6 месячных сеток) — вход
+ * flingChunks. */
+const FEED_CHUNK_PX = 2800;
 
 function monthKey(year: number, month0: number): string {
   return `${year}-${month0}`;
 }
 
 /** Прокрутка внутренней ленты к месяцу — только самой лентой, без
- * scrollIntoView: тот реквизирует все скролл-предки цели, и Chromium
+ * scrollIntoView: тот реквизирует всех скролл-предков цели, и Chromium
  * сдвигает и viewport документа (замер 16.10: открытие пикера уводило
  * документ на сотни пикселей; под локом overflow-y: hidden документ
  * программно скроллируем, и утечка стала видимой — карта #1437, план
- * 041). Цель считается геометрией ленты (block: 'start'). */
+ * 041). Цель — offsetTop секции относительно ленты (лента position:
+ * relative — её offsetParent): надёжно прямо в ref-колбэке до первой
+ * отрисовки, когда rect контента за content-visibility ещё не развит
+ * (rect-математика вырождалась в ноль и ломала якорный скролл
+ * открытия — догонка плана 042). block: 'start'. */
 function scrollListToMonth(list: HTMLElement | null, month: HTMLElement | undefined): void {
   if (list === null || month === undefined) {
     return;
   }
-  const top =
-    month.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
-  list.scrollTo({ top });
+  list.scrollTop = month.offsetTop;
 }
 
 export type CalendarDatePickerProps = {
@@ -239,9 +263,6 @@ export function CalendarDatePicker({
   // скроллится после монтирования новых месяцев. Ключ абсолютный — старт
   // ленты уезжает назад при дорисовке.
   const pendingScrollKey = useRef<string | null>(null);
-  // Высота стека до дорисовки назад: прокрутка возвращается на место,
-  // чтобы prepend не дёргал экран (тот же приём, что в пикере периода).
-  const heightAnchorRef = useRef<number | null>(null);
 
   // Чип месяца показывает месяц черновика; у пустого — текущий месяц.
   const draftMonth = calendarMonthOf(draft ?? today);
@@ -271,15 +292,6 @@ export function CalendarDatePicker({
     scrollListToMonth(scrollRef.current, monthRefs.current.get(key));
   }, [monthsCount, firstMonth]);
 
-  // После дорисовки назад прокрутка возвращается на место (якорь высоты).
-  useLayoutEffect(() => {
-    const list = scrollRef.current;
-    if (list !== null && heightAnchorRef.current !== null) {
-      list.scrollTop += list.scrollHeight - heightAnchorRef.current;
-      heightAnchorRef.current = null;
-    }
-  });
-
   // Escape закрывает пикер; при открытом шите месяца его Esc обрабатывает
   // Radix — глобальный слушатель в этот момент глушится.
   useEffect(() => {
@@ -305,15 +317,27 @@ export function CalendarDatePicker({
   // не растёт. В безпольном режиме (#1393) дотягивание к верху дорисовывает
   // порцию месяцев назад. DOM растёт только пройденной глубиной, а тяжёлый
   // layout оффскрина снимает content-visibility на блоках месяцев.
+  // Сдвиг позиции при prepend держит нативный scroll anchoring браузера
+  // (правка в том же layout-проходе, что и вставка, — моментум-безопасно;
+  // ручной якорь высоты убран, план 042). Порог 3000 (~5 экранов) держит
+  // триггер далеко от стены, а под фликом порций ставится несколько —
+  // по скорости прокрутки: под душащим CPU scroll-события доезжают с
+  // лагом в сотни мс (замер 16.10: 7 событий на 90 000px флика), и
+  // одна порция за событие не поспевает за моментумом — лента жила
+  // циклом «стена → прыжок на порцию» (feel-check владельца 16.10).
+  const lastScrollRef = useRef<{ st: number; t: number } | null>(null);
   const handleScroll = (): void => {
     const list = scrollRef.current;
-    if (list === null || heightAnchorRef.current !== null) return;
+    if (list === null) return;
+    const now = performance.now();
+    const previous = lastScrollRef.current;
+    lastScrollRef.current = { st: list.scrollTop, t: now };
     if (endlessPast && list.scrollTop <= PREPEND_THRESHOLD_PX) {
-      heightAnchorRef.current = list.scrollHeight;
+      const chunks = flingChunks(previous, now, list.scrollTop, FEED_CHUNK_PX);
       setFirstMonth((month) =>
-        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_PREPEND_CHUNK),
+        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_PREPEND_CHUNK * chunks),
       );
-      setMonthsCount((count) => count + CALENDAR_FEED_PREPEND_CHUNK);
+      setMonthsCount((count) => count + CALENDAR_FEED_PREPEND_CHUNK * chunks);
       return;
     }
     if (
@@ -541,14 +565,14 @@ function MonthJumpChip({
 
 /** Порог дорисовки назад безпольной ленты одиночного пикера: до верха
  * контейнера осталось меньше этого (#1393). */
-const PREPEND_THRESHOLD_PX = 32;
-/** Порог дорисовки назад ленты пикера периода: ~два месяца прокрутки.
- * Порция обязана отрисоваться задолго до стены: прежний порог 32px
- * срабатывал вплотную к краю, и пока React рисовал 6 месячных сеток
- * (40–110мс под нагрузкой), флик доезжал до scrollTop 0 — прокрутка
- * зажималась о край и дёргалась (#1428, замер живой приёмки: триггер
- * снимал высоту ленты на scrollTop 0–9px из 5 дорисовок). */
-const RANGE_PREPEND_THRESHOLD_PX = 800;
+const PREPEND_THRESHOLD_PX = 3000;
+/** Порог дорисовки назад ленты пикера периода: ~5 экранов прокрутки.
+ * Порция обязана отрисоваться задолго до стены: прежние 32px (потом 800)
+ * срабатывали вплотную к краю — под жёстким фликом (~100px/мс) лента
+ * жила циклом «стена → компенсация прыжком на порцию» (feel-check
+ * владельца 16.10, замер 16.10: паузы на scrollTop 0 между каждой
+ * дорисовкой). */
+const RANGE_PREPEND_THRESHOLD_PX = 3000;
 /** Сколько месяцев дорисовывается назад в ленте периода за одно
  * дотягивание к верху (решение владельца 13.10: порция 6 остаётся). */
 const RANGE_PREPEND_CHUNK = 6;
@@ -634,9 +658,8 @@ export function CalendarRangePicker({
 
   const monthRefs = useRef(new Map<string, HTMLElement>());
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  // Высота стека до дорисовки: прокрутка возвращается на место, чтобы
-  // prepend не дёргал экран (тот же приём, что на странице периода).
-  const anchorRef = useRef<number | null>(null);
+  // Темп прокрутки для скоростно-зависимого prepend (flingChunks).
+  const lastRangeScrollRef = useRef<{ st: number; t: number } | null>(null);
   // Месяц прыжка чипа за дорисованный назад край — скроллится после
   // монтирования новых месяцев.
   const pendingJumpRef = useRef<string | undefined>(undefined);
@@ -644,18 +667,6 @@ export function CalendarRangePicker({
   const scrolledRef = useRef(false);
 
   useLayoutEffect(() => {
-    const container = scrollRef.current;
-    if (container !== null && anchorRef.current !== null) {
-      // Кадр не телепортируется: позиция от фактического места скролла
-      // плюс прирост высоты (calendar-feed-anchor — возврат к снимку на
-      // триггере прыгал бы назад на дрейф инерции за время рендера).
-      container.scrollTop = compensatedScrollTop(
-        container,
-        anchorRef.current,
-        container.scrollHeight,
-      );
-      anchorRef.current = null;
-    }
     const jump = pendingJumpRef.current;
     if (jump !== undefined) {
       pendingJumpRef.current = undefined;
@@ -665,15 +676,18 @@ export function CalendarRangePicker({
 
   const handleScroll = (): void => {
     const container = scrollRef.current;
-    if (container === null || anchorRef.current !== null) {
+    if (container === null) {
       return;
     }
+    const now = performance.now();
+    const previous = lastRangeScrollRef.current;
+    lastRangeScrollRef.current = { st: container.scrollTop, t: now };
     if (container.scrollTop > RANGE_PREPEND_THRESHOLD_PX) {
       return;
     }
-    anchorRef.current = container.scrollHeight;
+    const chunks = flingChunks(previous, now, container.scrollTop, FEED_CHUNK_PX);
     setFirstMonth((month) =>
-      calendarMonthOfIndex(calendarMonthIndex(month) - RANGE_PREPEND_CHUNK),
+      calendarMonthOfIndex(calendarMonthIndex(month) - RANGE_PREPEND_CHUNK * chunks),
     );
   };
 
@@ -716,7 +730,12 @@ export function CalendarRangePicker({
   const attachTarget = (node: HTMLElement | null): void => {
     if (node !== null && !scrolledRef.current) {
       scrolledRef.current = true;
-      scrollListToMonth(scrollRef.current, node);
+      // Ref-колбэки секций диспатчатся раньше ref самой ленты (дети
+      // раньше родителя): scrollRef.current здесь ещё null, и якорь
+      // терялся молча (регресс плана 042, пойман приёмкой #1428).
+      // Микротаска выходит из коммита до отрисовки — ref'ы на месте,
+      // вспышки чужого месяца нет.
+      queueMicrotask(() => scrollListToMonth(scrollRef.current, node));
     }
   };
 
@@ -771,13 +790,14 @@ export function CalendarRangePicker({
         </div>
       </div>
 
-      {/* Нативный scroll-якорь выключен: позицию при дорисовке держит
-          ручная компенсация (useLayoutEffect выше) — в Chrome двойная
-          корректировка уводила бы кадр на прирост высоты. */}
+      {/* Позицию при дорисовке держит нативный scroll anchoring браузера:
+          корректировка едет в том же layout-проходе, что и вставка, —
+          моментум-безопасно (план 042). Ручная компенсация снята: с
+          включённым якорем она удваивала бы сдвиг. */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] [scrollbar-width:none]"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none]"
       >
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
