@@ -48,12 +48,13 @@ func NewPropertyHandlers(
 // staticPropertyProblems maps the property application errors whose wire
 // outcome is fixed onto their status, title and detail (the shared
 // ErrorProblem table shape), grouped by outcome: access outcomes (issue #156
-// T3 — the privacy-preserving 404 and the edit-permission 403), the tariff
-// limit, and the domain lifecycle conflicts. Errors whose details are derived
-// at runtime (invalid input, transitions, tenant contacts) are handled by
-// handlePropertyError's dynamic branches instead; the suspended membership's
-// coded 403 (T9) is the one outcome the flat table cannot carry, so it stays
-// an explicit branch.
+// T3 — the privacy-preserving 404 and the edit-permission 403) and the domain
+// lifecycle conflicts. Errors whose details are derived at runtime (invalid
+// input, transitions, tenant contacts) are handled by handlePropertyError's
+// dynamic branches instead; the coded outcomes — the suspended membership's
+// 403 (T9), the occupied-property 409 (#632) and the tariff-limit 402
+// (#1468) — stay explicit branches: the flat table cannot carry the
+// extension codes.
 var staticPropertyProblems = []httpsupport.ErrorProblem{
 	// Access outcomes.
 	{
@@ -63,11 +64,6 @@ var staticPropertyProblems = []httpsupport.ErrorProblem{
 	{
 		Err: propertiesapp.ErrForbidden, Status: http.StatusForbidden,
 		Title: httpsupport.ProblemTitleForbidden, Detail: "Недостаточно прав для этого действия",
-	},
-	// Tariff limit.
-	{
-		Err: propertiesapp.ErrLimitExceeded, Status: http.StatusPaymentRequired,
-		Title: "Limit exceeded", Detail: "Превышен лимит активных объектов",
 	},
 	// Domain lifecycle conflicts.
 	{
@@ -89,10 +85,10 @@ var staticPropertyProblems = []httpsupport.ErrorProblem{
 }
 
 // handlePropertyError maps an application error of the property endpoints onto
-// the wire contract: the coded suspended-membership 403 and the coded
-// occupied-property 409 first (T9, #632 — the flat table cannot carry the
-// extension codes), then the fixed table, then the dynamic ones whose detail
-// derives from the error itself.
+// the wire contract: the coded suspended-membership 403, occupied-property 409
+// and tariff-limit 402 first (T9, #632, #1468 — the flat table cannot carry
+// the extension codes), then the fixed table, then the dynamic ones whose
+// detail derives from the error itself.
 func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, propertiesapp.ErrAccessSuspended) {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
@@ -108,6 +104,17 @@ func (h *PropertyHandlers) handlePropertyError(w http.ResponseWriter, r *http.Re
 				httpsupport.ProblemTitleConflict,
 				"Нельзя удалить объект, пока он арендован",
 				"property_occupied"))
+		return
+	}
+	if errors.Is(err, propertiesapp.ErrLimitExceeded) {
+		// The tariff-gate reason key (#1468): the interstitials tell the 402
+		// causes apart by machine code, against the paid sections' coded
+		// tariff_required (ADR 0064).
+		httpsupport.WriteProblem(r.Context(), w, http.StatusPaymentRequired,
+			httpsupport.ProblemWithCode(r.Context(),
+				"Limit exceeded",
+				"Превышен лимит активных объектов",
+				"property_limit_reached"))
 		return
 	}
 	if httpsupport.WriteErrorProblem(r.Context(), w, err, staticPropertyProblems) {
