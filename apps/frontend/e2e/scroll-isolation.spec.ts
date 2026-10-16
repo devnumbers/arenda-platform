@@ -213,4 +213,31 @@ test.describe('Изоляция скролла', () => {
     const scrollbar = await list.evaluate((el) => getComputedStyle(el).scrollbarWidth);
     expect(scrollbar).toBe('none');
   });
+
+  // Позиция чтения не теряется (карта #1437, план 041, feel-check
+  // владельца 16.10): лок через inline overflow: clip на html делал html
+  // не-скролл-контейнером и сбрасывал viewport-скролл в 0 — страница
+  // «отходила назад» при каждом открытии поверхности и не возвращалась.
+  test('позиция фона переживает открытие и закрытие поверхности', async ({ page, seededUser }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/ui-kit');
+    await scrollBackground(page);
+    const before = await docScroll(page);
+    expect(before.root).toBeGreaterThan(0);
+
+    // TEMP DIAGNOSTIC (план 041): протокол scroll-событий вокруг открытия
+    await page.getByRole('button', { name: 'Открыть пикер периода' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Выберите период' });
+    await expect(dialog).toBeVisible();
+    // Страж позиции гасит прыжок движка на кадре после вставки оверлея
+    // (отложенная коррекция) — замер читает устоявшееся состояние, не
+    // кадр вспышки за непрозрачной поверхностью.
+    await page.waitForTimeout(150);
+    expect(await docScroll(page), 'фон под открытой поверхностью').toEqual(before);
+
+    await dialog.getByRole('button', { name: 'Назад' }).click();
+    await expect(dialog).toBeHidden();
+    expect(await docScroll(page), 'фон после закрытия').toEqual(before);
+  });
 });

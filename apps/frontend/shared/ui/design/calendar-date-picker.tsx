@@ -124,6 +124,21 @@ function monthKey(year: number, month0: number): string {
   return `${year}-${month0}`;
 }
 
+/** Прокрутка внутренней ленты к месяцу — только самой лентой, без
+ * scrollIntoView: тот реквизирует все скролл-предки цели, и Chromium
+ * сдвигает и viewport документа (замер 16.10: открытие пикера уводило
+ * документ на сотни пикселей; под локом overflow-y: hidden документ
+ * программно скроллируем, и утечка стала видимой — карта #1437, план
+ * 041). Цель считается геометрией ленты (block: 'start'). */
+function scrollListToMonth(list: HTMLElement | null, month: HTMLElement | undefined): void {
+  if (list === null || month === undefined) {
+    return;
+  }
+  const top =
+    month.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+  list.scrollTo({ top });
+}
+
 export type CalendarDatePickerProps = {
   readonly title?: string;
   readonly confirmLabel?: string;
@@ -243,7 +258,7 @@ export function CalendarDatePicker({
     }
     anchorScrolledRef.current = true;
     const target = calendarMonthOfIndex(startIndex + anchorIndex);
-    monthRefs.current.get(monthKey(target.year, target.month0))?.scrollIntoView({ block: 'start' });
+    scrollListToMonth(scrollRef.current, monthRefs.current.get(monthKey(target.year, target.month0)));
   }, [anchorIndex, startIndex]);
 
   // Дорисовка прыжка за край — после монтирования новых месяцев.
@@ -253,7 +268,7 @@ export function CalendarDatePicker({
       return;
     }
     pendingScrollKey.current = null;
-    monthRefs.current.get(key)?.scrollIntoView({ block: 'start' });
+    scrollListToMonth(scrollRef.current, monthRefs.current.get(key));
   }, [monthsCount, firstMonth]);
 
   // После дорисовки назад прокрутка возвращается на место (якорь высоты).
@@ -317,7 +332,7 @@ export function CalendarDatePicker({
   const jumpTo = (year: number, month0: number): void => {
     const targetIdx = calendarMonthIndex({ year, month0 });
     if (targetIdx >= startIndex && targetIdx - startIndex < monthsCount) {
-      monthRefs.current.get(monthKey(year, month0))?.scrollIntoView({ block: 'start' });
+      scrollListToMonth(scrollRef.current, monthRefs.current.get(monthKey(year, month0)));
       return;
     }
     pendingScrollKey.current = monthKey(year, month0);
@@ -644,7 +659,7 @@ export function CalendarRangePicker({
     const jump = pendingJumpRef.current;
     if (jump !== undefined) {
       pendingJumpRef.current = undefined;
-      monthRefs.current.get(jump)?.scrollIntoView({ block: 'start' });
+      scrollListToMonth(scrollRef.current, monthRefs.current.get(jump));
     }
   });
 
@@ -667,7 +682,7 @@ export function CalendarRangePicker({
   const jumpTo = (year: number, month0: number): void => {
     const targetIdx = calendarMonthIndex({ year, month0 });
     if (targetIdx >= calendarMonthIndex(firstMonth)) {
-      monthRefs.current.get(monthKey(year, month0))?.scrollIntoView({ block: 'start' });
+      scrollListToMonth(scrollRef.current, monthRefs.current.get(monthKey(year, month0)));
       return;
     }
     let nextFirst = calendarMonthIndex(firstMonth);
@@ -701,7 +716,7 @@ export function CalendarRangePicker({
   const attachTarget = (node: HTMLElement | null): void => {
     if (node !== null && !scrolledRef.current) {
       scrolledRef.current = true;
-      node.scrollIntoView({ block: 'start' });
+      scrollListToMonth(scrollRef.current, node);
     }
   };
 
