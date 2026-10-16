@@ -241,6 +241,12 @@ export const ROUTES = {
   profileTariffDisable: '/profile/tariff/disable',
   profileTariffChange: '/profile/tariff/change',
   profileTariffChangeSuccess: '/profile/tariff/change/success',
+  /** Интерстишал «Превышен лимит объектов» (карта #1459, тикет #1469,
+   * макет 3516-79702): промежуточный экран вместо мгновенного редиректа
+   * на выбор тарифа при исчерпанном лимите — входы из хаба объектов
+   * (openCreate) и из визарда создания (402 property_limit_reached,
+   * #1468). */
+  profileTariffPropertyLimit: '/profile/tariff/property-limit',
   /** Интерстишал «Совместный доступ недоступен» (карта #1459, #1470):
    * цель разводки тарифного гейта шаринга (#1463) — клик «Совместного
    * доступа» владельцем на basic и страховка страницы участников; экран
