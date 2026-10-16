@@ -50,7 +50,7 @@ export function PaymentsLoading(): JSX.Element {
           </div>
         </HubCollapseAnchor>
 
-        <div className="flex flex-col gap-6 px-6 pt-4">
+        <div className="flex flex-col gap-6 px-6 pt-4" data-testid="payments-loading">
           <PaymentsSearchPill onOpenSearch={() => {}} />
 
           <PaymentsGlobalSectionSkeleton />

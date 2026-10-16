@@ -13,7 +13,7 @@ import { ParticipantsListSkeleton } from './participants-list-skeletons';
 export function ParticipantsListLoading(): JSX.Element {
   return (
     <>
-      <div className="mt-4 px-6">
+      <div className="mt-4 px-6" data-testid="participants-list-loading">
         <ChipButton trailingIcon={<ArrowDown />}>Имя</ChipButton>
       </div>
       <ParticipantsListSkeleton />

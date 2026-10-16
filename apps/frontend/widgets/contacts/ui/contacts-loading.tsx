@@ -53,7 +53,7 @@ export function ContactBookLoading(): JSX.Element {
           </div>
         </HubCollapseAnchor>
 
-        <div className="mb-6 px-6">
+        <div className="mb-6 px-6" data-testid="contacts-loading">
           <BookSortChip field="name" order="asc" />
         </div>
 

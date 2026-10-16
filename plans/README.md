@@ -651,8 +651,8 @@ feel-check на пересобранном стеке): push-back фона мо�
 | 041 | [Лок фона без прыжка позиции](041-scroll-lock-position.md) | HIGH | DONE |
 | 042 | [Календарь: плавный флик](042-calendar-fling.md) | HIGH | DONE |
 | 043 | [Вырез push-back фона модалок](043-remove-modal-push-back.md) | HIGH | DONE |
-| 044 | [Скелетоны хаба объектов: паритет кадра](044-properties-skeleton-parity.md) | HIGH | TODO |
-| 045 | [Снос теневых loading.tsx хабов](045-hub-loading-shadow-sweep.md) | MEDIUM | TODO |
+| 044 | [Скелетоны хаба объектов: паритет кадра](044-properties-skeleton-parity.md) | HIGH | DONE |
+| 045 | [Снос теневых loading.tsx хабов](045-hub-loading-shadow-sweep.md) | MEDIUM | DONE |
 
 ## Порядок исполнения
 

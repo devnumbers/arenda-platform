@@ -24,7 +24,9 @@ export function NotificationsLoading(): JSX.Element {
             <HubTitle>Уведомления</HubTitle>
           </div>
         </HubCollapseAnchor>
-        <NotificationsFeedSkeleton />
+        <div data-testid="notifications-loading">
+          <NotificationsFeedSkeleton />
+        </div>
       </PageContent>
     </>
   );
