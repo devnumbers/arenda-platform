@@ -15,10 +15,10 @@ import { DesktopMenuButton } from './desktop-menu-button';
  * и /profile/notifications (вне шестёрки) — без подсветки. Только ПК
  * ≥1024 (hidden desktop:block; ярусы владельца 08.09: мобайл 320–560,
  * планшет 561–1023, ПК от 1024 — боковое меню есть только у ПК-версии,
- * в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout. Класс
- * .desktop-chrome — хук для globals.css: при открытой полноэкранной
- * поверхности меню поднимается над ней (z-60) и остаётся кликабельным
- * (решение владельца 25.09, доработка #865). */
+ * в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout. При
+ * открытой полноэкранной поверхности сайдбар скрыт и некликабелен —
+ * поверхность накрывает вьюпорт целиком (решение владельца 16.10,
+ * план 046: отмена «меню видно и кликабельно» 25.09/#865). */
 export function DesktopSidebar(): JSX.Element {
   const pathname = usePathname();
   const activeSectionId = getActiveNavItem(pathname, mainNavSections)?.id;

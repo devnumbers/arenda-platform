@@ -135,10 +135,10 @@ function WheelRow({
       style={{ height: WHEEL_ROW_HEIGHT }}
       className={cn(
         // Единый кегль всех рядов (Figma 1539-82659): выбранный
-        // темнеет, остальные серые — без каскада размеров. active —
-        // мгновенный отклик на тап по ряду (канон Apple §1): тот же
-        // токен, что у вторичной Button.
-        'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-xl leading-6 text-content-secondary transition-colors active:bg-surface-muted-active',
+        // темнеет, остальные серые — без каскада размеров. Подсветка
+        // нажатия ряда (active:bg) отклонена владельцем 16.10 (карта
+        // #1437): отклик ряда — только полоса выбора и цвет текста.
+        'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-xl leading-6 text-content-secondary transition-colors',
         dark && 'text-content',
       )}
     >
