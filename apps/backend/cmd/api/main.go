@@ -117,7 +117,9 @@ func run() error {
 	//      the filter options; wired after the membership policy is
 	//      installed — the property_ids scope proof resolves roles through
 	//      it (the same reason as the notifications feed above).
-	historyReadMod := wire.WireHistoryRead(p)
+	// The role-aware tariff gate (ADR 0064, ревизия #1465) rides the same
+	// billing module the middleware and the access use cases consume.
+	historyReadMod := wire.WireHistoryRead(p, billingMod)
 
 	// 7. Properties: repos, subscription limiter, the property service and
 	//    the dadata suggester; the photo storage is the identity step's.

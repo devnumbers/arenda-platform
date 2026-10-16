@@ -52,7 +52,7 @@ func newEventsFixture() *eventsFixture {
 		events, auditapp.Noop{}, noopBeginner{}, clk, nil)
 	factory := newTestFactory(repo, invitations, auditapp.Noop{})
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
-		events, factory, nil)
+		events, nil, factory, nil)
 	invites := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
 		coordinator, nil, events, fakeTitles("Квартира на Невском"), factory, clk, nil, nil)
 	return &eventsFixture{

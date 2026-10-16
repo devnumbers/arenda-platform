@@ -97,7 +97,7 @@ func newMutationFixture() *mutationFixture {
 	realtime := &realtimetest.RecordingPublisher{}
 	factory := NewTxStoreFactory(repo, invitations, audit, history, fakeUoW{beginner: noopBeginner{}})
 	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
-		events, factory, nil)
+		events, nil, factory, nil)
 	access.SetRealtimePublisher(realtime)
 	svc := NewParticipantMutationService(access, owners, statuses, lookup, emails, policy,
 		scope, coordinator, mailer, events, titles, factory, clk, nil)

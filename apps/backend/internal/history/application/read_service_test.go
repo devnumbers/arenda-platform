@@ -57,7 +57,34 @@ func (f policyFake) RoleForProperty(_ context.Context, _, propertyID uuid.UUID) 
 
 func newReadServiceFake(rows []domain.FeedEntry, roles map[uuid.UUID]sharedpolicy.Role) (*HistoryReadService, *readerFake) {
 	reader := &readerFake{listRows: rows}
-	return NewHistoryReadService(reader, policyFake{roles: roles}), reader
+	// Nil-гейт выключен — конвенция опциональных зависимостей пакета; тарифное
+	// измерение пинят отдельные тесты гейта ниже.
+	return NewHistoryReadService(reader, policyFake{roles: roles}, nil), reader
+}
+
+// gateStub is the PaidSectionsGate test double: a fixed verdict plus the call
+// counter — «гейт спрашивают один раз на запрос, после резолва политики»
+// pins itself through calls.
+type gateStub struct {
+	allows bool
+	err    error
+	calls  int
+}
+
+func (g *gateStub) CanUsePaidFeatures(context.Context, uuid.UUID) (bool, error) {
+	g.calls++
+	return g.allows, g.err
+}
+
+var _ PaidSectionsGate = (*gateStub)(nil)
+
+// newGatedReadServiceFake builds the empty-feed service with the given gate
+// verdict; the caller keeps the gate to assert the calls. The gate verdicts
+// under test all fire before the store is touched, the fake's rows stay
+// empty.
+func newGatedReadServiceFake(roles map[uuid.UUID]sharedpolicy.Role, gate *gateStub) (*HistoryReadService, *readerFake) {
+	reader := &readerFake{}
+	return NewHistoryReadService(reader, policyFake{roles: roles}, gate), reader
 }
 
 // encodeString builds a well-formed base64url blob that is not a cursor
@@ -287,7 +314,7 @@ func TestFiltersProvesScopeAndReturnsOptions(t *testing.T) {
 		participants: []domain.FilterParticipant{{ID: uuid.Must(uuid.NewV7()), Name: "Иван Иванов"}},
 		objects:      []domain.FilterObject{{ID: uuid.Must(uuid.NewV7()), Name: "Гараж"}},
 	}
-	svc := NewHistoryReadService(reader, policyFake{roles: roles})
+	svc := NewHistoryReadService(reader, policyFake{roles: roles}, nil)
 
 	if _, err := svc.Filters(t.Context(), uuid.Must(uuid.NewV7()), []uuid.UUID{foreign}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign scope: want the privacy ErrNotFound, got %v", err)
@@ -298,6 +325,206 @@ func TestFiltersProvesScopeAndReturnsOptions(t *testing.T) {
 	}
 	if len(opts.Participants) != 1 || len(opts.Objects) != 1 {
 		t.Fatalf("options did not travel: %+v", opts)
+	}
+}
+
+// Ролевой тарифный гейт history-роутов (ADR 0064, ревизия #1465): на
+// не-платном тарифе чтения журнала проходят только в суженной membership-
+// области — каждый суженный объект обязан быть объектом активного участия
+// читателя (не его собственным). Лента без сужения и сужение на собственный
+// объект — ErrTariffRequired («свой объект не в истории» буквально, любая
+// поверхность). Приватность отвечает раньше тарифа: suspended и чужой id —
+// прежний privacy-404, гейт не спрашивается. Шов — после уже существующего
+// резолва роли, одним проходом (без второго резолва, ADR 0028).
+
+func TestFeedBasicTariffGlobalFeedRefused(t *testing.T) {
+	t.Parallel()
+
+	gate := &gateStub{allows: false}
+	svc, reader := newGatedReadServiceFake(nil, gate)
+
+	if _, err := svc.Feed(t.Context(), uuid.Must(uuid.NewV7()), FeedQuery{}); !errors.Is(err, ErrTariffRequired) {
+		t.Fatalf("global feed on basic: want ErrTariffRequired, got %v", err)
+	}
+	if reader.gotQuery != nil {
+		t.Fatalf("the store must not be touched when the tariff refuses")
+	}
+	if gate.calls != 1 {
+		t.Fatalf("gate calls = %d, want exactly one consult per request", gate.calls)
+	}
+}
+
+func TestFeedBasicTariffOwnPropertyNarrowingRefused(t *testing.T) {
+	t.Parallel()
+
+	owned := uuid.Must(uuid.NewV7())
+	roles := map[uuid.UUID]sharedpolicy.Role{owned: sharedpolicy.RoleOwner}
+	gate := &gateStub{allows: false}
+	svc, reader := newGatedReadServiceFake(roles, gate)
+
+	if _, err := svc.Feed(t.Context(), uuid.Must(uuid.NewV7()),
+		FeedQuery{PropertyIDs: []uuid.UUID{owned}}); !errors.Is(err, ErrTariffRequired) {
+		t.Fatalf("own-property narrowing on basic: want ErrTariffRequired, got %v", err)
+	}
+	if reader.gotQuery != nil {
+		t.Fatalf("the store must not be touched when the tariff refuses")
+	}
+}
+
+func TestFeedBasicTariffMemberNarrowingPasses(t *testing.T) {
+	t.Parallel()
+
+	for name, role := range map[string]sharedpolicy.Role{
+		"full access": sharedpolicy.RoleFullAccess,
+		"viewer":      sharedpolicy.RoleViewer,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			memberProperty := uuid.Must(uuid.NewV7())
+			roles := map[uuid.UUID]sharedpolicy.Role{memberProperty: role}
+			gate := &gateStub{allows: false}
+			svc, reader := newGatedReadServiceFake(roles, gate)
+
+			// «Пригласили — значит пользуется»: участник объекта читает
+			// суженную ленту на базовом тарифе, стор получает запрос.
+			if _, err := svc.Feed(t.Context(), uuid.Must(uuid.NewV7()), FeedQuery{PropertyIDs: []uuid.UUID{memberProperty}}); err != nil {
+				t.Fatalf("member narrowing on basic: want pass, got %v", err)
+			}
+			if reader.gotQuery == nil {
+				t.Fatalf("the store must receive the narrowed query")
+			}
+		})
+	}
+}
+
+func TestFeedBasicTariffMixedNarrowingRefused(t *testing.T) {
+	t.Parallel()
+
+	// Строгий вариант: каждый суженный объект обязан быть членством —
+	// собственный объект в списке валит весь запрос.
+	owned := uuid.Must(uuid.NewV7())
+	memberProperty := uuid.Must(uuid.NewV7())
+	roles := map[uuid.UUID]sharedpolicy.Role{
+		owned:          sharedpolicy.RoleOwner,
+		memberProperty: sharedpolicy.RoleViewer,
+	}
+	gate := &gateStub{allows: false}
+	svc, _ := newGatedReadServiceFake(roles, gate)
+
+	if _, err := svc.Feed(t.Context(), uuid.Must(uuid.NewV7()),
+		FeedQuery{PropertyIDs: []uuid.UUID{memberProperty, owned}}); !errors.Is(err, ErrTariffRequired) {
+		t.Fatalf("mixed narrowing on basic: want ErrTariffRequired, got %v", err)
+	}
+}
+
+func TestFeedPrivacyAnswersBeforeTariff(t *testing.T) {
+	t.Parallel()
+
+	memberProperty, foreign, suspended := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	roles := map[uuid.UUID]sharedpolicy.Role{
+		memberProperty: sharedpolicy.RoleViewer,
+		foreign:        sharedpolicy.RoleNone,
+		suspended:      sharedpolicy.RoleSuspended,
+	}
+	gate := &gateStub{allows: false}
+	svc, reader := newGatedReadServiceFake(roles, gate)
+
+	for name, ids := range map[string][]uuid.UUID{
+		"foreign":            {foreign},
+		"suspended":          {suspended},
+		"mixed with foreign": {memberProperty, foreign},
+	} {
+		if _, err := svc.Feed(t.Context(), uuid.Must(uuid.NewV7()), FeedQuery{PropertyIDs: ids}); !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s: want the privacy ErrNotFound, got %v", name, err)
+		}
+	}
+	if reader.gotQuery != nil {
+		t.Errorf("the store must not be touched when the proof fails")
+	}
+	if gate.calls != 0 {
+		t.Errorf("gate calls = %d, want 0 — privacy is the role-policy answer", gate.calls)
+	}
+}
+
+func TestFeedPaidTariffPassesUnchanged(t *testing.T) {
+	t.Parallel()
+
+	owned, memberProperty := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	roles := map[uuid.UUID]sharedpolicy.Role{
+		owned:          sharedpolicy.RoleOwner,
+		memberProperty: sharedpolicy.RoleViewer,
+	}
+	gate := &gateStub{allows: true}
+	svc, reader := newGatedReadServiceFake(roles, gate)
+
+	// Регрессионное направление: платный тариф читает и глобальную ленту
+	// (собственные объекты — дело стора), и любое сужение.
+	if _, err := svc.Feed(t.Context(), uuid.Must(uuid.NewV7()), FeedQuery{}); err != nil {
+		t.Fatalf("global feed on paid: %v", err)
+	}
+	if _, err := svc.Feed(t.Context(), uuid.Must(uuid.NewV7()), FeedQuery{PropertyIDs: []uuid.UUID{owned, memberProperty}}); err != nil {
+		t.Fatalf("narrowed feed on paid: %v", err)
+	}
+	if reader.gotQuery == nil {
+		t.Fatalf("the store must receive the query on the paid tariff")
+	}
+}
+
+func TestFeedGateFailureFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	// Сбой хранилища подписки — не тарифный вердикт: наверх, на 500
+	// обработчика (гейт не fail-open, ADR 0064).
+	gate := &gateStub{allows: false, err: errors.New("subscriptions store down")}
+	svc, reader := newGatedReadServiceFake(nil, gate)
+
+	if _, err := svc.Feed(t.Context(), uuid.Must(uuid.NewV7()), FeedQuery{}); err == nil || errors.Is(err, ErrTariffRequired) {
+		t.Fatalf("feed with a broken gate: want a propagated error, got %v", err)
+	}
+	if reader.gotQuery != nil {
+		t.Fatalf("the store must not be touched when the gate fails")
+	}
+}
+
+func TestFiltersTariffScope(t *testing.T) {
+	t.Parallel()
+
+	owned, memberProperty, foreign := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	roles := map[uuid.UUID]sharedpolicy.Role{
+		owned:          sharedpolicy.RoleOwner,
+		memberProperty: sharedpolicy.RoleViewer,
+		foreign:        sharedpolicy.RoleNone,
+	}
+	reader := &readerFake{
+		participants: []domain.FilterParticipant{{ID: uuid.Must(uuid.NewV7()), Name: "Иван Иванов"}},
+		objects:      []domain.FilterObject{{ID: uuid.Must(uuid.NewV7()), Name: "Гараж"}},
+	}
+	gate := &gateStub{allows: false}
+	svc := NewHistoryReadService(reader, policyFake{roles: roles}, gate)
+	actor := uuid.Must(uuid.NewV7())
+
+	// Глобальная область шита и сужение на собственный объект — 402.
+	if _, err := svc.Filters(t.Context(), actor, nil); !errors.Is(err, ErrTariffRequired) {
+		t.Errorf("global filter options on basic: want ErrTariffRequired, got %v", err)
+	}
+	if _, err := svc.Filters(t.Context(), actor, []uuid.UUID{owned}); !errors.Is(err, ErrTariffRequired) {
+		t.Errorf("own-property filter options on basic: want ErrTariffRequired, got %v", err)
+	}
+	// Сужение на объект участия — опции шита, как на платном.
+	opts, err := svc.Filters(t.Context(), actor, []uuid.UUID{memberProperty})
+	if err != nil {
+		t.Fatalf("member filter options on basic: %v", err)
+	}
+	if len(opts.Participants) != 1 || len(opts.Objects) != 1 {
+		t.Fatalf("options did not travel: %+v", opts)
+	}
+	// Приватность раньше тарифа, гейт не спрашивается.
+	if _, err := svc.Filters(t.Context(), actor, []uuid.UUID{foreign}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("foreign filter options: want the privacy ErrNotFound, got %v", err)
+	}
+	if gate.calls != 3 {
+		t.Errorf("gate calls = %d, want 3 — the two refusals and the passing scope", gate.calls)
 	}
 }
 

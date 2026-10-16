@@ -68,6 +68,31 @@ func TestHandlePropertyError_AccessOutcomes(t *testing.T) {
 	}
 }
 
+// TestHandlePropertyError_TariffLimitOutcome verifies the wire contract of
+// the active-property limit refusal (#1468): the 402 carries the
+// property_limit_reached machine code — the reason key the tariff-gate
+// interstitials tell apart from the coded tariff_required (ADR 0064) — while
+// the title and the detail stay fixed.
+func TestHandlePropertyError_TariffLimitOutcome(t *testing.T) {
+	t.Parallel()
+
+	h := newPropertyHandlersForMapping(t)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+	rr := httptest.NewRecorder()
+
+	h.handlePropertyError(rr, req, propertiesapp.ErrLimitExceeded)
+
+	assertProblemStatus(t, rr, http.StatusPaymentRequired)
+	prob := decodeProblem(t, rr)
+	if prob.Title != "Limit exceeded" {
+		t.Errorf("Problem.Title = %q, want %q", prob.Title, "Limit exceeded")
+	}
+	if prob.Detail == nil || *prob.Detail != "Превышен лимит активных объектов" {
+		t.Errorf("Problem.Detail = %v, want %q", prob.Detail, "Превышен лимит активных объектов")
+	}
+	assertProblemCode(t, rr.Body.Bytes(), "property_limit_reached")
+}
+
 // assertProblemStatus checks the response status and the problem+json content
 // type of an error mapping.
 func assertProblemStatus(t *testing.T, rr *httptest.ResponseRecorder, wantStatus int) {

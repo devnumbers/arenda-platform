@@ -77,7 +77,12 @@ type AccessService struct {
 	policy   sharedpolicy.Policy
 	slots    *SlotCoordinator
 	events   AccessEventPublisher
-	logger   *slog.Logger
+	// Gate is the paid-sections tariff gate the use cases consult after the
+	// role resolve (ADR 0064, ревизия #1462); nil keeps the gate off — the
+	// package convention for optional dependencies. The composition root
+	// always wires the billing adapter.
+	gate   PaidSectionsGate
+	logger *slog.Logger
 	// Realtime is the late-bound carrier the transitions' frames dispatch
 	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
 	// pre-#716 silence. The invitation and participant-mutation services
@@ -139,9 +144,10 @@ func recoveredAccessFrames(recovered []domain.Membership) []realtimedom.Change {
 // the lifecycle event publisher (карта #734, #751); it may be nil to disable
 // the publications (tests that don't exercise them). Statuses reports the
 // archived flag of a property (issue #163); it may be nil to skip the
-// archived-property checks. Factory bundles the membership repository, the
-// audit and history recorders, and the Unit-of-Work every mutating use case
-// runs through (ADR 0033 γ-factory).
+// archived-property checks. Gate is the paid-sections tariff gate (ADR 0064);
+// nil keeps it off (tests that don't exercise the tariff). Factory bundles
+// the membership repository, the audit and history recorders, and the
+// Unit-of-Work every mutating use case runs through (ADR 0033 γ-factory).
 func NewAccessService(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
@@ -150,6 +156,7 @@ func NewAccessService(
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
 	events AccessEventPublisher,
+	gate PaidSectionsGate,
 	factory txStoreFactory,
 	logger *slog.Logger,
 ) *AccessService {
@@ -165,6 +172,7 @@ func NewAccessService(
 		policy:         policy,
 		slots:          slots,
 		events:         events,
+		gate:           gate,
 		logger:         logger,
 	}
 }
@@ -721,7 +729,11 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 // ListMembers returns the property participants: the owner first (synthesized
 // from properties.owner_id, IsOwner = true), then the membership rows ordered
 // by created_at. Requires the view capability; RoleNone is mapped to not-found
-// to preserve object privacy.
+// to preserve object privacy. The paid-sections tariff gate sits after the
+// role resolve (ADR 0064, ревизия #1462): the list is a paid section for the
+// owner, while a property member reads it on any tariff — «пригласили —
+// значит пользуется»; a suspended member and a stranger never reach the gate
+// (the role policy's privacy answer).
 func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.UUID) ([]Member, error) {
 	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
@@ -729,6 +741,11 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 	}
 	if !sharedpolicy.CanView(role) {
 		return nil, domain.ErrMemberNotFound
+	}
+	if role == sharedpolicy.RoleOwner {
+		if err := ensurePaidSections(ctx, s.gate, actor); err != nil {
+			return nil, err
+		}
 	}
 
 	owner, err := s.owners.GetOwnerID(ctx, propertyID)
@@ -782,9 +799,20 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 // actor's role. A missing property or lack of access is mapped to
 // ErrMemberNotFound to keep object existence private. The role is returned so
 // callers can attribute audit entries to the actor's real role (issue #166
-// follow-up).
+// follow-up). Passing the manage gate means the actor is the owner (owner-only
+// since D8, issue #1304), so the paid-sections tariff gate consults exactly
+// here (ADR 0064, ревизия #1462): the member-management mutations stay a paid
+// section for the owner, while a member's attempt is refused above by the role
+// policy without hearing the tariff verdict.
 func (s *AccessService) requireManage(ctx context.Context, actor, propertyID uuid.UUID) (uuid.UUID, sharedpolicy.Role, error) {
-	return requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	owner, role, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
+	if err != nil {
+		return uuid.UUID{}, "", err
+	}
+	if err := ensurePaidSections(ctx, s.gate, actor); err != nil {
+		return uuid.UUID{}, "", err
+	}
+	return owner, role, nil
 }
 
 // requireManageAccess is the shared manage-members gate used by both the

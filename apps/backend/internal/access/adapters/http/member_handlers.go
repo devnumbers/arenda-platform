@@ -139,6 +139,10 @@ func (h *MemberHandlers) LeaveProperty(w http.ResponseWriter, r *http.Request, p
 
 func (h *MemberHandlers) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, accessapp.ErrTariffRequired):
+		// The role-aware tariff gate (ADR 0064, ревизия #1462): the owner on a
+		// non-paid tariff — the middleware's canonical wire shape.
+		httpsupport.WriteTariffRequired(r.Context(), w)
 	case errors.Is(err, domain.ErrMemberNotFound):
 		// Privacy: not-found covers both "object does not exist" and "no access".
 		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))

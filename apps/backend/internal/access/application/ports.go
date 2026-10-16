@@ -225,3 +225,13 @@ type RevokeAllScope interface {
 	OwnsAnyProperty(ctx context.Context, userID uuid.UUID) (bool, error)
 	HoldsAnyMembership(ctx context.Context, userID uuid.UUID) (bool, error)
 }
+
+// PaidSectionsGate resolves whether the actor's subscription covers the
+// platform's paid sections (ADR 0064). Consumer-side port (ADR 0035): the
+// billing module's adapter satisfies it alongside the httpsupport middleware
+// port — the same verdict, consumed here where the role is already resolved.
+// A user without a subscription counts as basic; the gate only blocks, never
+// grants.
+type PaidSectionsGate interface {
+	CanUsePaidFeatures(ctx context.Context, userID uuid.UUID) (bool, error)
+}

@@ -18,12 +18,25 @@ type PaidSectionsGate interface {
 	CanUsePaidFeatures(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
+// WriteTariffRequired answers the canonical "needs a paid tariff" refusal:
+// 402 PaymentRequired with the machine code "tariff_required" — the wire
+// shape the route middleware and the handlers mapping a use-case-level
+// gate's verdict (ADR 0064, ревизии #1462 и #1465) share.
+func WriteTariffRequired(ctx context.Context, w http.ResponseWriter) {
+	WriteProblem(ctx, w, http.StatusPaymentRequired,
+		ProblemWithCode(ctx, "Paid tariff required",
+			"Этот раздел доступен на платных тарифах", "tariff_required"))
+}
+
 // PaidSectionsMiddleware blocks requests to the paid platform sections when
 // the authenticated user's subscription does not cover them (карта #997):
 // the answer is 402 PaymentRequired with the machine code "tariff_required",
 // the same canonical "needs a paid tariff" status as the property-limit 402.
 // Mounted over the generated paid-section routes via r.With (the AdminOnly
-// precedent); the self-leave route stays outside the mount.
+// precedent). Since ревизия #1465 the mount covers only the global
+// participants section; the per-object access group (ревизия #1462) and the
+// history journal (ревизия #1465) are gated inside their use cases instead —
+// their verdicts are role-aware, the middleware has no access to the role.
 func PaidSectionsMiddleware(gate PaidSectionsGate, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,9 +57,7 @@ func PaidSectionsMiddleware(gate PaidSectionsGate, logger *slog.Logger) func(htt
 					slog.String("user_id", userID.String()),
 					slog.String("method", r.Method),
 					slog.String("path", r.URL.Path))
-				WriteProblem(r.Context(), w, http.StatusPaymentRequired,
-					ProblemWithCode(r.Context(), "Paid tariff required",
-						"Этот раздел доступен на платных тарифах", "tariff_required"))
+				WriteTariffRequired(r.Context(), w)
 				return
 			}
 

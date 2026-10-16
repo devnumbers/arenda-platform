@@ -101,7 +101,9 @@ func assertScopedOwnership(t *testing.T, participants []domain.FilterParticipant
 // membership policy — the same wiring as the composition root.
 func newReadStack(pool *pgxpool.Pool) *historyapp.HistoryReadService {
 	policy := accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(pool), accesspg.NewMembershipRepository(pool))
-	return historyapp.NewHistoryReadService(historypg.NewReadStore(pool), policy)
+	// Nil-гейт выключен: эти тесты — про стор и policy, тарифный вердикт
+	// пинят юнит-тесты шва (конвенция опциональных зависимостей).
+	return historyapp.NewHistoryReadService(historypg.NewReadStore(pool), policy, nil)
 }
 
 // seedEntry writes one journal row through the recorder — the actor

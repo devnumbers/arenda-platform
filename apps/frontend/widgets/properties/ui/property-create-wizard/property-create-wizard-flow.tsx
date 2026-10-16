@@ -15,6 +15,7 @@ import {
   type PropertyCreateStep,
 } from '@/features/properties';
 import { attributeCatalog } from '../property-fields/attribute-catalog';
+import { isPropertyLimitReachedError } from '../../lib/property-limit-gate';
 import {
   Button,
   IconButton,
@@ -234,7 +235,14 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
         return;
       }
       setCreated(property);
-    } catch {
+    } catch (error) {
+      // Гейт лимита (#1469): закодированный 402 property_limit_reached
+      // (#1468) — интерстишал; незакодированный 402 и прочие ошибки —
+      // прежняя генерик-ошибка (канон #1452).
+      if (isPropertyLimitReachedError(error)) {
+        router.push(ROUTES.profileTariffPropertyLimit);
+        return;
+      }
       setSubmitError(SUBMIT_ERROR_MESSAGE);
     }
   }

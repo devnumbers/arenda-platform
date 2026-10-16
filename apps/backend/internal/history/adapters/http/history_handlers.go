@@ -134,9 +134,13 @@ func (h *HistoryHandlers) GetHistoryFilters(w http.ResponseWriter, r *http.Reque
 
 // writeError maps the service's sentinels onto the contract's statuses: the
 // 404 is the privacy-404 — a foreign or suspended property is answered
-// exactly like a missing one, the existence of either is never revealed.
+// exactly like a missing one, the existence of either is never revealed; the
+// 402 is the role-aware tariff gate's verdict (ADR 0064, ревизия #1465),
+// the middleware's canonical wire shape.
 func (h *HistoryHandlers) writeError(r *http.Request, w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, historyapp.ErrTariffRequired):
+		httpsupport.WriteTariffRequired(r.Context(), w)
 	case errors.Is(err, historyapp.ErrNotFound):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound,
 			httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))

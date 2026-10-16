@@ -328,21 +328,16 @@ func New(deps Deps) http.Handler {
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/audit-logs", wrapper.ListAdminUserAuditLogs)
 
 	// Paid-sections tariff gate (карта #997, ADR 0064): the same override
-	// trick as AdminOnly above — the paid property-access routes re-register
+	// trick as AdminOnly above — the paid participants routes re-register
 	// with the tariff middleware over the generated ones, answering 402
-	// tariff_required below a paid tariff. DELETE .../access/members/self is
-	// intentionally left as generated: «Покинуть объект» lives on the property
-	// detail page, outside the paid sections.
+	// tariff_required below a paid tariff. Two groups are NOT mounted here:
+	// the per-object access group since ревизия #1462 and the history
+	// journal since ревизия #1465 — their gates are role-aware and live in
+	// the use cases after the already-resolved role (a property member reads
+	// the access list and the narrowed history on the basic tariff, «
+	// пригласили — значит пользуется»; the owner's reads refuse with 402
+	// inside the handlers).
 	paidSections := httpsupport.PaidSectionsMiddleware(deps.PaidSectionsGate, deps.Logger)
-	r.With(paidSections).Post("/properties/{propertyId}/access/invitations", wrapper.CreatePropertyAccessInvitation)
-	r.With(paidSections).Delete("/properties/{propertyId}/access/invitations/{invitationId}", wrapper.DeletePropertyAccessInvitation)
-	r.With(paidSections).Patch("/properties/{propertyId}/access/invitations/{invitationId}", wrapper.UpdatePropertyAccessInvitation)
-	r.With(paidSections).Post("/properties/{propertyId}/access/invitations/{invitationId}/resend", wrapper.ResendPropertyAccessInvitation)
-	r.With(paidSections).Get("/properties/{propertyId}/access/members", wrapper.ListPropertyAccessMembers)
-	r.With(paidSections).Get("/properties/{propertyId}/access/members/{memberId}", wrapper.GetPropertyAccessMember)
-	r.With(paidSections).Post("/properties/{propertyId}/access/members", wrapper.CreatePropertyAccessMember)
-	r.With(paidSections).Delete("/properties/{propertyId}/access/members/{memberId}", wrapper.DeletePropertyAccessMember)
-	r.With(paidSections).Patch("/properties/{propertyId}/access/members/{memberId}", wrapper.UpdatePropertyAccessMember)
 
 	// Idempotency-Key на creation-роутах (тикет Т3 карты #1112): тот же
 	// override-приём, что AdminOnly/paidSections выше — повтор с тем же
@@ -369,11 +364,11 @@ func New(deps Deps) http.Handler {
 	r.With(paidSections).Get("/participants/{participantId}", wrapper.GetParticipant)
 	r.With(paidSections).Post("/participants/{participantId}/properties", wrapper.AddParticipantProperties)
 
-	// Screen 3 (#1000): the «История действий» journal — both read endpoints
-	// of the section; every nested page and the filter sheet serve from
-	// these two.
-	r.With(paidSections).Get("/history", wrapper.GetHistory)
-	r.With(paidSections).Get("/history/filters", wrapper.GetHistoryFilters)
+	// Screen 3 (#1000), the «История действий» journal, left the middleware
+	// mount in ревизия #1465: both read endpoints serve every page and the
+	// filter sheet, and the participant's narrowed reads must pass on the
+	// basic tariff — the role-aware verdict lives in HistoryReadService
+	// (the handlers answer its ErrTariffRequired with the same 402 body).
 
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can
