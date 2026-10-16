@@ -640,7 +640,7 @@ error-редьюсер без гарда данных — `query.js:375-385`). �
 
 | # | План | Severity | Status |
 | --- | --- | --- | --- |
-| 039 | [Пресс без сжатия: цветовой отклик](039-press-color-only.md) | HIGH | TODO |
+| 039 | [Пресс без сжатия: цветовой отклик](039-press-color-only.md) | HIGH | DONE |
 | 040 | [Плавающий лейбл: вёрстка по Figma](040-floating-label-figma.md) | HIGH | TODO |
 | 041 | [Лок фона без прыжка позиции](041-scroll-lock-position.md) | HIGH | TODO |
 | 042 | [Календарь: плавный флик](042-calendar-fling.md) | HIGH | TODO |

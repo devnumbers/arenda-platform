@@ -578,24 +578,18 @@
     transform: translateY(-100%);
 }
 
-/* Пресс-отклик интерактива дизайн-слоя (аудит #1418): scale(0.97) на
-   нажатии — канон физичности (коридор 0.95–0.98). Трансформ едет на
-   --dl-duration-press (150ms), цвета/прозрачность/кольцо — на своём
-   --dl-duration-fast (250ms): нажатие подтверждается мгновенно, цвет
-   догоняет. reduced-motion не трогает — 150ms уже короче порога, а
-   фидбек пониманию сохраняем (стратегия §8). */
+/* Пресс-отклик интерактива дизайн-слоя (аудит #1418; канон правлен
+   владельцем 16.10, карта #1437): нажатие подтверждается только цветовым
+   шагом — opacity/прозрачность/фон/граница/кольцо на
+   --dl-duration-fast. Сжатие scale(0.97) из плана 007 отклонено
+   владельцем, трансформа в каноне нет. */
 .pressable {
     transition:
-        transform var(--dl-duration-press) var(--dl-ease),
         opacity var(--dl-duration-fast) var(--dl-ease),
         background-color var(--dl-duration-fast) var(--dl-ease),
         border-color var(--dl-duration-fast) var(--dl-ease),
         color var(--dl-duration-fast) var(--dl-ease),
         box-shadow var(--dl-duration-fast) var(--dl-ease);
-}
-
-.pressable:active {
-    transform: scale(0.97);
 }
 
 /* ПК-каркас (макеты 1185-40815/1185-40811, решение владельца 25.09 —
