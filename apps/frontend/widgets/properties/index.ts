@@ -1,5 +1,5 @@
 export { parseSortFromParams } from './lib/property-sort';
-export { PropertiesLoading } from './ui/PropertiesLoading';
+export { PropertiesHubLoading, PropertiesLoading } from './ui/PropertiesLoading';
 export { PropertiesPage } from './ui/PropertiesPage';
 export { PropertiesArchiveScreen } from './ui/PropertiesArchiveScreen';
 export {

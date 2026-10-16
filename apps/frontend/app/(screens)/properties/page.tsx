@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { PropertiesLoading, PropertiesPage, parseSortFromParams } from '@/widgets/properties';
+import { PropertiesHubLoading, PropertiesPage, parseSortFromParams } from '@/widgets/properties';
 import { propertiesListQueryOptions } from '@/features/properties';
 import { subscriptionQueryOptions } from '@/features/subscription';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
@@ -25,8 +25,11 @@ export default async function PropertiesRoutePage({
     const resolved = await searchParams;
     const initialSort = parseSortFromParams(resolved);
 
+    // Полный кадр хаба (план 044): хром вне фазы загрузки (§7),
+    // сегментный loading.tsx снесён — его архетип стримился первым
+    // кадром и детям (/properties/[id] получал скелетон списка).
     return (
-        <Suspense fallback={<PropertiesLoading />}>
+        <Suspense fallback={<PropertiesHubLoading />}>
             <ServerPrefetchBoundary
                 prefetch={(queryClient) => {
                     void queryClient.prefetchQuery(propertiesListQueryOptions(serverApiClient));
