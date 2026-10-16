@@ -13,15 +13,17 @@ export const metadata: Metadata = {
  * в тикете #1469; в макете шапка «Повысить тариф») и «Назад»
  * history-first с фолбэком на хаб объектов. Входы — «+» хаба объектов
  * при исчерпанном лимите и визард создания (402
- * property_limit_reached, #1468). Контент центрируется между шапкой и
- * нижней панелью кнопок (анатомия макета: Page Content justify-center
- * над клиренсом 136). */
+ * property_limit_reached, #1468). Контент прижат кверху — отступ 96
+ * от шапки, как padding 96px 32px контентного фрейма макета (правка
+ * владельца 16.10: без вертикального центрирования — center инстанса
+ * Page Content макета не воспроизводить, совпадение с отступом было
+ * верно только на высоте макетного фрейма); снизу воздух до панели. */
 export default function TariffPropertyLimitPage() {
   return (
     <SubScreenShell
       title="Тариф"
       fallbackHref={ROUTES.properties}
-      contentClassName="min-h-[calc(100dvh-72px)] justify-center"
+      contentClassName="pt-24"
     >
       <TariffPropertyLimitScreen />
     </SubScreenShell>
