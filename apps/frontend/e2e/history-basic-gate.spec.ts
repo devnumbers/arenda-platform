@@ -45,7 +45,7 @@ async function seedApartmentJournal(user: SeededUser): Promise<void> {
   await seedJournalEntry(memberTaskEntry('f0000000-0000-4000-8000-000000000002', 3), user);
 }
 
-test('участник на basic читает обе объектные поверхности истории, лента ведёт на выбор тарифа; сид восстанавливается', async ({ page, seededUser }) => {
+test('участник на basic читает обе объектные поверхности истории, лента ведёт на интерстишал шаринга; сид восстанавливается', async ({ page, seededUser }) => {
   // Мария (full_access) на basic: proxy объектные маршруты больше не
   // держит, бекенд-гейт суженную область её участия пропускает (#1465).
   const previousTariff = await execE2eSql(
@@ -83,11 +83,12 @@ test('участник на basic читает обе объектные пов�
     await expect(page.getByText('Платёж создан:')).toHaveCount(0);
 
     // Лента /history — по-прежнему платная для всех basic, вход ей не
-    // нужен: proxy ведёт на выбор тарифа (ретаргет на интерстишал —
-    // тикет #1470).
+    // нужен: proxy ведёт на интерстишал шаринга (ретаргет #1470 —
+    // история отнесена владельцем к совместному доступу; выбор тарифа —
+    // следующей кнопкой с экрана).
     await page.goto('/history');
-    await expect(page).toHaveURL(/\/profile\/tariff\/change$/);
-    await expect(page.getByText('Выбрать тариф').first()).toBeVisible();
+    await expect(page).toHaveURL(/\/profile\/tariff\/sharing$/);
+    await expect(page.getByRole('heading', { name: 'Совместный доступ недоступен' })).toBeVisible();
   } finally {
     await execE2eSql(
       `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = '${previousTariff}') ` +

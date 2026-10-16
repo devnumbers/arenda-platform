@@ -13,5 +13,6 @@ export { TariffChangeSuccess } from './ui/TariffChangeSuccess';
 export { TariffAboutScreen } from './ui/tariff/tariff-about-screen';
 export { TariffDisableScreen } from './ui/tariff/tariff-disable-screen';
 export { TariffPropertyLimitScreen } from './ui/tariff/tariff-property-limit-screen';
+export { TariffSharingScreen } from './ui/tariff/tariff-sharing-screen';
 export { TariffScreen } from './ui/tariff/tariff-screen';
 export { TimezonePickerScreen } from './ui/TimezonePickerScreen';

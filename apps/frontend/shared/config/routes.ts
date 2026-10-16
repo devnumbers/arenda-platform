@@ -247,10 +247,12 @@ export const ROUTES = {
    * (openCreate) и из визарда создания (402 property_limit_reached,
    * #1468). */
   profileTariffPropertyLimit: '/profile/tariff/property-limit',
-  /** Интерстишал «Совместный доступ недоступен» (карта #1459, #1470):
-   * цель разводки тарифного гейта шаринга (#1463) — клик «Совместного
-   * доступа» владельцем на basic и страховка страницы участников; экран
-   * строит #1470, до него маршрут ведёт на 404. */
+  /** Интерстишал «Совместный доступ недоступен» (карта #1459, #1470,
+   * макет 3518-80047): цель разводки тарифного гейта шаринга (#1463) —
+   * клик «Совместного доступа» владельцем на basic, страховка страницы
+   * участников и объектных поверхностей истории; с #1470 сюда же ведут
+   * proxy-цели реестра paid-sections (deep-маршруты участников, лента
+   * истории) и апселл-CTA хаба /participants. */
   profileTariffSharing: '/profile/tariff/sharing',
   profilePaymentMethods: '/profile/tariff/payment-methods',
   profilePaymentMethodsAdd: '/profile/tariff/payment-methods/add',

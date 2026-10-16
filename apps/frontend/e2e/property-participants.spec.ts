@@ -473,6 +473,9 @@ test('D15 снято #1464: пункт «Совместного доступа»
     // тарифа уводит на тот же интерстишал.
     await page.goto(`/properties/${APARTMENT_ID}/participants`);
     await expect(page).toHaveURL(/\/profile\/tariff\/sharing$/);
+    // С #1470 маршрут — живой экран, не 404: диплинк показывает
+    // интерстишал целиком.
+    await expect(page.getByRole('heading', { name: 'Совместный доступ недоступен' })).toBeVisible();
     await page.goto(`/properties/${APARTMENT_ID}/participants/invite`);
     await expect(page).toHaveURL(/\/profile\/tariff\/sharing$/);
     await page.goto(`/properties/${APARTMENT_ID}/participants/${MARIA_MEMBER_ID}`);
