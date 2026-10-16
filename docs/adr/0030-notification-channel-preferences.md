@@ -10,7 +10,13 @@ migrated.
 
 ## Status
 
-Accepted. Supersedes point 1 of [ADR 0022](./0022-notification-preferences.md)
+Superseded by [ADR 0058](./0058-notification-feed-and-per-category-settings.md):
+the per-event-type × per-channel model is replaced by per-category settings
+(email per account, push per device), and this ADR's table
+`user_notification_channel_preferences` was dropped in migration `000132`
+(decision #738 — stored opt-outs are reset, not migrated).
+
+Was accepted. Supersedes point 1 of [ADR 0022](./0022-notification-preferences.md)
 ("Permissions are bound to the event type, not to the delivery channel"). All
 other points of ADR 0022 — opt-out default, soft revocation in the
 ReminderWorker, bulk API, per-recipient enforcement, audit — remain in force,

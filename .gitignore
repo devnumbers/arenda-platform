@@ -6,29 +6,44 @@
 .env
 .env.*
 !.env.example
-!.env.perf.example
 !.env.stage.example
 !.env.prod.example
 *.exe
 node_modules/
-apps/landing/dist
 *.log
 .tmp
+# Одноразовые экспорты макетов из Figma (скретч сессий)
+.tmp-figma-*
 
 # Bruno runtime environment (contains session ids and dynamic object ids)
 tools/bruno/arenda-api/environments/Local.bru
 
-# Generated perf fixtures
-apps/backend/perf/fixtures.json
-apps/backend/perf/results/
-# Compiled perf binaries
-apps/backend/perfvegeta
-
 .playwright-mcp
 screenshots
+
+# Per-checkout golangci-lint cache (GOLANGCI_LINT_CACHE pinned in the Makefile —
+# the machine-global default cache is poisoned across worktrees)
+/.golangci-lint-cache/
+
+# Playwright e2e run artifacts (frontend)
+apps/frontend/playwright-report
+apps/frontend/test-results
 
 docs/plans
 docs/reviews
 
-# Local agent tooling config
-.zcode/
+# Local agent tooling config (workspace MCP config is committed — see .zcode/config.json)
+.zcode/*
+!.zcode/config.json
+!.zcode/postgres-mcp.tools.json
+
+# Personal lefthook overrides (skip jobs etc.)
+lefthook-local.yml
+
+.scratch
+
+# Agent scratch temp dir (session artifacts: probes, logs, dumps)
+.zcode-tmp/
+
+# Agent worktrees (using-git-worktrees skill)
+.worktrees/

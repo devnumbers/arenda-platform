@@ -29,12 +29,13 @@ export const subscriptionStatusChoices: Choice[] = [
   { id: 'cancelled', name: 'Отменена' },
 ];
 
+// partial_refunded отсутствует: возвраты всегда полные (ADR 0037), статус
+// выпадает из нового домена и строк с ним быть не может.
 export const subscriptionPaymentStatusChoices: Choice[] = [
   { id: 'pending', name: 'Ожидает оплаты' },
   { id: 'succeeded', name: 'Оплачен' },
   { id: 'failed', name: 'Ошибка оплаты' },
   { id: 'refunded', name: 'Возвращён' },
-  { id: 'partial_refunded', name: 'Частичный возврат' },
   { id: 'refunding', name: 'Возврат выполняется' },
 ];
 
@@ -47,6 +48,7 @@ export const propertyTypeChoices: Choice[] = [
   { id: 'apartment', name: 'Квартира' },
   { id: 'room', name: 'Комната' },
   { id: 'apartments', name: 'Апартаменты' },
+  { id: 'studio', name: 'Студия' },
   { id: 'house', name: 'Дом' },
   { id: 'commercial', name: 'Коммерческое' },
   { id: 'office', name: 'Офис' },
@@ -68,32 +70,6 @@ export const propertyStatusChoices: Choice[] = [
 export const propertyStatusFilterChoices: Choice[] = [
   { id: 'active', name: 'Активен' },
   { id: 'archived', name: 'В архиве' },
-];
-
-export const occupancyChoices: Choice[] = [
-  { id: 'free', name: 'Свободен' },
-  { id: 'occupied', name: 'Занят' },
-];
-
-export const leaseStatusChoices: Choice[] = [
-  { id: 'awaiting_start', name: 'Ожидает начала' },
-  { id: 'active', name: 'Активен' },
-  { id: 'requires_action', name: 'Требует действия' },
-  { id: 'completed', name: 'Завершён' },
-  { id: 'archived', name: 'В архиве' },
-];
-
-export const operationTypeChoices: Choice[] = [
-  { id: 'income', name: 'Доход' },
-  { id: 'expense', name: 'Расход' },
-];
-
-export const operationStatusChoices: Choice[] = [
-  { id: 'unconfirmed', name: 'Не подтверждена' },
-  { id: 'pending', name: 'Ожидает' },
-  { id: 'overdue', name: 'Просрочена' },
-  { id: 'paid', name: 'Оплачена' },
-  { id: 'received', name: 'Получена' },
 ];
 
 // Choices аудита синхронизированы с реестром действий и типов сущностей
@@ -120,6 +96,7 @@ export const auditEntityTypeChoices: Choice[] = [
   { id: 'subscription', name: 'Подписка' },
   { id: 'payment_method', name: 'Способ оплаты' },
   { id: 'subscription_payment', name: 'Платёж подписки' },
+  { id: 'tariff', name: 'Тариф' },
 ];
 
 export const auditActionChoices: Choice[] = [
@@ -156,6 +133,9 @@ export const auditActionChoices: Choice[] = [
   { id: 'operation_category.created', name: 'Создание категории' },
   { id: 'subscription.tariff_changed', name: 'Смена тарифа' },
   { id: 'subscription.cancelled', name: 'Отмена подписки' },
+  { id: 'subscription.service_assigned', name: 'Назначение служебной подписки' },
+  { id: 'subscription.tariff_forced', name: 'Принудительная смена тарифа' },
+  { id: 'subscription.grace_extended', name: 'Продление грейс-периода' },
   { id: 'subscription.auto_renew_toggled', name: 'Переключение автопродления' },
   { id: 'payment_method.added', name: 'Добавление способа оплаты' },
   { id: 'payment_method.activated', name: 'Активация способа оплаты' },
@@ -164,6 +144,8 @@ export const auditActionChoices: Choice[] = [
   { id: 'subscription_payment.failed', name: 'Платёж не удался' },
   { id: 'subscription_payment.refunded', name: 'Возврат платежа' },
   { id: 'subscription_payment.synced', name: 'Синхронизация платежа' },
+  { id: 'tariff.created', name: 'Создание тарифа' },
+  { id: 'tariff.updated', name: 'Изменение тарифа' },
 ];
 
 interface PersonName {
@@ -176,7 +158,7 @@ interface PersonName {
 export const fullName = (person: PersonName): string =>
   [person.surname, person.name, person.patronymic].filter(Boolean).join(' ');
 
-export const asPersonName = (value: unknown): PersonName => (value && typeof value === 'object' ? (value as PersonName) : {});
+export const asPersonName = (value: unknown): PersonName => (value && typeof value === 'object' ? value : {});
 
 const moneyFormatter = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' });
 
@@ -212,7 +194,15 @@ export const ChoiceChipField = ({ choices, ...props }: FieldProps & { choices: C
     return null;
   }
   const choice = choices.find((item) => item.id === value);
-  return <Chip size="small" label={choice ? choice.name : String(value)} />;
+  if (choice) {
+    return <Chip size="small" label={choice.name} />;
+  }
+  // Неизвестный enum проходит как есть; строковые и числовые id строковируются
+  // явно — объектное значение не может стать чипом «[object Object]».
+  if (typeof value === 'string' || typeof value === 'number') {
+    return <Chip size="small" label={String(value)} />;
+  }
+  return null;
 };
 
 /**
@@ -242,7 +232,7 @@ export const UserLinkField = (props: FieldProps) => {
 /**
  * Владелец записи: ссылка на Show пользователя, текст — ownerPhone.
  * source указывает на поле ownerId; запросов не выполняет,
- * используются ownerPhone/ownerId текущей записи (AdminProperty, AdminTenantContact).
+ * используются ownerPhone/ownerId текущей записи (AdminProperty).
  */
 export const OwnerLinkField = (props: FieldProps) => {
   const record = useRecordContext();
@@ -260,30 +250,6 @@ export const OwnerLinkField = (props: FieldProps) => {
     </Link>
   );
 };
-
-interface TenantContactValue extends PersonName {
-  phone?: string | null;
-}
-
-/** Вложенный tenantContact договора: «Фамилия Имя Отчество, телефон». */
-export const TenantContactField = (props: FieldProps) => (
-  <FunctionField
-    {...props}
-    render={(record) => {
-      const contact: unknown = record[props.source];
-      if (!contact || typeof contact !== 'object') {
-        return null;
-      }
-      const value = contact as TenantContactValue;
-      const name = fullName(value);
-      const phone = typeof value.phone === 'string' ? value.phone : '';
-      if (name && phone) {
-        return `${name}, ${phone}`;
-      }
-      return name || phone || null;
-    }}
-  />
-);
 
 /** Плейсхолдер для записей, чей объект был удалён без сохранения имени (propertyName пуст). */
 const deletedPropertyPlaceholder = 'объект удалён';
@@ -324,12 +290,6 @@ const renderUser = (user: RaRecord) => {
   return name ? `${phone} (${name})` : phone;
 };
 
-const renderLease = (lease: RaRecord) => {
-  const propertyName = typeof lease.propertyName === 'string' ? lease.propertyName : '';
-  const tenantName = fullName(asPersonName(lease.tenantContact));
-  return tenantName ? `${propertyName} → ${tenantName}` : propertyName;
-};
-
 type ReferenceProps = Omit<ReferenceFieldProps, 'reference' | 'children'>;
 
 /** Владелец/пользователь: ссылка на Show пользователя, телефон (+ ФИО). */
@@ -355,10 +315,3 @@ export const PropertyReferenceField = (props: ReferenceProps) => {
     </ReferenceField>
   );
 };
-
-/** Договор аренды: ссылка на Show договора, «{propertyName} → {ФИО арендатора}». */
-export const LeaseReferenceField = (props: ReferenceProps) => (
-  <ReferenceField reference="leases" link="show" {...props}>
-    <FunctionField render={renderLease} />
-  </ReferenceField>
-);

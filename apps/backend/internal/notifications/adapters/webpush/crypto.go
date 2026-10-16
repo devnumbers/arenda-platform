@@ -73,7 +73,12 @@ func encryptPayload(sub domain.PushSubscription, plaintext []byte) (*encryptedMe
 // encryptPayloadWithKey encrypts using an injected ephemeral private key and
 // salt. It backs both the production path (random key + salt) and the
 // deterministic RFC 8291 Appendix A test vectors.
-func encryptPayloadWithKey(sub domain.PushSubscription, plaintext []byte, asPrivate *ecdh.PrivateKey, salt []byte) (*encryptedMessage, error) {
+func encryptPayloadWithKey(
+	sub domain.PushSubscription,
+	plaintext []byte,
+	asPrivate *ecdh.PrivateKey,
+	salt []byte,
+) (*encryptedMessage, error) {
 	if len(plaintext) > maxPlaintextLen {
 		return nil, errPayloadTooLarge
 	}
@@ -114,13 +119,19 @@ func encryptPayloadWithKey(sub domain.PushSubscription, plaintext []byte, asPriv
 // derivation (step 3) is standard HKDF Extract+Expand.
 func deriveKeys(ecdhSecret, authSecret, uaPublic, asPublic, salt []byte) (cek, nonce []byte, err error) {
 	// Step 1: IKM = HMAC(PRK_key, key_info || 0x01), PRK_key = HMAC(auth, secret).
-	// key_info = "WebPush: info" || 0x00 || ua_public || as_public.
-	prkKey := hmacSHA256(authSecret, ecdhSecret)
+	// The key_info value is "WebPush: info" || 0x00 || ua_public || as_public.
+	prkKey, err := hmacSHA256(authSecret, ecdhSecret)
+	if err != nil {
+		return nil, nil, fmt.Errorf("hmac prf key: %w", err)
+	}
 	keyInfo := buildKeyInfo(uaPublic, asPublic)
 	ikmInput := make([]byte, 0, len(keyInfo)+1)
 	ikmInput = append(ikmInput, keyInfo...)
 	ikmInput = append(ikmInput, 0x01)
-	ikm := hmacSHA256(prkKey, ikmInput)
+	ikm, err := hmacSHA256(prkKey, ikmInput)
+	if err != nil {
+		return nil, nil, fmt.Errorf("hmac ikm: %w", err)
+	}
 
 	// Step 2: PRK = HKDF-Extract(salt, IKM).
 	prk, err := hkdf.Extract(sha256.New, ikm, salt)
@@ -184,9 +195,9 @@ func buildMessage(salt, asPublic, ciphertext []byte) *encryptedMessage {
 	var m encryptedMessage
 	copy(m.header[0:16], salt)
 	binary.BigEndian.PutUint32(m.header[16:20], recordSize)
-	// asPublic is always an uncompressed P-256 key (65 bytes, p256UncompressedSize),
-	// so the idlen octet fits in a byte by construction.
-	m.header[20] = byte(len(asPublic)) //nolint:gosec // G115: len is 65 by P-256 invariant
+	// The asPublic key is always an uncompressed P-256 key, so the idlen octet
+	// is the key size constant by construction.
+	m.header[20] = p256UncompressedSize
 	copy(m.header[21:21+len(asPublic)], asPublic)
 	m.ciphertext = ciphertext
 	return &m
@@ -201,10 +212,14 @@ func (m *encryptedMessage) Bytes() []byte {
 }
 
 // hmacSHA256 returns HMAC-SHA256(key, data).
-func hmacSHA256(key, data []byte) []byte {
+func hmacSHA256(key, data []byte) ([]byte, error) {
 	h := hmac.New(sha256.New, key)
-	h.Write(data)
-	return h.Sum(nil)
+	// The hash.Hash contract guarantees that Write never returns an error; the
+	// check keeps the contract explicit instead of silently discarding it.
+	if _, err := h.Write(data); err != nil {
+		return nil, fmt.Errorf("hash write: %w", err)
+	}
+	return h.Sum(nil), nil
 }
 
 // decodeP256PublicKey decodes a base64url-encoded uncompressed P-256 public key

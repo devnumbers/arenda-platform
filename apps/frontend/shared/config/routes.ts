@@ -1,47 +1,258 @@
 export const ROUTES = {
   login: '/login',
-  dashboard: '/dashboard',
   properties: '/properties',
   property: (id: string) => `/properties/${id}`,
   propertyArchive: '/properties/archive',
   propertyNew: '/properties/new',
+  /** Поиск по объектам (#586): вход — пилюля на хабе «Объекты». */
+  propertySearch: '/properties/search',
   propertyEdit: (id: string) => `/properties/${id}/edit`,
-  propertyContactsNew: (id: string) => `/properties/${id}/contacts/new`,
-  propertyContactEdit: (propertyId: string, contactId: string) =>
-    `/properties/${propertyId}/contacts/${contactId}/edit`,
-  propertyLeases: (id: string) => `/properties/${id}/leases`,
-  leaseNew: '/leases/new',
-  lease: (id: string) => `/leases/${id}`,
-  leaseEdit: (id: string) => `/leases/${id}/edit`,
-  tenants: '/tenants',
-  tenant: (id: string) => `/tenants/${id}`,
-  tenantNew: '/tenants/new',
-  tenantEdit: (id: string) => `/tenants/${id}/edit`,
-  finance: '/finance',
-  financeOperations: '/finance/operations',
-  financeCreateOperation: '/finance/create-operation',
-  financeOperation: (id: string) => `/finance/operations/${id}`,
-  financeOperationEdit: (id: string) => `/finance/operations/${id}/edit`,
-  financeRecurringOperation: (id: string) => `/finance/operations/recurring/${id}`,
-  financeRecurringOperationEdit: (id: string) => `/finance/operations/recurring/${id}/edit`,
+  /** Экран «Об объекте» (деталь #588, шаблон 1550:95856): данные и
+   * характеристики read-only, карандаш в шапке ведёт на правку; вход —
+   * пункт кебаба «Об объекте» и секция «Квартира» на детали. */
+  propertyAbout: (id: string) => `/properties/${id}/about`,
+  /** Экран «Платежи объекта» — новый хром (#463). */
+  propertyPayments: (id: string) => `/properties/${id}/payments`,
+  /** Страницы секций «Платежей объекта» (Figma 1043:57610): клик по
+   * заголовку секции ведёт на полный список — просроченные операции
+   * объекта, все правила, автоплатежи. */
+  propertyPaymentsOverdue: (id: string) => `/properties/${id}/payments/overdue`,
+  propertyPaymentsAll: (id: string) => `/properties/${id}/payments/all`,
+  propertyPaymentsAuto: (id: string) => `/properties/${id}/payments/auto`,
+  /** Страница платежа (#465): карточка, мутации, секции вхождений. */
+  propertyPayment: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}`,
+  /** Экран «Задачи объекта» (#499): единый список групп-секций. */
+  propertyTasks: (id: string) => `/properties/${id}/tasks`,
+  /** Экран «Задачи» — глобальная лента всех задач (карта #518, тикет #523):
+   * merged-фид читателя, топ-уровень рядом с объектами. */
+  tasks: '/tasks',
+  /** Экран «Создать задачу» (#500): полноэкранная форма в два шага. */
+  propertyTaskCreate: (id: string) => `/properties/${id}/tasks/new`,
+  /** Тот же экран с глобальной ленты «Задачи» (#525): вход без
+   * предвыбранного объекта. */
+  taskCreate: '/tasks/new',
+  /** Экран «Изменить задачу» (#502): правка правила, тапом по строке списка. */
+  propertyTaskEdit: (id: string, ruleId: string) => `/properties/${id}/tasks/${ruleId}/edit`,
+  /** Плоский маршрут правки безобъектного правила (#537): та же форма
+   * «Изменить задачу» вне объекта; тап по активной безобъектной строке
+   * глобальной ленты (#523). Правило объекта на нём невидимо (privacy 404). */
+  taskEdit: (ruleId: string) => `/tasks/${ruleId}/edit`,
+  /** Подэкраны страницы платежа (#466): график, история, просрочки. */
+  propertyPaymentSchedule: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}/schedule`,
+  propertyPaymentHistory: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}/history`,
+  propertyPaymentOverdue: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}/overdue`,
+  /** Страница операции: вхождение правила; «Отметить оплаченной» — отсюда. */
+  propertyOperation: (id: string, operationId: string) =>
+    `/properties/${id}/operations/${operationId}`,
+  /** Экран «Операции» — глобальная лента по всем объектам (карта #545,
+   * тикет #541): платёжные факты видимой книги, вход — ПК-сайдбар (#539). */
+  operations: '/operations',
+  /** Поиск по глобальным операциям (#543): вход — пилюля на главной. */
+  operationsSearch: '/operations/search',
+  /** «Выбрать объект» — мультивыбор фильтра глобальных операций (#542). */
+  operationsObjects: '/operations/objects',
+  /** Глобальный выбор категории фильтра (#544). */
+  operationsCategories: '/operations/categories',
+  /** Страницы направления глобальной ленты (#548): все доходы/расходы
+   * выбранного скоупа за период; вход — карточки сводки на главной. */
+  operationsExpenses: '/operations/expenses',
+  operationsIncomes: '/operations/incomes',
+  /** Визард создания одиночной операции (#570): глобальный вход — с шагом
+   * «Выбрать объект»; направление — пресет ?type= (Расходы/Доходы). */
+  operationsNew: '/operations/new',
+  /** Экран «Платежи» — глобальная страница платежей (карта #573, тикет
+   * #578): вход — меню «Ещё» и ПК-сайдбар. */
+  payments: '/payments',
+  /** Поиск по платежам (#575, экран #581): вход — пилюля на главной. */
+  paymentsSearch: '/payments/search',
+  /** Страницы категорий главного экрана: избранные (#579), просроченные
+   * (#580), объекты и поиск объектов (#582), «На оплату» (#1347). */
+  paymentsFavorites: '/payments/favorites',
+  paymentsOverdue: '/payments/overdue',
+  paymentsDue: '/payments/due',
+  paymentsObjects: '/payments/objects',
+  paymentsObjectsSearch: '/payments/objects/search',
+  /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
   propertyOperations: (id: string) => `/properties/${id}/operations`,
+  /** Визард создания операции с объекта (#570): объектного шага нет,
+   * категория — последний шаг с сабмитом. */
+  propertyOperationsNew: (id: string) => `/properties/${id}/operations/new`,
+  /** Экраны «Доходы объекта»/«Расходы объекта» (#475): список одного
+   * направления за месяц с листанием. */
+  propertyOperationsIncome: (id: string) => `/properties/${id}/operations/income`,
+  propertyOperationsExpense: (id: string) => `/properties/${id}/operations/expense`,
+  /** Поиск по операциям объекта (Figma 1494-61633…; экран — тикет #476). */
+  propertyOperationsSearch: (id: string) => `/properties/${id}/operations/search`,
+  /** Страница выбора категорий (#477, Figma 1506-72116, 1510-74149);
+   * выбор периода — канонический пикер поверх списков (2026-09-04). */
+  propertyOperationsCategories: (id: string) => `/properties/${id}/operations/categories`,
+  /** Просмотр проекции будущего вхождения (чисто фронт, без id операции). */
+  propertyPaymentProjectedOperation: (id: string, paymentId: string, date: string) =>
+    `/properties/${id}/payments/${paymentId}/operations/projected/${date}`,
+  /** Экран правки платежа (#467): форма поверх правила, удаление — там же. */
+  propertyPaymentEdit: (id: string, paymentId: string) =>
+    `/properties/${id}/payments/${paymentId}/edit`,
+  /** Визард создания платежа; тип выбирается в шите выбора «Платёж / Автоплатёж». */
+  propertyPaymentNew: (id: string, type: 'payment' | 'autopayment') =>
+    `/properties/${id}/payments/new?type=${type}`,
+  /** Визард создания аренды (#530): 4 шага на одном маршруте. */
+  propertyRentalNew: (id: string) => `/properties/${id}/rentals/new`,
+  /** Экран выбора арендатора (#807, макет 1855:64129): отдельный маршрут
+   * шага «Контакт арендатора» — поиск и плоский список книги объекта. */
+  propertyRentalNewContact: (id: string) => `/properties/${id}/rentals/new/contact`,
+  /** Экран «Аренда» (#531): пустое состояние или детализация текущей аренды. */
+  propertyRental: (id: string) => `/properties/${id}/rentals`,
+  /** «Условия аренды» read-only (#531) — полный просмотр условий текущей аренды. */
+  propertyRentalTerms: (id: string) => `/properties/${id}/rentals/terms`,
+  /** Правка условий аренды (#532): форма поверх условий, начало read-only. */
+  propertyRentalTermsEdit: (id: string) => `/properties/${id}/rentals/terms/edit`,
+  /** Продление аренды (#533): новая дата окончания поверх PATCH plannedEndDate. */
+  propertyRentalExtend: (id: string) => `/properties/${id}/rentals/extend`,
+  /** Завершение аренды (#534): мастер из подтверждения, даты, залога и итогов. */
+  propertyRentalComplete: (id: string) => `/properties/${id}/rentals/complete`,
+  /** «Прошлые аренды» (#535): список завершённых аренд объекта. */
+  propertyRentalPast: (id: string) => `/properties/${id}/rentals/past`,
+  /** Завершённая детализация (#535): карточка прошлой аренды по id. */
+  propertyRentalCompleted: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}`,
+  /** «История операций» завершённой аренды (#535): paid-вхождения платежа. */
+  propertyRentalCompletedHistory: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}/history`,
+  /** «Итоги аренды» завершённой (#535): read-only повтор шага итогов мастера. */
+  propertyRentalCompletedSummary: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/${rentalId}/summary`,
+  /** «Условия аренды» завершённой (#535): тот же экран условий с ?rental=. */
+  propertyRentalCompletedTerms: (id: string, rentalId: string) =>
+    `/properties/${id}/rentals/terms?rental=${rentalId}`,
+  /** Экран «Контакты объекта» (#508) — новый хром, книга контактов (ADR 0054). */
+  propertyContacts: (id: string) => `/properties/${id}/contacts`,
+  /** Создание контакта (#509); до тикета путь ведёт на 404. */
+  propertyContactNew: (id: string) => `/properties/${id}/contacts/new`,
+  /** Карточка контакта (#510): деталка с правкой и удалением. */
+  propertyContact: (id: string, contactId: string) =>
+    `/properties/${id}/contacts/${contactId}`,
+  /** Экран правки контакта (#510): форма создания в режиме правки. */
+  propertyContactEdit: (id: string, contactId: string) =>
+    `/properties/${id}/contacts/${contactId}/edit`,
+  /** Экран «Участники объекта» (#700): вход из детали объекта —
+   * «Управление» → «Совместный доступ». */
+  propertyParticipants: (id: string) => `/properties/${id}/participants`,
+  /** Приглашение от объекта (#700): тот же флоу #699, но объект один —
+   * без выбора объектов. */
+  propertyParticipantsInvite: (id: string) => `/properties/${id}/participants/invite`,
+  /** Плоская книга контактов (глобальная страница, макеты 1726:65083/…). */
+  contacts: '/contacts',
+  /** Поиск по книге — отдельная страница с поисковой шапкой (как #508). */
+  contactSearch: '/contacts/search',
+  /** Создание контакта из книги (без фиксированной привязки). */
+  contactNew: '/contacts/new',
+  /** Карточка контакта из книги. */
+  contact: (contactId: string) => `/contacts/${contactId}`,
+  /** Правка контакта из книги. */
+  contactEdit: (contactId: string) => `/contacts/${contactId}/edit`,
+  /** Раздел «Участники» (D1 #1313): единая страница списка «своих
+   * приглашённых» — хаб-карточки и «Объекты пользователей» снесены;
+   * вход — пункт навбара «Участники». На basic — пустое состояние-апселл
+   * (ADR 0064, ревизия #1313). */
+  participants: '/participants',
+  /** Поиск по разделу (#1313, D3): пилюля хаба и лупа компакт-бара ведут
+   * на отдельную поисковую страницу — канон книги контактов (#1238). */
+  participantsSearch: '/participants/search',
+  /** Страница участника (тикет #698, тот же агрегат GET
+   * /participants/{participantId}). Идентификатор — uuid юзера либо
+   * pending-почта: кодируется в путь (Next декодирует параметр обратно). */
+  participant: (participantId: string) =>
+    `/participants/${encodeURIComponent(participantId)}`,
+  /** Экран «Права участника» (#698): роль и отзыв на одном объекте. */
+  participantRights: (participantId: string, propertyId: string) =>
+    `/participants/${encodeURIComponent(participantId)}/properties/${propertyId}`,
+  /** «Права участника» в member-режиме (#1362): тот же экран read-only
+   * для приглашённых — карточка объекта с ролью и строка «Действия
+   * участника в объекте», без сегмента роли и отзыва (мутации остаются
+   * у владельца на participantRights). Идентификатор — адресующий id
+   * строки чтения GET /properties/{id}/access/members/{memberId}
+   * (контракт #1357, клиентское правило `row.id ?? row.user_id`):
+   * membership id, invitation id у pending или user_id у ряда владельца —
+   * deep-link и refresh участника работают по построению. */
+  propertyParticipantRights: (propertyId: string, memberId: string) =>
+    `/properties/${propertyId}/participants/${encodeURIComponent(memberId)}`,
+  /** Экран «Пригласить в объект» (#698): мультичек объектов читающего
+   * для существующего участника (не путать с participantsInvite —
+   * приглашением нового человека, #699). */
+  participantInvite: (participantId: string) =>
+    `/participants/${encodeURIComponent(participantId)}/invite`,
+  /** Экран приглашения участника (#699): мультиобъектный флоу. */
+  participantsInvite: '/participants/invite',
+  /** Лента «История действий» (карта #704, тикет #709): общая лента по
+   * всем доступным объектам, новые снизу (мессенджер), догрузка старых —
+   * скроллом вверх. Вход — кебабы шапки «Ваших участников» и «Объектов
+   * пользователей» (#843, макеты 1967-86441/2008-47514); история объекта
+   * — выделенный экран historyProperty (#840, макет 1980-139712), поиск
+   * #710, пара участник-в-объекте historyMemberProperty #841, переходы
+   * строк #713. */
+  history: '/history',
+  /** «История объекта» (карта #838, тикет #840): та же лента, прибитая к
+   * одному объекту (property_ids = один, ADR 0061 §7). Идентификатор —
+   * uuid объекта; вход — кебаб «Участников объекта» (макет 1980-139712),
+   * иконка истории его пустого списка и шапки объектов общей ленты
+   * (оба — решение владельца 13.10.2026, амендмент #1361). */
+  historyProperty: (propertyId: string) =>
+    `/history/properties/${encodeURIComponent(propertyId)}`,
+  /** «Действия участника в объекте» (карта #838, тикет #841): та же
+   * лента, прибитая к паре человек+объект (actor_ids и property_ids =
+   * по одному, ADR 0061 §7; сервер AND'ит обе группы — бэк #708 без
+   * изменений). Идентификаторы — uuid юзера (actor_id журнала) и uuid
+   * объекта; вход — строка на «Правах участника» (макет 2177-59620) и
+   * шапки актёров лент: «Истории объекта» (#840) и общей (амендмент
+   * #1361, решение владельца 13.10.2026 — человек кликается в рамках
+   * объекта, где он изменения сделал). */
+  historyMemberProperty: (participantId: string, propertyId: string) =>
+    `/history/participants/${encodeURIComponent(participantId)}/properties/${encodeURIComponent(propertyId)}`,
+  /** Центр уведомлений — лента (карта #734, тикет #744): хаб-маршрут
+   * среднего таба TabBar и пилюли ПК. */
+  notifications: '/notifications',
+  /** Страница уведомления с живыми действиями (карта #734, тикет #745). */
+  notification: (id: string) => `/notifications/${id}`,
   profile: '/profile',
-  profilePersonal: '/profile/personal',
+  /** Хаб-страница «Уведомления» (#566) — промежуточная заглушка; станет
+   * экраном «Настроить уведомления» (#746, решение #738). */
   profileNotifications: '/profile/notifications',
   profileAccount: '/profile/account',
+  /** Экран «Устройства» (карта #724): строка хаба ведёт сюда (мок
+   * 1786-31288, тикет #729); страница списка сессий — тикет #730. */
+  profileDevices: '/profile/devices',
+  /** Пикер часового пояса (карта #591, тикет #594): полный список зон РФ
+   * с поиском; сохранение — PATCH /me, назад — на аккаунт. */
+  profileAccountTimezone: '/profile/account/timezone',
   profileChangePhone: '/profile/account/phone',
+  /** Флоу смены почты (карта #723, тикет #722): двойной код — на текущий
+   * адрес, затем на новый. */
+  profileChangeEmail: '/profile/account/email',
   profileTariff: '/profile/tariff',
+  /** Экран «О тарифе» (карта #611, тикет #621): детали тарифа с главного
+   * «Тариф»; до #621 страница живёт как нейтральный каркас. */
+  profileTariffAbout: '/profile/tariff/about',
+  /** Флоу отключения тарифа (карта #611, тикет #622) поверх «О тарифе»;
+   * в #621 страница живёт как нейтральный каркас под кнопку. */
+  profileTariffDisable: '/profile/tariff/disable',
   profileTariffChange: '/profile/tariff/change',
   profileTariffChangeSuccess: '/profile/tariff/change/success',
   profilePaymentMethods: '/profile/tariff/payment-methods',
   profilePaymentMethodsAdd: '/profile/tariff/payment-methods/add',
   profilePayments: '/profile/tariff/payments',
   profilePaymentDetail: (id: string) => `/profile/tariff/payments/${id}`,
-  profileSupport: '/profile/support',
   profileInfo: '/profile/info',
   profilePrivacy: '/profile/info/privacy',
   profileTerms: '/profile/info/terms',
-  calendar: '/calendar',
-  freeReminderNew: '/reminders/new',
-  freeReminder: (id: string) => `/reminders/${id}`,
+  profileOffer: '/profile/info/offer',
+  /** Юрстраницы лендинга (карта #761, тикет #763): consent-ссылки шага
+   * телефона логина. Страницы живут на лендинге за прокси, открываются в
+   * новой вкладке; самих страниц пока нет — 404 лендинга не блокирует
+   * (решение владельца 18.09). */
+  landingPrivacy: '/privacy',
+  landingTerms: '/terms',
 } as const;

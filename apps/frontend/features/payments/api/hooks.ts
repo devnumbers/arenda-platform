@@ -1,0 +1,783 @@
+'use client';
+
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type UseInfiniteQueryResult,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
+import { apiClient } from '@/shared/api/client';
+import type { ApiError } from '@/shared/api/errors';
+import { mapGlobalPaymentSearch, mapPayment, mapPaymentOperation } from '@/entities/payment';
+import type {
+  GlobalPaymentFeed,
+  GlobalPaymentObject,
+  GlobalPaymentSearch,
+  OperationCreateCommand,
+  OperationsSummary,
+  PaymentCategoryView,
+  Payment,
+  PaymentChangeEntry,
+  PaymentCreateCommand,
+  PaymentOperation,
+  PaymentUpdateCommand,
+  PaymentsDue,
+} from '@/entities/payment';
+import {
+  type OperationsSortKey,
+  globalOperationKeys,
+  globalPaymentKeys,
+  paymentKeys,
+  paymentOperationKeys,
+  type GlobalOperationScope,
+  rentalKeys,
+  type PaymentOperationOrder,
+  type PaymentOperationScope,
+  type PaymentOperationStatusFilter,
+} from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
+
+type OperationsResponse = components['schemas']['OperationsResponse'];
+type PaymentResponseDto = components['schemas']['PaymentResponse'];
+type OperationResponseDto = components['schemas']['OperationResponse'];
+
+import {
+  globalOperationsPagedQueryOptions,
+  globalOperationsSummaryQueryOptions,
+  globalPaymentObjectsQueryOptions,
+  globalPaymentsFeedQueryOptions,
+  paymentChangesPagedQueryOptions,
+  paymentDetailQueryOptions,
+  paymentListQueryOptions,
+  paymentOperationQueryOptions,
+  paymentOperationsByStatusQueryOptions,
+  paymentOperationsOverdueQueryOptions,
+  paymentOperationsPagedQueryOptions,
+  paymentOperationsSummaryQueryOptions,
+  paymentsDueQueryOptions,
+} from './queries';
+import { keysetNextPageParam } from '@/shared/lib/keyset';
+import {
+  OPERATIONS_PAGE_SIZE,
+  operationsOffsetNextPageParam,
+} from '../lib/operations-pages';
+import { flattenUniqueById } from '../lib/feed-pages';
+
+/** Список платежей объекта — правил с флагом автоплатежа и избранным
+ * (ADR 0049): без пагинации, порядок — серверный (по дате заведения).
+ * search — серверный регистронезависимый подстрочный фильтр по названию
+ * ('' = без фильтра; секции экрана «Платежи объекта» ищут каждую свою). */
+export function usePayments(
+  propertyId: string,
+  search = '',
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<Payment[], ApiError> {
+  return useQuery({
+    ...paymentListQueryOptions({ propertyId, search }),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
+  });
+}
+
+/**
+ * Просроченные операции объекта (секция «Просроченные операции» экрана
+ * «Платежи объекта»): статус overdue вычисляет сервер по «сегодня» в TZ
+ * собственника (ADR 0048), сортировка asc — старейшая просрочка первой,
+ * долг разбирают по порядку накопления. Порция — серверный дефолт 50;
+ * полный список с пагинацией — usePropertyOperationsPaged. search — тот же
+ * серверный фильтр по названию ('' = без фильтра).
+ */
+export function usePropertyOverdueOperations(
+  propertyId: string,
+  search = '',
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<PaymentOperation[], ApiError> {
+  return useQuery({
+    ...paymentOperationsOverdueQueryOptions({ propertyId, search }),
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
+  });
+}
+
+/**
+ * Порции операций объекта для страницы «Просроченные операции»: тот же
+ * контракте, что у usePropertyOverdueOperations, но с limit/offset —
+ * pageParam — offset; следующая страница есть, пока порция полная.
+ */
+export function usePropertyOperationsPaged(
+  propertyId: string,
+  params: { readonly status: PaymentOperationStatusFilter; readonly order: PaymentOperationOrder },
+): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
+  const { status, order } = params;
+  return useInfiniteQuery({
+    queryKey: paymentOperationKeys.byPropertyPaged(propertyId, status, order),
+    queryFn: async ({ pageParam }) => {
+      const response = await apiClient<OperationsResponse>(
+        `/properties/${encodeURIComponent(propertyId)}/operations`
+          + `?status=${status}&order=${order}`
+          + `&limit=${OPERATIONS_PAGE_SIZE}&offset=${String(pageParam)}`,
+      );
+      return response.items.map(mapPaymentOperation);
+    },
+    initialPageParam: 0,
+    getNextPageParam: operationsOffsetNextPageParam,
+    select: (data) => data.pages.flat(),
+    enabled: Boolean(propertyId),
+  });
+}
+
+/**
+ * Создание платежа (визард #464): контракт POST создания camelCase — команда
+ * уходит телом без переупаковки; `since` проставляет сервер (сегодня в TZ
+ * собственника). Инвалидация списков платежей и операций объекта.
+ */
+export function useCreatePayment(
+  propertyId: string,
+): UseMutationResult<Payment, ApiError, PaymentCreateCommand> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (command: PaymentCreateCommand) => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments`,
+        // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(command),
+        },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      // Новое правило с напоминанием уже сегодня стоит в окне «На оплату»
+      // (#1347) — перечитывается глобальная ветка.
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Создание ручной операции (#570, контракт POST из #569): факт рождается
+ * paid с датой «сегодня владельца» — команда уходит телом без
+ * переупаковки. Объект — часть переменных мутации: у глобального входа
+ * он выбирается на шаге «Выбрать объект», когда хук уже смонтирован.
+ * Инвалидация операций объекта (списки, просрочка, сводка) и глобальной
+ * ленты со сводками.
+ */
+export function useCreateOperation(): UseMutationResult<
+  PaymentOperation,
+  ApiError,
+  { readonly propertyId: string; readonly command: OperationCreateCommand }
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async ({ propertyId, command }) => {
+      const response = await apiClient<OperationResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/operations`,
+        // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(command),
+        },
+      );
+      return mapPaymentOperation(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalOperationKeys.all });
+    },
+  });
+}
+
+/**
+ * Правка платежа (#467, экран правки): частичный PATCH — команда уже
+ * посчитана диффом формы (update-model), опущенное поле остаётся без
+ * изменений, `since` серверный. Сервер в транзакции пересоздаёт плановое
+ * вхождение и гоняет тик — инвалидируются и правила, и операции; правка
+ * напоминания/автоплатежа вводит и выводит правило из окна «На оплату»
+ * (#1347) — перечитывается глобальная ветка.
+ */
+export function useUpdatePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<Payment, ApiError, PaymentUpdateCommand> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (command: PaymentUpdateCommand) => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`,
+        { method: 'PATCH', body: JSON.stringify(command) },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Удаление платежа (только владелец, история 33 спеки #453): плановые
+ * операции с датой от сегодня сносятся всегда; просроченные остаются
+ * долгом (`keepOverdue: true`, безопасный дефолт модалки) или сносятся
+ * вместе с правилом (`false`). Оплаченные факты неприкосновенны — в истории
+ * они остаются с пометкой «платёж удалён» (`payment_id` обнуляется).
+ * Снос правила убирает его строки из окна «На оплату» (#1347) —
+ * перечитывается глобальная ветка.
+ */
+export function useDeletePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<void, ApiError, boolean> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (keepOverdue: boolean) => {
+      await apiClient<void>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}`
+          + `?keep_overdue=${keepOverdue}`,
+        { method: 'DELETE' },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Чтение платежа для страницы платежа (#465). Порции списков операций
+ * отдельно — этот хук тянет только правило.
+ */
+export function usePayment(
+  propertyId: string,
+  paymentId: string,
+): UseQueryResult<Payment, ApiError> {
+  return useQuery({
+    ...paymentDetailQueryOptions({ propertyId, paymentId }),
+    enabled: Boolean(propertyId) && Boolean(paymentId),
+  });
+}
+
+/**
+ * Операции платежа одного статуса — вход мутации «Оплатить» (head asc =
+ * старейшее неоплаченное; просроченные запрашиваются отдельным ключом и
+ * имеют приоритет над плановыми) и секция «Просроченные» страницы платежа
+ * (#465). Порядок asc закреплён контрактом «долг разбирают по порядку
+ * накопления»; порция — серверный дефолт 50. `options.enabled` глушит запрос
+ * там, где статусный список не нужен (экран правки #467 тянет просрочки
+ * только для владельца — от них зависит чекбокс модалки удаления).
+ */
+export function usePaymentOperationsByStatus(
+  propertyId: string,
+  paymentId: string,
+  status: PaymentOperationStatusFilter,
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<PaymentOperation[], ApiError> {
+  return useQuery({
+    ...paymentOperationsByStatusQueryOptions({ propertyId, paymentId, status }),
+    enabled: (options.enabled ?? true) && Boolean(propertyId) && Boolean(paymentId),
+  });
+}
+
+/**
+ * Порции операций платежа для подэкранов страницы (#466): «История»
+ * (status=paid, порядок по чипу «Сначала новые») и полный список просроченных
+ * (status=overdue, asc — долг разбирают по порядку накопления). pageParam —
+ * offset; следующая страница есть, пока порция полная. Направление — часть
+ * ключа: переключение чипа читает другой кэш с первой порции.
+ */
+export function usePaymentOperationsPaged(
+  propertyId: string,
+  paymentId: string,
+  params: {
+    readonly status: PaymentOperationStatusFilter;
+    readonly order: PaymentOperationOrder;
+    readonly sort?: OperationsSortKey;
+  },
+): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
+  const { status, order, sort } = params;
+  return useInfiniteQuery({
+    ...paymentOperationsPagedQueryOptions({ propertyId, paymentId, status, order, sort }),
+    select: (data) => data.pages.flat(),
+    enabled: Boolean(propertyId) && Boolean(paymentId),
+  });
+}
+
+/**
+ * Порции журнала изменений платежа (ADR 0065, режим «изменения» экрана
+ * «История платежа» #1195): keyset-курсор (created_at, id) DESC, обратная
+ * хронология — канон #597. `options.enabled` глушит запрос: режим
+ * изменений грузит журнал только когда включён (дефолтный режим экрана
+ * операций его не трогает).
+ */
+export function usePaymentChangesPaged(
+  propertyId: string,
+  paymentId: string,
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<ReadonlyArray<PaymentChangeEntry>, ApiError> {
+  return useInfiniteQuery({
+    ...paymentChangesPagedQueryOptions({ propertyId, paymentId }),
+    select: (data) => data.pages.flatMap((page) => page.items),
+    enabled: Boolean(propertyId) && Boolean(paymentId) && (options.enabled ?? true),
+  });
+}
+
+/**
+ * Порции операций объекта для экранов «Операции объекта» (#474): тот же
+ * контракт, что у usePropertyOperationsPaged, но весь скоуп (тип, категории,
+ * период, поиск #476) уходит и в ключ, и в query — переключение фильтра
+ * читает свой кэш с первой порции. pageParam — offset; следующая страница
+ * есть, пока порция полная. `options.enabled` глушит запрос (поиск #476 не
+ * стреляет, пока запрос не введён). keepPreviousData держит предыдущий
+ * период на экране, пока едет новый — смена фильтра не подменяет страницу
+ * скелетоном (решение владельца о плавности, #472).
+ */
+export function usePropertyOperationsScopedPaged(
+  propertyId: string,
+  scope: PaymentOperationScope,
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
+  return useInfiniteQuery({
+    queryKey: paymentOperationKeys.byPropertyScopedPaged(propertyId, scope),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams({
+        status: scope.status,
+        order: scope.order,
+        limit: String(OPERATIONS_PAGE_SIZE),
+        offset: String(pageParam),
+      });
+      if (scope.sort !== undefined) {
+        params.set('sort', scope.sort);
+      }
+      if (scope.type !== undefined) {
+        params.set('type', scope.type);
+      }
+      if (scope.categories !== undefined && scope.categories.length > 0) {
+        params.set('category', scope.categories.join(','));
+      }
+      if (scope.dateFrom !== undefined) {
+        params.set('date_from', scope.dateFrom);
+      }
+      if (scope.dateTo !== undefined) {
+        params.set('date_to', scope.dateTo);
+      }
+      if (scope.search !== undefined && scope.search !== '') {
+        params.set('search', scope.search);
+      }
+      const response = await apiClient<OperationsResponse>(
+        `/properties/${encodeURIComponent(propertyId)}/operations?${params.toString()}`,
+      );
+      return response.items.map(mapPaymentOperation);
+    },
+    initialPageParam: 0,
+    getNextPageParam: operationsOffsetNextPageParam,
+    select: (data) => data.pages.flat(),
+    placeholderData: keepPreviousData,
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
+  });
+}
+
+/**
+ * Сводка периода объекта (#474) за карточками «Расходы/Доходы» и чипом
+ * «Категория»: итоги всегда оба направления, разбивка — только категории с
+ * операциями (по сумме убывание). Статус и период — те же, что у списка,
+ * поэтому карточки и список всегда согласны друг с другом. Поиск (#476) —
+ * тот же предикат, что у списка: разбивка становится чипами совпавших
+ * категорий экрана поиска; `options.enabled` глушит запрос, пока запрос
+ * поиска не введён; keepPreviousData — сводка не мигает при смене периода
+ * или запроса (решение владельца о плавности, #472).
+ */
+export function usePropertyOperationsSummary(
+  propertyId: string,
+  scope: PaymentOperationScope,
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<OperationsSummary, ApiError> {
+  return useQuery({
+    ...paymentOperationsSummaryQueryOptions({ propertyId, scope }),
+    placeholderData: keepPreviousData,
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
+  });
+}
+
+/**
+ * Глобальная лента операций (карта #540, #541): платёжные факты видимой
+ * книги (ADR 0028), архивные исключены сервером; лента paid-only. Порции
+ * листаются keyset-курсором (#597): pageParam — курсор прошлого ответа,
+ * смена queryKey начинает свежий обход с пустого курсора — sentinel не
+ * наследует позицию прошлых порций. `options.enabled` глушит
+ * запрос (поиск #543 не стреляет, пока запрос не введён);
+ * keepPreviousData держит прежнюю страницу, пока едет новая; склейка
+ * порций дедуплицируется по id — страховка от повторов на гонках.
+ */
+export function useGlobalOperationsPaged(
+  scope: GlobalOperationScope,
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<ReadonlyArray<PaymentOperation>, ApiError> {
+  return useInfiniteQuery({
+    ...globalOperationsPagedQueryOptions({ scope }),
+    select: (data) => flattenUniqueById(data.pages.map((page) => page.items)),
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/**
+ * Сохранение ручного порядка избранного (карта #573, #576; кнопка
+ * «Сохранить» режима правки #579): полный список видимых избранных правил
+ * в новом порядке — сервер в одной транзакции строит плотные 1-based
+ * позиции (полное замещение). Чистая запись порядка — ничего не тикает;
+ * инвалидируется глобальный фид, из которого читают оба экрана избранного.
+ */
+export function useSaveFavoritesOrder(): UseMutationResult<
+  void,
+  ApiError,
+  readonly string[]
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (paymentIds: readonly string[]) => {
+      await apiClient<void>('/payments/favorites/order', {
+        method: 'PUT',
+        body: JSON.stringify({ paymentIds: [...paymentIds] }),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Глобальная сводка периода (#540) за карточками «Расходы/Доходы» и чипом
+ * «Категория»: итоги всегда оба направления; категорийный фильтр сужает
+ * сводку вместе со списком — карточки зеркалят отфильтрованный список
+ * (решение владельца 01.10, прежнее «сводка не сужается» #539 отменено) —
+ * в запрос уходят объекты, период, категории, тип направления (#548) и
+ * поиск. Поиск (#543) — тот же предикат, что у списка: разбивка становится
+ * чипами совпавших категорий; `options.enabled` глушит запрос,
+ * keepPreviousData — карточки не мигают при смене фильтров.
+ */
+export function useGlobalOperationsSummary(
+  scope: GlobalOperationScope,
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<OperationsSummary, ApiError> {
+  return useQuery({
+    ...globalOperationsSummaryQueryOptions({ scope }),
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/**
+ * Удаление операции (решение владельца): planned (долг) и paid получают
+ * tombstone-статус cancelled — факт оплаты и долг исчезают, расписание не
+ * трогается (надгробие блокирует повторную материализацию на тике).
+ * Инвалидация операций и правил (isCompleted мог пересчитаться); отмена
+ * planned из окна «На оплату» выводит строку из секции — перечитывается
+ * и глобальная ветка (#1347).
+ */export function useDeleteOperation(
+  propertyId: string,
+): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (operationId: string) => {
+      await apiClient<void>(
+        `/properties/${encodeURIComponent(propertyId)}`
+          + `/operations/${encodeURIComponent(operationId)}`,
+        { method: 'DELETE' },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Пауза платежа (история 18 спеки #453): бессрочно с сегодняшнего дня,
+ * генерация останавливается. Сервер в транзакции гоняет тик, поэтому
+ * инвалидируются и правила, и операции; пауза снимает правило с окна
+ * «На оплату» (#1347) — перечитывается глобальная ветка.
+ */
+export function usePausePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<Payment, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/pause`,
+        { method: 'POST' },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/** Возобновление без подтверждения (история 20); расписание идёт от якорей.
+ * Будущие planned возвращаются — правило снова может стоять в окне
+ * «На оплату» (#1347), перечитывается глобальная ветка. */
+export function useResumePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<Payment, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/resume`,
+        { method: 'POST' },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Завершение платежа (#1377, ревизия #1340; ревизия 2 — #1426): мутация
+ * удаляет правило — единственный серверный гейт арендный (дата окончания,
+ * «всё оплачено» и открытая пауза сняты: завершение доступно как удаление);
+ * оплаченные операции остаются хвостом в истории объекта, звезда читателя
+ * падает вместе с правилом, повторное завершение — приватный 404. Ответа
+ * нет (204) — финальный экран рисуется из локального состояния страницы
+ * (прецедент успеха оплаты #1072) и от чтений не зависит: перечитывать
+ * удалённое правило нечего, а ин-флайт 404 перечитываний активных
+ * наблюдателей финал убить не могут. Кэш правил снимается (не
+ * инвалидируется): следующий маунт списка/детали прочитает свежее
+ * состояние; ленты операций и хаба перечитываются сразу — хвост пришёл в
+ * ленту объекта, правило скрыто из списков и счётчиков.
+ */
+export function useCompletePayment(
+  propertyId: string,
+  paymentId: string,
+): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      await apiClient<void>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/complete`,
+        { method: 'POST' },
+      );
+    },
+    onSuccess: () => {
+      // Правило удалено: детали и списки правил не перечитываются (refetch
+      // детали дал бы 404 под финальным экраном) — следующий маунт прочитает
+      // свежее состояние сам.
+      queryClient.removeQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Атомарный toggle избранного (PUT favorite c телом `{favorite}` —
+ * резолюция #452, без read-modify-write через PATCH). Правило и команда
+ * приходят переменными мутации: один инстанс обслуживает и звезду
+ * страницы платежа, и пачку удалений режима правки избранного (#579).
+ */
+export function useSetPaymentFavorite(): UseMutationResult<
+  Payment,
+  ApiError,
+  { readonly propertyId: string; readonly paymentId: string; readonly favorite: boolean }
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async ({ propertyId, paymentId, favorite }) => {
+      const response = await apiClient<PaymentResponseDto>(
+        `/properties/${encodeURIComponent(propertyId)}/payments/${encodeURIComponent(paymentId)}/favorite`,
+        { method: 'PUT', body: JSON.stringify({ favorite }) },
+      );
+      return mapPayment(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      // Строка избранного живёт и в глобальном фиде (карта #573): звезда
+      // на месте — фид перечитывается, строка исчезает/появляется сразу.
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Одна операция для страницы операции: статус приходит вычисляемым view
+ * (planned/paid/overdue — overdue по TZ собственника, ADR 0048). Ключ —
+ * ветка paymentOperationKeys.all, поэтому оплата инвалидирует её наравне
+ * со списками.
+ */
+export function useOperation(
+  propertyId: string,
+  operationId: string,
+): UseQueryResult<PaymentOperation, ApiError> {
+  return useQuery({
+    ...paymentOperationQueryOptions({ propertyId, operationId }),
+    enabled: Boolean(propertyId) && Boolean(operationId),
+  });
+}
+
+/**
+ * «Оплатить сейчас» (история 24/25): `planned → paid` у конкретного
+ * вхождения, дата оплаты — серверная, расписание не сдвигается. Какая
+ * операция гасится («старейшее неоплаченное»), решает виджет по спискам
+ * операций; сервер подтверждает контрактной ошибкой 409 на повторную
+ * оплату. Гашение операции арендной платы двигает прогресс аренды
+ * (#531) — инвалидируется и срез rentals. Оплаченная операция покидает
+ * окно «На оплату» (критерий #1347 «оплата → исчезновение») и счётчики
+ * хаба — перечитывается глобальная ветка (канон complete #1340).
+ */
+export function usePayOperation(
+  propertyId: string,
+): UseMutationResult<PaymentOperation, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (operationId: string) => {
+      const response = await apiClient<components['schemas']['OperationResponse']>(
+        `/properties/${encodeURIComponent(propertyId)}`
+          + `/operations/${encodeURIComponent(operationId)}/pay`,
+        { method: 'POST' },
+      );
+      return mapPaymentOperation(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: paymentOperationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: rentalKeys.all });
+      void queryClient.invalidateQueries({ queryKey: globalPaymentKeys.all });
+    },
+  });
+}
+
+/**
+ * Секция «На оплату» (GET /payments/due, #1346; экраны #1347): всё окно
+ * напоминаний видимого скоупа одним чтением — строки хаба и страницы.
+ * Пагинации нет (секция мала по построению материализации).
+ */
+export function usePaymentsDue(): UseQueryResult<PaymentsDue, ApiError> {
+  return useQuery(paymentsDueQueryOptions());
+}
+
+/**
+ * Фид главного экрана «Платежи» (карта #573, #575): все правила видимой
+ * книги целиком (пагинации нет) плюс счётчики целого скоупа — карточки
+ * «Все избранные»/«Все просроченные» читают их; поиск счётчики не сужает.
+ * Секции (избранные/просроченные) из фида режет виджет — в том числе
+ * сортировку избранного по favoriteOrder (#576).
+ */
+export function useGlobalPayments(): UseQueryResult<GlobalPaymentFeed, ApiError> {
+  return useQuery(globalPaymentsFeedQueryOptions());
+}
+
+/**
+ * Стопки объектов для секции «Платежи объектов» и страницы «Объекты»
+ * (#575, #582): видимые объекты с группами правил и флагами просрочки;
+ * закреплённые (#577) сервер отдаёт первыми. search — серверный фильтр
+ * по названию/адресу ('' = без фильтра); keepPreviousData держит список,
+ * пока едет новый запрос. enabled=false держит запрос спящим — поиск
+ * объектов (#582) включает его только при непустом запросе.
+ */
+export function useGlobalPaymentObjects(
+  search = '',
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<ReadonlyArray<GlobalPaymentObject>, ApiError> {
+  return useQuery({
+    ...globalPaymentObjectsQueryOptions({ search }),
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/**
+ * Чипы поиска платежей (matchedCategories, GET /payments/search #575):
+ * сервер считает их по всему скоупу поискового запроса, поэтому лёгкий
+ * отдельный запрос с limit=1 — строки списку не нужны. Выбранный чип
+ * сужает только список (useGlobalPaymentSearch) — канон сводки операций
+ * #543.
+ */
+export function useGlobalPaymentSearchCategories(
+  query: string,
+  options: { readonly enabled?: boolean } = {},
+): UseQueryResult<ReadonlyArray<PaymentCategoryView>, ApiError> {
+  return useQuery({
+    queryKey: globalPaymentKeys.searchCategories(query),
+    queryFn: async () => {
+      const suffix = query ? `?search=${encodeURIComponent(query)}&limit=1` : '?limit=1';
+      const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
+        `/payments/search${suffix}`,
+      );
+      return mapGlobalPaymentSearch(response).matchedCategories;
+    },
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}
+
+/** Порция поиска платежей (правило платформы #452): 50 строк на страницу,
+ * догрузка при скролле; серверный максимум — те же 100. */
+export const PAYMENT_SEARCH_PAGE_SIZE = 50;
+
+/**
+ * Поиск глобальных платежей (GET /payments/search, #575; экран #581):
+ * бесконечный запрос порциями по PAYMENT_SEARCH_PAGE_SIZE; фильтр чипа
+ * (категория; направление из контракта чипов убрано — #602) сужает список
+ * серверно.
+ * Порции листаются keyset-курсором (#597): pageParam — nextCursor прошлого
+ * ответа, смена queryKey начинает свежий обход с пустым курсором —
+ * sentinel не наследует позицию прошлых порций при правке запроса.
+ * matchedCategories сервер считает по всему скоупу запроса, поэтому в
+ * результате они берутся с первой страницы; склейка порций дедуплицируется
+ * по id — страховка от повторов на гонках.
+ * keepPreviousData держит прежнюю выдачу, пока едет новый запрос (правка
+ * запроса не мигает); пустой запрос экран не выполняет.
+ */
+export function useGlobalPaymentSearch(
+  query: string,
+  filter: { readonly category?: string } = {},
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<GlobalPaymentSearch, ApiError> {
+  const { category = '' } = filter;
+  return useInfiniteQuery({
+    queryKey: globalPaymentKeys.search(query, category),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (query) params.set('search', query);
+      if (category) params.set('category', category);
+      params.set('limit', String(PAYMENT_SEARCH_PAGE_SIZE));
+      if (pageParam) params.set('cursor', pageParam);
+      const response = await apiClient<components['schemas']['PaymentsSearchGlobalResponse']>(
+        `/payments/search?${params.toString()}`,
+      );
+      return mapGlobalPaymentSearch(response);
+    },
+    initialPageParam: '',
+    getNextPageParam: keysetNextPageParam,
+    select: (data): GlobalPaymentSearch => ({
+      items: flattenUniqueById(data.pages.map((page) => page.items)),
+      matchedCategories: data.pages[0]?.matchedCategories ?? [],
+      nextCursor: data.pages[data.pages.length - 1]?.nextCursor ?? null,
+    }),
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  });
+}

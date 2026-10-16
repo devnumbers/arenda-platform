@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 )
 
+// fakePaymentReconciliationService is a scheduler.PaymentReconciler stub
+// returning canned results.
 type fakePaymentReconciliationService struct {
-	billingapp.PaymentProcessor
 	count       int
 	err         error
 	refundCount int
@@ -59,7 +59,7 @@ func TestPaymentReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
-	sensitive := "token=secret123 card 1234-5678-9012-3456 phone +79991234567"
+	sensitive := testSensitivePayload
 	svc := &fakePaymentReconciliationService{err: errors.New("reconcile failed: " + sensitive)}
 	w := NewPaymentReconciliationWorker(nil, nil, fakeClockForWorker{now: time.Now()}, 5*time.Minute, logger)
 	w.payments = svc
@@ -70,9 +70,9 @@ func TestPaymentReconciliationWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 
 	logs := logBuf.String()
 	forbidden := []string{
-		"token=secret123",
-		"1234-5678-9012-3456",
-		"+79991234567",
+		testSecretToken,
+		testCardNumber,
+		testUserPhone,
 	}
 	for _, s := range forbidden {
 		if strings.Contains(logs, s) {
@@ -155,7 +155,11 @@ func TestPaymentReconciliationWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing
 	if !acquired {
 		t.Fatal("advisory lock should be released after tick completes")
 	}
-	_, _ = testConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", paymentReconciliationWorkerLockKey)
+	// The unlock returns the advisory lock held only by this test; a failure
+	// would leak it to sibling integration tests sharing the database.
+	if _, err := testConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", paymentReconciliationWorkerLockKey); err != nil {
+		t.Errorf("unlock advisory lock after tick: %v", err)
+	}
 }
 
 type delayedPaymentReconciliationService struct {

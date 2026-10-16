@@ -28,8 +28,8 @@ function toBase64Url(buffer: ArrayBuffer | null): string {
     if (!buffer) return '';
     const bytes = new Uint8Array(buffer);
     let binary = '';
-    for (let i = 0; i < bytes.length; i += 1) {
-        binary += String.fromCharCode(bytes[i]);
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
     }
     // `btoa` is available in the browser and in Node ≥16 (vitest).
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

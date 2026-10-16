@@ -102,12 +102,15 @@ var (
 	// ErrInvalidMemberStatus is returned when a membership status string is not
 	// a recognized member status value.
 	ErrInvalidMemberStatus = errors.New("invalid membership status")
-	// ErrCannotLeaveSuspended is returned when a recipient tries to self-exit a
-	// suspended membership. Self-exit is not available for suspended access
-	// because the object is already hidden from the recipient.
-	ErrCannotLeaveSuspended = errors.New("cannot leave a suspended membership")
 	// ErrPropertyArchived is returned when a new member or invitation is added
 	// to an archived property. Existing members keep working: revoking and role
 	// changes stay available on archived objects (issue #163).
 	ErrPropertyArchived = errors.New("cannot add members to an archived property")
+	// ErrNotPropertyOwner is returned when an actor with no properties of
+	// their own calls the global «Отозвать доступ всем» (issue #1310): the
+	// action closes the sharing of one's own objects, so a participant of
+	// foreign objects is refused loudly (the HTTP layer maps it to 403) —
+	// unlike the privacy-preserving ErrParticipantNotFound for a stranger
+	// with no relation to sharing at all.
+	ErrNotPropertyOwner = errors.New("actor does not own any property")
 )

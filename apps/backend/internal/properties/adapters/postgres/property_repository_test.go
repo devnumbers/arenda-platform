@@ -2,16 +2,21 @@ package postgres
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 )
+
+// attrRooms — код атрибута rooms, повторённый JSONB-тестами пакета.
+const attrRooms = "rooms"
 
 var (
 	migrateOnce sync.Once
@@ -30,8 +35,16 @@ func setupPropertiesIntegrationDB(t *testing.T) *pgxpool.Pool {
 	if errMigrate != nil {
 		t.Fatalf("migrate up: %v", errMigrate)
 	}
+	// Tests run in parallel and each holds its own pool. The production
+	// DefaultPoolConfig keeps MinConns=16 warm per pool; across the parallel
+	// fixtures of the package that is close to a hundred connections against
+	// one PostgreSQL, so the test pools stay minimal (repo tests run
+	// sequential statements, the policy test one rollback transaction).
+	cfg := database.DefaultPoolConfig()
+	cfg.MinConns = 0
+	cfg.MaxConns = 2
 	ctx := t.Context()
-	pool, err := database.NewPool(ctx, databaseURL)
+	pool, err := database.NewPoolWithConfig(ctx, databaseURL, cfg)
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}
@@ -46,9 +59,13 @@ func setupPropertiesIntegrationDB(t *testing.T) *pgxpool.Pool {
 func createTestOwner(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
-	// Derive a unique phone from the owner UUID's random bytes. Since the id is
-	// unique, the phone is too — dodging the users.phone UNIQUE constraint.
-	phone := fmt.Sprintf("+7000%012x", id[0:6])
+	// The phone comes from the UUID's random tail, not its leading bytes:
+	// those are the UUIDv7 timestamp with millisecond precision, so parallel
+	// tests creating owners in the same millisecond would collide on
+	// users.phone (the flake #168 predicted). Value-unique phones keep the
+	// fixture parallel-safe (the same fix as waves #374/#375; the sibling
+	// createContactPolicyTestUser derives its phone the same way).
+	phone := fmt.Sprintf("+7000%07d", binary.BigEndian.Uint32(id[12:])%10000000)
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO users (id, phone, role) VALUES ($1, $2, 'owner')`,
@@ -57,8 +74,9 @@ func createTestOwner(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 		t.Fatalf("insert test owner: %v", err)
 	}
 	t.Cleanup(func() {
-		// t.Context() is canceled once the test ends, so use a fresh context
-		// for cleanup to ensure the owner (and its cascaded property) is removed.
+		// Since t.Context() is canceled once the test ends, use a fresh
+		// context for cleanup to ensure the owner (and its cascaded property)
+		// is removed.
 		if _, err := pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, id); err != nil {
 			t.Logf("cleanup delete owner %s: %v", id, err)
 		}
@@ -80,13 +98,15 @@ func sampleProperty(ownerID uuid.UUID, attrs domain.Attributes) domain.Property 
 }
 
 func TestPropertyRepository_Attributes_JSONBRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	repo := NewPropertyRepository(pool)
 	ownerID := createTestOwner(t, pool)
 
 	property := sampleProperty(ownerID, domain.Attributes{
-		"rooms":      "2",
+		attrRooms:    "2",
 		"area_total": 50.0,
 		"floor":      float64(3),
 	})
@@ -105,9 +125,9 @@ func TestPropertyRepository_Attributes_JSONBRoundTrip(t *testing.T) {
 		t.Fatalf("expected 3 attributes, got %d (%v)", len(got.Attributes), got.Attributes)
 	}
 
-	rooms, ok := got.Attributes["rooms"].(string)
+	rooms, ok := got.Attributes[attrRooms].(string)
 	if !ok || rooms != "2" {
-		t.Fatalf("expected rooms to be string %q, got %T %v", "2", got.Attributes["rooms"], got.Attributes["rooms"])
+		t.Fatalf("expected rooms to be string %q, got %T %v", "2", got.Attributes[attrRooms], got.Attributes[attrRooms])
 	}
 	areaTotal, ok := got.Attributes["area_total"].(float64)
 	if !ok || areaTotal != 50.0 {
@@ -120,6 +140,8 @@ func TestPropertyRepository_Attributes_JSONBRoundTrip(t *testing.T) {
 }
 
 func TestPropertyRepository_Attributes_EmptyObjectDefault(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	repo := NewPropertyRepository(pool)
@@ -146,12 +168,14 @@ func TestPropertyRepository_Attributes_EmptyObjectDefault(t *testing.T) {
 }
 
 func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	repo := NewPropertyRepository(pool)
 	ownerID := createTestOwner(t, pool)
 
-	property := sampleProperty(ownerID, domain.Attributes{"rooms": "2"})
+	property := sampleProperty(ownerID, domain.Attributes{attrRooms: "2"})
 
 	created, err := repo.Create(ctx, ownerID, property)
 	if err != nil {
@@ -160,7 +184,7 @@ func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
 
 	// Update with a completely different key set: the old single key must be gone.
 	created.Attributes = domain.Attributes{
-		"rooms":      "3",
+		attrRooms:    "3",
 		"area_total": 60.0,
 	}
 	if _, err := repo.Update(ctx, ownerID, created); err != nil {
@@ -176,9 +200,9 @@ func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
 		t.Fatalf("expected exactly 2 attributes after update, got %d (%v)", len(got.Attributes), got.Attributes)
 	}
 
-	rooms, ok := got.Attributes["rooms"].(string)
+	rooms, ok := got.Attributes[attrRooms].(string)
 	if !ok || rooms != "3" {
-		t.Fatalf("expected rooms to be string %q, got %T %v", "3", got.Attributes["rooms"], got.Attributes["rooms"])
+		t.Fatalf("expected rooms to be string %q, got %T %v", "3", got.Attributes[attrRooms], got.Attributes[attrRooms])
 	}
 	areaTotal, ok := got.Attributes["area_total"].(float64)
 	if !ok || areaTotal != 60.0 {
@@ -187,6 +211,8 @@ func TestPropertyRepository_Attributes_UpdateReplacesEntireBlob(t *testing.T) {
 }
 
 func TestPropertyRepository_Attributes_NilAttributesStoredAsEmpty(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPropertiesIntegrationDB(t)
 	ctx := t.Context()
 	repo := NewPropertyRepository(pool)
@@ -209,5 +235,354 @@ func TestPropertyRepository_Attributes_NilAttributesStoredAsEmpty(t *testing.T) 
 	}
 	if len(got.Attributes) != 0 {
 		t.Fatalf("expected 0 attributes, got %d (%v)", len(got.Attributes), got.Attributes)
+	}
+}
+
+// Personal pin tests (ticket #577; the cutover #1307, D11): the pin is the
+// actor's user_property_pins row — «строка есть = состояние», a re-pin
+// keeps the original time, unpinning deletes the row; one actor's pins are
+// invisible to another, and archiving keeps the rows (D16).
+
+func TestPropertyRepository_ActorPin_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+
+	property := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, property); err != nil {
+		t.Fatalf("create property: %v", err)
+	}
+
+	pin, err := repo.ActorPin(ctx, ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("read pin without a row: %v", err)
+	}
+	if pin != nil {
+		t.Fatalf("pin without a row = %v, want nil", pin)
+	}
+
+	first := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	returned, err := repo.InsertActorPin(ctx, ownerID, property.ID, first)
+	if err != nil {
+		t.Fatalf("insert pin: %v", err)
+	}
+	if !returned.Equal(first) {
+		t.Fatalf("insert returned %v, want the fresh pin %v", returned, first)
+	}
+	pin, err = repo.ActorPin(ctx, ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("read pin: %v", err)
+	}
+	if pin == nil || !pin.Equal(first) {
+		t.Fatalf("pin = %v, want %v", pin, first)
+	}
+}
+
+func TestPropertyRepository_ActorPin_RepinKeepsTimeAndUnpinDeletes(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+
+	property := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, property); err != nil {
+		t.Fatalf("create property: %v", err)
+	}
+	first := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	returned, err := repo.InsertActorPin(ctx, ownerID, property.ID, first)
+	if err != nil {
+		t.Fatalf("insert pin: %v", err)
+	}
+	if !returned.Equal(first) {
+		t.Fatalf("insert returned %v, want the fresh pin %v", returned, first)
+	}
+
+	// The idempotent re-pin: the conflicting row keeps the original
+	// pin time — the order among the pinned never shifts.
+	second := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	returned, err = repo.InsertActorPin(ctx, ownerID, property.ID, second)
+	if err != nil {
+		t.Fatalf("re-pin: %v", err)
+	}
+	if !returned.Equal(first) {
+		t.Fatalf("re-pin returned %v, want the untouched original %v", returned, first)
+	}
+	pin, err := repo.ActorPin(ctx, ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("read pin after re-pin: %v", err)
+	}
+	if pin == nil || !pin.Equal(first) {
+		t.Fatalf("pin after re-pin = %v, want the untouched %v", pin, first)
+	}
+
+	// Unpinning deletes the row; deleting again is a no-op.
+	if err := repo.DeleteActorPin(ctx, ownerID, property.ID); err != nil {
+		t.Fatalf("delete pin: %v", err)
+	}
+	if err := repo.DeleteActorPin(ctx, ownerID, property.ID); err != nil {
+		t.Fatalf("delete pin again: %v", err)
+	}
+	pin, err = repo.ActorPin(ctx, ownerID, property.ID)
+	if err != nil {
+		t.Fatalf("read pin after delete: %v", err)
+	}
+	if pin != nil {
+		t.Fatalf("pin after delete = %v, want nil", pin)
+	}
+}
+
+func TestPropertyRepository_ActorPins_BatchAndIsolation(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+	memberID := createTestOwner(t, pool)
+
+	first := sampleProperty(ownerID, nil)
+	second := sampleProperty(ownerID, nil)
+	for _, p := range []domain.Property{first, second} {
+		if _, err := repo.Create(ctx, ownerID, p); err != nil {
+			t.Fatalf("create property: %v", err)
+		}
+	}
+
+	pinA := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	pinB := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	if _, err := repo.InsertActorPin(ctx, ownerID, first.ID, pinA); err != nil {
+		t.Fatalf("owner pin first: %v", err)
+	}
+	if _, err := repo.InsertActorPin(ctx, ownerID, second.ID, pinB); err != nil {
+		t.Fatalf("owner pin second: %v", err)
+	}
+	if _, err := repo.InsertActorPin(ctx, memberID, second.ID, pinB); err != nil {
+		t.Fatalf("member pin second: %v", err)
+	}
+
+	ownerPins, err := repo.ActorPins(ctx, ownerID, []uuid.UUID{first.ID, second.ID})
+	if err != nil {
+		t.Fatalf("owner pins: %v", err)
+	}
+	if len(ownerPins) != 2 || !ownerPins[first.ID].Equal(pinA) || !ownerPins[second.ID].Equal(pinB) {
+		t.Fatalf("owner pins = %v, want both rows", ownerPins)
+	}
+
+	// A personal state: the member sees only their own row (D11).
+	memberPins, err := repo.ActorPins(ctx, memberID, []uuid.UUID{first.ID, second.ID})
+	if err != nil {
+		t.Fatalf("member pins: %v", err)
+	}
+	if len(memberPins) != 1 || !memberPins[second.ID].Equal(pinB) {
+		t.Fatalf("member pins = %v, want only the member's own row", memberPins)
+	}
+}
+
+func TestPropertyRepository_ArchiveKeepsPersonalPin(t *testing.T) {
+	t.Parallel()
+
+	// D16: the archive transaction touches no personal rows — unarchiving
+	// returns the property with the participants' pins.
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+	memberID := createTestOwner(t, pool)
+
+	property := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, property); err != nil {
+		t.Fatalf("create property: %v", err)
+	}
+	ownerPin := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	memberPin := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	if _, err := repo.InsertActorPin(ctx, ownerID, property.ID, ownerPin); err != nil {
+		t.Fatalf("owner pin: %v", err)
+	}
+	if _, err := repo.InsertActorPin(ctx, memberID, property.ID, memberPin); err != nil {
+		t.Fatalf("member pin: %v", err)
+	}
+
+	if err := repo.Archive(ctx, property.ID, ownerID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	if err := repo.Unarchive(ctx, property.ID, ownerID); err != nil {
+		t.Fatalf("unarchive: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		actor uuid.UUID
+		want  time.Time
+	}{
+		{"owner", ownerID, ownerPin},
+		{"member", memberID, memberPin},
+	} {
+		pin, err := repo.ActorPin(ctx, tc.actor, property.ID)
+		if err != nil {
+			t.Fatalf("%s pin after archive cycle: %v", tc.name, err)
+		}
+		if pin == nil || !pin.Equal(tc.want) {
+			t.Errorf("%s pin after archive cycle = %v, want the untouched %v (D16)", tc.name, pin, tc.want)
+		}
+	}
+}
+
+func TestPropertyRepository_CountByOwnerAndType(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+	otherOwner := createTestOwner(t, pool)
+
+	// The serial source counts the owner's properties of the type in every
+	// status (archived too), never another owner's (ticket #1001).
+	active := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, active); err != nil {
+		t.Fatalf("create active: %v", err)
+	}
+	archived := sampleProperty(ownerID, nil)
+	archived.Type = domain.PropertyTypeGarage
+	if _, err := repo.Create(ctx, ownerID, archived); err != nil {
+		t.Fatalf("create archived candidate: %v", err)
+	}
+	if err := repo.Archive(ctx, archived.ID, ownerID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	foreign := sampleProperty(otherOwner, nil)
+	if _, err := repo.Create(ctx, otherOwner, foreign); err != nil {
+		t.Fatalf("create foreign: %v", err)
+	}
+
+	count, err := repo.CountByOwnerAndType(ctx, ownerID, domain.PropertyTypeApartment)
+	if err != nil {
+		t.Fatalf("count apartment: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("apartment count = %d, want 1 (the foreign owner's row stays out)", count)
+	}
+
+	count, err = repo.CountByOwnerAndType(ctx, ownerID, domain.PropertyTypeGarage)
+	if err != nil {
+		t.Fatalf("count garage: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("garage count = %d, want 1 (the archived row counts)", count)
+	}
+
+	count, err = repo.CountByOwnerAndType(ctx, ownerID, domain.PropertyTypeHouse)
+	if err != nil {
+		t.Fatalf("count house: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("house count = %d, want 0", count)
+	}
+
+	// Удалённые строки из счёта выпадают (hard delete, #1001).
+	gone := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, gone); err != nil {
+		t.Fatalf("create doomed: %v", err)
+	}
+	if err := repo.Delete(ctx, gone.ID, ownerID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	count, err = repo.CountByOwnerAndType(ctx, ownerID, domain.PropertyTypeApartment)
+	if err != nil {
+		t.Fatalf("count after delete: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("apartment count after delete = %d, want 1 (the deleted row is gone)", count)
+	}
+}
+
+// TestPropertyRepository_CountArchivedByOwner verifies the «Архив» button
+// gate's count (issue #1233): only the owner's archived rows count — active
+// and maintenance stay out, another owner's archived row never leaks in, and
+// an owner without archived rows reads 0.
+func TestPropertyRepository_CountArchivedByOwner(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+	otherOwner := createTestOwner(t, pool)
+	emptyOwner := createTestOwner(t, pool)
+
+	active := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, active); err != nil {
+		t.Fatalf("create active: %v", err)
+	}
+	maintenance := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, maintenance); err != nil {
+		t.Fatalf("create maintenance candidate: %v", err)
+	}
+	maintenance.Status = domain.PropertyStatusMaintenance
+	if _, err := repo.Update(ctx, ownerID, maintenance); err != nil {
+		t.Fatalf("update to maintenance: %v", err)
+	}
+	archived := sampleProperty(ownerID, nil)
+	if _, err := repo.Create(ctx, ownerID, archived); err != nil {
+		t.Fatalf("create archived candidate: %v", err)
+	}
+	if err := repo.Archive(ctx, archived.ID, ownerID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	foreign := sampleProperty(otherOwner, nil)
+	if _, err := repo.Create(ctx, otherOwner, foreign); err != nil {
+		t.Fatalf("create foreign: %v", err)
+	}
+	if err := repo.Archive(ctx, foreign.ID, otherOwner); err != nil {
+		t.Fatalf("archive foreign: %v", err)
+	}
+
+	count, err := repo.CountArchivedByOwner(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("count archived: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("archived count = %d, want 1 (active and maintenance stay out, the foreign archived row never leaks in)", count)
+	}
+
+	count, err = repo.CountArchivedByOwner(ctx, otherOwner)
+	if err != nil {
+		t.Fatalf("count archived (other owner): %v", err)
+	}
+	if count != 1 {
+		t.Errorf("other owner's archived count = %d, want 1", count)
+	}
+
+	count, err = repo.CountArchivedByOwner(ctx, emptyOwner)
+	if err != nil {
+		t.Fatalf("count archived (empty): %v", err)
+	}
+	if count != 0 {
+		t.Errorf("empty owner's archived count = %d, want 0", count)
+	}
+}
+
+func TestPropertyRepository_StudioTypeAccepted(t *testing.T) {
+	t.Parallel()
+
+	// 000143: 'studio' проходит CHECK-констрейнт properties.type (#1003).
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+
+	studio := sampleProperty(ownerID, nil)
+	studio.Type = domain.PropertyTypeStudio
+	created, err := repo.Create(ctx, ownerID, studio)
+	if err != nil {
+		t.Fatalf("create studio property: %v", err)
+	}
+	if created.Type != domain.PropertyTypeStudio {
+		t.Errorf("type = %q, want studio", created.Type)
 	}
 }

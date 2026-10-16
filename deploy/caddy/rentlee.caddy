@@ -1,0 +1,149 @@
+# Рентли: публичные блоки rentlee.ru — зеркало серверного
+# /etc/caddy/conf.d/rentlee.caddy. Источник правды — этот файл в репо: правки
+# только через репо и деплой (deploy-stage/prod раскатывают фрагмент в conf.d),
+# руками на сервере не редактировать. Остальные проекты живут своими файлами
+# в /etc/caddy/conf.d/ и правятся руками — пайплайн их не трогает
+# (docs/deployment.md, раздел «Caddy»).
+#
+# Контракт публичного сайта — инверсия фолбэка (карта #649): кабинет Next.js
+# дефолтный catch-all, лендинг — явные исключения. Новый top-level роут фронта
+# работает без правок прокси; новый публичный путь лендинга = добавление
+# в матчер @landing. На /sw.js никаких заголовков Caddy не ставит —
+# Cache-Control: no-store приходит от Next (ADR 0032).
+#
+# Оба приложения — Next.js, внутренние ассеты обоих живут в /_next/*, по пути
+# их не развести. Поэтому кабинет владеет /_next/* catch-all'ом (карта
+# #649), а лендинг собран с assetPrefix /landing (apps/landing/next.config.ts):
+# его бандлы публикуются как /landing/_next/*, Caddy снимает /landing —
+# контейнер ждёт честный /_next/*. Image-оптимизатор лендинга префикса не
+# получает (серверный рендер Next всегда пишет /_next/image) и разводится по
+# параметру url — см. комментарий у @landing_optimizer. Попытка отдать
+# лендингу весь /_next/* (ADR 0063, исправлено 30.09) ломала кабинет на
+# stage: HTML отвечал 200, а каждый чанк уходил в лендинг и падал 404 —
+# белый экран.
+
+# Access-лог общий для всех блоков хоста: /var/log/caddy/access.log
+# (JSON, roll 50mb × 5), пишут все проекты сервера; ротацию делает сам Caddy.
+(rentlee_log) {
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+	}
+}
+
+# Один публичный сайт кабинета: /api и /webhooks — бэкенд, лендинг —
+# явные исключения, всё остальное — кабинет. handle-блоки взаимоисключающие;
+# порядок гарантируется алгоритмом сортировки Caddy (матчерные до безматчерного
+# fallback), выписан в порядке приоритета для читаемости.
+# Аргументы: {args[0]} — backend, {args[1]} — landing, {args[2]} — frontend.
+(rentlee_site) {
+	# Стрим событий не сжимается: дефолтный матчер encode включает text/*,
+	# и gzip начал бы буферизовать SSE-кадры после 512 байт (карта #734,
+	# #742; ADR 0058). reverse_proxy сам флешит text/event-stream немедленно.
+	# Ответные матчеры encode не умеют отрицания по значению заголовка
+	# (официальная дока: только status и header с !-отсутствием поля), поэтому
+	# стрим исключается по пути запроса — /api/notifications/stream (ADR 0060);
+	# encode сортируется до handle_path, так что путь здесь с префиксом /api.
+	@not_sse not path /api/notifications/stream*
+	encode @not_sse zstd gzip
+
+	# Префикс /api снимается: бэкенд ждёт пути без /api.
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:{args[0]}
+	}
+
+	# /webhooks — БЕЗ снятия префикса: T-Kassa шлёт колбэки на полный путь.
+	handle /webhooks/* {
+		reverse_proxy 127.0.0.1:{args[0]}
+	}
+
+	# /internal/* — возврат из «банка» фейк-симулятора оплат (#663) и
+	# подтверждение привязки карты: маршрут монтируется бекендом только при
+	# PAYMENT_PROVIDER=fake (stage; в production провайдер запрещён конфигом,
+	# пути отвечают бекендовским 404). БЕЗ снятия префикса — бекенд ждёт
+	# полный путь (решение 01.10: на stage возврат проваливался в кабинетный
+	# catch-all и отдавал 404 Next.js — платёж не подтверждался переходом).
+	handle /internal/* {
+		reverse_proxy 127.0.0.1:{args[0]}
+	}
+
+	# Ассеты лендинга — /landing/_next/* (assetPrefix, см. шапку файла).
+	# uri strip_prefix снимает только /landing: контейнер ждёт /_next/...
+	handle /landing/_next/* {
+		uri strip_prefix /landing
+		reverse_proxy 127.0.0.1:{args[1]}
+	}
+
+	# Image-оптимизатор лендинга: его endpoint assetPrefix не получает —
+	# серверный (RSC) рендер лендинга пишет /_next/image всегда (images.path
+	# в Next 16 на серверный srcset не влияет, проверено сборкой), зато
+	# параметр url у лендинга всегда начинается с /landing (все картинки —
+	# статические импорты), у кабинета — никогда. Разводим по нему: CEL,
+	# а не query-матчер — частичный wildcard значения в доке query не обещан.
+	@landing_optimizer {
+		path /_next/image
+		expression `{query.url}.startsWith('/landing/')`
+	}
+	handle @landing_optimizer {
+		reverse_proxy 127.0.0.1:{args[1]}
+	}
+
+	# Публичные пути лендинга: корень, юрстраницы, robots/sitemap, шрифты
+	# (self-hosted Onest) и метадата-маршруты Next — OG-картинка
+	# /opengraph-image, apple-touch-icon /apple-icon.png, favicon /favicon.ico
+	# и /icon.png — конечные пути, выписаны точно: промах ушёл бы в кабинетный
+	# catch-all. handle, НЕ handle_path: контейнер лендинга (Next standalone,
+	# ADR 0063) ждёт полный путь. Форма префиксов — только /prefix/* (со слешем
+	# перед *), не /prefix*.
+	@landing path / /privacy /terms /robots.txt /sitemap.xml /fonts/* /icon.png /opengraph-image /apple-icon.png /favicon.ico
+	handle @landing {
+		reverse_proxy 127.0.0.1:{args[1]}
+	}
+
+	# Всё остальное — кабинет Next.js, включая его /_next/*.
+	handle {
+		reverse_proxy 127.0.0.1:{args[2]}
+	}
+}
+
+# Админка: /api — бэкенд (префикс снимается), остальное — SPA на react-admin.
+# Аргументы: {args[0]} — backend, {args[1]} — admin SPA.
+(rentlee_admin) {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:{args[0]}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:{args[1]}
+	}
+}
+
+www.rentlee.ru {
+	redir https://rentlee.ru{uri} permanent
+	import rentlee_log
+}
+
+rentlee.ru {
+	import rentlee_site 18080 13002 13000
+	import rentlee_log
+}
+
+dev.rentlee.ru {
+	import rentlee_site 28080 23002 23000
+	import rentlee_log
+}
+
+admin.rentlee.ru {
+	import rentlee_admin 18080 13001
+	import rentlee_log
+}
+
+admin.dev.rentlee.ru {
+	import rentlee_admin 28080 23001
+	import rentlee_log
+}

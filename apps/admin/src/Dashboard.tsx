@@ -11,10 +11,9 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
-import { Link } from 'react-admin';
+import { Link, useDataProvider } from 'react-admin';
 import { formatKopecks, fullName, subscriptionPaymentStatusChoices } from './fields';
-
-const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api';
+import type { AdminDataProvider } from './dataProvider';
 
 // Ссылка на список пользователей с активной подпиской: react-admin читает фильтры списка
 // из query-параметра filter (JSON), ключ совпадает с source фильтра в UserList.
@@ -24,7 +23,7 @@ const ACTIVE_SUBSCRIPTIONS_URL = `/users?filter=${encodeURIComponent(JSON.string
 const countFormatter = new Intl.NumberFormat('ru-RU');
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
-type SubscriptionPaymentStatus = 'pending' | 'succeeded' | 'failed' | 'refunded' | 'partial_refunded' | 'refunding';
+type SubscriptionPaymentStatus = 'pending' | 'succeeded' | 'failed' | 'refunded' | 'refunding';
 
 // Структуры синхронизированы со схемой AdminStats в apps/backend/api/openapi/openapi.yaml.
 interface AdminStatsRecentUser {
@@ -50,34 +49,12 @@ interface AdminStats {
   subscriptionsActive: number;
   propertiesActive: number;
   propertiesArchived: number;
-  leasesTotal: number;
-  operationsTotal: number;
   paymentsSucceededTotalKopecksLast30d: number;
   paymentsFailedCountLast30d: number;
   paymentsRefundedCountLast30d: number;
   recentUsers: AdminStatsRecentUser[];
   recentPayments: AdminStatsRecentPayment[];
 }
-
-interface ProblemDetails {
-  detail?: string;
-  title?: string;
-}
-
-const fetchStats = async (): Promise<AdminStats> => {
-  const response = await fetch(`${API_PREFIX}/admin/stats`, { credentials: 'include' });
-  if (!response.ok) {
-    let message = `Ошибка ${response.status}`;
-    try {
-      const body = (await response.json()) as ProblemDetails;
-      message = body.detail || body.title || message;
-    } catch {
-      // Тело ответа не JSON — оставляем сообщение по коду статуса.
-    }
-    throw new Error(message);
-  }
-  return (await response.json()) as AdminStats;
-};
 
 interface StatCardProps {
   title: string;
@@ -217,6 +194,7 @@ const RecentPaymentsCard = ({ payments }: { payments: AdminStatsRecentPayment[] 
 );
 
 export const Dashboard = () => {
+  const dataProvider = useDataProvider<AdminDataProvider>();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -224,12 +202,11 @@ export const Dashboard = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetchStats()
-      .then((data) => {
+    dataProvider
+      .getStats()
+      .then((result: { data: unknown }) => {
         if (!cancelled) {
-          setStats(data);
+          setStats(result.data as AdminStats);
         }
       })
       .catch((err: unknown) => {
@@ -245,7 +222,7 @@ export const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+  }, [dataProvider, reloadToken]);
 
   if (loading) {
     return (
@@ -265,7 +242,14 @@ export const Dashboard = () => {
           <Alert severity="error" sx={{ mb: 2 }}>
             {error ?? 'Неизвестная ошибка'}
           </Alert>
-          <Button variant="contained" onClick={() => setReloadToken((value) => value + 1)}>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              setReloadToken((value) => value + 1);
+            }}
+          >
             Повторить
           </Button>
         </CardContent>
@@ -297,12 +281,6 @@ export const Dashboard = () => {
             subtitle={`архивных: ${countFormatter.format(stats.propertiesArchived)}`}
             to="/properties"
           />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-          <StatCard title="Договоры" value={stats.leasesTotal} to="/leases" />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-          <StatCard title="Операции" value={stats.operationsTotal} to="/operations" />
         </Grid>
         <Grid size={{ xs: 12 }}>
           <PaymentsSummaryCard stats={stats} />

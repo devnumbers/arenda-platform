@@ -9,7 +9,7 @@ export class ApiError extends Error {
         public detail: string,
         public requestId?: string,
         public status?: number,
-        public cause?: unknown,
+        public override cause?: unknown,
         public retryAfter?: number,
         public fieldErrors?: readonly FieldError[],
     ) {

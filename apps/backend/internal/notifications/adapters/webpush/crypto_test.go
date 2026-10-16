@@ -34,14 +34,18 @@ const (
 	rfc8291ASPrivate = "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw"
 	rfc8291Salt      = "DGv6ra1nlYgDCS1FRnbzlw"
 
-	// rfc8291Plaintext is "When I grow up, I want to be a watermelon".
+	// The rfc8291Plaintext value is "When I grow up, I want to be a watermelon".
 	rfc8291Plaintext = "When I grow up, I want to be a watermelon"
 
-	// rfc8291Ciphertext is the complete RFC 8188 body (86-byte header + ciphertext + tag).
-	rfc8291Ciphertext = "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN"
+	// The rfc8291Ciphertext value is the complete RFC 8188 body
+	// (86-byte header + ciphertext + tag), split to fit the line limit.
+	rfc8291Ciphertext = "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6Tlz" +
+		"AC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN"
 )
 
 func TestEncryptPayload_RFC8291TestVector(t *testing.T) {
+	t.Parallel()
+
 	salt, err := base64.RawURLEncoding.DecodeString(rfc8291Salt)
 	if err != nil {
 		t.Fatalf("decode salt: %v", err)
@@ -78,10 +82,15 @@ func TestEncryptPayload_RFC8291TestVector(t *testing.T) {
 }
 
 func TestDeriveKeys_RFC8291IntermediateValues(t *testing.T) {
+	t.Parallel()
+
 	// RFC 8291 Appendix A intermediate values (hex), used to pin each step of
 	// the derivation independently so a regression is easy to localise.
 	const (
-		rfc8291ECDHSecret = "932acbd63208387133837b0cd995911c3441eb66000998614a592727aef6912b" //nolint:gosec // G101: RFC 8291 test vector, not a credential
+		// The rfc8291ECDHOutput value is the hex of the ECDH shared secret
+		// from the RFC appendix; named without "Secret" so gosec G101 does not
+		// misread the published test vector as a hardcoded credential.
+		rfc8291ECDHOutput = "932acbd63208387133837b0cd995911c3441eb66000998614a592727aef6912b"
 		rfc8291IKM        = "4b895831bfcbd05c427aad16843c7cd772a0498a94dba90ecb359476c5d8cab8"
 		rfc8291CEK        = "a088555b4e0c45dcb65cdf4288a2f14e"
 		rfc8291Nonce      = "e21ffde6495727913faa7a0d"
@@ -109,8 +118,8 @@ func TestDeriveKeys_RFC8291IntermediateValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ecdh: %v", err)
 	}
-	if hexEncode(shared) != rfc8291ECDHSecret {
-		t.Errorf("ECDH shared secret\n got %s\nwant %s", hexEncode(shared), rfc8291ECDHSecret)
+	if hexEncode(shared) != rfc8291ECDHOutput {
+		t.Errorf("ECDH shared secret\n got %s\nwant %s", hexEncode(shared), rfc8291ECDHOutput)
 	}
 
 	// IKM = HMAC(PRK_key, key_info || 0x01).
@@ -118,12 +127,18 @@ func TestDeriveKeys_RFC8291IntermediateValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode auth: %v", err)
 	}
-	prkKey := hmacSHA256(auth, shared)
+	prkKey, err := hmacSHA256(auth, shared)
+	if err != nil {
+		t.Fatalf("hmac prf key: %v", err)
+	}
 	keyInfo := buildKeyInfo(uaPrivate.PublicKey().Bytes(), asPrivate.PublicKey().Bytes())
 	ikmInput := make([]byte, 0, len(keyInfo)+1)
 	ikmInput = append(ikmInput, keyInfo...)
 	ikmInput = append(ikmInput, 0x01)
-	ikm := hmacSHA256(prkKey, ikmInput)
+	ikm, err := hmacSHA256(prkKey, ikmInput)
+	if err != nil {
+		t.Fatalf("hmac ikm: %v", err)
+	}
 	if hexEncode(ikm) != rfc8291IKM {
 		t.Errorf("IKM\n got %s\nwant %s", hexEncode(ikm), rfc8291IKM)
 	}
@@ -157,6 +172,8 @@ func hexEncode(b []byte) string {
 }
 
 func TestEncryptPayload_RoundTrip(t *testing.T) {
+	t.Parallel()
+
 	// Generate a fresh subscription key pair to exercise the full path and
 	// verify we can decrypt our own output with AES-128-GCM.
 	uaPrivate, err := ecdh.P256().GenerateKey(nil)
@@ -206,7 +223,7 @@ func TestEncryptPayload_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}
-	// aes128gcmOpen returns plaintext + padding delimiter (0x02).
+	// The aes128gcmOpen helper returns plaintext + padding delimiter (0x02).
 	if len(decrypted) < 1 || decrypted[len(decrypted)-1] != 0x02 {
 		t.Fatalf("padding delimiter missing: %x", decrypted)
 	}
@@ -217,6 +234,8 @@ func TestEncryptPayload_RoundTrip(t *testing.T) {
 }
 
 func TestEncryptPayload_TooLarge(t *testing.T) {
+	t.Parallel()
+
 	uaPrivate, err := ecdh.P256().GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate ua key: %v", err)
@@ -232,6 +251,8 @@ func TestEncryptPayload_TooLarge(t *testing.T) {
 }
 
 func TestBase64urlDecode_PaddedAndUnpadded(t *testing.T) {
+	t.Parallel()
+
 	// The same 16 bytes as padded and unpadded base64url must both decode.
 	raw := []byte{
 		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,

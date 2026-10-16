@@ -37,8 +37,13 @@ type PushSubscription struct {
 	P256dh         string
 	Auth           string
 	ExpirationTime *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// Categories is the device's own copy of the four configurable category
+	// flags (per-device push settings, решение #738). The master state is the
+	// row's existence itself (спека #1028: строка есть = устройство включено,
+	// строки нет = выключено — выключение удаляет подписку целиком).
+	Categories CategoryPrefs
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // ValidatePushSubscription checks the invariants of a stored subscription's

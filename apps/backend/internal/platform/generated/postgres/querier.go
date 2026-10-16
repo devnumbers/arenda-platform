@@ -7,133 +7,435 @@ package postgres
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	// The actor's personal pin on the property (the cutover #1307, D11): no row
+	// — not pinned, the row's pinned_at — pinned since then. The view
+	// capability is resolved by the application before the call.
+	ActorPin(ctx context.Context, arg ActorPinParams) (pgtype.Timestamptz, error)
+	// The actor's personal pins for the listed properties — the list overlay's
+	// batch (the main list and the search carry pinnedAt of the actor over own
+	// and shared rows alike).
+	ActorPins(ctx context.Context, arg ActorPinsParams) ([]ActorPinsRow, error)
+	// The transition log is append-only (enforced by trigger, ADR 0037); the first
+	// transition of a subscription has no prior status or tariff.
+	AppendSubscriptionTransition(ctx context.Context, arg AppendSubscriptionTransitionParams) error
+	// The time-travel twin of AppendSubscriptionTransition: identical columns plus
+	// the shifted created_at (the plain append always stamps now()).
+	AppendSubscriptionTransitionWithCreatedAt(ctx context.Context, arg AppendSubscriptionTransitionWithCreatedAtParams) error
+	// The archive touches no pin state: pins are personal rows — the contract
+	// migration (#1311) dropped the global properties.pinned_at column with its
+	// CHECK, and personal pin rows are never touched here (D16): unarchiving
+	// returns the property with the participants' pins.
 	ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error)
-	// Atomically reserve a payment for an in-flight refund. updated_at is maintained
-	// by the trg_subscription_payments_updated_at trigger, so it is not set here.
-	BeginSubscriptionPaymentRefund(ctx context.Context, id pgtype.UUID) (pgconn.CommandTag, error)
-	CancelByIDAndOwner(ctx context.Context, arg CancelByIDAndOwnerParams) (int64, error)
-	CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error)
-	CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error)
-	CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error)
-	CompleteLease(ctx context.Context, arg CompleteLeaseParams) (Lease, error)
+	// «Удалить операцию» (решение владельца): tombstone-статус cancelled —
+	// строка остаётся с ключом (payment_id, date) и не воскресает на тике,
+	// paid_date очищается вместе с фактом оплаты (штамп источника — вместе с
+	// ним, #1169). Только planned и paid;
+	// прочие строки (включая уже отменённые) не трогаются — use case рапортует
+	// not-found: отменённая операция для всех чтений больше не существует.
+	CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error)
+	CleanupExpiredIdempotencyKeys(ctx context.Context) (int64, error)
+	// The favorites order save's full-replacement pass (ticket #576; the
+	// personal cutover #1308): the actor's favorites OUTSIDE the submitted list
+	// lose their positions — they fall to the end of the reading order («новое
+	// избранное — в конец»), so duplicate positions never survive a save. The
+	// pass only ever touches the actor's own rows (the personal set, D12) and
+	// keeps the feed's visibility and archive cuts: a favorite on an archived
+	// property keeps its position through the save — unarchiving returns the
+	// rule with its order intact (D16). '' keeps the empty list working (a save
+	// of nothing clears the whole visible personal order).
+	ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error)
+	// Resume: close the open interval with today's date (the resume day is
+	// already outside the pause, [from, to)). The owner's resume closes any
+	// open pause — manual or system: while the property is archived the
+	// conveyor refuses the mutation, so an open auto_archive pause here means
+	// the property is active again and the bridge has already closed its own.
+	CloseActivePaymentPause(ctx context.Context, arg CloseActivePaymentPauseParams) (int64, error)
+	// The archive bridge's reverse leg (тикет #1342): the property returned
+	// from the archive — close only the system auto_archive pause; the owner's
+	// manual pauses stay open. Same [from, to) semantics as the manual resume.
+	CloseAutoArchivePaymentPause(ctx context.Context, arg CloseAutoArchivePaymentPauseParams) (int64, error)
+	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
+	// Завершение (ревизия ADR 0053 #1161): дата завершения, возврат залога и
+	// Архив условий удалённого Платежа — один UPDATE; ссылка payment_id
+	// снимается (RESTRICT отпускает платёж, удаляемый следом в той же
+	// транзакции). The one-unfinished-per-property index releases here; the
+	// caller has proven the rental unfinished inside the same transaction.
+	CompleteRental(ctx context.Context, arg CompleteRentalParams) (int64, error)
+	// «Выполнить»: the completion fact stamped on the still-active task; rows
+	// affected = 0 surfaces as ErrAlreadyCompleted (the use case has already
+	// proven existence under the property lock).
+	CompleteTask(ctx context.Context, arg CompleteTaskParams) (int64, error)
 	// Occupied recipient tariff slots: memberships on archived properties do not
 	// occupy a slot (issue #163).
 	CountActiveMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
+	// Admin dashboard stats. These queries are consumed by the admin context's
+	// repository, not by the billing module itself.
 	CountActiveSubscriptionsAdmin(ctx context.Context) (int64, error)
+	// The «Архив» button gate (issue #1233): the owner's archived rows only —
+	// shared properties contribute nothing, the archive is owner-only.
+	CountArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountArchivedPropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error)
 	CountAuditLogsAdmin(ctx context.Context, arg CountAuditLogsAdminParams) (int64, error)
-	CountLeasesAdmin(ctx context.Context, arg CountLeasesAdminParams) (int64, error)
-	CountLeasesTotalAdmin(ctx context.Context) (int64, error)
+	// Every started session counts, whatever its later outcome (ticket #427).
+	CountCardBindingSessionsByUserSince(ctx context.Context, arg CountCardBindingSessionsByUserSinceParams) (int64, error)
+	CountContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
+	// The search's whole-scope match count (ticket #599): the list query's
+	// predicate — the visibility, the search over title/user category/catalog
+	// slugs, the chip's category+type filter — without the per-row schedule
+	// aggregates, the ordering, the window and the keyset key. The count is the
+	// scope's own, identical on every walked page; the search screen shows it
+	// as «найдено N». The owner→today join travels with the predicate: the map
+	// covers every visible owner (ListGlobalPaymentOwnerTodays), so its rows
+	// are the list's rows.
+	CountGlobalPaymentRules(ctx context.Context, arg CountGlobalPaymentRulesParams) (int64, error)
 	CountNewUsersLast30dAdmin(ctx context.Context) (int64, error)
-	CountOpenLeasesByProperty(ctx context.Context, propertyID pgtype.UUID) (int64, error)
-	CountOperationsAdmin(ctx context.Context, arg CountOperationsAdminParams) (int64, error)
-	CountOperationsTotalAdmin(ctx context.Context) (int64, error)
+	// The overdue-occurrences count of one rule (#817: the rentals progress'
+	// overdueMonths — «Просрочено N месяцев» counts the managed payment's
+	// planned rows dated before the owner's today). The same computed truth the
+	// listings report (domain.OperationView mirrors the predicate; ticket
+	// #461); paid facts never read as overdue, cancelled tombstones never count,
+	// the nested payment→property path is enforced in the WHERE clause.
+	CountOverdueOperationsByPayment(ctx context.Context, arg CountOverdueOperationsByPaymentParams) (int64, error)
+	// The progress counters of the listed rules in one batched read (ticket
+	// #845): the rentals list's «N из M» / «Просрочено N месяцев» — the same
+	// paid and overdue predicates the per-payment counts encode, split by
+	// COUNT FILTER over one GROUP BY instead of a query pair per rule. A rule
+	// with no matching operations yields no row — its zeros default in the
+	// application. Cancelled tombstones never count; the nested
+	// payment→property path is enforced in the WHERE clause. An empty id list
+	// never reaches the query (the ListRentalManagedPaymentIDs precedent).
+	CountPaidAndOverdueByPaymentIDs(ctx context.Context, arg CountPaidAndOverdueByPaymentIDsParams) ([]CountPaidAndOverdueByPaymentIDsRow, error)
+	// The paid-operations count of one rule (ADR 0053 §2: the rentals progress'
+	// paidMonths — «N из M месяцев» counts the managed payment's paid facts).
+	// Cancelled tombstones never count; the nested payment→property path is
+	// enforced in the WHERE clause.
+	CountPaidOperationsByPayment(ctx context.Context, arg CountPaidOperationsByPaymentParams) (int64, error)
+	// The global feed's whole-scope count (ticket #599): the list query's
+	// predicate — paid, the visibility, the archive cut, the propertyIds
+	// multi-select, the period on the listing's date key, the search over
+	// title/category label/amount digits, the direction and category filters —
+	// without the keyset key, the ordering and the window. The count is the
+	// scope's own, identical on every walked page; the search screen shows it
+	// as «найдено N».
+	CountPaidOperationsGlobal(ctx context.Context, arg CountPaidOperationsGlobalParams) (int64, error)
 	CountPropertiesAdmin(ctx context.Context, arg CountPropertiesAdminParams) (int64, error)
-	CountPropertyContactsAdmin(ctx context.Context, propertyID pgtype.UUID) (int64, error)
-	CountPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) (int64, error)
+	// The auto-name serial (ticket #1001): the owner's properties of this type
+	// in every status — archived count too, deleted rows are gone (hard delete).
+	CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error)
 	CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountSubscriptionPaymentsAdminParams) (int64, error)
-	CountSubscriptionsByActivePaymentMethodID(ctx context.Context, activePaymentMethodID pgtype.UUID) (int64, error)
-	// Shared objects hidden from the recipient by a tariff slot shortage (the
-	// hidden_shared_count badge). Memberships on archived properties are excluded
-	// (issue #163): those objects are hidden by the archive, not by the tariff.
-	CountSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
-	CountTenantContactsAdmin(ctx context.Context, arg CountTenantContactsAdminParams) (int64, error)
+	// The count twin of ListSubscriptionPaymentsBySelection for the stuck-payment
+	// gauges (ticket #433): the WHERE clause mirrors the list query's one — keep
+	// the two in sync when a selection field changes. The limit of the selection
+	// value is ignored: a gauge counts the whole batch.
+	CountSubscriptionPaymentsBySelection(ctx context.Context, arg CountSubscriptionPaymentsBySelectionParams) (int64, error)
+	// The total count of one bucket — the «Выполненные N» counter (false =
+	// active tasks, true = the completed journal).
+	CountTasksByProperty(ctx context.Context, arg CountTasksByPropertyParams) (int64, error)
+	// The global listings' visibility predicate (ticket #521): the actor's own
+	// rows — bound and property-less — plus the bound rows of the properties
+	// they share with an active membership (ADR 0028 read scope with the merged
+	// visibility of ADR 0052 decision 3). The policy port maps an actor to a
+	// role per property; the merged feed has no single scope to resolve, so the
+	// actor-scoped read carries its visibility predicate here, beside the data.
+	// The bound rows' verdict is the derived-read canon — the SQL function
+	// actor_can_read_property (000142, ADR 0028): the owner plus the active
+	// members of a non-archived object, a suspended membership grants no read
+	// (the SQL-level status filter, #158 T4). The owner term stays beside the
+	// function call: the property-less rows are the owner's alone — the
+	// function needs a property row to say yes.
+	//
+	// The bound task rows always carry owner_id of the property's owner (there
+	// is no re-binding), so the owner branch covers the actor's own properties.
+	// The total of one bucket of the actor's visible merged feed. The tasks of
+	// archived properties are not in the global feed (карта #518 решение 9,
+	// тикет #522): non-archived properties plus the property-less cut.
+	CountTasksGlobal(ctx context.Context, arg CountTasksGlobalParams) (int64, error)
+	// The listed-properties cut of the global listing (ticket #547): the merged
+	// feed restricted to the picker's selection — the visibility predicate is
+	// the feed's, the list arrives comma-separated (uuids hold no commas).
+	// Archived properties contribute nothing (карта #518, решение 9); the
+	// without_property flag unions the actor's own property-less rows in — the
+	// feed filter's «Общие задачи» + objects (решение владельца 2026-09-07).
+	CountTasksGlobalOfProperties(ctx context.Context, arg CountTasksGlobalOfPropertiesParams) (int64, error)
+	// The property-less cut of the global listing (ADR 0052: the actor's own
+	// book only). No property join — the label is always absent there.
+	CountTasksGlobalWithoutProperty(ctx context.Context, arg CountTasksGlobalWithoutPropertyParams) (int64, error)
+	// The unread counter (решение #737): unread, not-deleted rows of the user;
+	// clicks, page opens and «Прочитать все» drive it down, push/email do not
+	// touch it.
+	CountUnreadNotifications(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountUsersAdmin(ctx context.Context, arg CountUsersAdminParams) (int64, error)
 	// GetUserByIDAdmin is implemented by the existing GetUserByID query (no owner filter).
 	CountUsersTotalAdmin(ctx context.Context) (int64, error)
-	CreateFreeReminder(ctx context.Context, arg CreateFreeReminderParams) (FreeReminder, error)
-	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
+	// Card binding sessions (issue #251). One row per initiated provider binding;
+	// the request key is unique per provider, and open sessions are resolved by
+	// status polling or the add-card webhook before the TTL expires.
+	// created_at comes from the caller's clock (the domain session), not the
+	// database default: the per-user binding limit's sliding window (ticket #427)
+	// is measured on this timestamp against the service clock.
+	CreateCardBindingSession(ctx context.Context, arg CreateCardBindingSessionParams) (CardBindingSession, error)
 	CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) error
-	CreateOperation(ctx context.Context, arg CreateOperationParams) (Operation, error)
-	CreateOperationCategory(ctx context.Context, arg CreateOperationCategoryParams) (OperationCategory, error)
-	CreateOperationCategoryIgnoreConflict(ctx context.Context, arg CreateOperationCategoryIgnoreConflictParams) error
-	CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error)
+	// Ручная разовая операция (тикет #569): рождается оплаченной в «сегодня»
+	// владельца — приложение передаёт одну дату, обе колонки берут её. Правила
+	// за фактом нет: origin='manual', payment_id NULL (partial unique
+	// (payment_id, date) накрывает только платёжные строки и не применяется).
+	// Штамп источника — 'manual' (семантика колонки едина, #1169; событие
+	// «автоплатёж исполнен» платёжные факты без правила не читает).
+	CreateManualOperation(ctx context.Context, arg CreateManualOperationParams) error
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
-	CreatePropertyContact(ctx context.Context, arg CreatePropertyContactParams) (PropertyContact, error)
 	CreatePropertyMember(ctx context.Context, arg CreatePropertyMemberParams) (PropertyMember, error)
 	// Pending property member invitations by email (T5, issue #161). Emails are
 	// stored lowercase; lookups compare with lower() on the parameter side too.
 	CreatePropertyMemberInvitation(ctx context.Context, arg CreatePropertyMemberInvitationParams) (PropertyMemberInvitation, error)
+	// A grant created directly in the suspended status (invite activation or
+	// AddMember without a free recipient slot) stamps suspended_at: the FIFO
+	// recovery queue orders by it (ListSuspendedMembersByUser), and a NULL would
+	// degrade the ordering to updated_at DESC (issue #767). The active insert
+	// keeps it NULL, matching the column default.
 	CreatePropertyMemberWithStatus(ctx context.Context, arg CreatePropertyMemberWithStatusParams) (PropertyMember, error)
-	CreatePropertyPhoto(ctx context.Context, arg CreatePropertyPhotoParams) (PropertyPhoto, error)
-	CreateRecurringOperation(ctx context.Context, arg CreateRecurringOperationParams) (RecurringOperation, error)
-	CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error)
-	CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (int64, error)
-	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) (CreateSessionRow, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (UserSubscription, error)
+	// Subscription payments (issue #250). Two partial unique indexes are the
+	// durable backstops of the one-pending-payment rule: the same-target
+	// idx_subscription_payments_one_pending_upgrade (user_id, tariff_id, period)
+	// WHERE status = 'pending' against double payment initiation, and the
+	// user-level idx_subscription_payments_one_pending_form (user_id)
+	// WHERE status = 'pending' AND expires_at IS NOT NULL — at most one payer
+	// form per user, whatever the target (issue #690). Create narrows the
+	// violation by index: the form index is the pending-exists conflict, any
+	// other is a duplicate initiation the application resolves to the existing
+	// pending payment.
 	CreateSubscriptionPayment(ctx context.Context, arg CreateSubscriptionPaymentParams) (SubscriptionPayment, error)
-	CreateTenantContact(ctx context.Context, arg CreateTenantContactParams) (TenantContact, error)
+	// Admin tariff creation (issue #256). The name is UNIQUE; a duplicate surfaces
+	// as a unique violation the adapter narrows to ErrAlreadyExists.
+	CreateTariff(ctx context.Context, arg CreateTariffParams) (Tariff, error)
+	CreateTaskRule(ctx context.Context, arg CreateTaskRuleParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeactivateAllPaymentMethodsForUser(ctx context.Context, userID pgtype.UUID) error
+	// The unpin: the personal row goes; unpinning an unpinned property deletes
+	// nothing and succeeds (the PUT's idempotency).
+	DeleteActorPin(ctx context.Context, arg DeleteActorPinParams) error
+	// «Удалить все» (решение #737): soft-deletes every feed row of the user in
+	// one statement; the result is the number of rows hidden.
+	DeleteAllNotifications(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// «Удалить все выполненные» (resolution #497, ADR 0051 as amended
+	// 2026-10-01): every completed task of the property is removed forever — the
+	// deleted-rule journal and the live rules' rows alike. The live rules'
+	// horizons were raised by RaiseTaskHistoryHorizons in the same transaction:
+	// the cleared dates never materialize again, the standing rows stand.
+	DeleteCompletedJournal(ctx context.Context, arg DeleteCompletedJournalParams) (int64, error)
+	// «Удалить все выполненные» across the owner's whole book (ticket #536):
+	// every completed task of the book in one query — the bound rows and the
+	// property-less ones (nullable property_id, ADR 0052), the deleted-rule
+	// journals and the live rules' rows alike (the horizons were raised by
+	// RaiseTaskHistoryHorizonsOwnerBook in the same transaction, ADR 0051 as
+	// amended). Archived properties stay frozen (ADR 0025) and the shared-to
+	// properties' journals are other owners' books (owner-scope, ADR 0028).
+	// Returns the removed rows' property anchors, one per removed row (NULL is
+	// the property-less leg) — the use case groups them into the per-object
+	// journal rows (ADR 0061 §3).
+	DeleteCompletedJournalOwnerBook(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
+	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
+	DeleteEmailChangeGrantByID(ctx context.Context, id pgtype.UUID) error
+	DeleteEmailChangeGrantsByUserID(ctx context.Context, userID pgtype.UUID) error
+	// The hygiene batch (ticket #433): sessions past their lifetime, whatever
+	// their status — an expired session never produces a payment method, and the
+	// only later read of an old row is the binding limit's sliding window, which
+	// is measured on created_at and long past for an expired session (TTL 24 h vs
+	// window 1 h). The subselect keeps the delete batched; the loop re-runs it
+	// until fewer than the batch limit rows remain, so repeated runs are safe.
+	DeleteExpiredCardBindingSessions(ctx context.Context, arg DeleteExpiredCardBindingSessionsParams) (int64, error)
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
 	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
-	DeleteFreeReminderByIDAndOwner(ctx context.Context, arg DeleteFreeReminderByIDAndOwnerParams) (int64, error)
-	DeleteFutureGeneratedOperations(ctx context.Context, arg DeleteFutureGeneratedOperationsParams) error
-	DeleteFutureOperationsByLease(ctx context.Context, arg DeleteFutureOperationsByLeaseParams) error
-	DeleteFutureUneditedOperationsByProperty(ctx context.Context, arg DeleteFutureUneditedOperationsByPropertyParams) error
-	DeleteLeasesByProperty(ctx context.Context, arg DeleteLeasesByPropertyParams) error
+	// Future-planned rebuild in one statement: remove every future planned
+	// operation of the rule except the single allowed one. A NULL keep removes
+	// them all — the rule is paused or ended, no future planned may remain
+	// (ADR 0049 §2).
+	DeleteFuturePlannedExcept(ctx context.Context, arg DeleteFuturePlannedExceptParams) (int64, error)
+	// Future rebuild in one statement: remove every uncompleted strictly future
+	// task of the rule except the single allowed one. A NULL keep removes them
+	// all — an undated rule keeps no dated future (stale rows from rule edits).
+	DeleteFutureTasksExcept(ctx context.Context, arg DeleteFutureTasksExceptParams) (int64, error)
 	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
 	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
 	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
 	DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UUID) error
-	DeleteOperationsByProperty(ctx context.Context, arg DeleteOperationsByPropertyParams) error
-	DeleteOperationsOutsideLeaseRange(ctx context.Context, arg DeleteOperationsOutsideLeaseRangeParams) error
-	DeletePaymentMethodByID(ctx context.Context, id pgtype.UUID) error
+	// Soft-deletes one feed row («удалить», решение #737): the row stays with
+	// its deleted_at, the feed and the unread counter stop seeing it. Rows
+	// matched = 0 means already deleted, read-status aside — the caller maps
+	// that to not-found for the reader.
+	DeleteNotification(ctx context.Context, arg DeleteNotificationParams) (int64, error)
+	// Hard delete of the rule. Pauses cascade; operations keep their snapshots
+	// with payment_id set to NULL by the FK — the "платёж удалён" mark is
+	// origin='payment' AND payment_id IS NULL (ticket #446). Planned operations
+	// are removed by the caller per keep_overdue before this runs.
+	DeletePayment(ctx context.Context, arg DeletePaymentParams) (int64, error)
+	// Unfavoriting (the cutover #1308): the actor's row goes — the order
+	// position leaves with it, a re-star lands at the end (a fresh NULL row).
+	// An absent row deletes nothing and succeeds.
+	DeletePaymentFavorite(ctx context.Context, arg DeletePaymentFavoriteParams) error
+	// The edit invalidation of the future planned (date > today, strictly): the
+	// mutation deletes it and the in-transaction tick stands it again with fresh
+	// snapshots (spec: "правка пересоздаёт будущее planned"). Today's occurrence
+	// is not future — its snapshot is frozen.
+	DeletePaymentFuturePlanned(ctx context.Context, arg DeletePaymentFuturePlannedParams) (int64, error)
+	// Owner-scoped: the row must belong to the user issuing the deletion.
+	DeletePaymentMethodByID(ctx context.Context, arg DeletePaymentMethodByIDParams) error
+	// keep_overdue=false: the overdue planned (the accumulated debt) goes too.
+	// Paid operations are never touched.
+	DeletePaymentPlannedBefore(ctx context.Context, arg DeletePaymentPlannedBeforeParams) (int64, error)
+	// Deletion of the rule's planned operations from a date on (today): future
+	// planned always goes with the rule.
+	DeletePaymentPlannedFrom(ctx context.Context, arg DeletePaymentPlannedFromParams) (int64, error)
 	DeleteProperty(ctx context.Context, arg DeletePropertyParams) error
-	DeletePropertyContact(ctx context.Context, arg DeletePropertyContactParams) error
 	DeletePropertyMember(ctx context.Context, arg DeletePropertyMemberParams) error
 	DeletePropertyMemberInvitation(ctx context.Context, arg DeletePropertyMemberInvitationParams) error
-	DeletePropertyPhoto(ctx context.Context, id pgtype.UUID) error
-	// Delete a push subscription by endpoint scoped to a user. Returns 0 rows when
-	// the subscription does not exist or belongs to another user (404 in the API).
+	// Delete a push subscription by endpoint scoped to a user. Idempotent
+	// (спека #1028 §5): 0 rows — подписки не было или она чужая, интент
+	// «выключено» исполнен в обоих случаях (API отвечает 204 без 404).
 	DeletePushSubscriptionByEndpointAndUser(ctx context.Context, arg DeletePushSubscriptionByEndpointAndUserParams) (int64, error)
-	DeleteRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) error
-	DeleteRecurringOperationsByProperty(ctx context.Context, arg DeleteRecurringOperationsByPropertyParams) error
-	DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEmailReminderParams) error
-	DeleteSentPushReminder(ctx context.Context, arg DeleteSentPushReminderParams) error
+	// Hard delete of the rental row; it must run before the payment's own delete
+	// (the RESTRICT FK releases only after the rental row is gone, ADR 0053 §3).
+	DeleteRental(ctx context.Context, arg DeleteRentalParams) (int64, error)
+	// The property-delete teardown (issue #632): every rental row of the
+	// property goes before the property row itself, inside the caller's
+	// transaction — the explicit order keeps the payment_id RESTRICT FK from
+	// racing the payments cascade off the property row (ADR 0025 §2), the
+	// completed rentals included. Scope is the owner like every rentals mutation.
+	DeleteRentalsByProperty(ctx context.Context, arg DeleteRentalsByPropertyParams) (int64, error)
+	// The edit invalidation (resolution #496): the rule's uncompleted tasks that
+	// have not fallen due yet — the undated one and the strictly future ones —
+	// are removed; the in-transaction tick stands the single future again with
+	// fresh snapshots. Already due and completed tasks keep their frozen
+	// snapshots.
+	DeleteRuleNotDueUncompleted(ctx context.Context, arg DeleteRuleNotDueUncompletedParams) error
+	// The rule deletion semantics (resolution #496): every uncompleted task of
+	// the rule — planned, overdue, today's and the single future — is physically
+	// removed; completed rows stay in the journal.
+	DeleteRuleUncompleted(ctx context.Context, ruleID pgtype.UUID) error
+	DeleteSessionByIDForUser(ctx context.Context, arg DeleteSessionByIDForUserParams) (int64, error)
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
-	DeleteSessionsByUserID(ctx context.Context, userID pgtype.UUID) error
-	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) error
+	// The previous_token_hash branch is the SQL copy of the currentness rule in
+	// identity/application/sessions_service.go (isCurrentSession): within the
+	// rotation grace window the caller may present the previous token, so its row
+	// must survive the except-delete behind RevokeOthers. Change the two copies
+	// together; pinned by TestSessionRepository_ExceptDeleteHonorsRotationGrace.
+	DeleteSessionsByUserIDExcept(ctx context.Context, arg DeleteSessionsByUserIDExceptParams) (int64, error)
 	DeleteStaleLoginAttemptsBatch(ctx context.Context, arg DeleteStaleLoginAttemptsBatchParams) (int64, error)
-	DeleteUneditedFutureOperationsByLease(ctx context.Context, arg DeleteUneditedFutureOperationsByLeaseParams) error
-	DeleteUneditedFutureOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedFutureOperationsByRecurringOperationParams) error
-	DeleteUneditedOperationsByLease(ctx context.Context, arg DeleteUneditedOperationsByLeaseParams) error
-	DeleteUneditedOperationsByRecurringOperation(ctx context.Context, arg DeleteUneditedOperationsByRecurringOperationParams) error
+	// The stand-only time-travel rig of issue #665 is the one deliberate writer
+	// that moves history: the dunning retry schedule anchors at the latest
+	// reason='grace_entered' transition (the ListSubscriptionsBySelection bound),
+	// so shifting the schedule data-side means moving those rows in time. UPDATE
+	// is rejected by the immutability trigger (ADR 0037), so the move is a
+	// delete-and-reinsert of the same rows with shifted created_at; DELETE is
+	// deliberately unguarded by that trigger. The queries below are reachable
+	// only from the admin time-shift operation, which the config railguard keeps
+	// out of production (BILLING_TIME_TRAVEL, local/dev/stage stands only).
+	DeleteSubscriptionGraceEntryTransitions(ctx context.Context, subscriptionID pgtype.UUID) error
+	// The hard rule deletion (resolution #496): the completed journal keeps its
+	// rows with rule_id set to NULL by the FK; the uncompleted tasks are
+	// physically removed by DeleteRuleUncompleted before this runs.
+	DeleteTaskRule(ctx context.Context, arg DeleteTaskRuleParams) error
 	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
+	// The create-time app check for invariant №12 (одна незавершённая на
+	// объекте): run inside the transaction under the property lock; the partial
+	// unique index backstops the race.
+	ExistsUnfinishedRental(ctx context.Context, arg ExistsUnfinishedRentalParams) (bool, error)
+	// The access events' property snapshot (#751): the display name and the
+	// address line the feed rows' property card carries (EntityRef, #745); the
+	// type picks the card avatar's placeholder glyph (карта #1217, #1244), the
+	// photo path streams the card's picture when the object has one (#1275). A
+	// missing property is a no-row error — the access transitions never fire on
+	// a deleted object, a miss is abnormal and fails the publication.
+	GetAccessEventPropertyView(ctx context.Context, id pgtype.UUID) (GetAccessEventPropertyViewRow, error)
 	GetAuditLogByIDAdmin(ctx context.Context, id pgtype.UUID) (AuditLog, error)
-	GetFinanceReportByCategory(ctx context.Context, arg GetFinanceReportByCategoryParams) ([]GetFinanceReportByCategoryRow, error)
-	GetFinanceReportByMonth(ctx context.Context, arg GetFinanceReportByMonthParams) ([]GetFinanceReportByMonthRow, error)
-	GetFinanceReportByProperty(ctx context.Context, arg GetFinanceReportByPropertyParams) ([]GetFinanceReportByPropertyRow, error)
-	GetFinanceReportTotals(ctx context.Context, arg GetFinanceReportTotalsParams) (GetFinanceReportTotalsRow, error)
-	GetFreeReminderByIDAndOwner(ctx context.Context, arg GetFreeReminderByIDAndOwnerParams) (FreeReminder, error)
-	GetFreeReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (FreeReminder, error)
-	GetLastSucceededSubscriptionPaymentBySubscriptionID(ctx context.Context, subscriptionID pgtype.UUID) (SubscriptionPayment, error)
+	GetCardBindingSessionByRequestKeyForUpdate(ctx context.Context, arg GetCardBindingSessionByRequestKeyForUpdateParams) (CardBindingSession, error)
+	// Contacts context queries: CRUD and search over the owner's contact book
+	// (ADR 0054, ticket #506). Reads and writes are scoped by the data owner
+	// (ADR 0028) — the service has already resolved the actor's role. The by-id
+	// read alone is unscoped on purpose: the card itself carries the property
+	// binding the authorization gates on, so the service loads first and
+	// authorizes before anything travels out.
+	GetContactByID(ctx context.Context, id pgtype.UUID) (Contact, error)
+	// The row-locked variant for the photo mutations (ADR 0065): the old photo
+	// key must be read under the lock, or two concurrent replacements both see
+	// the same previous key and one of them orphans its object silently.
+	GetContactByIDForUpdate(ctx context.Context, id pgtype.UUID) (Contact, error)
+	// The contacts view of the property a use case targets: just the data owner
+	// whose book the property-bound cards belong to (ADR 0028).
+	GetContactPropertyRef(ctx context.Context, id pgtype.UUID) (GetContactPropertyRefRow, error)
+	GetEmailChangeGrantByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (EmailChangeGrant, error)
+	// The account-level email matrix (решение #738, ADR 0058): four
+	// configurable categories. A missing row is the all-on default — the caller
+	// falls back without inserting.
+	GetEmailPreferences(ctx context.Context, userID pgtype.UUID) (GetEmailPreferencesRow, error)
+	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error)
+	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
+	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
+	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
+	// WHERE used=false created by migration 000063 — the same index that backs
+	// CreateLoginCode's ON CONFLICT upsert. The index serves both writes and reads; no
+	// separate read index is needed (issue #224, EXPLAIN-verified: at production scale
+	// the planner chooses an index scan over this index; email falls into Filter, not
+	// Index Cond, because the index column is COALESCE(email, ...) and cannot match a raw
+	// email=$2 equality, but the phone+purpose prefix narrows the scan efficiently).
 	GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByPhoneAndEmailAndPurposeParams) (GetLatestLoginCodeByPhoneAndEmailAndPurposeRow, error)
-	GetLeaseByID(ctx context.Context, id pgtype.UUID) (Lease, error)
-	GetLeaseByIDAdmin(ctx context.Context, id pgtype.UUID) (GetLeaseByIDAdminRow, error)
-	GetLeaseByIDAndOwner(ctx context.Context, arg GetLeaseByIDAndOwnerParams) (Lease, error)
-	GetLeaseByIDAndOwnerForUpdate(ctx context.Context, arg GetLeaseByIDAndOwnerForUpdateParams) (Lease, error)
-	GetLeaseByIDForUpdate(ctx context.Context, id pgtype.UUID) (Lease, error)
 	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
 	GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone string) (LoginAttempt, error)
 	GetMaxMemberRoleByOwner(ctx context.Context, arg GetMaxMemberRoleByOwnerParams) (int32, error)
-	GetOpenLeaseByProperty(ctx context.Context, arg GetOpenLeaseByPropertyParams) (Lease, error)
-	GetOperationByID(ctx context.Context, id pgtype.UUID) (GetOperationByIDRow, error)
-	GetOperationByIDAdmin(ctx context.Context, id pgtype.UUID) (GetOperationByIDAdminRow, error)
-	GetOperationByIDAndOwner(ctx context.Context, arg GetOperationByIDAndOwnerParams) (GetOperationByIDAndOwnerRow, error)
-	GetOperationByIDAndOwnerForUpdate(ctx context.Context, arg GetOperationByIDAndOwnerForUpdateParams) (GetOperationByIDAndOwnerForUpdateRow, error)
-	GetOperationCategoryByIDAndOwner(ctx context.Context, arg GetOperationCategoryByIDAndOwnerParams) (OperationCategory, error)
-	GetOperationCategoryByOwnerAndCode(ctx context.Context, arg GetOperationCategoryByOwnerAndCodeParams) (OperationCategory, error)
+	// One feed row by id for the delivery jobs (#740): a job reloads the
+	// committed row (recipient, texts, payload) instead of carrying content in
+	// its args. A soft-deleted row still resolves — deletion hides the row from
+	// the feed, it does not retract an in-flight delivery.
+	GetNotification(ctx context.Context, id pgtype.UUID) (Notification, error)
+	// The feed page's single row (GET /notifications/{id}, #743): scoped to the
+	// reader and hidden once deleted — a foreign or deleted row does not exist
+	// for them. The delivery jobs keep using the unscoped GetNotification.
+	GetNotificationForUser(ctx context.Context, arg GetNotificationForUserParams) (Notification, error)
+	// Payments context queries: operations and favorites-facing operation reads
+	// (ticket #461, the second contracts slice of ADR 0049 §4). Reads are scoped
+	// by the data owner and by the nested path property→payment→operation;
+	// "overdue" is not stored anywhere — the status filter and every response
+	// item's view status resolve against the owner's today passed in by the
+	// application layer (ADR 0048). Rule CRUD lives in payments_rules.sql.
+	// One operation by id within the owner's scope on the given property — the
+	// pay-now use case's load step (manual operations have no payment, so the
+	// payment link is not a filter).
+	GetOperationByID(ctx context.Context, arg GetOperationByIDParams) (GetOperationByIDRow, error)
+	// The data owner's IANA timezone (ADR 0048): the tick's "today" is the
+	// calendar date in the property owner's timezone. NOT NULL with the
+	// 'Europe/Moscow' default (migration 000088); IANA-validated on write.
+	GetOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
+	// Payments context queries: payment rule CRUD and pause/resume (ADR 0049 §4;
+	// tickets #457, #461). Reads and writes are scoped by the data owner (ADR
+	// 0028: SQL filters by scope, the policy port has already resolved the
+	// actor's role); the nested path payment→property is enforced in the WHERE
+	// clause. The materialization tick lives in payments_tick.sql, operations in
+	// payments_operations.sql. The favorite star is a personal state (the
+	// cutover #1308, D12): it lives in user_payment_favorites — the global
+	// payments.is_favorite/favorite_order columns went with the contract
+	// migration #1311; the actor's rows overlay the actor-facing reads, the
+	// star writes are this file's insert/delete pair.
+	// One rule by id within the owner's scope on the given property, with the
+	// user category's current name resolved for the CategoryView.
+	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
+	// Whether the notification's own payment occurrence (решение #737: payment
+	// = правило + дата операции) still awaits payment: a planned operation of
+	// the rule dated that day exists. The date pins the check to the notified
+	// occurrence — the rule's other occurrences say nothing about it. Paid or
+	// cancelled — the state has moved on; the rule deleted — its occurrences
+	// lose the payment link and the «открыть платёж» button goes with the dead
+	// page (решение #737).
+	GetPaymentOpenState(ctx context.Context, arg GetPaymentOpenStateParams) (bool, error)
 	// "active" mirrors CountActivePropertiesByOwnerAdmin: active plus maintenance.
 	GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesStatsAdminRow, error)
 	// Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
@@ -141,21 +443,35 @@ type Querier interface {
 	// properties list to load shared properties (whose owner_id differs from the
 	// actor). Read-only; callers must never leak existence to actors without a view
 	// capability (the application maps "no access" to ErrNotFound to preserve
-	// object privacy). members_count is the shared-access participant count
-	// (membership rows of any status plus pending email invitations, issue #163).
-	// overdue_rent_count counts the property's overdue rent operations scoped to
-	// the property's data owner so shared properties show the same count to a
-	// member as to the owner (issue #157).
-	GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPropertyByIDRow, error)
+	// object privacy).
+	GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property, error)
 	GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error)
-	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error)
+	GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error)
 	GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetPropertyByIDAndOwnerForUpdateParams) (Property, error)
 	// Unscoped pessimistic-lock lookup by id, for write paths that resolve access
 	// via the policy port before applying scope = owner_id (T3, issue #156).
 	GetPropertyByIDForUpdate(ctx context.Context, id pgtype.UUID) (Property, error)
-	GetPropertyContact(ctx context.Context, arg GetPropertyContactParams) (PropertyContact, error)
-	GetPropertyFinanceByCategory(ctx context.Context, arg GetPropertyFinanceByCategoryParams) ([]GetPropertyFinanceByCategoryRow, error)
-	GetPropertyFinanceByMonth(ctx context.Context, arg GetPropertyFinanceByMonthParams) ([]GetPropertyFinanceByMonthRow, error)
+	// The read side of the payments property port: the data owner of a property
+	// (the SQL scope, ADR 0028) and its lifecycle state for the read gates.
+	GetPropertyForPayment(ctx context.Context, id pgtype.UUID) (GetPropertyForPaymentRow, error)
+	// The mutation's serialization point (ADR 0049 §3): the property row is
+	// locked FOR UPDATE before the rule is read or written, so mutation-vs-tick,
+	// mutation-vs-mutation and archive-vs-mutation serialize on one point.
+	GetPropertyForPaymentMutation(ctx context.Context, id pgtype.UUID) (GetPropertyForPaymentMutationRow, error)
+	// Tasks context queries: the task rule CRUD with the property serialization
+	// lock and the rule's task invalidations (ADR 0051). The property lock
+	// mirrors the payments precedent (ADR 0049 §3); the tick's persistence lives
+	// in tasks_tick.sql, the task reads/completions in tasks_tasks.sql.
+	// The tasks-scoped read of the property (ADR 0028): the data owner, the
+	// archived flag and the display name (the global listing's row projection,
+	// ticket #521), no lock.
+	GetPropertyForTask(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskRow, error)
+	// The property row locked inside the caller's transaction: for an
+	// active/maintenance row the conveyor's owner-wide set lock already holds
+	// it (the #546 global order), so this re-lock is a no-op; an archived row
+	// stands outside that set, and this lock closes the archive-vs-mutation
+	// race before the read-only check (ADR 0049 §3).
+	GetPropertyForTaskMutation(ctx context.Context, id pgtype.UUID) (GetPropertyForTaskMutationRow, error)
 	GetPropertyMember(ctx context.Context, arg GetPropertyMemberParams) (PropertyMember, error)
 	GetPropertyMemberByPropertyAndUser(ctx context.Context, arg GetPropertyMemberByPropertyAndUserParams) (PropertyMember, error)
 	GetPropertyMemberInvitation(ctx context.Context, arg GetPropertyMemberInvitationParams) (PropertyMemberInvitation, error)
@@ -165,211 +481,1247 @@ type Querier interface {
 	// recipient indistinguishable from a non-member for authorization purposes
 	// (issue #158, T4). The UI distinguishes suspended via a dedicated screen (T9).
 	GetPropertyMemberRole(ctx context.Context, arg GetPropertyMemberRoleParams) (string, error)
-	GetPropertyOperationsSummary(ctx context.Context, arg GetPropertyOperationsSummaryParams) (GetPropertyOperationsSummaryRow, error)
-	GetPropertyPhotoByID(ctx context.Context, id pgtype.UUID) (PropertyPhoto, error)
-	GetPropertyPhotoByIDAndPropertyID(ctx context.Context, arg GetPropertyPhotoByIDAndPropertyIDParams) (PropertyPhoto, error)
 	GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyStatusByOwnerParams) (string, error)
-	GetRecurringOperationByID(ctx context.Context, id pgtype.UUID) (RecurringOperation, error)
-	GetRecurringOperationByIDAndOwner(ctx context.Context, arg GetRecurringOperationByIDAndOwnerParams) (RecurringOperation, error)
-	GetRecurringOperationByIDAndOwnerForUpdate(ctx context.Context, arg GetRecurringOperationByIDAndOwnerForUpdateParams) (RecurringOperation, error)
-	GetRecurringOperationByLease(ctx context.Context, leaseID pgtype.UUID) ([]RecurringOperation, error)
-	GetRecurringOperationByLeaseIDAndOwner(ctx context.Context, arg GetRecurringOperationByLeaseIDAndOwnerParams) (RecurringOperation, error)
-	GetReminderByIDAndOwner(ctx context.Context, arg GetReminderByIDAndOwnerParams) (Reminder, error)
-	GetReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (Reminder, error)
+	// The device's stored settings state (GET /push/subscriptions/preferences):
+	// scoped to the user — another user's endpoint is not found.
+	GetPushSubscriptionByEndpointAndUser(ctx context.Context, arg GetPushSubscriptionByEndpointAndUserParams) (PushSubscription, error)
+	// The live rental facts behind the «Продлить»/«Завершить» buttons
+	// (решение #737: действия вычисляются при чтении): whether the rental still
+	// awaits action (not completed, planned end already passed — the
+	// needs_attention state, ADR 0053) and which property it belongs to, so the
+	// reader's rights resolve against the live rental, not the payload snapshot.
+	// No row — the rental is gone.
+	GetRentalActionState(ctx context.Context, id pgtype.UUID) (GetRentalActionStateRow, error)
+	// Rentals context queries: the rental CRUD and the list ordering (ADR 0053
+	// §4, ticket #529). Reads and writes are scoped by the data owner (ADR 0028:
+	// SQL filters by scope, the policy port has already resolved the actor's
+	// role); the nested path rental→property is enforced in the WHERE clause.
+	// The tenant is embedded by a LEFT JOIN: after the contact's deletion the
+	// link is NULL and the tenant is simply absent (решение #528).
+	// One rental by id within the owner's scope on the given property, with the
+	// tenant's contact fields resolved for the embedded tenant view.
+	GetRentalByID(ctx context.Context, arg GetRentalByIDParams) (GetRentalByIDRow, error)
+	// The auto-paid boundary job's delivery-time resolution (#1169): the
+	// operation as it stands at its 10:00 wake-up. The owner's decision
+	// (гриллинг #1167): the event is about the AUTO charge — the tick's stamp
+	// (status='paid', paid_source='auto_pay', paid_date = the operation date)
+	// is the live predicate; a manual payment of the same occurrence is
+	// silent (the owner knows — they paid it). The live day only: an
+	// operation whose date is no longer the zone's today (a job awake after
+	// the day rolled over) answers no row — a downtime's missed days are not
+	// backfilled, the 22:00 overdue leg speaks for the unpaid past; an
+	// archived property answers no row. The per-payment flag (#1189): a rule
+	// with notify_auto_paid = false answers no row — the flag flipped after
+	// the booking silences the standing job.
+	GetScheduledAutoPaidPayment(ctx context.Context, arg GetScheduledAutoPaidPaymentParams) (GetScheduledAutoPaidPaymentRow, error)
+	// The completed boundary job's delivery-time resolution (issue #777): the
+	// rental as it stands at its boundary midnight. The needs_attention
+	// conditions are re-checked as of the wake-up instant ($3): a completed
+	// rental, an extended one (the planned end moved off the booked date — its
+	// new boundary books its own job), an archived property — and a rental
+	// whose planned end is no longer strictly before the zone's today (the job
+	// woke before the boundary) — answers no row, the job finishes without
+	// publishing.
+	GetScheduledCompletedRental(ctx context.Context, arg GetScheduledCompletedRentalParams) (GetScheduledCompletedRentalRow, error)
+	// The due boundary job's delivery-time resolution (issue #776): the
+	// operation as it stands at its due boundary — the wall clock 10:00 of the
+	// operation date in the owner's timezone (#1168). The leg's conditions are
+	// re-checked as of the wake-up instant ($3): a paid, cancelled, auto-pay
+	// operation, a deleted rule's orphan, an archived property — and an
+	// operation whose date is no longer the zone's today (the job woke after
+	// the day had rolled over) — answers no row, the job finishes without
+	// publishing. The date-against-today predicate holds at any hour of the
+	// boundary day — the wake-up instant itself needs no gate, the job books
+	// at its own 10:00.
+	GetScheduledDuePayment(ctx context.Context, arg GetScheduledDuePaymentParams) (GetScheduledDuePaymentRow, error)
+	// The overdue boundary job's delivery-time resolution (issue #776): the
+	// operation as it stands at its overdue boundary — the wall clock 22:00 of
+	// the day after the operation date in the owner's timezone (#1168). The
+	// overdue leg's conditions are re-checked as of the wake-up instant ($3):
+	// planned, non-archived property, the date strictly before the zone's
+	// today — auto-pay rules included, the sweep's overdue leg's shape.
+	GetScheduledOverduePayment(ctx context.Context, arg GetScheduledOverduePaymentParams) (GetScheduledOverduePaymentRow, error)
+	// The boundary job's delivery-time resolution (issues #750, #777): the task
+	// as it stands at its boundary instant. A gone (rule edit removed the stale
+	// row), completed, undated, or archived-property task answers no row — the
+	// job finishes without publishing. The boundary instant in the owner's
+	// timezone (due_at) — a timed task's term minute, a date-only task's
+	// day-after midnight — travels for the creation/edit seam (#775), which
+	// decides future-vs-past on it; the job wakes at its own instant and needs
+	// no clock. Both shapes answer: the kind is one per task, the boundary
+	// differs by shape.
+	GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (GetScheduledOverdueTaskRow, error)
+	// The reminder boundary job's delivery-time resolution (карта #822, #824):
+	// the operation as it stands at its reminder boundary — the wall clock
+	// 10:00 of the reminder day (#1168). Planned, on a
+	// non-archived property, and the rule's CURRENT lead time still landing the
+	// reminder day on the zone's today ($3) — a lead time changed after the
+	// booking (or a job awake after the day rolled over) answers no row, the
+	// job finishes without publishing; the new boundary books its own job.
+	GetScheduledReminderPayment(ctx context.Context, arg GetScheduledReminderPaymentParams) (GetScheduledReminderPaymentRow, error)
+	GetSessionByID(ctx context.Context, id pgtype.UUID) (GetSessionByIDRow, error)
+	// GetSessionByTokenHash resolves a live session by its token hash. The
+	// previous_token_hash branch keeps in-flight requests working during the
+	// rotation grace window: the old token is accepted until rotated_at falls
+	// behind $2 (now - SessionRotationGrace).
 	GetSessionByTokenHash(ctx context.Context, arg GetSessionByTokenHashParams) (GetSessionByTokenHashRow, error)
 	GetSubscriptionByID(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByIDForUpdate(ctx context.Context, id pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
 	GetSubscriptionByUserIDForUpdate(ctx context.Context, userID pgtype.UUID) (UserSubscription, error)
+	GetSubscriptionPaymentAdmin(ctx context.Context, id pgtype.UUID) (GetSubscriptionPaymentAdminRow, error)
 	GetSubscriptionPaymentByID(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error)
-	GetSubscriptionPaymentByIDAdmin(ctx context.Context, id pgtype.UUID) (GetSubscriptionPaymentByIDAdminRow, error)
 	GetSubscriptionPaymentByIDForUpdate(ctx context.Context, id pgtype.UUID) (SubscriptionPayment, error)
-	// Aggregates over payments created in the last 30 days. "refunded" covers both
-	// full and partial refunds.
+	// Aggregates over payments created in the last 30 days. Refunds are full-amount
+	// only in the rewritten schema (ADR 0037): the legacy partial_refunded status
+	// is gone.
 	GetSubscriptionPaymentsStatsLast30dAdmin(ctx context.Context) (GetSubscriptionPaymentsStatsLast30dAdminRow, error)
 	GetTariffByID(ctx context.Context, id pgtype.UUID) (Tariff, error)
+	// Billing context queries (rewritten module, issue #245).
+	//
+	// Only the queries consumed by the rewritten core module and by the admin
+	// dashboard live here. The payment, payment-method and webhook queries return
+	// with their tickets (#250, #251, #254).
 	GetTariffByName(ctx context.Context, name string) (Tariff, error)
-	// GetTenantContactByID is intentionally unscoped: it resolves the contact's
-	// data owner before the policy gate authorizes the actor (Property Sharing
-	// follow-up). Callers must not expose the result without a role check.
-	GetTenantContactByID(ctx context.Context, id pgtype.UUID) (TenantContact, error)
-	GetTenantContactByIDAdmin(ctx context.Context, id pgtype.UUID) (GetTenantContactByIDAdminRow, error)
-	GetTenantContactByIDAndOwner(ctx context.Context, arg GetTenantContactByIDAndOwnerParams) (TenantContact, error)
+	// The tariff events' plan snapshot (#752): the slug the display name resolves
+	// from (TariffDisplayName). A missing plan is a no-row error — the billing
+	// events never fire on a dropped tariff, a miss is abnormal and fails the
+	// publication.
+	GetTariffEventView(ctx context.Context, id pgtype.UUID) (string, error)
+	// Tasks context queries: the task reads, the completion toggle and the
+	// «Удалить все выполненные» journal clear (ADR 0051, resolutions #496/#497).
+	// Rule CRUD lives in tasks_rules.sql, the tick's persistence in
+	// tasks_tick.sql.
+	// The nested path task→property is part of the key: a foreign or re-hung
+	// row is the privacy 404. rule_repeat is the live rule's repeat read through the
+	// LEFT JOIN (null once the rule is deleted) — the wire's ↻ mark; the task
+	// row itself carries no repeat snapshot.
+	GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error)
+	// Whether the notification's task still awaits action: it exists and is not
+	// completed. A completed or deleted task leaves the notification without
+	// its button (решение #737).
+	GetTaskOpenState(ctx context.Context, id pgtype.UUID) (bool, error)
+	// The data owner's IANA timezone (ADR 0048): the tick's "today" and the
+	// listings' computed buckets are resolved in the property owner's timezone.
+	// NOT NULL with the 'Europe/Moscow' default (migration 000088);
+	// IANA-validated on write.
+	GetTaskOwnerTimezone(ctx context.Context, id pgtype.UUID) (string, error)
+	// The nested path rule→property is part of the key: a foreign or re-hung
+	// row is the privacy 404.
+	GetTaskRule(ctx context.Context, arg GetTaskRuleParams) (GetTaskRuleRow, error)
+	// The property-less cut of the rule read (ADR 0052: the slices never mix —
+	// the predicate over property_id picks the slice explicitly). The id-scoped
+	// owner key is the privacy 404; a bound rule is invisible here by design.
+	GetTaskRuleWithoutProperty(ctx context.Context, arg GetTaskRuleWithoutPropertyParams) (GetTaskRuleWithoutPropertyRow, error)
+	// The property-less cut of the task read (ADR 0052: the slices never mix).
+	// rule_repeat is the same live-rule read projection as in GetTask.
+	GetTaskWithoutProperty(ctx context.Context, arg GetTaskWithoutPropertyParams) (GetTaskWithoutPropertyRow, error)
 	GetUserByEmail(ctx context.Context, dollar_1 string) (User, error)
+	GetUserByEmailForUpdate(ctx context.Context, dollar_1 string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone string) (User, error)
 	GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error)
-	GetUserTimezone(ctx context.Context, id pgtype.UUID) (string, error)
 	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
-	HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error)
-	HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error)
-	// Atomically increment the renewal charge attempt counter and return the new
-	// value so the renewal job can cap retries on persistent charge failures.
-	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
-	IncrementSubscriptionPaymentChargeAttempts(ctx context.Context, id pgtype.UUID) (int32, error)
+	// IncrementLoginAttempt atomically increments the failure counter on the
+	// existing row, so concurrent upserts cannot lose an increment (issue #215).
+	// failures carries the delta to add; first_failure_at is intentionally left
+	// untouched on the conflict branch because the window is not being reset.
+	IncrementLoginAttempt(ctx context.Context, arg IncrementLoginAttemptParams) error
+	InsertActionJournal(ctx context.Context, arg InsertActionJournalParams) (pgtype.UUID, error)
+	// The pin's «строка есть = состояние» write (the cutover #1307, the model
+	// #1299): one atomic statement — a re-pin keeps the original pin time (the
+	// PUT's idempotency, the order among the pinned never shifts), a fresh pin
+	// takes the moment from the application's clock. The conflicting row's time
+	// stands: DO UPDATE writes the same value back purely so RETURNING delivers
+	// the effective pinned_at (DO NOTHING would return no row) — the stored
+	// value never changes.
+	InsertActorPin(ctx context.Context, arg InsertActorPinParams) (pgtype.Timestamptz, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (pgtype.UUID, error)
-	IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error)
-	IsNotificationChannelAllowed(ctx context.Context, arg IsNotificationChannelAllowedParams) (bool, error)
-	IsPushReminderSent(ctx context.Context, arg IsPushReminderSentParams) (bool, error)
-	IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error)
-	ListAccessibleOwners(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
+	InsertContact(ctx context.Context, arg InsertContactParams) (Contact, error)
+	InsertEmailChangeGrant(ctx context.Context, arg InsertEmailChangeGrantParams) error
+	// Idempotent by the partial unique (payment_id, date): a concurrent or
+	// repeated run inserts nothing. Always planned — the auto-pay closes today's
+	// occurrence separately, strictly on its day (ADR 0049 §2).
+	InsertMaterializedOperation(ctx context.Context, arg InsertMaterializedOperationParams) error
+	// Idempotent by the partial unique (rule_id, due_date): a concurrent or
+	// repeated run inserts nothing. Always uncompleted — the completion is a
+	// manual act only.
+	InsertMaterializedTask(ctx context.Context, arg InsertMaterializedTaskParams) error
+	// The undated task of an undated rule («Без срока»): idempotent by the
+	// partial unique (rule_id) over the undated rows.
+	InsertMaterializedUndatedTask(ctx context.Context, arg InsertMaterializedUndatedTaskParams) error
+	// Хранимая лента уведомлений (карта #734, тикет #739; модель — решение
+	// #737). One event = one row per recipient (fan-out); the row carries the
+	// text snapshot, the payload links and the personal flags.
+	// Publishes one recipient's feed row. The unique (user_id, dedup_key) index
+	// makes the dedup invariant durable: a repeat publication with the same key
+	// inserts nothing (0 rows), it is a no-op rather than an error.
+	InsertNotification(ctx context.Context, arg InsertNotificationParams) (int64, error)
+	// ids and since are app-side (UUIDv7, the owner's today); recurrence is the
+	// domain-validated jsonb; the category arrives as a default-catalog slug in
+	// this slice (user_category_id stays NULL). reminder_offset_days is the
+	// nullable reminder lead time (карта #822; NULL = напоминаний нет);
+	// notify_auto_paid — гейт события «Автоплатёж исполнен» (#1189, дефолт новых
+	// false, макет 3214-72739).
+	InsertPayment(ctx context.Context, arg InsertPaymentParams) error
+	// The payment change log queries (ADR 0065, ticket #1188): the append-only
+	// story of one rule's user edits. The insert runs inside the mutation
+	// conveyor's transaction; the reads serve the payment screen's «изменения»
+	// page — the bidirectional keyset over (created_at, id) DESC, scoped by the
+	// data owner and the payment→property path (ADR 0028).
+	// One append-only row: the id is minted app-side (UUIDv7, ADR 0019),
+	// created_at is the database's. Empty changes (pause/resume) travel as the
+	// literal [] — the application layer normalizes nil.
+	InsertPaymentChangeLog(ctx context.Context, arg InsertPaymentChangeLogParams) error
+	// The personal favorite star (PUT favorite, the cutover #1308, D12): one
+	// row of the actor's user_payment_favorites — «строка есть = состояние».
+	// The atomic insert (no read-modify-write): a re-star keeps the stored row
+	// (the order position among the actor's favorites never shifts), a fresh
+	// star takes a NULL position — the new-favorite-at-the-end rule (ticket
+	// #576). created_at is the row's bookkeeping stamp (the schema default,
+	// nothing reads it today). Existence is already proven inside the same
+	// transaction under the property lock.
+	InsertPaymentFavorite(ctx context.Context, arg InsertPaymentFavoriteParams) error
+	// The open-ended pause [from, ∞): exactly one may exist per rule — the
+	// partial unique index (to_date IS NULL) makes a double pause a constraint
+	// violation even past the application check. Origin distinguishes the
+	// owner's manual pause from the archive bridge's system one (тикет #1342).
+	InsertPaymentPause(ctx context.Context, arg InsertPaymentPauseParams) error
+	// The id, owner and payment link are app-side (UUIDv7, the denormalized
+	// scope owner, the gateway-minted rent payment).
+	InsertRental(ctx context.Context, arg InsertRentalParams) error
+	// The newest materialized date across planned and paid per listed rule —
+	// the projection cursor of the nearest-date fallback (the tick has not
+	// stood the single future planned up yet; CONTEXT.md «Материализация»).
+	// Cancelled tombstones are not materialized facts.
+	LastOperationDatesOfPayments(ctx context.Context, paymentIds string) ([]LastOperationDatesOfPaymentsRow, error)
+	// Чтение журнала (карта #704, тикет #708, ADR 0061 §7): страница ленты
+	// «История действий». Область двух родов (сужение глобальной ленты —
+	// тикет #1412, по образцу изоляции D14 фильтра участников):
+	// глобальная лента (property_ids = '') — только СОБСТВЕННЫЕ объекты
+	// читателя (p.owner_id = actor, архивный срез владельческий — свои
+	// архивные объекты остаются): события объектов, куда читателя пригласили,
+	// в глобальную ленту не попадают; их история читается в суженной области.
+	// Суженная лента (property_ids задан — объект, участник, пара #841) —
+	// SQL-функция actor_can_read_property (000142, до #884 —
+	// actor_can_read_history 000137): владелец (включая архивные
+	// объекты) и активные участники неархивных объектов; suspended и чужие
+	// объекты строк не отдают (privacy-404 — существование не раскрывается).
+	//
+	// Курсор двусторонний по ключу (created_at, id): before_ts/before_id —
+	// страница СТАРШЕ ключа (скролл вверх), after_ts/after_id — страница МОЛОЖЕ
+	// (prepend новых); аргументы пары ходят вместе, NULL — нет курсора. Порядок
+	// DESC-запроса — (created_at DESC, id DESC); after-нога читается отдельным
+	// ASC-запросом (ListActionJournalAfter), адаптер разворачивает её страницу
+	// обратно — на проводе порядок строк всегда (created_at DESC, id DESC), и
+	// переименование объекта не может увести строку из окна (канон #597).
+	//
+	// Фильтры: csv-списки ('' = фильтра нет), период по created_at (верхняя
+	// граница исключающая — экран считает датой+24ч), поиск — всегда-OR
+	// предикат «как в Telegram» (ресерч #839, тикет #842): prefix-FTS
+	// (plainto_tsquery санитизирует произвольный ввод, ':*' на хвосте делает
+	// последнюю лексему префиксной; CASE-гард обязателен — to_tsquery(':*') на
+	// пустом plainto бросает syntax error) OR ILIKE-trgm (подстроки, почты,
+	// фрагменты внутри слова; q_trgm — экранированный паттерн, ESCAPE '\').
+	// q_raw='' — поиска нет. Маршрутизация trgm/fts/both (#705) снесена: любая
+	// маршрутизация — предсказание интента, обе ноги через GIN-индексы 000140
+	// всегда дешевле неверного угадывания. Записи с обезличенным актёром
+	// (actor_id IS NULL) под фильтр actor_ids не попадают.
+	//
+	// Живые ноги актёра (карта #1324, протокол D5, решение #1317 §4): имя и
+	// фамилия читаются LEFT JOIN'ом users (как фото, #1286) — карточка актёра
+	// показывает живые данные, снимки actor_name/actor_email остаются строкой
+	// журнала. Фолбэк на снимок — по дискриминатору actor_id (FK ON DELETE SET
+	// NULL 000140: actor_id IS NULL ⟺ пользователь удалён), НЕ COALESCE'ом:
+	// снимок — составленное «Имя Фамилия» целиком, вмешивать его в «имя без
+	// фамилии» нельзя (ломает ФИО-канон D4). details — пояснения нового
+	// шаблона (D1); NULL у строк до D1. Состав колонок обязан совпадать с
+	// ListActionJournalAfter: адаптер конвертирует ряды общим feedEntryOf.
+	//
+	ListActionJournal(ctx context.Context, arg ListActionJournalParams) ([]ListActionJournalRow, error)
+	// After-нога двустороннего курсора (prepend новых, «новые снизу» ленты):
+	// тот же скоуп, фильтры и поиск, что у ListActionJournal, окно «строго
+	// новее якоря» (after_ts/after_id) — но от якоря В СТОРОНУ НЕПРЕРЫВНОСТИ:
+	// (created_at ASC, id ASC) забирает старейшие строки окна, поэтому
+	// after-цепочка продолжает ленту от якоря вверх и всплеск новых записей
+	// больше страницы доносится целиком (контракт openapi «появившиеся записи
+	// не теряются») — DESC-порядок здесь взял бы из всплеска новейшие и отрезал
+	// старейший хвост. Один sqlc-запрос двух порядков не несёт; контрактный
+	// DESC страницы возвращает адаптер разворотом. Before-пару запрос не принимает:
+	// ноги курсора взаимоисключающие на сервисе. Живые ноги актёра и details —
+	// те же, что у основного запроса (состав колонок обязан совпадать: адаптер
+	// конвертирует ряды общим feedEntryOf).
+	//
+	ListActionJournalAfter(ctx context.Context, arg ListActionJournalAfterParams) ([]ListActionJournalAfterRow, error)
 	ListActiveMembersByPropertyOwner(ctx context.Context, ownerID pgtype.UUID) ([]PropertyMember, error)
 	// The recipient's shared-pool entries for slot accounting. Memberships on
 	// archived properties are excluded: an archived object does not occupy a
 	// recipient slot (issue #163).
 	ListActiveMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
+	// The main list's base order (ticket #577, the personal-pin cutover #1307):
+	// the unpinned incoming order is updated_at DESC. The pinned-first rule is
+	// per-actor since the cutover — the application overlays the actor's
+	// personal pins (user_property_pins) over the merged list and re-sorts
+	// (PropertyService.pinnedFirst), so the SQL pass stays out of pin ordering.
 	ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error)
-	ListAllFreeRemindersByOwner(ctx context.Context, arg ListAllFreeRemindersByOwnerParams) ([]ListAllFreeRemindersByOwnerRow, error)
-	ListAllPendingOperationsWithPastDate(ctx context.Context, arg ListAllPendingOperationsWithPastDateParams) ([]Operation, error)
+	// The active tasks (uncompleted) of the property: the screen's main
+	// sections. Due order with the undated last — the client buckets sections
+	// against the owner's today delivered by the response.
+	ListActiveTasksByProperty(ctx context.Context, arg ListActiveTasksByPropertyParams) ([]ListActiveTasksByPropertyRow, error)
+	// The active tasks of the actor's visible merged feed, due order with the
+	// undated last — the global screen's sections (ticket #521). property_name
+	// is the row's property label; the actor's today travels in the response.
+	// Archived properties are out of the feed (карта #518 решение 9): the
+	// sections stay contiguous for the client's pagination and bucketing.
+	ListActiveTasksGlobal(ctx context.Context, arg ListActiveTasksGlobalParams) ([]ListActiveTasksGlobalRow, error)
+	// The active tasks of the listed properties, the merged feed's visibility
+	// and due order (ticket #547); without_property unions the actor's own
+	// property-less rows in (решение владельца 2026-09-07).
+	ListActiveTasksGlobalOfProperties(ctx context.Context, arg ListActiveTasksGlobalOfPropertiesParams) ([]ListActiveTasksGlobalOfPropertiesRow, error)
+	// The active property-less tasks of the actor's book, the same due order as
+	// the property listings (ticket #521).
+	ListActiveTasksGlobalWithoutProperty(ctx context.Context, arg ListActiveTasksGlobalWithoutPropertyParams) ([]ListActiveTasksGlobalWithoutPropertyRow, error)
+	// Admin tariff listing: every tariff including hidden ones (issue #247).
+	ListAllTariffs(ctx context.Context) ([]Tariff, error)
 	ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error)
 	ListAuditLogsAdmin(ctx context.Context, arg ListAuditLogsAdminParams) ([]AuditLog, error)
-	ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error)
-	ListCompletedOperationsForExport(ctx context.Context, arg ListCompletedOperationsForExportParams) ([]ListCompletedOperationsForExportRow, error)
-	ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error)
-	ListExpiredCancelledSubscriptions(ctx context.Context, arg ListExpiredCancelledSubscriptionsParams) ([]UserSubscription, error)
-	ListExpiredNonRenewingSubscriptions(ctx context.Context, arg ListExpiredNonRenewingSubscriptionsParams) ([]UserSubscription, error)
-	ListFreeRemindersByOwner(ctx context.Context, arg ListFreeRemindersByOwnerParams) ([]FreeReminder, error)
-	ListFreeRemindersByProperty(ctx context.Context, arg ListFreeRemindersByPropertyParams) ([]FreeReminder, error)
-	ListFutureOperationsByLease(ctx context.Context, arg ListFutureOperationsByLeaseParams) ([]ListFutureOperationsByLeaseRow, error)
-	ListLeasesAdmin(ctx context.Context, arg ListLeasesAdminParams) ([]ListLeasesAdminRow, error)
-	ListLeasesByOwner(ctx context.Context, arg ListLeasesByOwnerParams) ([]Lease, error)
-	ListLeasesByProperty(ctx context.Context, arg ListLeasesByPropertyParams) ([]Lease, error)
-	ListLeasesWithTenantForExport(ctx context.Context, arg ListLeasesWithTenantForExportParams) ([]ListLeasesWithTenantForExportRow, error)
-	ListNextRentPaymentsByOwner(ctx context.Context, arg ListNextRentPaymentsByOwnerParams) ([]ListNextRentPaymentsByOwnerRow, error)
-	ListNotificationChannelPreferences(ctx context.Context, userID pgtype.UUID) ([]UserNotificationChannelPreference, error)
-	ListOpenLeasePropertyIDsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
-	ListOpenLeasesWithPastEndDate(ctx context.Context, arg ListOpenLeasesWithPastEndDateParams) ([]Lease, error)
-	ListOperationCategoriesByOwner(ctx context.Context, arg ListOperationCategoriesByOwnerParams) ([]OperationCategory, error)
-	ListOperationDatesByLease(ctx context.Context, leaseID pgtype.UUID) ([]pgtype.Date, error)
-	ListOperationDatesByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]pgtype.Date, error)
-	ListOperationsAdmin(ctx context.Context, arg ListOperationsAdminParams) ([]ListOperationsAdminRow, error)
-	ListOperationsByLease(ctx context.Context, leaseID pgtype.UUID) ([]ListOperationsByLeaseRow, error)
-	ListOperationsByOwner(ctx context.Context, arg ListOperationsByOwnerParams) ([]ListOperationsByOwnerRow, error)
-	ListOperationsByOwnerAsc(ctx context.Context, arg ListOperationsByOwnerAscParams) ([]ListOperationsByOwnerAscRow, error)
-	ListOperationsByProperty(ctx context.Context, arg ListOperationsByPropertyParams) ([]ListOperationsByPropertyRow, error)
-	ListOperationsByPropertyWithStatuses(ctx context.Context, arg ListOperationsByPropertyWithStatusesParams) ([]ListOperationsByPropertyWithStatusesRow, error)
-	ListOperationsByRecurringOperation(ctx context.Context, recurringOperationID pgtype.UUID) ([]ListOperationsByRecurringOperationRow, error)
-	ListOverdueRentOperationsByOwner(ctx context.Context, arg ListOverdueRentOperationsByOwnerParams) ([]ListOverdueRentOperationsByOwnerRow, error)
+	// The subset of the given payment ids whose managing rental row is completed
+	// — the isRentalCompleted read flag (#1158): the payment screen's «Изменить
+	// аренду» lives only while the rental is unfinished («Действия аренды»:
+	// Завершена — финал, чтение и Итоги). The mutation gate query above stays
+	// state-blind on purpose. An empty id list never reaches the query.
+	ListCompletedRentalPaymentIDs(ctx context.Context, arg ListCompletedRentalPaymentIDsParams) ([]pgtype.UUID, error)
+	// The completed journal of the property, newest completions first.
+	ListCompletedTasksByProperty(ctx context.Context, arg ListCompletedTasksByPropertyParams) ([]ListCompletedTasksByPropertyRow, error)
+	// The completed journal of the actor's visible merged feed, newest
+	// completions first (ticket #521); archived properties are out (решение 9).
+	ListCompletedTasksGlobal(ctx context.Context, arg ListCompletedTasksGlobalParams) ([]ListCompletedTasksGlobalRow, error)
+	// The completed journal of the listed properties, newest completions first
+	// (ticket #547); without_property unions the actor's own property-less
+	// journal in (решение владельца 2026-09-07).
+	ListCompletedTasksGlobalOfProperties(ctx context.Context, arg ListCompletedTasksGlobalOfPropertiesParams) ([]ListCompletedTasksGlobalOfPropertiesRow, error)
+	// The completed journal of the actor's property-less tasks, newest
+	// completions first (ticket #521).
+	ListCompletedTasksGlobalWithoutProperty(ctx context.Context, arg ListCompletedTasksGlobalWithoutPropertyParams) ([]ListCompletedTasksGlobalWithoutPropertyRow, error)
+	// The actor's visible slice per the query scope (ADR 0054, ADR 0028):
+	// 'all' — the flat book: the actor's own cards plus the cards bound to
+	// properties the actor owns or shares with an active membership (the merged
+	// visibility the global book page reads);
+	// 'without_property' — the actor's own unbound cards;
+	// 'property' — the cards bound to one property whatever book they live in:
+	// visibility is driven by the binding (the book owner never changes on a
+	// move), and the service has already gated the actor's view capability on
+	// the property. property_id must be set for the property scope.
+	// search ('' = no filter) is a case-insensitive substring match over the
+	// name fields, role, phone, email and messenger username, glued by
+	// contacts_search_text — the same IMMUTABLE expression the trigram index
+	// (migration 000124) is built on; the application layer escapes the ILIKE
+	// metacharacters (ESCAPE '\').
+	// sort 'name' orders by the display name; 'property' — by the bound
+	// property's name, unbound cards first in both directions («Общие
+	// контакты»), contact name ordering inside the groups. Both keys use the
+	// Russian ICU collation to match the client's letter grouping; id ties off.
+	// 'created' orders by the creation moment (ticket #847 — the «свежие
+	// контакты сверху» promise server-side): the key is immutable, so a walked
+	// card never moves across the window boundary.
+	//
+	// The page walks the listing's own order by keyset (ticket #600): the
+	// window resumes strictly after the (sort key, id) the previous page ended
+	// on, so cards created or deleted between loads never duplicate or drop.
+	// The sort keys are mutable (display name, property binding): a rename or
+	// rebind of a card the walk has already passed can move it across the
+	// window boundary — inherent to the visible name/property sort. The
+	// predicate mirrors the ORDER BY branch by branch — the same CASE-gated
+	// keys, the same ICU collations, the unbound-flag leading the property sort
+	// and id tying off ascending in both directions. The cursor blob carries
+	// its sort/order: the application rejects a cursor echoed under another
+	// walk. All cursor args travel together; NULL (no cursor) reads from the
+	// beginning.
+	ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error)
+	// The admin read of one property's contacts (ADR 0054 consequences): the
+	// bound cards only — an unbound contact belongs to no property card.
+	ListContactsAdmin(ctx context.Context, arg ListContactsAdminParams) ([]Contact, error)
+	// The TTL-expiry batch of the pending-payment worker (issue #616):
+	// still-pending payments whose payer form deadline ran out — the server-side
+	// expiry is the truth that marks them failed and unlocks the tariff choice.
+	// Unlike the reconciliation selections this batch does not require a provider
+	// reference: a crashed initiation must expire too. The worker re-checks and
+	// locks every row in its own transaction.
+	ListExpiredPendingSubscriptionPayments(ctx context.Context, arg ListExpiredPendingSubscriptionPaymentsParams) ([]SubscriptionPayment, error)
+	// The actor's visible non-archived properties — the «Объекты» screen's
+	// stacks (ticket #575); the rules of each stack arrive on the feed query's
+	// rows and the application layer groups them. The search ('' = no filter)
+	// is a case-insensitive substring over the name and the address — it
+	// filters the objects, never their stacks. The order is the actor's
+	// personal pin's (ticket #577, the cutover #1307): the pinned first — among
+	// themselves by the pin time — then the rest by name. pinned_at travels
+	// from the actor's row in user_property_pins (the LEFT JOIN) to the cards
+	// for the pin mark, photo_url is the card avatar (ticket #582): with the
+	// private photos (ADR 0065, #1227) one image per object, streamed by the
+	// backend — the same-origin path, or NULL without a photo; type picks the
+	// avatar's placeholder glyph (карта #1217, #1244).
+	ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPaymentObjectsParams) ([]ListGlobalPaymentObjectsRow, error)
+	// Payments context queries: the global surface of the payment rules
+	// (tickets #575, #576) — the merged «Платежи» feed, the search with its
+	// matched-category chips, the «Объекты» stacks and the favorites manual
+	// order save. Rule CRUD lives in payments_rules.sql, operations in
+	// payments_operations.sql, the tick in payments_tick.sql.
+	//
+	// The visibility predicate is the global listings' (ticket #521): the
+	// actor's own rows plus the rows of the properties they share with an
+	// active membership (ADR 0028 read scope); a suspended membership grants
+	// no read. The composition lives in one place — the SQL function
+	// actor_can_read_property (000142, ADR 0028's derived read); the queries
+	// below call it and keep the feed's own stricter archive cut beside it:
+	// the rules of archived properties are out of every read (map #573) —
+	// the owner included, unlike the history canon where the owner's leg is
+	// unconditional. No single scope exists to resolve through the policy
+	// port — the actor-scoped read carries its visibility predicate here,
+	// beside the data.
+	//
+	// Every per-row schedule computation (nearest date, overdue) runs against
+	// the property owner's calendar date (ADR 0048): the merged feed mixes
+	// owners, so the reads take the owner→today map as parallel csv lists —
+	// uuids and ISO dates hold no commas — joined by owner_id (payments
+	// always carry owner_id of the property's owner; there is no re-binding).
+	// The distinct data owners of the actor's visible non-archived properties
+	// — the keys of the owner→today map the feed and the counters join on.
+	// Objects without rules contribute their owner too: the «Объекты» read
+	// lists them all the same.
+	ListGlobalPaymentOwnerTodays(ctx context.Context, actor pgtype.UUID) ([]pgtype.UUID, error)
+	// The actor's visible merged feed of payment rules (ticket #575): one row
+	// per rule with the property's display name, the owner's today and the
+	// rule's schedule aggregates — the earliest stored planned operation on or
+	// after today («Ближайший»; the application layer falls back to the pure
+	// projection when the row has none, the pause and the settled rule being
+	// the true nulls) and the overdue aggregates (planned with the date before
+	// today): the count, the oldest date — «N дней» — and the oldest
+	// operation's id, the overdue card's link target (ticket #578). Cancelled
+	// tombstones never exist for reads. The search ('' = no filter) is a
+	// case-insensitive substring over the title and the user category's name;
+	// the default catalog's label is not in the database — the application
+	// layer expands the query into the matching slugs (category_slugs, '' when
+	// none) and they match as a set.
+	//
+	// The reading order is (created_at, id) and the page walks it by keyset
+	// (ticket #597): the window resumes strictly after the (created_at, id)
+	// the previous page ended on, so rows created, deleted or renamed between
+	// loads never duplicate or drop. The property name is deliberately not a
+	// sort key — a rename would move rows across the window. Both cursor args
+	// travel together; NULL (no cursor) reads from the beginning.
+	// The actor's personal favorite (the cutover #1308, D12): the star and the
+	// order position are the reading actor's own — a join, not the frozen
+	// payments columns; absent row = not a favorite of this actor.
+	ListGlobalPaymentRules(ctx context.Context, arg ListGlobalPaymentRulesParams) ([]ListGlobalPaymentRulesRow, error)
+	// Объекты области для шита фильтров: те же свойства, что отдаёт лента,
+	// плюс фото-аватар карточки (канон #582). С приватными фото (ADR 0065,
+	// #1227) аватар один на объект и живёт в properties.photo_key; наружу —
+	// относительный same-origin путь стриминга через бэкенд.
+	// '' = фото нет (COALESCE: sqlc верит NOT NULL колонке, а CASE по NULL-ключу
+	// промахивается в NULL). Сужение property_ids — тот же фильтр ленты.
+	// Область — как у ленты (#1412): глобально только свои объекты читателя,
+	// сужение — канон actor_can_read_property (иначе чип чужого объекта
+	// фильтровал бы ленту, которая чужих строк не отдаёт).
+	//
+	ListHistoryFilterObjects(ctx context.Context, arg ListHistoryFilterObjectsParams) ([]ListHistoryFilterObjectsRow, error)
+	// Опции фильтров ленты (ADR 0061 §7, тикет #708): участники области =
+	// владелец ∪ текущие участники (включая приостановленных — suspend не
+	// вытирает их записи из журнала) ∪ все актёры журнала области (отозванные
+	// и вышедшие остаются фильтруемыми — записи переживают отзыв). Живые имена
+	// читаются из users: чип фильтра — метаданные UI, не строка журнала; снимки
+	// строк остаются в самом журнале. Обезличенные актёры (пользователь удалён)
+	// не фильтруемы по определению. Отображаемое имя собирает адаптер по канону
+	// access.DisplayNameOf («Пользователь» вместо имени — карта #1105, аменд #1123).
+	//
+	// Область двух родов (D14 изоляции, спека #1302, аудит #1298, тикет #1305;
+	// CTE scope_property — единая трёхногая область UNION'а):
+	// глобальная лента (property_ids = '') — только МОИ объекты читателя
+	// (p.owner_id = actor, архивный срез тот же, что у владельческой ноги
+	// канона 000142: свои архивные объекты остаются); получателю shared-доступа
+	// владелец и соучастники чужого объекта в глобальном фильтре не раскрыты.
+	// Суженная лента (property_ids задан — per-object фильтр /history/
+	// properties/{id} и страница пары #841) — канон actor_can_read_property по
+	// запрошенным id: собственник и соучастники остаются (D6 — без изменений).
+	//
+	// is_owner (#711, макет 2067-163528): замок владельца — пользователь —
+	// владелец ХОТЯ БЫ ОДНОГО объекта области (bool_or по ноге properties
+	// UNION'а); в глобальной области это сам читатель, в суженной — владелец
+	// суженных объектов. first_name — имя без фамилии (u.name) для строки
+	// «(Вы)»; '' у безымянных (тогда имя в чипе — «Пользователь»).
+	// role (#840, макет 2184-94261): иконка роли строки шита — максимальный
+	// доступ в области (MIN ранга: 0 owner, 1 full_access, 2 viewer); живая
+	// нога property_members сильнее снимка журнала (actor_role) — она и есть
+	// ранг строки members. role='owner' жёстко совпадает с is_owner: снимок
+	// 'owner' от бывшего владельца в журнале замка не даёт (фолбэк в
+	// full_access).
+	// status (#1324, протокол D6, решение #1317 §5): секции «Текущие»/«Удалён-
+	// ные» шита фильтров — computed на лету, без новой таблицы: bool_or(is_live)
+	// по ногам CTE. Живые ноги: владелец (owner_id NOT NULL) и членство
+	// property_members — включая suspended (suspend ставит status='suspended',
+	// строку не стирает — 000095; ревок/выход удаляет строку). Мёртвая нога —
+	// только журнал. Повторное добавление живит участника автоматически (новая
+	// членская строка); мульти-скоуп: жив хотя бы в одном объекте области
+	// (bool_or по всем кортежам), при сужении property_ids до одного объекта
+	// область — этот объект (та же семантика на узкой области). Обезличенные
+	// (actor_id IS NULL) в участники не попадают — как и раньше.
+	//
+	ListHistoryFilterParticipants(ctx context.Context, arg ListHistoryFilterParticipantsParams) ([]ListHistoryFilterParticipantsRow, error)
+	// The user's feed page, newest first, deleted rows never appear. The walk
+	// resumes strictly after the (created_at, id) the previous page ended on
+	// (канон #597), so rows created between loads never duplicate or drop; both
+	// cursor args travel together, NULL reads from the beginning. unread_only
+	// filters the page to unread rows (the partial index
+	// idx_notifications_user_unread serves the filtered walk); page_limit 0 = no
+	// limit.
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
+	ListOpenCardBindingSessionsByUserID(ctx context.Context, userID pgtype.UUID) ([]CardBindingSession, error)
+	// The operations of one scope with pagination (limit/offset), the view status
+	// filter ('' is any), an inclusive period on the listing's date key, the
+	// sort key (date = the planned operation date — the payment history's
+	// default; paid_date = the actual payment fact, ticket #992), the sort
+	// direction, a search filter ('' = no filter; the application layer escapes
+	// the ILIKE metacharacters, ESCAPE '\'): a case-insensitive substring over
+	// the title and the category snapshot — and, when the query reads as an
+	// amount, its digits inside the amount's decimal digits in kopecks (the
+	// display amount without separators; ticket #476), the direction filter (''
+	// is any) and the comma-separated category slugs filter ('' is any; rows
+	// without a category snapshot never match a slug).
+	// The period bounds follow the sort key: at paid_date a planned row (no
+	// fact) falls out of every window, and sorts below the facts in both
+	// directions (NULLS LAST) — the operational feed reads payment facts.
+	// A NULL payment widens the scope from one rule to every rule of
+	// the property: "planned" and "overdue" split the stored planned rows against
+	// the owner's today — overdue is computed here from the same truth the
+	// response items report, in exactly one place (domain.OperationView mirrors
+	// this predicate for already-loaded rows; ticket #461).
+	ListOperations(ctx context.Context, arg ListOperationsParams) ([]ListOperationsRow, error)
+	// The global read side (ticket #540): the actor-scoped cross-property read
+	// over the paid facts of their own book plus the properties they can view.
+	// The visibility predicate is this SQL's (the tasks global feed precedent,
+	// ticket #521): no single scope exists to resolve through the
+	// policy port, and an active membership grants the read right here; a
+	// suspended one does not. The feed is paid-only — planned/overdue are the
+	// property screens' vocabulary — and the archived properties are out of it
+	// by default: the property join doubles as the archive cut, lifted only by
+	// the include_archived opt-in (ticket #549) under the same visibility
+	// predicate.
+	// The propertyIds filter ('' is any) is validated through the view gate by
+	// the application layer before this SQL runs — the uuid[] cast never sees a
+	// foreign id (its row would be invisible anyway) or a non-uuid.
+	// One page of the actor's visible merged feed, the property listing's
+	// ordering (the sort key, id tiebreak) and filter vocabulary minus the status
+	// filter: paid is the feed's only stored status. property_name is the row's
+	// property label — the global screen's row label.
+	//
+	// The sort key (ticket #992): date — the planned operation date (the
+	// default), paid_date — the actual payment fact the operational feeds read;
+	// the feed is paid-only, so the fact is never NULL (CHECK
+	// paid ⟺ paid_date NOT NULL). The period bounds follow the same key.
+	//
+	// The page walks the feed's own order by keyset (ticket #597): the window
+	// resumes strictly after the (sort key, id) the previous page ended on, so
+	// rows created, deleted or renamed between loads never duplicate or drop.
+	// The id tiebreak runs DESC in both directions, so the continuation is
+	// (date ahead of the cursor) or (same date, id below it); the direction
+	// only flips the date comparison. Both cursor args travel together; NULL
+	// (no cursor) reads from the beginning.
+	ListPaidOperationsGlobal(ctx context.Context, arg ListPaidOperationsGlobalParams) ([]ListPaidOperationsGlobalRow, error)
+	ListParticipantInvitationsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantInvitationsByPropertiesRow, error)
+	ListParticipantInvitationsForRemoval(ctx context.Context, arg ListParticipantInvitationsForRemovalParams) ([]ListParticipantInvitationsForRemovalRow, error)
+	ListParticipantInvitationsForRemovalByOwner(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantInvitationsForRemovalByOwnerRow, error)
+	ListParticipantMembershipsByProperties(ctx context.Context, propertyIds string) ([]ListParticipantMembershipsByPropertiesRow, error)
+	// The mutation side of the owner's participant aggregate (issue #694):
+	// «Отозвать и удалить» enumerates one person's legs within the acting
+	// actor's manage scope. Unlike the read scope above, archived properties are
+	// INCLUDED here: revoking access keeps working on archived objects (issue
+	// #163) — an archived leg must not survive a full removal, or the person
+	// would silently reappear on unarchive. The scope predicate is the
+	// authorization: rows outside it never leave the database.
+	ListParticipantMembershipsForRemoval(ctx context.Context, arg ListParticipantMembershipsForRemovalParams) ([]ListParticipantMembershipsForRemovalRow, error)
+	// The global «Отозвать доступ всем» (issue #1310) walks the same removal
+	// scope without the per-person filter: every membership and every pending
+	// invitation on the acting owner's properties, archived included (issue
+	// #163). The scope predicate stays the authorization: rows outside it never
+	// leave the database.
+	ListParticipantMembershipsForRemovalByOwner(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantMembershipsForRemovalByOwnerRow, error)
+	// The «Участник (владельца)» read model (issue #693): an aggregate over
+	// property_members ∪ property_member_invitations with no table of its own
+	// (chart decision of map #692). The reading actor's scope is the set of
+	// non-archived properties the actor owns; since the D8 decision of the
+	// sharing effort (issue #1304) member management — and with it the hub — is
+	// the owner's prerogative, so a full_access member of a foreign object sees
+	// none of its owner's participants; archived properties stay invisible like
+	// everywhere else on the platform (issue #163). The scope doubles as the
+	// authorization: rows outside it never leave the database.
+	//
+	// THE MANAGE-SCOPE PREDICATE (the «actor_can_manage» canon): owner-only
+	// since D8 (issue #1304; migration 000157) is the authorization of the five
+	// scope queries in this file (read scope, both per-person removal listings,
+	// both owner-wide removal listings of the global revoke #1310; the two
+	// ByProperties listings filter by the already-scoped id list). The predicate
+	// lives in one place — the SQL function actor_can_manage (migration 000135,
+	// issue #794) — which the queries below call; before #794 sqlc could not
+	// share the text between query bodies, so the predicate was kept as three
+	// byte-identical copies pinned by the matrix test.
+	// TestParticipantRepository_ManageScopePredicateMatrix runs the same actor
+	// verdict across these queries and stays the gate: semantic drift of the
+	// function fails there instead of opening a silent privacy hole.
+	// The scope rows carry the leg avatar pair (решение #1286, остаток #1244
+	// п.3): the property type — the placeholder glyph's key — and the photo's
+	// same-origin streaming path (ADR 0065), so the participant read model's
+	// legs are self-sufficient and the client needs no /properties join (a cold
+	// cache no longer renders BoldHome).
+	ListParticipantScopeProperties(ctx context.Context, actorID pgtype.UUID) ([]ListParticipantScopePropertiesRow, error)
+	// One zone's auto-pay-executed operations as of the zone's today (#1169,
+	// карта #1162; решение владельца по гриллингу #1167): planned occurrences
+	// of auto-pay rules that the TICK extinguished in their own day —
+	// status='paid', paid_source='auto_pay', paid_date = the operation date —
+	// on non-archived properties. A manual «Оплатить сейчас» is silent: the
+	// stamp is the tick's alone (the owner's decision — the event is about the
+	// auto charge, not about any payment). Only the live day: the leg lists
+	// date = today — a downtime's missed days are not backfilled (решение
+	// владельца, #1167; the overdue leg speaks for the unpaid past instead).
+	// The instant gate (#1168): the boundary is the wall clock 10:00 of the
+	// operation date — the sweep must not publish ahead of it. The per-payment
+	// flag (гейты #1189): молчащие правила (notify_auto_paid = false) мимо —
+	// событие «Автоплатёж исполнен» приходит только по разрешившим уведомление.
+	ListPaymentAutoPaidTargets(ctx context.Context, arg ListPaymentAutoPaidTargetsParams) ([]ListPaymentAutoPaidTargetsRow, error)
+	// The first page, no cursor: newest first — the feed's one order.
+	ListPaymentChanges(ctx context.Context, arg ListPaymentChangesParams) ([]ListPaymentChangesRow, error)
+	// The after-leg of the bidirectional keyset (the prepend of newer rows): an
+	// ASC walk strictly after the anchor, so a burst wider than the page is
+	// carried from the anchor toward the fresh edge without holes; the adapter
+	// restores the feed's DESC order.
+	ListPaymentChangesAfter(ctx context.Context, arg ListPaymentChangesAfterParams) ([]ListPaymentChangesAfterRow, error)
+	// The next-older page: rows strictly before the (created_at, id) key, newest
+	// first — the keyset continuation the index
+	// (payment_id, created_at DESC, id DESC) serves.
+	ListPaymentChangesBefore(ctx context.Context, arg ListPaymentChangesBeforeParams) ([]ListPaymentChangesBeforeRow, error)
+	// The «На оплату» section's rows (ticket #1346): one row per (rule,
+	// operation) pair standing in the reminder window — planned operations with
+	// D−N ≤ today ≤ D on the rules with the reminder armed (1/3/7) and auto-pay
+	// OFF (решение владельца: напоминание у автоплатёжных стреляет, но в секции
+	// их нет), the feed's own visibility predicate and archive cut, completed
+	// rules cut (the #1340 gate the future reader inherits). The window joins
+	// the rule's operations laterally the feed's way: the driver is
+	// idx_payments_reminder_offset on the rules side, the per-rule operation
+	// scan rides idx_operations_payment_date with the sargable date bounds —
+	// no owner-side operation index needed at this scale.
+	//
+	// The pause needs no gate: occurrences inside a pause are never generated
+	// and the tick removed the future planned when the pause opened, so a
+	// paused rule keeps no in-window operation (the same structural cut the
+	// derivation rides for the timezone shifts, ADR 0048 п.5). Overdue
+	// operations (D < today) are out by the lower bound — they live in «Все
+	// просроченные». Days-left is the window's own math (D − today, 0..7 by
+	// construction); the reading order runs the real days ascending (решение
+	// владельца 13.10, #1347: the page groups the rows per real day, the chip
+	// reverses the group order client-side) with the operation's id the
+	// same-day tiebreak. No window: the section comes back whole — the
+	// materialization keeps at most two window operations per rule (today's
+	// and the next future one), the reminder is armed on a fraction of the
+	// rules.
+	ListPaymentDue(ctx context.Context, arg ListPaymentDueParams) ([]ListPaymentDueRow, error)
+	// One zone's due-day operations as of the zone's today (решение #737, тип
+	// №2: в день срока): planned, dated exactly today, on rules without the
+	// auto-pay mode — an auto-pay rule's due occurrence is extinguished by the
+	// tick the same day (ADR 0049) and never asks to be paid; if the auto
+	// charge did not happen, the operation becomes overdue and the overdue leg
+	// speaks. The rule's title travels (not the operation's snapshot): the
+	// notification's link lands on the payment's page, the copy names what the
+	// reader sees there. The instant gate (#1168, решение владельца 06.10 по
+	// гриллингу #1167): the leg's boundary is the wall clock 10:00 of the
+	// operation date in the owner's timezone — the hourly backstop sweep must
+	// not publish ahead of it, the same instant predicate the booking leg and
+	// the tasks scan use.
+	ListPaymentDueTargets(ctx context.Context, arg ListPaymentDueTargetsParams) ([]ListPaymentDueTargetsRow, error)
 	ListPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]PaymentMethod, error)
+	// One zone's overdue operations as of the zone's today (решение #737, тип
+	// №3: 1-й день просрочки): planned, dated strictly before today — auto-pay
+	// rules included, the tick never backdates an auto charge (ADR 0049). The
+	// dedup key (rule, operation date) keeps a long-unpaid operation single —
+	// the sweep lists it daily, the publication inserts nothing. The instant
+	// gate (#1168): the leg's boundary is the wall clock 22:00 of the day after
+	// the operation date in the owner's timezone — yesterday's occurrence waits
+	// for its 22:00 even though the date says overdue since the zone's midnight;
+	// a long-unpaid operation's boundary is long past and the gate keeps it
+	// sweeping (the persistent leg's semantics).
+	ListPaymentOverdueTargets(ctx context.Context, arg ListPaymentOverdueTargetsParams) ([]ListPaymentOverdueTargetsRow, error)
+	// One zone's reminder-day operations as of the zone's today (карта #822,
+	// #824): planned, on rules with a reminder set, whose reminder day — the
+	// operation date minus the rule's lead time (1/3/7) — is exactly today.
+	// Auto-pay rules included: напоминание живёт независимо от auto_pay
+	// (решение владельца, #823). The dedup key (rule, operation date) keeps
+	// the occurrence single even if the lead time changes after firing. The
+	// instant gate (#1168): the leg's boundary is the wall clock 10:00 of the
+	// reminder day in the owner's timezone — the sweep must not publish ahead
+	// of it.
+	ListPaymentReminderTargets(ctx context.Context, arg ListPaymentReminderTargetsParams) ([]ListPaymentReminderTargetsRow, error)
+	// The payments scan's sweep targets (карта #734, #749; ADR 0048 p.3): the
+	// distinct owner timezones having planned payment-rule operations on
+	// non-archived properties — the only operations the scan can fire for (the
+	// ticks' status canon, same as the rental scan; the join to payments also
+	// keeps the manual facts and the deleted rules' orphans out). Stateless —
+	// every run re-lists, no per-zone state is kept.
+	ListPaymentScanZones(ctx context.Context) ([]string, error)
+	// The payments scan's booking list of the auto-paid leg (#1169): the
+	// planned occurrences of auto-pay rules on non-archived properties whose
+	// boundary — the wall clock 10:00 of the operation date in the owner's
+	// timezone — falls in the window (from, until]. The occurrence is planned
+	// at booking time; whether the tick (or a manual payment) extinguished it
+	// by the wake-up is the delivery-time resolution's call. Only
+	// notify_auto_paid-правила бронят (#1189) — молчащие не зовут событие.
+	ListPaymentScheduledAutoPaidTargets(ctx context.Context, arg ListPaymentScheduledAutoPaidTargetsParams) ([]ListPaymentScheduledAutoPaidTargetsRow, error)
+	// The payments scan's booking list of the due leg (issue #776): the planned
+	// operations whose due boundary — the wall clock 10:00 of the operation
+	// date read in the owner's timezone (#1168, решение по гриллингу #1167:
+	// «Оплатите платёж» больше не будит в полночь) — falls in the window
+	// (from, until]. Auto-pay rules
+	// excluded like the sweep's due leg (an auto-pay rule's due occurrence is
+	// extinguished by the tick the same day, ADR 0049); manual facts and
+	// cancelled tombstones stay out (status='planned' + the join to payments);
+	// non-archived property only (the ticks' canon).
+	ListPaymentScheduledDueTargets(ctx context.Context, arg ListPaymentScheduledDueTargetsParams) ([]ListPaymentScheduledDueTargetsRow, error)
+	// The payments scan's booking list of the overdue leg (issue #776): the
+	// planned operations whose overdue boundary — the wall clock 22:00 of the
+	// day after the operation date read in the owner's timezone (#1168, по
+	// гриллингу #1167: просрочка приходит вечером, не в полночь) — falls in the
+	// window (from, until]. Auto-pay rules included (the tick never backdates an auto
+	// charge, ADR 0049); the wall clock 22:00 is
+	// the boundary, a DST day rolls it with the wall clock.
+	ListPaymentScheduledOverdueTargets(ctx context.Context, arg ListPaymentScheduledOverdueTargetsParams) ([]ListPaymentScheduledOverdueTargetsRow, error)
+	// The payments scan's booking list of the reminder leg (карта #822, #824):
+	// the planned operations of rules with a reminder set whose reminder
+	// boundary — the wall clock 10:00 of (operation date − lead time) read in
+	// the owner's timezone (#1168, по гриллингу #1167) — falls in the window
+	// (from, until]. Auto-pay rules included
+	// (the reminder is independent of auto_pay); the wall clock 10:00 is
+	// the boundary, a DST day rolls it with the wall clock.
+	ListPaymentScheduledReminderTargets(ctx context.Context, arg ListPaymentScheduledReminderTargetsParams) ([]ListPaymentScheduledReminderTargetsRow, error)
+	// The property's rules in creation order (stable for the list response).
+	// search ('' = no filter) is a case-insensitive substring match on the title;
+	// the application layer escapes the ILIKE metacharacters (ESCAPE '\').
+	ListPaymentsByProperty(ctx context.Context, arg ListPaymentsByPropertyParams) ([]ListPaymentsByPropertyRow, error)
 	// All pending invitations for an email, oldest first: activation at
 	// registration is FIFO across properties (T5, issue #161).
 	ListPendingInvitationsByEmail(ctx context.Context, email string) ([]PropertyMemberInvitation, error)
-	ListPendingOperationsWithPastDate(ctx context.Context, arg ListPendingOperationsWithPastDateParams) ([]Operation, error)
-	ListPendingPayments(ctx context.Context, arg ListPendingPaymentsParams) ([]SubscriptionPayment, error)
 	ListPendingSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
-	ListPendingUpgradePayments(ctx context.Context, arg ListPendingUpgradePaymentsParams) ([]SubscriptionPayment, error)
 	ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error)
-	ListPropertyContactsAdmin(ctx context.Context, arg ListPropertyContactsAdminParams) ([]PropertyContact, error)
-	ListPropertyContactsByProperty(ctx context.Context, arg ListPropertyContactsByPropertyParams) ([]PropertyContact, error)
+	// The property's active members' user ids — the object events' recipients
+	// besides the owner (решение #737: активные участники, «Просмотр»
+	// включительно; a suspended membership is not an active participant).
+	ListPropertyActiveRecipients(ctx context.Context, propertyID pgtype.UUID) ([]pgtype.UUID, error)
+	// The payments half of the list red dot (ticket #585, резолюция #584): the
+	// subset of the given properties holding at least one overdue planned
+	// operation — a stored planned row dated before the owner's today, the same
+	// predicate ListOperations resolves as the overdue view status in exactly
+	// one place. One batched read per data owner; cancelled tombstones are not
+	// planned rows and never match.
+	ListPropertyIDsWithOverdueOperations(ctx context.Context, arg ListPropertyIDsWithOverdueOperationsParams) ([]pgtype.UUID, error)
 	ListPropertyMemberInvitations(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMemberInvitation, error)
 	ListPropertyMembers(ctx context.Context, propertyID pgtype.UUID) ([]PropertyMember, error)
 	ListPropertyMembersByUser(ctx context.Context, userID pgtype.UUID) ([]ListPropertyMembersByUserRow, error)
-	ListPropertyPhotosByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]PropertyPhoto, error)
-	ListPropertyPhotosByPropertyIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]PropertyPhoto, error)
 	ListPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]PushSubscription, error)
+	// The frame audience of one object (карта #714, тикет #716; ADR 0062 §4):
+	// the derived read access (ADR 0028) resolved at the moment of publication.
+	// The predicate lives in one place — the SQL function actor_can_read_property
+	// (000142, the successor of actor_can_read_history 000137): the owner reads
+	// at any property status, an active member only while the property is not
+	// archived (the archive's invisibility canon #163), a suspended membership
+	// is no access (#158 T4), a deleted property resolves to nobody — its frames
+	// simply die. The query enumerates the candidates (the owner plus the
+	// object's members — a small set) and lets the function give the verdict, so
+	// the canon is not re-encoded here.
+	ListRealtimePropertyReaders(ctx context.Context, id pgtype.UUID) ([]pgtype.UUID, error)
 	ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error)
 	ListRecentUsersAdmin(ctx context.Context) ([]ListRecentUsersAdminRow, error)
-	ListRecurringOperationsByOwner(ctx context.Context, arg ListRecurringOperationsByOwnerParams) ([]RecurringOperation, error)
-	ListRecurringOperationsByProperty(ctx context.Context, arg ListRecurringOperationsByPropertyParams) ([]RecurringOperation, error)
-	ListRecurringOperationsByPropertyID(ctx context.Context, propertyID pgtype.UUID) ([]RecurringOperation, error)
-	ListRemindersByLease(ctx context.Context, arg ListRemindersByLeaseParams) ([]Reminder, error)
-	ListRemindersByOperation(ctx context.Context, arg ListRemindersByOperationParams) ([]Reminder, error)
-	ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error)
-	ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error)
+	// The rental-completed scan's sweep targets (карта #734, #748; ADR 0048
+	// p.3): the distinct owner timezones having unfinished rentals with a
+	// planned end on non-archived properties — the only rentals the scan can
+	// fire for (the ticks' status canon: an archived property's rentals
+	// mutations are rejected, the action buttons would be dead ends).
+	// Stateless — every run re-lists, no per-zone state is kept.
+	ListRentalCompletedScanZones(ctx context.Context) ([]string, error)
+	// One zone's needs_attention rentals as of the zone's today (решение #737,
+	// тип №1: the day after the planned end): not completed, planned end
+	// strictly before today, non-archived property. The property snapshot
+	// (name, address) travels for the publication cards (решение владельца
+	// 19.09.2026, #745).
+	ListRentalCompletedTargets(ctx context.Context, arg ListRentalCompletedTargetsParams) ([]ListRentalCompletedTargetsRow, error)
+	// The scope's payment ids a rental row references (any rental state) — the
+	// payments rule-mutation gate's input and the isRentalManaged read flag
+	// (ADR 0053, ticket #818): the rent payment is created, edited and deleted
+	// only through the rental. An empty id list never reaches the query.
+	ListRentalManagedPaymentIDs(ctx context.Context, arg ListRentalManagedPaymentIDsParams) ([]pgtype.UUID, error)
+	// The rental scan's booking list of the completed boundary (issue #777):
+	// the unfinished rentals whose boundary — 00:00 of the day after the
+	// planned end read in the owner's timezone — falls in the window (from,
+	// until]. The wall-clock midnight of the next calendar date is the
+	// boundary, a DST day rolls it with the wall clock (the payments' overdue
+	// convention); non-archived property only (the ticks' canon).
+	ListRentalScheduledCompletedTargets(ctx context.Context, arg ListRentalScheduledCompletedTargetsParams) ([]ListRentalScheduledCompletedTargetsRow, error)
+	// The property's rentals: unfinished first (newest start on top), then the
+	// completed ones by completion date, fresh on top (ADR 0053 §4).
+	ListRentalsByProperty(ctx context.Context, arg ListRentalsByPropertyParams) ([]ListRentalsByPropertyRow, error)
+	// The scheduling seam's in-transaction handover (issue #775): the rule's
+	// standing uncompleted tasks' ids, read after the materialization tick has
+	// settled the rule's rows. The freshly materialized and the kept standing
+	// tasks travel alike — notifications re-resolves each task's liveness and
+	// term itself, so stale or kept ids are safe to hand over.
+	ListRuleUncompletedTaskIDs(ctx context.Context, ruleID pgtype.UUID) ([]pgtype.UUID, error)
 	ListSeenPopups(ctx context.Context, userID pgtype.UUID) ([]string, error)
-	// Payments stuck in the refunding state (refund reserved but never finalized or
-	// reverted). updated_at is trigger-maintained and marks entry into refunding.
-	ListStaleRefundingPayments(ctx context.Context, arg ListStaleRefundingPaymentsParams) ([]SubscriptionPayment, error)
-	ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error)
+	// The devices list shows live sessions only: expired rows survive up to the
+	// cleaner retention (a week) after expires_at, and GetSessionByTokenHash
+	// already refuses them — the list must not show them as active either.
+	ListSessionsByUserID(ctx context.Context, arg ListSessionsByUserIDParams) ([]ListSessionsByUserIDRow, error)
+	// Admin payment views (issue #254). The phone filter matches the stored
+	// ciphertext (deterministic encryption) or the plaintext of a not-yet-
+	// encrypted row, mirroring ListUsersAdmin; user input is never interpolated
+	// into SQL — sort/order map to columns through fixed CASE arms.
 	ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error)
-	ListSubscriptionPaymentsByUserID(ctx context.Context, userID pgtype.UUID) ([]SubscriptionPayment, error)
-	ListSubscriptionsInExpiredGrace(ctx context.Context, arg ListSubscriptionsInExpiredGraceParams) ([]UserSubscription, error)
-	ListSubscriptionsUpForRenewal(ctx context.Context, arg ListSubscriptionsUpForRenewalParams) ([]UserSubscription, error)
-	ListSubscriptionsWithPendingChange(ctx context.Context, arg ListSubscriptionsWithPendingChangeParams) ([]UserSubscription, error)
+	// The reconciliation batch of the payment phases (issues #252, #254): pending
+	// payments stale enough that a webhook is presumed lost, and payments stuck in
+	// the refunding reservation. The provider reference is mandatory in every
+	// selection — without it there is nothing to query at the provider. The order
+	// follows the staleness clock the phase set: updated-stale batches
+	// (updated_before set) by updated_at, the rest by created_at, each with id as
+	// the tie-breaker.
+	ListSubscriptionPaymentsBySelection(ctx context.Context, arg ListSubscriptionPaymentsBySelectionParams) ([]SubscriptionPayment, error)
+	// The user's payment history (issues #250, #619): newest first, with the card
+	// the payment was charged with resolved for display — the payment's own
+	// snapshot first, the bound method's mask as the fallback for payments
+	// created before the snapshot existed. A method deleted after the snapshot
+	// was taken changes nothing; a deleted method behind a snapshot-less payment
+	// resolves to NULL.
+	ListSubscriptionPaymentsWithCardByUserID(ctx context.Context, userID pgtype.UUID) ([]ListSubscriptionPaymentsWithCardByUserIDRow, error)
+	ListSubscriptionTransitionsBySubscription(ctx context.Context, subscriptionID pgtype.UUID) ([]SubscriptionTransition, error)
+	// Worker batch selections (issue #252, ADR 0008 lifecycle phases; one
+	// parameterized query per aggregate since issue #286). The phases set the
+	// values through application.SubscriptionSelection / PaymentSelection; a
+	// bound left NULL drops its condition. Each listing is a plain selection; the
+	// processing transaction re-reads and locks the row by user id, so a
+	// concurrent mutation between listing and processing is re-checked under the
+	// lock and never applied twice. The composite indexes of migration 000107
+	// back every selection: the required status prefix narrows to the phase's
+	// status, the second column serves the phase-clock range and the batch order.
+	// The order follows the phase clock: deferred-change batches
+	// (pending_change_due set) by pending_change_at, everything else by
+	// valid_until, each with id as the tie-breaker — the oldest-first fairness of
+	// the batches. A non-NULL user_id narrows the selection to one subscription:
+	// the under-lock re-check of a phase, run in the transaction that locked the
+	// row.
+	//
+	// The grace_retry_due bound (ticket #431, spec #419) selects grace
+	// subscriptions with a due dunning retry: the retry schedule is anchored at
+	// the latest grace entry (the newest reason='grace_entered' transition) and
+	// fires twice — +24 h and +72 h — each boundary consumed by any payment
+	// created at or after the entry (a prior retry or a manual payment; a
+	// successful manual payment also removes the row through the status bound).
+	// The window must still be open and an active payment method linked: without
+	// one there is nothing to charge. The 24/72-hour offsets are product
+	// constants mirrored by graceRetryFirstAfter/graceRetrySecondAfter in
+	// billing/application/phases.go — no schema or config knob.
+	ListSubscriptionsBySelection(ctx context.Context, arg ListSubscriptionsBySelectionParams) ([]UserSubscription, error)
 	// The FIFO recovery queue. Memberships on archived properties are excluded:
 	// an archived object does not occupy a recipient slot (issue #163), so a free
 	// slot must not be wasted on them; they re-enter the selection on unarchive.
+	// Predicate and order are shared with ListSuspendedSharedWithOwner below
+	// (the list's blur-card placeholders, ticket #702) — change them together.
 	ListSuspendedMembersByUser(ctx context.Context, userID pgtype.UUID) ([]PropertyMember, error)
+	// The blur-cards of the recipient's main property list (ticket #702):
+	// suspended memberships on non-archived properties — the same predicate and
+	// FIFO order the hidden-shared count used (#158 T4, #163) — each with the
+	// object's own card data (title, address — the card renders for real under
+	// the blur, Figma 2213-99113) and the data owner id for the reason sheet's
+	// contact row. Owner display data and the first photo resolve through the
+	// access context's follow-up lookups; the access SQL never joins users.
+	ListSuspendedSharedWithOwner(ctx context.Context, userID pgtype.UUID) ([]ListSuspendedSharedWithOwnerRow, error)
+	// User-facing tariff listing: hidden tariffs stay referable by FK but are not
+	// offered (issue #245).
 	ListTariffs(ctx context.Context) ([]Tariff, error)
-	ListTenantContactsAdmin(ctx context.Context, arg ListTenantContactsAdminParams) ([]ListTenantContactsAdminRow, error)
-	ListTenantContactsByIDs(ctx context.Context, arg ListTenantContactsByIDsParams) ([]TenantContact, error)
-	ListTenantContactsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]TenantContact, error)
-	ListTenantContactsWithLeaseStatus(ctx context.Context, ownerID pgtype.UUID) ([]ListTenantContactsWithLeaseStatusRow, error)
-	ListUpcomingFreeRemindersByProperty(ctx context.Context, arg ListUpcomingFreeRemindersByPropertyParams) ([]ListUpcomingFreeRemindersByPropertyRow, error)
+	// One zone's overdue tasks as of the sweep's instant (решение #737, тип №4):
+	// active, dated, term passed — the timed ones by their term minute
+	// (в минуту срока, включительно, tasks/CONTEXT.md «Просрочка»), the
+	// date-only ones strictly after the zone's day's end (первый скан после
+	// границы суток). Non-archived property or no property at all (ADR 0052).
+	// The dedup key (task id) keeps a long-overdue task single — the sweep
+	// lists it hourly, the publication inserts nothing.
+	ListTaskOverdueTargets(ctx context.Context, arg ListTaskOverdueTargetsParams) ([]ListTaskOverdueTargetsRow, error)
+	// The tasks scan's sweep targets (карта #734, #750; ADR 0048 p.3): the
+	// distinct owner timezones having active dated tasks on non-archived
+	// properties or without a property — the only tasks the scan can fire for
+	// (the ticks' status canon, same as the rental scan; ADR 0052 — the task
+	// without a property stays in its owner's book). Stateless — every run
+	// re-lists, no per-zone state is kept.
+	ListTaskScanZones(ctx context.Context) ([]string, error)
+	// The tasks scan's scheduled leg (issues #750, #777): the active dated
+	// tasks whose boundary instant — a timed task's (due_date + due_time), a
+	// date-only task's day-after midnight (the wall-clock midnight, a DST day
+	// rolls it with the wall clock), each read in the owner's timezone — falls
+	// in the window (from, until]. Each one gets a boundary River job booked at
+	// its boundary instant; the undated ones stay out (без срока — никогда).
+	ListTaskScheduledTargets(ctx context.Context, arg ListTaskScheduledTargetsParams) ([]ListTaskScheduledTargetsRow, error)
+	// The hourly zone sweep of the tasks tick worker (ADR 0048 p.3): the
+	// distinct owner timezones having task rules — without a property (ADR 0052)
+	// or on active/maintenance properties — with the data owners of each zone.
+	// One "today" is computed per zone in Go; owners without tickable rules are
+	// not sweep targets. Stateless — every run re-lists, no per-zone or
+	// per-owner tick state is kept.
+	ListTaskTickZones(ctx context.Context) ([]ListTaskTickZonesRow, error)
+	// Dedup keys and statuses of the listed payments' operations: existence by
+	// (payment_id, date), status for the future-planned rebuild.
+	ListTickOperationStatuses(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickOperationStatusesRow, error)
+	// Pause intervals of the listed payments (ADR 0002 of the prototype: the
+	// holes are reproducible from the rule plus intervals). Origin rides along
+	// (тикет #1342): the archive bridge closes only its own auto_archive pauses.
+	ListTickPausesByPaymentIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickPausesByPaymentIDsRow, error)
+	// The owner's payment rules on non-archived properties, with the user
+	// category's current name resolved for the materialization snapshot. Pauses
+	// are listed separately (ListTickPausesByPaymentIDs).
+	ListTickPaymentsByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickPaymentsByOwnerRow, error)
+	// Dedup keys of the listed rules' tasks: existence by (rule_id, due_date)
+	// for dated rows and by rule_id alone for the undated one; the completed
+	// flag steers the single-future walk (completed-ahead rows are skipped).
+	ListTickTaskKeys(ctx context.Context, dollar_1 []pgtype.UUID) ([]ListTickTaskKeysRow, error)
+	// The owner's tick read side: rules without a property plus rules on
+	// non-archived properties (ADR 0052). The LEFT JOIN keeps the property-less
+	// cut while the status predicate still skips archived ones. history_before
+	// rides along — the tick's creation horizon (ADR 0051 as amended).
+	ListTickTaskRulesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListTickTaskRulesByOwnerRow, error)
+	// The hourly zone sweep of the tick worker (ADR 0048 p.3): the distinct owner
+	// timezones having payment rules on active/maintenance properties, with the
+	// data owners of each zone. One "today" is computed per zone in Go; owners
+	// without rules on such properties are not sweep targets. Stateless — every
+	// run re-lists, no per-zone or per-owner tick state is kept.
+	ListTickZones(ctx context.Context) ([]ListTickZonesRow, error)
+	// The occupancy projection of the properties list (ticket #585, резолюция
+	// #584): the unfinished rentals of the given properties in one batched read
+	// — exactly one per property (invariant №12), so the result over a listed
+	// property is either one row or none. The status itself computes in Go
+	// against the data owner's today (ADR 0048), from the same dates the
+	// rentals responses report.
+	ListUnfinishedRentalsByPropertyIDs(ctx context.Context, propertyIds []pgtype.UUID) ([]ListUnfinishedRentalsByPropertyIDsRow, error)
 	ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error)
+	// The favorites order save's lock pass (ticket #576; the personal cutover
+	// #1308): FOR UPDATE row locks on the submitted ids' rows of the ACTOR —
+	// the caller passes the ids sorted, the ORDER BY keeping the lock order
+	// deadlock-safe — restricted to the actor's visible non-archived rules (the
+	// feed's visibility predicate). The lock runs on both the actor's
+	// user_payment_favorites row (the pass's write target) and the payment row
+	// (the archive/delete serialization the global mutations share). An id that
+	// does not come back is unknown, foreign, invisible, archived or simply not
+	// a favorite of this actor — the personal rows fold the old «visible
+	// non-favorite» case into the same privacy-preserving 404 the application
+	// layer answers. Every row carries the actor's role on the rule's property
+	// — resolved per row beside the data (the star's right is the view one,
+	// D12). Ids travel as the file's csv list; an empty list never reaches the
+	// query.
+	// The role's row only — the visibility is the function call in the WHERE:
+	// the join's active-status condition is the membership snapshot's, not a
+	// second copy of the predicate.
+	LockGlobalPaymentFavorites(ctx context.Context, arg LockGlobalPaymentFavoritesParams) ([]LockGlobalPaymentFavoritesRow, error)
+	// Payments context queries: the materialization tick's persistence
+	// (ADR 0049 §3, ticket #458). The owner-level payment listing with pauses
+	// resolved, the operation dedup keys, the idempotent insert, the auto-pay day
+	// payment and the future-planned rebuild. Rule CRUD lives in
+	// payments_rules.sql, operations/favorites in payments_operations.sql.
+	// Serialization point of the tick (ADR 0049 §3): the run locks the owner's
+	// active/maintenance property rows, ordered by id, before reading or writing
+	// anything. Context mutations take the same lock per property through
+	// GetPropertyByIDAndOwnerForUpdate, so update-vs-tick, archive-vs-tick and
+	// delete-vs-tick serialize on one point. Archived properties are skipped by
+	// the tick entirely.
+	LockOwnerTickProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
+	// Serializes activation switches per user: the deactivate-all / activate-one
+	// pair must not interleave with a concurrent switch, or the one-active
+	// partial unique index rejects the second committer.
 	LockPaymentMethodsByUserID(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error)
+	// The owner row is the serialization anchor of the property-less cut (ADR
+	// 0052): owner-scope mutations lock it before reading or writing a rule, and
+	// the full tick locks it after the property rows, so owner-mutation-vs-tick
+	// serializes on one point. A bound-rule mutation never takes this lock — the
+	// two slices' rules are disjoint row sets, and crossing the lock orders
+	// would invite deadlocks.
+	LockTaskOwner(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
+	// Tasks context queries: the materialization tick's persistence (ADR 0051,
+	// mirroring ADR 0049 §3). The owner-level rule listing, the task dedup keys,
+	// the idempotent inserts and the future rebuild. Rule CRUD lives in
+	// tasks_rules.sql, task reads/completions in tasks_tasks.sql.
+	// Serialization point of the tick: the run locks the owner's
+	// active/maintenance property rows, ordered by id, before reading or writing
+	// anything. Context mutations take the same ordered set at their
+	// transaction's front (#546 — the deadlock-free global order), so
+	// update-vs-tick, archive-vs-tick, delete-vs-tick and mutation-vs-mutation
+	// serialize on one lock order. Archived properties are skipped by the tick
+	// entirely.
+	LockTaskOwnerProperties(ctx context.Context, ownerID pgtype.UUID) ([]pgtype.UUID, error)
+	// «Прочитать все» (решение #737): every unread not-deleted row of the user
+	// in one statement; the result is the number of rows that flipped.
+	MarkAllNotificationsRead(ctx context.Context, userID pgtype.UUID) (int64, error)
 	MarkLoginCodeUsed(ctx context.Context, id pgtype.UUID) error
-	MarkOperationOverdue(ctx context.Context, arg MarkOperationOverdueParams) (Operation, error)
+	// Marks one row read (a click, the notification page). Idempotent: an
+	// already-read or deleted row matches nothing (0 rows).
+	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
 	MarkPopupSeen(ctx context.Context, arg MarkPopupSeenParams) error
-	MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error)
-	MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error)
-	MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error)
-	MarkReminderSkipped(ctx context.Context, id pgtype.UUID) (int64, error)
-	MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error)
-	MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error)
-	MarkSubscriptionPaymentFailed(ctx context.Context, arg MarkSubscriptionPaymentFailedParams) (SubscriptionPayment, error)
-	// Transition a failed payment to refunded after an explicit provider-side
-	// status check. This handles out-of-order webhooks where the provider reports
-	// a refund after the system has already marked the payment as failed.
-	MarkSubscriptionPaymentReconciledRefunded(ctx context.Context, arg MarkSubscriptionPaymentReconciledRefundedParams) (SubscriptionPayment, error)
-	// Transition a failed payment to succeeded after an explicit provider-side
-	// status check. This handles out-of-order webhooks where the provider reports
-	// success after the system has already marked the payment as failed.
-	MarkSubscriptionPaymentReconciledSucceeded(ctx context.Context, arg MarkSubscriptionPaymentReconciledSucceededParams) (SubscriptionPayment, error)
-	MarkSubscriptionPaymentRefunded(ctx context.Context, arg MarkSubscriptionPaymentRefundedParams) (SubscriptionPayment, error)
-	MarkSubscriptionPaymentSucceeded(ctx context.Context, arg MarkSubscriptionPaymentSucceededParams) (SubscriptionPayment, error)
-	MoveOperationToProperty(ctx context.Context, arg MoveOperationToPropertyParams) (Operation, error)
+	// The stored aggregates the next payment date resolution consumes (ticket
+	// #991) in one batched read: the earliest planned operation on or after
+	// today (the stored half — a paid prepaid nearest is not «следующая») and
+	// the newest materialized date across planned and paid (the projection
+	// cursor — the IsCompleted rule; the tick has not stood the single future
+	// planned up yet). Cancelled tombstones are not materialized facts. A rule
+	// with no matching operations yields no row — the consumer resolves from
+	// nils. The nested payment→property path is enforced in the WHERE clause;
+	// an empty id list never reaches the query.
+	NearestDateInputsOfPayments(ctx context.Context, arg NearestDateInputsOfPaymentsParams) ([]NearestDateInputsOfPaymentsRow, error)
+	// The gate probes of the global revoke (issue #1310): with no target id the
+	// endpoint conditions on bare existence. The ownership probe counts any
+	// status — archived objects still hold revocable legs; the membership probe
+	// splits the non-owner refusal into the participant's loud 403 and the
+	// stranger's privacy-404.
+	OwnerOwnsAnyProperty(ctx context.Context, ownerID pgtype.UUID) (bool, error)
+	// «Оплатить сейчас» (planned → paid, paid_date = today in the owner's
+	// timezone). The planned guard is belt-and-suspenders over the application's
+	// loaded check: rows affected = 0 means already paid or gone.
+	PayOperationByID(ctx context.Context, arg PayOperationByIDParams) (int64, error)
+	// The auto-pay day payment (ADR 0049 §2): planned with date = today becomes
+	// paid, paid_date = today. Strictly today — never backdated; the active
+	// pause is excluded by the caller (the domain plan), and occurrences inside
+	// a pause are not generated at all. The auto-pay stamp (#1169, решение по
+	// гриллингу #1167): «автоплатёж исполнен» смотрит только на тиковые
+	// гашения — ручная оплата молчит.
+	PayOperationDueToday(ctx context.Context, arg PayOperationDueTodayParams) (int64, error)
+	// The subset of the listed rules the actor has starred — the personal-state
+	// overlay of the actor-facing reads (the property pin's ActorPins
+	// precedent): the rule rows carry no favorite column (frozen, #1308), the
+	// actor's rows travel beside them and the application layer folds them in.
+	PaymentFavoriteIDs(ctx context.Context, arg PaymentFavoriteIDsParams) ([]pgtype.UUID, error)
+	// The horizon leg of «Удалить все выполненные» (ADR 0051 as amended
+	// 2026-10-01): every live rule of the property with completed rows about to
+	// be cleared gets its history horizon raised to max(deleted due)+1 — the
+	// cleared occurrences never materialize again. For an undated rule MAX(due)
+	// is NULL: the CASE stamps the dormancy marker (the owner's today) whose
+	// date part is meaningless. GREATEST keeps an earlier-raised horizon — the
+	// deletion is forever. Runs inside the clear's transaction, before
+	// DeleteCompletedJournal.
+	RaiseTaskHistoryHorizons(ctx context.Context, arg RaiseTaskHistoryHorizonsParams) error
+	// The book-wide horizon leg: the owner's live rules with completed rows
+	// about to be cleared — on non-archived properties and without one (ADR
+	// 0052). The same max(deleted due)+1 raise; archived properties' rules stay
+	// outside (their rows are not cleared — ADR 0025).
+	RaiseTaskHistoryHorizonsOwnerBook(ctx context.Context, arg RaiseTaskHistoryHorizonsOwnerBookParams) error
 	ReactivatePropertyMember(ctx context.Context, arg ReactivatePropertyMemberParams) (PropertyMember, error)
-	ReschedulePendingRemindersByOwner(ctx context.Context, arg ReschedulePendingRemindersByOwnerParams) (int64, error)
-	ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error)
-	// Roll back an in-flight refund reservation to the previous status ($2).
-	// updated_at is maintained by the trg_subscription_payments_updated_at trigger.
-	RevertSubscriptionPaymentRefund(ctx context.Context, arg RevertSubscriptionPaymentRefundParams) (pgconn.CommandTag, error)
-	SaveFreeReminder(ctx context.Context, arg SaveFreeReminderParams) (int64, error)
-	SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error)
-	SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error)
-	SaveSentPushReminder(ctx context.Context, arg SaveSentPushReminderParams) (int64, error)
-	SoftDeleteOperation(ctx context.Context, arg SoftDeleteOperationParams) (Operation, error)
-	SoftDeleteRecurringOperation(ctx context.Context, arg SoftDeleteRecurringOperationParams) (RecurringOperation, error)
+	// Идемпотентные ключи creations (тикет Т3 карты #1112): бронь ключа до
+	// исполнения хендлера закрывает гонку двух параллельных POST с одним
+	// ключом — второй получает сохранённый ответ или 409, но не второй 201.
+	ReserveIdempotencyKey(ctx context.Context, arg ReserveIdempotencyKeyParams) (IdempotencyKey, error)
+	// ResetLoginAttempt writes the absolute attempt-window state, used when the
+	// window is new or has expired (TTL reset) and the failure counter must be set
+	// to an absolute value rather than incremented.
+	ResetLoginAttempt(ctx context.Context, arg ResetLoginAttemptParams) error
+	// RotateSessionToken swaps the session token in place: the fresh hash replaces
+	// the old one, which moves to previous_token_hash (accepted for the in-flight
+	// grace window by GetSessionByTokenHash) and rotated_at restarts the renewal
+	// window. The token_hash = $3 guard makes a concurrent rotation a no-op for
+	// the loser, so exactly one swap wins per window.
+	RotateSessionToken(ctx context.Context, arg RotateSessionTokenParams) (int64, error)
+	// The search endpoint's window (ticket #601): the actor's visible
+	// non-archived properties — own plus actively shared (the merged visibility
+	// of the main list, ADR 0028) — matching the search as a case-insensitive
+	// substring over the name or the address (the store escapes the ILIKE
+	// metacharacters; the trgm indexes of migration 000124 serve both fields).
+	//
+	// The walk is keyset over the display name and id (ticket #597's pattern):
+	// the window resumes strictly after the (name, id) the previous page ended
+	// on, so rows created, deleted or renamed between loads never duplicate or
+	// drop. The name sort mirrors the hub's own default (the client orders the
+	// list by name) with the Russian ICU collation matching the contacts book's
+	// letter order (#600); id ties off. A rename moving a row across the window
+	// boundary is inherent to the visible-name sort. The cursor args travel
+	// together; NULL (no cursor) reads from the beginning.
+	// access_role names the actor's role on the row: 'owner' for own
+	// properties, the active membership's role for shared ones (T11) — the
+	// LEFT JOIN row is unique per (property, user) and carries the role only;
+	// the visibility verdict is the function call in the WHERE.
+	SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error)
+	// The card photo write (ADR 0065, ticket #1227): the key and the sniffed
+	// content type move together; a NULL key clears the photo. The full-row
+	// rewrite of the editable fields is untouched — the photo is not an
+	// UpdateContact field. Existence and the edit capability are proven by the
+	// caller; the scope is the book owner (ADR 0028).
+	SetContactPhoto(ctx context.Context, arg SetContactPhotoParams) (Contact, error)
+	// One rule's 1-based favorite position in the actor's personal order
+	// (ticket #576; the cutover #1308); the id match alone is the guard — the
+	// lock pass has already proven the actor's row and its visibility in the
+	// same transaction. :execrows keeps that ordering honest.
+	SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error)
+	// The object photo write (ADR 0065, ticket #1227): the key and the sniffed
+	// content type move together; a NULL key clears the photo — one image per
+	// entity, no gallery. The scope is the property's owner (ADR 0028): the
+	// actor may be the full-access member; existence and the edit capability
+	// (plus the archived-object guard) are proven by the caller under the row
+	// lock.
+	SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoParams) (Property, error)
+	// The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
+	// content type move together; a NULL key clears the photo. Existence and the
+	// self-only access are proven by the caller under the row lock.
+	SetUserPhoto(ctx context.Context, arg SetUserPhotoParams) (User, error)
+	// The other half of the coherent subscription time shift (issue #665): the
+	// dunning retry predicate counts payments created at or after the grace entry
+	// anchor, so the payments must travel by the same delta to keep the relative
+	// order — a +24 h retry boundary stays consumed/unconsumed exactly as it was
+	// before the shift.
+	ShiftSubscriptionPaymentsCreatedAt(ctx context.Context, arg ShiftSubscriptionPaymentsCreatedAtParams) (int64, error)
+	// The main screen's three counters over the whole visible scope (ticket
+	// #575; the due pair — ticket #1346): the actor's favorite rules — the
+	// «Все избранные (N)» card, the personal set of the reading actor (the
+	// cutover #1308, D12) — the overdue operations summed across the feed's
+	// rules — the «Все просроченные (N)» card — and the «На оплату» window:
+	// its operations and the nearest days-left, the «На оплату (N)» card's
+	// number and label source. None is narrowed by a search: the counters
+	// describe the scope, the search screens' rows are the feed query's.
+	//
+	// The due aggregates ride their own lateral beside the overdue one, both
+	// sargable-narrow — the overdue leg scans the planned-before-today tail, the
+	// due leg the reminder window (the rule terms fold into the WHERE: a NULL
+	// reminder makes the date bound NULL, the lateral comes back empty) — and
+	// neither ever narrows the outer WHERE: the favorites and the overdue keep
+	// counting the whole scope. No pause gate: an open pause keeps no planned
+	// operations in the window (the tick removed the future ones, occurrences
+	// inside the pause are not generated).
+	// The personal favorite join (the cutover #1308): COUNT over the actor's
+	// joined rows — a stranger's star never lands in the actor's counter.
+	SumGlobalPaymentCounters(ctx context.Context, arg SumGlobalPaymentCountersParams) (SumGlobalPaymentCountersRow, error)
+	// The matched categories of the payment rules search (ticket #575): one
+	// row per category present among the matched rules — the search screen's
+	// chips — the largest match count first (ticket #602: the count orders the
+	// rows and stays out of the contract; a category's directions are one
+	// chip). The identity is the rule's category reference resolved: a default
+	// catalog slug or the user category. Rules without any category reference
+	// cannot appear (the XOR is a durable schema invariant; no such rules exist
+	// today). The search predicate is the feed query's.
+	SumGlobalPaymentSearchCategories(ctx context.Context, arg SumGlobalPaymentSearchCategoriesParams) ([]SumGlobalPaymentSearchCategoriesRow, error)
+	// The period totals of one property's operations by direction (ticket #473):
+	// the same status/period predicate as ListOperations, aggregated in SQL so
+	// the summary cards never re-add a paginated listing client-side. The
+	// direction filter deliberately does not apply here — the totals always
+	// report both directions (the contract: the type filter narrows only the
+	// category breakdown). The category filter narrows the totals (the card
+	// mirrors the filtered list, решение владельца 01.10). Cancelled
+	// tombstones never count. The search filter (ticket #476) is the listing's
+	// predicate — the summary of the searched scope stays consistent with its
+	// list.
+	SumOperationTotals(ctx context.Context, arg SumOperationTotalsParams) ([]SumOperationTotalsRow, error)
+	// The per-category breakdown behind the category chips and the summary
+	// cards' bar (ticket #473): one row per category snapshot present in the
+	// scope, largest total first; rows without a category snapshot are skipped
+	// (no chip identity — their amounts still count in the totals). The search
+	// filter (ticket #476) is the listing's predicate: the breakdown over the
+	// searched scope is the search screen's matched-category chips. The
+	// category filter narrows the breakdown to the selected slugs (the chips
+	// multi-select); the period follows the listing's date key (ticket #992).
+	SumOperationsByCategory(ctx context.Context, arg SumOperationsByCategoryParams) ([]SumOperationsByCategoryRow, error)
+	// The period totals by direction of the actor's visible merged feed (ticket
+	// #540): the propertyIds filter, the period and the category filter narrow
+	// the totals (the card mirrors the filtered list, решение владельца
+	// 01.10); the type filter deliberately does not — the totals always report
+	// both directions whatever the breakdown is narrowed to. Types absent from
+	// the scope miss from the result — the adapter reports them as zero.
+	SumPaidOperationTotalsGlobal(ctx context.Context, arg SumPaidOperationTotalsGlobalParams) ([]SumPaidOperationTotalsGlobalRow, error)
+	// The per-category breakdown of the actor's visible merged feed (ticket
+	// #540), largest total first; rows without a category snapshot are skipped
+	// (no chip identity — their amounts still count in the totals). Both the
+	// type and the category filters narrow this read only. The period follows
+	// the listing's date key (ticket #992).
+	SumPaidOperationsByCategoryGlobal(ctx context.Context, arg SumPaidOperationsByCategoryGlobalParams) ([]SumPaidOperationsByCategoryGlobalRow, error)
 	SuspendPropertyMember(ctx context.Context, arg SuspendPropertyMemberParams) error
+	// TouchSession persists one request's activity: the sliding expiry, the
+	// throttled last-seen stamp, and the client IP with its GeoIP city (null when
+	// unresolvable — an existing city is never erased by an unknown one, the
+	// application only writes cities it actually resolved).
+	TouchSession(ctx context.Context, arg TouchSessionParams) error
 	UnarchiveProperty(ctx context.Context, arg UnarchivePropertyParams) (Property, error)
-	UpdateFreeReminder(ctx context.Context, arg UpdateFreeReminderParams) (FreeReminder, error)
-	UpdateFutureGeneratedOperationReminderOffsets(ctx context.Context, arg UpdateFutureGeneratedOperationReminderOffsetsParams) (int64, error)
-	UpdateLease(ctx context.Context, arg UpdateLeaseParams) (Lease, error)
-	UpdateOperation(ctx context.Context, arg UpdateOperationParams) (Operation, error)
+	// «Отменить выполнение»: the completion fact cleared; rows affected = 0
+	// surfaces as ErrNotCompleted.
+	UncompleteTask(ctx context.Context, arg UncompleteTaskParams) (int64, error)
+	UpdateCardBindingSessionStatus(ctx context.Context, arg UpdateCardBindingSessionStatusParams) (CardBindingSession, error)
+	// The full editable-field rewrite keyed by (id, owner_id): zero rows means
+	// the card is gone between the service's read and this write (mapped to
+	// ErrNotFound, taking the audit entry down with it).
+	UpdateContact(ctx context.Context, arg UpdateContactParams) (Contact, error)
+	UpdateEmailChangeGrantEmail(ctx context.Context, arg UpdateEmailChangeGrantEmailParams) error
+	// Partial PATCH is resolved by the application layer; the statement always
+	// writes the full editable set (since is never among it — server-set,
+	// prototype decision №17). The favorite star is a personal state (the
+	// cutover #1308) with its own insert/delete pair.
+	UpdatePayment(ctx context.Context, arg UpdatePaymentParams) error
 	UpdatePaymentMethodActiveByID(ctx context.Context, arg UpdatePaymentMethodActiveByIDParams) (PaymentMethod, error)
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
-	UpdatePropertyContact(ctx context.Context, arg UpdatePropertyContactParams) (PropertyContact, error)
 	UpdatePropertyMemberInvitationLastSentAt(ctx context.Context, arg UpdatePropertyMemberInvitationLastSentAtParams) error
 	UpdatePropertyMemberInvitationRole(ctx context.Context, arg UpdatePropertyMemberInvitationRoleParams) (PropertyMemberInvitation, error)
 	UpdatePropertyMemberRole(ctx context.Context, arg UpdatePropertyMemberRoleParams) (PropertyMember, error)
-	UpdateRecurringOperation(ctx context.Context, arg UpdateRecurringOperationParams) (RecurringOperation, error)
-	UpdateRecurringOperationReminderOffset(ctx context.Context, arg UpdateRecurringOperationReminderOffsetParams) (int64, error)
-	UpdateRecurringOperationStatus(ctx context.Context, arg UpdateRecurringOperationStatusParams) (RecurringOperation, error)
-	UpdateRecurringOperationStatusByID(ctx context.Context, arg UpdateRecurringOperationStatusByIDParams) (RecurringOperation, error)
-	UpdateRecurringOperationStatusByLeaseID(ctx context.Context, arg UpdateRecurringOperationStatusByLeaseIDParams) ([]RecurringOperation, error)
-	UpdateRecurringOperationStatusByPropertyID(ctx context.Context, arg UpdateRecurringOperationStatusByPropertyIDParams) error
-	UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error)
-	UpdateSentSMSReminderProviderResponse(ctx context.Context, arg UpdateSentSMSReminderProviderResponseParams) (int64, error)
-	UpdateSession(ctx context.Context, arg UpdateSessionParams) error
+	// PUT /push/subscriptions/preferences (спека #1028 §5): замена категорийных
+	// флагов устройства, ключи подписки остаются. Не upsert: rows affected = 0 —
+	// endpoint не этого пользователя, строгий 404 (в нормальном флоу недостижим).
+	UpdatePushSubscriptionPreferences(ctx context.Context, arg UpdatePushSubscriptionPreferencesParams) (int64, error)
+	// Partial PATCH is resolved by the application layer; the statement always
+	// writes the full editable set. The start date is not editable (ADR 0053
+	// §3); completion and the deposit return belong to CompleteRental.
+	UpdateRental(ctx context.Context, arg UpdateRentalParams) error
 	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (UserSubscription, error)
-	UpdateSubscriptionPaymentMethodAndProviderID(ctx context.Context, arg UpdateSubscriptionPaymentMethodAndProviderIDParams) (SubscriptionPayment, error)
-	UpdateSubscriptionPaymentMethodID(ctx context.Context, arg UpdateSubscriptionPaymentMethodIDParams) (SubscriptionPayment, error)
-	UpdateSubscriptionPaymentPaymentURL(ctx context.Context, arg UpdateSubscriptionPaymentPaymentURLParams) (SubscriptionPayment, error)
-	UpdateSubscriptionPaymentProviderPaymentID(ctx context.Context, arg UpdateSubscriptionPaymentProviderPaymentIDParams) (SubscriptionPayment, error)
-	UpdateTenantContact(ctx context.Context, arg UpdateTenantContactParams) (TenantContact, error)
+	UpdateSubscriptionPayment(ctx context.Context, arg UpdateSubscriptionPaymentParams) (SubscriptionPayment, error)
+	// Admin tariff edit (issue #256): prices, property limit and the activity
+	// flag. The name is immutable — user-facing tariff selection is by name, so a
+	// rename would silently change what existing references point at.
+	UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tariff, error)
+	// The editable fields of the rule (the anchor included: edit invalidates the
+	// not-yet-due uncompleted tasks, the in-transaction tick stands the single
+	// future again) plus the history horizon the row already carries: a dated
+	// edit keeps it (the cleared past stays deleted), an undated one passes NULL
+	// (the edit resets the dormancy marker — the application folds that into the
+	// rule before this runs); id/owner_id/property_id never move.
+	UpdateTaskRule(ctx context.Context, arg UpdateTaskRuleParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
-	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (UpdateUserEmailVerifiedRow, error)
+	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (User, error)
+	UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (User, error)
 	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
-	UpsertLoginAttempt(ctx context.Context, arg UpsertLoginAttemptParams) error
-	UpsertNotificationChannelPreference(ctx context.Context, arg UpsertNotificationChannelPreferenceParams) error
+	// PUT /notification-preferences is a full replacement of the four flags
+	// (канон #738).
+	UpsertEmailPreferences(ctx context.Context, arg UpsertEmailPreferencesParams) (int64, error)
+	// Payment methods (issue #251). Token uniqueness is enforced per user by the
+	// UNIQUE (user_id, token_hash) constraint: the upsert converges on the
+	// existing row instead of creating a duplicate card, and exactly one active
+	// method per user is enforced by the partial unique index
+	// idx_payment_methods_one_active_per_user. Sensitive columns (provider_token,
+	// provider_card_id, exp_date) hold ciphertext; the application encrypts
+	// before writing and decrypts after reading.
+	// Inserts a method or converges on the row with the same (user_id,
+	// token_hash): a re-bound card (webhook redelivery, sync polling, duplicate
+	// binding) updates the token and display fields instead of duplicating the
+	// row. Empty incoming display fields do not wipe stored ones, so completion
+	// paths that do not know the card data cannot erase what an earlier delivery
+	// stored. is_active is deliberately not in the update set: activation is a
+	// separate explicit step.
 	UpsertPaymentMethodByTokenHash(ctx context.Context, arg UpsertPaymentMethodByTokenHashParams) (PaymentMethod, error)
 	// Insert a push subscription keyed by endpoint, or update its mutable fields
 	// (user_id, p256dh, auth, expiration_time) when the endpoint already exists.
 	// This makes re-subscribing on the same device idempotent and also re-binds an
-	// endpoint that moved between accounts (rare) to the latest user.
+	// endpoint that moved between accounts (rare) to the latest user. The four
+	// category flags always travel with the request (спека #1028 §5): POST несёт
+	// желаемое состояние явно, дефолт omitted-категорий — все ВКЛ. Мастер-состояние
+	// устройства — само существование строки: строка есть = включено.
 	UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) (PushSubscription, error)
+	UserHoldsAnyMembership(ctx context.Context, userID pgtype.UUID) (bool, error)
+	// The gate of the foreign profile-photo read (ADR 0065, решение владельца
+	// #1286 — «показ участникам»): the two users are connected when at least
+	// one property is readable by both sides (ADR 0028 derived read,
+	// symmetric). The candidate set is the target user's readable properties —
+	// owned, or held as an active member (suspended/revoked answers «нет»
+	// inside the canonical function); the viewer's side is the canonical SQL
+	// function actor_can_read_property (000142, #884) — the derived-read
+	// predicate is not re-encoded here, and EXISTS stops on the first shared
+	// property.
+	UsersShareReadableProperty(ctx context.Context, arg UsersShareReadablePropertyParams) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

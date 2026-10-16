@@ -6,16 +6,16 @@ import { isStandaloneMode } from './standalone';
 import { markStandaloneClient } from './standalone-store';
 
 /**
- * Registers the cabinet service worker (`/sw.js`) with scope `/`.
+ * Registers the app service worker (`/sw.js`) with scope `/`.
  *
- * The SW is registered on every cabinet route (this component is mounted inside
- * the cabinet layout) and deliberately not registered on landing routes to
+ * The SW is registered on every app route (this component is mounted inside
+ * the app-wide ScreenLayout) and deliberately not registered on landing routes to
  * avoid waking it up unnecessarily. The scope is still `/` (the origin root),
  * and the SW's fetch handler filters cabinet paths itself — see `public/sw.js`.
  *
  * When the app runs in PWA standalone mode, a standalone flag is written to
  * IndexedDB after registration. The SW reads it to redirect any navigation to
- * `/` back to `/dashboard`, keeping PWA users inside the app (hard isolation).
+ * `/` back to `/properties`, keeping PWA users inside the app (hard isolation).
  *
  * `updateViaCache: 'none'` guarantees the SW script bypasses the HTTP cache so
  * updates are picked up promptly. `public/` is already served with
@@ -23,7 +23,7 @@ import { markStandaloneClient } from './standalone-store';
  * for `/sw.js` in `next.config.ts` and at the Caddy layer.
  *
  * A `message` listener forwards push-notification click targets (posted by the
- * SW `notificationclick` handler when an existing cabinet window is already
+ * SW `notificationclick` handler when an existing app window is already
  * open) to Next.js App Router, so tapping a notification navigates the focused
  * tab instead of opening a duplicate.
  */
@@ -54,10 +54,10 @@ export function ServiceWorkerRegister(): JSX.Element | null {
         // Defer registration to avoid competing with first-paint work.
         if (document.readyState === 'complete') {
             register();
-        } else {
-            window.addEventListener('load', register, { once: true });
-            return () => window.removeEventListener('load', register);
+            return undefined;
         }
+        window.addEventListener('load', register, { once: true });
+        return () => window.removeEventListener('load', register);
     }, []);
 
     useEffect(() => {
@@ -65,12 +65,14 @@ export function ServiceWorkerRegister(): JSX.Element | null {
         if (!('serviceWorker' in navigator)) return;
 
         const onMessage = (event: MessageEvent): void => {
-            const data = event.data;
+            // The SW posts `{ type: 'PUSH_NOTIFICATION_CLICK', url }`; held as
+            // unknown because MessageEvent.data is `any` on the DOM side.
+            const data: unknown = event.data;
             if (!data || typeof data !== 'object') return;
-            if (data.type !== 'PUSH_NOTIFICATION_CLICK') return;
+            if (!('type' in data) || data.type !== 'PUSH_NOTIFICATION_CLICK') return;
             // `resolveClickTarget` re-validates the URL the SW sent — same-origin
-            // absolute path only, fallback to /dashboard otherwise.
-            const url = resolveClickTarget(data.url);
+            // absolute path only, fallback to /properties otherwise.
+            const url = resolveClickTarget('url' in data ? data.url : undefined);
             // Client-side navigation via the History API. The SW already focused
             // this window; we only need to move it to the click target.
             if (url !== window.location.pathname + window.location.search) {

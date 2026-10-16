@@ -1,0 +1,1563 @@
+//go:build integration
+
+package postgres_test
+
+// The integration suite of the journal's reading side (карта #704, тикет
+// #708, ADR 0061 §7): the two-fold read scope (revision #1412) — the global
+// feed and the filter options' objects leg scope to the reader's own
+// properties, a narrowed per-object call rides the derived-access canon
+// (actor_can_read_property, 000142: owner, active members (viewer included),
+// suspended and revoked excluded, the archive visible to the owner only) —
+// the bidirectional keyset walk (before/after, no duplicates, no drops), the
+// filters, the always-OR search through the service seam and the filter-sheet
+// options (current members ∪ historical actors; objects with the photo
+// avatar).
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
+	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
+	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
+)
+
+// kindPayment is the wire's payment kind — the filters test's constant.
+const kindPayment = "payment"
+
+// Отображаемые имена сидов опций фильтров — константы тестов ниже.
+const (
+	ownerDisplayName = "Иван Иванов"
+	petrDisplayName  = "Пётр Петров"
+	annaDisplayName  = "Анна Сидорова"
+	// Актёр журнала без живой ноги: фильтруемый призрак глобальной области
+	// (D14) и выживший снимок обезличенного актёра.
+	ghostActorName = "Лев Призрак"
+)
+
+// participantNames собирает отображаемые имена опций «Участников».
+func participantNames(participants []domain.FilterParticipant) map[string]bool {
+	names := map[string]bool{}
+	for _, p := range participants {
+		names[p.Name] = true
+	}
+	return names
+}
+
+// assertParticipantNames фиксирует состав опций: каждое wanted имя в
+// списке, каждого banned — нет.
+func assertParticipantNames(t *testing.T, names map[string]bool, want, banned []string) {
+	t.Helper()
+	for _, w := range want {
+		if !names[w] {
+			t.Errorf("participants: want %q in %+v", w, names)
+		}
+	}
+	for _, b := range banned {
+		if names[b] {
+			t.Errorf("participants: %q must not be listed", b)
+		}
+	}
+}
+
+// participantFlags собирает id участников и владельческие замки опций —
+// ассерты изоляции области ниже.
+func participantFlags(participants []domain.FilterParticipant) (ids, owners map[uuid.UUID]bool) {
+	ids = map[uuid.UUID]bool{}
+	owners = map[uuid.UUID]bool{}
+	for _, p := range participants {
+		ids[p.ID] = true
+		if p.IsOwner {
+			owners[p.ID] = true
+		}
+	}
+	return ids, owners
+}
+
+// assertScopedOwnership фиксирует суженную область опций: точный набор
+// участников и их владельческие замки (замок — владелец объектов скоупа).
+func assertScopedOwnership(t *testing.T, participants []domain.FilterParticipant, wantOwners map[uuid.UUID]bool) {
+	t.Helper()
+	ids, owners := participantFlags(participants)
+	if len(ids) != len(wantOwners) {
+		t.Fatalf("scoped participants: want exactly %d, got %+v", len(wantOwners), participants)
+	}
+	for id, wantOwner := range wantOwners {
+		if !ids[id] || owners[id] != wantOwner {
+			t.Errorf("scoped participant %s: want owner=%v, got %+v", id, wantOwner, participants)
+		}
+	}
+}
+
+// newReadStack builds the service over the real store and the real
+// membership policy — the same wiring as the composition root.
+func newReadStack(pool *pgxpool.Pool) *historyapp.HistoryReadService {
+	policy := accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(pool), accesspg.NewMembershipRepository(pool))
+	return historyapp.NewHistoryReadService(historypg.NewReadStore(pool), policy)
+}
+
+// seedEntry writes one journal row through the recorder — the actor
+// name/email snapshots resolve from the users table exactly as in
+// production — then pins created_at to an explicit instant: the recorder
+// stamps Now(), and the keyset/period tests need a deterministic order.
+func seedEntry(t *testing.T, pool *pgxpool.Pool, actorID, propertyID uuid.UUID, at time.Time,
+	kind domain.Kind, action domain.Action, base domain.BaseAction, text string,
+) {
+	t.Helper()
+	entry := domain.Entry{
+		PropertyID: propertyID,
+		ActorID:    &actorID,
+		ActorRole:  domain.ActorRoleOwner,
+		Kind:       kind,
+		Action:     action,
+		BaseAction: base,
+		Segments:   domain.Segments{{Text: text}},
+		Context:    map[string]any{},
+		CreatedAt:  at,
+	}
+	if err := historypg.NewRecorder(pool).Record(context.Background(), entry); err != nil {
+		t.Fatalf("seed entry: %v", err)
+	}
+	// Record присваивает ID копии Entry (передача по значению — до
+	// вызывающего он не доезжает): свежевставленная строка — последняя по
+	// (created_at, id) своего (property, actor), вычитываем её id и пиним
+	// созданное время.
+	var rowID uuid.UUID
+	if err := pool.QueryRow(t.Context(),
+		`SELECT id FROM action_journal WHERE property_id = $1 AND actor_id = $2
+		 ORDER BY created_at DESC, id DESC LIMIT 1`,
+		propertyID, actorID,
+	).Scan(&rowID); err != nil {
+		t.Fatalf("locate seeded entry: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE action_journal SET created_at = $1 WHERE id = $2`, at, rowID,
+	); err != nil {
+		t.Fatalf("pin created_at: %v", err)
+	}
+}
+
+// suspendMembership flips the membership's status (the slot coordinator's
+// raw effect, migration 000095).
+func suspendMembership(t *testing.T, pool *pgxpool.Pool, propertyID, userID uuid.UUID) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE property_members SET status = 'suspended', suspended_at = now()
+		 WHERE property_id = $1 AND user_id = $2`, propertyID, userID,
+	); err != nil {
+		t.Fatalf("suspend membership: %v", err)
+	}
+}
+
+func TestReadStore_FeedVisibility(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
+
+	liveProperty := seedProperty(t, pool, owner)
+	archivedProperty := seedProperty(t, pool, owner)
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE properties SET status = 'archived' WHERE id = $1`, archivedProperty,
+	); err != nil {
+		t.Fatalf("archive property: %v", err)
+	}
+
+	seedMembership(t, pool, liveProperty, member)
+	seedMembership(t, pool, liveProperty, viewer)
+
+	seedEntry(t, pool, owner, liveProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+	seedEntry(t, pool, owner, archivedProperty, time.Unix(90, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	// Владелец видит оба объекта — история переживает архив.
+	page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{})
+	if err != nil {
+		t.Fatalf("owner feed: %v", err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("owner feed: want 2 rows (archive included), got %d", len(page.Items))
+	}
+
+	// Активный участник: глобальная лента — только СОБСТВЕННЫЕ объекты
+	// (тикет #1412): членство в чужом живом объекте строк глобальной ленты
+	// не добавляет; история чужого объекта читается только в суженной
+	// области (TestReadStore_FeedScopedCanonForMember).
+	ownProperty := seedProperty(t, pool, viewer)
+	seedEntry(t, pool, viewer, ownProperty, time.Unix(50, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Своя операция")
+	page, err = svc.Feed(ctx, viewer, historyapp.FeedQuery{})
+	if err != nil {
+		t.Fatalf("viewer feed: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].PropertyID != ownProperty {
+		t.Fatalf("viewer global feed: want only the own property's row, got %+v", page.Items)
+	}
+
+	// Приостановленный участник ленту не видит вовсе («suspended — недоступно»).
+	suspendMembership(t, pool, liveProperty, member)
+	page, err = svc.Feed(ctx, member, historyapp.FeedQuery{})
+	if err != nil {
+		t.Fatalf("suspended feed: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("suspended member: want no rows, got %d", len(page.Items))
+	}
+
+	// Чужой — пусто: существование строк не раскрывается.
+	page, err = svc.Feed(ctx, stranger, historyapp.FeedQuery{})
+	if err != nil {
+		t.Fatalf("stranger feed: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("stranger: want no rows, got %d", len(page.Items))
+	}
+}
+
+// After-нога двустороннего курсора несёт тот же скоуп, что и основная
+// страница (сужение глобальной ленты, тикет #1412): prepend участника не
+// привозит строки чужого объекта, prepend владельца не меняется.
+func TestReadStore_FeedGlobalPrependScope(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+
+	liveProperty := seedProperty(t, pool, owner)
+	seedMembership(t, pool, liveProperty, viewer)
+	seedEntry(t, pool, owner, liveProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	// Якорь — страница владельца; свежая строка чужого объекта участника
+	// в prepend не приезжает, у владельца — приезжает.
+	ownerPage, err := svc.Feed(ctx, owner, historyapp.FeedQuery{})
+	if err != nil {
+		t.Fatalf("owner anchor page: %v", err)
+	}
+	seedEntry(t, pool, owner, liveProperty, time.Unix(200, 0), domain.KindPayment, domain.ActionPaymentCreated,
+		domain.BaseAdded, "Свежая строка чужого объекта")
+	page, err := svc.Feed(ctx, viewer, historyapp.FeedQuery{AfterCursor: ownerPage.PrevCursor})
+	if err != nil {
+		t.Fatalf("viewer prepend feed: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("viewer global prepend: want no foreign rows, got %+v", page.Items)
+	}
+	page, err = svc.Feed(ctx, owner, historyapp.FeedQuery{AfterCursor: ownerPage.PrevCursor})
+	if err != nil {
+		t.Fatalf("owner prepend feed: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("owner global prepend: want the fresh row, got %d", len(page.Items))
+	}
+}
+
+// Суженная область (property_ids) — канон derived access без изменений
+// (#1412): участник читает историю живого объекта, куда приглашён, обеими
+// ногами курсора.
+func TestReadStore_FeedScopedCanonForMember(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+
+	liveProperty := seedProperty(t, pool, owner)
+	seedMembership(t, pool, liveProperty, viewer)
+	seedEntry(t, pool, owner, liveProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	page, err := svc.Feed(ctx, viewer, historyapp.FeedQuery{PropertyIDs: []uuid.UUID{liveProperty}})
+	if err != nil {
+		t.Fatalf("viewer scoped feed: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("viewer scoped feed: want the live property's row, got %+v", page.Items)
+	}
+
+	// After-нога суженной области — та же строка.
+	page, err = svc.Feed(ctx, viewer, historyapp.FeedQuery{PropertyIDs: []uuid.UUID{liveProperty}, AfterCursor: page.PrevCursor})
+	if err != nil {
+		t.Fatalf("viewer scoped prepend: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("viewer scoped prepend: want nothing newer, got %+v", page.Items)
+	}
+
+	// Suspended-лег канона живёт в суженной области (000142): сервис
+	// отсекает приостановленное членство privacy-404 до SQL — глобальный
+	// вакуум участника без своих объектов этот случай не различает.
+	suspendMembership(t, pool, liveProperty, viewer)
+	if _, err := svc.Feed(ctx, viewer, historyapp.FeedQuery{PropertyIDs: []uuid.UUID{liveProperty}}); !errors.Is(err, historyapp.ErrNotFound) {
+		t.Fatalf("suspended scoped feed: want ErrNotFound (privacy), got %v", err)
+	}
+}
+
+func TestReadStore_InvisiblePropertyIDIsPrivacy404(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000003", "zina@example.com")
+	property := seedProperty(t, pool, owner)
+	seedMembership(t, pool, property, member)
+	seedEntry(t, pool, owner, property, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+	unknown := uuid.Must(uuid.NewV7())
+
+	// Чужой id и неизвестный — одинаково privacy-404; смесь живого и чужого
+	// не палит, какой именно чужой. Читателю с доступом тот же id проходит.
+	for _, actor := range []uuid.UUID{stranger, member} {
+		ids := []uuid.UUID{unknown}
+		if actor == member {
+			ids = []uuid.UUID{unknown, property}
+		}
+		if _, err := svc.Feed(context.Background(), actor, historyapp.FeedQuery{PropertyIDs: ids}); !errors.Is(err, historyapp.ErrNotFound) {
+			t.Fatalf("privacy 404: want ErrNotFound, got %v", err)
+		}
+		if _, err := svc.Filters(context.Background(), actor, ids); !errors.Is(err, historyapp.ErrNotFound) {
+			t.Fatalf("privacy 404 on filters: want ErrNotFound, got %v", err)
+		}
+	}
+	if page, err := svc.Feed(context.Background(), owner, historyapp.FeedQuery{PropertyIDs: []uuid.UUID{property}}); err != nil ||
+		len(page.Items) != 1 {
+		t.Fatalf("owner scoped feed: %v / %d rows", err, len(page.Items))
+	}
+}
+
+func TestReadStore_DownwardKeysetWalk(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	property := seedProperty(t, pool, owner)
+
+	// 12 строк с шагом в секунду — детерминированный порядок (created_at, id).
+	total := 12
+	for i := range total {
+		seedEntry(t, pool, owner, property, time.Unix(int64(1000+i), 0),
+			domain.KindOperation, domain.ActionOperationPaid, domain.BaseCompleted, fmt.Sprintf("Строка %d", i))
+	}
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	const pageSize = 5
+	seen := map[uuid.UUID]bool{}
+	tail := historyapp.FeedPage{}
+	page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize})
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	for pages := 1; ; pages++ {
+		if pages > 5 {
+			t.Fatal("the walk did not end within 5 pages")
+		}
+		for _, item := range page.Items {
+			if seen[item.ID] {
+				t.Fatalf("duplicate row %s across the downward walk", item.ID)
+			}
+			seen[item.ID] = true
+		}
+		if len(page.Items) < pageSize {
+			tail = page
+			break
+		}
+		if page.NextCursor == "" {
+			t.Fatal("a full page must carry next_cursor")
+		}
+		page, err = svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize, BeforeCursor: page.NextCursor})
+		if err != nil {
+			t.Fatalf("next page: %v", err)
+		}
+	}
+	if len(seen) != total {
+		t.Fatalf("downward walk: want all %d rows, got %d", total, len(seen))
+	}
+	if want := total - total/pageSize*pageSize; len(tail.Items) != want {
+		t.Fatalf("tail page size: want %d, got %d", want, len(tail.Items))
+	}
+}
+
+// walkToTail walks the feed down to the last page, collecting the seen ids —
+// the shared prep of the bidirectional walk tests.
+func walkToTail(
+	t *testing.T, svc *historyapp.HistoryReadService, owner uuid.UUID, pageSize int,
+) (seen map[uuid.UUID]bool, tail historyapp.FeedPage) {
+	t.Helper()
+	ctx := context.Background()
+	seen = map[uuid.UUID]bool{}
+	page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize})
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	for len(page.Items) == pageSize {
+		for _, item := range page.Items {
+			seen[item.ID] = true
+		}
+		if page.NextCursor == "" {
+			t.Fatal("a full page must carry next_cursor")
+		}
+		page, err = svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize, BeforeCursor: page.NextCursor})
+		if err != nil {
+			t.Fatalf("next page: %v", err)
+		}
+	}
+	for _, item := range page.Items {
+		seen[item.ID] = true
+	}
+	return seen, page
+}
+
+func TestReadStore_UpwardKeysetWalkAndPrepend(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	property := seedProperty(t, pool, owner)
+
+	total := 12
+	for i := range total {
+		seedEntry(t, pool, owner, property, time.Unix(int64(1000+i), 0),
+			domain.KindOperation, domain.ActionOperationPaid, domain.BaseCompleted, fmt.Sprintf("Строка %d", i))
+	}
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	const pageSize = 5
+	// Вниз до хвоста — стартовая точка восходящего обхода.
+	seen, tail := walkToTail(t, svc, owner, pageSize)
+
+	// Вверх по времени: страницы after_cursor возвращают строго более новые
+	// строки; объединение вниз-вверх покрывает ровно все строки без потерь.
+	got := map[uuid.UUID]bool{}
+	after := tail.PrevCursor
+	for after != "" {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize, AfterCursor: after})
+		if err != nil {
+			t.Fatalf("newer page: %v", err)
+		}
+		if len(page.Items) == 0 {
+			break
+		}
+		for i := 1; i < len(page.Items); i++ {
+			if page.Items[i].CreatedAt.After(page.Items[i-1].CreatedAt) {
+				t.Fatal("an after-page must keep the (created_at, id) DESC order")
+			}
+		}
+		for _, item := range page.Items {
+			got[item.ID] = true
+		}
+		if len(page.Items) < pageSize {
+			break
+		}
+		after = page.PrevCursor
+	}
+	for id := range seen {
+		got[id] = true
+	}
+	if len(got) != total {
+		t.Fatalf("upward walk union: want %d rows, got %d", total, len(got))
+	}
+
+	first, firstErr := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize})
+	if firstErr != nil {
+		t.Fatalf("first page for cursors: %v", firstErr)
+	}
+	if first.NextCursor == "" || first.PrevCursor == "" {
+		t.Fatal("a full first page must carry both cursors")
+	}
+}
+
+func TestReadStore_PrependNewArrival(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	property := seedProperty(t, pool, owner)
+	for i := range 6 {
+		seedEntry(t, pool, owner, property, time.Unix(int64(1000+i), 0),
+			domain.KindOperation, domain.ActionOperationPaid, domain.BaseCompleted, fmt.Sprintf("Строка %d", i))
+	}
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	// Страница, снятая до прихода, несёт ключ первой (самой свежей) строки;
+	// prepend по after_cursor возвращает ровно свежую строку — без дублей
+	// и потерь.
+	first, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 5})
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	seedEntry(t, pool, owner, property, time.Unix(2000, 0),
+		domain.KindPayment, domain.ActionPaymentCreated, domain.BaseAdded, "Свежая строка")
+	page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 5, AfterCursor: first.PrevCursor})
+	if err != nil {
+		t.Fatalf("prepend page: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Segments[0].Text != "Свежая строка" {
+		t.Fatalf("prepend: want exactly the fresh row, got %+v", page.Items)
+	}
+}
+
+// Всплеск новых записей больше страницы (контракт openapi «появившиеся
+// записи не теряются»): 60 строк строго новее якоря не помещаются в одну
+// страницу из 50 — after-цепочка от якоря обязана донести весь всплеск,
+// ровно множество засеянных строк, без дублей и дыр. Одиночный prepend
+// (TestReadStore_PrependNewArrival) эту дыру не ловит: одна строка всегда
+// умещается в страницу.
+func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	property := seedProperty(t, pool, owner)
+
+	for i := range 5 {
+		seedEntry(t, pool, owner, property, time.Unix(int64(1000+i), 0),
+			domain.KindOperation, domain.ActionOperationPaid, domain.BaseCompleted, fmt.Sprintf("База %d", i))
+	}
+	svc := newReadStack(pool)
+	ctx := context.Background()
+
+	// Якорь — ключ свежайшей строки страницы, снятой до всплеска.
+	first, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: 5})
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+
+	// Всплеск: 60 строк строго новее якоря, у каждой свой момент времени —
+	// детерминированный порядок (created_at, id).
+	const burst = 60
+	seeded := make(map[uuid.UUID]bool, burst)
+	rowIDAt := newRowIDAt(t, pool, property)
+	for i := range burst {
+		at := time.Unix(2000+int64(i), 0)
+		seedEntry(t, pool, owner, property, at,
+			domain.KindPayment, domain.ActionPaymentCreated, domain.BaseAdded, fmt.Sprintf("Всплеск %d", i))
+		seeded[rowIDAt(at)] = true
+	}
+
+	got := walkAfterPages(t, ctx, svc, owner, first.PrevCursor, seeded, burst)
+	if len(got) != burst {
+		t.Fatalf("after-walk: want all %d burst rows, got %d — %d lost", burst, len(got), burst-len(got))
+	}
+}
+
+// walkAfterPages turns the pages after the anchor cursor until exhaustion,
+// asserting each page's order, burst membership and cursor hygiene — the
+// loop body of TestReadStore_AfterCursorBurstWalk (граница gocognit).
+func walkAfterPages(
+	t *testing.T, ctx context.Context, svc *historyapp.HistoryReadService, owner uuid.UUID,
+	after string, seeded map[uuid.UUID]bool, burst int,
+) map[uuid.UUID]bool {
+	t.Helper()
+	const pageSize = 50
+	got := map[uuid.UUID]bool{}
+	pages := 0
+	for after != "" {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Limit: pageSize, AfterCursor: after})
+		if err != nil {
+			t.Fatalf("after page %d: %v", pages, err)
+		}
+		if assertAfterPage(t, page, seeded, got, pages, pageSize) {
+			break
+		}
+		if page.PrevCursor == "" {
+			t.Fatal("a full after-page must carry prev_cursor")
+		}
+		pages++
+		if pages > burst/pageSize+1 {
+			t.Fatal("the after-walk did not end within the burst's pages")
+		}
+		after = page.PrevCursor
+	}
+	return got
+}
+
+// assertAfterPage verifies one after-walk page: the empty page carries
+// neither cursor, the (created_at, id) DESC order holds, every row is a
+// first-seen burst row. Returns true when the walk must end (an empty page
+// or a short one).
+func assertAfterPage(
+	t *testing.T,
+	page historyapp.FeedPage,
+	seeded, got map[uuid.UUID]bool,
+	pages, pageSize int,
+) bool {
+	t.Helper()
+	if len(page.Items) == 0 {
+		if page.NextCursor != "" || page.PrevCursor != "" {
+			t.Fatal("an empty after-page must carry neither cursor")
+		}
+		return true
+	}
+	for i := 1; i < len(page.Items); i++ {
+		if page.Items[i].CreatedAt.After(page.Items[i-1].CreatedAt) {
+			t.Fatal("an after-page must keep the (created_at, id) DESC order")
+		}
+	}
+	for _, item := range page.Items {
+		if got[item.ID] {
+			t.Fatalf("after page %d: duplicate row %s", pages, item.ID)
+		}
+		if !seeded[item.ID] {
+			t.Fatalf("after page %d: row %s is not part of the burst", pages, item.ID)
+		}
+		got[item.ID] = true
+	}
+	return len(page.Items) < pageSize
+}
+
+func TestReadStore_Filters(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	propertyA := seedProperty(t, pool, owner)
+	propertyB := seedProperty(t, pool, owner)
+	seedMembership(t, pool, propertyA, member)
+
+	base := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	seedEntry(t, pool, owner, propertyA, base, domain.KindPayment, domain.ActionPaymentCreated, domain.BaseAdded, "Платёж создан")
+	seedEntry(t, pool, owner, propertyA, base.Add(time.Second), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+	seedEntry(t, pool, member, propertyA, base.Add(2*time.Second), domain.KindTask, domain.ActionTaskCompleted,
+		domain.BaseCompleted, "Задача выполнена")
+	seedEntry(t, pool, owner, propertyB, base.Add(3*time.Second), domain.KindPayment, domain.ActionPaymentCreated,
+		domain.BaseAdded, "Платёж создан")
+
+	svc := newReadStack(pool)
+	ctx := context.Background()
+	feed := func(q historyapp.FeedQuery) []domain.FeedEntry {
+		t.Helper()
+		page, err := svc.Feed(ctx, owner, q)
+		if err != nil {
+			t.Fatalf("feed: %v", err)
+		}
+		return page.Items
+	}
+
+	if got := len(feed(historyapp.FeedQuery{Kinds: []string{kindPayment}})); got != 2 {
+		t.Fatalf("kinds=payment: want 2 rows, got %d", got)
+	}
+	if got := len(feed(historyapp.FeedQuery{BaseActions: []string{"completed"}})); got != 2 {
+		t.Fatalf("base=completed: want 2 rows, got %d", got)
+	}
+	if got := len(feed(historyapp.FeedQuery{ActorIDs: []uuid.UUID{member}})); got != 1 {
+		t.Fatalf("actor=member: want 1 row, got %d", got)
+	}
+	if got := len(feed(historyapp.FeedQuery{PropertyIDs: []uuid.UUID{propertyA}})); got != 3 {
+		t.Fatalf("property=A: want 3 rows, got %d", got)
+	}
+	if got := len(feed(historyapp.FeedQuery{Kinds: []string{kindPayment}, PropertyIDs: []uuid.UUID{propertyA}})); got != 1 {
+		t.Fatalf("kinds+property: want 1 row, got %d", got)
+	}
+	// Период: границы — календарные дни; верхняя исключающая (дата + 24ч).
+	day := func(y int, m time.Month, d int) *time.Time {
+		t0 := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+		return &t0
+	}
+	if got := len(feed(historyapp.FeedQuery{DateFrom: day(2026, 9, 20), DateTo: day(2026, 9, 21)})); got != 4 {
+		t.Fatalf("period=Sep 20: want 4 rows, got %d", got)
+	}
+	if got := len(feed(historyapp.FeedQuery{DateFrom: day(2026, 9, 21)})); got != 0 {
+		t.Fatalf("period=Sep 21+: want 0 rows, got %d", got)
+	}
+}
+
+func TestReadStore_SearchRespectsScope(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr.petrov@example.com")
+	property := seedProperty(t, pool, owner)
+	seedMembership(t, pool, property, member)
+
+	base := time.Unix(1000, 0)
+	seedEntry(t, pool, owner, property, base, domain.KindProperty, domain.ActionPropertyRenamed,
+		domain.BaseChanged, "Название объекта изменено")
+	seedEntry(t, pool, member, property, base.Add(time.Second), domain.KindContact, domain.ActionContactCreated,
+		domain.BaseAdded, "Контакт создан: Анна Ленина")
+
+	svc := newReadStack(pool)
+	ctx := context.Background()
+	search := func(actor uuid.UUID, q string, propertyIDs ...uuid.UUID) int {
+		t.Helper()
+		page, err := svc.Feed(ctx, actor, historyapp.FeedQuery{Query: q, PropertyIDs: propertyIDs})
+		if err != nil {
+			t.Fatalf("search %q: %v", q, err)
+		}
+		return len(page.Items)
+	}
+
+	if got := search(owner, "qqqqzzzz"); got != 0 {
+		t.Fatalf("garbage query: want 0 rows, got %d", got)
+	}
+	// Поиск уважает скоуп. Глобальная лента участника — только свои объекты
+	// (#1412): строки чужого объекта не находятся, даже по имени владельца.
+	if got := search(member, "Иванов"); got != 0 {
+		t.Fatalf("member global search by owner name: want 0 rows (#1412), got %d", got)
+	}
+	if got := search(member, "Петров"); got != 0 {
+		t.Fatalf("member global search by own name: want 0 rows (no own objects), got %d", got)
+	}
+	// Суженная область — канон: участник ищет по чужому объекту, который
+	// читает, — свою строку по своей почте, строку владельца по имени
+	// (семантика предиката — TestReadStore_SearchPredicate).
+	if got := search(member, "Иванов", property); got != 1 {
+		t.Fatalf("member scoped search by owner name: want 1 row, got %d", got)
+	}
+	if got := search(member, "Петров", property); got != 1 {
+		t.Fatalf("member scoped search by own name: want 1 row, got %d", got)
+	}
+}
+
+// newPredicateSearch создаёт замыкание поиска от лица владельца: на вход
+// строка, на выходе множество id строк выдачи.
+func newPredicateSearch(t *testing.T, svc *historyapp.HistoryReadService, owner uuid.UUID) func(string) map[uuid.UUID]bool {
+	t.Helper()
+	ctx := context.Background()
+	return func(q string) map[uuid.UUID]bool {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Query: q})
+		if err != nil {
+			t.Fatalf("search %q: %v", q, err)
+		}
+		ids := make(map[uuid.UUID]bool, len(page.Items))
+		for _, item := range page.Items {
+			ids[item.ID] = true
+		}
+		return ids
+	}
+}
+
+// searchPredicateCount сверяет выдачу поиска с точным ожиданием строк.
+func searchPredicateCount(t *testing.T, search func(string) map[uuid.UUID]bool, q string, want int) {
+	t.Helper()
+	if got := len(search(q)); got != want {
+		t.Fatalf("search %q: want %d rows, got %d", q, want, got)
+	}
+}
+
+// newRowIDAt создаёт вычитку засеянной строки по зафиксированному created_at.
+func newRowIDAt(t *testing.T, pool *pgxpool.Pool, property uuid.UUID) func(time.Time) uuid.UUID {
+	t.Helper()
+	return func(at time.Time) uuid.UUID {
+		var id uuid.UUID
+		if err := pool.QueryRow(context.Background(),
+			`SELECT id FROM action_journal WHERE property_id = $1 AND created_at = $2`,
+			property, at,
+		).Scan(&id); err != nil {
+			t.Fatalf("locate seeded row at %s: %v", at, err)
+		}
+		return id
+	}
+}
+
+// searchPredicatePrefixes проверяет префиксные сценарии: «петр» находит
+// «Петрова»; любой ввод семьи «иван/иванов/Иванова» находит обе формы
+// фамилии (стеммер асимметричен, и to_tsquery нормализует лексему
+// префикса: 'иванов':* живёт как 'ива':* — выручает союз prefix-FTS и
+// ILIKE-ног). Имена актёров в searchable («Иван Иванов» в каждой строке
+// владельца) точные счётчики ломают — семья фамилии проверяется сабсетом.
+func searchPredicatePrefixes(t *testing.T, search func(string) map[uuid.UUID]bool, idsA, idsE uuid.UUID) {
+	t.Helper()
+	searchPredicateCount(t, search, "петр", 1)
+	for _, q := range []string{"иван", "иванов", "ив", "Иванова"} {
+		got := search(q)
+		if !got[idsA] || !got[idsE] {
+			t.Fatalf("prefix %q: want both surname forms found, got %v rows", q, len(got))
+		}
+	}
+}
+
+// searchPredicateKeyset проверяет пустой ввод (фильтра нет — лента целиком)
+// и постраничный обход выдачи keyset'ом без дублей и дыр: «счёт» находит
+// три строки (две «выставила счёт» и «счёт 100% оплачен»), порция в две.
+func searchPredicateKeyset(t *testing.T, svc *historyapp.HistoryReadService, owner uuid.UUID, total int) {
+	t.Helper()
+	ctx := context.Background()
+	for _, q := range []string{"", "   "} {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Query: q})
+		if err != nil {
+			t.Fatalf("empty search %q: %v", q, err)
+		}
+		if len(page.Items) != total {
+			t.Fatalf("empty query %q: want %d rows, got %d", q, total, len(page.Items))
+		}
+	}
+	seen := map[uuid.UUID]bool{}
+	cursor := ""
+	pages := 0
+	for {
+		page, err := svc.Feed(ctx, owner, historyapp.FeedQuery{Query: "счёт", Limit: 2, BeforeCursor: cursor})
+		if err != nil {
+			t.Fatalf("search page %d: %v", pages, err)
+		}
+		for _, item := range page.Items {
+			if seen[item.ID] {
+				t.Fatalf("search page %d: duplicate row %s", pages, item.ID)
+			}
+			seen[item.ID] = true
+		}
+		pages++
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	if len(seen) != 3 || pages != 2 {
+		t.Fatalf("search keyset walk: want 3 rows over 2 pages, got %d rows over %d pages", len(seen), pages)
+	}
+}
+
+// TestReadStore_SearchPredicate гоняет всегда-OR предикат поиска (ресерч
+// #839, тикет #842) по сценарию «как в Telegram»: префикс слова, фрагмент
+// внутри слова, морфология, почта, обрубки и инъекции — на одном сиде
+// («Иванов заплатил», «Петрова выставила счёт», «renewed contract»,
+// «счёт 100% оплачен», «Иванова выставила счёт», «ivanov.petr@example.com»).
+func TestReadStore_SearchPredicate(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	maria := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
+	property := seedProperty(t, pool, owner)
+	seedMembership(t, pool, property, maria)
+
+	base := time.Unix(1000, 0)
+	seedEntry(t, pool, owner, property, base, domain.KindPayment, domain.ActionPaymentCreated,
+		domain.BaseAdded, "Иванов заплатил")
+	seedEntry(t, pool, maria, property, base.Add(time.Second), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Петрова выставила счёт")
+	seedEntry(t, pool, owner, property, base.Add(2*time.Second), domain.KindProperty, domain.ActionPropertyRenamed,
+		domain.BaseChanged, "renewed contract")
+	seedEntry(t, pool, owner, property, base.Add(3*time.Second), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "счёт 100% оплачен")
+	seedEntry(t, pool, owner, property, base.Add(4*time.Second), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Иванова выставила счёт")
+	seedEntry(t, pool, owner, property, base.Add(5*time.Second), domain.KindContact, domain.ActionContactCreated,
+		domain.BaseAdded, "ivanov.petr@example.com")
+
+	svc := newReadStack(pool)
+	const total = 6
+	search := newPredicateSearch(t, svc, owner)
+	rowIDAt := newRowIDAt(t, pool, property)
+	idsA, idsE := rowIDAt(base), rowIDAt(base.Add(4*time.Second))
+
+	t.Run("префиксы", func(t *testing.T) {
+		t.Parallel()
+		searchPredicatePrefixes(t, search, idsA, idsE)
+	})
+	t.Run("морфология и фрагменты", func(t *testing.T) {
+		t.Parallel()
+		// «заплатила» → «заплатил», «renewing» → «renewed»; «трова» —
+		// фрагмент внутри слова, видит только ILIKE-нога.
+		searchPredicateCount(t, search, "заплатила", 1)
+		searchPredicateCount(t, search, "renewing", 1)
+		searchPredicateCount(t, search, "трова", 1)
+	})
+	t.Run("почта", func(t *testing.T) {
+		t.Parallel()
+		// Обрубок локальной части, точка внутри локальной части, домен.
+		searchPredicateCount(t, search, "maria@", 1)
+		searchPredicateCount(t, search, "ivanov.petr", 1)
+		searchPredicateCount(t, search, "@example.com", total)
+	})
+	t.Run("обрубки и цифры", func(t *testing.T) {
+		t.Parallel()
+		// Хвостовая точка не мешает префиксу, отсутствующие цифры дают
+		// пустую выдачу без ошибки; один символ «ё» живёт только в «счёт»
+		// (три строки), FTS-нога на стоп-слове молчит — ищет ILIKE-нога.
+		searchPredicateCount(t, search, "петр.", 1)
+		searchPredicateCount(t, search, "125000", 0)
+		searchPredicateCount(t, search, "ё", 3)
+	})
+	t.Run("многословие", func(t *testing.T) {
+		t.Parallel()
+		// AND по лексемам; последнее слово едет префиксом (семантика
+		// инкрементального ввода — «выставила сч» находит обе «выставила
+		// счёт»), стоп-слово снимается до приклейки ':*'.
+		searchPredicateCount(t, search, "иванова выставила", 1)
+		searchPredicateCount(t, search, "выставила сч", 2)
+		searchPredicateCount(t, search, "петр и", 1)
+	})
+	t.Run("инъекции", func(t *testing.T) {
+		t.Parallel()
+		// Не роняют запрос и не превращаются в wildcard: '%' и '_' ищутся
+		// литерально (pgconv.EscapeLikePattern + ESCAPE '\').
+		searchPredicateCount(t, search, "'", 0)
+		searchPredicateCount(t, search, "'; --", 0)
+		searchPredicateCount(t, search, "_", 0)
+		searchPredicateCount(t, search, "0%", 1)
+	})
+	t.Run("пустое и keyset", func(t *testing.T) {
+		t.Parallel()
+		searchPredicateKeyset(t, svc, owner, total)
+	})
+}
+
+func TestReadStore_FilterOptionsParticipants(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
+
+	property := seedProperty(t, pool, owner)
+	otherProperty := seedProperty(t, pool, stranger)
+	seedMembership(t, pool, property, member)
+	seedMembership(t, pool, property, viewer)
+
+	base := time.Unix(1000, 0)
+	// Отозванный актёр: вышел из объекта — записи остались,
+	// фильтруемым остался.
+	exited := seedUser(t, pool, "Олег", "Ушёл", "+79990000005", "oleg@example.com")
+	seedMembership(t, pool, property, exited)
+	seedEntry(t, pool, exited, property, base,
+		domain.KindRental, domain.ActionRentalCreated, domain.BaseAdded, "Аренда создана")
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, property, exited,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+	// Обезличенный актёр: пользователь удалён (actor_id SET NULL) — в
+	// опциях его нет, строка остаётся.
+	ghost := seedUser(t, pool, "Лев", "Призрак", "+79990000006", "ghost@example.com")
+	seedEntry(t, pool, ghost, property, base.Add(time.Second),
+		domain.KindTask, domain.ActionTaskCompleted, domain.BaseCompleted, "Задача выполнена")
+	if _, err := pool.Exec(t.Context(), `DELETE FROM users WHERE id = $1`, ghost); err != nil {
+		t.Fatalf("delete ghost user: %v", err)
+	}
+	seedEntry(t, pool, owner, property, base.Add(2*time.Second),
+		domain.KindPayment, domain.ActionPaymentCreated, domain.BaseAdded, "Платёж создан")
+
+	// Приостановленный участник остаётся в списке: suspend не вытирает его
+	// из состава участников.
+	suspendMembership(t, pool, property, viewer)
+
+	svc := newReadStack(pool)
+
+	// Глобальный фильтр владельца: вся его область — suspended и отозванные
+	// остаются фильтруемыми, призрак и чужие — нет.
+	opts, err := svc.Filters(t.Context(), owner, nil)
+	if err != nil {
+		t.Fatalf("filters: %v", err)
+	}
+	assertParticipantNames(t, participantNames(opts.Participants),
+		[]string{ownerDisplayName, petrDisplayName, annaDisplayName, "Олег Ушёл"},
+		[]string{ghostActorName, "Зина Злобина"})
+
+	// Глобальный фильтр участника без своих объектов — пуст (D14, #1305):
+	// владелец и соучастники чужого объекта не раскрываются.
+	memberOpts, err := svc.Filters(t.Context(), member, nil)
+	if err != nil {
+		t.Fatalf("member filters: %v", err)
+	}
+	if len(memberOpts.Participants) != 0 {
+		t.Fatalf("member global participants: want none (D14), got %+v", memberOpts.Participants)
+	}
+
+	// Per-object фильтр того же участника (D6 — без изменений): собственник
+	// и соучастники суженной области остаются — включая приостановленную
+	// Анну и отозванного Олега; призрак и чужой объект — нет.
+	scopedMember, err := svc.Filters(t.Context(), member, []uuid.UUID{property})
+	if err != nil {
+		t.Fatalf("member scoped filters: %v", err)
+	}
+	assertParticipantNames(t, participantNames(scopedMember.Participants),
+		[]string{ownerDisplayName, petrDisplayName, annaDisplayName, "Олег Ушёл"},
+		[]string{ghostActorName, "Зина Злобина"})
+
+	// Скоуп по property_ids сужает участников: журнал другого объекта
+	// не подмешивается (зовёт владелец этого объекта).
+	scopedOpts, err := svc.Filters(t.Context(), stranger, []uuid.UUID{otherProperty})
+	if err != nil {
+		t.Fatalf("scoped filters: %v", err)
+	}
+	if len(scopedOpts.Participants) != 1 || scopedOpts.Participants[0].ID != stranger {
+		t.Fatalf("scoped participants: want only Зина, got %+v", scopedOpts.Participants)
+	}
+}
+
+// Изоляция глобального фильтра «Участники» (D14 спеки #1302, аудит #1298,
+// тикет #1305): получатель shared-доступа в глобальной ленте видит только
+// участников СВОИХ объектов — владелец и соучастники чужого объекта не
+// раскрываются. Per-object фильтр (property_ids) ведёт себя по D6 —
+// собственник и соучастники суженной области остаются: фиксация поведения
+// «без изменений».
+func TestReadStore_GlobalFilterParticipantsIsolation(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	recipient := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
+	ownMember := seedUser(t, pool, "Сергей", "Сидоров", "+79990000003", "sergey@example.com")
+
+	sharedProperty := seedProperty(t, pool, owner)
+	ownProperty := seedProperty(t, pool, recipient)
+	seedMembership(t, pool, sharedProperty, recipient)
+	seedMembership(t, pool, ownProperty, ownMember)
+	seedEntry(t, pool, owner, sharedProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+
+	// Глобальный фильтр получателя: только участники его объекта — сама
+	// Мария (владелец, замок) и Сергей; Иван из чужого объекта не виден.
+	opts, err := svc.Filters(t.Context(), recipient, nil)
+	if err != nil {
+		t.Fatalf("recipient global filters: %v", err)
+	}
+	ids, owners := participantFlags(opts.Participants)
+	if len(ids) != 2 || !ids[recipient] || !ids[ownMember] {
+		t.Fatalf("global participants: want only the own property's people, got %+v", opts.Participants)
+	}
+	if !owners[recipient] {
+		t.Errorf("recipient own row: want is_owner (замок владельца), got %+v", opts.Participants)
+	}
+
+	// Per-object фильтр того же получателя (история чужого объекта, D6):
+	// собственник и соучастники остаются — поведение не изменилось; замок —
+	// у владельца суженного объекта, не у читателя.
+	scoped, err := svc.Filters(t.Context(), recipient, []uuid.UUID{sharedProperty})
+	if err != nil {
+		t.Fatalf("recipient scoped filters: %v", err)
+	}
+	assertScopedOwnership(t, scoped.Participants, map[uuid.UUID]bool{owner: true, recipient: false})
+}
+
+// Изоляция глобального фильтра «Объекты» (сужение глобальной ленты,
+// тикет #1412): получатель shared-доступа в глобальной области видит
+// только СВОИ объекты — чужой живой объект, куда его пригласили, в опциях
+// не раскрывается (иначе чип фильтровал бы ленту, которая по #1412 чужих
+// строк не отдаёт). Per-object фильтр (property_ids) ведёт себя по канону
+// derived access — запрошенный видимый чужой объект остаётся.
+func TestReadStore_GlobalFilterObjectsIsolation(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	recipient := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
+
+	sharedProperty := seedProperty(t, pool, owner)
+	ownProperty := seedProperty(t, pool, recipient)
+	seedMembership(t, pool, sharedProperty, recipient)
+	seedEntry(t, pool, owner, sharedProperty, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+
+	svc := newReadStack(pool)
+
+	// Глобальный фильтр получателя: только свой объект.
+	opts, err := svc.Filters(t.Context(), recipient, nil)
+	if err != nil {
+		t.Fatalf("recipient global filters: %v", err)
+	}
+	if len(opts.Objects) != 1 || opts.Objects[0].ID != ownProperty {
+		t.Fatalf("global objects: want only the own property, got %+v", opts.Objects)
+	}
+
+	// Per-object фильтр того же получателя (история чужого объекта):
+	// запрошенный видимый объект остаётся — канон без изменений.
+	scoped, err := svc.Filters(t.Context(), recipient, []uuid.UUID{sharedProperty})
+	if err != nil {
+		t.Fatalf("recipient scoped filters: %v", err)
+	}
+	if len(scoped.Objects) != 1 || scoped.Objects[0].ID != sharedProperty {
+		t.Fatalf("scoped objects: want the shared property, got %+v", scoped.Objects)
+	}
+}
+
+// Владелец-замок считается по любому объекту скоупа, а не по роли на
+// конкретному: приглашённый, владеющий вторым объектом той же области
+// чтения, помечен is_owner; приглашённый без своих объектов — нет.
+// Замок у того, кто пригласил (#711, макет 2067-163528). First_name —
+// имя без фамилии; у пользователя без имени — пусто (name — полный
+// телефон, #1105).
+func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	const namelessPhone = "+79990000009"
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	invited := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	nameless := seedUser(t, pool, "", "", namelessPhone, "nameless@example.com")
+
+	property := seedProperty(t, pool, owner)
+	ownProperty := seedProperty(t, pool, member) // Пётр владеет вторым объектом области.
+	seedMembership(t, pool, property, member)
+	seedMembership(t, pool, property, invited)
+	seedMembership(t, pool, property, nameless)
+	seedMembership(t, pool, ownProperty, owner) // Иван читает оба объекта.
+
+	svc := newReadStack(pool)
+	opts, err := svc.Filters(t.Context(), owner, nil)
+	if err != nil {
+		t.Fatalf("filters: %v", err)
+	}
+	if len(opts.Participants) != 4 {
+		t.Fatalf("participants: want 4, got %+v", opts.Participants)
+	}
+	byID := map[uuid.UUID]domain.FilterParticipant{}
+	for _, p := range opts.Participants {
+		byID[p.ID] = p
+	}
+	// Глобальная область — только объекты читателя (D14, #1305): замок у
+	// самого Ивана; Пётр — участник, его собственный объект в глобальную
+	// область Ивана не входит. First_name — имя без фамилии; у
+	// пользователя без имени — пусто, name — «Пользователь» (#1105,
+	// аменд #1123).
+	tests := []struct {
+		name      string
+		p         domain.FilterParticipant
+		wantOwner bool
+		wantFirst string
+		wantName  string
+	}{
+		{"owner", byID[owner], true, "Иван", ownerDisplayName},
+		{"member owning a property outside the global scope", byID[member], false, "Пётр", petrDisplayName},
+		{"invited without own objects", byID[invited], false, "Анна", "Анна Сидорова"},
+		{"nameless", byID[nameless], false, "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.p.IsOwner != tt.wantOwner {
+				t.Errorf("is_owner: want %v, got %+v", tt.wantOwner, tt.p)
+			}
+			if tt.p.FirstName != tt.wantFirst {
+				t.Errorf("first_name: want %q, got %+v", tt.wantFirst, tt.p)
+			}
+			if tt.wantName != "" && tt.p.Name != tt.wantName {
+				t.Errorf("name: want %q, got %+v", tt.wantName, tt.p)
+			}
+		})
+	}
+	if name := byID[nameless].Name; name != "Пользователь" {
+		t.Errorf("nameless name: want the anonymous label (аменд #1123), got %q", name)
+	}
+
+	// Суженная область — объект Петра, где Иван участник (D6): замок
+	// владельца у Петра, Иван — без замка; замок считается по объектам
+	// скоупа, а не по глобальной области.
+	scopedOwn, err := svc.Filters(t.Context(), owner, []uuid.UUID{ownProperty})
+	if err != nil {
+		t.Fatalf("scoped own filters: %v", err)
+	}
+	assertScopedOwnership(t, scopedOwn.Participants, map[uuid.UUID]bool{member: true, owner: false})
+
+	// Скоуп по property_ids: единственный участник — владелец суженной
+	// области, замок и first_name доходят и в суженном запросе.
+	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
+	foreignProperty := seedProperty(t, pool, stranger)
+	scopedOpts, err := svc.Filters(t.Context(), stranger, []uuid.UUID{foreignProperty})
+	if err != nil {
+		t.Fatalf("scoped filters: %v", err)
+	}
+	if len(scopedOpts.Participants) != 1 {
+		t.Fatalf("scoped participants: want only Зина, got %+v", scopedOpts.Participants)
+	}
+	if p := scopedOpts.Participants[0]; !p.IsOwner || p.FirstName != "Зина" {
+		t.Fatalf("scoped participants: want is_owner + first name Зина, got %+v", p)
+	}
+}
+
+// Роль строки шита (#840, макет 2184-94261): максимальный доступ в области
+// — владелец → owner, живое членство → его роль, отозванный актёр → роль
+// из снимка журнала (actor_role); у человека с членством и журнальным
+// снимком разных ролей побеждает более широкая (MIN ранга).
+func TestReadStore_FilterOptionsParticipantRoles(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	fullAccess := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	exited := seedUser(t, pool, "Олег", "Ушёл", "+79990000004", "oleg@example.com")
+	mixed := seedUser(t, pool, "Мария", "Петрова", "+79990000005", "maria@example.com")
+
+	property := seedProperty(t, pool, owner)
+	seedMembership(t, pool, property, fullAccess)
+	seedMembership(t, pool, property, exited)
+	// Viewer-членство прямым INSERT'ом: хелпер сеет только full_access.
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO property_members (id, property_id, user_id, role, granted_by)
+		 VALUES ($1, $2, $3, 'viewer', $3)`,
+		uuid.Must(uuid.NewV7()), property, viewer,
+	); err != nil {
+		t.Fatalf("seed viewer membership: %v", err)
+	}
+	// Олег вышел из объекта — в опциях остаётся снимком журнала
+	// (actor_role full_access).
+	exitedEntry := domain.Entry{
+		PropertyID: property,
+		ActorID:    &exited,
+		ActorRole:  domain.ActorRoleFullAccess,
+		Kind:       domain.KindRental,
+		Action:     domain.ActionRentalCreated,
+		BaseAction: domain.BaseAdded,
+		Segments:   domain.Segments{{Text: "Аренда создана"}},
+		Context:    map[string]any{},
+		CreatedAt:  time.Unix(1000, 0),
+	}
+	if err := historypg.NewRecorder(pool).Record(context.Background(), exitedEntry); err != nil {
+		t.Fatalf("seed exited entry: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, property, exited,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+	// Мария: viewer-членство на объекте + журнальный снимок full_access —
+	// более широкая роль побеждает.
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO property_members (id, property_id, user_id, role, granted_by)
+		 VALUES ($1, $2, $3, 'viewer', $3)`,
+		uuid.Must(uuid.NewV7()), property, mixed,
+	); err != nil {
+		t.Fatalf("seed mixed membership: %v", err)
+	}
+	mixedEntry := domain.Entry{
+		PropertyID: property,
+		ActorID:    &mixed,
+		ActorRole:  domain.ActorRoleFullAccess,
+		Kind:       domain.KindTask,
+		Action:     domain.ActionTaskCompleted,
+		BaseAction: domain.BaseCompleted,
+		Segments:   domain.Segments{{Text: "Задача выполнена"}},
+		Context:    map[string]any{},
+		CreatedAt:  time.Unix(1001, 0),
+	}
+	if err := historypg.NewRecorder(pool).Record(context.Background(), mixedEntry); err != nil {
+		t.Fatalf("seed mixed entry: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	opts, err := svc.Filters(t.Context(), owner, nil)
+	if err != nil {
+		t.Fatalf("filters: %v", err)
+	}
+	byID := map[uuid.UUID]domain.FilterParticipant{}
+	for _, p := range opts.Participants {
+		byID[p.ID] = p
+	}
+	wantRoles := map[uuid.UUID]string{
+		owner:      string(domain.ActorRoleOwner),
+		fullAccess: string(domain.ActorRoleFullAccess),
+		viewer:     string(domain.ActorRoleViewer),
+		exited:     string(domain.ActorRoleFullAccess),
+		mixed:      string(domain.ActorRoleFullAccess),
+	}
+	tests := []struct {
+		name      string
+		id        uuid.UUID
+		wantOwner bool
+	}{
+		{"владелец области", owner, true},
+		{"full access member", fullAccess, false},
+		{"viewer member", viewer, false},
+		{"exited actor by journal snapshot", exited, false},
+		{"journal snapshot vs membership — wider wins", mixed, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := byID[tt.id]
+			if p.Role != wantRoles[tt.id] {
+				t.Errorf("role: want %q, got %+v", wantRoles[tt.id], p)
+			}
+			if p.IsOwner != tt.wantOwner {
+				t.Errorf("is_owner: want %v, got %+v", tt.wantOwner, p)
+			}
+		})
+	}
+}
+
+func TestReadStore_FilterOptionsObjects(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
+
+	property := seedProperty(t, pool, owner)
+	seedProperty(t, pool, stranger)
+
+	// Фото-аватар: с приватными фото (ADR 0065) он один на объект и живёт в
+	// properties.photo_key; наружу — same-origin путь стриминга.
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE properties SET photo_key = $2, photo_content_type = 'image/jpeg' WHERE id = $1`,
+		property, "photos/01987654-3210-7abc-9def-0123456789ab.jpg",
+	); err != nil {
+		t.Fatalf("seed photo: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	opts, err := svc.Filters(t.Context(), owner, nil)
+	if err != nil {
+		t.Fatalf("filters: %v", err)
+	}
+	// Чужой объект в опциях не попадает.
+	if len(opts.Objects) != 1 || opts.Objects[0].ID != property {
+		t.Fatalf("objects: want only the visible one, got %+v", opts.Objects)
+	}
+	if opts.Objects[0].PhotoURL != "/api/properties/"+property.String()+"/photo" {
+		t.Fatalf("photo avatar: want the streaming path, got %q", opts.Objects[0].PhotoURL)
+	}
+}
+
+func TestReadStore_ArchivedScopeForOptions(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	coMember := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	property := seedProperty(t, pool, owner)
+	// Свой живой объект участника с соучастником: глобальный фильтр
+	// participant-скипа D14 непуст — архивная нога чужого объекта видна
+	// на его фоне.
+	ownProperty := seedProperty(t, pool, member)
+	seedMembership(t, pool, property, member)
+	seedMembership(t, pool, ownProperty, coMember)
+	seedEntry(t, pool, owner, property, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
+		domain.BaseCompleted, "Операция оплачена")
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE properties SET status = 'archived' WHERE id = $1`, property,
+	); err != nil {
+		t.Fatalf("archive property: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	ctx := t.Context()
+
+	// Владелец: архивный объект остаётся в опциях вместе с историей.
+	opts, err := svc.Filters(ctx, owner, nil)
+	if err != nil {
+		t.Fatalf("owner filters: %v", err)
+	}
+	if len(opts.Objects) != 1 {
+		t.Fatalf("owner objects: archived stays visible, got %+v", opts.Objects)
+	}
+
+	// Участник: архив ничего не добавляет (канон невидимости архива, #163)
+	// — чужой архивный объект в объектах не виден, остаётся только свой
+	// живой; участники глобального фильтра — только люди его собственного
+	// объекта, владелец архивного не раскрыт (D14, #1305).
+	opts, err = svc.Filters(ctx, member, nil)
+	if err != nil {
+		t.Fatalf("member filters: %v", err)
+	}
+	if len(opts.Objects) != 1 || opts.Objects[0].ID != ownProperty {
+		t.Fatalf("member objects: want only the own live property, got %+v", opts.Objects)
+	}
+	memberIDs := map[uuid.UUID]bool{}
+	for _, p := range opts.Participants {
+		memberIDs[p.ID] = true
+	}
+	if len(memberIDs) != 2 || !memberIDs[member] || !memberIDs[coMember] {
+		t.Fatalf("member participants: want only the own property's people, got %+v", opts.Participants)
+	}
+}
+
+// Статус участника шита фильтров (карта #1324, протокол D6, решение
+// #1317 §5): current — живая нога в области (владелец или членство,
+// приостановленное живо), removed — только строки журнала. Повторное
+// добавление живит автоматически; мульти-скоуп читает bool_or по всем
+// объектам области, сужение property_ids — та же семантика на узкой
+// области; computed на лету, без таблицы.
+func TestReadStore_ParticipantStatus(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	suspendedOne := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	revoked := seedUser(t, pool, "Олег", "Ушёл", "+79990000004", "oleg@example.com")
+	readded := seedUser(t, pool, "Мира", "Вернувшаяся", "+79990000005", "mira@example.com")
+	journalOnly := seedUser(t, pool, "Борис", "Сторонний", "+79990000006", "boris@example.com")
+
+	propertyA := seedProperty(t, pool, owner)
+	propertyB := seedProperty(t, pool, owner)
+	seedMembership(t, pool, propertyA, member)
+	seedMembership(t, pool, propertyA, suspendedOne)
+	suspendMembership(t, pool, propertyA, suspendedOne)
+
+	base := time.Unix(1000, 0)
+	// Отзыв: членство стёрто, строки журнала остались.
+	seedMembership(t, pool, propertyA, revoked)
+	seedEntry(t, pool, revoked, propertyA, base, domain.KindRental, domain.ActionRentalCreated,
+		domain.BaseAdded, "Аренда создана")
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, propertyA, revoked,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+	// Повторное добавление: отозвали и вернули — живая нога снова есть.
+	seedMembership(t, pool, propertyA, readded)
+	seedEntry(t, pool, readded, propertyA, base.Add(time.Second), domain.KindTask, domain.ActionTaskCompleted,
+		domain.BaseCompleted, "Задача выполнена")
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, propertyA, readded,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+	seedMembership(t, pool, propertyA, readded)
+	// Журнал-only: писал в журнал, членством никогда не был.
+	seedEntry(t, pool, journalOnly, propertyA, base.Add(2*time.Second), domain.KindContact, domain.ActionContactCreated,
+		domain.BaseAdded, "Контакт создан")
+	// Мульти-скоуп: Пётр — живой участник A и отозванный B.
+	seedMembership(t, pool, propertyB, member)
+	seedEntry(t, pool, member, propertyB, base.Add(3*time.Second), domain.KindPayment, domain.ActionPaymentCreated,
+		domain.BaseAdded, "Платёж создан")
+	if _, err := pool.Exec(t.Context(),
+		`DELETE FROM property_members WHERE property_id = $1 AND user_id = $2`, propertyB, member,
+	); err != nil {
+		t.Fatalf("revoke membership: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	statusOf := func(t *testing.T, actor uuid.UUID, propertyIDs []uuid.UUID) map[uuid.UUID]string {
+		t.Helper()
+		opts, err := svc.Filters(context.Background(), actor, propertyIDs)
+		if err != nil {
+			t.Fatalf("filters: %v", err)
+		}
+		out := map[uuid.UUID]string{}
+		for _, p := range opts.Participants {
+			out[p.ID] = p.Status
+		}
+		return out
+	}
+
+	t.Run("full scope", func(t *testing.T) {
+		t.Parallel()
+		got := statusOf(t, owner, nil)
+		for id, want := range map[uuid.UUID]string{
+			owner:        statusCurrent,
+			member:       statusCurrent, // Жив в A, отозван в B — bool_or.
+			suspendedOne: statusCurrent, // Suspend живо.
+			revoked:      statusRemoved, // Только журнал.
+			readded:      statusCurrent, // Вернулся.
+			journalOnly:  statusRemoved, // Журнал без членства.
+		} {
+			if got[id] != want {
+				t.Errorf("status of %s = %q, want %q", id, got[id], want)
+			}
+		}
+	})
+	t.Run("narrowed to property B", func(t *testing.T) {
+		t.Parallel()
+		got := statusOf(t, owner, []uuid.UUID{propertyB})
+		// Пётр в области одного B — только мёртвая нога, честно removed.
+		if got[member] != statusRemoved {
+			t.Errorf("member status in B scope = %q, want removed", got[member])
+		}
+		if got[owner] != statusCurrent {
+			t.Errorf("owner status in B scope = %q, want current", got[owner])
+		}
+	})
+}
+
+// Живые ноги актёра и details доезжают до проекции (карта #1324, решение
+// #1317 §4): имя/фамилия читаются JOIN'ом users при чтении; у обезличенной
+// строки (пользователь удалён) — пустые части при живом снимке; details
+// новой строки доходят дословно, легаси-строка (NULL) остаётся nil.
+func TestReadStore_DetailsAndLiveActorLegs(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	ghost := seedUser(t, pool, "Лев", "Призрак", "+79990000002", "ghost@example.com")
+	property := seedProperty(t, pool, owner)
+
+	base := time.Unix(1000, 0)
+	// Новая строка: билдер с деталями.
+	newEntry := domain.PropertyUpdated(property, "Новое имя", []domain.AttributeChange{
+		{Key: "name", Label: "Название", Old: "Old Name", New: "Новое имя"},
+	})
+	newEntry.PropertyID = property
+	newEntry.ActorID = &owner
+	newEntry.ActorRole = domain.ActorRoleOwner
+	newEntry.CreatedAt = base
+	if err := historypg.NewRecorder(pool).Record(context.Background(), newEntry); err != nil {
+		t.Fatalf("record new-template entry: %v", err)
+	}
+	// Легаси-строка: сегменты без details, потом актёр удалён — actor_id
+	// SET NULL, снимки остаются.
+	legacy := domain.Entry{
+		PropertyID: property,
+		ActorID:    &ghost,
+		ActorRole:  domain.ActorRoleViewer,
+		Kind:       domain.KindTask,
+		Action:     domain.ActionTaskCompleted,
+		BaseAction: domain.BaseCompleted,
+		Segments:   domain.Segments{{Text: "Задача выполнена: Поливка"}},
+		Context:    map[string]any{},
+		CreatedAt:  base.Add(time.Second),
+	}
+	if err := historypg.NewRecorder(pool).Record(context.Background(), legacy); err != nil {
+		t.Fatalf("record legacy entry: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), `DELETE FROM users WHERE id = $1`, ghost); err != nil {
+		t.Fatalf("delete ghost user: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	page, err := svc.Feed(context.Background(), owner, historyapp.FeedQuery{})
+	if err != nil {
+		t.Fatalf("feed: %v", err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("feed rows = %d, want 2", len(page.Items))
+	}
+	byAction := map[domain.Action]domain.FeedEntry{}
+	for _, e := range page.Items {
+		byAction[e.Action] = e
+	}
+	assertRenamedRowDetails(t, byAction[domain.ActionPropertyUpdated])
+	assertLegacyRowLegs(t, byAction[domain.ActionTaskCompleted])
+}
+
+// Статусы шита фильтров — словарь ожиданий (goconst).
+const (
+	statusCurrent = "current"
+	statusRemoved = "removed"
+)
+
+func assertRenamedRowDetails(t *testing.T, renamed domain.FeedEntry) {
+	t.Helper()
+	wantDetails := domain.DetailLines{`Название: «Old Name» → «Новое имя»`}
+	if len(renamed.Details) != 1 || renamed.Details[0] != wantDetails[0] {
+		t.Errorf("renamed details = %q, want %q", renamed.Details, wantDetails)
+	}
+	if renamed.ActorFirstName != "Иван" || renamed.ActorLastName != "Иванов" {
+		t.Errorf("live actor legs = %q/%q, want Иван/Иванов", renamed.ActorFirstName, renamed.ActorLastName)
+	}
+}
+
+func assertLegacyRowLegs(t *testing.T, legacyRow domain.FeedEntry) {
+	t.Helper()
+	if legacyRow.Details != nil {
+		t.Errorf("legacy details = %q, want nil", legacyRow.Details)
+	}
+	if legacyRow.ActorID != nil {
+		t.Fatalf("ghost row actor_id = %v, want nil (SET NULL)", legacyRow.ActorID)
+	}
+	if legacyRow.ActorFirstName != "" || legacyRow.ActorLastName != "" {
+		t.Errorf("anonymized live legs = %q/%q, want empty parts over the live snapshot",
+			legacyRow.ActorFirstName, legacyRow.ActorLastName)
+	}
+	if legacyRow.ActorName != ghostActorName {
+		t.Errorf("anonymized snapshot = %q, want «%s» to survive", legacyRow.ActorName, ghostActorName)
+	}
+}

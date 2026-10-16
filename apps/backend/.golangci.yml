@@ -1,0 +1,550 @@
+# Конфигурация golangci-lint v2. Версия пинится в Makefile (GOLANGCI_LINT_VERSION).
+# Принцип: курируемый строгий набор — баг-класс + гигиена под стек проекта
+# (Go 1.26, chi, sqlc/pgx, oapi-codegen, slog, OTel). Шумные/opinionated линтеры
+# осознанно не включены (список с причинами — в конце файла). Не добавляй линтеры
+# из «не включаем» без причины в комментарии.
+#
+# Двухэтапный режим (бар качества #323, тикет #336): этап 1 приземлён
+# 2026-08-18 (research #321, docs/research/2026-08-18-golangci-lint-catalog.md),
+# этап 2 закрыт волнами сетки #325 — каждая настройка переносилась в действующий
+# конфиг тикетом, закрывшим последнюю ненулевую ячейку волны (флип-конвенция:
+# docs/research/2026-08-18-remediation-grid-counters.md), последняя — paralleltest
+# (тикет #376).
+version: "2"
+
+run:
+  timeout: 5m
+  # Версия языка не задаётся: берётся из apps/backend/go.mod (go 1.26) — единый источник правды.
+
+linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused; enable добавляет поверх.
+  default: standard
+  enable:
+    # --- баги и корректность ---
+    - asasalint            # []any как any в variadic-вызовах
+    - bidichk              # trojan-source unicode-последовательности
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - dupword
+    - durationcheck
+    - errchkjson           # json-функции с типами, не кодируемыми корректно
+    - errname
+    - errorlint
+    - exhaustive           # неисчерпывающие switch по enum-типам (settings ниже)
+    - fatcontext           # вложенные контексты в циклах/замыканиях
+    - forcetypeassert      # type assertion без comma-ok → паники
+    - gocheckcompilerdirectives
+    - gocritic             # дефолтный stable-набор + курируемый enabled-checks (settings ниже); теги не включать
+    - gosec
+    - loggercheck
+    - makezero
+    - mirror               # зеркальные bytes/strings вызовы
+    - musttag              # (un)marshal структур без тегов
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - noctx
+    - nosprintfhostport    # host:port через Sprintf (IPv6-баги)
+    - reassign             # переприсваивание пакетных переменных
+    - rowserrcheck
+    - spancheck            # OTel: пропущенный span.End()
+    - sqlclosecheck
+    - tparallel            # misuse t.Parallel()
+    - unparam              # мёртвые параметры/неиспользуемые результаты
+    - wastedassign
+    # --- современный Go и гигиена (большинство с autofix) ---
+    - asciicheck           # не-ASCII в идентификаторах (защита от homoglyph)
+    - canonicalheader
+    - containedctx         # context.Context в полях структур
+    - godoclint            # гигиена godoc-комментариев
+    - godot
+    - gomoddirectives
+    - goprintffuncname
+    - gosmopolitan         # time.Local и i18n-ловушки (финансовый домен, UTC-конвенция)
+    - inamedparam          # имена параметров в сигнатурах интерфейсов
+    - iotamixing           # iota в смешанных const-блоках
+    - misspell
+    - modernize
+    - nakedret             # naked return в длинных функциях
+    - perfsprint
+    - prealloc
+    - thelper              # t.Helper() в тест-хелперах
+    - unconvert
+    - usetesting
+    - usestdlibvars
+    - whitespace
+    # --- архитектура и процесс ---
+    - depguard             # правила domain/application-clean, см. settings
+    - dupl                 # дубли кода; threshold под sqlc-boilerplate в settings
+    - forbidigo            # запрет fmt.Print*/stdlib log/os.Exit — см. settings
+    - gochecknoinits       # без init()-функций
+    - nolintlint           # строгий режим, см. settings
+    - predeclared
+    - recvcheck
+    - revive
+    - sloglint
+    - testifylint        # testify в go.mod (v1.11.1); включён по результату прогона 2026-08-17 — 0 нарушений (#302)
+    # --- ЭТАП 1 (бар #323, тикет #336; research #321) ---
+    - dogsled              # 3+ подчёркивания в присваивании — скрытые результаты
+    - gochecksumtype       # 0 нарушений; страховка sealed-интерфейсов (Go sum types)
+    - godox                 # TODO/FIXME в комментариях → issue tracker
+    - iface                # идентичные интерфейсы — случайный дубль контракта
+    - intrange             # for i := range n — modernize этот случай не ловит
+    - testableexamples     # 0; Example-функции обязаны быть runnable
+    # --- ЭТАП 2, волны механики goconst/godot/lll закрыты (сетка #325, тикеты #360–#367) ---
+    - goconst              # повторяющиеся строки → константы (волна 314 → 0)
+    - lll                  # длина строки ≤140 (волна 605 → 0)
+    # --- ЭТАП 2, структурная волна закрыта (сетка #325, тикет #369) ---
+    - cyclop               # цикломатическая сложность ≤15 (волна 52 → 0); замещает gocyclo@30
+    - gocognit             # когнитивная сложность ≤25 (волна 75 → 0)
+    # --- ЭТАП 2, волна paralleltest закрыта (сетка #325, тикет #376) ---
+    - paralleltest       # t.Parallel() в тестах и субтестах (волна 994 → 0)
+  settings:
+    depguard:
+      rules:
+        domain-clean:
+          list-mode: lax
+          files:
+            - "**/internal/**/domain/*.go"
+            - "!**/*_test.go"
+          deny:
+            - pkg: database/sql
+              desc: domain must stay persistence agnostic
+            - pkg: net/http
+              desc: domain must stay transport agnostic
+            - pkg: github.com/aws/aws-sdk-go-v2
+              desc: domain must stay external-service agnostic
+            - pkg: github.com/jackc/pgx
+              desc: domain must stay persistence agnostic
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform
+              desc: domain must not depend on platform infrastructure
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/history/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters
+              desc: domain must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
+              desc: domain must not depend on adapters
+            # Явные deny для config и openapi-gen (волна 1A, решение #295): раньше
+            # ловились только через префикс internal/platform — намерение теперь
+            # записано напрямую и переживёт перестройку platform-пакетов.
+            # (desc — plain YAML-скаляр: без «#» внутри, иначе комментарий съест хвост.)
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi
+              desc: domain must not import generated OpenAPI types
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform/config
+              desc: domain must not read infrastructure configuration
+        application-clean:
+          list-mode: lax
+          files:
+            - "**/internal/**/application/*.go"
+            - "!**/*_test.go"
+          allow:
+            # requestctx only carries request-scoped diagnostics (request ID, trace ID,
+            # client IP); it is not platform infrastructure.
+            - github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx
+          deny:
+            - pkg: database/sql
+              desc: application layer must use ports instead of concrete persistence
+            - pkg: net/http
+              desc: application layer must stay transport agnostic
+            - pkg: github.com/aws/aws-sdk-go-v2
+              desc: application layer must use ports instead of concrete external clients
+            - pkg: github.com/jackc/pgx
+              desc: application layer must use ports instead of concrete persistence
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform
+              desc: application layer must not depend on platform infrastructure
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/history/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters
+              desc: application layer must not depend on adapters
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters
+              desc: application layer must not depend on adapters
+            # Явные deny для config и openapi-gen (волна 1A, решение #295) —
+            # симметрично domain-clean выше.
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi
+              desc: application layer must not import generated OpenAPI types
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/platform/config
+              desc: application layer must not read infrastructure configuration
+        # platform-clean (ADR 0034): platform infrastructure must depend on the
+        # shared actor kernel, never on a bounded context's domain. httpserver is
+        # the composition root that legitimately wires identity handlers and
+        # services, so its identity imports are allow-listed; the deny keeps every
+        # other platform package (notably httpsupport) identity-free.
+        platform-clean:
+          list-mode: lax
+          files:
+            - "**/internal/platform/**/*.go"
+            - "!**/*_test.go"
+          allow:
+            # httpserver is the composition root: it wires identity HTTP handlers
+            # and the session service into the server.
+            - github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http
+            - github.com/nambers/arenda-planform/apps/backend/internal/identity/application
+          deny:
+            - pkg: github.com/nambers/arenda-planform/apps/backend/internal/identity
+              desc: platform infrastructure must not depend on a bounded context; use shared/actor
+        # Волна 1A (решение #295, issue #302): модуль-широкие запреты. Без files —
+        # правило действует на все Go-файлы модуля, включая тесты: ORM в тестовой
+        # инфраструктуре — такое же нарушение, как в прод-коде.
+        no-orm:
+          list-mode: lax
+          deny:
+            - pkg: gorm.io
+              desc: persistence is explicit SQL through sqlc; ORM libraries are banned
+            - pkg: entgo.io
+              desc: persistence is explicit SQL through sqlc; ORM libraries are banned
+            - pkg: xorm.io
+              desc: persistence is explicit SQL through sqlc; ORM libraries are banned
+        no-minio:
+          list-mode: lax
+          deny:
+            - pkg: github.com/minio
+              desc: S3-compatible storage access goes through the storage port; MinIO is not a dependency
+        # Бар #323 (тикет #336): testify — тестовая библиотека. Ассерты в прод-коде
+        # маскируют обработку ошибок и подменяют доменные проверки; прод-путь —
+        # errors.Is/As и конструкторы валидации домена (CODING_STANDARDS.md).
+        testify-test-only:
+          list-mode: lax
+          files:
+            - "!**/*_test.go"
+          deny:
+            - pkg: github.com/stretchr/testify
+              desc: testify is test-only; production code uses errors.Is/As and domain validation constructors
+    errcheck:
+      exclude-functions:
+        # Документированный always-nil error (go.dev/ref/spec: «Write can never
+        # return a non-nil error») — исключён здесь и в revive unhandled-error.
+        # Форма со звёздочкой обязательна: у методов pointer-receiver, форма
+        # без `(*...)` не матчится и работает сегодня только за счёт дефолтных
+        # исключений errcheck — которые выключил disable-default-exclusions
+        # на флипе волны errcheck (сетка #325, тикет #359).
+        - (*strings.Builder).WriteString
+        - (*strings.Builder).WriteByte
+        - (*strings.Builder).WriteRune
+        # bytes.Buffer: «err is always nil» (документация bytes.Write) — то же
+        # семейство документированных always-nil писателей; нужен буферу
+        # capture-ответов идемпотентности (тикет #1121).
+        - (*bytes.Buffer).Write
+        # httptest.ResponseRecorder: Write всегда успешен, тело пишется в
+        # память рекордера — юнит-тесты мидлвари (#1121).
+        - (*httptest.ResponseRecorder).Write
+      # Флип волны errcheck (волны #353–#359, сетка #325): глобальный счётчик
+      # доведён до 0 — строгость этапа 2 перенесена в действующий конфиг.
+      check-blank: true
+      check-type-assertions: true
+      disable-default-exclusions: true
+    govet:
+      enable:
+        - nilness          # SSA-анализ nil-дерефов; shadow НЕ включать (139 шумовых срабатываний)
+        - stdversion       # ЭТАП 1: вызовы стандартной библиотеки младше go.mod-версии
+    exhaustive:
+      default-signifies-exhaustive: true
+    gosec:
+      # G124 (cookie SameSite): правило требует Strict, а ADR 0041 фиксирует
+      # Lax как продуктовое решение (ADR 0018) — HttpOnly всегда, Secure по
+      # APP_ENV. Сигнал правила в этих условиях нулевой; исключение живёт,
+      # пока стоит ADR 0018 (бар #323, сетка #325, тикет #343).
+      excludes:
+        - G124
+    staticcheck:
+      # Флип волны ST1000 (сетка #325, тикет #368): глобальный счётчик
+      # package-комментариев доведён до 0 — исключений не осталось.
+      # ST1016/ST1020-ST1022 возвращены с этапа 1 (тикет #336), 0 нарушений.
+      checks: ["all"]
+    spancheck:
+      # "all" парсером go-spancheck не принимается (тихо отключит все проверки) — перечисляем явно.
+      checks: ["end", "set-status", "record-error"]   # все три проверки; дефолт — только end
+    loggercheck:
+      require-string-key: true
+      no-printf-like: true
+    sloglint:
+      context: all           # кодирует правило AGENTS.md: InfoContext/WarnContext/ErrorContext
+      no-global: "all"       # ЭТАП 1: никаких глобальных логгеров, только из ctx
+      msg-style: "lowercased" # ЭТАП 1: сообщения с маленькой буквы
+      static-msg: true       # ЭТАП 1: сообщения — константы, не интерполяция переменных
+    errchkjson:
+      check-error-free-encoding: true   # ЭТАП 1: Marshal в error-free контекстах без проверки
+    cyclop:
+      # Флип структурной волны (сетка #325, тикет #369): глобальный счётчик
+      # функций сложнее 15 доведён до 0. Замещает gocyclo@30 этапа 1 — та же
+      # цикломатическая метрика, но на целевой планке этапа 2.
+      max-complexity: 15
+    gocognit:
+      # Флип структурной волны (сетка #325, тикет #369): когнитивная сложность
+      # (вложенность) — порог этапа 2, глобальный счётчик доведён до 0.
+      min-complexity: 25
+    gocritic:
+      # Теги НЕ включать: прогоны style/performance/opinionated/experimental дали 50/367/48/18 шумовых.
+      enabled-checks:
+        - appendCombine        # цепочки append — маркер опечатки
+        - badLock              # непарные Lock/Unlock → дедлоки
+        - badRegexp
+        - badSorting           # misuse sort.Interface
+        - badSyncOnceFunc
+        - deferInLoop          # defer в цикле держит ресурсы/локи
+        - dupOption            # повтор variadic-опции
+        - dynamicFmtString     # Printf с непостоянным форматом
+        - emptyFallthrough
+        - evalOrder
+        - externalErrorReassign
+        - filepathJoin
+        - nilValReturn         # гарантированный nil как error
+        - regexpPattern
+        - returnAfterHttpError # http.Error без return — про chi-хендлеры
+        - sloppyReassign
+        - sortSlice            # нестрогий less → недетерминированная сортировка
+        - sqlQuery             # Query вместо Exec — про sqlc/pgx
+        - truncateCmp          # сравнение int разной ширины
+        - weakCond
+        - sprintfQuotedString
+        # ЭТАП 1 (research #321, пересмотр раунда 2): курируемые чеки из style-тега
+        - importShadow         # затенение имён пакетов локальными переменными
+        - paramTypeCombine     # func(_ uuid.UUID, _ uuid.UUID) → (_, _ uuid.UUID)
+        - unnamedResult        # именовать результаты при одинаковых/неочевидных типах
+    dupl:
+      threshold: 150         # дефолт; продовые dupl-кластеры сетки закрыты —
+      # scheduler-воркеры #337, admin List-хендлеры #338, operations-хвост #339,
+      # property_handlers #340; тестовые пары — в #336; generated не
+      # анализируется (exclusions.generated: strict).
+    forbidigo:
+      analyze-types: true    # привязка паттерна к пакету (нужна для stdlib log)
+      forbid:
+        - pattern: ^(fmt\.Print(|f|ln)|print|println)$   # дефолтный паттерн, сохранён явно
+        - pattern: ^log\.                                 # логируем только через log/slog
+          msg: use log/slog instead of stdlib log
+        # ADR 0033: все шесть мутирующих контекстов (identity, billing, access,
+        # properties, notifications, leases; сетка #325, тикеты #346–#349)
+        # открывают транзакции только через runInTx/UoW. Финал миграции
+        # (тикет #350): правило защищает весь модуль — новый ручной Begin в
+        # прод-коде вне internal/platform является нарушением. Platform —
+        # единственное легитимное прод-место (реализация transaction-слоя:
+        # postgres/transaction, postgres/uow, database/instrumentation,
+        # scheduler); тест-фикстуры контролируют границу транзакции сами — легитимировано
+        # ADR 0033, раздел «Test fixtures». Оба исключения — явные path-правила
+        # в linters.exclusions.rules ниже, без path-except.
+        #
+        # The pattern matches the selector `.Begin` (forbidigo renders a
+        # SelectorExpr without its arguments, so b.Begin(ctx) is seen as
+        # "b.Begin"); the implicit receiver is always a transaction.Beginner.
+        - pattern: '\.Begin$'
+          msg: "use runInTx/UoW instead of manual Begin (ADR 0033)"
+        # ADR 0019: идентификаторы только UUIDv7. uuid.New/NewV4/NewString/
+        # NewRandom/NewRandomFromReader порождают v4 — использовать uuid.NewV7()
+        # (с прокидыванием ошибки) или uuid.Must(uuid.NewV7()) там, где раньше
+        # паниковали. Паттерн покрывает обе формы рендеринга forbidigo: исходную
+        # (uuid.New) и с полным путём пакета при analyze-types
+        # (github.com/google/uuid.New).
+        - pattern: '^(github\.com/google/)?uuid\.New(|V4|String|Random|RandomFromReader)$'
+          msg: "identifiers are UUIDv7 only (ADR 0019): use uuid.NewV7() or uuid.Must(uuid.NewV7())"
+        # Exit-политика (бар #323, тикет #336): процесс завершает только
+        # композиционный корень cmd/. Внутренние пакеты возвращают ошибку
+        # наверх; os.Exit в недрах делает недоступными defer-очистку и
+        # корректный shutdown. Разрешение для cmd/ — exclusions.rules ниже.
+        - pattern: '^os\.Exit$'
+          msg: "exit policy (bar #323): os.Exit only in cmd/ - return the error upward instead"
+        - pattern: '^log\.Fatal(|f|ln)$'
+          msg: "exit policy (bar #323): log.Fatal* only in cmd/ - return the error upward instead"
+    modernize:
+      disable:
+        - forvar           # дублирует copyloopvar
+        - omitzero         # меняет JSON-контракт ответов (omitempty → omitzero для struct)
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: error-strings   # покрывается staticcheck ST1005
+          disabled: true
+        - name: errorf          # покрывается staticcheck S1028
+          disabled: true
+        - name: use-any            # interface{} → any (код уже чист — профилактика)
+        - name: early-return       # guard clauses вместо вложенных if
+        # ЭТАП 1 (тикет #336): необработанные ошибки вызовов. arguments —
+        # regexp-список revive (exclude-functions в golangci v2 для revive-правил
+        # не существует — ключ молча игнорируется); матч полный, на имя функции.
+        # strings.Builder исключён — документированный always-nil error
+        # (как в errcheck.exclude-functions выше).
+        - name: unhandled-error
+          arguments:
+            - strings\.Builder\.Write(String|Byte|Rune)
+            - bytes\.Buffer\.Write
+            - httptest\.ResponseRecorder\.Write
+    godot:
+      # Волна механики закрыта (сетка #325, флип тикета #367): strict-режим.
+      scope: all
+      capital: true
+    lll:
+      line-length: 140
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    generated: strict      # покрывает sqlc/oapi-codegen целиком (маркер DO NOT EDIT)
+    warn-unused: true      # страховка от гнилых паттернов исключений
+    # Поле paths осознанно не задаём: прежние top-level path-исключения были
+    # мёртвыми/избыточными. Ниже — rules (structured exclude rules, не paths):
+    # каждое несёт ADR-обоснование и точечный lint+text+path-фильтр, warn-unused
+    # выше ловит гнилые правила.
+    rules:
+      # ADR 0033 (forbidigo на ручной Begin): правило действует на весь модуль
+      # (финал UoW-миграции, тикет #350, сетка #325). Легитимных исключений
+      # ровно два, оба — явные path-правила (path-except удалён вместе с
+      # инкрементальной стадией миграции):
+      # 1. internal/platform — реализация transaction-слоя (postgres/transaction,
+      #    postgres/uow, database/instrumentation, scheduler): этот слой сам
+      #    открывает транзакции — его и оборачивает UoW.
+      # 2. *_test.go — тест-фикстуры контролируют границу транзакции сами:
+      #    fakeUoW в application-юнит-тестах воспроизводит семантику UoW.Do
+      #    (Begin → work → Commit/Rollback → re-panic), чтобы проверять её без
+      #    базы; adapter-интеграционники изолируются roll-back-транзакцией над
+      #    реальным Postgres и проверяют WithTx-биндинг в транзакции вызывающего.
+      #    Легитимировано ADR 0033, раздел «Test fixtures». Новые контексты
+      #    наследуют оба исключения автоматически — конфиг править не нужно.
+      # text должен совпадать с msg forbidigo-паттерна выше.
+      - linters: [forbidigo]
+        path: ^internal/platform/
+        text: 'use runInTx/UoW instead of manual Begin'
+      - linters: [forbidigo]
+        path: _test\.go$
+        text: 'use runInTx/UoW instead of manual Begin'
+      # Exit-политика (бар #323, тикет #336): os.Exit/log.Fatal* легитимны только
+      # в композиционном корне cmd/ (завершение при фатальных startup-ошибках и
+      # по сигналам ОС). Путь issues отсчитывается от каталога конфига
+      # (apps/backend — конфиг живёт рядом с модулем), поэтому паттерн заякорен
+      # префиксом cmd/ — случайные «cmd/» внутри путей его не проходят; везде
+      # остальное forbidigo-паттерны выше поднимают нарушение.
+      - linters: [forbidigo]
+        path: ^cmd/
+        text: 'exit policy \(bar #323\)'
+      # Шов «управляемый платёж аренды» (ADR 0053 §2): порт
+      # RentPaymentGateway.NextPlannedOccurrence (и его тест-фейк) отвечает
+      # (nil, nil), когда будущего вхождения нет — после планового окончания
+      # или у завершённой аренды. Это документированное значение порта
+      # («nil — нет вхождения»), а не забытая ошибка; сентинел-ошибка
+      # заставила бы каждое чтение view различать «нет будущего» как ошибку.
+      # Две точки — реализация в композиционном корне и фейк в
+      # интеграционных тестах rentals; новые появляются через nilnil-файлы
+      # гейта #344, не молча.
+      - linters: [nilnil]
+        path: ^cmd/api/wire/rentals\.go$
+        text: 'return both a `nil` error and an invalid value'
+      - linters: [nilnil]
+        path: ^internal/rentals/application/integration_test\.go$
+        text: 'return both a `nil` error and an invalid value'
+      # Личный пин объекта (cutover #1307, D11): порт
+      # PropertyRepository.ActorPin отвечает (nil, nil), когда актёр объект
+      # не закрепил — «строки нет = не закреплено» это документированное
+      # значение чтения (не «нет pin-строки» как ошибка); сентинел заставил
+      # бы каждый оверлей списка различать отсутствие пина как ошибку.
+      # Точки — реализация в postgres-адаптере и тест-фейки (application,
+      # http); новые появляются через nilnil-файлы гейта #344, не молча.
+      - linters: [nilnil]
+        path: ^internal/properties/adapters/postgres/repository\.go$
+        text: 'return both a `nil` error and an invalid value'
+      - linters: [nilnil]
+        path: ^internal/properties/application/service_test\.go$
+        text: 'return both a `nil` error and an invalid value'
+      - linters: [nilnil]
+        path: ^internal/properties/adapters/http/property_photo_upload_test\.go$
+        text: 'return both a `nil` error and an invalid value'
+      - linters: [nilnil]
+        path: ^internal/properties/adapters/http/property_search_test\.go$
+        text: 'return both a `nil` error and an invalid value'
+      # paralleltest: тесты с глобальным состоянием процесса, параллельность
+      # им противопоказана по природе фикстуры — t.Setenv паникует в
+      # параллельном тесте (конфиг-фикстура setRequiredLocalEnv выставляет
+      # несколько переменных окружения, их нельзя ронять в гонку), а
+      # heartbeat-тест платежей меняет глобальный OTel MeterProvider.
+      # Исключения поимённые: новый серийный тест обязан заработать своё
+      # правило, а не утащить чужое.
+      - linters: [paralleltest]
+        path: ^internal/payments/application/tick_zones_test\.go$
+        text: 'Function TestRunZoneTicks_Heartbeat missing the call to method parallel'
+      - linters: [paralleltest]
+        path: ^internal/platform/config/config_fake_simulator_test\.go$
+        text: 'Function TestFakeSimulatorWebOriginDefaultsToAppBaseURLOrigin missing the call to method parallel'
+      - linters: [paralleltest]
+        path: ^internal/platform/config/config_fake_simulator_test\.go$
+        text: 'Function TestFakeSimulatorAutoConfirmDefaultsToAuto missing the call to method parallel'
+      - linters: [paralleltest]
+        path: ^internal/platform/config/config_time_travel_test\.go$
+        text: 'Function TestTimeTravelDefaultsToOff missing the call to method parallel'
+
+formatters:
+  enable:
+    - gofumpt              # надмножество gofmt -s
+    - gci                  # секции по умолчанию (standard, default) = текущая конвенция импортов
+  settings:
+    gofumpt:
+      extra-rules: true   # ЭТАП 1 (тикет #336): 0 diff на момент включения — бесплатно
+
+issues:
+  max-issues-per-linter: 0   # не обрезать отчёт
+  max-same-issues: 0
+
+# Осознанно НЕ включаем (пересмотрено research #321, 2026-08-18; счётчики измерены
+# v2.12.2 прогонах по всему модулю; полная аргументация — docs/research/2026-08-18-golangci-lint-catalog.md):
+# - Стиль без баг-класса: wsl_v5 (5448), nlreturn (2486), varnamelen (1044),
+#   funcorder (85), embeddedstructfieldcheck (49), mnd (131).
+# - Против идиом Go/проекта: noinlineerr (1426 — запрет if err :=), exhaustruct
+#   (1705 — частичная инициализация composite literals — sqlc-параметры, домены),
+#   err113 (282 — доменные errors.New с динамическими сообщениями), testpackage
+#   (143 — white-box доменные тесты), gochecknoglobals (67 — package-level
+#   таблицы, tracer, regexp.Must), ireturn (142 — FP на DDD-портах: возврат
+#   интерфейсов — суть hexagonal), interfacebloat (9 — осознанные порты 12-31
+#   метода), nonamedreturns (11 — named return в defer-идиоме метрик tkassa).
+# - Внешний контракт: tagliatelle (50 — T-Bank PascalCase + openapi смешанный).
+# - Метрики: funlen 37 / nestif 19 — осознанно вне гейта (после структурной
+#   волны #369 их сигнатура дублирует cyclop/gocognit).
+# - govet shadow (341 — идиома if err :=) и fieldalignment (269 — переупаковка
+#   полей против читаемости DDD-доменов); gocritic performance-тег
+#   (hugeParam 381 + rangeValCopy 221 — осознанная семантика передачи
+#   sqlc-структур/доменов по значению); style-тег целиком — курируемые чеки
+#   точечнее (см. gocritic.enabled-checks).
+# - Стек-нерелевантные (0 на модуле): arangolint, clickhouselint, ginkgolinter,
+#   promlinter, protogetter, zerologlint, unqueryvet; exptostd — при появлении
+#   golang.org/x/exp в go.mod; gomodguard_v2 (0 — дублирует depguard no-orm).
+# - perfsprint fiximports в v2.12.2 недоступен (захардкожен false): --fix не
+#   добавляет import "errors" — добавлять руками.

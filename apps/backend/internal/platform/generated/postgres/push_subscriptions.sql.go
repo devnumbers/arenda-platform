@@ -21,8 +21,9 @@ type DeletePushSubscriptionByEndpointAndUserParams struct {
 	UserID   pgtype.UUID `json:"user_id"`
 }
 
-// Delete a push subscription by endpoint scoped to a user. Returns 0 rows when
-// the subscription does not exist or belongs to another user (404 in the API).
+// Delete a push subscription by endpoint scoped to a user. Idempotent
+// (спека #1028 §5): 0 rows — подписки не было или она чужая, интент
+// «выключено» исполнен в обоих случаях (API отвечает 204 без 404).
 func (q *Queries) DeletePushSubscriptionByEndpointAndUser(ctx context.Context, arg DeletePushSubscriptionByEndpointAndUserParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePushSubscriptionByEndpointAndUser, arg.Endpoint, arg.UserID)
 	if err != nil {
@@ -31,8 +32,40 @@ func (q *Queries) DeletePushSubscriptionByEndpointAndUser(ctx context.Context, a
 	return result.RowsAffected(), nil
 }
 
+const getPushSubscriptionByEndpointAndUser = `-- name: GetPushSubscriptionByEndpointAndUser :one
+SELECT id, user_id, endpoint, p256dh, auth, expiration_time, created_at, updated_at, category_rental, category_payments_operations, category_tasks, category_shared_access FROM push_subscriptions
+WHERE endpoint = $1 AND user_id = $2
+`
+
+type GetPushSubscriptionByEndpointAndUserParams struct {
+	Endpoint string      `json:"endpoint"`
+	UserID   pgtype.UUID `json:"user_id"`
+}
+
+// The device's stored settings state (GET /push/subscriptions/preferences):
+// scoped to the user — another user's endpoint is not found.
+func (q *Queries) GetPushSubscriptionByEndpointAndUser(ctx context.Context, arg GetPushSubscriptionByEndpointAndUserParams) (PushSubscription, error) {
+	row := q.db.QueryRow(ctx, getPushSubscriptionByEndpointAndUser, arg.Endpoint, arg.UserID)
+	var i PushSubscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Endpoint,
+		&i.P256dh,
+		&i.Auth,
+		&i.ExpirationTime,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CategoryRental,
+		&i.CategoryPaymentsOperations,
+		&i.CategoryTasks,
+		&i.CategorySharedAccess,
+	)
+	return i, err
+}
+
 const listPushSubscriptionsByUser = `-- name: ListPushSubscriptionsByUser :many
-SELECT id, user_id, endpoint, p256dh, auth, expiration_time, created_at, updated_at FROM push_subscriptions
+SELECT id, user_id, endpoint, p256dh, auth, expiration_time, created_at, updated_at, category_rental, category_payments_operations, category_tasks, category_shared_access FROM push_subscriptions
 WHERE user_id = $1
 ORDER BY created_at ASC
 `
@@ -55,6 +88,10 @@ func (q *Queries) ListPushSubscriptionsByUser(ctx context.Context, userID pgtype
 			&i.ExpirationTime,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CategoryRental,
+			&i.CategoryPaymentsOperations,
+			&i.CategoryTasks,
+			&i.CategorySharedAccess,
 		); err != nil {
 			return nil, err
 		}
@@ -66,36 +103,86 @@ func (q *Queries) ListPushSubscriptionsByUser(ctx context.Context, userID pgtype
 	return items, nil
 }
 
+const updatePushSubscriptionPreferences = `-- name: UpdatePushSubscriptionPreferences :execrows
+UPDATE push_subscriptions
+SET category_rental              = $3,
+    category_payments_operations = $4,
+    category_tasks               = $5,
+    category_shared_access       = $6,
+    updated_at                   = now()
+WHERE endpoint = $1 AND user_id = $2
+`
+
+type UpdatePushSubscriptionPreferencesParams struct {
+	Endpoint                   string      `json:"endpoint"`
+	UserID                     pgtype.UUID `json:"user_id"`
+	CategoryRental             bool        `json:"category_rental"`
+	CategoryPaymentsOperations bool        `json:"category_payments_operations"`
+	CategoryTasks              bool        `json:"category_tasks"`
+	CategorySharedAccess       bool        `json:"category_shared_access"`
+}
+
+// PUT /push/subscriptions/preferences (спека #1028 §5): замена категорийных
+// флагов устройства, ключи подписки остаются. Не upsert: rows affected = 0 —
+// endpoint не этого пользователя, строгий 404 (в нормальном флоу недостижим).
+func (q *Queries) UpdatePushSubscriptionPreferences(ctx context.Context, arg UpdatePushSubscriptionPreferencesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updatePushSubscriptionPreferences,
+		arg.Endpoint,
+		arg.UserID,
+		arg.CategoryRental,
+		arg.CategoryPaymentsOperations,
+		arg.CategoryTasks,
+		arg.CategorySharedAccess,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const upsertPushSubscription = `-- name: UpsertPushSubscription :one
 INSERT INTO push_subscriptions (
-    id, user_id, endpoint, p256dh, auth, expiration_time, created_at, updated_at
+    id, user_id, endpoint, p256dh, auth, expiration_time,
+    category_rental, category_payments_operations, category_tasks, category_shared_access,
+    created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
 ON CONFLICT (endpoint) DO UPDATE SET
     user_id          = EXCLUDED.user_id,
     p256dh           = EXCLUDED.p256dh,
     auth             = EXCLUDED.auth,
     expiration_time  = EXCLUDED.expiration_time,
+    category_rental              = EXCLUDED.category_rental,
+    category_payments_operations = EXCLUDED.category_payments_operations,
+    category_tasks               = EXCLUDED.category_tasks,
+    category_shared_access       = EXCLUDED.category_shared_access,
     updated_at       = EXCLUDED.updated_at
-RETURNING id, user_id, endpoint, p256dh, auth, expiration_time, created_at, updated_at
+RETURNING id, user_id, endpoint, p256dh, auth, expiration_time, created_at, updated_at, category_rental, category_payments_operations, category_tasks, category_shared_access
 `
 
 type UpsertPushSubscriptionParams struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	Endpoint       string             `json:"endpoint"`
-	P256dh         string             `json:"p256dh"`
-	Auth           string             `json:"auth"`
-	ExpirationTime pgtype.Timestamptz `json:"expiration_time"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID                         pgtype.UUID        `json:"id"`
+	UserID                     pgtype.UUID        `json:"user_id"`
+	Endpoint                   string             `json:"endpoint"`
+	P256dh                     string             `json:"p256dh"`
+	Auth                       string             `json:"auth"`
+	ExpirationTime             pgtype.Timestamptz `json:"expiration_time"`
+	CategoryRental             bool               `json:"category_rental"`
+	CategoryPaymentsOperations bool               `json:"category_payments_operations"`
+	CategoryTasks              bool               `json:"category_tasks"`
+	CategorySharedAccess       bool               `json:"category_shared_access"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Insert a push subscription keyed by endpoint, or update its mutable fields
 // (user_id, p256dh, auth, expiration_time) when the endpoint already exists.
 // This makes re-subscribing on the same device idempotent and also re-binds an
-// endpoint that moved between accounts (rare) to the latest user.
+// endpoint that moved between accounts (rare) to the latest user. The four
+// category flags always travel with the request (спека #1028 §5): POST несёт
+// желаемое состояние явно, дефолт omitted-категорий — все ВКЛ. Мастер-состояние
+// устройства — само существование строки: строка есть = включено.
 func (q *Queries) UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) (PushSubscription, error) {
 	row := q.db.QueryRow(ctx, upsertPushSubscription,
 		arg.ID,
@@ -104,6 +191,10 @@ func (q *Queries) UpsertPushSubscription(ctx context.Context, arg UpsertPushSubs
 		arg.P256dh,
 		arg.Auth,
 		arg.ExpirationTime,
+		arg.CategoryRental,
+		arg.CategoryPaymentsOperations,
+		arg.CategoryTasks,
+		arg.CategorySharedAccess,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -117,6 +208,10 @@ func (q *Queries) UpsertPushSubscription(ctx context.Context, arg UpsertPushSubs
 		&i.ExpirationTime,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CategoryRental,
+		&i.CategoryPaymentsOperations,
+		&i.CategoryTasks,
+		&i.CategorySharedAccess,
 	)
 	return i, err
 }

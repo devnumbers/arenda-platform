@@ -8,6 +8,7 @@ import (
 	"compress/flate"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -25,6 +26,54 @@ import (
 const (
 	SessionCookieScopes sessionCookieContextKey = "sessionCookie.Scopes"
 )
+
+// Defines values for ActiveSessionDeviceType.
+const (
+	ActiveSessionDeviceTypeComputer ActiveSessionDeviceType = "computer"
+	ActiveSessionDeviceTypePhone    ActiveSessionDeviceType = "phone"
+	ActiveSessionDeviceTypeTablet   ActiveSessionDeviceType = "tablet"
+	ActiveSessionDeviceTypeTv       ActiveSessionDeviceType = "tv"
+	ActiveSessionDeviceTypeUnknown  ActiveSessionDeviceType = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the ActiveSessionDeviceType enum.
+func (e ActiveSessionDeviceType) Valid() bool {
+	switch e {
+	case ActiveSessionDeviceTypeComputer:
+		return true
+	case ActiveSessionDeviceTypePhone:
+		return true
+	case ActiveSessionDeviceTypeTablet:
+		return true
+	case ActiveSessionDeviceTypeTv:
+		return true
+	case ActiveSessionDeviceTypeUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdminAssignServiceSubscriptionRequestTermType.
+const (
+	AdminAssignServiceSubscriptionRequestTermTypeDate  AdminAssignServiceSubscriptionRequestTermType = "date"
+	AdminAssignServiceSubscriptionRequestTermTypeMonth AdminAssignServiceSubscriptionRequestTermType = "month"
+	AdminAssignServiceSubscriptionRequestTermTypeYear  AdminAssignServiceSubscriptionRequestTermType = "year"
+)
+
+// Valid indicates whether the value is a known member of the AdminAssignServiceSubscriptionRequestTermType enum.
+func (e AdminAssignServiceSubscriptionRequestTermType) Valid() bool {
+	switch e {
+	case AdminAssignServiceSubscriptionRequestTermTypeDate:
+		return true
+	case AdminAssignServiceSubscriptionRequestTermTypeMonth:
+		return true
+	case AdminAssignServiceSubscriptionRequestTermTypeYear:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for AdminAuditLogActorRole.
 const (
@@ -56,57 +105,39 @@ func (e AdminAuditLogActorRole) Valid() bool {
 	}
 }
 
-// Defines values for AdminOperationReminderOffsetDays.
-const (
-	AdminOperationReminderOffsetDaysN1 AdminOperationReminderOffsetDays = 1
-	AdminOperationReminderOffsetDaysN3 AdminOperationReminderOffsetDays = 3
-	AdminOperationReminderOffsetDaysN7 AdminOperationReminderOffsetDays = 7
-)
-
-// Valid indicates whether the value is a known member of the AdminOperationReminderOffsetDays enum.
-func (e AdminOperationReminderOffsetDays) Valid() bool {
-	switch e {
-	case AdminOperationReminderOffsetDaysN1:
-		return true
-	case AdminOperationReminderOffsetDaysN3:
-		return true
-	case AdminOperationReminderOffsetDaysN7:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AdminPropertyOccupancy.
-const (
-	AdminPropertyOccupancyFree     AdminPropertyOccupancy = "free"
-	AdminPropertyOccupancyOccupied AdminPropertyOccupancy = "occupied"
-)
-
-// Valid indicates whether the value is a known member of the AdminPropertyOccupancy enum.
-func (e AdminPropertyOccupancy) Valid() bool {
-	switch e {
-	case AdminPropertyOccupancyFree:
-		return true
-	case AdminPropertyOccupancyOccupied:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for AdminSubscriptionPaymentPeriod.
 const (
-	Month AdminSubscriptionPaymentPeriod = "month"
-	Year  AdminSubscriptionPaymentPeriod = "year"
+	AdminSubscriptionPaymentPeriodMonth AdminSubscriptionPaymentPeriod = "month"
+	AdminSubscriptionPaymentPeriodYear  AdminSubscriptionPaymentPeriod = "year"
 )
 
 // Valid indicates whether the value is a known member of the AdminSubscriptionPaymentPeriod enum.
 func (e AdminSubscriptionPaymentPeriod) Valid() bool {
 	switch e {
-	case Month:
+	case AdminSubscriptionPaymentPeriodMonth:
 		return true
-	case Year:
+	case AdminSubscriptionPaymentPeriodYear:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdminSubscriptionTransitionInitiator.
+const (
+	AdminSubscriptionTransitionInitiatorAdmin  AdminSubscriptionTransitionInitiator = "admin"
+	AdminSubscriptionTransitionInitiatorSystem AdminSubscriptionTransitionInitiator = "system"
+	AdminSubscriptionTransitionInitiatorUser   AdminSubscriptionTransitionInitiator = "user"
+)
+
+// Valid indicates whether the value is a known member of the AdminSubscriptionTransitionInitiator enum.
+func (e AdminSubscriptionTransitionInitiator) Valid() bool {
+	switch e {
+	case AdminSubscriptionTransitionInitiatorAdmin:
+		return true
+	case AdminSubscriptionTransitionInitiatorSystem:
+		return true
+	case AdminSubscriptionTransitionInitiatorUser:
 		return true
 	default:
 		return false
@@ -131,93 +162,42 @@ func (e AdminUserRole) Valid() bool {
 	}
 }
 
-// Defines values for CalendarReminderItemEventType.
+// Defines values for CardSystem.
 const (
-	CalendarReminderItemEventTypeFreeReminder        CalendarReminderItemEventType = "free_reminder"
-	CalendarReminderItemEventTypeLeaseExpiring       CalendarReminderItemEventType = "lease_expiring"
-	CalendarReminderItemEventTypeLeaseRequiresAction CalendarReminderItemEventType = "lease_requires_action"
-	CalendarReminderItemEventTypeOperationDue        CalendarReminderItemEventType = "operation_due"
-	CalendarReminderItemEventTypeOperationOverdue    CalendarReminderItemEventType = "operation_overdue"
+	CardSystemMastercard CardSystem = "mastercard"
+	CardSystemMir        CardSystem = "mir"
+	CardSystemUnknown    CardSystem = "unknown"
+	CardSystemVisa       CardSystem = "visa"
 )
 
-// Valid indicates whether the value is a known member of the CalendarReminderItemEventType enum.
-func (e CalendarReminderItemEventType) Valid() bool {
+// Valid indicates whether the value is a known member of the CardSystem enum.
+func (e CardSystem) Valid() bool {
 	switch e {
-	case CalendarReminderItemEventTypeFreeReminder:
+	case CardSystemMastercard:
 		return true
-	case CalendarReminderItemEventTypeLeaseExpiring:
+	case CardSystemMir:
 		return true
-	case CalendarReminderItemEventTypeLeaseRequiresAction:
+	case CardSystemUnknown:
 		return true
-	case CalendarReminderItemEventTypeOperationDue:
-		return true
-	case CalendarReminderItemEventTypeOperationOverdue:
+	case CardSystemVisa:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for CalendarReminderItemPeriodicity.
+// Defines values for CategoryViewSource.
 const (
-	CalendarReminderItemPeriodicityDaily   CalendarReminderItemPeriodicity = "daily"
-	CalendarReminderItemPeriodicityMonthly CalendarReminderItemPeriodicity = "monthly"
-	CalendarReminderItemPeriodicityOnce    CalendarReminderItemPeriodicity = "once"
-	CalendarReminderItemPeriodicityWeekly  CalendarReminderItemPeriodicity = "weekly"
-	CalendarReminderItemPeriodicityYearly  CalendarReminderItemPeriodicity = "yearly"
+	CategoryViewSourceCustom  CategoryViewSource = "custom"
+	CategoryViewSourceDefault CategoryViewSource = "default"
 )
 
-// Valid indicates whether the value is a known member of the CalendarReminderItemPeriodicity enum.
-func (e CalendarReminderItemPeriodicity) Valid() bool {
+// Valid indicates whether the value is a known member of the CategoryViewSource enum.
+func (e CategoryViewSource) Valid() bool {
 	switch e {
-	case CalendarReminderItemPeriodicityDaily:
+	case CategoryViewSourceCustom:
 		return true
-	case CalendarReminderItemPeriodicityMonthly:
-		return true
-	case CalendarReminderItemPeriodicityOnce:
-		return true
-	case CalendarReminderItemPeriodicityWeekly:
-		return true
-	case CalendarReminderItemPeriodicityYearly:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CalendarReminderItemStatus.
-const (
-	CalendarReminderItemStatusPending CalendarReminderItemStatus = "pending"
-	CalendarReminderItemStatusSent    CalendarReminderItemStatus = "sent"
-)
-
-// Valid indicates whether the value is a known member of the CalendarReminderItemStatus enum.
-func (e CalendarReminderItemStatus) Valid() bool {
-	switch e {
-	case CalendarReminderItemStatusPending:
-		return true
-	case CalendarReminderItemStatusSent:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CalendarReminderItemType.
-const (
-	CalendarReminderItemTypeFree      CalendarReminderItemType = "free"
-	CalendarReminderItemTypeOperation CalendarReminderItemType = "operation"
-	CalendarReminderItemTypeSystem    CalendarReminderItemType = "system"
-)
-
-// Valid indicates whether the value is a known member of the CalendarReminderItemType enum.
-func (e CalendarReminderItemType) Valid() bool {
-	switch e {
-	case CalendarReminderItemTypeFree:
-		return true
-	case CalendarReminderItemTypeOperation:
-		return true
-	case CalendarReminderItemTypeSystem:
+	case CategoryViewSourceDefault:
 		return true
 	default:
 		return false
@@ -245,108 +225,168 @@ func (e ClientErrorReportApp) Valid() bool {
 	}
 }
 
-// Defines values for FreeReminderCreateRequestPeriodicity.
+// Defines values for CreateOperationRequestType.
 const (
-	FreeReminderCreateRequestPeriodicityDaily   FreeReminderCreateRequestPeriodicity = "daily"
-	FreeReminderCreateRequestPeriodicityMonthly FreeReminderCreateRequestPeriodicity = "monthly"
-	FreeReminderCreateRequestPeriodicityOnce    FreeReminderCreateRequestPeriodicity = "once"
-	FreeReminderCreateRequestPeriodicityWeekly  FreeReminderCreateRequestPeriodicity = "weekly"
-	FreeReminderCreateRequestPeriodicityYearly  FreeReminderCreateRequestPeriodicity = "yearly"
+	CreateOperationRequestTypeExpense CreateOperationRequestType = "expense"
+	CreateOperationRequestTypeIncome  CreateOperationRequestType = "income"
 )
 
-// Valid indicates whether the value is a known member of the FreeReminderCreateRequestPeriodicity enum.
-func (e FreeReminderCreateRequestPeriodicity) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateOperationRequestType enum.
+func (e CreateOperationRequestType) Valid() bool {
 	switch e {
-	case FreeReminderCreateRequestPeriodicityDaily:
+	case CreateOperationRequestTypeExpense:
 		return true
-	case FreeReminderCreateRequestPeriodicityMonthly:
-		return true
-	case FreeReminderCreateRequestPeriodicityOnce:
-		return true
-	case FreeReminderCreateRequestPeriodicityWeekly:
-		return true
-	case FreeReminderCreateRequestPeriodicityYearly:
+	case CreateOperationRequestTypeIncome:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for FreeReminderResponsePeriodicity.
+// Defines values for HistoryItemActorRole.
 const (
-	FreeReminderResponsePeriodicityDaily   FreeReminderResponsePeriodicity = "daily"
-	FreeReminderResponsePeriodicityMonthly FreeReminderResponsePeriodicity = "monthly"
-	FreeReminderResponsePeriodicityOnce    FreeReminderResponsePeriodicity = "once"
-	FreeReminderResponsePeriodicityWeekly  FreeReminderResponsePeriodicity = "weekly"
-	FreeReminderResponsePeriodicityYearly  FreeReminderResponsePeriodicity = "yearly"
+	HistoryItemActorRoleFullAccess HistoryItemActorRole = "full_access"
+	HistoryItemActorRoleOwner      HistoryItemActorRole = "owner"
+	HistoryItemActorRoleViewer     HistoryItemActorRole = "viewer"
 )
 
-// Valid indicates whether the value is a known member of the FreeReminderResponsePeriodicity enum.
-func (e FreeReminderResponsePeriodicity) Valid() bool {
+// Valid indicates whether the value is a known member of the HistoryItemActorRole enum.
+func (e HistoryItemActorRole) Valid() bool {
 	switch e {
-	case FreeReminderResponsePeriodicityDaily:
+	case HistoryItemActorRoleFullAccess:
 		return true
-	case FreeReminderResponsePeriodicityMonthly:
+	case HistoryItemActorRoleOwner:
 		return true
-	case FreeReminderResponsePeriodicityOnce:
-		return true
-	case FreeReminderResponsePeriodicityWeekly:
-		return true
-	case FreeReminderResponsePeriodicityYearly:
+	case HistoryItemActorRoleViewer:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for FreeReminderUpdateRequestPeriodicity.
+// Defines values for HistoryItemBaseAction.
 const (
-	FreeReminderUpdateRequestPeriodicityDaily   FreeReminderUpdateRequestPeriodicity = "daily"
-	FreeReminderUpdateRequestPeriodicityMonthly FreeReminderUpdateRequestPeriodicity = "monthly"
-	FreeReminderUpdateRequestPeriodicityOnce    FreeReminderUpdateRequestPeriodicity = "once"
-	FreeReminderUpdateRequestPeriodicityWeekly  FreeReminderUpdateRequestPeriodicity = "weekly"
-	FreeReminderUpdateRequestPeriodicityYearly  FreeReminderUpdateRequestPeriodicity = "yearly"
+	HistoryItemBaseActionAdded     HistoryItemBaseAction = "added"
+	HistoryItemBaseActionChanged   HistoryItemBaseAction = "changed"
+	HistoryItemBaseActionCompleted HistoryItemBaseAction = "completed"
+	HistoryItemBaseActionDeleted   HistoryItemBaseAction = "deleted"
 )
 
-// Valid indicates whether the value is a known member of the FreeReminderUpdateRequestPeriodicity enum.
-func (e FreeReminderUpdateRequestPeriodicity) Valid() bool {
+// Valid indicates whether the value is a known member of the HistoryItemBaseAction enum.
+func (e HistoryItemBaseAction) Valid() bool {
 	switch e {
-	case FreeReminderUpdateRequestPeriodicityDaily:
+	case HistoryItemBaseActionAdded:
 		return true
-	case FreeReminderUpdateRequestPeriodicityMonthly:
+	case HistoryItemBaseActionChanged:
 		return true
-	case FreeReminderUpdateRequestPeriodicityOnce:
+	case HistoryItemBaseActionCompleted:
 		return true
-	case FreeReminderUpdateRequestPeriodicityWeekly:
-		return true
-	case FreeReminderUpdateRequestPeriodicityYearly:
+	case HistoryItemBaseActionDeleted:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for LeaseStatus.
+// Defines values for HistoryItemKind.
 const (
-	LeaseStatusActive         LeaseStatus = "active"
-	LeaseStatusArchived       LeaseStatus = "archived"
-	LeaseStatusAwaitingStart  LeaseStatus = "awaiting_start"
-	LeaseStatusCompleted      LeaseStatus = "completed"
-	LeaseStatusRequiresAction LeaseStatus = "requires_action"
+	HistoryItemKindContact   HistoryItemKind = "contact"
+	HistoryItemKindMember    HistoryItemKind = "member"
+	HistoryItemKindOperation HistoryItemKind = "operation"
+	HistoryItemKindPayment   HistoryItemKind = "payment"
+	HistoryItemKindProperty  HistoryItemKind = "property"
+	HistoryItemKindRental    HistoryItemKind = "rental"
+	HistoryItemKindTask      HistoryItemKind = "task"
 )
 
-// Valid indicates whether the value is a known member of the LeaseStatus enum.
-func (e LeaseStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the HistoryItemKind enum.
+func (e HistoryItemKind) Valid() bool {
 	switch e {
-	case LeaseStatusActive:
+	case HistoryItemKindContact:
 		return true
-	case LeaseStatusArchived:
+	case HistoryItemKindMember:
 		return true
-	case LeaseStatusAwaitingStart:
+	case HistoryItemKindOperation:
 		return true
-	case LeaseStatusCompleted:
+	case HistoryItemKindPayment:
 		return true
-	case LeaseStatusRequiresAction:
+	case HistoryItemKindProperty:
+		return true
+	case HistoryItemKindRental:
+		return true
+	case HistoryItemKindTask:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HistoryParticipantRole.
+const (
+	HistoryParticipantRoleFullAccess HistoryParticipantRole = "full_access"
+	HistoryParticipantRoleOwner      HistoryParticipantRole = "owner"
+	HistoryParticipantRoleViewer     HistoryParticipantRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the HistoryParticipantRole enum.
+func (e HistoryParticipantRole) Valid() bool {
+	switch e {
+	case HistoryParticipantRoleFullAccess:
+		return true
+	case HistoryParticipantRoleOwner:
+		return true
+	case HistoryParticipantRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HistoryParticipantStatus.
+const (
+	HistoryParticipantStatusCurrent HistoryParticipantStatus = "current"
+	HistoryParticipantStatusRemoved HistoryParticipantStatus = "removed"
+)
+
+// Valid indicates whether the value is a known member of the HistoryParticipantStatus enum.
+func (e HistoryParticipantStatus) Valid() bool {
+	switch e {
+	case HistoryParticipantStatusCurrent:
+		return true
+	case HistoryParticipantStatusRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HistorySegmentLinkKind.
+const (
+	HistorySegmentLinkKindContact   HistorySegmentLinkKind = "contact"
+	HistorySegmentLinkKindMember    HistorySegmentLinkKind = "member"
+	HistorySegmentLinkKindOperation HistorySegmentLinkKind = "operation"
+	HistorySegmentLinkKindPayment   HistorySegmentLinkKind = "payment"
+	HistorySegmentLinkKindProperty  HistorySegmentLinkKind = "property"
+	HistorySegmentLinkKindRental    HistorySegmentLinkKind = "rental"
+	HistorySegmentLinkKindTask      HistorySegmentLinkKind = "task"
+)
+
+// Valid indicates whether the value is a known member of the HistorySegmentLinkKind enum.
+func (e HistorySegmentLinkKind) Valid() bool {
+	switch e {
+	case HistorySegmentLinkKindContact:
+		return true
+	case HistorySegmentLinkKindMember:
+		return true
+	case HistorySegmentLinkKindOperation:
+		return true
+	case HistorySegmentLinkKindPayment:
+		return true
+	case HistorySegmentLinkKindProperty:
+		return true
+	case HistorySegmentLinkKindRental:
+		return true
+	case HistorySegmentLinkKindTask:
 		return true
 	default:
 		return false
@@ -371,159 +411,486 @@ func (e MeResponseRole) Valid() bool {
 	}
 }
 
-// Defines values for NotificationPreferenceEventType.
+// Defines values for NotificationAction.
 const (
-	NotificationPreferenceEventTypeFreeReminder        NotificationPreferenceEventType = "free_reminder"
-	NotificationPreferenceEventTypeLeaseExpiring       NotificationPreferenceEventType = "lease_expiring"
-	NotificationPreferenceEventTypeLeaseRequiresAction NotificationPreferenceEventType = "lease_requires_action"
-	NotificationPreferenceEventTypeOperationDue        NotificationPreferenceEventType = "operation_due"
-	NotificationPreferenceEventTypeOperationOverdue    NotificationPreferenceEventType = "operation_overdue"
+	NotificationActionOpenPayment         NotificationAction = "open_payment"
+	NotificationActionOpenPaymentMethods  NotificationAction = "open_payment_methods"
+	NotificationActionOpenProperty        NotificationAction = "open_property"
+	NotificationActionOpenPropertyMembers NotificationAction = "open_property_members"
+	NotificationActionOpenTariffs         NotificationAction = "open_tariffs"
+	NotificationActionOpenTask            NotificationAction = "open_task"
+	NotificationActionRentalComplete      NotificationAction = "rental_complete"
+	NotificationActionRentalExtend        NotificationAction = "rental_extend"
 )
 
-// Valid indicates whether the value is a known member of the NotificationPreferenceEventType enum.
-func (e NotificationPreferenceEventType) Valid() bool {
+// Valid indicates whether the value is a known member of the NotificationAction enum.
+func (e NotificationAction) Valid() bool {
 	switch e {
-	case NotificationPreferenceEventTypeFreeReminder:
+	case NotificationActionOpenPayment:
 		return true
-	case NotificationPreferenceEventTypeLeaseExpiring:
+	case NotificationActionOpenPaymentMethods:
 		return true
-	case NotificationPreferenceEventTypeLeaseRequiresAction:
+	case NotificationActionOpenProperty:
 		return true
-	case NotificationPreferenceEventTypeOperationDue:
+	case NotificationActionOpenPropertyMembers:
 		return true
-	case NotificationPreferenceEventTypeOperationOverdue:
+	case NotificationActionOpenTariffs:
+		return true
+	case NotificationActionOpenTask:
+		return true
+	case NotificationActionRentalComplete:
+		return true
+	case NotificationActionRentalExtend:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for OperationCreateRequestReminderOffsetDays.
+// Defines values for OperationResponseOrigin.
 const (
-	OperationCreateRequestReminderOffsetDaysN0 OperationCreateRequestReminderOffsetDays = 0
-	OperationCreateRequestReminderOffsetDaysN1 OperationCreateRequestReminderOffsetDays = 1
-	OperationCreateRequestReminderOffsetDaysN3 OperationCreateRequestReminderOffsetDays = 3
-	OperationCreateRequestReminderOffsetDaysN7 OperationCreateRequestReminderOffsetDays = 7
+	OperationResponseOriginManual  OperationResponseOrigin = "manual"
+	OperationResponseOriginPayment OperationResponseOrigin = "payment"
 )
 
-// Valid indicates whether the value is a known member of the OperationCreateRequestReminderOffsetDays enum.
-func (e OperationCreateRequestReminderOffsetDays) Valid() bool {
+// Valid indicates whether the value is a known member of the OperationResponseOrigin enum.
+func (e OperationResponseOrigin) Valid() bool {
 	switch e {
-	case OperationCreateRequestReminderOffsetDaysN0:
+	case OperationResponseOriginManual:
 		return true
-	case OperationCreateRequestReminderOffsetDaysN1:
-		return true
-	case OperationCreateRequestReminderOffsetDaysN3:
-		return true
-	case OperationCreateRequestReminderOffsetDaysN7:
+	case OperationResponseOriginPayment:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for OperationListSort.
+// Defines values for OperationResponseStatus.
 const (
-	OperationDateAsc  OperationListSort = "operation_date_asc"
-	OperationDateDesc OperationListSort = "operation_date_desc"
+	OperationResponseStatusOverdue OperationResponseStatus = "overdue"
+	OperationResponseStatusPaid    OperationResponseStatus = "paid"
+	OperationResponseStatusPlanned OperationResponseStatus = "planned"
 )
 
-// Valid indicates whether the value is a known member of the OperationListSort enum.
-func (e OperationListSort) Valid() bool {
+// Valid indicates whether the value is a known member of the OperationResponseStatus enum.
+func (e OperationResponseStatus) Valid() bool {
 	switch e {
-	case OperationDateAsc:
+	case OperationResponseStatusOverdue:
 		return true
-	case OperationDateDesc:
+	case OperationResponseStatusPaid:
+		return true
+	case OperationResponseStatusPlanned:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for OperationResponseReminderOffsetDays.
+// Defines values for OperationResponseType.
 const (
-	OperationResponseReminderOffsetDaysN1 OperationResponseReminderOffsetDays = 1
-	OperationResponseReminderOffsetDaysN3 OperationResponseReminderOffsetDays = 3
-	OperationResponseReminderOffsetDaysN7 OperationResponseReminderOffsetDays = 7
+	OperationResponseTypeExpense OperationResponseType = "expense"
+	OperationResponseTypeIncome  OperationResponseType = "income"
 )
 
-// Valid indicates whether the value is a known member of the OperationResponseReminderOffsetDays enum.
-func (e OperationResponseReminderOffsetDays) Valid() bool {
+// Valid indicates whether the value is a known member of the OperationResponseType enum.
+func (e OperationResponseType) Valid() bool {
 	switch e {
-	case OperationResponseReminderOffsetDaysN1:
+	case OperationResponseTypeExpense:
 		return true
-	case OperationResponseReminderOffsetDaysN3:
-		return true
-	case OperationResponseReminderOffsetDaysN7:
+	case OperationResponseTypeIncome:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for OperationStatus.
+// Defines values for OperationsSummaryCategoryType.
 const (
-	OperationStatusOverdue     OperationStatus = "overdue"
-	OperationStatusPaid        OperationStatus = "paid"
-	OperationStatusPending     OperationStatus = "pending"
-	OperationStatusReceived    OperationStatus = "received"
-	OperationStatusUnconfirmed OperationStatus = "unconfirmed"
+	OperationsSummaryCategoryTypeExpense OperationsSummaryCategoryType = "expense"
+	OperationsSummaryCategoryTypeIncome  OperationsSummaryCategoryType = "income"
 )
 
-// Valid indicates whether the value is a known member of the OperationStatus enum.
-func (e OperationStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the OperationsSummaryCategoryType enum.
+func (e OperationsSummaryCategoryType) Valid() bool {
 	switch e {
-	case OperationStatusOverdue:
+	case OperationsSummaryCategoryTypeExpense:
 		return true
-	case OperationStatusPaid:
-		return true
-	case OperationStatusPending:
-		return true
-	case OperationStatusReceived:
-		return true
-	case OperationStatusUnconfirmed:
+	case OperationsSummaryCategoryTypeIncome:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for OperationType.
+// Defines values for ParticipantGrantOutcome.
 const (
-	Expense OperationType = "expense"
-	Income  OperationType = "income"
+	ParticipantGrantOutcomeActive             ParticipantGrantOutcome = "active"
+	ParticipantGrantOutcomePending            ParticipantGrantOutcome = "pending"
+	ParticipantGrantOutcomeSkippedArchived    ParticipantGrantOutcome = "skipped_archived"
+	ParticipantGrantOutcomeSkippedDuplicate   ParticipantGrantOutcome = "skipped_duplicate"
+	ParticipantGrantOutcomeSkippedOwner       ParticipantGrantOutcome = "skipped_owner"
+	ParticipantGrantOutcomeSkippedUnavailable ParticipantGrantOutcome = "skipped_unavailable"
+	ParticipantGrantOutcomeSuspended          ParticipantGrantOutcome = "suspended"
 )
 
-// Valid indicates whether the value is a known member of the OperationType enum.
-func (e OperationType) Valid() bool {
+// Valid indicates whether the value is a known member of the ParticipantGrantOutcome enum.
+func (e ParticipantGrantOutcome) Valid() bool {
 	switch e {
-	case Expense:
+	case ParticipantGrantOutcomeActive:
 		return true
-	case Income:
+	case ParticipantGrantOutcomePending:
+		return true
+	case ParticipantGrantOutcomeSkippedArchived:
+		return true
+	case ParticipantGrantOutcomeSkippedDuplicate:
+		return true
+	case ParticipantGrantOutcomeSkippedOwner:
+		return true
+	case ParticipantGrantOutcomeSkippedUnavailable:
+		return true
+	case ParticipantGrantOutcomeSuspended:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for OperationUpdateRequestReminderOffsetDays.
+// Defines values for ParticipantInviteRequestRole.
 const (
-	OperationUpdateRequestReminderOffsetDaysN0 OperationUpdateRequestReminderOffsetDays = 0
-	OperationUpdateRequestReminderOffsetDaysN1 OperationUpdateRequestReminderOffsetDays = 1
-	OperationUpdateRequestReminderOffsetDaysN3 OperationUpdateRequestReminderOffsetDays = 3
-	OperationUpdateRequestReminderOffsetDaysN7 OperationUpdateRequestReminderOffsetDays = 7
+	ParticipantInviteRequestRoleFullAccess ParticipantInviteRequestRole = "full_access"
+	ParticipantInviteRequestRoleViewer     ParticipantInviteRequestRole = "viewer"
 )
 
-// Valid indicates whether the value is a known member of the OperationUpdateRequestReminderOffsetDays enum.
-func (e OperationUpdateRequestReminderOffsetDays) Valid() bool {
+// Valid indicates whether the value is a known member of the ParticipantInviteRequestRole enum.
+func (e ParticipantInviteRequestRole) Valid() bool {
 	switch e {
-	case OperationUpdateRequestReminderOffsetDaysN0:
+	case ParticipantInviteRequestRoleFullAccess:
 		return true
-	case OperationUpdateRequestReminderOffsetDaysN1:
+	case ParticipantInviteRequestRoleViewer:
 		return true
-	case OperationUpdateRequestReminderOffsetDaysN3:
+	default:
+		return false
+	}
+}
+
+// Defines values for ParticipantPropertiesAddRequestRole.
+const (
+	ParticipantPropertiesAddRequestRoleFullAccess ParticipantPropertiesAddRequestRole = "full_access"
+	ParticipantPropertiesAddRequestRoleViewer     ParticipantPropertiesAddRequestRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the ParticipantPropertiesAddRequestRole enum.
+func (e ParticipantPropertiesAddRequestRole) Valid() bool {
+	switch e {
+	case ParticipantPropertiesAddRequestRoleFullAccess:
 		return true
-	case OperationUpdateRequestReminderOffsetDaysN7:
+	case ParticipantPropertiesAddRequestRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ParticipantPropertyResponseRole.
+const (
+	ParticipantPropertyResponseRoleFullAccess ParticipantPropertyResponseRole = "full_access"
+	ParticipantPropertyResponseRoleViewer     ParticipantPropertyResponseRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the ParticipantPropertyResponseRole enum.
+func (e ParticipantPropertyResponseRole) Valid() bool {
+	switch e {
+	case ParticipantPropertyResponseRoleFullAccess:
+		return true
+	case ParticipantPropertyResponseRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ParticipantPropertyResponseStatus.
+const (
+	ParticipantPropertyResponseStatusActive    ParticipantPropertyResponseStatus = "active"
+	ParticipantPropertyResponseStatusPending   ParticipantPropertyResponseStatus = "pending"
+	ParticipantPropertyResponseStatusSuspended ParticipantPropertyResponseStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the ParticipantPropertyResponseStatus enum.
+func (e ParticipantPropertyResponseStatus) Valid() bool {
+	switch e {
+	case ParticipantPropertyResponseStatusActive:
+		return true
+	case ParticipantPropertyResponseStatusPending:
+		return true
+	case ParticipantPropertyResponseStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ParticipantResponseAggregateStatus.
+const (
+	ParticipantResponseAggregateStatusAllProperties ParticipantResponseAggregateStatus = "all_properties"
+	ParticipantResponseAggregateStatusLimitExceeded ParticipantResponseAggregateStatus = "limit_exceeded"
+	ParticipantResponseAggregateStatusPartial       ParticipantResponseAggregateStatus = "partial"
+)
+
+// Valid indicates whether the value is a known member of the ParticipantResponseAggregateStatus enum.
+func (e ParticipantResponseAggregateStatus) Valid() bool {
+	switch e {
+	case ParticipantResponseAggregateStatusAllProperties:
+		return true
+	case ParticipantResponseAggregateStatusLimitExceeded:
+		return true
+	case ParticipantResponseAggregateStatusPartial:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentChangeAction.
+const (
+	PaymentChangeActionPaused  PaymentChangeAction = "paused"
+	PaymentChangeActionResumed PaymentChangeAction = "resumed"
+	PaymentChangeActionUpdated PaymentChangeAction = "updated"
+)
+
+// Valid indicates whether the value is a known member of the PaymentChangeAction enum.
+func (e PaymentChangeAction) Valid() bool {
+	switch e {
+	case PaymentChangeActionPaused:
+		return true
+	case PaymentChangeActionResumed:
+		return true
+	case PaymentChangeActionUpdated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentChangeField.
+const (
+	PaymentChangeFieldAmountKopecks      PaymentChangeField = "amount_kopecks"
+	PaymentChangeFieldAutoPay            PaymentChangeField = "auto_pay"
+	PaymentChangeFieldCategorySlug       PaymentChangeField = "category_slug"
+	PaymentChangeFieldEndDate            PaymentChangeField = "end_date"
+	PaymentChangeFieldRecurrence         PaymentChangeField = "recurrence"
+	PaymentChangeFieldReminderOffsetDays PaymentChangeField = "reminder_offset_days"
+	PaymentChangeFieldTitle              PaymentChangeField = "title"
+	PaymentChangeFieldType               PaymentChangeField = "type"
+)
+
+// Valid indicates whether the value is a known member of the PaymentChangeField enum.
+func (e PaymentChangeField) Valid() bool {
+	switch e {
+	case PaymentChangeFieldAmountKopecks:
+		return true
+	case PaymentChangeFieldAutoPay:
+		return true
+	case PaymentChangeFieldCategorySlug:
+		return true
+	case PaymentChangeFieldEndDate:
+		return true
+	case PaymentChangeFieldRecurrence:
+		return true
+	case PaymentChangeFieldReminderOffsetDays:
+		return true
+	case PaymentChangeFieldTitle:
+		return true
+	case PaymentChangeFieldType:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentChangeItemOrigin.
+const (
+	PaymentChangeItemOriginAutoArchive PaymentChangeItemOrigin = "auto_archive"
+)
+
+// Valid indicates whether the value is a known member of the PaymentChangeItemOrigin enum.
+func (e PaymentChangeItemOrigin) Valid() bool {
+	switch e {
+	case PaymentChangeItemOriginAutoArchive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentCreateRequestReminderOffsetDays.
+const (
+	PaymentCreateRequestReminderOffsetDaysN1 PaymentCreateRequestReminderOffsetDays = 1
+	PaymentCreateRequestReminderOffsetDaysN3 PaymentCreateRequestReminderOffsetDays = 3
+	PaymentCreateRequestReminderOffsetDaysN7 PaymentCreateRequestReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the PaymentCreateRequestReminderOffsetDays enum.
+func (e PaymentCreateRequestReminderOffsetDays) Valid() bool {
+	switch e {
+	case PaymentCreateRequestReminderOffsetDaysN1:
+		return true
+	case PaymentCreateRequestReminderOffsetDaysN3:
+		return true
+	case PaymentCreateRequestReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentCreateRequestType.
+const (
+	PaymentCreateRequestTypeExpense PaymentCreateRequestType = "expense"
+	PaymentCreateRequestTypeIncome  PaymentCreateRequestType = "income"
+)
+
+// Valid indicates whether the value is a known member of the PaymentCreateRequestType enum.
+func (e PaymentCreateRequestType) Valid() bool {
+	switch e {
+	case PaymentCreateRequestTypeExpense:
+		return true
+	case PaymentCreateRequestTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentDueItemReminderOffsetDays.
+const (
+	PaymentDueItemReminderOffsetDaysN1 PaymentDueItemReminderOffsetDays = 1
+	PaymentDueItemReminderOffsetDaysN3 PaymentDueItemReminderOffsetDays = 3
+	PaymentDueItemReminderOffsetDaysN7 PaymentDueItemReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the PaymentDueItemReminderOffsetDays enum.
+func (e PaymentDueItemReminderOffsetDays) Valid() bool {
+	switch e {
+	case PaymentDueItemReminderOffsetDaysN1:
+		return true
+	case PaymentDueItemReminderOffsetDaysN3:
+		return true
+	case PaymentDueItemReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentDueItemType.
+const (
+	PaymentDueItemTypeExpense PaymentDueItemType = "expense"
+	PaymentDueItemTypeIncome  PaymentDueItemType = "income"
+)
+
+// Valid indicates whether the value is a known member of the PaymentDueItemType enum.
+func (e PaymentDueItemType) Valid() bool {
+	switch e {
+	case PaymentDueItemTypeExpense:
+		return true
+	case PaymentDueItemTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentGlobalItemType.
+const (
+	PaymentGlobalItemTypeExpense PaymentGlobalItemType = "expense"
+	PaymentGlobalItemTypeIncome  PaymentGlobalItemType = "income"
+)
+
+// Valid indicates whether the value is a known member of the PaymentGlobalItemType enum.
+func (e PaymentGlobalItemType) Valid() bool {
+	switch e {
+	case PaymentGlobalItemTypeExpense:
+		return true
+	case PaymentGlobalItemTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentResponseReminderOffsetDays.
+const (
+	PaymentResponseReminderOffsetDaysN1 PaymentResponseReminderOffsetDays = 1
+	PaymentResponseReminderOffsetDaysN3 PaymentResponseReminderOffsetDays = 3
+	PaymentResponseReminderOffsetDaysN7 PaymentResponseReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the PaymentResponseReminderOffsetDays enum.
+func (e PaymentResponseReminderOffsetDays) Valid() bool {
+	switch e {
+	case PaymentResponseReminderOffsetDaysN1:
+		return true
+	case PaymentResponseReminderOffsetDaysN3:
+		return true
+	case PaymentResponseReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentResponseType.
+const (
+	PaymentResponseTypeExpense PaymentResponseType = "expense"
+	PaymentResponseTypeIncome  PaymentResponseType = "income"
+)
+
+// Valid indicates whether the value is a known member of the PaymentResponseType enum.
+func (e PaymentResponseType) Valid() bool {
+	switch e {
+	case PaymentResponseTypeExpense:
+		return true
+	case PaymentResponseTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentUpdateRequestReminderOffsetDays.
+const (
+	PaymentUpdateRequestReminderOffsetDaysN1 PaymentUpdateRequestReminderOffsetDays = 1
+	PaymentUpdateRequestReminderOffsetDaysN3 PaymentUpdateRequestReminderOffsetDays = 3
+	PaymentUpdateRequestReminderOffsetDaysN7 PaymentUpdateRequestReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the PaymentUpdateRequestReminderOffsetDays enum.
+func (e PaymentUpdateRequestReminderOffsetDays) Valid() bool {
+	switch e {
+	case PaymentUpdateRequestReminderOffsetDaysN1:
+		return true
+	case PaymentUpdateRequestReminderOffsetDaysN3:
+		return true
+	case PaymentUpdateRequestReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentUpdateRequestType.
+const (
+	PaymentUpdateRequestTypeExpense PaymentUpdateRequestType = "expense"
+	PaymentUpdateRequestTypeIncome  PaymentUpdateRequestType = "income"
+)
+
+// Valid indicates whether the value is a known member of the PaymentUpdateRequestType enum.
+func (e PaymentUpdateRequestType) Valid() bool {
+	switch e {
+	case PaymentUpdateRequestTypeExpense:
+		return true
+	case PaymentUpdateRequestTypeIncome:
 		return true
 	default:
 		return false
@@ -631,34 +998,40 @@ func (e PropertyAccessMemberRole) Valid() bool {
 
 // Defines values for PropertyAccessMemberUpdateRequestRole.
 const (
-	FullAccess PropertyAccessMemberUpdateRequestRole = "full_access"
-	Viewer     PropertyAccessMemberUpdateRequestRole = "viewer"
+	PropertyAccessMemberUpdateRequestRoleFullAccess PropertyAccessMemberUpdateRequestRole = "full_access"
+	PropertyAccessMemberUpdateRequestRoleViewer     PropertyAccessMemberUpdateRequestRole = "viewer"
 )
 
 // Valid indicates whether the value is a known member of the PropertyAccessMemberUpdateRequestRole enum.
 func (e PropertyAccessMemberUpdateRequestRole) Valid() bool {
 	switch e {
-	case FullAccess:
+	case PropertyAccessMemberUpdateRequestRoleFullAccess:
 		return true
-	case Viewer:
+	case PropertyAccessMemberUpdateRequestRoleViewer:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for PropertyResponseOccupancy.
+// Defines values for PropertyOccupancyStatus.
 const (
-	PropertyResponseOccupancyFree     PropertyResponseOccupancy = "free"
-	PropertyResponseOccupancyOccupied PropertyResponseOccupancy = "occupied"
+	PropertyOccupancyStatusActive         PropertyOccupancyStatus = "active"
+	PropertyOccupancyStatusNeedsAttention PropertyOccupancyStatus = "needs_attention"
+	PropertyOccupancyStatusNone           PropertyOccupancyStatus = "none"
+	PropertyOccupancyStatusUpcoming       PropertyOccupancyStatus = "upcoming"
 )
 
-// Valid indicates whether the value is a known member of the PropertyResponseOccupancy enum.
-func (e PropertyResponseOccupancy) Valid() bool {
+// Valid indicates whether the value is a known member of the PropertyOccupancyStatus enum.
+func (e PropertyOccupancyStatus) Valid() bool {
 	switch e {
-	case PropertyResponseOccupancyFree:
+	case PropertyOccupancyStatusActive:
 		return true
-	case PropertyResponseOccupancyOccupied:
+	case PropertyOccupancyStatusNeedsAttention:
+		return true
+	case PropertyOccupancyStatusNone:
+		return true
+	case PropertyOccupancyStatusUpcoming:
 		return true
 	default:
 		return false
@@ -688,259 +1061,286 @@ func (e PropertyStatus) Valid() bool {
 
 // Defines values for PropertyType.
 const (
-	Apartment  PropertyType = "apartment"
-	Apartments PropertyType = "apartments"
-	Commercial PropertyType = "commercial"
-	Garage     PropertyType = "garage"
-	House      PropertyType = "house"
-	Land       PropertyType = "land"
-	Office     PropertyType = "office"
-	Parking    PropertyType = "parking"
-	Room       PropertyType = "room"
-	Warehouse  PropertyType = "warehouse"
+	PropertyTypeApartment  PropertyType = "apartment"
+	PropertyTypeApartments PropertyType = "apartments"
+	PropertyTypeCommercial PropertyType = "commercial"
+	PropertyTypeGarage     PropertyType = "garage"
+	PropertyTypeHouse      PropertyType = "house"
+	PropertyTypeLand       PropertyType = "land"
+	PropertyTypeOffice     PropertyType = "office"
+	PropertyTypeParking    PropertyType = "parking"
+	PropertyTypeRoom       PropertyType = "room"
+	PropertyTypeStudio     PropertyType = "studio"
+	PropertyTypeWarehouse  PropertyType = "warehouse"
 )
 
 // Valid indicates whether the value is a known member of the PropertyType enum.
 func (e PropertyType) Valid() bool {
 	switch e {
-	case Apartment:
+	case PropertyTypeApartment:
 		return true
-	case Apartments:
+	case PropertyTypeApartments:
 		return true
-	case Commercial:
+	case PropertyTypeCommercial:
 		return true
-	case Garage:
+	case PropertyTypeGarage:
 		return true
-	case House:
+	case PropertyTypeHouse:
 		return true
-	case Land:
+	case PropertyTypeLand:
 		return true
-	case Office:
+	case PropertyTypeOffice:
 		return true
-	case Parking:
+	case PropertyTypeParking:
 		return true
-	case Room:
+	case PropertyTypeRoom:
 		return true
-	case Warehouse:
+	case PropertyTypeStudio:
 		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RecurringOperationCreateRequestPeriodicity.
-const (
-	RecurringOperationCreateRequestPeriodicityMonthly RecurringOperationCreateRequestPeriodicity = "monthly"
-	RecurringOperationCreateRequestPeriodicityYearly  RecurringOperationCreateRequestPeriodicity = "yearly"
-)
-
-// Valid indicates whether the value is a known member of the RecurringOperationCreateRequestPeriodicity enum.
-func (e RecurringOperationCreateRequestPeriodicity) Valid() bool {
-	switch e {
-	case RecurringOperationCreateRequestPeriodicityMonthly:
-		return true
-	case RecurringOperationCreateRequestPeriodicityYearly:
+	case PropertyTypeWarehouse:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for RecurringOperationCreateRequestReminderOffsetDays.
+// Defines values for RecurrenceDailyKind.
 const (
-	RecurringOperationCreateRequestReminderOffsetDaysN0 RecurringOperationCreateRequestReminderOffsetDays = 0
-	RecurringOperationCreateRequestReminderOffsetDaysN1 RecurringOperationCreateRequestReminderOffsetDays = 1
-	RecurringOperationCreateRequestReminderOffsetDaysN3 RecurringOperationCreateRequestReminderOffsetDays = 3
-	RecurringOperationCreateRequestReminderOffsetDaysN7 RecurringOperationCreateRequestReminderOffsetDays = 7
+	RecurrenceDailyKindDaily RecurrenceDailyKind = "daily"
 )
 
-// Valid indicates whether the value is a known member of the RecurringOperationCreateRequestReminderOffsetDays enum.
-func (e RecurringOperationCreateRequestReminderOffsetDays) Valid() bool {
+// Valid indicates whether the value is a known member of the RecurrenceDailyKind enum.
+func (e RecurrenceDailyKind) Valid() bool {
 	switch e {
-	case RecurringOperationCreateRequestReminderOffsetDaysN0:
-		return true
-	case RecurringOperationCreateRequestReminderOffsetDaysN1:
-		return true
-	case RecurringOperationCreateRequestReminderOffsetDaysN3:
-		return true
-	case RecurringOperationCreateRequestReminderOffsetDaysN7:
+	case RecurrenceDailyKindDaily:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for RecurringOperationResponsePeriodicity.
+// Defines values for RecurrenceMonthlyKind.
 const (
-	RecurringOperationResponsePeriodicityMonthly RecurringOperationResponsePeriodicity = "monthly"
-	RecurringOperationResponsePeriodicityYearly  RecurringOperationResponsePeriodicity = "yearly"
+	RecurrenceMonthlyKindMonthly RecurrenceMonthlyKind = "monthly"
 )
 
-// Valid indicates whether the value is a known member of the RecurringOperationResponsePeriodicity enum.
-func (e RecurringOperationResponsePeriodicity) Valid() bool {
+// Valid indicates whether the value is a known member of the RecurrenceMonthlyKind enum.
+func (e RecurrenceMonthlyKind) Valid() bool {
 	switch e {
-	case RecurringOperationResponsePeriodicityMonthly:
-		return true
-	case RecurringOperationResponsePeriodicityYearly:
+	case RecurrenceMonthlyKindMonthly:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for RecurringOperationResponseReminderOffsetDays.
+// Defines values for RecurrenceWeeklyKind.
 const (
-	RecurringOperationResponseReminderOffsetDaysN1 RecurringOperationResponseReminderOffsetDays = 1
-	RecurringOperationResponseReminderOffsetDaysN3 RecurringOperationResponseReminderOffsetDays = 3
-	RecurringOperationResponseReminderOffsetDaysN7 RecurringOperationResponseReminderOffsetDays = 7
+	RecurrenceWeeklyKindWeekly RecurrenceWeeklyKind = "weekly"
 )
 
-// Valid indicates whether the value is a known member of the RecurringOperationResponseReminderOffsetDays enum.
-func (e RecurringOperationResponseReminderOffsetDays) Valid() bool {
+// Valid indicates whether the value is a known member of the RecurrenceWeeklyKind enum.
+func (e RecurrenceWeeklyKind) Valid() bool {
 	switch e {
-	case RecurringOperationResponseReminderOffsetDaysN1:
-		return true
-	case RecurringOperationResponseReminderOffsetDaysN3:
-		return true
-	case RecurringOperationResponseReminderOffsetDaysN7:
+	case RecurrenceWeeklyKindWeekly:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for RecurringOperationResponseStatus.
+// Defines values for RecurrenceYearlyKind.
 const (
-	RecurringOperationResponseStatusActive RecurringOperationResponseStatus = "active"
-	RecurringOperationResponseStatusPaused RecurringOperationResponseStatus = "paused"
+	RecurrenceYearlyKindYearly RecurrenceYearlyKind = "yearly"
 )
 
-// Valid indicates whether the value is a known member of the RecurringOperationResponseStatus enum.
-func (e RecurringOperationResponseStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the RecurrenceYearlyKind enum.
+func (e RecurrenceYearlyKind) Valid() bool {
 	switch e {
-	case RecurringOperationResponseStatusActive:
-		return true
-	case RecurringOperationResponseStatusPaused:
+	case RecurrenceYearlyKindYearly:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for RecurringOperationUpdateRequestPeriodicity.
+// Defines values for RentalCreateRequestReminderOffsetDays.
 const (
-	RecurringOperationUpdateRequestPeriodicityMonthly RecurringOperationUpdateRequestPeriodicity = "monthly"
-	RecurringOperationUpdateRequestPeriodicityYearly  RecurringOperationUpdateRequestPeriodicity = "yearly"
+	RentalCreateRequestReminderOffsetDaysN1 RentalCreateRequestReminderOffsetDays = 1
+	RentalCreateRequestReminderOffsetDaysN3 RentalCreateRequestReminderOffsetDays = 3
+	RentalCreateRequestReminderOffsetDaysN7 RentalCreateRequestReminderOffsetDays = 7
 )
 
-// Valid indicates whether the value is a known member of the RecurringOperationUpdateRequestPeriodicity enum.
-func (e RecurringOperationUpdateRequestPeriodicity) Valid() bool {
+// Valid indicates whether the value is a known member of the RentalCreateRequestReminderOffsetDays enum.
+func (e RentalCreateRequestReminderOffsetDays) Valid() bool {
 	switch e {
-	case RecurringOperationUpdateRequestPeriodicityMonthly:
+	case RentalCreateRequestReminderOffsetDaysN1:
 		return true
-	case RecurringOperationUpdateRequestPeriodicityYearly:
+	case RentalCreateRequestReminderOffsetDaysN3:
+		return true
+	case RentalCreateRequestReminderOffsetDaysN7:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for RecurringOperationUpdateRequestReminderOffsetDays.
+// Defines values for RentalCreateRequestUtilities.
 const (
-	N0 RecurringOperationUpdateRequestReminderOffsetDays = 0
-	N1 RecurringOperationUpdateRequestReminderOffsetDays = 1
-	N3 RecurringOperationUpdateRequestReminderOffsetDays = 3
-	N7 RecurringOperationUpdateRequestReminderOffsetDays = 7
+	RentalCreateRequestUtilitiesFullReceipt RentalCreateRequestUtilities = "full_receipt"
+	RentalCreateRequestUtilitiesIncluded    RentalCreateRequestUtilities = "included"
+	RentalCreateRequestUtilitiesMetersOnly  RentalCreateRequestUtilities = "meters_only"
 )
 
-// Valid indicates whether the value is a known member of the RecurringOperationUpdateRequestReminderOffsetDays enum.
-func (e RecurringOperationUpdateRequestReminderOffsetDays) Valid() bool {
+// Valid indicates whether the value is a known member of the RentalCreateRequestUtilities enum.
+func (e RentalCreateRequestUtilities) Valid() bool {
 	switch e {
-	case N0:
+	case RentalCreateRequestUtilitiesFullReceipt:
 		return true
-	case N1:
+	case RentalCreateRequestUtilitiesIncluded:
 		return true
-	case N3:
-		return true
-	case N7:
+	case RentalCreateRequestUtilitiesMetersOnly:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ReminderResponseEventType.
+// Defines values for RentalPaymentDay1.
 const (
-	FreeReminder        ReminderResponseEventType = "free_reminder"
-	LeaseExpiring       ReminderResponseEventType = "lease_expiring"
-	LeaseRequiresAction ReminderResponseEventType = "lease_requires_action"
-	OperationDue        ReminderResponseEventType = "operation_due"
-	OperationOverdue    ReminderResponseEventType = "operation_overdue"
+	RentalPaymentDay1Last RentalPaymentDay1 = "last"
 )
 
-// Valid indicates whether the value is a known member of the ReminderResponseEventType enum.
-func (e ReminderResponseEventType) Valid() bool {
+// Valid indicates whether the value is a known member of the RentalPaymentDay1 enum.
+func (e RentalPaymentDay1) Valid() bool {
 	switch e {
-	case FreeReminder:
-		return true
-	case LeaseExpiring:
-		return true
-	case LeaseRequiresAction:
-		return true
-	case OperationDue:
-		return true
-	case OperationOverdue:
+	case RentalPaymentDay1Last:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ReminderResponseStatus.
+// Defines values for RentalPaymentViewReminderOffsetDays.
 const (
-	ReminderResponseStatusCancelled ReminderResponseStatus = "cancelled"
-	ReminderResponseStatusFailed    ReminderResponseStatus = "failed"
-	ReminderResponseStatusPending   ReminderResponseStatus = "pending"
-	ReminderResponseStatusSent      ReminderResponseStatus = "sent"
-	ReminderResponseStatusSkipped   ReminderResponseStatus = "skipped"
+	RentalPaymentViewReminderOffsetDaysN1 RentalPaymentViewReminderOffsetDays = 1
+	RentalPaymentViewReminderOffsetDaysN3 RentalPaymentViewReminderOffsetDays = 3
+	RentalPaymentViewReminderOffsetDaysN7 RentalPaymentViewReminderOffsetDays = 7
 )
 
-// Valid indicates whether the value is a known member of the ReminderResponseStatus enum.
-func (e ReminderResponseStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the RentalPaymentViewReminderOffsetDays enum.
+func (e RentalPaymentViewReminderOffsetDays) Valid() bool {
 	switch e {
-	case ReminderResponseStatusCancelled:
+	case RentalPaymentViewReminderOffsetDaysN1:
 		return true
-	case ReminderResponseStatusFailed:
+	case RentalPaymentViewReminderOffsetDaysN3:
 		return true
-	case ReminderResponseStatusPending:
-		return true
-	case ReminderResponseStatusSent:
-		return true
-	case ReminderResponseStatusSkipped:
+	case RentalPaymentViewReminderOffsetDaysN7:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ReminderResponseTargetType.
+// Defines values for RentalResponseStatus.
 const (
-	ReminderResponseTargetTypeFree               ReminderResponseTargetType = "free"
-	ReminderResponseTargetTypeLease              ReminderResponseTargetType = "lease"
-	ReminderResponseTargetTypeOperation          ReminderResponseTargetType = "operation"
-	ReminderResponseTargetTypeRecurringOperation ReminderResponseTargetType = "recurring_operation"
+	RentalResponseStatusActive         RentalResponseStatus = "active"
+	RentalResponseStatusCompleted      RentalResponseStatus = "completed"
+	RentalResponseStatusNeedsAttention RentalResponseStatus = "needs_attention"
+	RentalResponseStatusUpcoming       RentalResponseStatus = "upcoming"
 )
 
-// Valid indicates whether the value is a known member of the ReminderResponseTargetType enum.
-func (e ReminderResponseTargetType) Valid() bool {
+// Valid indicates whether the value is a known member of the RentalResponseStatus enum.
+func (e RentalResponseStatus) Valid() bool {
 	switch e {
-	case ReminderResponseTargetTypeFree:
+	case RentalResponseStatusActive:
 		return true
-	case ReminderResponseTargetTypeLease:
+	case RentalResponseStatusCompleted:
 		return true
-	case ReminderResponseTargetTypeOperation:
+	case RentalResponseStatusNeedsAttention:
 		return true
-	case ReminderResponseTargetTypeRecurringOperation:
+	case RentalResponseStatusUpcoming:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RentalResponseUtilities.
+const (
+	RentalResponseUtilitiesFullReceipt RentalResponseUtilities = "full_receipt"
+	RentalResponseUtilitiesIncluded    RentalResponseUtilities = "included"
+	RentalResponseUtilitiesMetersOnly  RentalResponseUtilities = "meters_only"
+)
+
+// Valid indicates whether the value is a known member of the RentalResponseUtilities enum.
+func (e RentalResponseUtilities) Valid() bool {
+	switch e {
+	case RentalResponseUtilitiesFullReceipt:
+		return true
+	case RentalResponseUtilitiesIncluded:
+		return true
+	case RentalResponseUtilitiesMetersOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RentalUpdateRequestReminderOffsetDays.
+const (
+	RentalUpdateRequestReminderOffsetDaysN1 RentalUpdateRequestReminderOffsetDays = 1
+	RentalUpdateRequestReminderOffsetDaysN3 RentalUpdateRequestReminderOffsetDays = 3
+	RentalUpdateRequestReminderOffsetDaysN7 RentalUpdateRequestReminderOffsetDays = 7
+)
+
+// Valid indicates whether the value is a known member of the RentalUpdateRequestReminderOffsetDays enum.
+func (e RentalUpdateRequestReminderOffsetDays) Valid() bool {
+	switch e {
+	case RentalUpdateRequestReminderOffsetDaysN1:
+		return true
+	case RentalUpdateRequestReminderOffsetDaysN3:
+		return true
+	case RentalUpdateRequestReminderOffsetDaysN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RentalUpdateRequestUtilities.
+const (
+	RentalUpdateRequestUtilitiesFullReceipt RentalUpdateRequestUtilities = "full_receipt"
+	RentalUpdateRequestUtilitiesIncluded    RentalUpdateRequestUtilities = "included"
+	RentalUpdateRequestUtilitiesMetersOnly  RentalUpdateRequestUtilities = "meters_only"
+)
+
+// Valid indicates whether the value is a known member of the RentalUpdateRequestUtilities enum.
+func (e RentalUpdateRequestUtilities) Valid() bool {
+	switch e {
+	case RentalUpdateRequestUtilitiesFullReceipt:
+		return true
+	case RentalUpdateRequestUtilitiesIncluded:
+		return true
+	case RentalUpdateRequestUtilitiesMetersOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SubscriptionSource.
+const (
+	SubscriptionSourcePaid    SubscriptionSource = "paid"
+	SubscriptionSourceService SubscriptionSource = "service"
+)
+
+// Valid indicates whether the value is a known member of the SubscriptionSource enum.
+func (e SubscriptionSource) Valid() bool {
+	switch e {
+	case SubscriptionSourcePaid:
+		return true
+	case SubscriptionSourceService:
 		return true
 	default:
 		return false
@@ -949,20 +1349,17 @@ func (e ReminderResponseTargetType) Valid() bool {
 
 // Defines values for SubscriptionPaymentStatus.
 const (
-	SubscriptionPaymentStatusFailed          SubscriptionPaymentStatus = "failed"
-	SubscriptionPaymentStatusPartialRefunded SubscriptionPaymentStatus = "partial_refunded"
-	SubscriptionPaymentStatusPending         SubscriptionPaymentStatus = "pending"
-	SubscriptionPaymentStatusRefunded        SubscriptionPaymentStatus = "refunded"
-	SubscriptionPaymentStatusRefunding       SubscriptionPaymentStatus = "refunding"
-	SubscriptionPaymentStatusSucceeded       SubscriptionPaymentStatus = "succeeded"
+	SubscriptionPaymentStatusFailed    SubscriptionPaymentStatus = "failed"
+	SubscriptionPaymentStatusPending   SubscriptionPaymentStatus = "pending"
+	SubscriptionPaymentStatusRefunded  SubscriptionPaymentStatus = "refunded"
+	SubscriptionPaymentStatusRefunding SubscriptionPaymentStatus = "refunding"
+	SubscriptionPaymentStatusSucceeded SubscriptionPaymentStatus = "succeeded"
 )
 
 // Valid indicates whether the value is a known member of the SubscriptionPaymentStatus enum.
 func (e SubscriptionPaymentStatus) Valid() bool {
 	switch e {
 	case SubscriptionPaymentStatusFailed:
-		return true
-	case SubscriptionPaymentStatusPartialRefunded:
 		return true
 	case SubscriptionPaymentStatusPending:
 		return true
@@ -998,48 +1395,183 @@ func (e SubscriptionStatus) Valid() bool {
 	}
 }
 
-// Defines values for TariffName.
+// Defines values for SuspendedSharedPropertyAccessRole.
 const (
-	Basic    TariffName = "basic"
-	Business TariffName = "business"
-	Pro      TariffName = "pro"
+	SuspendedSharedPropertyAccessRoleFullAccess SuspendedSharedPropertyAccessRole = "full_access"
+	SuspendedSharedPropertyAccessRoleViewer     SuspendedSharedPropertyAccessRole = "viewer"
 )
 
-// Valid indicates whether the value is a known member of the TariffName enum.
-func (e TariffName) Valid() bool {
+// Valid indicates whether the value is a known member of the SuspendedSharedPropertyAccessRole enum.
+func (e SuspendedSharedPropertyAccessRole) Valid() bool {
 	switch e {
-	case Basic:
+	case SuspendedSharedPropertyAccessRoleFullAccess:
 		return true
-	case Business:
-		return true
-	case Pro:
+	case SuspendedSharedPropertyAccessRoleViewer:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for UpcomingFreeReminderResponsePeriodicity.
+// Defines values for TariffName.
 const (
-	UpcomingFreeReminderResponsePeriodicityDaily   UpcomingFreeReminderResponsePeriodicity = "daily"
-	UpcomingFreeReminderResponsePeriodicityMonthly UpcomingFreeReminderResponsePeriodicity = "monthly"
-	UpcomingFreeReminderResponsePeriodicityOnce    UpcomingFreeReminderResponsePeriodicity = "once"
-	UpcomingFreeReminderResponsePeriodicityWeekly  UpcomingFreeReminderResponsePeriodicity = "weekly"
-	UpcomingFreeReminderResponsePeriodicityYearly  UpcomingFreeReminderResponsePeriodicity = "yearly"
+	TariffNameBasic    TariffName = "basic"
+	TariffNameBusiness TariffName = "business"
+	TariffNamePro      TariffName = "pro"
 )
 
-// Valid indicates whether the value is a known member of the UpcomingFreeReminderResponsePeriodicity enum.
-func (e UpcomingFreeReminderResponsePeriodicity) Valid() bool {
+// Valid indicates whether the value is a known member of the TariffName enum.
+func (e TariffName) Valid() bool {
 	switch e {
-	case UpcomingFreeReminderResponsePeriodicityDaily:
+	case TariffNameBasic:
 		return true
-	case UpcomingFreeReminderResponsePeriodicityMonthly:
+	case TariffNameBusiness:
 		return true
-	case UpcomingFreeReminderResponsePeriodicityOnce:
+	case TariffNamePro:
 		return true
-	case UpcomingFreeReminderResponsePeriodicityWeekly:
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskRepeat.
+const (
+	TaskRepeatDaily   TaskRepeat = "daily"
+	TaskRepeatMonthly TaskRepeat = "monthly"
+	TaskRepeatOnce    TaskRepeat = "once"
+	TaskRepeatWeekly  TaskRepeat = "weekly"
+	TaskRepeatYearly  TaskRepeat = "yearly"
+)
+
+// Valid indicates whether the value is a known member of the TaskRepeat enum.
+func (e TaskRepeat) Valid() bool {
+	switch e {
+	case TaskRepeatDaily:
 		return true
-	case UpcomingFreeReminderResponsePeriodicityYearly:
+	case TaskRepeatMonthly:
+		return true
+	case TaskRepeatOnce:
+		return true
+	case TaskRepeatWeekly:
+		return true
+	case TaskRepeatYearly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskResponseStatus.
+const (
+	TaskResponseStatusActive    TaskResponseStatus = "active"
+	TaskResponseStatusCompleted TaskResponseStatus = "completed"
+	TaskResponseStatusOverdue   TaskResponseStatus = "overdue"
+	TaskResponseStatusUndated   TaskResponseStatus = "undated"
+)
+
+// Valid indicates whether the value is a known member of the TaskResponseStatus enum.
+func (e TaskResponseStatus) Valid() bool {
+	switch e {
+	case TaskResponseStatusActive:
+		return true
+	case TaskResponseStatusCompleted:
+		return true
+	case TaskResponseStatusOverdue:
+		return true
+	case TaskResponseStatusUndated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsOrder.
+const (
+	OperationsOrderAsc  OperationsOrder = "asc"
+	OperationsOrderDesc OperationsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the OperationsOrder enum.
+func (e OperationsOrder) Valid() bool {
+	switch e {
+	case OperationsOrderAsc:
+		return true
+	case OperationsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsSort.
+const (
+	OperationsSortDate     OperationsSort = "date"
+	OperationsSortPaidDate OperationsSort = "paid_date"
+)
+
+// Valid indicates whether the value is a known member of the OperationsSort enum.
+func (e OperationsSort) Valid() bool {
+	switch e {
+	case OperationsSortDate:
+		return true
+	case OperationsSortPaidDate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsStatusFilter.
+const (
+	OperationsStatusFilterOverdue OperationsStatusFilter = "overdue"
+	OperationsStatusFilterPaid    OperationsStatusFilter = "paid"
+	OperationsStatusFilterPlanned OperationsStatusFilter = "planned"
+)
+
+// Valid indicates whether the value is a known member of the OperationsStatusFilter enum.
+func (e OperationsStatusFilter) Valid() bool {
+	switch e {
+	case OperationsStatusFilterOverdue:
+		return true
+	case OperationsStatusFilterPaid:
+		return true
+	case OperationsStatusFilterPlanned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationsTypeFilter.
+const (
+	OperationsTypeFilterExpense OperationsTypeFilter = "expense"
+	OperationsTypeFilterIncome  OperationsTypeFilter = "income"
+)
+
+// Valid indicates whether the value is a known member of the OperationsTypeFilter enum.
+func (e OperationsTypeFilter) Valid() bool {
+	switch e {
+	case OperationsTypeFilterExpense:
+		return true
+	case OperationsTypeFilterIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentsTypeFilter.
+const (
+	PaymentsTypeFilterExpense PaymentsTypeFilter = "expense"
+	PaymentsTypeFilterIncome  PaymentsTypeFilter = "income"
+)
+
+// Valid indicates whether the value is a known member of the PaymentsTypeFilter enum.
+func (e PaymentsTypeFilter) Valid() bool {
+	switch e {
+	case PaymentsTypeFilterExpense:
+		return true
+	case PaymentsTypeFilterIncome:
 		return true
 	default:
 		return false
@@ -1058,42 +1590,6 @@ func (e ListAdminAuditLogsParamsOrder) Valid() bool {
 	case ListAdminAuditLogsParamsOrderAsc:
 		return true
 	case ListAdminAuditLogsParamsOrderDesc:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ListAdminLeasesParamsOrder.
-const (
-	ListAdminLeasesParamsOrderAsc  ListAdminLeasesParamsOrder = "asc"
-	ListAdminLeasesParamsOrderDesc ListAdminLeasesParamsOrder = "desc"
-)
-
-// Valid indicates whether the value is a known member of the ListAdminLeasesParamsOrder enum.
-func (e ListAdminLeasesParamsOrder) Valid() bool {
-	switch e {
-	case ListAdminLeasesParamsOrderAsc:
-		return true
-	case ListAdminLeasesParamsOrderDesc:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ListAdminOperationsParamsOrder.
-const (
-	ListAdminOperationsParamsOrderAsc  ListAdminOperationsParamsOrder = "asc"
-	ListAdminOperationsParamsOrderDesc ListAdminOperationsParamsOrder = "desc"
-)
-
-// Valid indicates whether the value is a known member of the ListAdminOperationsParamsOrder enum.
-func (e ListAdminOperationsParamsOrder) Valid() bool {
-	switch e {
-	case ListAdminOperationsParamsOrderAsc:
-		return true
-	case ListAdminOperationsParamsOrderDesc:
 		return true
 	default:
 		return false
@@ -1157,36 +1653,18 @@ func (e ListAdminSubscriptionPaymentsParamsOrder) Valid() bool {
 	}
 }
 
-// Defines values for ListAdminTenantContactsParamsOrder.
-const (
-	ListAdminTenantContactsParamsOrderAsc  ListAdminTenantContactsParamsOrder = "asc"
-	ListAdminTenantContactsParamsOrderDesc ListAdminTenantContactsParamsOrder = "desc"
-)
-
-// Valid indicates whether the value is a known member of the ListAdminTenantContactsParamsOrder enum.
-func (e ListAdminTenantContactsParamsOrder) Valid() bool {
-	switch e {
-	case ListAdminTenantContactsParamsOrderAsc:
-		return true
-	case ListAdminTenantContactsParamsOrderDesc:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ListAdminUsersParamsRole.
 const (
-	Admin ListAdminUsersParamsRole = "admin"
-	Owner ListAdminUsersParamsRole = "owner"
+	ListAdminUsersParamsRoleAdmin ListAdminUsersParamsRole = "admin"
+	ListAdminUsersParamsRoleOwner ListAdminUsersParamsRole = "owner"
 )
 
 // Valid indicates whether the value is a known member of the ListAdminUsersParamsRole enum.
 func (e ListAdminUsersParamsRole) Valid() bool {
 	switch e {
-	case Admin:
+	case ListAdminUsersParamsRoleAdmin:
 		return true
-	case Owner:
+	case ListAdminUsersParamsRoleOwner:
 		return true
 	default:
 		return false
@@ -1229,57 +1707,21 @@ func (e ListAdminUserAuditLogsParamsOrder) Valid() bool {
 	}
 }
 
-// Defines values for ListAdminUserLeasesParamsOrder.
-const (
-	ListAdminUserLeasesParamsOrderAsc  ListAdminUserLeasesParamsOrder = "asc"
-	ListAdminUserLeasesParamsOrderDesc ListAdminUserLeasesParamsOrder = "desc"
-)
-
-// Valid indicates whether the value is a known member of the ListAdminUserLeasesParamsOrder enum.
-func (e ListAdminUserLeasesParamsOrder) Valid() bool {
-	switch e {
-	case ListAdminUserLeasesParamsOrderAsc:
-		return true
-	case ListAdminUserLeasesParamsOrderDesc:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ListAdminUserOperationsParamsOrder.
-const (
-	ListAdminUserOperationsParamsOrderAsc  ListAdminUserOperationsParamsOrder = "asc"
-	ListAdminUserOperationsParamsOrderDesc ListAdminUserOperationsParamsOrder = "desc"
-)
-
-// Valid indicates whether the value is a known member of the ListAdminUserOperationsParamsOrder enum.
-func (e ListAdminUserOperationsParamsOrder) Valid() bool {
-	switch e {
-	case ListAdminUserOperationsParamsOrderAsc:
-		return true
-	case ListAdminUserOperationsParamsOrderDesc:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ListAdminUserPropertiesParamsStatus.
 const (
-	Active   ListAdminUserPropertiesParamsStatus = "active"
-	All      ListAdminUserPropertiesParamsStatus = "all"
-	Archived ListAdminUserPropertiesParamsStatus = "archived"
+	ListAdminUserPropertiesParamsStatusActive   ListAdminUserPropertiesParamsStatus = "active"
+	ListAdminUserPropertiesParamsStatusAll      ListAdminUserPropertiesParamsStatus = "all"
+	ListAdminUserPropertiesParamsStatusArchived ListAdminUserPropertiesParamsStatus = "archived"
 )
 
 // Valid indicates whether the value is a known member of the ListAdminUserPropertiesParamsStatus enum.
 func (e ListAdminUserPropertiesParamsStatus) Valid() bool {
 	switch e {
-	case Active:
+	case ListAdminUserPropertiesParamsStatusActive:
 		return true
-	case All:
+	case ListAdminUserPropertiesParamsStatusAll:
 		return true
-	case Archived:
+	case ListAdminUserPropertiesParamsStatusArchived:
 		return true
 	default:
 		return false
@@ -1304,41 +1746,371 @@ func (e ListAdminUserPropertiesParamsOrder) Valid() bool {
 	}
 }
 
-// Defines values for ListAdminUserTenantContactsParamsOrder.
+// Defines values for ListContactsParamsSort.
 const (
-	ListAdminUserTenantContactsParamsOrderAsc  ListAdminUserTenantContactsParamsOrder = "asc"
-	ListAdminUserTenantContactsParamsOrderDesc ListAdminUserTenantContactsParamsOrder = "desc"
+	ListContactsParamsSortCreated  ListContactsParamsSort = "created"
+	ListContactsParamsSortName     ListContactsParamsSort = "name"
+	ListContactsParamsSortProperty ListContactsParamsSort = "property"
 )
 
-// Valid indicates whether the value is a known member of the ListAdminUserTenantContactsParamsOrder enum.
-func (e ListAdminUserTenantContactsParamsOrder) Valid() bool {
+// Valid indicates whether the value is a known member of the ListContactsParamsSort enum.
+func (e ListContactsParamsSort) Valid() bool {
 	switch e {
-	case ListAdminUserTenantContactsParamsOrderAsc:
+	case ListContactsParamsSortCreated:
 		return true
-	case ListAdminUserTenantContactsParamsOrderDesc:
+	case ListContactsParamsSortName:
+		return true
+	case ListContactsParamsSortProperty:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for DeletePropertyParamsMode.
+// Defines values for ListContactsParamsOrder.
 const (
-	Cascade DeletePropertyParamsMode = "cascade"
-	Detach  DeletePropertyParamsMode = "detach"
+	ListContactsParamsOrderAsc  ListContactsParamsOrder = "asc"
+	ListContactsParamsOrderDesc ListContactsParamsOrder = "desc"
 )
 
-// Valid indicates whether the value is a known member of the DeletePropertyParamsMode enum.
-func (e DeletePropertyParamsMode) Valid() bool {
+// Valid indicates whether the value is a known member of the ListContactsParamsOrder enum.
+func (e ListContactsParamsOrder) Valid() bool {
 	switch e {
-	case Cascade:
+	case ListContactsParamsOrderAsc:
 		return true
-	case Detach:
+	case ListContactsParamsOrderDesc:
 		return true
 	default:
 		return false
 	}
 }
+
+// Defines values for ListOperationsParamsType.
+const (
+	ListOperationsParamsTypeExpense ListOperationsParamsType = "expense"
+	ListOperationsParamsTypeIncome  ListOperationsParamsType = "income"
+)
+
+// Valid indicates whether the value is a known member of the ListOperationsParamsType enum.
+func (e ListOperationsParamsType) Valid() bool {
+	switch e {
+	case ListOperationsParamsTypeExpense:
+		return true
+	case ListOperationsParamsTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListOperationsParamsSort.
+const (
+	ListOperationsParamsSortDate     ListOperationsParamsSort = "date"
+	ListOperationsParamsSortPaidDate ListOperationsParamsSort = "paid_date"
+)
+
+// Valid indicates whether the value is a known member of the ListOperationsParamsSort enum.
+func (e ListOperationsParamsSort) Valid() bool {
+	switch e {
+	case ListOperationsParamsSortDate:
+		return true
+	case ListOperationsParamsSortPaidDate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListOperationsParamsOrder.
+const (
+	ListOperationsParamsOrderAsc  ListOperationsParamsOrder = "asc"
+	ListOperationsParamsOrderDesc ListOperationsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListOperationsParamsOrder enum.
+func (e ListOperationsParamsOrder) Valid() bool {
+	switch e {
+	case ListOperationsParamsOrderAsc:
+		return true
+	case ListOperationsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SummarizeOperationsParamsSort.
+const (
+	SummarizeOperationsParamsSortDate     SummarizeOperationsParamsSort = "date"
+	SummarizeOperationsParamsSortPaidDate SummarizeOperationsParamsSort = "paid_date"
+)
+
+// Valid indicates whether the value is a known member of the SummarizeOperationsParamsSort enum.
+func (e SummarizeOperationsParamsSort) Valid() bool {
+	switch e {
+	case SummarizeOperationsParamsSortDate:
+		return true
+	case SummarizeOperationsParamsSortPaidDate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SummarizeOperationsParamsType.
+const (
+	SummarizeOperationsParamsTypeExpense SummarizeOperationsParamsType = "expense"
+	SummarizeOperationsParamsTypeIncome  SummarizeOperationsParamsType = "income"
+)
+
+// Valid indicates whether the value is a known member of the SummarizeOperationsParamsType enum.
+func (e SummarizeOperationsParamsType) Valid() bool {
+	switch e {
+	case SummarizeOperationsParamsTypeExpense:
+		return true
+	case SummarizeOperationsParamsTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SearchGlobalPaymentsParamsType.
+const (
+	SearchGlobalPaymentsParamsTypeExpense SearchGlobalPaymentsParamsType = "expense"
+	SearchGlobalPaymentsParamsTypeIncome  SearchGlobalPaymentsParamsType = "income"
+)
+
+// Valid indicates whether the value is a known member of the SearchGlobalPaymentsParamsType enum.
+func (e SearchGlobalPaymentsParamsType) Valid() bool {
+	switch e {
+	case SearchGlobalPaymentsParamsTypeExpense:
+		return true
+	case SearchGlobalPaymentsParamsTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPropertyOperationsParamsStatus.
+const (
+	ListPropertyOperationsParamsStatusOverdue ListPropertyOperationsParamsStatus = "overdue"
+	ListPropertyOperationsParamsStatusPaid    ListPropertyOperationsParamsStatus = "paid"
+	ListPropertyOperationsParamsStatusPlanned ListPropertyOperationsParamsStatus = "planned"
+)
+
+// Valid indicates whether the value is a known member of the ListPropertyOperationsParamsStatus enum.
+func (e ListPropertyOperationsParamsStatus) Valid() bool {
+	switch e {
+	case ListPropertyOperationsParamsStatusOverdue:
+		return true
+	case ListPropertyOperationsParamsStatusPaid:
+		return true
+	case ListPropertyOperationsParamsStatusPlanned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPropertyOperationsParamsSort.
+const (
+	ListPropertyOperationsParamsSortDate     ListPropertyOperationsParamsSort = "date"
+	ListPropertyOperationsParamsSortPaidDate ListPropertyOperationsParamsSort = "paid_date"
+)
+
+// Valid indicates whether the value is a known member of the ListPropertyOperationsParamsSort enum.
+func (e ListPropertyOperationsParamsSort) Valid() bool {
+	switch e {
+	case ListPropertyOperationsParamsSortDate:
+		return true
+	case ListPropertyOperationsParamsSortPaidDate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPropertyOperationsParamsOrder.
+const (
+	ListPropertyOperationsParamsOrderAsc  ListPropertyOperationsParamsOrder = "asc"
+	ListPropertyOperationsParamsOrderDesc ListPropertyOperationsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListPropertyOperationsParamsOrder enum.
+func (e ListPropertyOperationsParamsOrder) Valid() bool {
+	switch e {
+	case ListPropertyOperationsParamsOrderAsc:
+		return true
+	case ListPropertyOperationsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPropertyOperationsParamsType.
+const (
+	ListPropertyOperationsParamsTypeExpense ListPropertyOperationsParamsType = "expense"
+	ListPropertyOperationsParamsTypeIncome  ListPropertyOperationsParamsType = "income"
+)
+
+// Valid indicates whether the value is a known member of the ListPropertyOperationsParamsType enum.
+func (e ListPropertyOperationsParamsType) Valid() bool {
+	switch e {
+	case ListPropertyOperationsParamsTypeExpense:
+		return true
+	case ListPropertyOperationsParamsTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SummarizePropertyOperationsParamsStatus.
+const (
+	SummarizePropertyOperationsParamsStatusOverdue SummarizePropertyOperationsParamsStatus = "overdue"
+	SummarizePropertyOperationsParamsStatusPaid    SummarizePropertyOperationsParamsStatus = "paid"
+	SummarizePropertyOperationsParamsStatusPlanned SummarizePropertyOperationsParamsStatus = "planned"
+)
+
+// Valid indicates whether the value is a known member of the SummarizePropertyOperationsParamsStatus enum.
+func (e SummarizePropertyOperationsParamsStatus) Valid() bool {
+	switch e {
+	case SummarizePropertyOperationsParamsStatusOverdue:
+		return true
+	case SummarizePropertyOperationsParamsStatusPaid:
+		return true
+	case SummarizePropertyOperationsParamsStatusPlanned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SummarizePropertyOperationsParamsSort.
+const (
+	SummarizePropertyOperationsParamsSortDate     SummarizePropertyOperationsParamsSort = "date"
+	SummarizePropertyOperationsParamsSortPaidDate SummarizePropertyOperationsParamsSort = "paid_date"
+)
+
+// Valid indicates whether the value is a known member of the SummarizePropertyOperationsParamsSort enum.
+func (e SummarizePropertyOperationsParamsSort) Valid() bool {
+	switch e {
+	case SummarizePropertyOperationsParamsSortDate:
+		return true
+	case SummarizePropertyOperationsParamsSortPaidDate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SummarizePropertyOperationsParamsType.
+const (
+	SummarizePropertyOperationsParamsTypeExpense SummarizePropertyOperationsParamsType = "expense"
+	SummarizePropertyOperationsParamsTypeIncome  SummarizePropertyOperationsParamsType = "income"
+)
+
+// Valid indicates whether the value is a known member of the SummarizePropertyOperationsParamsType enum.
+func (e SummarizePropertyOperationsParamsType) Valid() bool {
+	switch e {
+	case SummarizePropertyOperationsParamsTypeExpense:
+		return true
+	case SummarizePropertyOperationsParamsTypeIncome:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPaymentOperationsParamsStatus.
+const (
+	ListPaymentOperationsParamsStatusOverdue ListPaymentOperationsParamsStatus = "overdue"
+	ListPaymentOperationsParamsStatusPaid    ListPaymentOperationsParamsStatus = "paid"
+	ListPaymentOperationsParamsStatusPlanned ListPaymentOperationsParamsStatus = "planned"
+)
+
+// Valid indicates whether the value is a known member of the ListPaymentOperationsParamsStatus enum.
+func (e ListPaymentOperationsParamsStatus) Valid() bool {
+	switch e {
+	case ListPaymentOperationsParamsStatusOverdue:
+		return true
+	case ListPaymentOperationsParamsStatusPaid:
+		return true
+	case ListPaymentOperationsParamsStatusPlanned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPaymentOperationsParamsSort.
+const (
+	ListPaymentOperationsParamsSortDate     ListPaymentOperationsParamsSort = "date"
+	ListPaymentOperationsParamsSortPaidDate ListPaymentOperationsParamsSort = "paid_date"
+)
+
+// Valid indicates whether the value is a known member of the ListPaymentOperationsParamsSort enum.
+func (e ListPaymentOperationsParamsSort) Valid() bool {
+	switch e {
+	case ListPaymentOperationsParamsSortDate:
+		return true
+	case ListPaymentOperationsParamsSortPaidDate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPaymentOperationsParamsOrder.
+const (
+	ListPaymentOperationsParamsOrderAsc  ListPaymentOperationsParamsOrder = "asc"
+	ListPaymentOperationsParamsOrderDesc ListPaymentOperationsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListPaymentOperationsParamsOrder enum.
+func (e ListPaymentOperationsParamsOrder) Valid() bool {
+	switch e {
+	case ListPaymentOperationsParamsOrderAsc:
+		return true
+	case ListPaymentOperationsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// ActiveSession defines model for ActiveSession.
+type ActiveSession struct {
+	// Browser Browser name, e.g. Chrome or YaBrowser; empty when unparsed.
+	Browser string `json:"browser"`
+
+	// BrowserMajor Browser major version; null when unknown.
+	BrowserMajor *int `json:"browserMajor,omitempty"`
+
+	// City GeoIP-resolved city for the last IP in the ru locale; null when unknown.
+	City      *string   `json:"city"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Current True when the session belongs to the caller's own cookie.
+	Current bool `json:"current"`
+
+	// DeviceType Device class captured from the User-Agent at session creation.
+	DeviceType ActiveSessionDeviceType `json:"deviceType"`
+	Id         openapi_types.UUID      `json:"id"`
+
+	// LastIp Client IP of the most recent request.
+	LastIp     *string   `json:"lastIp"`
+	LastSeenAt time.Time `json:"lastSeenAt"`
+
+	// Os Operating system name; empty when unparsed.
+	Os string `json:"os"`
+}
+
+// ActiveSessionDeviceType Device class captured from the User-Agent at session creation.
+type ActiveSessionDeviceType string
 
 // AddPaymentMethodRequest defines model for AddPaymentMethodRequest.
 type AddPaymentMethodRequest struct {
@@ -1363,6 +2135,24 @@ type AddressSuggestion struct {
 type AddressSuggestionsResponse struct {
 	Suggestions []AddressSuggestion `json:"suggestions"`
 }
+
+// AdminAssignServiceSubscriptionRequest defines model for AdminAssignServiceSubscriptionRequest.
+type AdminAssignServiceSubscriptionRequest struct {
+	TariffName TariffName `json:"tariffName"`
+
+	// TermType The fixed term of the service subscription: month or year counts
+	// from the assignment moment; date runs until the end of untilDate
+	// (UTC, inclusive).
+	TermType AdminAssignServiceSubscriptionRequestTermType `json:"termType"`
+
+	// UntilDate Required when termType is date; must be today or later.
+	UntilDate *openapi_types.Date `json:"untilDate,omitempty"`
+}
+
+// AdminAssignServiceSubscriptionRequestTermType The fixed term of the service subscription: month or year counts
+// from the assignment moment; date runs until the end of untilDate
+// (UTC, inclusive).
+type AdminAssignServiceSubscriptionRequestTermType string
 
 // AdminAuditLog defines model for AdminAuditLog.
 type AdminAuditLog struct {
@@ -1392,69 +2182,29 @@ type AdminAuditLogsResponse struct {
 	Total int             `json:"total"`
 }
 
-// AdminLease defines model for AdminLease.
-type AdminLease struct {
-	Comment              *string             `json:"comment,omitempty"`
-	CreatedAt            time.Time           `json:"createdAt"`
-	DepositAmountKopecks int                 `json:"depositAmountKopecks"`
-	EndDate              *openapi_types.Date `json:"endDate,omitempty"`
-	Id                   openapi_types.UUID  `json:"id"`
-	OwnerId              openapi_types.UUID  `json:"ownerId"`
-	PaymentDay           int                 `json:"paymentDay"`
-	PropertyId           *openapi_types.UUID `json:"propertyId,omitempty"`
-	PropertyName         *string             `json:"propertyName,omitempty"`
-	RentAmountKopecks    int                 `json:"rentAmountKopecks"`
-	StartDate            openapi_types.Date  `json:"startDate"`
-	Status               LeaseStatus         `json:"status"`
-	TenantContact        *AdminTenantContact `json:"tenantContact,omitempty"`
-	UpdatedAt            time.Time           `json:"updatedAt"`
+// AdminCreateTariffRequest defines model for AdminCreateTariffRequest.
+type AdminCreateTariffRequest struct {
+	// ActivePropertyLimit Maximum number of active properties; -1 means unlimited.
+	ActivePropertyLimit int `json:"activePropertyLimit"`
+
+	// MonthlyPriceKopecks Monthly price in kopecks.
+	MonthlyPriceKopecks int64      `json:"monthlyPriceKopecks"`
+	Name                TariffName `json:"name"`
+
+	// YearlyPriceKopecks Yearly price in kopecks.
+	YearlyPriceKopecks int64 `json:"yearlyPriceKopecks"`
 }
 
-// AdminLeaseResponse defines model for AdminLeaseResponse.
-type AdminLeaseResponse struct {
-	Lease AdminLease `json:"lease"`
+// AdminExtendGraceRequest defines model for AdminExtendGraceRequest.
+type AdminExtendGraceRequest struct {
+	// Days The extra days added to the current grace window.
+	Days int `json:"days"`
 }
 
-// AdminLeasesResponse defines model for AdminLeasesResponse.
-type AdminLeasesResponse struct {
-	Items []AdminLease `json:"items"`
-	Total int          `json:"total"`
-}
-
-// AdminOperation defines model for AdminOperation.
-type AdminOperation struct {
-	AmountKopecks        int                               `json:"amountKopecks"`
-	CategoryId           openapi_types.UUID                `json:"categoryId"`
-	CategoryName         string                            `json:"categoryName"`
-	Comment              *string                           `json:"comment,omitempty"`
-	CreatedAt            time.Time                         `json:"createdAt"`
-	Id                   openapi_types.UUID                `json:"id"`
-	IsException          bool                              `json:"isException"`
-	LeaseId              *openapi_types.UUID               `json:"leaseId,omitempty"`
-	Name                 string                            `json:"name"`
-	OperationDate        openapi_types.Date                `json:"operationDate"`
-	OwnerId              openapi_types.UUID                `json:"ownerId"`
-	PropertyId           *openapi_types.UUID               `json:"propertyId,omitempty"`
-	PropertyName         *string                           `json:"propertyName,omitempty"`
-	RecurringOperationId *openapi_types.UUID               `json:"recurringOperationId,omitempty"`
-	ReminderOffsetDays   *AdminOperationReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
-	Status               OperationStatus                   `json:"status"`
-	Type                 OperationType                     `json:"type"`
-	UpdatedAt            time.Time                         `json:"updatedAt"`
-}
-
-// AdminOperationReminderOffsetDays defines model for AdminOperation.ReminderOffsetDays.
-type AdminOperationReminderOffsetDays int
-
-// AdminOperationResponse defines model for AdminOperationResponse.
-type AdminOperationResponse struct {
-	Operation AdminOperation `json:"operation"`
-}
-
-// AdminOperationsResponse defines model for AdminOperationsResponse.
-type AdminOperationsResponse struct {
-	Items []AdminOperation `json:"items"`
-	Total int              `json:"total"`
+// AdminForceChangeTariffRequest defines model for AdminForceChangeTariffRequest.
+type AdminForceChangeTariffRequest struct {
+	Period     AdminSubscriptionPaymentPeriod `json:"period"`
+	TariffName TariffName                     `json:"tariffName"`
 }
 
 // AdminPropertiesResponse defines model for AdminPropertiesResponse.
@@ -1468,22 +2218,20 @@ type AdminProperty struct {
 	Address string `json:"address"`
 
 	// Attributes Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written.
-	Attributes  PropertyAttributes     `json:"attributes"`
-	CreatedAt   time.Time              `json:"createdAt"`
-	Description *string                `json:"description,omitempty"`
-	Id          openapi_types.UUID     `json:"id"`
-	Name        string                 `json:"name"`
-	Occupancy   AdminPropertyOccupancy `json:"occupancy"`
-	OwnerId     openapi_types.UUID     `json:"ownerId"`
-	OwnerPhone  string                 `json:"ownerPhone"`
-	Photos      *[]PropertyPhoto       `json:"photos,omitempty"`
-	Status      PropertyStatus         `json:"status"`
-	Type        PropertyType           `json:"type"`
-	UpdatedAt   time.Time              `json:"updatedAt"`
-}
+	Attributes  PropertyAttributes `json:"attributes"`
+	CreatedAt   time.Time          `json:"createdAt"`
+	Description *string            `json:"description,omitempty"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+	OwnerId     openapi_types.UUID `json:"ownerId"`
+	OwnerPhone  string             `json:"ownerPhone"`
 
-// AdminPropertyOccupancy defines model for AdminProperty.Occupancy.
-type AdminPropertyOccupancy string
+	// PhotoUrl The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo; null when the object has no photo.
+	PhotoUrl  *string        `json:"photoUrl,omitempty"`
+	Status    PropertyStatus `json:"status"`
+	Type      PropertyType   `json:"type"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+}
 
 // AdminPropertyContact defines model for AdminPropertyContact.
 type AdminPropertyContact struct {
@@ -1508,8 +2256,6 @@ type AdminPropertyResponse struct {
 
 // AdminStats defines model for AdminStats.
 type AdminStats struct {
-	LeasesTotal                          int                       `json:"leasesTotal"`
-	OperationsTotal                      int                       `json:"operationsTotal"`
 	PaymentsFailedCountLast30d           int                       `json:"paymentsFailedCountLast30d"`
 	PaymentsRefundedCountLast30d         int                       `json:"paymentsRefundedCountLast30d"`
 	PaymentsSucceededTotalKopecksLast30d int64                     `json:"paymentsSucceededTotalKopecksLast30d"`
@@ -1524,12 +2270,14 @@ type AdminStats struct {
 
 // AdminStatsRecentPayment defines model for AdminStatsRecentPayment.
 type AdminStatsRecentPayment struct {
-	AmountKopecks int64                     `json:"amountKopecks"`
-	CreatedAt     time.Time                 `json:"createdAt"`
-	Id            openapi_types.UUID        `json:"id"`
-	Status        SubscriptionPaymentStatus `json:"status"`
-	UserId        openapi_types.UUID        `json:"userId"`
-	UserPhone     string                    `json:"userPhone"`
+	AmountKopecks int64              `json:"amountKopecks"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	Id            openapi_types.UUID `json:"id"`
+
+	// Status Lifecycle states of a subscription payment. Refunds are full-amount only (ADR 0037): the legacy partial_refunded is not part of the vocabulary, refunding is the internal reservation shown to the user as pending.
+	Status    SubscriptionPaymentStatus `json:"status"`
+	UserId    openapi_types.UUID        `json:"userId"`
+	UserPhone string                    `json:"userPhone"`
 }
 
 // AdminStatsRecentUser defines model for AdminStatsRecentUser.
@@ -1543,19 +2291,21 @@ type AdminStatsRecentUser struct {
 
 // AdminSubscriptionPayment defines model for AdminSubscriptionPayment.
 type AdminSubscriptionPayment struct {
-	AmountKopecks         int                            `json:"amountKopecks"`
+	AmountKopecks         int64                          `json:"amountKopecks"`
 	CreatedAt             time.Time                      `json:"createdAt"`
 	Id                    openapi_types.UUID             `json:"id"`
 	PaymentMethodId       *openapi_types.UUID            `json:"paymentMethodId,omitempty"`
 	Period                AdminSubscriptionPaymentPeriod `json:"period"`
 	Provider              string                         `json:"provider"`
-	RefundedAmountKopecks *int                           `json:"refundedAmountKopecks,omitempty"`
-	Status                SubscriptionPaymentStatus      `json:"status"`
-	SucceededAt           *time.Time                     `json:"succeededAt,omitempty"`
-	Tariff                Tariff                         `json:"tariff"`
-	UpdatedAt             time.Time                      `json:"updatedAt"`
-	UserId                openapi_types.UUID             `json:"userId"`
-	UserPhone             string                         `json:"userPhone"`
+	RefundedAmountKopecks *int64                         `json:"refundedAmountKopecks,omitempty"`
+
+	// Status Lifecycle states of a subscription payment. Refunds are full-amount only (ADR 0037): the legacy partial_refunded is not part of the vocabulary, refunding is the internal reservation shown to the user as pending.
+	Status      SubscriptionPaymentStatus `json:"status"`
+	SucceededAt *time.Time                `json:"succeededAt,omitempty"`
+	Tariff      Tariff                    `json:"tariff"`
+	UpdatedAt   time.Time                 `json:"updatedAt"`
+	UserId      openapi_types.UUID        `json:"userId"`
+	UserPhone   string                    `json:"userPhone"`
 }
 
 // AdminSubscriptionPaymentPeriod defines model for AdminSubscriptionPaymentPeriod.
@@ -1567,30 +2317,73 @@ type AdminSubscriptionPaymentsResponse struct {
 	Total int                        `json:"total"`
 }
 
-// AdminTenantContact defines model for AdminTenantContact.
-type AdminTenantContact struct {
-	Comment    *string            `json:"comment,omitempty"`
-	CreatedAt  time.Time          `json:"createdAt"`
-	Email      *string            `json:"email,omitempty"`
-	Id         openapi_types.UUID `json:"id"`
-	Name       string             `json:"name"`
-	OwnerId    openapi_types.UUID `json:"ownerId"`
-	OwnerPhone string             `json:"ownerPhone"`
-	Patronymic *string            `json:"patronymic,omitempty"`
-	Phone      *string            `json:"phone,omitempty"`
-	Surname    *string            `json:"surname,omitempty"`
-	UpdatedAt  time.Time          `json:"updatedAt"`
+// AdminSubscriptionTransition defines model for AdminSubscriptionTransition.
+type AdminSubscriptionTransition struct {
+	CreatedAt      time.Time                            `json:"createdAt"`
+	FromStatus     *SubscriptionStatus                  `json:"fromStatus,omitempty"`
+	FromTariffId   *openapi_types.UUID                  `json:"fromTariffId,omitempty"`
+	FromTariffName *string                              `json:"fromTariffName,omitempty"`
+	Id             openapi_types.UUID                   `json:"id"`
+	Initiator      AdminSubscriptionTransitionInitiator `json:"initiator"`
+
+	// InitiatorId The user or admin actor id; absent for the system.
+	InitiatorId *openapi_types.UUID `json:"initiatorId,omitempty"`
+
+	// PaymentId The payment that caused the transition, when there was one.
+	PaymentId *openapi_types.UUID `json:"paymentId,omitempty"`
+
+	// Reason Why the transition happened: registered, cancelled, resumed,
+	// downgrade_scheduled, payment_applied, grace_entered,
+	// grace_extended, scheduled_change_applied, expired, refunded,
+	// service_assigned, forced_change.
+	Reason       string             `json:"reason"`
+	ToStatus     SubscriptionStatus `json:"toStatus"`
+	ToTariffId   openapi_types.UUID `json:"toTariffId"`
+	ToTariffName string             `json:"toTariffName"`
 }
 
-// AdminTenantContactResponse defines model for AdminTenantContactResponse.
-type AdminTenantContactResponse struct {
-	Contact AdminTenantContact `json:"contact"`
+// AdminSubscriptionTransitionInitiator defines model for AdminSubscriptionTransition.Initiator.
+type AdminSubscriptionTransitionInitiator string
+
+// AdminSubscriptionTransitionsResponse defines model for AdminSubscriptionTransitionsResponse.
+type AdminSubscriptionTransitionsResponse struct {
+	Items []AdminSubscriptionTransition `json:"items"`
+	Total int                           `json:"total"`
 }
 
-// AdminTenantContactsResponse defines model for AdminTenantContactsResponse.
-type AdminTenantContactsResponse struct {
-	Items []AdminTenantContact `json:"items"`
-	Total int                  `json:"total"`
+// AdminTariff defines model for AdminTariff.
+type AdminTariff struct {
+	// ActivePropertyLimit Maximum number of active properties; -1 means unlimited.
+	ActivePropertyLimit int                `json:"activePropertyLimit"`
+	Id                  openapi_types.UUID `json:"id"`
+
+	// IsActive Hidden tariffs (false) stay referable by foreign keys but are not offered to users.
+	IsActive            bool       `json:"isActive"`
+	MonthlyPriceKopecks int64      `json:"monthlyPriceKopecks"`
+	Name                TariffName `json:"name"`
+	YearlyPriceKopecks  int64      `json:"yearlyPriceKopecks"`
+}
+
+// AdminTariffsResponse defines model for AdminTariffsResponse.
+type AdminTariffsResponse struct {
+	Items []AdminTariff `json:"items"`
+}
+
+// AdminUpdateTariffRequest defines model for AdminUpdateTariffRequest.
+type AdminUpdateTariffRequest struct {
+	// ActivePropertyLimit Maximum number of active properties; -1 means unlimited.
+	ActivePropertyLimit int `json:"activePropertyLimit"`
+
+	// IsActive false hides the plan: it disappears from the user-facing listing
+	// and cannot be newly selected, while existing subscriptions,
+	// renewals and payment history keep referencing it.
+	IsActive bool `json:"isActive"`
+
+	// MonthlyPriceKopecks Monthly price in kopecks.
+	MonthlyPriceKopecks int64 `json:"monthlyPriceKopecks"`
+
+	// YearlyPriceKopecks Yearly price in kopecks.
+	YearlyPriceKopecks int64 `json:"yearlyPriceKopecks"`
 }
 
 // AdminUser defines model for AdminUser.
@@ -1621,9 +2414,6 @@ type AdminUserResponse struct {
 type AdminUserStats struct {
 	ActivePropertiesCount   int `json:"activePropertiesCount"`
 	ArchivedPropertiesCount int `json:"archivedPropertiesCount"`
-	LeasesCount             int `json:"leasesCount"`
-	OperationsCount         int `json:"operationsCount"`
-	TenantContactsCount     int `json:"tenantContactsCount"`
 }
 
 // AdminUsersResponse defines model for AdminUsersResponse.
@@ -1637,46 +2427,39 @@ type AutoRenewRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
-// CalendarReminderItem One calendar entry — a free, operation, or system reminder projected into the requested date range. Free reminders are expanded from their template on read (independent of materialization horizon) and carry no status; operation/lease reminders come from the reminders table with a status. Orphan reminders (property deleted in detach mode) have property_id = null and has_property = false.
-type CalendarReminderItem struct {
-	EventType      *CalendarReminderItemEventType `json:"event_type,omitempty"`
-	FreeReminderId *openapi_types.UUID            `json:"free_reminder_id,omitempty"`
-	HasProperty    bool                           `json:"has_property"`
-
-	// Id For free reminders — the free_reminder template id (same id repeats for each occurrence of a periodic reminder). For operation/system — the concrete reminder row id.
-	Id          openapi_types.UUID  `json:"id"`
-	LeaseId     *openapi_types.UUID `json:"lease_id,omitempty"`
-	OperationId *openapi_types.UUID `json:"operation_id,omitempty"`
-
-	// Periodicity Present only for free reminders.
-	Periodicity *CalendarReminderItemPeriodicity `json:"periodicity,omitempty"`
-	PropertyId  *openapi_types.UUID              `json:"property_id,omitempty"`
-
-	// PropertyName Resolved property name; null means "Без объекта" (orphan).
-	PropertyName *string   `json:"property_name,omitempty"`
-	ScheduledAt  time.Time `json:"scheduled_at"`
-
-	// Status Present only for operation/system; null for free.
-	Status *CalendarReminderItemStatus `json:"status,omitempty"`
-	Title  string                      `json:"title"`
-	Type   CalendarReminderItemType    `json:"type"`
+// CancelSubscriptionRequest defines model for CancelSubscriptionRequest.
+type CancelSubscriptionRequest struct {
+	// KeepPropertyId The property the owner chooses to keep when the cancelled
+	// subscription later expires and the basic tariff's property limit
+	// is applied: the chosen property survives, the excess ones are
+	// archived. Must be one of the owner's active properties, otherwise
+	// the cancellation answers 409 `invalid_keep_property`. Omitted
+	// when there is no choice to make (0 or 1 active properties) — the
+	// most recently updated property survives.
+	KeepPropertyId *openapi_types.UUID `json:"keepPropertyId,omitempty"`
 }
 
-// CalendarReminderItemEventType defines model for CalendarReminderItem.EventType.
-type CalendarReminderItemEventType string
+// CardSystem Card system derived by the backend from the BIN prefix of the masked number (2 — Mir, 4 — Visa, 5 — Mastercard); unknown for old or unrecognized cards.
+type CardSystem string
 
-// CalendarReminderItemPeriodicity Present only for free reminders.
-type CalendarReminderItemPeriodicity string
+// CategoryView The payment's category reference resolved by the server: a default catalog slug (label from the code catalog; a slug removed from the catalog falls back to the label «Прочее») or a user category. Icon and color are frontend catalog metadata keyed by slug.
+type CategoryView struct {
+	Id     *openapi_types.UUID `json:"id,omitempty"`
+	Label  string              `json:"label"`
+	Slug   *string             `json:"slug,omitempty"`
+	Source CategoryViewSource  `json:"source"`
+}
 
-// CalendarReminderItemStatus Present only for operation/system; null for free.
-type CalendarReminderItemStatus string
+// CategoryViewSource defines model for CategoryView.Source.
+type CategoryViewSource string
 
-// CalendarReminderItemType defines model for CalendarReminderItem.Type.
-type CalendarReminderItemType string
+// ChangeEmailRequest defines model for ChangeEmailRequest.
+type ChangeEmailRequest struct {
+	// Code The code sent to the new email.
+	Code string `json:"code"`
 
-// CalendarRemindersResponse defines model for CalendarRemindersResponse.
-type CalendarRemindersResponse struct {
-	Items []CalendarReminderItem `json:"items"`
+	// Grant The grant token returned by /me/email/verify-current.
+	Grant string `json:"grant"`
 }
 
 // ChangePhoneRequest defines model for ChangePhoneRequest.
@@ -1715,167 +2498,307 @@ type ClientErrorReport struct {
 // ClientErrorReportApp Application that reported the error
 type ClientErrorReportApp string
 
-// FinanceReportCategoryRow defines model for FinanceReportCategoryRow.
-type FinanceReportCategoryRow struct {
-	CategoryId   openapi_types.UUID `json:"category_id"`
-	CategoryName string             `json:"category_name"`
-	TotalKopecks int                `json:"total_kopecks"`
-	Type         OperationType      `json:"type"`
+// ContactCreateRequest The create payload of a contact card (ADR 0054). Only the first name is required; the phone travels in any accepted Russian spelling and is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands in the property owner's book (the edit gate applies); without one it is created «без объекта» in the actor's own book.
+type ContactCreateRequest struct {
+	Email     *string `json:"email,omitempty"`
+	FirstName string  `json:"firstName"`
+	LastName  *string `json:"lastName,omitempty"`
+
+	// MessengerName The messenger's name — any service, one pair per contact.
+	MessengerName     *string             `json:"messengerName,omitempty"`
+	MessengerUsername *string             `json:"messengerUsername,omitempty"`
+	Note              *string             `json:"note,omitempty"`
+	Patronymic        *string             `json:"patronymic,omitempty"`
+	Phone             *string             `json:"phone,omitempty"`
+	PropertyId        *openapi_types.UUID `json:"propertyId,omitempty"`
+
+	// Role What the person is to the property — «сантехник», «консьерж». Free text, never an access role.
+	Role *string `json:"role,omitempty"`
 }
 
-// FinanceReportMonthRow defines model for FinanceReportMonthRow.
-type FinanceReportMonthRow struct {
-	ExpenseKopecks int                `json:"expense_kopecks"`
-	IncomeKopecks  int                `json:"income_kopecks"`
-	Month          openapi_types.Date `json:"month"`
-	ProfitKopecks  int                `json:"profit_kopecks"`
+// ContactResponse One card of the owner's contact book (ADR 0054): a person useful for a property — not a service user. propertyId null means «без объекта». Deleting the property deletes its bound cards (FK CASCADE, ADR 0054 §2 as amended 2026-10-02); null-bound cards survive in the owner's book.
+type ContactResponse struct {
+	CreatedAt         time.Time          `json:"createdAt"`
+	Email             string             `json:"email"`
+	FirstName         string             `json:"firstName"`
+	Id                openapi_types.UUID `json:"id"`
+	LastName          string             `json:"lastName"`
+	MessengerName     string             `json:"messengerName"`
+	MessengerUsername string             `json:"messengerUsername"`
+	Note              string             `json:"note"`
+	Patronymic        string             `json:"patronymic"`
+	Phone             string             `json:"phone"`
+
+	// PhotoUrl The card photo's same-origin streaming path (ADR 0065): /api/contacts/{id}/photo, served with the session cookie; null when the card has no photo.
+	PhotoUrl   *string             `json:"photoUrl,omitempty"`
+	PropertyId *openapi_types.UUID `json:"propertyId,omitempty"`
+
+	// PropertyName The display name of the bound property; null for an unbound card. A list projection only — the card read resolves the property by its id.
+	PropertyName *string   `json:"propertyName,omitempty"`
+	Role         string    `json:"role"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
-// FinanceReportPeriod defines model for FinanceReportPeriod.
-type FinanceReportPeriod struct {
-	From openapi_types.Date `json:"from"`
-	To   openapi_types.Date `json:"to"`
+// ContactUpdateRequest The partial-update payload of a contact card: an omitted field keeps the stored value, and a text field clears by sending an empty string. The propertyId is tri-state — omitted keeps the current binding, null clears it («без объекта»), a uuid moves the card onto that property (the target's edit gate applies).
+type ContactUpdateRequest struct {
+	Email             *string             `json:"email,omitempty"`
+	FirstName         *string             `json:"firstName,omitempty"`
+	LastName          *string             `json:"lastName,omitempty"`
+	MessengerName     *string             `json:"messengerName,omitempty"`
+	MessengerUsername *string             `json:"messengerUsername,omitempty"`
+	Note              *string             `json:"note,omitempty"`
+	Patronymic        *string             `json:"patronymic,omitempty"`
+	Phone             *string             `json:"phone,omitempty"`
+	PropertyId        *openapi_types.UUID `json:"propertyId,omitempty"`
+	Role              *string             `json:"role,omitempty"`
 }
 
-// FinanceReportPropertyRow defines model for FinanceReportPropertyRow.
-type FinanceReportPropertyRow struct {
-	ExpenseKopecks int `json:"expense_kopecks"`
-	IncomeKopecks  int `json:"income_kopecks"`
-	ProfitKopecks  int `json:"profit_kopecks"`
+// ContactsResponse defines model for ContactsResponse.
+type ContactsResponse struct {
+	Items []ContactResponse `json:"items"`
 
-	// PropertyId Null groups operations whose property was deleted in detach mode.
-	PropertyId *openapi_types.UUID `json:"property_id,omitempty"`
+	// NextCursor The opaque continuation cursor of the keyset window (ticket #600): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted.
+	NextCursor *string `json:"nextCursor"`
 }
 
-// FinanceReportResponse defines model for FinanceReportResponse.
-type FinanceReportResponse struct {
-	ByCategory []FinanceReportCategoryRow `json:"by_category"`
-	ByMonth    []FinanceReportMonthRow    `json:"by_month"`
-	ByProperty []FinanceReportPropertyRow `json:"by_property"`
-	Period     FinanceReportPeriod        `json:"period"`
-	Totals     FinanceReportTotals        `json:"totals"`
+// CreateOperationRequest The body of the manual operation creation (ticket #569). The fact is born paid on the client-chosen calendar date; when the date is absent it is the property owner's today (ADR 0048) — backwards compatible. No payment form exists behind a manual fact.
+type CreateOperationRequest struct {
+	AmountKopecks int64 `json:"amountKopecks"`
+
+	// CategorySlug Slug of the default category catalog; frozen as the operation's snapshot.
+	CategorySlug string `json:"categorySlug"`
+
+	// Date The client-chosen calendar date of the fact (backdating, ticket #1392): RFC 3339 full-date, no time and no timezone — the calendar-day semantics, not a moment. It lands in both the planned date and the paid date (the fact is born paid). Absent means the property owner's today (ADR 0048). A date after the owner's today is rejected with 400 «Дата операции не может быть в будущем»; there is no lower bound — the past is unlimited.
+	Date  *openapi_types.Date        `json:"date,omitempty"`
+	Title string                     `json:"title"`
+	Type  CreateOperationRequestType `json:"type"`
 }
 
-// FinanceReportTotals defines model for FinanceReportTotals.
-type FinanceReportTotals struct {
-	ExpenseKopecks int `json:"expense_kopecks"`
-	IncomeKopecks  int `json:"income_kopecks"`
-	ProfitKopecks  int `json:"profit_kopecks"`
+// CreateOperationRequestType defines model for CreateOperationRequest.Type.
+type CreateOperationRequestType string
+
+// EmailChangeGrantResponse defines model for EmailChangeGrantResponse.
+type EmailChangeGrantResponse struct {
+	// Grant One-time grant token proving the current email was verified by code. Present it at /me/email/request-new-email-code to bind the new address, then at /me/email/change together with the code delivered to it; it expires in about 10 minutes.
+	Grant string `json:"grant"`
 }
 
-// FreeReminderCreateRequest defines model for FreeReminderCreateRequest.
-type FreeReminderCreateRequest struct {
-	Periodicity FreeReminderCreateRequestPeriodicity `json:"periodicity"`
-	Title       string                               `json:"title"`
-	TriggerAt   time.Time                            `json:"trigger_at"`
+// FavoriteUpdateRequest The favorite toggle body of PUT favorite (an atomic UPDATE on the server — never a read-modify-write PATCH).
+type FavoriteUpdateRequest struct {
+	Favorite bool `json:"favorite"`
 }
 
-// FreeReminderCreateRequestPeriodicity defines model for FreeReminderCreateRequest.Periodicity.
-type FreeReminderCreateRequestPeriodicity string
+// FeedbackRequest defines model for FeedbackRequest.
+type FeedbackRequest struct {
+	// Email Reply address of the sender
+	Email string `json:"email"`
 
-// FreeReminderResponse defines model for FreeReminderResponse.
-type FreeReminderResponse struct {
-	CreatedAt   time.Time                       `json:"created_at"`
-	Id          openapi_types.UUID              `json:"id"`
-	OwnerId     openapi_types.UUID              `json:"owner_id"`
-	Periodicity FreeReminderResponsePeriodicity `json:"periodicity"`
-	PropertyId  openapi_types.UUID              `json:"property_id"`
-	Title       string                          `json:"title"`
-	TriggerAt   time.Time                       `json:"trigger_at"`
-	UpdatedAt   time.Time                       `json:"updated_at"`
+	// Message Feedback question text
+	Message string `json:"message"`
 }
 
-// FreeReminderResponsePeriodicity defines model for FreeReminderResponse.Periodicity.
-type FreeReminderResponsePeriodicity string
+// HistoryFiltersResponse Опции шита фильтров «Истории действий» в области чтения (ADR 0061 §7).
+type HistoryFiltersResponse struct {
+	// Objects Объекты области с фото-аватаром; отсортированы по названию.
+	Objects []HistoryObject `json:"objects"`
 
-// FreeReminderUpdateRequest defines model for FreeReminderUpdateRequest.
-type FreeReminderUpdateRequest struct {
-	Periodicity *FreeReminderUpdateRequestPeriodicity `json:"periodicity,omitempty"`
-	Title       *string                               `json:"title,omitempty"`
-	TriggerAt   *time.Time                            `json:"trigger_at,omitempty"`
+	// Participants Владелец и текущие участники области ∪ все актёры журнала области
+	// (отозванные остаются фильтруемыми). Именованные пользователи — по
+	// алфавиту имени, затем фамилии; безымянные (name — полный
+	// телефон) — в конце списка: сортировка по исходным колонкам, а не
+	// по отображаемому имени.
+	Participants []HistoryParticipant `json:"participants"`
 }
 
-// FreeReminderUpdateRequestPeriodicity defines model for FreeReminderUpdateRequest.Periodicity.
-type FreeReminderUpdateRequestPeriodicity string
+// HistoryItem Одна строка ленты — снимок действия при записи (ADR 0061 §3–§6).
+// Переименования и удаления сущность-строку не меняют; у удалённой
+// сущности сегмент остаётся без ссылки. Отдельного эндпоинта деталей
+// нет — payload строки полон, «детали» = существующие страницы сущностей
+// по ссылкам сегментов (тикет #713).
+type HistoryItem struct {
+	// Action Стабильный точечный id действия (ADR 0061 §4), например property.renamed, operation.paid.
+	Action string `json:"action"`
 
-// FreeRemindersResponse defines model for FreeRemindersResponse.
-type FreeRemindersResponse struct {
-	Items []FreeReminderResponse `json:"items"`
-}
+	// ActorEmail Снимок почты актёра (видна всем участникам, решение 2026-09-20); '' — почты не было.
+	ActorEmail string `json:"actor_email"`
 
-// LeaseCreateRequest defines model for LeaseCreateRequest.
-type LeaseCreateRequest struct {
-	Comment              *string             `json:"comment,omitempty"`
-	DepositAmountKopecks *int                `json:"deposit_amount_kopecks,omitempty"`
-	EndDate              *openapi_types.Date `json:"end_date,omitempty"`
-	PaymentDay           int                 `json:"payment_day"`
-	PropertyId           openapi_types.UUID  `json:"property_id"`
-	RentAmountKopecks    int                 `json:"rent_amount_kopecks"`
-	StartDate            openapi_types.Date  `json:"start_date"`
-	TenantContactId      *openapi_types.UUID `json:"tenant_contact_id,omitempty"`
-}
+	// ActorFirstName Живое имя актёра при чтении (карта #1324, протокол D5, паттерн
+	// ADR 0065): читается из профиля на выдаче, снимком не является;
+	// '' — имени нет или запись обезличена. Сборку отображаемого имени
+	// («Имя Фамилия» / «(Вы)» / «Пользователь», фолбэк на снимок
+	// actor_name при actor_id = null) делает фронт — сервер отдаёт
+	// части.
+	ActorFirstName string `json:"actor_first_name"`
 
-// LeaseResponse defines model for LeaseResponse.
-type LeaseResponse struct {
-	Comment   *string   `json:"comment,omitempty"`
+	// ActorId Актёр действия; null — пользователь удалён (запись обезличена,
+	// снимки при этом остаются). Под фильтр actor_ids такие записи не
+	// попадают.
+	ActorId *openapi_types.UUID `json:"actor_id,omitempty"`
+
+	// ActorLastName Живая фамилия актёра при чтении (D5); '' — фамилии нет или запись обезличена.
+	ActorLastName string `json:"actor_last_name"`
+
+	// ActorName Снимок отображаемого имени актёра на момент действия.
+	ActorName string `json:"actor_name"`
+
+	// ActorPhotoUrl Аватар актёра — same-origin путь стриминга фото профиля (ADR 0065, решение #1286), живой на чтение; null — у актёра нет фото или запись обезличена. Чтение эндпоинта регулируется связью по общему объекту: у отозванного участника путь отвечает 404, строка откатывается на заглушку.
+	ActorPhotoUrl *string `json:"actor_photo_url"`
+
+	// ActorRole Роль актёра на объекте в момент действия (снимок, ADR 0061 §4).
+	ActorRole HistoryItemActorRole `json:"actor_role"`
+
+	// BaseAction Основное действие — группа фильтра, иконка и цвет строки.
+	BaseAction HistoryItemBaseAction `json:"base_action"`
+
+	// Context Структурные дополнения действия (ADR 0061 §5): суммы — BIGINT
+	// копейки, даты, old/new значения; ключи зависят от действия.
+	// Текстом строки не является и в поиске не участвует.
+	Context map[string]interface{} `json:"context"`
+
+	// CreatedAt Момент действия, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
 	CreatedAt time.Time `json:"created_at"`
 
-	// CurrentPeriodOverdue Deprecated. Kept for backward compatibility; true when the lease has any overdue rent operation. The frontend no longer relies on it.
-	CurrentPeriodOverdue bool                `json:"current_period_overdue"`
-	DepositAmountKopecks int                 `json:"deposit_amount_kopecks"`
-	EndDate              *openapi_types.Date `json:"end_date,omitempty"`
+	// Details Серые строки-пояснения нового шаблона (карта #1324, протокол D1,
+	// решение #1317 §2): собраны сервером при записи, рендерятся
+	// дословно под заголовком, ссылок не несут; в поиске участвуют
+	// (searchable покрывает заголовок + пояснения + актёра у новых
+	// строк). Поле отсутствует у строк, записанных до ввода пояснений,
+	// и у действий без диффов, — такие строки рендерятся одним
+	// заголовком (осознанное решение владельца).
+	Details *[]string          `json:"details,omitempty"`
+	Id      openapi_types.UUID `json:"id"`
 
-	// HasOverdue True when the lease has at least one overdue rent operation of any period.
-	HasOverdue bool               `json:"has_overdue"`
-	Id         openapi_types.UUID `json:"id"`
+	// Kind Вид действия — группа чекбоксов фильтра и маршрутизатор ссылок сегментов.
+	Kind       HistoryItemKind    `json:"kind"`
+	PropertyId openapi_types.UUID `json:"property_id"`
 
-	// NextPaymentDate Nearest pending rent operation date on or after as_of.
-	NextPaymentDate *openapi_types.Date `json:"next_payment_date,omitempty"`
+	// PropertyName Название объекта для шапки группы ленты (снимок живого названия — читается при чтении).
+	PropertyName string `json:"property_name"`
 
-	// OverdueSince Earliest overdue rent operation date of any period.
-	OverdueSince *openapi_types.Date `json:"overdue_since,omitempty"`
-	OwnerId      openapi_types.UUID  `json:"owner_id"`
-	PaymentDay   int                 `json:"payment_day"`
-
-	// PropertyId Null when the property was deleted in detach mode.
-	PropertyId        *openapi_types.UUID    `json:"property_id,omitempty"`
-	RentAmountKopecks int                    `json:"rent_amount_kopecks"`
-	StartDate         openapi_types.Date     `json:"start_date"`
-	Status            LeaseStatus            `json:"status"`
-	TenantContact     *TenantContactResponse `json:"tenant_contact"`
-	UpdatedAt         time.Time              `json:"updated_at"`
+	// Segments Текст строки, собранный сервером при записи (ADR 0061 §6): экран
+	// рендерит фрагменты дословно, склеивая в одно предложение, и
+	// оборачивает связанные; дословность — про строки после стрипа,
+	// у записанных до него экран при маппинге срезает легаси голые
+	// хвосты дат (аудит #876). Актёра в тексте нет — он поле записи.
+	Segments []HistorySegment `json:"segments"`
 }
 
-// LeaseStatus defines model for LeaseStatus.
-type LeaseStatus string
+// HistoryItemActorRole Роль актёра на объекте в момент действия (снимок, ADR 0061 §4).
+type HistoryItemActorRole string
 
-// LeaseUpdateRequest defines model for LeaseUpdateRequest.
-type LeaseUpdateRequest struct {
-	ClearTenantContact   *bool               `json:"clear_tenant_contact,omitempty"`
-	Comment              *string             `json:"comment,omitempty"`
-	DepositAmountKopecks *int                `json:"deposit_amount_kopecks,omitempty"`
-	EndDate              *openapi_types.Date `json:"end_date,omitempty"`
-	PaymentDay           *int                `json:"payment_day,omitempty"`
-	RentAmountKopecks    *int                `json:"rent_amount_kopecks,omitempty"`
-	StartDate            *openapi_types.Date `json:"start_date,omitempty"`
-	TenantContactId      *openapi_types.UUID `json:"tenant_contact_id,omitempty"`
+// HistoryItemBaseAction Основное действие — группа фильтра, иконка и цвет строки.
+type HistoryItemBaseAction string
+
+// HistoryItemKind Вид действия — группа чекбоксов фильтра и маршрутизатор ссылок сегментов.
+type HistoryItemKind string
+
+// HistoryObject Объект-вариант фильтра с фото-аватаром карточки (первое по времени фото, #582).
+type HistoryObject struct {
+	Address string             `json:"address"`
+	Id      openapi_types.UUID `json:"id"`
+	Name    string             `json:"name"`
+
+	// PhotoUrl URL первого по времени фото; '' — фото нет.
+	PhotoUrl string       `json:"photo_url"`
+	Type     PropertyType `json:"type"`
 }
 
-// LeasesResponse defines model for LeasesResponse.
-type LeasesResponse struct {
-	Items []LeaseResponse `json:"items"`
+// HistoryPageResponse Страница ленты «История действий» (двусторонний keyset, ADR 0061 §7).
+type HistoryPageResponse struct {
+	Items []HistoryItem `json:"items"`
+
+	// NextCursor Непрозрачный курсор страницы СТАРШЕ (в before_cursor следующего
+	// запроса): продолжение ленты в прошлое. Отсутствует на пустой или
+	// неполной странице — дальше старше ничего нет.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// PrevCursor Непрозрачный курсор страницы МОЛОЖЕ (в after_cursor следующего
+	// запроса): prepend записей, появившихся после загрузки видимых.
+	// Отсутствует только на пустой странице.
+	PrevCursor *string `json:"prev_cursor,omitempty"`
 }
+
+// HistoryParticipant Участник-вариант фильтра. name — канон отображаемого имени платформы
+// («Имя Фамилия», иначе «Пользователь» — карта #1105, аменд #1123); email — текущая
+// почта пользователя; first_name — имя без фамилии для строки «(Вы)»;
+// is_owner — замок владельца объектов (макет 2067-163528); role —
+// иконка роли строки (макет 2184-94261): максимальный доступ в области,
+// живое членство сильнее снимка журнала отозванного участника;
+// status — секция шита фильтров «Текущие»/«Удалённые» (карта #1324,
+// протокол D6).
+type HistoryParticipant struct {
+	// Email Текущая почта; '' — почты нет.
+	Email string `json:"email"`
+
+	// FirstName Имя без фамилии; '' — имени нет (тогда name — «Пользователь»).
+	FirstName string             `json:"first_name"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// IsOwner Пользователь владеет хотя бы одним объектом области чтения.
+	IsOwner bool   `json:"is_owner"`
+	Name    string `json:"name"`
+
+	// PhotoUrl Аватар участника — same-origin путь стриминга фото профиля (ADR 0065, решение #1286), живой на чтение; null — фото нет. Отозванный участник остаётся опцией фильтра: его путь отвечает 404, строка откатывается на заглушку.
+	PhotoUrl *string `json:"photo_url"`
+
+	// Role Максимальная роль в области чтения (owner совпадает с is_owner по построению).
+	Role HistoryParticipantRole `json:"role"`
+
+	// Status Секция шита фильтров (D6, решение #1317 §5), вычисляется на лету
+	// без новой таблицы: current — у пользователя есть живая нога в
+	// области (владелец или членство, приостановленное членство тоже
+	// живо); removed — остались только строки журнала (ревок или
+	// выход). Повторное добавление живит участника автоматически;
+	// при сужении области одним объектом участник, живущий только в
+	// другом объекте, честно removed в истории этого.
+	Status HistoryParticipantStatus `json:"status"`
+}
+
+// HistoryParticipantRole Максимальная роль в области чтения (owner совпадает с is_owner по построению).
+type HistoryParticipantRole string
+
+// HistoryParticipantStatus Секция шита фильтров (D6, решение #1317 §5), вычисляется на лету
+// без новой таблицы: current — у пользователя есть живая нога в
+// области (владелец или членство, приостановленное членство тоже
+// живо); removed — остались только строки журнала (ревок или
+// выход). Повторное добавление живит участника автоматически;
+// при сужении области одним объектом участник, живущий только в
+// другом объекте, честно removed в истории этого.
+type HistoryParticipantStatus string
+
+// HistorySegment Один фрагмент текста строки; видимое предложение — точная склейка
+// текстов; дословность — про строки после стрипа, у записанных до
+// него экран при маппинге срезает легаси голые хвосты дат (аудит #876).
+type HistorySegment struct {
+	// Link Ссылка фрагмента на страницу сущности (синие переходы, тикет #713);
+	// отсутствует у несвязанных фрагментов и у строк удалённых сущностей.
+	Link *HistorySegmentLink `json:"link,omitempty"`
+	Text string              `json:"text"`
+}
+
+// HistorySegmentLink Ссылка фрагмента на страницу сущности (синие переходы, тикет #713);
+// отсутствует у несвязанных фрагментов и у строк удалённых сущностей.
+type HistorySegmentLink struct {
+	Id   openapi_types.UUID     `json:"id"`
+	Kind HistorySegmentLinkKind `json:"kind"`
+}
+
+// HistorySegmentLinkKind defines model for HistorySegmentLink.Kind.
+type HistorySegmentLinkKind string
 
 // MeResponse defines model for MeResponse.
 type MeResponse struct {
-	Email        *string            `json:"email,omitempty"`
-	Id           openapi_types.UUID `json:"id"`
-	Name         *string            `json:"name,omitempty"`
-	Patronymic   *string            `json:"patronymic,omitempty"`
-	Phone        string             `json:"phone"`
-	Role         MeResponseRole     `json:"role"`
-	Subscription *Subscription      `json:"subscription,omitempty"`
-	Surname      *string            `json:"surname,omitempty"`
+	Email      *string            `json:"email,omitempty"`
+	Id         openapi_types.UUID `json:"id"`
+	Name       *string            `json:"name,omitempty"`
+	Patronymic *string            `json:"patronymic,omitempty"`
+	Phone      string             `json:"phone"`
+
+	// PhotoUrl The profile photo's same-origin streaming path (ADR 0065): /api/me/photo, served with the session cookie; null when the profile has no photo. Only the owner reads it.
+	PhotoUrl     *string        `json:"photoUrl,omitempty"`
+	Role         MeResponseRole `json:"role"`
+	Subscription *Subscription  `json:"subscription,omitempty"`
+	Surname      *string        `json:"surname,omitempty"`
 
 	// Timezone IANA timezone identifier, e.g. Europe/Moscow.
 	Timezone *string `json:"timezone,omitempty"`
@@ -1884,139 +2807,464 @@ type MeResponse struct {
 // MeResponseRole defines model for MeResponse.Role.
 type MeResponseRole string
 
-// NotificationPreference defines model for NotificationPreference.
-type NotificationPreference struct {
-	// EmailAllowed Permission to deliver this event type over email.
-	EmailAllowed bool                            `json:"email_allowed"`
-	EventType    NotificationPreferenceEventType `json:"event_type"`
+// NotificationAction Кнопка-переход на экран сущности, никогда не мутация (решение #737).
+type NotificationAction string
 
-	// PushAllowed Permission to deliver this event type over Web Push.
-	PushAllowed bool `json:"push_allowed"`
+// NotificationCategoryPreferences Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+type NotificationCategoryPreferences struct {
+	PaymentsOperations bool `json:"payments_operations"`
+	Rental             bool `json:"rental"`
+	SharedAccess       bool `json:"shared_access"`
+	Tasks              bool `json:"tasks"`
 }
 
-// NotificationPreferenceEventType defines model for NotificationPreference.EventType.
-type NotificationPreferenceEventType string
+// NotificationDetailResponse defines model for NotificationDetailResponse.
+type NotificationDetailResponse struct {
+	// Actions Действия, доступные этому читателю сейчас (вычислены при чтении, решение #737).
+	Actions      []NotificationAction `json:"actions"`
+	Body         string               `json:"body"`
+	Category     string               `json:"category"`
+	ContextLabel *string              `json:"context_label,omitempty"`
+	CreatedAt    time.Time            `json:"created_at"`
+	EventType    string               `json:"event_type"`
+	Id           openapi_types.UUID   `json:"id"`
+
+	// Payload Payload-ссылки и снимки имён (решение #737): property {id, name,
+	// address}, actor {id, name, email}, rental_id, payment_id, payment_date,
+	// payment_category, task_id, task_rule_id, membership_id, tariff {slug,
+	// period, amount_kopecks, active_until}. address и email — снимки
+	// карточек (решение владельца 19.09.2026, #745): строка карточки,
+	// которой нет в снимке, просто не рендерится. payment_id — id правила,
+	// payment_date — дата операции (решение #737: payment = правило +
+	// дата операции, #749). task_rule_id — правило задачи: экран задачи —
+	// экран её правила, переход ведёт по нему (#750). События доступа
+	// (#751) несут membership_id — сущность перехода, переживающую
+	// снесённое приглашение.
+	// payment_category — снимок категории правила платёжных событий
+	// (решение владельца 14.10.2026): {source: "default", slug} для
+	// дефолтного каталога или {source: "custom", name} для
+	// пользовательской; иконка и цвет — метаданные фронтенд-каталога по
+	// слагу и в ответе не ездят. Нет у строк, опубликованных до снимка.
+	// Все поля опциональны; суммы — BIGINT копейки.
+	Payload map[string]interface{} `json:"payload"`
+	ReadAt  *time.Time             `json:"read_at,omitempty"`
+	Title   string                 `json:"title"`
+}
+
+// NotificationItem Строка ленты одного получателя (решение #737): снимок текста, payload-ссылки, личные флаги.
+type NotificationItem struct {
+	Body string `json:"body"`
+
+	// Category Категория уведомлений (группа настроек и иконка).
+	Category string `json:"category"`
+
+	// ContextLabel Строка над заголовком — имя объекта/тарифа или «Системные уведомления».
+	ContextLabel *string `json:"context_label,omitempty"`
+
+	// CreatedAt Момент события, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
+	CreatedAt time.Time `json:"created_at"`
+
+	// EventType Тип события каталога v1 (решение #737).
+	EventType string             `json:"event_type"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Payload Тот же free-form payload, что несёт NotificationDetailResponse
+	// (решение #737, контракт #743): ленте он нужен ради снимков
+	// карточек без хода на страницу — фото и глиф объекта в строке
+	// ленты берутся из payload.property (#1275). Отсутствует у строк
+	// без payload-снимков.
+	Payload *map[string]interface{} `json:"payload,omitempty"`
+	ReadAt  *time.Time              `json:"read_at,omitempty"`
+	Title   string                  `json:"title"`
+}
+
+// NotificationPreferencesRequest defines model for NotificationPreferencesRequest.
+type NotificationPreferencesRequest struct {
+	// Email Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+	Email NotificationCategoryPreferences `json:"email"`
+}
 
 // NotificationPreferencesResponse defines model for NotificationPreferencesResponse.
 type NotificationPreferencesResponse struct {
-	Preferences []NotificationPreference `json:"preferences"`
+	// Email Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+	Email NotificationCategoryPreferences `json:"email"`
 }
 
-// NotificationPreferencesUpdateRequest defines model for NotificationPreferencesUpdateRequest.
-type NotificationPreferencesUpdateRequest struct {
-	Preferences []NotificationPreference `json:"preferences"`
+// NotificationsPageResponse defines model for NotificationsPageResponse.
+type NotificationsPageResponse struct {
+	Items []NotificationItem `json:"items"`
+
+	// NextCursor Непрозрачный курсор следующей страницы; отсутствует в конце ленты.
+	NextCursor *string `json:"next_cursor,omitempty"`
 }
 
-// OperationCategory defines model for OperationCategory.
-type OperationCategory struct {
-	Code      *string            `json:"code,omitempty"`
-	CreatedAt time.Time          `json:"created_at"`
-	Id        openapi_types.UUID `json:"id"`
-	Name      string             `json:"name"`
-	Type      OperationType      `json:"type"`
-}
-
-// OperationCategoryCreateRequest defines model for OperationCategoryCreateRequest.
-type OperationCategoryCreateRequest struct {
-	Name string `json:"name"`
-
-	// PropertyId Optional property context. When set, the category is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the category is created in the actor's own account.
-	PropertyId *openapi_types.UUID `json:"property_id,omitempty"`
-	Type       OperationType       `json:"type"`
-}
-
-// OperationCreateRequest defines model for OperationCreateRequest.
-type OperationCreateRequest struct {
-	AmountKopecks int                 `json:"amount_kopecks"`
-	CategoryId    openapi_types.UUID  `json:"category_id"`
-	Comment       *string             `json:"comment,omitempty"`
-	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
-	Name          string              `json:"name"`
-	OperationDate openapi_types.Date  `json:"operation_date"`
-
-	// ReminderOffsetDays 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before the operation date.
-	ReminderOffsetDays *OperationCreateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	Type               OperationType                             `json:"type"`
-}
-
-// OperationCreateRequestReminderOffsetDays 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before the operation date.
-type OperationCreateRequestReminderOffsetDays int
-
-// OperationListSort defines model for OperationListSort.
-type OperationListSort string
-
-// OperationMoveRequest defines model for OperationMoveRequest.
-type OperationMoveRequest struct {
-	// PropertyId Target property. Must belong to the same owner as the operation's current property.
-	PropertyId openapi_types.UUID `json:"property_id"`
-}
-
-// OperationResponse defines model for OperationResponse.
+// OperationResponse One operation of the Payments context: a payment occurrence or a manual fact. status carries overdue as a server-computed view status (planned with the date already past in the property owner's timezone).
 type OperationResponse struct {
-	AmountKopecks int                 `json:"amount_kopecks"`
-	CategoryId    openapi_types.UUID  `json:"category_id"`
-	CategoryName  string              `json:"category_name"`
-	Comment       *string             `json:"comment,omitempty"`
-	CreatedAt     time.Time           `json:"created_at"`
-	Id            openapi_types.UUID  `json:"id"`
-	IsException   bool                `json:"is_exception"`
-	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
-	Name          string              `json:"name"`
-	OperationDate openapi_types.Date  `json:"operation_date"`
-	OwnerId       openapi_types.UUID  `json:"owner_id"`
+	AmountKopecks int64 `json:"amountKopecks"`
 
-	// PropertyId Null when the property was deleted in detach mode.
-	PropertyId           *openapi_types.UUID                  `json:"property_id,omitempty"`
-	PropertyStatus       *PropertyStatus                      `json:"property_status,omitempty"`
-	RecurringOperationId *openapi_types.UUID                  `json:"recurring_operation_id,omitempty"`
-	ReminderOffsetDays   *OperationResponseReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	Status               OperationStatus                      `json:"status"`
-	Type                 OperationType                        `json:"type"`
-	UpdatedAt            time.Time                            `json:"updated_at"`
+	// CategoryLabel Category label snapshot frozen at materialization time.
+	CategoryLabel string `json:"categoryLabel"`
+
+	// CategorySlug Default-catalog slug snapshot for icon rendering; null when absent.
+	CategorySlug *string            `json:"categorySlug"`
+	Date         openapi_types.Date `json:"date"`
+	Id           openapi_types.UUID `json:"id"`
+
+	// Origin Where the operation came from: a rule occurrence (payment) or a one-off manual fact (manual). A rule occurrence keeps payment after its rule is deleted — with paymentId null that pair marks the deleted-rule tail (ticket #1371): the operation page shows the same detail rows as before the deletion.
+	Origin   OperationResponseOrigin `json:"origin"`
+	PaidDate *openapi_types.Date     `json:"paidDate"`
+
+	// PaymentId The originating rule; null marks it deleted or the fact manual.
+	PaymentId  *openapi_types.UUID `json:"paymentId"`
+	PropertyId openapi_types.UUID  `json:"propertyId"`
+
+	// PropertyName The display name of the bound property — the global screen's row label (list projection only, filled on the global listing; null elsewhere — the property screen resolves the property by its id).
+	PropertyName *string                 `json:"propertyName,omitempty"`
+	Status       OperationResponseStatus `json:"status"`
+	Title        string                  `json:"title"`
+	Type         OperationResponseType   `json:"type"`
+
+	// UpdatedAt Момент последнего касания строки. Оплаченная строка после оплаты не меняется, так что у факта это момент оплаты: история платежа ставит его в ленту по реальному времени и читает порядок оплат внутри одного дня (#1195). В ответах создания и оплаты — момент самого действия.
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// OperationResponseReminderOffsetDays defines model for OperationResponse.ReminderOffsetDays.
-type OperationResponseReminderOffsetDays int
+// OperationResponseOrigin Where the operation came from: a rule occurrence (payment) or a one-off manual fact (manual). A rule occurrence keeps payment after its rule is deleted — with paymentId null that pair marks the deleted-rule tail (ticket #1371): the operation page shows the same detail rows as before the deletion.
+type OperationResponseOrigin string
 
-// OperationStatus defines model for OperationStatus.
-type OperationStatus string
+// OperationResponseStatus defines model for OperationResponse.Status.
+type OperationResponseStatus string
 
-// OperationType defines model for OperationType.
-type OperationType string
-
-// OperationUpdateRequest defines model for OperationUpdateRequest.
-type OperationUpdateRequest struct {
-	AmountKopecks *int                `json:"amount_kopecks,omitempty"`
-	CategoryId    *openapi_types.UUID `json:"category_id,omitempty"`
-	Comment       *string             `json:"comment,omitempty"`
-	LeaseId       *openapi_types.UUID `json:"lease_id,omitempty"`
-	Name          *string             `json:"name,omitempty"`
-	OperationDate *openapi_types.Date `json:"operation_date,omitempty"`
-
-	// ReminderOffsetDays 0 clears any existing reminder; 1/3/7 reschedules the reminder.
-	ReminderOffsetDays *OperationUpdateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	Type               *OperationType                            `json:"type,omitempty"`
-}
-
-// OperationUpdateRequestReminderOffsetDays 0 clears any existing reminder; 1/3/7 reschedules the reminder.
-type OperationUpdateRequestReminderOffsetDays int
+// OperationResponseType defines model for OperationResponse.Type.
+type OperationResponseType string
 
 // OperationsResponse defines model for OperationsResponse.
 type OperationsResponse struct {
-	HasMore    bool                `json:"has_more"`
-	Items      []OperationResponse `json:"items"`
-	Limit      int                 `json:"limit"`
-	NextOffset *int                `json:"next_offset,omitempty"`
-	Offset     int                 `json:"offset"`
+	Items []OperationResponse `json:"items"`
+
+	// NextCursor The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the feed is exhausted.
+	NextCursor *string `json:"nextCursor"`
+
+	// Total The whole scope's paid count under the query's filters (ticket #599) — «найдено N»: the same predicate as the rows, independent of the window, identical on every walked page. The global feed's field (GET /operations): the property-scoped listings sharing this schema omit it.
+	Total *int64 `json:"total,omitempty"`
 }
+
+// OperationsSummaryCategory One category's total over the summarized scope. Rows without a category snapshot never appear here — their amounts still count in the totals.
+type OperationsSummaryCategory struct {
+	CategoryLabel string                        `json:"categoryLabel"`
+	CategorySlug  string                        `json:"categorySlug"`
+	TotalKopecks  int64                         `json:"totalKopecks"`
+	Type          OperationsSummaryCategoryType `json:"type"`
+}
+
+// OperationsSummaryCategoryType defines model for OperationsSummaryCategory.Type.
+type OperationsSummaryCategoryType string
+
+// OperationsSummaryResponse The operations summary behind the «Операции объекта» screens: the period totals by direction and the per-category breakdown. Money is integer kopecks (ADR 0008).
+type OperationsSummaryResponse struct {
+	Categories          []OperationsSummaryCategory `json:"categories"`
+	ExpenseTotalKopecks int64                       `json:"expenseTotalKopecks"`
+	IncomeTotalKopecks  int64                       `json:"incomeTotalKopecks"`
+}
+
+// ParticipantGrantOutcome The per-property result of a participant grant. "active"/"suspended" — a membership was created (the recipient's tariff slot was free / exhausted); "pending" — an invitation was stored and the invite email will be sent; "skipped_duplicate" — the person already holds access or a pending invitation on the property; "skipped_archived" — the property is archived (granting new access is forbidden);  "skipped_owner" — the target is the property's owner themself; "skipped_unavailable" — the property is not in the reading actor's manage scope (unknown, foreign, or otherwise unmanageable).
+type ParticipantGrantOutcome string
+
+// ParticipantGrantResult defines model for ParticipantGrantResult.
+type ParticipantGrantResult struct {
+	// InvitationId The created invitation id; set only for pending.
+	InvitationId *openapi_types.UUID `json:"invitation_id,omitempty"`
+
+	// MembershipId The created membership id; set only for active/suspended.
+	MembershipId *openapi_types.UUID `json:"membership_id,omitempty"`
+
+	// Outcome The per-property result of a participant grant. "active"/"suspended" — a membership was created (the recipient's tariff slot was free / exhausted); "pending" — an invitation was stored and the invite email will be sent; "skipped_duplicate" — the person already holds access or a pending invitation on the property; "skipped_archived" — the property is archived (granting new access is forbidden);  "skipped_owner" — the target is the property's owner themself; "skipped_unavailable" — the property is not in the reading actor's manage scope (unknown, foreign, or otherwise unmanageable).
+	Outcome    ParticipantGrantOutcome `json:"outcome"`
+	PropertyId openapi_types.UUID      `json:"property_id"`
+}
+
+// ParticipantGrantResultsResponse defines model for ParticipantGrantResultsResponse.
+type ParticipantGrantResultsResponse struct {
+	Items []ParticipantGrantResult `json:"items"`
+}
+
+// ParticipantInviteRequest defines model for ParticipantInviteRequest.
+type ParticipantInviteRequest struct {
+	// Email Invitee email. A registered email activates memberships instantly; an unregistered email becomes pending invitations plus one invite email listing the objects. The actor's own email is rejected.
+	Email openapi_types.Email `json:"email"`
+
+	// PropertyIds The objects to grant access to — a snapshot chosen at invite time. Duplicate ids collapse to the first occurrence.
+	PropertyIds []openapi_types.UUID         `json:"property_ids"`
+	Role        ParticipantInviteRequestRole `json:"role"`
+}
+
+// ParticipantInviteRequestRole defines model for ParticipantInviteRequest.Role.
+type ParticipantInviteRequestRole string
+
+// ParticipantPropertiesAddRequest defines model for ParticipantPropertiesAddRequest.
+type ParticipantPropertiesAddRequest struct {
+	// PropertyIds The objects to add to the participant's existing access — a snapshot chosen at grant time. Duplicate ids collapse to the first occurrence.
+	PropertyIds []openapi_types.UUID                `json:"property_ids"`
+	Role        ParticipantPropertiesAddRequestRole `json:"role"`
+}
+
+// ParticipantPropertiesAddRequestRole defines model for ParticipantPropertiesAddRequest.Role.
+type ParticipantPropertiesAddRequestRole string
+
+// ParticipantPropertyResponse defines model for ParticipantPropertyResponse.
+type ParticipantPropertyResponse struct {
+	// PhotoUrl The property photo's same-origin streaming path (ADR 0065), live at read; null when the property has no photo. The leg row is self-sufficient — the client needs no /properties join for the avatar (остаток #1244 п.3, решение #1286).
+	PhotoUrl   *string                         `json:"photo_url"`
+	PropertyId openapi_types.UUID              `json:"property_id"`
+	Role       ParticipantPropertyResponseRole `json:"role"`
+
+	// Status The access lifecycle on this property: "active"/"suspended" memberships, "pending" email invitation.
+	Status ParticipantPropertyResponseStatus `json:"status"`
+	Title  string                            `json:"title"`
+	Type   PropertyType                      `json:"type"`
+}
+
+// ParticipantPropertyResponseRole defines model for ParticipantPropertyResponse.Role.
+type ParticipantPropertyResponseRole string
+
+// ParticipantPropertyResponseStatus The access lifecycle on this property: "active"/"suspended" memberships, "pending" email invitation.
+type ParticipantPropertyResponseStatus string
+
+// ParticipantResponse defines model for ParticipantResponse.
+type ParticipantResponse struct {
+	// AccessiblePropertiesCount The number of properties with active access.
+	AccessiblePropertiesCount int `json:"accessible_properties_count"`
+
+	// AggregateStatus The aggregate badge (issue #693): "all_properties" — active access to every property in the reading scope; "partial" — active access to accessible_properties_count of them; "limit_exceeded" — at least one suspended membership (the recipient's tariff limit was hit). Display copy: «Доступ ко всем объектам» / «Доступно N объектов» / «Превышен лимит объектов».
+	AggregateStatus ParticipantResponseAggregateStatus `json:"aggregate_status"`
+
+	// DisplayName The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row (the email is the label).
+	DisplayName *string `json:"display_name,omitempty"`
+
+	// Email The invitee email of a pending row; for a registered user, their email resolved for display (null when the user has none).
+	Email *openapi_types.Email `json:"email,omitempty"`
+
+	// Id The stable person identifier to address this aggregate by: the registered user's uuid, or the invitee email for a pending row.
+	Id string `json:"id"`
+
+	// PhotoUrl The registered user's profile photo same-origin streaming path (ADR 0065; решение владельца #1286): /api/users/{userId}/photo, readable while the reader shares a readable property with the user; a revoked access answers 404 and the client falls back to the placeholder. Null for a pending row or a user without a photo.
+	PhotoUrl *string `json:"photo_url,omitempty"`
+
+	// Properties The person's access legs on the reading scope's properties.
+	Properties []ParticipantPropertyResponse `json:"properties"`
+
+	// UserId Registered user id; null for a pending email row.
+	UserId *openapi_types.UUID `json:"user_id,omitempty"`
+}
+
+// ParticipantResponseAggregateStatus The aggregate badge (issue #693): "all_properties" — active access to every property in the reading scope; "partial" — active access to accessible_properties_count of them; "limit_exceeded" — at least one suspended membership (the recipient's tariff limit was hit). Display copy: «Доступ ко всем объектам» / «Доступно N объектов» / «Превышен лимит объектов».
+type ParticipantResponseAggregateStatus string
+
+// ParticipantsResponse defines model for ParticipantsResponse.
+type ParticipantsResponse struct {
+	Items []ParticipantResponse `json:"items"`
+}
+
+// PauseIntervalView One pause interval [fromDate, toDate); a null toDate is the active open-ended pause.
+type PauseIntervalView struct {
+	FromDate openapi_types.Date  `json:"fromDate"`
+	ToDate   *openapi_types.Date `json:"toDate,omitempty"`
+}
+
+// PaymentChangeAction Род действия строки журнала (ADR 0065 §4): правка условий, пауза, возобновление. Завершения среди них нет — правило удалено, журнал каскадит вместе с ним (тикет #1377).
+type PaymentChangeAction string
+
+// PaymentChangeField Словарь полей дифа — тот же словарь, что у мутационного аудита
+// контекста; порядок строк дифа в ответе — словарный.
+type PaymentChangeField string
+
+// PaymentChangeItem Одна строка журнала — снимок действия при записи (ADR 0065): кто и
+// какое действие совершил над правилом и какие поля двинулись. Чип
+// экрана строится из action и changes; переименования и удаления
+// пользовательской категории строку не меняют — лейбл-снапшот уже в
+// значении.
+type PaymentChangeItem struct {
+	// Action Род действия строки журнала (ADR 0065 §4): правка условий, пауза, возобновление. Завершения среди них нет — правило удалено, журнал каскадит вместе с ним (тикет #1377).
+	Action PaymentChangeAction `json:"action"`
+
+	// ActorId Кто совершил действие (пишут только пользователи).
+	ActorId openapi_types.UUID `json:"actor_id"`
+
+	// Changes Диф полей старое→новое в словарном порядке; у paused/resumed —
+	// пустой массив (состояние и есть содержимое строки).
+	Changes   []PaymentFieldChange `json:"changes"`
+	CreatedAt time.Time            `json:"created_at"`
+	Id        openapi_types.UUID   `json:"id"`
+
+	// Origin Отметка происхождения системной строки (тикет #1342): null или
+	// отсутствие — ручное действие пользователя (все строки до тикета);
+	// auto_archive — системные пауза/снятие архивного моста: объект
+	// ушёл в архив или вернулся из него.
+	Origin *PaymentChangeItemOrigin `json:"origin,omitempty"`
+}
+
+// PaymentChangeItemOrigin Отметка происхождения системной строки (тикет #1342): null или
+// отсутствие — ручное действие пользователя (все строки до тикета);
+// auto_archive — системные пауза/снятие архивного моста: объект
+// ушёл в архив или вернулся из него.
+type PaymentChangeItemOrigin string
+
+// PaymentChangesResponse Страница истории изменений платежа (двусторонний keyset, ADR 0065).
+type PaymentChangesResponse struct {
+	Items []PaymentChangeItem `json:"items"`
+
+	// NextCursor Непрозрачный курсор страницы СТАРШЕ (в before_cursor следующего
+	// запроса): продолжение журнала в прошлое. Отсутствует на пустой
+	// или неполной странице — дальше старше ничего нет.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// PrevCursor Непрозрачный курсор страницы МОЛОЖЕ (в after_cursor следующего
+	// запроса): prepend записей, появившихся после загрузки видимых.
+	// Отсутствует только на пустой странице.
+	PrevCursor *string `json:"prev_cursor,omitempty"`
+}
+
+// PaymentCreateRequest A payment rule on a property. The since date is server-set (today in the property owner's timezone) and never accepted from the client; backdated occurrences are not generated.
+type PaymentCreateRequest struct {
+	AmountKopecks int64 `json:"amountKopecks"`
+	AutoPay       *bool `json:"autoPay,omitempty"`
+
+	// CategorySlug Slug of the default category catalog (user categories arrive in a later slice).
+	CategorySlug string `json:"categorySlug"`
+
+	// EndDate Окончание правила. Не раньше первого вхождения графика (recurrence от since): иначе правило не создало бы ни одной операции — 400 «Дата окончания не может быть раньше первого платежа» (тикет #1154). Конец на самом первом вхождении валиден.
+	EndDate *openapi_types.Date `json:"endDate,omitempty"`
+
+	// NotifyAutoPaid Присылать ли событие «Автоплатёж исполнен» по правилу (#1189). Дефолт для новых — false («Не уведомлять», макет 3214-72739); явный null равен false.
+	NotifyAutoPaid *bool `json:"notifyAutoPaid,omitempty"`
+
+	// Recurrence The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts.
+	Recurrence Recurrence `json:"recurrence"`
+
+	// ReminderOffsetDays За сколько дней предупреждать о вхождении («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет (выбор опционален). Напоминание живёт независимо от autoPay. У правила с autoPay=true присланный оффсет при создании форсируется в null (решение владельца по гриллингу #1186: автоплатёжная форма reminder-пикер не показывает).
+	ReminderOffsetDays *PaymentCreateRequestReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
+	Title              string                                  `json:"title"`
+	Type               PaymentCreateRequestType                `json:"type"`
+}
+
+// PaymentCreateRequestReminderOffsetDays За сколько дней предупреждать о вхождении («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет (выбор опционален). Напоминание живёт независимо от autoPay. У правила с autoPay=true присланный оффсет при создании форсируется в null (решение владельца по гриллингу #1186: автоплатёжная форма reminder-пикер не показывает).
+type PaymentCreateRequestReminderOffsetDays int
+
+// PaymentCreateRequestType defines model for PaymentCreateRequest.Type.
+type PaymentCreateRequestType string
+
+// PaymentDueItem One «На оплату» row (ticket #1346): the (rule, operation) pair standing in the reminder window — the section page's card data. The bucket is the client's rendering of daysLeft (the server builds no labels): 0 → «Сегодня», 1 → «Завтра», 2..3 → «Через 3 дня», 4..7 → «Через 7 дней»; the rows arrive in the buckets' fixed order, «Сначала новые» inside one.
+type PaymentDueItem struct {
+	AmountKopecks int64 `json:"amountKopecks"`
+
+	// Category The payment's category reference resolved by the server: a default catalog slug (label from the code catalog; a slug removed from the catalog falls back to the label «Прочее») or a user category. Icon and color are frontend catalog metadata keyed by slug.
+	Category CategoryView `json:"category"`
+
+	// DaysLeft dueDate − today (0..7 by the window's construction) — the bucket key and the hub card's «Через N дней» source.
+	DaysLeft int `json:"daysLeft"`
+
+	// DueDate The window operation's date (D) — the card's deadline display.
+	DueDate openapi_types.Date `json:"dueDate"`
+
+	// OperationId The window operation's id — the row's identity (a rule can carry two window rows: today's and the next future one).
+	OperationId openapi_types.UUID `json:"operationId"`
+
+	// PaymentId The payment rule's id — the card's link target (the payment screen), not the operation's own page.
+	PaymentId  openapi_types.UUID `json:"paymentId"`
+	PropertyId openapi_types.UUID `json:"propertyId"`
+
+	// PropertyName The display name of the bound property — the section card's object label.
+	PropertyName string `json:"propertyName"`
+
+	// ReminderOffsetDays The rule's reminder lead time (1/3/7) — the window's own N.
+	ReminderOffsetDays PaymentDueItemReminderOffsetDays `json:"reminderOffsetDays"`
+	Title              string                           `json:"title"`
+
+	// Today The property owner's calendar date (ADR 0048) the window math ran against.
+	Today openapi_types.Date `json:"today"`
+	Type  PaymentDueItemType `json:"type"`
+}
+
+// PaymentDueItemReminderOffsetDays The rule's reminder lead time (1/3/7) — the window's own N.
+type PaymentDueItemReminderOffsetDays int
+
+// PaymentDueItemType defines model for PaymentDueItem.Type.
+type PaymentDueItemType string
+
+// PaymentFieldChange Один уехавший поле дифа: старое→новое значение. Значения типизированы
+// по словарю поля (ADR 0065 §2) — никогда строки-с-форматированием:
+// amount_kopecks — число копеек; recurrence — канонический JSON-объект
+// Recurrence (как в payments.recurrence); end_date — «YYYY-MM-DD» или
+// null; type/title — строки; auto_pay — булево; reminder_offset_days —
+// 1/3/7 или null; category_slug — {slug, label} или {userCategoryId,
+// label} — ссылка со снапшотом лейбла на момент правки (канон
+// category_label операций, ADR 0049 §1).
+type PaymentFieldChange struct {
+	// Field Словарь полей дифа — тот же словарь, что у мутационного аудита
+	// контекста; порядок строк дифа в ответе — словарный.
+	Field PaymentChangeField `json:"field"`
+
+	// New Новое значение поля — типизировано по словарю (см. описание схемы).
+	New interface{} `json:"new"`
+
+	// Old Прежнее значение поля — типизировано по словарю (см. описание схемы).
+	Old interface{} `json:"old"`
+}
+
+// PaymentGlobalItem One payment rule of the actor's visible merged feed (ticket #575) — the global «Платежи» card's data: the rule, its property label, the nearest schedule date and the overdue aggregates.
+type PaymentGlobalItem struct {
+	AmountKopecks int64 `json:"amountKopecks"`
+	AutoPay       bool  `json:"autoPay"`
+
+	// Category The payment's category reference resolved by the server: a default catalog slug (label from the code catalog; a slug removed from the catalog falls back to the label «Прочее») or a user category. Icon and color are frontend catalog metadata keyed by slug.
+	Category CategoryView `json:"category"`
+
+	// FavoriteOrder The rule's position in the reading actor's personal favorite order (ticket #576; the personal cutover #1308, D12): the 1-based position the favorites edit mode's save assigned. Null when the actor has never placed the rule in their saved order — the favorites screens sort by favoriteOrder with nulls last (the new-favorite-at-the-end rule); the feed's own order is unchanged.
+	FavoriteOrder *int               `json:"favoriteOrder"`
+	Id            openapi_types.UUID `json:"id"`
+
+	// IsCompleted The row's display-complete flag (ticket #1341) — the hub card's «Полностью оплачен»: the computed settlement completeness (CONTEXT.md, «Завершённый платёж») with the open-pause exception resolved server-side. The raw computed flag answers «завершён» behind an open pause's cut cursor (the glossary's exception), and the feed row carries no pauses for the client to repeat the resolution the payment screen does by the end date — the flag ships pause-free. The stored-completed rules are hidden from the feed entirely; the payment detail read carries the raw flag (PaymentResponse.isCompleted).
+	IsCompleted bool `json:"isCompleted"`
+
+	// IsFavorite The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12).
+	IsFavorite bool `json:"isFavorite"`
+
+	// NearestDate «Ближайший»: the earliest stored planned operation on or after today, else the rule's projection — a bare schedule order without a view status. Null when the schedule has no next occurrence (an open pause or a settled rule).
+	NearestDate *openapi_types.Date `json:"nearestDate"`
+
+	// OldestOverdueOperationId The oldest overdue operation's id (the same operation the overdueDays age speaks of) — the overdue card's link target on the global main screen (ticket #578); null when the rule has no overdue operations.
+	OldestOverdueOperationId *openapi_types.UUID `json:"oldestOverdueOperationId"`
+
+	// OverdueDays The age of the oldest overdue operation in days (today minus its date, at least 1) — the «N дней» line; null when the rule has no overdue operations.
+	OverdueDays *int `json:"overdueDays"`
+
+	// OverdueOperationCount The rule's overdue operations (planned with the date before today); 0 when the rule has none.
+	OverdueOperationCount int                `json:"overdueOperationCount"`
+	PropertyId            openapi_types.UUID `json:"propertyId"`
+
+	// PropertyName The display name of the bound property — the global screen's row label.
+	PropertyName string `json:"propertyName"`
+	Title        string `json:"title"`
+
+	// Today The property owner's calendar date (ADR 0048) the row's schedule math ran against — the client renders «Сегодня»/«Завтра» against it instead of knowing the owner's timezone.
+	Today openapi_types.Date    `json:"today"`
+	Type  PaymentGlobalItemType `json:"type"`
+}
+
+// PaymentGlobalItemType defines model for PaymentGlobalItem.Type.
+type PaymentGlobalItemType string
 
 // PaymentMethod defines model for PaymentMethod.
 type PaymentMethod struct {
-	CreatedAt   time.Time          `json:"createdAt"`
-	DisplayMask string             `json:"displayMask"`
-	Id          openapi_types.UUID `json:"id"`
-	IsActive    bool               `json:"isActive"`
-	Provider    string             `json:"provider"`
+	// CardSystem Card system derived by the backend from the BIN prefix of the masked number (2 — Mir, 4 — Visa, 5 — Mastercard); unknown for old or unrecognized cards.
+	CardSystem  CardSystem `json:"cardSystem"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	DisplayMask string     `json:"displayMask"`
+
+	// ExpDate Card expiry in the provider's display format (MMYY); null when unknown.
+	ExpDate  *string            `json:"expDate,omitempty"`
+	Id       openapi_types.UUID `json:"id"`
+	IsActive bool               `json:"isActive"`
+	Provider string             `json:"provider"`
 }
 
 // PaymentMethodsResponse defines model for PaymentMethodsResponse.
@@ -2024,9 +3272,166 @@ type PaymentMethodsResponse struct {
 	Items []PaymentMethod `json:"items"`
 }
 
+// PaymentObjectItem One visible property with its payment stacks (ticket #575): the keys grouped into the auto-pay group and the rest.
+type PaymentObjectItem struct {
+	Address string `json:"address"`
+
+	// AutoPayRules The «Автоплатежи» group — the object's auto-pay rules.
+	AutoPayRules []PaymentObjectKey `json:"autoPayRules"`
+	Name         string             `json:"name"`
+
+	// OtherRules The «Платежи» group — the object's non-auto-pay rules.
+	OtherRules []PaymentObjectKey `json:"otherRules"`
+
+	// PhotoUrl The card avatar's photo — the object's first (oldest) photo (ticket #582); with the private photos (ADR 0065) one image per object, streamed by the backend; null when the object has no photo.
+	PhotoUrl *string `json:"photoUrl"`
+
+	// PinnedAt The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The cards order the pinned first — the actor's own order, never another participant's.
+	PinnedAt   *time.Time         `json:"pinnedAt"`
+	PropertyId openapi_types.UUID `json:"propertyId"`
+	Type       PropertyType       `json:"type"`
+}
+
+// PaymentObjectKey One key of a property's stack (ticket #575): the rule behind it and its overdue flag — the red dot.
+type PaymentObjectKey struct {
+	HasOverdue bool               `json:"hasOverdue"`
+	PaymentId  openapi_types.UUID `json:"paymentId"`
+}
+
+// PaymentObjectsGlobalResponse The global «Объекты» screen of the payments map (ticket #575).
+type PaymentObjectsGlobalResponse struct {
+	Items []PaymentObjectItem `json:"items"`
+}
+
+// PaymentResponse defines model for PaymentResponse.
+type PaymentResponse struct {
+	AmountKopecks int64 `json:"amountKopecks"`
+	AutoPay       bool  `json:"autoPay"`
+
+	// Category The payment's category reference resolved by the server: a default catalog slug (label from the code catalog; a slug removed from the catalog falls back to the label «Прочее») or a user category. Icon and color are frontend catalog metadata keyed by slug.
+	Category  CategoryView        `json:"category"`
+	CreatedAt time.Time           `json:"createdAt"`
+	EndDate   *openapi_types.Date `json:"endDate,omitempty"`
+	Id        openapi_types.UUID  `json:"id"`
+
+	// IsCompleted Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. The feed's display-safe flag («Полностью оплачен») lives on the global feed row.
+	IsCompleted bool `json:"isCompleted"`
+
+	// IsFavorite The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12) — returned in the reads and the lists; another user's star never lands in this actor's read.
+	IsFavorite bool `json:"isFavorite"`
+
+	// IsRentalCompleted The managing rental is completed («Завершена» — финал: чтение, Итоги, Удаление; ticket #1158). The payment screen's «Изменить аренду» lives only while the rental is unfinished — the read-side state of the #818 gate: the mutation gate stays state-blind (any rental row finalizes its payment), this flag carries the rental state machine onto the payment surfaces so every surface shows the same action set.
+	IsRentalCompleted bool `json:"isRentalCompleted"`
+
+	// IsRentalManaged The rule is the rental's managed rent payment (ADR 0053, ticket #818): a rental row references it, any rental state — a completed rental is final and its payment is final with it. The rental is the source of truth for the amount, the payment day, the auto-pay and the planned end, so the rule mutations (pause, resume, patch, delete) answer 409; the payment facts («Оплатить») and the favorite star stay open. The reads carry the flag so the client hides the mutation actions instead of learning the 409 live.
+	IsRentalManaged bool `json:"isRentalManaged"`
+
+	// NearestDate «Следующая дата оплаты» (ticket #991, CONTEXT.md): the earliest stored planned operation on or after the owner's today (ADR 0048), else the rule's projection. Null when the schedule has no next occurrence — an open pause or a settled rule. The object payments list resolves it on every row; the single-rule reads do not compute it and always carry null.
+	NearestDate *openapi_types.Date `json:"nearestDate"`
+
+	// NotifyAutoPaid The per-payment gate of the «Автоплатёж исполнен» event (#1189): false — правило автоплатежа гасится молча. Дефолт новых правил — false (макет 3214-72739); существующим автоплатежам проставлен true миграцией (без поведенческого регресса, #1186).
+	NotifyAutoPaid bool                `json:"notifyAutoPaid"`
+	Pauses         []PauseIntervalView `json:"pauses"`
+	PropertyId     openapi_types.UUID  `json:"propertyId"`
+
+	// Recurrence The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts.
+	Recurrence Recurrence `json:"recurrence"`
+
+	// ReminderOffsetDays The payment reminder's lead time in days (карта #822); null — напоминаний нет. Живёт независимо от autoPay.
+	ReminderOffsetDays *PaymentResponseReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
+	Since              openapi_types.Date                 `json:"since"`
+	Title              string                             `json:"title"`
+	Type               PaymentResponseType                `json:"type"`
+	UpdatedAt          time.Time                          `json:"updatedAt"`
+}
+
+// PaymentResponseReminderOffsetDays The payment reminder's lead time in days (карта #822); null — напоминаний нет. Живёт независимо от autoPay.
+type PaymentResponseReminderOffsetDays int
+
+// PaymentResponseType defines model for PaymentResponse.Type.
+type PaymentResponseType string
+
+// PaymentUpdateRequest Partial payment update: an omitted field is left unchanged. endDate is tri-state — omitted keeps it, null clears it (open-ended), a date sets it. The since date is not editable.
+type PaymentUpdateRequest struct {
+	AmountKopecks *int64  `json:"amountKopecks,omitempty"`
+	AutoPay       *bool   `json:"autoPay,omitempty"`
+	CategorySlug  *string `json:"categorySlug,omitempty"`
+
+	// EndDate Tri-state: omitted keeps the value, null clears it (open-ended), a date sets it. Окно графика (тикет #1154): слитое правило — после применения патча — не может остаться с концом раньше первого вхождения (смена recurrence при стоящей дате перепроверяет её): 400 «Дата окончания не может быть раньше первого платежа». Правки, не трогающие расписание и конец, окно не перепроверяют.
+	EndDate *openapi_types.Date `json:"endDate,omitempty"`
+
+	// NotifyAutoPaid Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps the current value, null turns the «Автоплатёж исполнен» event off, true/false sets it.
+	NotifyAutoPaid *bool `json:"notifyAutoPaid,omitempty"`
+
+	// Recurrence The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts.
+	Recurrence *Recurrence `json:"recurrence,omitempty"`
+
+	// ReminderOffsetDays Tri-state lead time of the payment reminder («Напоминание о платеже»): omitted keeps the current value, null turns reminders off, 1/3/7 sets the lead time.
+	ReminderOffsetDays *PaymentUpdateRequestReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
+	Title              *string                                 `json:"title,omitempty"`
+	Type               *PaymentUpdateRequestType               `json:"type,omitempty"`
+}
+
+// PaymentUpdateRequestReminderOffsetDays Tri-state lead time of the payment reminder («Напоминание о платеже»): omitted keeps the current value, null turns reminders off, 1/3/7 sets the lead time.
+type PaymentUpdateRequestReminderOffsetDays int
+
+// PaymentUpdateRequestType defines model for PaymentUpdateRequest.Type.
+type PaymentUpdateRequestType string
+
+// PaymentsDueResponse The «На оплату» section (ticket #1346): the whole window in one read — the section is small by construction (the materialization keeps at most two window operations per rule, the reminder is armed on a fraction of the rules). dueOperationsCount repeats the rows' count — the same figure the feed's counters carry.
+type PaymentsDueResponse struct {
+	// DueOperationsCount The window operations' count — the rows' own.
+	DueOperationsCount int              `json:"dueOperationsCount"`
+	Items              []PaymentDueItem `json:"items"`
+}
+
+// PaymentsFavoriteOrderUpdate The favorites edit mode's save request (ticket #576): the actor's visible favorite rules in their new order — the complete list as the edit screen shows it.
+type PaymentsFavoriteOrderUpdate struct {
+	// PaymentIds The favorite rules in their new order; the server assigns dense 1-based positions in this order (ticket #576).
+	PaymentIds []openapi_types.UUID `json:"paymentIds"`
+}
+
+// PaymentsGlobalResponse The global «Платежи» feed (ticket #575) with the main screen's counters. Money is integer kopecks (ADR 0008).
+type PaymentsGlobalResponse struct {
+	// DueNearestDays The smallest days-left (dueDate − today, ADR 0048) among the «На оплату» operations (ticket #1346) — the card's label source: «Сегодня» (0), «Завтра» (1), «Через N дней» (2..7). Null when the window is empty.
+	DueNearestDays *int `json:"dueNearestDays"`
+
+	// DueOperationsCount The «На оплату» operations across the whole visible scope (ticket #1346) — the reminder-window (D−N ≤ today ≤ D) planned operations of the rules with a reminder and no auto-pay — the «На оплату (N)» card; never narrowed by a search. Overdue operations are not counted here (the «Все просроченные» card's own number).
+	DueOperationsCount int `json:"dueOperationsCount"`
+
+	// FavoriteCount The reading actor's favorite rules across the whole visible scope — the «Все избранные (N)» card; never narrowed by a search (the personal cutover #1308, D12).
+	FavoriteCount int                 `json:"favoriteCount"`
+	Items         []PaymentGlobalItem `json:"items"`
+
+	// OverdueOperationsCount The overdue operations summed across the whole visible scope — the «Все просроченные (N)» card; never narrowed by a search.
+	OverdueOperationsCount int `json:"overdueOperationsCount"`
+}
+
+// PaymentsResponse defines model for PaymentsResponse.
+type PaymentsResponse struct {
+	Items []PaymentResponse `json:"items"`
+}
+
+// PaymentsSearchGlobalResponse The global payment rules search (ticket #575): the matched rows plus the matched-category chips and the whole scope's match count.
+type PaymentsSearchGlobalResponse struct {
+	Items             []PaymentGlobalItem `json:"items"`
+	MatchedCategories []CategoryView      `json:"matchedCategories"`
+
+	// NextCursor The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted.
+	NextCursor *string `json:"nextCursor"`
+
+	// Total The whole scope's match count under the query and the chip filter (ticket #599) — «найдено N»: the same predicate as the rows, independent of the window, identical on every walked page.
+	Total int64 `json:"total"`
+}
+
 // PendingPopupsResponse defines model for PendingPopupsResponse.
 type PendingPopupsResponse struct {
 	Popups []string `json:"popups"`
+}
+
+// PinnedUpdateRequest The pin toggle body of PUT pin (ticket #577, the favorite toggle's canon): an atomic UPDATE on the server — never a read-modify-write PATCH. Pinning an already-pinned object keeps its original pin time (the PUT's idempotency — the order among the pinned never shifts).
+type PinnedUpdateRequest struct {
+	Pinned bool `json:"pinned"`
 }
 
 // Problem defines model for Problem.
@@ -2053,15 +3458,35 @@ type ProblemError struct {
 
 // PropertiesResponse defines model for PropertiesResponse.
 type PropertiesResponse struct {
-	// HiddenSharedCount Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
-	HiddenSharedCount *int               `json:"hidden_shared_count,omitempty"`
-	Items             []PropertyResponse `json:"items"`
+	// ArchivedCount The data owner's archived property count (issue #1233): the properties hub gates the «Архив» entry on it — no archived rows, no button. The actor's own archived rows only; shared properties contribute nothing.
+	ArchivedCount int                `json:"archived_count"`
+	Items         []PropertyResponse `json:"items"`
+
+	// SuspendedShared The reading actor's suspended shared memberships, FIFO order (ticket #702): shared objects hidden from them by a tariff slot shortage, returned as blur-card placeholders («Объект недоступен») instead of the hidden_shared_count footnote they replace. Empty for owners and recipients within their limit.
+	SuspendedShared *[]SuspendedSharedProperty `json:"suspended_shared,omitempty"`
+
+	// Today The reading actor's calendar date (ADR 0048) — the «today» the client counts the «Осталось N месяцев» rental badge against (ticket #586; the tasks feed's today rule, #521).
+	Today openapi_types.Date `json:"today"`
+}
+
+// PropertiesSearchResponse The properties search page (ticket #601): the matched cards in the keyset window's order.
+type PropertiesSearchResponse struct {
+	Items []PropertyResponse `json:"items"`
+
+	// NextCursor The opaque continuation cursor of the keyset window (ticket #601): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted.
+	NextCursor *string `json:"nextCursor"`
 }
 
 // PropertyAccessContext defines model for PropertyAccessContext.
 type PropertyAccessContext struct {
-	// OwnerName Owner display name ("Name Surname" or masked phone, never email). Present only in the detail response when the actor is not the owner.
+	// OwnerEmail Owner's account email for the detail's owner contact row — a deliberate exposure on this surface (Figma 2200-97365), the same posture as SuspendedShared.owner_email. Present in the detail response only when the actor is not the owner; empty when the owner has no email or the resolution failed.
+	OwnerEmail *string `json:"owner_email,omitempty"`
+
+	// OwnerName Owner display name ("Name Surname" or «Пользователь», never a phone or an email — карта #1105, аменд #1123). Present when the actor is not the owner: in the detail response and on the list rows (main and archive) — the shared card shows whose object it is. Own rows carry none.
 	OwnerName *string `json:"owner_name,omitempty"`
+
+	// OwnerPhotoUrl The owner's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/users/{userId}/photo — readable while the reader shares a readable property with the owner. Null when the owner has no photo or the resolution failed; present in the detail response and on the shared list rows.
+	OwnerPhotoUrl *string `json:"owner_photo_url,omitempty"`
 
 	// Role Actor's role on this property: owner for own properties, full_access/viewer for shared ones. Suspended memberships never appear here — the detail endpoint answers 403 membership_suspended.
 	Role PropertyAccessContextRole `json:"role"`
@@ -2093,12 +3518,11 @@ type PropertyAccessMemberCreateRequestRole string
 
 // PropertyAccessMemberResponse defines model for PropertyAccessMemberResponse.
 type PropertyAccessMemberResponse struct {
-	// DisplayName Participant display name (name and surname, or a masked phone). Never the raw phone or email.
+	// DisplayName Participant display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123). Never a phone, never an email.
 	DisplayName *string `json:"display_name,omitempty"`
 
-	// Email Invitee email; filled only on pending invitation rows, null for registered participants.
-	Email    *openapi_types.Email `json:"email,omitempty"`
-	HasEmail *bool                `json:"has_email,omitempty"`
+	// Email The participant's email address. Filled on every row the reader may see — registered participants and pending invitations alike (owner decision 2026-09-20, #758: nothing is hidden from viewers); null when the address did not resolve.
+	Email *openapi_types.Email `json:"email,omitempty"`
 
 	// Id Membership id; null for the synthesized owner row. For a pending invitation row this is the invitation id.
 	Id      *openapi_types.UUID `json:"id,omitempty"`
@@ -2106,6 +3530,9 @@ type PropertyAccessMemberResponse struct {
 
 	// LastSentAt When the invite email was last sent; filled only on pending invitation rows.
 	LastSentAt *time.Time `json:"last_sent_at,omitempty"`
+
+	// PhotoUrl The participant's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/users/{userId}/photo — every reader of the list shares this property with every listed participant. Null for a pending row, the synthesized owner without a photo, or a user without a photo; a suspended member's path answers 404 (suspended access sees nothing) and the client falls back to the placeholder.
+	PhotoUrl *string `json:"photo_url,omitempty"`
 
 	// Role The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
 	Role PropertyAccessMemberRole `json:"role"`
@@ -2142,33 +3569,6 @@ type PropertyAccessMembersResponse struct {
 // PropertyAttributes Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written.
 type PropertyAttributes map[string]interface{}
 
-// PropertyContactCreateRequest defines model for PropertyContactCreateRequest.
-type PropertyContactCreateRequest struct {
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
-}
-
-// PropertyContactResponse defines model for PropertyContactResponse.
-type PropertyContactResponse struct {
-	CreatedAt  time.Time          `json:"created_at"`
-	Id         openapi_types.UUID `json:"id"`
-	Name       string             `json:"name"`
-	Phone      string             `json:"phone"`
-	PropertyId openapi_types.UUID `json:"property_id"`
-	UpdatedAt  time.Time          `json:"updated_at"`
-}
-
-// PropertyContactUpdateRequest defines model for PropertyContactUpdateRequest.
-type PropertyContactUpdateRequest struct {
-	Name  *string `json:"name,omitempty"`
-	Phone *string `json:"phone,omitempty"`
-}
-
-// PropertyContactsResponse defines model for PropertyContactsResponse.
-type PropertyContactsResponse struct {
-	Items []PropertyContactResponse `json:"items"`
-}
-
 // PropertyCreateRequest defines model for PropertyCreateRequest.
 type PropertyCreateRequest struct {
 	Address string `json:"address"`
@@ -2176,57 +3576,54 @@ type PropertyCreateRequest struct {
 	// Attributes Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written.
 	Attributes  *PropertyAttributes `json:"attributes,omitempty"`
 	Description *string             `json:"description,omitempty"`
-	Name        string              `json:"name"`
-	Type        PropertyType        `json:"type"`
+
+	// Name Optional. Omit (or send empty) to let the server generate the name from the property type — «Моя квартира», «Мой гараж 2» (ticket #1001). The serial is the object's position among the owner's properties of the type (archived included, deleted gone); the first property of the type carries no serial (ticket #1078).
+	Name *string      `json:"name,omitempty"`
+	Type PropertyType `json:"type"`
 }
 
-// PropertyLeasesResponse defines model for PropertyLeasesResponse.
-type PropertyLeasesResponse struct {
-	Items []LeaseResponse `json:"items"`
+// PropertyOccupancy Занятость объекта (property occupancy, резолюция #584, ticket #585): the property's computed state from its single unfinished rental against the data owner's today (ADR 0048) — the canon for the «По статусу» grouping, the card's rental badges and the red dot. The property lifecycle status (active/maintenance) is a different concept: a rental property under maintenance stays in its rental group. Populated by the list endpoints only; omitted on the write and detail responses.
+type PropertyOccupancy struct {
+	// PlannedEndDate The unfinished rental's planned end date («Осталось N месяцев» — the client counts the full months from today); null for an open-ended rental or without one.
+	PlannedEndDate *openapi_types.Date `json:"planned_end_date,omitempty"`
+
+	// StartDate The unfinished rental's start date; null without one.
+	StartDate *openapi_types.Date `json:"start_date,omitempty"`
+
+	// Status The unfinished rental's status in the rentals vocabulary (rentals/CONTEXT.md): upcoming — the start has not come yet («Аренда с DD.MM» badge); active — the rental runs; needs_attention — the planned end has passed and the rental is not completed (the «Аренда завершена» badge, a red dot reason); none — no unfinished rental (an explicitly completed rental is history and reports none).
+	Status PropertyOccupancyStatus `json:"status"`
 }
 
-// PropertyOperationsSummaryResponse defines model for PropertyOperationsSummaryResponse.
-type PropertyOperationsSummaryResponse struct {
-	AllTimeExpenseKopecks int                 `json:"all_time_expense_kopecks"`
-	AllTimeIncomeKopecks  int                 `json:"all_time_income_kopecks"`
-	AllTimeProfitKopecks  int                 `json:"all_time_profit_kopecks"`
-	MonthlyProfitKopecks  int                 `json:"monthly_profit_kopecks"`
-	NextPaymentDate       *openapi_types.Date `json:"next_payment_date,omitempty"`
-	OverdueRentCount      int                 `json:"overdue_rent_count"`
-	OverdueTotalCount     int                 `json:"overdue_total_count"`
-}
-
-// PropertyPhoto defines model for PropertyPhoto.
-type PropertyPhoto struct {
-	Id  openapi_types.UUID `json:"id"`
-	Url string             `json:"url"`
-}
+// PropertyOccupancyStatus The unfinished rental's status in the rentals vocabulary (rentals/CONTEXT.md): upcoming — the start has not come yet («Аренда с DD.MM» badge); active — the rental runs; needs_attention — the planned end has passed and the rental is not completed (the «Аренда завершена» badge, a red dot reason); none — no unfinished rental (an explicitly completed rental is history and reports none).
+type PropertyOccupancyStatus string
 
 // PropertyResponse defines model for PropertyResponse.
 type PropertyResponse struct {
-	Access      *PropertyAccessContext `json:"access,omitempty"`
-	ActiveLease *LeaseResponse         `json:"active_lease"`
-	Address     string                 `json:"address"`
+	Access  *PropertyAccessContext `json:"access,omitempty"`
+	Address string                 `json:"address"`
 
 	// Attributes Per-type typed property characteristics. Keys and values are in English snake_case; Russian labels are a frontend/admin concern. The set of valid keys depends on the property type and is validated by the backend catalog (see issue #125). An empty object means "no characteristics". Only filled keys are stored; null values are never written.
 	Attributes  PropertyAttributes `json:"attributes"`
 	CreatedAt   time.Time          `json:"created_at"`
 	Description *string            `json:"description,omitempty"`
-	Id          openapi_types.UUID `json:"id"`
 
-	// MembersCount Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations.
-	MembersCount     int                       `json:"members_count"`
-	Name             string                    `json:"name"`
-	Occupancy        PropertyResponseOccupancy `json:"occupancy"`
-	OverdueRentCount int                       `json:"overdue_rent_count"`
-	Photos           *[]PropertyPhoto          `json:"photos,omitempty"`
-	Status           PropertyStatus            `json:"status"`
-	Type             PropertyType              `json:"type"`
-	UpdatedAt        time.Time                 `json:"updated_at"`
+	// HasOverdueOperations The payments half of the card's red dot (резолюция #584): the property holds at least one overdue planned operation — a stored planned row dated before the data owner's today (ADR 0048), the same predicate the payments listings report as the overdue view status. Red dot = needs_attention occupancy OR this flag. Populated by the list endpoints only (ticket #585); omitted elsewhere.
+	HasOverdueOperations *bool              `json:"has_overdue_operations,omitempty"`
+	Id                   openapi_types.UUID `json:"id"`
+	Name                 string             `json:"name"`
+
+	// Occupancy Занятость объекта (property occupancy, резолюция #584, ticket #585): the property's computed state from its single unfinished rental against the data owner's today (ADR 0048) — the canon for the «По статусу» grouping, the card's rental badges and the red dot. The property lifecycle status (active/maintenance) is a different concept: a rental property under maintenance stays in its rental group. Populated by the list endpoints only; omitted on the write and detail responses.
+	Occupancy *PropertyOccupancy `json:"occupancy,omitempty"`
+
+	// PhotoUrl The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo, served with the session cookie; null when the object has no photo.
+	PhotoUrl *string `json:"photo_url,omitempty"`
+
+	// PinnedAt The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The lists order the pinned first, among themselves by this time — the actor's own order, never another participant's. The pin is a personal state: any reader may pin (the view right), and it survives archiving. The domain language calls the concept «основной объект / primary property» (резолюция #584); the contract keeps the pin name.
+	PinnedAt  *time.Time     `json:"pinned_at"`
+	Status    PropertyStatus `json:"status"`
+	Type      PropertyType   `json:"type"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
-
-// PropertyResponseOccupancy defines model for PropertyResponse.Occupancy.
-type PropertyResponseOccupancy string
 
 // PropertyStatus defines model for PropertyStatus.
 type PropertyStatus string
@@ -2241,15 +3638,36 @@ type PropertyUpdateRequest struct {
 	// Attributes Full replacement (idempotent). Omit the field to leave attributes unchanged; send an empty object to clear all characteristics.
 	Attributes  *PropertyAttributes `json:"attributes,omitempty"`
 	Description *string             `json:"description,omitempty"`
-	Name        *string             `json:"name,omitempty"`
-	Status      *PropertyStatus     `json:"status,omitempty"`
-	Type        *PropertyType       `json:"type,omitempty"`
+
+	// Name Omit to leave the name unchanged. An empty string clears the name and regenerates it from the property type — «Моя квартира» (ticket #1001): the first property of the type carries no serial, from the second the serial is appended (ticket #1078).
+	Name   *string         `json:"name,omitempty"`
+	Status *PropertyStatus `json:"status,omitempty"`
+	Type   *PropertyType   `json:"type,omitempty"`
+}
+
+// PushPreferencesRequest defines model for PushPreferencesRequest.
+type PushPreferencesRequest struct {
+	// Categories Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+	Categories NotificationCategoryPreferences `json:"categories"`
+
+	// Endpoint Push endpoint URL устройства (тот же, что при подписке).
+	Endpoint string `json:"endpoint"`
+}
+
+// PushPreferencesResponse Состояние устройства (спека #1028): категорийные флаги подписки; сам факт 200 = подписка есть = мастер-тумблер устройства включён («строка есть = включено»), 404 = выключено.
+type PushPreferencesResponse struct {
+	// Categories Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+	Categories NotificationCategoryPreferences `json:"categories"`
+	Endpoint   string                          `json:"endpoint"`
 }
 
 // PushSubscriptionCreateRequest defines model for PushSubscriptionCreateRequest.
 type PushSubscriptionCreateRequest struct {
 	// Auth The per-subscription auth secret, base64url (RFC 8291).
 	Auth string `json:"auth"`
+
+	// Categories Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+	Categories *NotificationCategoryPreferences `json:"categories,omitempty"`
 
 	// Endpoint The push endpoint URL issued by the browser push service.
 	Endpoint string `json:"endpoint"`
@@ -2269,134 +3687,239 @@ type PushSubscriptionDeleteRequest struct {
 
 // PushSubscriptionResponse defines model for PushSubscriptionResponse.
 type PushSubscriptionResponse struct {
-	CreatedAt time.Time          `json:"created_at"`
-	Endpoint  string             `json:"endpoint"`
-	Id        openapi_types.UUID `json:"id"`
-	UpdatedAt time.Time          `json:"updated_at"`
+	// Categories Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся.
+	Categories NotificationCategoryPreferences `json:"categories"`
+	CreatedAt  time.Time                       `json:"created_at"`
+	Endpoint   string                          `json:"endpoint"`
+	Id         openapi_types.UUID              `json:"id"`
+	UpdatedAt  time.Time                       `json:"updated_at"`
 }
 
-// RecurringOperationCreateRequest defines model for RecurringOperationCreateRequest.
-type RecurringOperationCreateRequest struct {
-	AmountKopecks int                                         `json:"amount_kopecks"`
-	CategoryId    openapi_types.UUID                          `json:"category_id"`
-	Comment       *string                                     `json:"comment,omitempty"`
-	EndDate       *openapi_types.Date                         `json:"end_date,omitempty"`
-	Name          string                                      `json:"name"`
-	PaymentDay    *int                                        `json:"payment_day,omitempty"`
-	Periodicity   *RecurringOperationCreateRequestPeriodicity `json:"periodicity,omitempty"`
-
-	// ReminderOffsetDays 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before each generated operation.
-	ReminderOffsetDays *RecurringOperationCreateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	StartDate          openapi_types.Date                                 `json:"start_date"`
-	Type               OperationType                                      `json:"type"`
+// Recurrence The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts.
+type Recurrence struct {
+	union json.RawMessage
 }
 
-// RecurringOperationCreateRequestPeriodicity defines model for RecurringOperationCreateRequest.Periodicity.
-type RecurringOperationCreateRequestPeriodicity string
-
-// RecurringOperationCreateRequestReminderOffsetDays 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before each generated operation.
-type RecurringOperationCreateRequestReminderOffsetDays int
-
-// RecurringOperationResponse defines model for RecurringOperationResponse.
-type RecurringOperationResponse struct {
-	AmountKopecks int                                   `json:"amount_kopecks"`
-	CategoryId    openapi_types.UUID                    `json:"category_id"`
-	CategoryName  string                                `json:"category_name"`
-	Comment       *string                               `json:"comment,omitempty"`
-	CreatedAt     time.Time                             `json:"created_at"`
-	EndDate       *openapi_types.Date                   `json:"end_date,omitempty"`
-	Id            openapi_types.UUID                    `json:"id"`
-	LeaseId       *openapi_types.UUID                   `json:"lease_id,omitempty"`
-	Name          string                                `json:"name"`
-	OwnerId       openapi_types.UUID                    `json:"owner_id"`
-	PaymentDay    int                                   `json:"payment_day"`
-	Periodicity   RecurringOperationResponsePeriodicity `json:"periodicity"`
-
-	// PropertyId Null when the property was deleted in detach mode.
-	PropertyId         *openapi_types.UUID                           `json:"property_id,omitempty"`
-	ReminderOffsetDays *RecurringOperationResponseReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	StartDate          openapi_types.Date                            `json:"start_date"`
-	Status             RecurringOperationResponseStatus              `json:"status"`
-	Type               OperationType                                 `json:"type"`
-	UpdatedAt          time.Time                                     `json:"updated_at"`
+// RecurrenceDaily defines model for RecurrenceDaily.
+type RecurrenceDaily struct {
+	Kind RecurrenceDailyKind `json:"kind"`
 }
 
-// RecurringOperationResponsePeriodicity defines model for RecurringOperationResponse.Periodicity.
-type RecurringOperationResponsePeriodicity string
+// RecurrenceDailyKind defines model for RecurrenceDaily.Kind.
+type RecurrenceDailyKind string
 
-// RecurringOperationResponseReminderOffsetDays defines model for RecurringOperationResponse.ReminderOffsetDays.
-type RecurringOperationResponseReminderOffsetDays int
+// RecurrenceMonthly Хотя бы одно из daysOfMonth и lastDay обязательно (проверяется доменом). День 1..30 в коротких месяцах зажимается на последний день месяца без сдвига расписания.
+type RecurrenceMonthly struct {
+	DaysOfMonth *[]int                `json:"daysOfMonth,omitempty"`
+	Kind        RecurrenceMonthlyKind `json:"kind"`
 
-// RecurringOperationResponseStatus defines model for RecurringOperationResponse.Status.
-type RecurringOperationResponseStatus string
-
-// RecurringOperationUpdateRequest defines model for RecurringOperationUpdateRequest.
-type RecurringOperationUpdateRequest struct {
-	AmountKopecks *int                                        `json:"amount_kopecks,omitempty"`
-	ApplyFromDate *openapi_types.Date                         `json:"apply_from_date,omitempty"`
-	CategoryId    *openapi_types.UUID                         `json:"category_id,omitempty"`
-	Comment       *string                                     `json:"comment,omitempty"`
-	EndDate       *openapi_types.Date                         `json:"end_date,omitempty"`
-	Name          *string                                     `json:"name,omitempty"`
-	PaymentDay    *int                                        `json:"payment_day,omitempty"`
-	Periodicity   *RecurringOperationUpdateRequestPeriodicity `json:"periodicity,omitempty"`
-
-	// ReminderOffsetDays 0 clears any existing reminders; 1/3/7 reschedules reminders for future generated operations.
-	ReminderOffsetDays *RecurringOperationUpdateRequestReminderOffsetDays `json:"reminder_offset_days,omitempty"`
-	StartDate          *openapi_types.Date                                `json:"start_date,omitempty"`
-	Type               *OperationType                                     `json:"type,omitempty"`
+	// LastDay Дополнительно срабатывать в последний день месяца (в коротких месяцах — в его фактический последний день).
+	LastDay *bool `json:"lastDay,omitempty"`
 }
 
-// RecurringOperationUpdateRequestPeriodicity defines model for RecurringOperationUpdateRequest.Periodicity.
-type RecurringOperationUpdateRequestPeriodicity string
+// RecurrenceMonthlyKind defines model for RecurrenceMonthly.Kind.
+type RecurrenceMonthlyKind string
 
-// RecurringOperationUpdateRequestReminderOffsetDays 0 clears any existing reminders; 1/3/7 reschedules reminders for future generated operations.
-type RecurringOperationUpdateRequestReminderOffsetDays int
-
-// RecurringOperationsResponse defines model for RecurringOperationsResponse.
-type RecurringOperationsResponse struct {
-	Items []RecurringOperationResponse `json:"items"`
+// RecurrenceWeekly defines model for RecurrenceWeekly.
+type RecurrenceWeekly struct {
+	Kind     RecurrenceWeeklyKind `json:"kind"`
+	Weekdays []int                `json:"weekdays"`
 }
 
-// ReminderResponse defines model for ReminderResponse.
-type ReminderResponse struct {
-	CreatedAt            time.Time                  `json:"created_at"`
-	EventType            ReminderResponseEventType  `json:"event_type"`
-	FailedAttempts       int                        `json:"failed_attempts"`
-	FreeReminderId       *openapi_types.UUID        `json:"free_reminder_id,omitempty"`
-	Id                   openapi_types.UUID         `json:"id"`
-	LeaseId              *openapi_types.UUID        `json:"lease_id,omitempty"`
-	MessageBody          string                     `json:"message_body"`
-	MessageTitle         string                     `json:"message_title"`
-	NextAttemptAt        *time.Time                 `json:"next_attempt_at,omitempty"`
-	OperationId          *openapi_types.UUID        `json:"operation_id,omitempty"`
-	OwnerId              openapi_types.UUID         `json:"owner_id"`
-	PropertyId           *openapi_types.UUID        `json:"property_id,omitempty"`
-	RecurringOperationId *openapi_types.UUID        `json:"recurring_operation_id,omitempty"`
-	ScheduledAt          time.Time                  `json:"scheduled_at"`
-	SentAt               *time.Time                 `json:"sent_at,omitempty"`
-	Status               ReminderResponseStatus     `json:"status"`
-	TargetType           ReminderResponseTargetType `json:"target_type"`
-	UpdatedAt            time.Time                  `json:"updated_at"`
+// RecurrenceWeeklyKind defines model for RecurrenceWeekly.Kind.
+type RecurrenceWeeklyKind string
+
+// RecurrenceYearly defines model for RecurrenceYearly.
+type RecurrenceYearly struct {
+	Day   int                  `json:"day"`
+	Kind  RecurrenceYearlyKind `json:"kind"`
+	Month int                  `json:"month"`
 }
 
-// ReminderResponseEventType defines model for ReminderResponse.EventType.
-type ReminderResponseEventType string
+// RecurrenceYearlyKind defines model for RecurrenceYearly.Kind.
+type RecurrenceYearlyKind string
 
-// ReminderResponseStatus defines model for ReminderResponse.Status.
-type ReminderResponseStatus string
+// RentalCompleteRequest Завершение аренды: фактическая дата (начало ≤ дата ≤ сегодня; «По плану» подставляет клиент) и опциональный возврат залога.
+type RentalCompleteRequest struct {
+	CompletedDate openapi_types.Date `json:"completedDate"`
+	DepositReturn *struct {
+		// AmountKopecks 0 валиден — «не вернул».
+		AmountKopecks int64 `json:"amountKopecks"`
 
-// ReminderResponseTargetType defines model for ReminderResponse.TargetType.
-type ReminderResponseTargetType string
-
-// ReminderUpdateRequest defines model for ReminderUpdateRequest.
-type ReminderUpdateRequest struct {
-	ReminderDate openapi_types.Date `json:"reminder_date"`
+		// Comment Только при сумме.
+		Comment *string `json:"comment,omitempty"`
+	} `json:"depositReturn,omitempty"`
 }
 
-// RemindersResponse defines model for RemindersResponse.
-type RemindersResponse struct {
-	Items []ReminderResponse `json:"items"`
+// RentalCreateRequest Создание аренды (= атомарное создание её Платежа арендной платы). Начало — сегодня или позже по TZ собственника (задним числом аренда не создаётся); плановое окончание — строго позже начала.
+type RentalCreateRequest struct {
+	AmountKopecks     int64   `json:"amountKopecks"`
+	AutoPay           bool    `json:"autoPay"`
+	Comment           *string `json:"comment,omitempty"`
+	CommissionKopecks *int64  `json:"commissionKopecks,omitempty"`
+
+	// ContactId Арендатор — контакт из книги владельца скоупа.
+	ContactId      *openapi_types.UUID `json:"contactId,omitempty"`
+	DepositKopecks *int64              `json:"depositKopecks,omitempty"`
+
+	// PaymentDay День оплаты аренды: число месяца 1–31 или строка "last" — «последний день месяца». «31-е число» и "last" — одно поведение: в коротком месяце прижимается к последнему дню (ADR 0053 §4).
+	PaymentDay RentalPaymentDay `json:"paymentDay"`
+
+	// PlannedEndDate Null/omitted — бессрочная аренда. Не раньше первого вхождения платежа аренды (monthly по дню оплаты от старта, тикет #1154): такой срок держал бы ноль платежей.
+	PlannedEndDate *openapi_types.Date `json:"plannedEndDate,omitempty"`
+
+	// ReminderOffsetDays За сколько дней предупреждать о платеже арендной платы («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет. Аренда ставит его вместе с автоплатежом; дефолт выбора на экране — «Не напоминать», null едет в команду явно (#1198, решение владельца 07.10).
+	ReminderOffsetDays *RentalCreateRequestReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
+	StartDate          openapi_types.Date                     `json:"startDate"`
+	Utilities          RentalCreateRequestUtilities           `json:"utilities"`
+}
+
+// RentalCreateRequestReminderOffsetDays За сколько дней предупреждать о платеже арендной платы («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет. Аренда ставит его вместе с автоплатежом; дефолт выбора на экране — «Не напоминать», null едет в команду явно (#1198, решение владельца 07.10).
+type RentalCreateRequestReminderOffsetDays int
+
+// RentalCreateRequestUtilities defines model for RentalCreateRequest.Utilities.
+type RentalCreateRequestUtilities string
+
+// RentalNextPayment Единственное будущее planned-вхождение Платежа арендной платы.
+type RentalNextPayment struct {
+	AmountKopecks int64              `json:"amountKopecks"`
+	Date          openapi_types.Date `json:"date"`
+
+	// DaysUntil date − today по TZ собственника.
+	DaysUntil int `json:"daysUntil"`
+
+	// OperationId Цель существующего «Оплатить платёж» — POST /properties/{propertyId}/operations/{operationId}/pay.
+	OperationId openapi_types.UUID `json:"operationId"`
+}
+
+// RentalPaymentDay День оплаты аренды: число месяца 1–31 или строка "last" — «последний день месяца». «31-е число» и "last" — одно поведение: в коротком месяце прижимается к последнему дню (ADR 0053 §4).
+type RentalPaymentDay struct {
+	union json.RawMessage
+}
+
+// RentalPaymentDay0 defines model for .
+type RentalPaymentDay0 = int
+
+// RentalPaymentDay1 defines model for RentalPaymentDay.1.
+type RentalPaymentDay1 string
+
+// RentalPaymentView Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. Ревизия #1161: у завершённой аренды платёж удалён — paymentId null, а сумма и день оплаты приходят из Архива условий на аренде; nextPayment всегда null.
+type RentalPaymentView struct {
+	AmountKopecks int64 `json:"amountKopecks"`
+	AutoPay       bool  `json:"autoPay"`
+
+	// NextPayment Единственное будущее planned-вхождение Платежа арендной платы.
+	NextPayment *RentalNextPayment `json:"nextPayment,omitempty"`
+
+	// PaymentDay День оплаты аренды: число месяца 1–31 или строка "last" — «последний день месяца». «31-е число» и "last" — одно поведение: в коротком месяце прижимается к последнему дню (ADR 0053 §4).
+	PaymentDay RentalPaymentDay `json:"paymentDay"`
+
+	// PaymentId Управляемый арендой Платёж — связь 1:1 (ADR 0053 §1); null у завершённой аренды — платёж удалён при Завершении (ревизия #1161).
+	PaymentId *openapi_types.UUID `json:"paymentId"`
+
+	// ReminderOffsetDays Lead time of the managed payment's reminder (карта #822); null — напоминаний нет.
+	ReminderOffsetDays *RentalPaymentViewReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
+}
+
+// RentalPaymentViewReminderOffsetDays Lead time of the managed payment's reminder (карта #822); null — напоминаний нет.
+type RentalPaymentViewReminderOffsetDays int
+
+// RentalProgress Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). overdueMonths — серверная просрочка Платежа арендной платы (#817): число planned-вхождений раньше «сегодня» собственника (платёжные месяцы, не календарные); null — просрочки нет.
+type RentalProgress struct {
+	MonthsRemaining *int `json:"monthsRemaining"`
+	OverdueMonths   *int `json:"overdueMonths"`
+	PaidMonths      int  `json:"paidMonths"`
+	TotalMonths     *int `json:"totalMonths"`
+}
+
+// RentalResponse Аренда с вычисляемым сервером состоянием: статус, прогресс, будущее плановое вхождение и today — клиент пояса не знает (ADR 0053 §2).
+type RentalResponse struct {
+	Comment              string              `json:"comment"`
+	CommissionKopecks    *int64              `json:"commissionKopecks"`
+	CompletedDate        *openapi_types.Date `json:"completedDate"`
+	CreatedAt            time.Time           `json:"createdAt"`
+	DepositKopecks       *int64              `json:"depositKopecks"`
+	DepositReturnComment *string             `json:"depositReturnComment"`
+	DepositReturnKopecks *int64              `json:"depositReturnKopecks"`
+	Id                   openapi_types.UUID  `json:"id"`
+	PlannedEndDate       *openapi_types.Date `json:"plannedEndDate,omitempty"`
+
+	// Progress Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). overdueMonths — серверная просрочка Платежа арендной платы (#817): число planned-вхождений раньше «сегодня» собственника (платёжные месяцы, не календарные); null — просрочки нет.
+	Progress   RentalProgress     `json:"progress"`
+	PropertyId openapi_types.UUID `json:"propertyId"`
+
+	// RentPayment Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. Ревизия #1161: у завершённой аренды платёж удалён — paymentId null, а сумма и день оплаты приходят из Архива условий на аренде; nextPayment всегда null.
+	RentPayment RentalPaymentView    `json:"rentPayment"`
+	StartDate   openapi_types.Date   `json:"startDate"`
+	Status      RentalResponseStatus `json:"status"`
+
+	// Tenant Встроенный арендатор — поля карточки контакта. После удаления контакта — null без пометки: UI пишет «Контакта нет» (решение #528).
+	Tenant    *TenantView             `json:"tenant,omitempty"`
+	Today     openapi_types.Date      `json:"today"`
+	Utilities RentalResponseUtilities `json:"utilities"`
+}
+
+// RentalResponseStatus defines model for RentalResponse.Status.
+type RentalResponseStatus string
+
+// RentalResponseUtilities defines model for RentalResponse.Utilities.
+type RentalResponseUtilities string
+
+// RentalSummaryResponse Итоги аренды (решение №13): все paid-операции объекта — любого платежа и ручные — с датой вхождения в периоде [startDate, until]; период — по дате вхождения. Прибыль = доходы − расходы, может быть отрицательной.
+type RentalSummaryResponse struct {
+	ExpenseKopecks int64              `json:"expenseKopecks"`
+	From           openapi_types.Date `json:"from"`
+	IncomeKopecks  int64              `json:"incomeKopecks"`
+	ProfitKopecks  int64              `json:"profitKopecks"`
+	Until          openapi_types.Date `json:"until"`
+}
+
+// RentalUpdateRequest Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment, reminderOffsetDays) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж, напоминание и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409.
+type RentalUpdateRequest struct {
+	AmountKopecks     *int64  `json:"amountKopecks,omitempty"`
+	AutoPay           *bool   `json:"autoPay,omitempty"`
+	Comment           *string `json:"comment,omitempty"`
+	CommissionKopecks *int64  `json:"commissionKopecks,omitempty"`
+
+	// ContactId Явный null — «Контакта нет».
+	ContactId      *openapi_types.UUID `json:"contactId,omitempty"`
+	DepositKopecks *int64              `json:"depositKopecks,omitempty"`
+
+	// PaymentDay День оплаты аренды: число месяца 1–31 или строка "last" — «последний день месяца». «31-е число» и "last" — одно поведение: в коротком месяце прижимается к последнему дню (ADR 0053 §4).
+	PaymentDay *RentalPaymentDay `json:"paymentDay,omitempty"`
+
+	// PlannedEndDate Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала). Окно графика (тикет #1154): слитая пара «день оплаты + плановое окончание» целиком — смена дня перепроверяет стоящее окончание, смена окончания сверяется с хранящимся днём; раньше первого вхождения дня оплаты — 400.
+	PlannedEndDate *openapi_types.Date `json:"plannedEndDate,omitempty"`
+
+	// ReminderOffsetDays Tri-state лид-тайм напоминания о платеже арендной платы («Напоминание о платеже», карта #822): omitted keeps the current value, null turns reminders off («Не напоминать»), 1/3/7 sets the lead time. Синхронно правит Платёж арендной платы; смена пишется и в его журнал изменений (#1208).
+	ReminderOffsetDays *RentalUpdateRequestReminderOffsetDays `json:"reminderOffsetDays,omitempty"`
+	Utilities          *RentalUpdateRequestUtilities          `json:"utilities,omitempty"`
+}
+
+// RentalUpdateRequestReminderOffsetDays Tri-state лид-тайм напоминания о платеже арендной платы («Напоминание о платеже», карта #822): omitted keeps the current value, null turns reminders off («Не напоминать»), 1/3/7 sets the lead time. Синхронно правит Платёж арендной платы; смена пишется и в его журнал изменений (#1208).
+type RentalUpdateRequestReminderOffsetDays int
+
+// RentalUpdateRequestUtilities defines model for RentalUpdateRequest.Utilities.
+type RentalUpdateRequestUtilities string
+
+// RentalsResponse defines model for RentalsResponse.
+type RentalsResponse struct {
+	Items []RentalResponse `json:"items"`
+}
+
+// RequestNewEmailCodeRequest defines model for RequestNewEmailCodeRequest.
+type RequestNewEmailCodeRequest struct {
+	// Grant The still-live grant token returned by /me/email/verify-current; the address binds to it and the code is issued for the new address.
+	Grant string `json:"grant"`
+
+	// NewEmail The new address; stored in lowercase.
+	NewEmail string `json:"newEmail"`
+}
+
+// ResendEmailCodeRequest defines model for ResendEmailCodeRequest.
+type ResendEmailCodeRequest struct {
+	// Grant The still-live grant token bound to the pending new email; the code is re-issued for the address it binds.
+	Grant string `json:"grant"`
 }
 
 // SendCodeRequest defines model for SendCodeRequest.
@@ -2419,32 +3942,68 @@ type SendPhoneChangeCodeRequest struct {
 	Phone string `json:"phone"`
 }
 
+// SessionListResponse defines model for SessionListResponse.
+type SessionListResponse struct {
+	Sessions []ActiveSession `json:"sessions"`
+}
+
 // Subscription defines model for Subscription.
 type Subscription struct {
 	ActivePaymentMethod *PaymentMethod                  `json:"activePaymentMethod,omitempty"`
 	AutoRenewEnabled    bool                            `json:"autoRenewEnabled"`
 	CurrentPeriod       *AdminSubscriptionPaymentPeriod `json:"currentPeriod,omitempty"`
 	PendingChangeAt     *time.Time                      `json:"pendingChangeAt,omitempty"`
-	PendingPeriod       *AdminSubscriptionPaymentPeriod `json:"pendingPeriod,omitempty"`
-	PendingTariff       *Tariff                         `json:"pendingTariff,omitempty"`
-	Status              SubscriptionStatus              `json:"status"`
-	Tariff              Tariff                          `json:"tariff"`
-	ValidUntil          *time.Time                      `json:"validUntil,omitempty"`
+
+	// PendingPayment The live pending subscription payment (issue #616): one per user, with the confirm URL and the absolute expiry instant the countdown anchors to. The TTL itself is a backend constant and does not surface here.
+	PendingPayment *SubscriptionPendingPayment     `json:"pendingPayment,omitempty"`
+	PendingPeriod  *AdminSubscriptionPaymentPeriod `json:"pendingPeriod,omitempty"`
+	PendingTariff  *Tariff                         `json:"pendingTariff,omitempty"`
+
+	// Source paid — the owner pays for the tariff (or runs the free basic plan);
+	// service — an admin assigned the tariff for a fixed term without
+	// payment (issue #255).
+	Source     SubscriptionSource `json:"source"`
+	Status     SubscriptionStatus `json:"status"`
+	Tariff     Tariff             `json:"tariff"`
+	ValidUntil *time.Time         `json:"validUntil,omitempty"`
 }
 
-// SubscriptionPayment defines model for SubscriptionPayment.
+// SubscriptionSource paid — the owner pays for the tariff (or runs the free basic plan);
+// service — an admin assigned the tariff for a fixed term without
+// payment (issue #255).
+type SubscriptionSource string
+
+// SubscriptionPayment One subscription charge (issue #619): one list row is one payment — a refunded payment keeps its own row with the refunded status and the same positive amount. The sign and the status label are a UI convention the frontend renders on top of the status; amounts in the contract are always positive kopecks.
 type SubscriptionPayment struct {
-	AmountKopecks int                            `json:"amountKopecks"`
-	CreatedAt     time.Time                      `json:"createdAt"`
-	Id            openapi_types.UUID             `json:"id"`
+	AmountKopecks int64     `json:"amountKopecks"`
+	CreatedAt     time.Time `json:"createdAt"`
+
+	// ExpiresAt The payment form's absolute deadline (issue #680): the same instant the provider got as its redirect deadline, so the client closes the return-to-payment link by server truth instead of duplicating the form TTL. Null on merchant-initiated charges — they carry no payer form.
+	ExpiresAt *time.Time         `json:"expiresAt,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// PaymentMethod The card a payment was charged with (issue #619): a snapshot taken at creation or finalization of the payment, so the history survives payment-method deletion. Null for payments the provider reported no card for.
+	PaymentMethod *SubscriptionPaymentCard       `json:"paymentMethod,omitempty"`
 	PaymentUrl    *string                        `json:"paymentUrl,omitempty"`
 	Period        AdminSubscriptionPaymentPeriod `json:"period"`
 	Provider      string                         `json:"provider"`
-	Status        SubscriptionPaymentStatus      `json:"status"`
-	Tariff        Tariff                         `json:"tariff"`
+
+	// Status Lifecycle states of a subscription payment. Refunds are full-amount only (ADR 0037): the legacy partial_refunded is not part of the vocabulary, refunding is the internal reservation shown to the user as pending.
+	Status      SubscriptionPaymentStatus `json:"status"`
+	SucceededAt *time.Time                `json:"succeededAt,omitempty"`
+	Tariff      Tariff                    `json:"tariff"`
 }
 
-// SubscriptionPaymentStatus defines model for SubscriptionPaymentStatus.
+// SubscriptionPaymentCard The card a payment was charged with (issue #619): a snapshot taken at creation or finalization of the payment, so the history survives payment-method deletion. Null for payments the provider reported no card for.
+type SubscriptionPaymentCard struct {
+	// CardSystem Card system derived by the backend from the BIN prefix of the masked number (2 — Mir, 4 — Visa, 5 — Mastercard); unknown for old or unrecognized cards.
+	CardSystem CardSystem `json:"cardSystem"`
+
+	// DisplayMask Masked card number, e.g. "4300********1234".
+	DisplayMask string `json:"displayMask"`
+}
+
+// SubscriptionPaymentStatus Lifecycle states of a subscription payment. Refunds are full-amount only (ADR 0037): the legacy partial_refunded is not part of the vocabulary, refunding is the internal reservation shown to the user as pending.
 type SubscriptionPaymentStatus string
 
 // SubscriptionPaymentsResponse defines model for SubscriptionPaymentsResponse.
@@ -2452,15 +4011,46 @@ type SubscriptionPaymentsResponse struct {
 	Items []SubscriptionPayment `json:"items"`
 }
 
+// SubscriptionPendingPayment The live pending subscription payment (issue #616): one per user, with the confirm URL and the absolute expiry instant the countdown anchors to. The TTL itself is a backend constant and does not surface here.
+type SubscriptionPendingPayment struct {
+	AmountKopecks int64                          `json:"amountKopecks"`
+	ConfirmUrl    string                         `json:"confirmUrl"`
+	ExpiresAt     time.Time                      `json:"expiresAt"`
+	Period        AdminSubscriptionPaymentPeriod `json:"period"`
+	TariffName    TariffName                     `json:"tariffName"`
+}
+
 // SubscriptionStatus defines model for SubscriptionStatus.
 type SubscriptionStatus string
+
+// SuspendedSharedProperty A suspended shared membership of the reading actor (ticket #702): the blur-card of an object temporarily unavailable because the actor's tariff limit is exceeded. The card renders for real under the blur (Figma 2213-99113) — the payload carries the object's own title and address plus the owner contact the reason sheet renders (Figma 2229-100002).
+type SuspendedSharedProperty struct {
+	// AccessRole The recipient's role on the suspended access.
+	AccessRole SuspendedSharedPropertyAccessRole `json:"access_role"`
+
+	// Address The object's address — the blurred card renders it.
+	Address string `json:"address"`
+
+	// Name The object's title — the blurred card renders it.
+	Name string `json:"name"`
+
+	// OwnerEmail The owner's account email for the reason sheet's contact row — a deliberate exposure for this surface (Figma 2229-100002): the recipient needs the contact to resolve the suspension with the owner. Empty when the owner has no email.
+	OwnerEmail string `json:"owner_email"`
+
+	// OwnerName The owner's public display name («Имя Фамилия» or the anonymous label «Пользователь» — карта #1105, аменд #1123).
+	OwnerName  string             `json:"owner_name"`
+	PropertyId openapi_types.UUID `json:"property_id"`
+}
+
+// SuspendedSharedPropertyAccessRole The recipient's role on the suspended access.
+type SuspendedSharedPropertyAccessRole string
 
 // Tariff defines model for Tariff.
 type Tariff struct {
 	ActivePropertyLimit int        `json:"activePropertyLimit"`
-	MonthlyPriceKopecks int        `json:"monthlyPriceKopecks"`
+	MonthlyPriceKopecks int64      `json:"monthlyPriceKopecks"`
 	Name                TariffName `json:"name"`
-	YearlyPriceKopecks  int        `json:"yearlyPriceKopecks"`
+	YearlyPriceKopecks  int64      `json:"yearlyPriceKopecks"`
 }
 
 // TariffName defines model for TariffName.
@@ -2471,72 +4061,115 @@ type TariffsResponse struct {
 	Items []Tariff `json:"items"`
 }
 
-// TenantContactCreateRequest defines model for TenantContactCreateRequest.
-type TenantContactCreateRequest struct {
-	Comment    *string `json:"comment,omitempty"`
-	Email      *string `json:"email,omitempty"`
-	Name       string  `json:"name"`
-	Patronymic *string `json:"patronymic,omitempty"`
-	Phone      *string `json:"phone,omitempty"`
+// TaskRepeat How often the rule produces tasks. Parameters (weekday sets, day-of-month lists) do not exist in v1 — the anchor date alone drives the schedule: weekly keeps the anchor's weekday, monthly/yearly clamp to the month's length (the 31st → 28/29, February 29 → 28).
+type TaskRepeat string
 
-	// PropertyId Optional property context. When set, the contact is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the contact is created in the actor's own account.
-	PropertyId *openapi_types.UUID `json:"property_id,omitempty"`
-	Surname    *string             `json:"surname,omitempty"`
+// TaskResponse One task — a rule occurrence and the unit that gets completed by hand. title/comment/dueDate/dueTime are snapshots taken at materialization; status is the server-computed view bucket (active, overdue — from the due minute inclusive, or from the end of the day for a date-only task; undated; completed).
+type TaskResponse struct {
+	Comment *string `json:"comment"`
+
+	// CompletedDate The completion fact; it may differ from the due date.
+	CompletedDate *openapi_types.Date `json:"completedDate"`
+	CreatedAt     time.Time           `json:"createdAt"`
+	DueDate       *openapi_types.Date `json:"dueDate"`
+
+	// DueTime Snapshot of the rule's due time; null = the date only.
+	DueTime *string            `json:"dueTime"`
+	Id      openapi_types.UUID `json:"id"`
+
+	// PropertyId The bound property, snapshotted at materialization; null = the task without a property (ADR 0052).
+	PropertyId *openapi_types.UUID `json:"propertyId"`
+
+	// PropertyName The display name of the bound property — the global screen's row label (list projection only, filled on the global listing; null elsewhere — the property screen resolves the property by its id).
+	PropertyName *string `json:"propertyName,omitempty"`
+
+	// Repeat The producing rule's repeat as of the read — the screen's ↻ mark. Read through the live rule, not snapshotted: null once the rule is deleted (the journal row keeps its content snapshots, not the rule's settings).
+	Repeat *TaskRepeat `json:"repeat"`
+
+	// RuleId The producing rule; null marks it deleted (the journal row is read-only).
+	RuleId    *openapi_types.UUID `json:"ruleId"`
+	Status    TaskResponseStatus  `json:"status"`
+	Title     string              `json:"title"`
+	UpdatedAt time.Time           `json:"updatedAt"`
 }
 
-// TenantContactResponse defines model for TenantContactResponse.
-type TenantContactResponse struct {
-	ActiveLease *LeaseResponse     `json:"active_lease"`
-	Comment     *string            `json:"comment"`
-	CreatedAt   time.Time          `json:"created_at"`
-	Email       *string            `json:"email"`
-	Id          openapi_types.UUID `json:"id"`
-	IsActive    bool               `json:"is_active"`
-	LastLease   *LeaseResponse     `json:"last_lease"`
-	Name        string             `json:"name"`
-	OwnerId     openapi_types.UUID `json:"owner_id"`
-	Patronymic  *string            `json:"patronymic"`
-	Phone       *string            `json:"phone"`
-	Surname     *string            `json:"surname"`
-	UpdatedAt   time.Time          `json:"updated_at"`
+// TaskResponseStatus defines model for TaskResponse.Status.
+type TaskResponseStatus string
+
+// TaskRuleCreateRequest The task rule create payload. The date is optional — an undated rule (only once) produces a single dateless task («Без срока») that materializes immediately; the time requires the date; a repeat other than once requires the date.
+type TaskRuleCreateRequest struct {
+	Comment *string             `json:"comment,omitempty"`
+	DueDate *openapi_types.Date `json:"dueDate,omitempty"`
+
+	// DueTime Wall-clock time HH:MM at minute precision; seconds never enter the system.
+	DueTime *TaskTime `json:"dueTime,omitempty"`
+
+	// Repeat How often the rule produces tasks. Parameters (weekday sets, day-of-month lists) do not exist in v1 — the anchor date alone drives the schedule: weekly keeps the anchor's weekday, monthly/yearly clamp to the month's length (the 31st → 28/29, February 29 → 28).
+	Repeat TaskRepeat `json:"repeat"`
+	Title  string     `json:"title"`
 }
 
-// TenantContactUpdateRequest defines model for TenantContactUpdateRequest.
-type TenantContactUpdateRequest struct {
-	Comment    *string `json:"comment,omitempty"`
-	Email      *string `json:"email,omitempty"`
-	Name       *string `json:"name,omitempty"`
-	Patronymic *string `json:"patronymic,omitempty"`
-	Phone      *string `json:"phone,omitempty"`
-	Surname    *string `json:"surname,omitempty"`
+// TaskRuleResponse One task rule: the setting that produces tasks. It is never itself completed, overdue or undated — those are states of its tasks. propertyId null marks the property-less slice (ADR 0052): the rule lives in the owner's own book.
+type TaskRuleResponse struct {
+	Comment   *string   `json:"comment"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// DueDate The rule's anchor — the first occurrence date; null = undated (once only).
+	DueDate *openapi_types.Date `json:"dueDate"`
+
+	// DueTime Wall-clock time HH:MM at minute precision; null = the date only.
+	DueTime *string            `json:"dueTime"`
+	Id      openapi_types.UUID `json:"id"`
+
+	// PropertyId The bound property; null = the rule without a property (ADR 0052).
+	PropertyId *openapi_types.UUID `json:"propertyId"`
+
+	// Repeat How often the rule produces tasks. Parameters (weekday sets, day-of-month lists) do not exist in v1 — the anchor date alone drives the schedule: weekly keeps the anchor's weekday, monthly/yearly clamp to the month's length (the 31st → 28/29, February 29 → 28).
+	Repeat    TaskRepeat `json:"repeat"`
+	Title     string     `json:"title"`
+	UpdatedAt time.Time  `json:"updatedAt"`
 }
 
-// TenantContactsResponse defines model for TenantContactsResponse.
-type TenantContactsResponse struct {
-	Items []TenantContactResponse `json:"items"`
+// TaskRuleUpdateRequest Partial rule update: an omitted field is left unchanged; comment, dueDate and dueTime are tri-state — null clears them.
+type TaskRuleUpdateRequest struct {
+	Comment *string             `json:"comment,omitempty"`
+	DueDate *openapi_types.Date `json:"dueDate,omitempty"`
+	DueTime *TaskTime           `json:"dueTime,omitempty"`
+
+	// Repeat How often the rule produces tasks. Parameters (weekday sets, day-of-month lists) do not exist in v1 — the anchor date alone drives the schedule: weekly keeps the anchor's weekday, monthly/yearly clamp to the month's length (the 31st → 28/29, February 29 → 28).
+	Repeat *TaskRepeat `json:"repeat,omitempty"`
+	Title  *string     `json:"title,omitempty"`
 }
 
-// UpcomingFreeReminderResponse A single nearest upcoming occurrence of a periodic (or one-shot) free reminder. Unlike FreeReminderResponse (a template), this represents one projected fire time — trigger_at is the instant of this occurrence.
-type UpcomingFreeReminderResponse struct {
-	FreeReminderId openapi_types.UUID                      `json:"free_reminder_id"`
-	Periodicity    UpcomingFreeReminderResponsePeriodicity `json:"periodicity"`
-	PropertyId     openapi_types.UUID                      `json:"property_id"`
-	Title          string                                  `json:"title"`
-	TriggerAt      time.Time                               `json:"trigger_at"`
+// TaskTime Wall-clock time HH:MM at minute precision; seconds never enter the system.
+type TaskTime = string
+
+// TasksResponse One tasks page: the items of the requested bucket, its total count (the «Выполненные N» counter) and the data owner's today — the day boundary for the «Сегодня»/«Завтра» sections.
+type TasksResponse struct {
+	Items []TaskResponse `json:"items"`
+
+	// Today The data owner's current date (ADR 0048).
+	Today openapi_types.Date `json:"today"`
+
+	// Total The total count of the same bucket (not the page).
+	Total int `json:"total"`
 }
 
-// UpcomingFreeReminderResponsePeriodicity defines model for UpcomingFreeReminderResponse.Periodicity.
-type UpcomingFreeReminderResponsePeriodicity string
+// TenantView Встроенный арендатор — поля карточки контакта. После удаления контакта — null без пометки: UI пишет «Контакта нет» (решение #528).
+type TenantView struct {
+	ContactId openapi_types.UUID `json:"contactId"`
+	FirstName string             `json:"firstName"`
+	LastName  string             `json:"lastName"`
+	Phone     string             `json:"phone"`
+}
 
-// UpcomingFreeRemindersResponse defines model for UpcomingFreeRemindersResponse.
-type UpcomingFreeRemindersResponse struct {
-	Items []UpcomingFreeReminderResponse `json:"items"`
+// UnreadCountResponse defines model for UnreadCountResponse.
+type UnreadCountResponse struct {
+	Count int64 `json:"count"`
 }
 
 // UserUpdateRequest defines model for UserUpdateRequest.
 type UserUpdateRequest struct {
-	// Email Email is stored in lowercase.
-	Email      *string `json:"email,omitempty"`
 	Name       *string `json:"name,omitempty"`
 	Patronymic *string `json:"patronymic,omitempty"`
 	Surname    *string `json:"surname,omitempty"`
@@ -2556,10 +4189,136 @@ type VerifyCodeRequest struct {
 	Code  string  `json:"code"`
 	Email *string `json:"email,omitempty"`
 	Phone string  `json:"phone"`
+
+	// Timezone Browser-detected IANA timezone of the registering device (Intl.DateTimeFormat().resolvedOptions().timeZone). Applied only when this request creates a new user; an absent or invalid value keeps the Europe/Moscow default. Ignored for existing users — the manual choice in the profile picker is never overwritten.
+	Timezone *string `json:"timezone,omitempty"`
 }
+
+// VerifyCurrentEmailRequest defines model for VerifyCurrentEmailRequest.
+type VerifyCurrentEmailRequest struct {
+	// Code The code sent to the current email.
+	Code string `json:"code"`
+}
+
+// ContactsCursor defines model for ContactsCursor.
+type ContactsCursor = string
+
+// ContactsLimit defines model for ContactsLimit.
+type ContactsLimit = int
+
+// HistoryActorIds defines model for HistoryActorIds.
+type HistoryActorIds = string
+
+// HistoryAfterCursor defines model for HistoryAfterCursor.
+type HistoryAfterCursor = string
+
+// HistoryBaseActions defines model for HistoryBaseActions.
+type HistoryBaseActions = string
+
+// HistoryBeforeCursor defines model for HistoryBeforeCursor.
+type HistoryBeforeCursor = string
+
+// HistoryDateFrom defines model for HistoryDateFrom.
+type HistoryDateFrom = openapi_types.Date
+
+// HistoryDateTo defines model for HistoryDateTo.
+type HistoryDateTo = openapi_types.Date
+
+// HistoryKinds defines model for HistoryKinds.
+type HistoryKinds = string
+
+// HistoryLimit defines model for HistoryLimit.
+type HistoryLimit = int
+
+// HistoryPropertyIds defines model for HistoryPropertyIds.
+type HistoryPropertyIds = string
+
+// HistoryQuery defines model for HistoryQuery.
+type HistoryQuery = string
+
+// OperationsCategoriesFilter defines model for OperationsCategoriesFilter.
+type OperationsCategoriesFilter = string
+
+// OperationsCursor defines model for OperationsCursor.
+type OperationsCursor = string
+
+// OperationsDateFrom defines model for OperationsDateFrom.
+type OperationsDateFrom = openapi_types.Date
+
+// OperationsDateTo defines model for OperationsDateTo.
+type OperationsDateTo = openapi_types.Date
+
+// OperationsIncludeArchived defines model for OperationsIncludeArchived.
+type OperationsIncludeArchived = bool
+
+// OperationsLimit defines model for OperationsLimit.
+type OperationsLimit = int
+
+// OperationsOffset defines model for OperationsOffset.
+type OperationsOffset = int
+
+// OperationsOrder defines model for OperationsOrder.
+type OperationsOrder string
+
+// OperationsPropertyIdsFilter defines model for OperationsPropertyIdsFilter.
+type OperationsPropertyIdsFilter = string
+
+// OperationsSearch defines model for OperationsSearch.
+type OperationsSearch = string
+
+// OperationsSort defines model for OperationsSort.
+type OperationsSort string
+
+// OperationsStatusFilter defines model for OperationsStatusFilter.
+type OperationsStatusFilter string
+
+// OperationsTypeFilter defines model for OperationsTypeFilter.
+type OperationsTypeFilter string
+
+// PaymentChangesAfterCursor defines model for PaymentChangesAfterCursor.
+type PaymentChangesAfterCursor = string
+
+// PaymentChangesBeforeCursor defines model for PaymentChangesBeforeCursor.
+type PaymentChangesBeforeCursor = string
+
+// PaymentChangesLimit defines model for PaymentChangesLimit.
+type PaymentChangesLimit = int
+
+// PaymentsCategoryFilter defines model for PaymentsCategoryFilter.
+type PaymentsCategoryFilter = string
+
+// PaymentsCursor defines model for PaymentsCursor.
+type PaymentsCursor = string
+
+// PaymentsLimit defines model for PaymentsLimit.
+type PaymentsLimit = int
+
+// PaymentsSearchQuery defines model for PaymentsSearchQuery.
+type PaymentsSearchQuery = string
+
+// PaymentsTypeFilter defines model for PaymentsTypeFilter.
+type PaymentsTypeFilter string
+
+// PropertiesSearchCursor defines model for PropertiesSearchCursor.
+type PropertiesSearchCursor = string
+
+// PropertiesSearchLimit defines model for PropertiesSearchLimit.
+type PropertiesSearchLimit = int
+
+// PropertiesSearchQuery defines model for PropertiesSearchQuery.
+type PropertiesSearchQuery = string
 
 // PropertyId defines model for PropertyId.
 type PropertyId = openapi_types.UUID
+
+// TasksLimit defines model for TasksLimit.
+type TasksLimit = int
+
+// TasksOffset defines model for TasksOffset.
+type TasksOffset = int
+
+// TitleSearch defines model for TitleSearch.
+type TitleSearch = string
 
 // BadRequest defines model for BadRequest.
 type BadRequest = Problem
@@ -2581,6 +4340,9 @@ type NotFound = Problem
 
 // SubscriptionBlocked defines model for SubscriptionBlocked.
 type SubscriptionBlocked = Problem
+
+// SubscriptionConflict defines model for SubscriptionConflict.
+type SubscriptionConflict = Problem
 
 // TooManyRequests defines model for TooManyRequests.
 type TooManyRequests = Problem
@@ -2618,49 +4380,6 @@ type ListAdminAuditLogsParams struct {
 
 // ListAdminAuditLogsParamsOrder defines parameters for ListAdminAuditLogs.
 type ListAdminAuditLogsParamsOrder string
-
-// ListAdminLeasesParams defines parameters for ListAdminLeases.
-type ListAdminLeasesParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
-
-	// Status Filter by the stored lease status.
-	Status     *LeaseStatus        `form:"status,omitempty" json:"status,omitempty"`
-	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
-	OwnerId    *openapi_types.UUID `form:"owner_id,omitempty" json:"owner_id,omitempty"`
-
-	// Sort Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending.
-	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
-
-	// Order Sort direction: asc or desc (default desc).
-	Order *ListAdminLeasesParamsOrder `form:"order,omitempty" json:"order,omitempty"`
-}
-
-// ListAdminLeasesParamsOrder defines parameters for ListAdminLeases.
-type ListAdminLeasesParamsOrder string
-
-// ListAdminOperationsParams defines parameters for ListAdminOperations.
-type ListAdminOperationsParams struct {
-	Limit      *int                `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
-	Status     *OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
-	Type       *OperationType      `form:"type,omitempty" json:"type,omitempty"`
-	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
-	LeaseId    *openapi_types.UUID `form:"lease_id,omitempty" json:"lease_id,omitempty"`
-	OwnerId    *openapi_types.UUID `form:"owner_id,omitempty" json:"owner_id,omitempty"`
-
-	// Q Case-insensitive substring search by operation name and comment.
-	Q *string `form:"q,omitempty" json:"q,omitempty"`
-
-	// Sort Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending.
-	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
-
-	// Order Sort direction: asc or desc (default desc).
-	Order *ListAdminOperationsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
-}
-
-// ListAdminOperationsParamsOrder defines parameters for ListAdminOperations.
-type ListAdminOperationsParamsOrder string
 
 // ListAdminPropertiesParams defines parameters for ListAdminProperties.
 type ListAdminPropertiesParams struct {
@@ -2701,6 +4420,9 @@ type ListAdminSubscriptionPaymentsParams struct {
 	// UserPhone Exact match on the user's phone number.
 	UserPhone *string `form:"user_phone,omitempty" json:"user_phone,omitempty"`
 
+	// SubscriptionStatus Filters payments by the payer's current subscription status (issue #254).
+	SubscriptionStatus *SubscriptionStatus `form:"subscription_status,omitempty" json:"subscription_status,omitempty"`
+
 	// Sort Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending.
 	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
 
@@ -2712,25 +4434,6 @@ type ListAdminSubscriptionPaymentsParams struct {
 
 // ListAdminSubscriptionPaymentsParamsOrder defines parameters for ListAdminSubscriptionPayments.
 type ListAdminSubscriptionPaymentsParamsOrder string
-
-// ListAdminTenantContactsParams defines parameters for ListAdminTenantContacts.
-type ListAdminTenantContactsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
-
-	// Q Case-insensitive substring search by name, surname and phone.
-	Q       *string             `form:"q,omitempty" json:"q,omitempty"`
-	OwnerId *openapi_types.UUID `form:"owner_id,omitempty" json:"owner_id,omitempty"`
-
-	// Sort Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending.
-	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
-
-	// Order Sort direction: asc or desc (default desc).
-	Order *ListAdminTenantContactsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
-}
-
-// ListAdminTenantContactsParamsOrder defines parameters for ListAdminTenantContacts.
-type ListAdminTenantContactsParamsOrder string
 
 // ListAdminUsersParams defines parameters for ListAdminUsers.
 type ListAdminUsersParams struct {
@@ -2781,40 +4484,6 @@ type ListAdminUserAuditLogsParams struct {
 // ListAdminUserAuditLogsParamsOrder defines parameters for ListAdminUserAuditLogs.
 type ListAdminUserAuditLogsParamsOrder string
 
-// ListAdminUserLeasesParams defines parameters for ListAdminUserLeases.
-type ListAdminUserLeasesParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
-
-	// Sort Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending.
-	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
-
-	// Order Sort direction: asc or desc (default desc).
-	Order *ListAdminUserLeasesParamsOrder `form:"order,omitempty" json:"order,omitempty"`
-}
-
-// ListAdminUserLeasesParamsOrder defines parameters for ListAdminUserLeases.
-type ListAdminUserLeasesParamsOrder string
-
-// ListAdminUserOperationsParams defines parameters for ListAdminUserOperations.
-type ListAdminUserOperationsParams struct {
-	Limit      *int                `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
-	Status     *OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
-	Type       *OperationType      `form:"type,omitempty" json:"type,omitempty"`
-	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
-	LeaseId    *openapi_types.UUID `form:"lease_id,omitempty" json:"lease_id,omitempty"`
-
-	// Sort Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending.
-	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
-
-	// Order Sort direction: asc or desc (default desc).
-	Order *ListAdminUserOperationsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
-}
-
-// ListAdminUserOperationsParamsOrder defines parameters for ListAdminUserOperations.
-type ListAdminUserOperationsParamsOrder string
-
 // ListAdminUserPropertiesParams defines parameters for ListAdminUserProperties.
 type ListAdminUserPropertiesParams struct {
 	Limit  *int                                 `form:"limit,omitempty" json:"limit,omitempty"`
@@ -2834,115 +4503,390 @@ type ListAdminUserPropertiesParamsStatus string
 // ListAdminUserPropertiesParamsOrder defines parameters for ListAdminUserProperties.
 type ListAdminUserPropertiesParamsOrder string
 
-// ListAdminUserTenantContactsParams defines parameters for ListAdminUserTenantContacts.
-type ListAdminUserTenantContactsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+// ListContactsParams defines parameters for ListContacts.
+type ListContactsParams struct {
+	// PropertyId Filter by the bound property. A missing value lists the actor's visible book: their own cards plus the property-bound cards of the properties they can view (ADR 0028 — for a shared member that is the bound cards of the shared properties plus their own unbound ones); a property-bound listing resolves through the view gate of that property (ADR 0028) and reads the cards bound to it.
+	PropertyId *openapi_types.UUID `form:"property_id,omitempty" json:"property_id,omitempty"`
 
-	// Sort Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending.
-	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+	// Search Case-insensitive substring search over the name fields, phone, email, messenger username and role. A missing or empty value disables the filter; LIKE metacharacters in the value are literals.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
 
-	// Order Sort direction: asc or desc (default desc).
-	Order *ListAdminUserTenantContactsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	// Sort The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside; `created` — the card's creation moment (ticket #847 — the «свежие контакты сверху» promise server-side: descending leads with the freshest cards whatever the book's size; the default order is asc, so a bare sort=created lists oldest-first — the freshness promise needs an explicit order=desc, as the tenant picker sends). The name/property keys use the Russian collation to match the client's letter grouping.
+	Sort *ListContactsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order The sort direction: ascending (default) or descending.
+	Order *ListContactsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+
+	// Limit The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400.
+	Limit *ContactsLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #600). A missing or empty value starts the list from the beginning; a malformed value is a 400.
+	Cursor *ContactsCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
-// ListAdminUserTenantContactsParamsOrder defines parameters for ListAdminUserTenantContacts.
-type ListAdminUserTenantContactsParamsOrder string
+// ListContactsParamsSort defines parameters for ListContacts.
+type ListContactsParamsSort string
+
+// ListContactsParamsOrder defines parameters for ListContacts.
+type ListContactsParamsOrder string
+
+// UploadContactPhotoMultipartBody defines parameters for UploadContactPhoto.
+type UploadContactPhotoMultipartBody struct {
+	File openapi_types.File `json:"file"`
+}
 
 // GetAddressSuggestionsParams defines parameters for GetAddressSuggestions.
 type GetAddressSuggestionsParams struct {
 	Query string `form:"query" json:"query"`
 }
 
-// GetFinanceReportParams defines parameters for GetFinanceReport.
-type GetFinanceReportParams struct {
-	From *openapi_types.Date `form:"from,omitempty" json:"from,omitempty"`
-	To   *openapi_types.Date `form:"to,omitempty" json:"to,omitempty"`
+// GetHistoryParams defines parameters for GetHistory.
+type GetHistoryParams struct {
+	// BeforeCursor Непрозрачный курсор страницы СТАРШЕ ключа (продолжение ленты в прошлое, скролл вверх): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — лента читается с самых новых записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400.
+	BeforeCursor *HistoryBeforeCursor `form:"before_cursor,omitempty" json:"before_cursor,omitempty"`
+
+	// AfterCursor Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400.
+	AfterCursor *HistoryAfterCursor `form:"after_cursor,omitempty" json:"after_cursor,omitempty"`
+
+	// Limit Размер страницы (канон #597: 50 по умолчанию, 100 потолок).
+	Limit *HistoryLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// DateFrom Включительная нижняя граница периода по created_at — календарная дата в 00:00:00 UTC (канон фильтра периода админ-аудита).
+	DateFrom *HistoryDateFrom `form:"date_from,omitempty" json:"date_from,omitempty"`
+
+	// DateTo Включительная верхняя граница периода по created_at — матчингется как дата + 24ч без включения самой границы (канон фильтра периода админ-аудита).
+	DateTo *HistoryDateTo `form:"date_to,omitempty" json:"date_to,omitempty"`
+
+	// Actions Фильтр по основным действиям — через запятую, одно или несколько из словаря (ADR 0061 §4). Неизвестное значение — 400.
+	Actions *HistoryBaseActions `form:"actions,omitempty" json:"actions,omitempty"`
+
+	// Kinds Фильтр по видам действий — через запятую, одно или несколько из семи групп словаря (ADR 0061 §4). Неизвестное значение — 400.
+	Kinds *HistoryKinds `form:"kinds,omitempty" json:"kinds,omitempty"`
+
+	// ActorIds Фильтр по актёрам — uuid через запятую; один id — экран «Действия участника». Записи с обезличенным актёром (пользователь удалён) под фильтр по актёру не попадают никогда. Некорректный uuid — 400.
+	ActorIds *HistoryActorIds `form:"actor_ids,omitempty" json:"actor_ids,omitempty"`
+
+	// PropertyIds Фильтр по объектам — uuid через запятую; один id — история объекта. Каждый перечисленный объект должен быть видим читателю (один невидимый или неизвестный id — privacy-404 всего запроса, канон ленты задач #547); архивные объекты владельца строки отдают, у участника архивные объекты ничего не добавляют. Некорректный uuid — 400.
+	PropertyIds *HistoryPropertyIds `form:"property_ids,omitempty" json:"property_ids,omitempty"`
+
+	// Q Поисковая строка по журналу области чтения: ищет по тексту строки и снапшотам актёра (имя, почта) — «как в Telegram»: по началу слова (префикс), по фрагменту внутри слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE (ресерч #839, тикет #842). Пробелы по краям не участвуют; пустая строка — фильтра нет. Серверный бэкстоп: ввод 400 байт и больше — 400 (255 символа кириллицы потолок схемы превышают; практические поисковые вводы на порядок короче).
+	Q *HistoryQuery `form:"q,omitempty" json:"q,omitempty"`
 }
 
-// ListFreeRemindersParams defines parameters for ListFreeReminders.
-type ListFreeRemindersParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+// GetHistoryFiltersParams defines parameters for GetHistoryFilters.
+type GetHistoryFiltersParams struct {
+	// PropertyIds Фильтр по объектам — uuid через запятую; один id — история объекта. Каждый перечисленный объект должен быть видим читателю (один невидимый или неизвестный id — privacy-404 всего запроса, канон ленты задач #547); архивные объекты владельца строки отдают, у участника архивные объекты ничего не добавляют. Некорректный uuid — 400.
+	PropertyIds *HistoryPropertyIds `form:"property_ids,omitempty" json:"property_ids,omitempty"`
 }
 
-// ListOperationCategoriesParams defines parameters for ListOperationCategories.
-type ListOperationCategoriesParams struct {
-	Type *OperationType `form:"type,omitempty" json:"type,omitempty"`
+// UploadMePhotoMultipartBody defines parameters for UploadMePhoto.
+type UploadMePhotoMultipartBody struct {
+	File openapi_types.File `json:"file"`
+}
+
+// ListNotificationsParams defines parameters for ListNotifications.
+type ListNotificationsParams struct {
+	// Unread Только непрочитанные строки.
+	Unread *bool `form:"unread,omitempty" json:"unread,omitempty"`
+	Limit  *int  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Непрозрачный курсор продолжения (next_cursor прошлой страницы).
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // ListOperationsParams defines parameters for ListOperations.
 type ListOperationsParams struct {
-	Type                      *[]OperationType      `form:"type,omitempty" json:"type,omitempty"`
-	Status                    *[]OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
-	CategoryId                *[]openapi_types.UUID `form:"category_id,omitempty" json:"category_id,omitempty"`
-	PropertyId                *openapi_types.UUID   `form:"property_id,omitempty" json:"property_id,omitempty"`
-	From                      *openapi_types.Date   `form:"from,omitempty" json:"from,omitempty"`
-	To                        *openapi_types.Date   `form:"to,omitempty" json:"to,omitempty"`
-	RecurringOperationId      *openapi_types.UUID   `form:"recurring_operation_id,omitempty" json:"recurring_operation_id,omitempty"`
-	LeaseId                   *openapi_types.UUID   `form:"lease_id,omitempty" json:"lease_id,omitempty"`
-	ExcludeArchivedProperties *bool                 `form:"exclude_archived_properties,omitempty" json:"exclude_archived_properties,omitempty"`
-	Sort                      *OperationListSort    `form:"sort,omitempty" json:"sort,omitempty"`
-	Limit                     *int                  `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset                    *int                  `form:"offset,omitempty" json:"offset,omitempty"`
+	// PropertyIds Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed.
+	PropertyIds *OperationsPropertyIdsFilter `form:"propertyIds,omitempty" json:"propertyIds,omitempty"`
+
+	// DateFrom Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateFrom *OperationsDateFrom `form:"date_from,omitempty" json:"date_from,omitempty"`
+
+	// DateTo Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateTo *OperationsDateTo `form:"date_to,omitempty" json:"date_to,omitempty"`
+
+	// Search Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals.
+	Search *OperationsSearch `form:"search,omitempty" json:"search,omitempty"`
+
+	// Type Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter.
+	Type *ListOperationsParamsType `form:"type,omitempty" json:"type,omitempty"`
+
+	// IncludeArchived Lift the archive cut (#549): operations of archived properties rejoin the feed or the summary under the same visibility predicate. A missing value or false keeps the archive excluded (the #540 contract default).
+	IncludeArchived *OperationsIncludeArchived `form:"includeArchived,omitempty" json:"includeArchived,omitempty"`
+
+	// Category Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored.
+	Category *OperationsCategoriesFilter `form:"category,omitempty" json:"category,omitempty"`
+
+	// Sort Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under.
+	Sort *ListOperationsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first).
+	Order *ListOperationsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Limit *OperationsLimit           `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #597) — the global feed's window; the property listings keep the offset vocabulary. The cursor is bound to the sort it was issued under — echoing it with a different sort is a 400. A missing or empty value starts the feed from the beginning; a malformed value is a 400.
+	Cursor *OperationsCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
-// CompleteOperationJSONBody defines parameters for CompleteOperation.
-type CompleteOperationJSONBody = map[string]interface{}
+// ListOperationsParamsType defines parameters for ListOperations.
+type ListOperationsParamsType string
 
-// MarkOperationIncompleteJSONBody defines parameters for MarkOperationIncomplete.
-type MarkOperationIncompleteJSONBody = map[string]interface{}
+// ListOperationsParamsSort defines parameters for ListOperations.
+type ListOperationsParamsSort string
 
-// DeletePropertyParams defines parameters for DeleteProperty.
-type DeletePropertyParams struct {
-	// Mode Deletion mode. `cascade` deletes the property together with its leases, recurring operations and operations. `detach` deletes only the property: its leases, recurring operations and operations are kept with `property_id` set to null, and its recurring operations are paused.
-	Mode DeletePropertyParamsMode `form:"mode" json:"mode"`
+// ListOperationsParamsOrder defines parameters for ListOperations.
+type ListOperationsParamsOrder string
+
+// SummarizeOperationsParams defines parameters for SummarizeOperations.
+type SummarizeOperationsParams struct {
+	// PropertyIds Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed.
+	PropertyIds *OperationsPropertyIdsFilter `form:"propertyIds,omitempty" json:"propertyIds,omitempty"`
+
+	// DateFrom Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateFrom *OperationsDateFrom `form:"date_from,omitempty" json:"date_from,omitempty"`
+
+	// DateTo Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateTo *OperationsDateTo `form:"date_to,omitempty" json:"date_to,omitempty"`
+
+	// Sort Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under.
+	Sort *SummarizeOperationsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Search Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals.
+	Search *OperationsSearch `form:"search,omitempty" json:"search,omitempty"`
+
+	// Type Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter.
+	Type *SummarizeOperationsParamsType `form:"type,omitempty" json:"type,omitempty"`
+
+	// IncludeArchived Lift the archive cut (#549): operations of archived properties rejoin the feed or the summary under the same visibility predicate. A missing value or false keeps the archive excluded (the #540 contract default).
+	IncludeArchived *OperationsIncludeArchived `form:"includeArchived,omitempty" json:"includeArchived,omitempty"`
+
+	// Category Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored.
+	Category *OperationsCategoriesFilter `form:"category,omitempty" json:"category,omitempty"`
 }
 
-// DeletePropertyParamsMode defines parameters for DeleteProperty.
-type DeletePropertyParamsMode string
+// SummarizeOperationsParamsSort defines parameters for SummarizeOperations.
+type SummarizeOperationsParamsSort string
 
-// ListPropertyFreeRemindersParams defines parameters for ListPropertyFreeReminders.
-type ListPropertyFreeRemindersParams struct {
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+// SummarizeOperationsParamsType defines parameters for SummarizeOperations.
+type SummarizeOperationsParamsType string
+
+// ListGlobalPaymentObjectsParams defines parameters for ListGlobalPaymentObjects.
+type ListGlobalPaymentObjectsParams struct {
+	// Search Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter.
+	Search *PaymentsSearchQuery `form:"search,omitempty" json:"search,omitempty"`
 }
 
-// ListUpcomingFreeRemindersParams defines parameters for ListUpcomingFreeReminders.
-type ListUpcomingFreeRemindersParams struct {
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+// SearchGlobalPaymentsParams defines parameters for SearchGlobalPayments.
+type SearchGlobalPaymentsParams struct {
+	// Search Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter.
+	Search *PaymentsSearchQuery `form:"search,omitempty" json:"search,omitempty"`
+
+	// Category The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories.
+	Category *PaymentsCategoryFilter `form:"category,omitempty" json:"category,omitempty"`
+
+	// Type The rules list's direction filter (map #573 rework): narrows the matched rules to income or expense. The category chips carry no direction (ticket #602), so nothing on the search screen sends it today. Missing — no filter. It never narrows matchedCategories.
+	Type  *SearchGlobalPaymentsParamsType `form:"type,omitempty" json:"type,omitempty"`
+	Limit *PaymentsLimit                  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400.
+	Cursor *PaymentsCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
-// ListOperationsByPropertyParams defines parameters for ListOperationsByProperty.
-type ListOperationsByPropertyParams struct {
-	Status     *[]OperationStatus    `form:"status,omitempty" json:"status,omitempty"`
-	Type       *[]OperationType      `form:"type,omitempty" json:"type,omitempty"`
-	CategoryId *[]openapi_types.UUID `form:"category_id,omitempty" json:"category_id,omitempty"`
-	From       *openapi_types.Date   `form:"from,omitempty" json:"from,omitempty"`
-	To         *openapi_types.Date   `form:"to,omitempty" json:"to,omitempty"`
-	Sort       *OperationListSort    `form:"sort,omitempty" json:"sort,omitempty"`
-	Limit      *int                  `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset     *int                  `form:"offset,omitempty" json:"offset,omitempty"`
+// SearchGlobalPaymentsParamsType defines parameters for SearchGlobalPayments.
+type SearchGlobalPaymentsParamsType string
+
+// SearchPropertiesParams defines parameters for SearchProperties.
+type SearchPropertiesParams struct {
+	// Search The case-insensitive substring the matches run over — the property's name or its address (ticket #601). Leading and trailing whitespace never takes part in the match.
+	Search PropertiesSearchQuery  `form:"search" json:"search"`
+	Limit  *PropertiesSearchLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (name, id), ticket #597's pattern). A missing or empty value starts the list from the beginning; a malformed value is a 400.
+	Cursor *PropertiesSearchCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
+
+// ListPropertyOperationsParams defines parameters for ListPropertyOperations.
+type ListPropertyOperationsParams struct {
+	// Status Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone.
+	Status *ListPropertyOperationsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// DateFrom Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateFrom *OperationsDateFrom `form:"date_from,omitempty" json:"date_from,omitempty"`
+
+	// DateTo Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateTo *OperationsDateTo `form:"date_to,omitempty" json:"date_to,omitempty"`
+
+	// Sort Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under.
+	Sort *ListPropertyOperationsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first).
+	Order  *ListPropertyOperationsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Limit  *OperationsLimit                   `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *OperationsOffset                  `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Search Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals.
+	Search *OperationsSearch `form:"search,omitempty" json:"search,omitempty"`
+
+	// Type Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter.
+	Type *ListPropertyOperationsParamsType `form:"type,omitempty" json:"type,omitempty"`
+
+	// Category Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored.
+	Category *OperationsCategoriesFilter `form:"category,omitempty" json:"category,omitempty"`
+}
+
+// ListPropertyOperationsParamsStatus defines parameters for ListPropertyOperations.
+type ListPropertyOperationsParamsStatus string
+
+// ListPropertyOperationsParamsSort defines parameters for ListPropertyOperations.
+type ListPropertyOperationsParamsSort string
+
+// ListPropertyOperationsParamsOrder defines parameters for ListPropertyOperations.
+type ListPropertyOperationsParamsOrder string
+
+// ListPropertyOperationsParamsType defines parameters for ListPropertyOperations.
+type ListPropertyOperationsParamsType string
+
+// SummarizePropertyOperationsParams defines parameters for SummarizePropertyOperations.
+type SummarizePropertyOperationsParams struct {
+	// Status Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone.
+	Status *SummarizePropertyOperationsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// DateFrom Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateFrom *OperationsDateFrom `form:"date_from,omitempty" json:"date_from,omitempty"`
+
+	// DateTo Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateTo *OperationsDateTo `form:"date_to,omitempty" json:"date_to,omitempty"`
+
+	// Sort Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under.
+	Sort *SummarizePropertyOperationsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Search Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals.
+	Search *OperationsSearch `form:"search,omitempty" json:"search,omitempty"`
+
+	// Type Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter.
+	Type *SummarizePropertyOperationsParamsType `form:"type,omitempty" json:"type,omitempty"`
+
+	// Category Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored.
+	Category *OperationsCategoriesFilter `form:"category,omitempty" json:"category,omitempty"`
+}
+
+// SummarizePropertyOperationsParamsStatus defines parameters for SummarizePropertyOperations.
+type SummarizePropertyOperationsParamsStatus string
+
+// SummarizePropertyOperationsParamsSort defines parameters for SummarizePropertyOperations.
+type SummarizePropertyOperationsParamsSort string
+
+// SummarizePropertyOperationsParamsType defines parameters for SummarizePropertyOperations.
+type SummarizePropertyOperationsParamsType string
+
+// ListPaymentsParams defines parameters for ListPayments.
+type ListPaymentsParams struct {
+	// Search Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals.
+	Search *TitleSearch `form:"search,omitempty" json:"search,omitempty"`
+}
+
+// DeletePaymentParams defines parameters for DeletePayment.
+type DeletePaymentParams struct {
+	// KeepOverdue Keep overdue planned operations as debt (true) or delete them together with the payment (false). Future planned operations are always deleted.
+	KeepOverdue *bool `form:"keep_overdue,omitempty" json:"keep_overdue,omitempty"`
+}
+
+// ListPaymentChangesParams defines parameters for ListPaymentChanges.
+type ListPaymentChangesParams struct {
+	// BeforeCursor Непрозрачный курсор страницы СТАРШЕ ключа (продолжение журнала в прошлое): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — журнал читается с самых свежих записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400.
+	BeforeCursor *PaymentChangesBeforeCursor `form:"before_cursor,omitempty" json:"before_cursor,omitempty"`
+
+	// AfterCursor Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400.
+	AfterCursor *PaymentChangesAfterCursor `form:"after_cursor,omitempty" json:"after_cursor,omitempty"`
+
+	// Limit Размер страницы (канон #597): 1..100, по умолчанию 50.
+	Limit *PaymentChangesLimit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListPaymentOperationsParams defines parameters for ListPaymentOperations.
+type ListPaymentOperationsParams struct {
+	// Status Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone.
+	Status *ListPaymentOperationsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// DateFrom Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateFrom *OperationsDateFrom `form:"date_from,omitempty" json:"date_from,omitempty"`
+
+	// DateTo Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date).
+	DateTo *OperationsDateTo `form:"date_to,omitempty" json:"date_to,omitempty"`
+
+	// Sort Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under.
+	Sort *ListPaymentOperationsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first).
+	Order  *ListPaymentOperationsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Limit  *OperationsLimit                  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *OperationsOffset                 `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// ListPaymentOperationsParamsStatus defines parameters for ListPaymentOperations.
+type ListPaymentOperationsParamsStatus string
+
+// ListPaymentOperationsParamsSort defines parameters for ListPaymentOperations.
+type ListPaymentOperationsParamsSort string
+
+// ListPaymentOperationsParamsOrder defines parameters for ListPaymentOperations.
+type ListPaymentOperationsParamsOrder string
 
 // UploadPropertyPhotoMultipartBody defines parameters for UploadPropertyPhoto.
 type UploadPropertyPhotoMultipartBody struct {
 	File openapi_types.File `json:"file"`
 }
 
-// ListRemindersParams defines parameters for ListReminders.
-type ListRemindersParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+// GetRentalSummaryParams defines parameters for GetRentalSummary.
+type GetRentalSummaryParams struct {
+	// Until Period end (inclusive). Defaults to the completion date for a completed rental, otherwise today in the owner's timezone; the completion master previews with the chosen date before completing.
+	Until *openapi_types.Date `form:"until,omitempty" json:"until,omitempty"`
 }
 
-// ListCalendarRemindersParams defines parameters for ListCalendarReminders.
-type ListCalendarRemindersParams struct {
-	From openapi_types.Date `form:"from" json:"from"`
-	To   openapi_types.Date `form:"to" json:"to"`
+// ListPropertyTasksParams defines parameters for ListPropertyTasks.
+type ListPropertyTasksParams struct {
+	// Completed The bucket selector: false (default) — the active tasks (the screen's Просроченные/Сегодня/даты/Без даты sections), true — the completed journal (the collapsible «Выполненные» section). total always counts the same bucket.
+	Completed *bool        `form:"completed,omitempty" json:"completed,omitempty"`
+	Limit     *TasksLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *TasksOffset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetPushSubscriptionPreferencesParams defines parameters for GetPushSubscriptionPreferences.
+type GetPushSubscriptionPreferencesParams struct {
+	Endpoint string `form:"endpoint" json:"endpoint"`
+}
+
+// ListTasksParams defines parameters for ListTasks.
+type ListTasksParams struct {
+	// PropertyId Filter by bound properties — a comma-separated list of one or more property UUIDs (the picker's multi-select, ticket #547). A single id keeps the one-property slice of ticket #521: resolved through the property's view gate (a stranger gets the privacy 404), today is the data owner's. Several ids select the tasks of those properties in one merged page — every listed id must be visible to the reader (one invisible id is a privacy 404 of the whole request), today is the reader's, and archived properties contribute nothing (карта #518, решение 9). Combining it with withoutProperty is the union filter's «Общие задачи» + objects (решение владельца 2026-09-07); a malformed UUID in the list is a 400.
+	PropertyId *string `form:"propertyId,omitempty" json:"propertyId,omitempty"`
+
+	// WithoutProperty The property-less slice of the actor's own book («без объекта», ADR 0052). Combining it with propertyId unions the two cuts — the property-less rows stay the reader's own book (решение владельца 2026-09-07).
+	WithoutProperty *bool `form:"withoutProperty,omitempty" json:"withoutProperty,omitempty"`
+
+	// Completed The bucket selector: false (default) — the active tasks (the screen's Просроченные/Сегодня/даты/Без даты sections), true — the completed journal. total always counts the same bucket.
+	Completed *bool        `form:"completed,omitempty" json:"completed,omitempty"`
+	Limit     *TasksLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *TasksOffset `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // HandlePaymentWebhookJSONBody defines parameters for HandlePaymentWebhook.
 type HandlePaymentWebhookJSONBody map[string]interface{}
+
+// CreateAdminTariffJSONRequestBody defines body for CreateAdminTariff for application/json ContentType.
+type CreateAdminTariffJSONRequestBody = AdminCreateTariffRequest
+
+// UpdateAdminTariffJSONRequestBody defines body for UpdateAdminTariff for application/json ContentType.
+type UpdateAdminTariffJSONRequestBody = AdminUpdateTariffRequest
+
+// ForceChangeAdminSubscriptionTariffJSONRequestBody defines body for ForceChangeAdminSubscriptionTariff for application/json ContentType.
+type ForceChangeAdminSubscriptionTariffJSONRequestBody = AdminForceChangeTariffRequest
+
+// ExtendAdminSubscriptionGraceJSONRequestBody defines body for ExtendAdminSubscriptionGrace for application/json ContentType.
+type ExtendAdminSubscriptionGraceJSONRequestBody = AdminExtendGraceRequest
+
+// AssignAdminServiceSubscriptionJSONRequestBody defines body for AssignAdminServiceSubscription for application/json ContentType.
+type AssignAdminServiceSubscriptionJSONRequestBody = AdminAssignServiceSubscriptionRequest
 
 // SendCodeJSONRequestBody defines body for SendCode for application/json ContentType.
 type SendCodeJSONRequestBody = SendCodeRequest
@@ -2953,17 +4897,32 @@ type VerifyCodeJSONRequestBody = VerifyCodeRequest
 // ReportClientErrorJSONRequestBody defines body for ReportClientError for application/json ContentType.
 type ReportClientErrorJSONRequestBody = ClientErrorReport
 
-// UpdateFreeReminderJSONRequestBody defines body for UpdateFreeReminder for application/json ContentType.
-type UpdateFreeReminderJSONRequestBody = FreeReminderUpdateRequest
+// CreateContactJSONRequestBody defines body for CreateContact for application/json ContentType.
+type CreateContactJSONRequestBody = ContactCreateRequest
 
-// CreateLeaseJSONRequestBody defines body for CreateLease for application/json ContentType.
-type CreateLeaseJSONRequestBody = LeaseCreateRequest
+// UpdateContactJSONRequestBody defines body for UpdateContact for application/json ContentType.
+type UpdateContactJSONRequestBody = ContactUpdateRequest
 
-// UpdateLeaseJSONRequestBody defines body for UpdateLease for application/json ContentType.
-type UpdateLeaseJSONRequestBody = LeaseUpdateRequest
+// UploadContactPhotoMultipartRequestBody defines body for UploadContactPhoto for multipart/form-data ContentType.
+type UploadContactPhotoMultipartRequestBody UploadContactPhotoMultipartBody
+
+// SendFeedbackJSONRequestBody defines body for SendFeedback for application/json ContentType.
+type SendFeedbackJSONRequestBody = FeedbackRequest
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UserUpdateRequest
+
+// ChangeEmailJSONRequestBody defines body for ChangeEmail for application/json ContentType.
+type ChangeEmailJSONRequestBody = ChangeEmailRequest
+
+// RequestNewEmailCodeJSONRequestBody defines body for RequestNewEmailCode for application/json ContentType.
+type RequestNewEmailCodeJSONRequestBody = RequestNewEmailCodeRequest
+
+// ResendEmailCodeJSONRequestBody defines body for ResendEmailCode for application/json ContentType.
+type ResendEmailCodeJSONRequestBody = ResendEmailCodeRequest
+
+// VerifyCurrentEmailJSONRequestBody defines body for VerifyCurrentEmail for application/json ContentType.
+type VerifyCurrentEmailJSONRequestBody = VerifyCurrentEmailRequest
 
 // ChangePhoneJSONRequestBody defines body for ChangePhone for application/json ContentType.
 type ChangePhoneJSONRequestBody = ChangePhoneRequest
@@ -2971,23 +4930,20 @@ type ChangePhoneJSONRequestBody = ChangePhoneRequest
 // SendPhoneChangeCodeJSONRequestBody defines body for SendPhoneChangeCode for application/json ContentType.
 type SendPhoneChangeCodeJSONRequestBody = SendPhoneChangeCodeRequest
 
-// UpdateNotificationPreferencesJSONRequestBody defines body for UpdateNotificationPreferences for application/json ContentType.
-type UpdateNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdateRequest
+// UploadMePhotoMultipartRequestBody defines body for UploadMePhoto for multipart/form-data ContentType.
+type UploadMePhotoMultipartRequestBody UploadMePhotoMultipartBody
 
-// CreateOperationCategoryJSONRequestBody defines body for CreateOperationCategory for application/json ContentType.
-type CreateOperationCategoryJSONRequestBody = OperationCategoryCreateRequest
+// PutNotificationPreferencesJSONRequestBody defines body for PutNotificationPreferences for application/json ContentType.
+type PutNotificationPreferencesJSONRequestBody = NotificationPreferencesRequest
 
-// UpdateOperationJSONRequestBody defines body for UpdateOperation for application/json ContentType.
-type UpdateOperationJSONRequestBody = OperationUpdateRequest
+// InviteParticipantJSONRequestBody defines body for InviteParticipant for application/json ContentType.
+type InviteParticipantJSONRequestBody = ParticipantInviteRequest
 
-// CompleteOperationJSONRequestBody defines body for CompleteOperation for application/json ContentType.
-type CompleteOperationJSONRequestBody = CompleteOperationJSONBody
+// AddParticipantPropertiesJSONRequestBody defines body for AddParticipantProperties for application/json ContentType.
+type AddParticipantPropertiesJSONRequestBody = ParticipantPropertiesAddRequest
 
-// MarkOperationIncompleteJSONRequestBody defines body for MarkOperationIncomplete for application/json ContentType.
-type MarkOperationIncompleteJSONRequestBody = MarkOperationIncompleteJSONBody
-
-// MoveOperationJSONRequestBody defines body for MoveOperation for application/json ContentType.
-type MoveOperationJSONRequestBody = OperationMoveRequest
+// SaveGlobalPaymentFavoritesOrderJSONRequestBody defines body for SaveGlobalPaymentFavoritesOrder for application/json ContentType.
+type SaveGlobalPaymentFavoritesOrderJSONRequestBody = PaymentsFavoriteOrderUpdate
 
 // CreatePropertyJSONRequestBody defines body for CreateProperty for application/json ContentType.
 type CreatePropertyJSONRequestBody = PropertyCreateRequest
@@ -3007,23 +4963,38 @@ type CreatePropertyAccessMemberJSONRequestBody = PropertyAccessMemberCreateReque
 // UpdatePropertyAccessMemberJSONRequestBody defines body for UpdatePropertyAccessMember for application/json ContentType.
 type UpdatePropertyAccessMemberJSONRequestBody = PropertyAccessMemberUpdateRequest
 
-// CreatePropertyContactJSONRequestBody defines body for CreatePropertyContact for application/json ContentType.
-type CreatePropertyContactJSONRequestBody = PropertyContactCreateRequest
-
-// UpdatePropertyContactJSONRequestBody defines body for UpdatePropertyContact for application/json ContentType.
-type UpdatePropertyContactJSONRequestBody = PropertyContactUpdateRequest
-
-// CreateFreeReminderJSONRequestBody defines body for CreateFreeReminder for application/json ContentType.
-type CreateFreeReminderJSONRequestBody = FreeReminderCreateRequest
-
 // CreateOperationJSONRequestBody defines body for CreateOperation for application/json ContentType.
-type CreateOperationJSONRequestBody = OperationCreateRequest
+type CreateOperationJSONRequestBody = CreateOperationRequest
+
+// CreatePaymentJSONRequestBody defines body for CreatePayment for application/json ContentType.
+type CreatePaymentJSONRequestBody = PaymentCreateRequest
+
+// UpdatePaymentJSONRequestBody defines body for UpdatePayment for application/json ContentType.
+type UpdatePaymentJSONRequestBody = PaymentUpdateRequest
+
+// SetPaymentFavoriteJSONRequestBody defines body for SetPaymentFavorite for application/json ContentType.
+type SetPaymentFavoriteJSONRequestBody = FavoriteUpdateRequest
 
 // UploadPropertyPhotoMultipartRequestBody defines body for UploadPropertyPhoto for multipart/form-data ContentType.
 type UploadPropertyPhotoMultipartRequestBody UploadPropertyPhotoMultipartBody
 
-// CreateRecurringOperationJSONRequestBody defines body for CreateRecurringOperation for application/json ContentType.
-type CreateRecurringOperationJSONRequestBody = RecurringOperationCreateRequest
+// SetPropertyPinJSONRequestBody defines body for SetPropertyPin for application/json ContentType.
+type SetPropertyPinJSONRequestBody = PinnedUpdateRequest
+
+// CreateRentalJSONRequestBody defines body for CreateRental for application/json ContentType.
+type CreateRentalJSONRequestBody = RentalCreateRequest
+
+// UpdateRentalJSONRequestBody defines body for UpdateRental for application/json ContentType.
+type UpdateRentalJSONRequestBody = RentalUpdateRequest
+
+// CompleteRentalJSONRequestBody defines body for CompleteRental for application/json ContentType.
+type CompleteRentalJSONRequestBody = RentalCompleteRequest
+
+// CreateTaskRuleJSONRequestBody defines body for CreateTaskRule for application/json ContentType.
+type CreateTaskRuleJSONRequestBody = TaskRuleCreateRequest
+
+// UpdateTaskRuleJSONRequestBody defines body for UpdateTaskRule for application/json ContentType.
+type UpdateTaskRuleJSONRequestBody = TaskRuleUpdateRequest
 
 // DeletePushSubscriptionJSONRequestBody defines body for DeletePushSubscription for application/json ContentType.
 type DeletePushSubscriptionJSONRequestBody = PushSubscriptionDeleteRequest
@@ -3031,14 +5002,14 @@ type DeletePushSubscriptionJSONRequestBody = PushSubscriptionDeleteRequest
 // CreatePushSubscriptionJSONRequestBody defines body for CreatePushSubscription for application/json ContentType.
 type CreatePushSubscriptionJSONRequestBody = PushSubscriptionCreateRequest
 
-// UpdateRecurringOperationJSONRequestBody defines body for UpdateRecurringOperation for application/json ContentType.
-type UpdateRecurringOperationJSONRequestBody = RecurringOperationUpdateRequest
-
-// UpdateReminderJSONRequestBody defines body for UpdateReminder for application/json ContentType.
-type UpdateReminderJSONRequestBody = ReminderUpdateRequest
+// PutPushSubscriptionPreferencesJSONRequestBody defines body for PutPushSubscriptionPreferences for application/json ContentType.
+type PutPushSubscriptionPreferencesJSONRequestBody = PushPreferencesRequest
 
 // ToggleAutoRenewJSONRequestBody defines body for ToggleAutoRenew for application/json ContentType.
 type ToggleAutoRenewJSONRequestBody = AutoRenewRequest
+
+// CancelSubscriptionJSONRequestBody defines body for CancelSubscription for application/json ContentType.
+type CancelSubscriptionJSONRequestBody = CancelSubscriptionRequest
 
 // ChangeTariffJSONRequestBody defines body for ChangeTariff for application/json ContentType.
 type ChangeTariffJSONRequestBody = ChangeTariffRequest
@@ -3046,14 +5017,225 @@ type ChangeTariffJSONRequestBody = ChangeTariffRequest
 // AddPaymentMethodJSONRequestBody defines body for AddPaymentMethod for application/json ContentType.
 type AddPaymentMethodJSONRequestBody = AddPaymentMethodRequest
 
-// CreateTenantContactJSONRequestBody defines body for CreateTenantContact for application/json ContentType.
-type CreateTenantContactJSONRequestBody = TenantContactCreateRequest
+// CreateTaskRuleWithoutPropertyJSONRequestBody defines body for CreateTaskRuleWithoutProperty for application/json ContentType.
+type CreateTaskRuleWithoutPropertyJSONRequestBody = TaskRuleCreateRequest
 
-// UpdateTenantContactJSONRequestBody defines body for UpdateTenantContact for application/json ContentType.
-type UpdateTenantContactJSONRequestBody = TenantContactUpdateRequest
+// UpdateTaskRuleWithoutPropertyJSONRequestBody defines body for UpdateTaskRuleWithoutProperty for application/json ContentType.
+type UpdateTaskRuleWithoutPropertyJSONRequestBody = TaskRuleUpdateRequest
 
 // HandlePaymentWebhookJSONRequestBody defines body for HandlePaymentWebhook for application/json ContentType.
 type HandlePaymentWebhookJSONRequestBody HandlePaymentWebhookJSONBody
+
+// AsRecurrenceDaily returns the union data inside the Recurrence as a RecurrenceDaily
+func (t Recurrence) AsRecurrenceDaily() (RecurrenceDaily, error) {
+	var body RecurrenceDaily
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRecurrenceDaily overwrites any union data inside the Recurrence as the provided RecurrenceDaily
+func (t *Recurrence) FromRecurrenceDaily(v RecurrenceDaily) error {
+	v.Kind = "daily"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRecurrenceDaily performs a merge with any union data inside the Recurrence, using the provided RecurrenceDaily
+func (t *Recurrence) MergeRecurrenceDaily(v RecurrenceDaily) error {
+	v.Kind = "daily"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRecurrenceWeekly returns the union data inside the Recurrence as a RecurrenceWeekly
+func (t Recurrence) AsRecurrenceWeekly() (RecurrenceWeekly, error) {
+	var body RecurrenceWeekly
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRecurrenceWeekly overwrites any union data inside the Recurrence as the provided RecurrenceWeekly
+func (t *Recurrence) FromRecurrenceWeekly(v RecurrenceWeekly) error {
+	v.Kind = "weekly"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRecurrenceWeekly performs a merge with any union data inside the Recurrence, using the provided RecurrenceWeekly
+func (t *Recurrence) MergeRecurrenceWeekly(v RecurrenceWeekly) error {
+	v.Kind = "weekly"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRecurrenceMonthly returns the union data inside the Recurrence as a RecurrenceMonthly
+func (t Recurrence) AsRecurrenceMonthly() (RecurrenceMonthly, error) {
+	var body RecurrenceMonthly
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRecurrenceMonthly overwrites any union data inside the Recurrence as the provided RecurrenceMonthly
+func (t *Recurrence) FromRecurrenceMonthly(v RecurrenceMonthly) error {
+	v.Kind = "monthly"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRecurrenceMonthly performs a merge with any union data inside the Recurrence, using the provided RecurrenceMonthly
+func (t *Recurrence) MergeRecurrenceMonthly(v RecurrenceMonthly) error {
+	v.Kind = "monthly"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRecurrenceYearly returns the union data inside the Recurrence as a RecurrenceYearly
+func (t Recurrence) AsRecurrenceYearly() (RecurrenceYearly, error) {
+	var body RecurrenceYearly
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRecurrenceYearly overwrites any union data inside the Recurrence as the provided RecurrenceYearly
+func (t *Recurrence) FromRecurrenceYearly(v RecurrenceYearly) error {
+	v.Kind = "yearly"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRecurrenceYearly performs a merge with any union data inside the Recurrence, using the provided RecurrenceYearly
+func (t *Recurrence) MergeRecurrenceYearly(v RecurrenceYearly) error {
+	v.Kind = "yearly"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Recurrence) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"kind"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t Recurrence) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "daily":
+		return t.AsRecurrenceDaily()
+	case "monthly":
+		return t.AsRecurrenceMonthly()
+	case "weekly":
+		return t.AsRecurrenceWeekly()
+	case "yearly":
+		return t.AsRecurrenceYearly()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t Recurrence) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Recurrence) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsRentalPaymentDay0 returns the union data inside the RentalPaymentDay as a RentalPaymentDay0
+func (t RentalPaymentDay) AsRentalPaymentDay0() (RentalPaymentDay0, error) {
+	var body RentalPaymentDay0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRentalPaymentDay0 overwrites any union data inside the RentalPaymentDay as the provided RentalPaymentDay0
+func (t *RentalPaymentDay) FromRentalPaymentDay0(v RentalPaymentDay0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRentalPaymentDay0 performs a merge with any union data inside the RentalPaymentDay, using the provided RentalPaymentDay0
+func (t *RentalPaymentDay) MergeRentalPaymentDay0(v RentalPaymentDay0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRentalPaymentDay1 returns the union data inside the RentalPaymentDay as a RentalPaymentDay1
+func (t RentalPaymentDay) AsRentalPaymentDay1() (RentalPaymentDay1, error) {
+	var body RentalPaymentDay1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRentalPaymentDay1 overwrites any union data inside the RentalPaymentDay as the provided RentalPaymentDay1
+func (t *RentalPaymentDay) FromRentalPaymentDay1(v RentalPaymentDay1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRentalPaymentDay1 performs a merge with any union data inside the RentalPaymentDay, using the provided RentalPaymentDay1
+func (t *RentalPaymentDay) MergeRentalPaymentDay1(v RentalPaymentDay1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t RentalPaymentDay) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *RentalPaymentDay) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -3063,18 +5245,6 @@ type ServerInterface interface {
 
 	// (GET /admin/audit-logs/{id})
 	GetAdminAuditLog(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /admin/leases)
-	ListAdminLeases(w http.ResponseWriter, r *http.Request, params ListAdminLeasesParams)
-
-	// (GET /admin/leases/{id})
-	GetAdminLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /admin/operations)
-	ListAdminOperations(w http.ResponseWriter, r *http.Request, params ListAdminOperationsParams)
-
-	// (GET /admin/operations/{id})
-	GetAdminOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /admin/properties)
 	ListAdminProperties(w http.ResponseWriter, r *http.Request, params ListAdminPropertiesParams)
@@ -3100,11 +5270,14 @@ type ServerInterface interface {
 	// (POST /admin/subscription/payments/{paymentId}/sync)
 	SyncSubscriptionPayment(w http.ResponseWriter, r *http.Request, paymentId openapi_types.UUID)
 
-	// (GET /admin/tenant-contacts)
-	ListAdminTenantContacts(w http.ResponseWriter, r *http.Request, params ListAdminTenantContactsParams)
+	// (GET /admin/tariffs)
+	ListAdminTariffs(w http.ResponseWriter, r *http.Request)
 
-	// (GET /admin/tenant-contacts/{id})
-	GetAdminTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// (POST /admin/tariffs)
+	CreateAdminTariff(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /admin/tariffs/{tariffId})
+	UpdateAdminTariff(w http.ResponseWriter, r *http.Request, tariffId openapi_types.UUID)
 
 	// (GET /admin/users)
 	ListAdminUsers(w http.ResponseWriter, r *http.Request, params ListAdminUsersParams)
@@ -3115,23 +5288,26 @@ type ServerInterface interface {
 	// (GET /admin/users/{id}/audit-logs)
 	ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserAuditLogsParams)
 
-	// (GET /admin/users/{id}/leases)
-	ListAdminUserLeases(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserLeasesParams)
-
-	// (GET /admin/users/{id}/operations)
-	ListAdminUserOperations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserOperationsParams)
-
 	// (GET /admin/users/{id}/properties)
 	ListAdminUserProperties(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserPropertiesParams)
 
-	// (GET /admin/users/{id}/tenant-contacts)
-	ListAdminUserTenantContacts(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserTenantContactsParams)
+	// (POST /admin/users/{id}/subscription/cancel)
+	CancelAdminSubscription(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /admin/users/{id}/subscription/force-change)
+	ForceChangeAdminSubscriptionTariff(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /admin/users/{id}/subscription/grace-extension)
+	ExtendAdminSubscriptionGrace(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /admin/users/{id}/subscription/service)
+	AssignAdminServiceSubscription(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /admin/users/{id}/subscription/transitions)
+	ListAdminSubscriptionTransitions(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (POST /auth/logout)
 	Logout(w http.ResponseWriter, r *http.Request)
-
-	// (POST /auth/logout-all)
-	LogoutAll(w http.ResponseWriter, r *http.Request)
 
 	// (POST /auth/send)
 	SendCode(w http.ResponseWriter, r *http.Request)
@@ -3142,44 +5318,41 @@ type ServerInterface interface {
 	// (POST /client-errors)
 	ReportClientError(w http.ResponseWriter, r *http.Request)
 
+	// (GET /contacts)
+	ListContacts(w http.ResponseWriter, r *http.Request, params ListContactsParams)
+
+	// (POST /contacts)
+	CreateContact(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /contacts/{contactId})
+	DeleteContact(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
+
+	// (GET /contacts/{contactId})
+	GetContact(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
+
+	// (PATCH /contacts/{contactId})
+	UpdateContact(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
+
+	// (DELETE /contacts/{contactId}/photo)
+	DeleteContactPhoto(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
+
+	// (GET /contacts/{contactId}/photo)
+	GetContactPhoto(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
+
+	// (POST /contacts/{contactId}/photo)
+	UploadContactPhoto(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
+
 	// (GET /dadata/suggestions/address)
 	GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params GetAddressSuggestionsParams)
 
-	// (GET /finance/report)
-	GetFinanceReport(w http.ResponseWriter, r *http.Request, params GetFinanceReportParams)
-
-	// (GET /free-reminders)
-	ListFreeReminders(w http.ResponseWriter, r *http.Request, params ListFreeRemindersParams)
-
-	// (DELETE /free-reminders/{freeReminderId})
-	DeleteFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID)
-
-	// (GET /free-reminders/{freeReminderId})
-	GetFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID)
-
-	// (PATCH /free-reminders/{freeReminderId})
-	UpdateFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID)
-
-	// (POST /internal/fake-subscription-payment/{id}/confirm)
-	ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /leases)
-	ListLeases(w http.ResponseWriter, r *http.Request)
-
-	// (POST /leases)
-	CreateLease(w http.ResponseWriter, r *http.Request)
-
-	// (GET /leases/{id})
-	GetLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (PATCH /leases/{id})
-	UpdateLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /leases/{id}/complete)
-	CompleteLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /leases/{leaseId}/reminders)
-	ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseId openapi_types.UUID)
+	// (POST /feedback)
+	SendFeedback(w http.ResponseWriter, r *http.Request)
+	// Страница ленты «История действий» (двусторонний keyset, канон #597)
+	// (GET /history)
+	GetHistory(w http.ResponseWriter, r *http.Request, params GetHistoryParams)
+	// Опции шита фильтров «Истории действий»
+	// (GET /history/filters)
+	GetHistoryFilters(w http.ResponseWriter, r *http.Request, params GetHistoryFiltersParams)
 
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -3187,44 +5360,113 @@ type ServerInterface interface {
 	// (PATCH /me)
 	UpdateMe(w http.ResponseWriter, r *http.Request)
 
+	// (POST /me/email/change)
+	ChangeEmail(w http.ResponseWriter, r *http.Request)
+
+	// (POST /me/email/request-new-email-code)
+	RequestNewEmailCode(w http.ResponseWriter, r *http.Request)
+
+	// (POST /me/email/resend-code)
+	ResendEmailCode(w http.ResponseWriter, r *http.Request)
+
+	// (POST /me/email/send-code)
+	SendEmailChangeCode(w http.ResponseWriter, r *http.Request)
+
+	// (POST /me/email/verify-current)
+	VerifyCurrentEmail(w http.ResponseWriter, r *http.Request)
+
 	// (POST /me/phone/change)
 	ChangePhone(w http.ResponseWriter, r *http.Request)
 
 	// (POST /me/phone/send-code)
 	SendPhoneChangeCode(w http.ResponseWriter, r *http.Request)
 
+	// (DELETE /me/photo)
+	DeleteMePhoto(w http.ResponseWriter, r *http.Request)
+
+	// (GET /me/photo)
+	GetMePhoto(w http.ResponseWriter, r *http.Request)
+
+	// (POST /me/photo)
+	UploadMePhoto(w http.ResponseWriter, r *http.Request)
+
+	// (GET /me/sessions)
+	ListSessions(w http.ResponseWriter, r *http.Request)
+
+	// (POST /me/sessions/logout-others)
+	LogoutOtherSessions(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /me/sessions/{sessionId})
+	RevokeSession(w http.ResponseWriter, r *http.Request, sessionId openapi_types.UUID)
+	// Матрица email-настроек аккаунта
 	// (GET /notification-preferences)
 	GetNotificationPreferences(w http.ResponseWriter, r *http.Request)
-
+	// Заменить матрицу email-настроек аккаунта
 	// (PUT /notification-preferences)
-	UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request)
-
-	// (GET /operation-categories)
-	ListOperationCategories(w http.ResponseWriter, r *http.Request, params ListOperationCategoriesParams)
-
-	// (POST /operation-categories)
-	CreateOperationCategory(w http.ResponseWriter, r *http.Request)
-
+	PutNotificationPreferences(w http.ResponseWriter, r *http.Request)
+	// Удалить все уведомления
+	// (DELETE /notifications)
+	DeleteAllNotifications(w http.ResponseWriter, r *http.Request)
+	// Страница ленты уведомлений (keyset, канон #597)
+	// (GET /notifications)
+	ListNotifications(w http.ResponseWriter, r *http.Request, params ListNotificationsParams)
+	// Прочитать все
+	// (POST /notifications/read-all)
+	MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request)
+	// Живой стрим событий пользователя (SSE)
+	// (GET /notifications/stream)
+	StreamNotifications(w http.ResponseWriter, r *http.Request)
+	// Счётчик непрочитанных
+	// (GET /notifications/unread-count)
+	GetUnreadNotificationCount(w http.ResponseWriter, r *http.Request)
+	// Удалить уведомление
+	// (DELETE /notifications/{notificationId})
+	DeleteNotification(w http.ResponseWriter, r *http.Request, notificationId openapi_types.UUID)
+	// Страница уведомления с живыми действиями
+	// (GET /notifications/{notificationId})
+	GetNotification(w http.ResponseWriter, r *http.Request, notificationId openapi_types.UUID)
+	// Прочитать уведомление
+	// (POST /notifications/{notificationId}/read)
+	MarkNotificationRead(w http.ResponseWriter, r *http.Request, notificationId openapi_types.UUID)
+	// List the actor's visible paid operations (the global «Операции» screen)
 	// (GET /operations)
 	ListOperations(w http.ResponseWriter, r *http.Request, params ListOperationsParams)
-
-	// (DELETE /operations/{id})
-	DeleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /operations/{id})
-	GetOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (PATCH /operations/{id})
-	UpdateOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /operations/{id}/complete)
-	CompleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /operations/{id}/mark-incomplete)
-	MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /operations/{id}/move)
-	MoveOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Summarize the actor's visible paid operations (the global «Операции» screen)
+	// (GET /operations/summary)
+	SummarizeOperations(w http.ResponseWriter, r *http.Request, params SummarizeOperationsParams)
+	// Revoke shared access from every participant of the actor's properties
+	// (DELETE /participants)
+	RevokeAllParticipants(w http.ResponseWriter, r *http.Request)
+	// List the owner's participants (aggregate over all properties)
+	// (GET /participants)
+	ListParticipants(w http.ResponseWriter, r *http.Request)
+	// Invite a person to several objects with one role
+	// (POST /participants/invite)
+	InviteParticipant(w http.ResponseWriter, r *http.Request)
+	// Revoke and remove a participant from all of the actor's objects
+	// (DELETE /participants/{participantId})
+	DeleteParticipant(w http.ResponseWriter, r *http.Request, participantId string)
+	// One participant's aggregate (the participant page)
+	// (GET /participants/{participantId})
+	GetParticipant(w http.ResponseWriter, r *http.Request, participantId string)
+	// Grant an existing participant access to more objects
+	// (POST /participants/{participantId}/properties)
+	AddParticipantProperties(w http.ResponseWriter, r *http.Request, participantId string)
+	// List the actor's visible payment rules (the global «Платежи» screen)
+	// (GET /payments)
+	ListGlobalPayments(w http.ResponseWriter, r *http.Request)
+	// List the actor's visible «На оплату» rows (the section page)
+	// (GET /payments/due)
+	ListPaymentDue(w http.ResponseWriter, r *http.Request)
+	// Save the manual order of the actor's favorite payment rules
+	// (PUT /payments/favorites/order)
+	SaveGlobalPaymentFavoritesOrder(w http.ResponseWriter, r *http.Request)
+	// List the actor's visible properties with their payment stacks (the global «Объекты» screen)
+	// (GET /payments/objects)
+	ListGlobalPaymentObjects(w http.ResponseWriter, r *http.Request, params ListGlobalPaymentObjectsParams)
+	// Search the actor's visible payment rules (the global «Платежи» search)
+	// (GET /payments/search)
+	SearchGlobalPayments(w http.ResponseWriter, r *http.Request, params SearchGlobalPaymentsParams)
 
 	// (GET /popups/pending)
 	GetPendingPopups(w http.ResponseWriter, r *http.Request)
@@ -3240,9 +5482,12 @@ type ServerInterface interface {
 
 	// (GET /properties/archive)
 	ListArchivedProperties(w http.ResponseWriter, r *http.Request)
+	// Search the actor's visible properties (the «Объекты» search)
+	// (GET /properties/search)
+	SearchProperties(w http.ResponseWriter, r *http.Request, params SearchPropertiesParams)
 
 	// (DELETE /properties/{id})
-	DeleteProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DeletePropertyParams)
+	DeleteProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /properties/{id})
 	GetProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -3252,15 +5497,6 @@ type ServerInterface interface {
 
 	// (POST /properties/{id}/archive)
 	ArchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /properties/{id}/export)
-	ExportPropertyData(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /properties/{id}/leases)
-	ListPropertyLeases(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /properties/{id}/operations/summary)
-	GetPropertyOperationsSummary(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (POST /properties/{id}/unarchive)
 	UnarchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -3288,90 +5524,138 @@ type ServerInterface interface {
 	// Revoke a member's access
 	// (DELETE /properties/{propertyId}/access/members/{memberId})
 	DeletePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID)
+	// One property participant row (the member card)
+	// (GET /properties/{propertyId}/access/members/{memberId})
+	GetPropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID)
 	// Change a member's role
 	// (PATCH /properties/{propertyId}/access/members/{memberId})
 	UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID)
 
-	// (GET /properties/{propertyId}/contacts)
-	ListPropertyContacts(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
-
-	// (POST /properties/{propertyId}/contacts)
-	CreatePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
-
-	// (DELETE /properties/{propertyId}/contacts/{contactId})
-	DeletePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID)
-
-	// (GET /properties/{propertyId}/contacts/{contactId})
-	GetPropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID)
-
-	// (PATCH /properties/{propertyId}/contacts/{contactId})
-	UpdatePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID)
-
-	// (GET /properties/{propertyId}/free-reminders)
-	ListPropertyFreeReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPropertyFreeRemindersParams)
-
-	// (POST /properties/{propertyId}/free-reminders)
-	CreateFreeReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
-
-	// (GET /properties/{propertyId}/free-reminders/upcoming)
-	ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListUpcomingFreeRemindersParams)
-
 	// (GET /properties/{propertyId}/operations)
-	ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListOperationsByPropertyParams)
-
+	ListPropertyOperations(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPropertyOperationsParams)
+	// Create a manual operation (the one-off paid fact)
 	// (POST /properties/{propertyId}/operations)
 	CreateOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
 
-	// (POST /properties/{propertyId}/photos)
+	// (GET /properties/{propertyId}/operations/summary)
+	SummarizePropertyOperations(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params SummarizePropertyOperationsParams)
+	// Delete an operation (the cancelled tombstone)
+	// (DELETE /properties/{propertyId}/operations/{operationId})
+	DeleteOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/operations/{operationId})
+	GetOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/operations/{operationId}/pay)
+	PayOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/payments)
+	ListPayments(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPaymentsParams)
+
+	// (POST /properties/{propertyId}/payments)
+	CreatePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (DELETE /properties/{propertyId}/payments/{paymentId})
+	DeletePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID, params DeletePaymentParams)
+
+	// (GET /properties/{propertyId}/payments/{paymentId})
+	GetPayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID)
+
+	// (PATCH /properties/{propertyId}/payments/{paymentId})
+	UpdatePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID)
+	// Страница истории изменений платежа (двусторонний keyset, канон #597)
+	// (GET /properties/{propertyId}/payments/{paymentId}/changes)
+	ListPaymentChanges(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID, params ListPaymentChangesParams)
+
+	// (POST /properties/{propertyId}/payments/{paymentId}/complete)
+	CompletePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID)
+
+	// (PUT /properties/{propertyId}/payments/{paymentId}/favorite)
+	SetPaymentFavorite(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/payments/{paymentId}/operations)
+	ListPaymentOperations(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID, params ListPaymentOperationsParams)
+
+	// (POST /properties/{propertyId}/payments/{paymentId}/pause)
+	PausePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/payments/{paymentId}/resume)
+	ResumePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID)
+
+	// (DELETE /properties/{propertyId}/photo)
+	DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/photo)
+	GetPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/photo)
 	UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
 
-	// (DELETE /properties/{propertyId}/photos/{photoId})
-	DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, photoId openapi_types.UUID)
+	// (PUT /properties/{propertyId}/pin)
+	SetPropertyPin(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
 
-	// (GET /properties/{propertyId}/recurring-operations)
-	ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+	// (GET /properties/{propertyId}/rentals)
+	ListRentals(w http.ResponseWriter, r *http.Request, propertyId PropertyId)
 
-	// (POST /properties/{propertyId}/recurring-operations)
-	CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+	// (POST /properties/{propertyId}/rentals)
+	CreateRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId)
+
+	// (DELETE /properties/{propertyId}/rentals/{rentalId})
+	DeleteRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/rentals/{rentalId})
+	GetRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID)
+
+	// (PATCH /properties/{propertyId}/rentals/{rentalId})
+	UpdateRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID)
+
+	// (POST /properties/{propertyId}/rentals/{rentalId}/complete)
+	CompleteRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/rentals/{rentalId}/summary)
+	GetRentalSummary(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID, params GetRentalSummaryParams)
+	// List the property's tasks (active ones or the completed journal)
+	// (GET /properties/{propertyId}/tasks)
+	ListPropertyTasks(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPropertyTasksParams)
+	// «Удалить все выполненные» — clear the completed journal
+	// (DELETE /properties/{propertyId}/tasks/completed)
+	DeleteCompletedTasks(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+	// Create a task rule (creating a task is creating a rule)
+	// (POST /properties/{propertyId}/tasks/rules)
+	CreateTaskRule(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID)
+	// Delete the task rule (hard; not covered by the v1 UI)
+	// (DELETE /properties/{propertyId}/tasks/rules/{ruleId})
+	DeleteTaskRule(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, ruleId openapi_types.UUID)
+
+	// (GET /properties/{propertyId}/tasks/rules/{ruleId})
+	GetTaskRule(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, ruleId openapi_types.UUID)
+	// Partial task rule update
+	// (PATCH /properties/{propertyId}/tasks/rules/{ruleId})
+	UpdateTaskRule(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, ruleId openapi_types.UUID)
+	// «Выполнить» the task
+	// (POST /properties/{propertyId}/tasks/{taskId}/complete)
+	CompleteTask(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, taskId openapi_types.UUID)
+	// «Отменить выполнение» the task
+	// (POST /properties/{propertyId}/tasks/{taskId}/uncomplete)
+	UncompleteTask(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, taskId openapi_types.UUID)
 
 	// (DELETE /push/subscriptions)
 	DeletePushSubscription(w http.ResponseWriter, r *http.Request)
 
 	// (POST /push/subscriptions)
 	CreatePushSubscription(w http.ResponseWriter, r *http.Request)
+	// Настройки пушей устройства
+	// (GET /push/subscriptions/preferences)
+	GetPushSubscriptionPreferences(w http.ResponseWriter, r *http.Request, params GetPushSubscriptionPreferencesParams)
+	// Заменить настройки пушей устройства
+	// (PUT /push/subscriptions/preferences)
+	PutPushSubscriptionPreferences(w http.ResponseWriter, r *http.Request)
 
 	// (GET /push/vapid-public-key)
 	GetVapidPublicKey(w http.ResponseWriter, r *http.Request)
-
-	// (GET /recurring-operations)
-	ListRecurringOperations(w http.ResponseWriter, r *http.Request)
-
-	// (DELETE /recurring-operations/{id})
-	DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /recurring-operations/{id})
-	GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (PATCH /recurring-operations/{id})
-	UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /recurring-operations/{id}/pause)
-	PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (POST /recurring-operations/{id}/resume)
-	ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (GET /reminders)
-	ListReminders(w http.ResponseWriter, r *http.Request, params ListRemindersParams)
-
-	// (GET /reminders/calendar)
-	ListCalendarReminders(w http.ResponseWriter, r *http.Request, params ListCalendarRemindersParams)
-
-	// (DELETE /reminders/{reminderId})
-	DeleteReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID)
-
-	// (PATCH /reminders/{reminderId})
-	UpdateReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID)
+	// Живой стрим изменений сущностей (SSE)
+	// (GET /realtime/stream)
+	StreamRealtime(w http.ResponseWriter, r *http.Request)
 
 	// (GET /subscription)
 	GetSubscription(w http.ResponseWriter, r *http.Request)
@@ -3403,20 +5687,38 @@ type ServerInterface interface {
 	// (GET /subscription/payments)
 	ListSubscriptionPayments(w http.ResponseWriter, r *http.Request)
 
+	// (POST /subscription/resume)
+	ResumeSubscription(w http.ResponseWriter, r *http.Request)
+
 	// (GET /tariffs)
 	ListTariffs(w http.ResponseWriter, r *http.Request)
+	// List the actor's visible tasks (the global «Задачи» screen)
+	// (GET /tasks)
+	ListTasks(w http.ResponseWriter, r *http.Request, params ListTasksParams)
+	// «Удалить все выполненные» — clear the actor's book-wide completed journal
+	// (DELETE /tasks/completed)
+	DeleteCompletedTasksWithoutProperty(w http.ResponseWriter, r *http.Request)
+	// Create a task rule without a property (the owner's own book)
+	// (POST /tasks/rules)
+	CreateTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request)
+	// Delete a property-less task rule (hard)
+	// (DELETE /tasks/rules/{ruleId})
+	DeleteTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleId openapi_types.UUID)
+	// Load a task rule of the property-less slice (the edit screen)
+	// (GET /tasks/rules/{ruleId})
+	GetTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleId openapi_types.UUID)
+	// Partial task rule update on the property-less slice
+	// (PATCH /tasks/rules/{ruleId})
+	UpdateTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleId openapi_types.UUID)
+	// «Выполнить» a property-less task
+	// (POST /tasks/{taskId}/complete)
+	CompleteTaskWithoutProperty(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID)
+	// «Отменить выполнение» a property-less task
+	// (POST /tasks/{taskId}/uncomplete)
+	UncompleteTaskWithoutProperty(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID)
 
-	// (GET /tenant-contacts)
-	ListTenantContacts(w http.ResponseWriter, r *http.Request)
-
-	// (POST /tenant-contacts)
-	CreateTenantContact(w http.ResponseWriter, r *http.Request)
-
-	// (GET /tenant-contacts/{id})
-	GetTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-
-	// (PATCH /tenant-contacts/{id})
-	UpdateTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// (GET /users/{userId}/photo)
+	GetUserPhoto(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID)
 
 	// (POST /webhooks/payment/{provider})
 	HandlePaymentWebhook(w http.ResponseWriter, r *http.Request, provider string)
@@ -3433,26 +5735,6 @@ func (_ Unimplemented) ListAdminAuditLogs(w http.ResponseWriter, r *http.Request
 
 // (GET /admin/audit-logs/{id})
 func (_ Unimplemented) GetAdminAuditLog(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /admin/leases)
-func (_ Unimplemented) ListAdminLeases(w http.ResponseWriter, r *http.Request, params ListAdminLeasesParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /admin/leases/{id})
-func (_ Unimplemented) GetAdminLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /admin/operations)
-func (_ Unimplemented) ListAdminOperations(w http.ResponseWriter, r *http.Request, params ListAdminOperationsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /admin/operations/{id})
-func (_ Unimplemented) GetAdminOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3496,13 +5778,18 @@ func (_ Unimplemented) SyncSubscriptionPayment(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /admin/tenant-contacts)
-func (_ Unimplemented) ListAdminTenantContacts(w http.ResponseWriter, r *http.Request, params ListAdminTenantContactsParams) {
+// (GET /admin/tariffs)
+func (_ Unimplemented) ListAdminTariffs(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /admin/tenant-contacts/{id})
-func (_ Unimplemented) GetAdminTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// (POST /admin/tariffs)
+func (_ Unimplemented) CreateAdminTariff(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /admin/tariffs/{tariffId})
+func (_ Unimplemented) UpdateAdminTariff(w http.ResponseWriter, r *http.Request, tariffId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3521,33 +5808,38 @@ func (_ Unimplemented) ListAdminUserAuditLogs(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /admin/users/{id}/leases)
-func (_ Unimplemented) ListAdminUserLeases(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserLeasesParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /admin/users/{id}/operations)
-func (_ Unimplemented) ListAdminUserOperations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserOperationsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // (GET /admin/users/{id}/properties)
 func (_ Unimplemented) ListAdminUserProperties(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserPropertiesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /admin/users/{id}/tenant-contacts)
-func (_ Unimplemented) ListAdminUserTenantContacts(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListAdminUserTenantContactsParams) {
+// (POST /admin/users/{id}/subscription/cancel)
+func (_ Unimplemented) CancelAdminSubscription(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /admin/users/{id}/subscription/force-change)
+func (_ Unimplemented) ForceChangeAdminSubscriptionTariff(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /admin/users/{id}/subscription/grace-extension)
+func (_ Unimplemented) ExtendAdminSubscriptionGrace(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /admin/users/{id}/subscription/service)
+func (_ Unimplemented) AssignAdminServiceSubscription(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /admin/users/{id}/subscription/transitions)
+func (_ Unimplemented) ListAdminSubscriptionTransitions(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // (POST /auth/logout)
 func (_ Unimplemented) Logout(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /auth/logout-all)
-func (_ Unimplemented) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3566,68 +5858,65 @@ func (_ Unimplemented) ReportClientError(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /contacts)
+func (_ Unimplemented) ListContacts(w http.ResponseWriter, r *http.Request, params ListContactsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /contacts)
+func (_ Unimplemented) CreateContact(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /contacts/{contactId})
+func (_ Unimplemented) DeleteContact(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /contacts/{contactId})
+func (_ Unimplemented) GetContact(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /contacts/{contactId})
+func (_ Unimplemented) UpdateContact(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /contacts/{contactId}/photo)
+func (_ Unimplemented) DeleteContactPhoto(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /contacts/{contactId}/photo)
+func (_ Unimplemented) GetContactPhoto(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /contacts/{contactId}/photo)
+func (_ Unimplemented) UploadContactPhoto(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /dadata/suggestions/address)
 func (_ Unimplemented) GetAddressSuggestions(w http.ResponseWriter, r *http.Request, params GetAddressSuggestionsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /finance/report)
-func (_ Unimplemented) GetFinanceReport(w http.ResponseWriter, r *http.Request, params GetFinanceReportParams) {
+// (POST /feedback)
+func (_ Unimplemented) SendFeedback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /free-reminders)
-func (_ Unimplemented) ListFreeReminders(w http.ResponseWriter, r *http.Request, params ListFreeRemindersParams) {
+// Страница ленты «История действий» (двусторонний keyset, канон #597)
+// (GET /history)
+func (_ Unimplemented) GetHistory(w http.ResponseWriter, r *http.Request, params GetHistoryParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (DELETE /free-reminders/{freeReminderId})
-func (_ Unimplemented) DeleteFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /free-reminders/{freeReminderId})
-func (_ Unimplemented) GetFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /free-reminders/{freeReminderId})
-func (_ Unimplemented) UpdateFreeReminder(w http.ResponseWriter, r *http.Request, freeReminderId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /internal/fake-subscription-payment/{id}/confirm)
-func (_ Unimplemented) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /leases)
-func (_ Unimplemented) ListLeases(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /leases)
-func (_ Unimplemented) CreateLease(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /leases/{id})
-func (_ Unimplemented) GetLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /leases/{id})
-func (_ Unimplemented) UpdateLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /leases/{id}/complete)
-func (_ Unimplemented) CompleteLease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /leases/{leaseId}/reminders)
-func (_ Unimplemented) ListLeaseReminders(w http.ResponseWriter, r *http.Request, leaseId openapi_types.UUID) {
+// Опции шита фильтров «Истории действий»
+// (GET /history/filters)
+func (_ Unimplemented) GetHistoryFilters(w http.ResponseWriter, r *http.Request, params GetHistoryFiltersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3641,6 +5930,31 @@ func (_ Unimplemented) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (POST /me/email/change)
+func (_ Unimplemented) ChangeEmail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /me/email/request-new-email-code)
+func (_ Unimplemented) RequestNewEmailCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /me/email/resend-code)
+func (_ Unimplemented) ResendEmailCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /me/email/send-code)
+func (_ Unimplemented) SendEmailChangeCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /me/email/verify-current)
+func (_ Unimplemented) VerifyCurrentEmail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (POST /me/phone/change)
 func (_ Unimplemented) ChangePhone(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -3651,58 +5965,171 @@ func (_ Unimplemented) SendPhoneChangeCode(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (DELETE /me/photo)
+func (_ Unimplemented) DeleteMePhoto(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /me/photo)
+func (_ Unimplemented) GetMePhoto(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /me/photo)
+func (_ Unimplemented) UploadMePhoto(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /me/sessions)
+func (_ Unimplemented) ListSessions(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /me/sessions/logout-others)
+func (_ Unimplemented) LogoutOtherSessions(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /me/sessions/{sessionId})
+func (_ Unimplemented) RevokeSession(w http.ResponseWriter, r *http.Request, sessionId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Матрица email-настроек аккаунта
 // (GET /notification-preferences)
 func (_ Unimplemented) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Заменить матрицу email-настроек аккаунта
 // (PUT /notification-preferences)
-func (_ Unimplemented) UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) PutNotificationPreferences(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /operation-categories)
-func (_ Unimplemented) ListOperationCategories(w http.ResponseWriter, r *http.Request, params ListOperationCategoriesParams) {
+// Удалить все уведомления
+// (DELETE /notifications)
+func (_ Unimplemented) DeleteAllNotifications(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (POST /operation-categories)
-func (_ Unimplemented) CreateOperationCategory(w http.ResponseWriter, r *http.Request) {
+// Страница ленты уведомлений (keyset, канон #597)
+// (GET /notifications)
+func (_ Unimplemented) ListNotifications(w http.ResponseWriter, r *http.Request, params ListNotificationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Прочитать все
+// (POST /notifications/read-all)
+func (_ Unimplemented) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Живой стрим событий пользователя (SSE)
+// (GET /notifications/stream)
+func (_ Unimplemented) StreamNotifications(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Счётчик непрочитанных
+// (GET /notifications/unread-count)
+func (_ Unimplemented) GetUnreadNotificationCount(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Удалить уведомление
+// (DELETE /notifications/{notificationId})
+func (_ Unimplemented) DeleteNotification(w http.ResponseWriter, r *http.Request, notificationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Страница уведомления с живыми действиями
+// (GET /notifications/{notificationId})
+func (_ Unimplemented) GetNotification(w http.ResponseWriter, r *http.Request, notificationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Прочитать уведомление
+// (POST /notifications/{notificationId}/read)
+func (_ Unimplemented) MarkNotificationRead(w http.ResponseWriter, r *http.Request, notificationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List the actor's visible paid operations (the global «Операции» screen)
 // (GET /operations)
 func (_ Unimplemented) ListOperations(w http.ResponseWriter, r *http.Request, params ListOperationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (DELETE /operations/{id})
-func (_ Unimplemented) DeleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// Summarize the actor's visible paid operations (the global «Операции» screen)
+// (GET /operations/summary)
+func (_ Unimplemented) SummarizeOperations(w http.ResponseWriter, r *http.Request, params SummarizeOperationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /operations/{id})
-func (_ Unimplemented) GetOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// Revoke shared access from every participant of the actor's properties
+// (DELETE /participants)
+func (_ Unimplemented) RevokeAllParticipants(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (PATCH /operations/{id})
-func (_ Unimplemented) UpdateOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// List the owner's participants (aggregate over all properties)
+// (GET /participants)
+func (_ Unimplemented) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (POST /operations/{id}/complete)
-func (_ Unimplemented) CompleteOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// Invite a person to several objects with one role
+// (POST /participants/invite)
+func (_ Unimplemented) InviteParticipant(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (POST /operations/{id}/mark-incomplete)
-func (_ Unimplemented) MarkOperationIncomplete(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// Revoke and remove a participant from all of the actor's objects
+// (DELETE /participants/{participantId})
+func (_ Unimplemented) DeleteParticipant(w http.ResponseWriter, r *http.Request, participantId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (POST /operations/{id}/move)
-func (_ Unimplemented) MoveOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// One participant's aggregate (the participant page)
+// (GET /participants/{participantId})
+func (_ Unimplemented) GetParticipant(w http.ResponseWriter, r *http.Request, participantId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Grant an existing participant access to more objects
+// (POST /participants/{participantId}/properties)
+func (_ Unimplemented) AddParticipantProperties(w http.ResponseWriter, r *http.Request, participantId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List the actor's visible payment rules (the global «Платежи» screen)
+// (GET /payments)
+func (_ Unimplemented) ListGlobalPayments(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List the actor's visible «На оплату» rows (the section page)
+// (GET /payments/due)
+func (_ Unimplemented) ListPaymentDue(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Save the manual order of the actor's favorite payment rules
+// (PUT /payments/favorites/order)
+func (_ Unimplemented) SaveGlobalPaymentFavoritesOrder(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List the actor's visible properties with their payment stacks (the global «Объекты» screen)
+// (GET /payments/objects)
+func (_ Unimplemented) ListGlobalPaymentObjects(w http.ResponseWriter, r *http.Request, params ListGlobalPaymentObjectsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Search the actor's visible payment rules (the global «Платежи» search)
+// (GET /payments/search)
+func (_ Unimplemented) SearchGlobalPayments(w http.ResponseWriter, r *http.Request, params SearchGlobalPaymentsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3731,8 +6158,14 @@ func (_ Unimplemented) ListArchivedProperties(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Search the actor's visible properties (the «Объекты» search)
+// (GET /properties/search)
+func (_ Unimplemented) SearchProperties(w http.ResponseWriter, r *http.Request, params SearchPropertiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (DELETE /properties/{id})
-func (_ Unimplemented) DeleteProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params DeletePropertyParams) {
+func (_ Unimplemented) DeleteProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3748,21 +6181,6 @@ func (_ Unimplemented) UpdateProperty(w http.ResponseWriter, r *http.Request, id
 
 // (POST /properties/{id}/archive)
 func (_ Unimplemented) ArchiveProperty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /properties/{id}/export)
-func (_ Unimplemented) ExportPropertyData(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /properties/{id}/leases)
-func (_ Unimplemented) ListPropertyLeases(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /properties/{id}/operations/summary)
-func (_ Unimplemented) GetPropertyOperationsSummary(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3819,79 +6237,205 @@ func (_ Unimplemented) DeletePropertyAccessMember(w http.ResponseWriter, r *http
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// One property participant row (the member card)
+// (GET /properties/{propertyId}/access/members/{memberId})
+func (_ Unimplemented) GetPropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Change a member's role
 // (PATCH /properties/{propertyId}/access/members/{memberId})
 func (_ Unimplemented) UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyId PropertyId, memberId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /properties/{propertyId}/contacts)
-func (_ Unimplemented) ListPropertyContacts(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /properties/{propertyId}/contacts)
-func (_ Unimplemented) CreatePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (DELETE /properties/{propertyId}/contacts/{contactId})
-func (_ Unimplemented) DeletePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /properties/{propertyId}/contacts/{contactId})
-func (_ Unimplemented) GetPropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /properties/{propertyId}/contacts/{contactId})
-func (_ Unimplemented) UpdatePropertyContact(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, contactId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /properties/{propertyId}/free-reminders)
-func (_ Unimplemented) ListPropertyFreeReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPropertyFreeRemindersParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /properties/{propertyId}/free-reminders)
-func (_ Unimplemented) CreateFreeReminder(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /properties/{propertyId}/free-reminders/upcoming)
-func (_ Unimplemented) ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListUpcomingFreeRemindersParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // (GET /properties/{propertyId}/operations)
-func (_ Unimplemented) ListOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListOperationsByPropertyParams) {
+func (_ Unimplemented) ListPropertyOperations(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPropertyOperationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Create a manual operation (the one-off paid fact)
 // (POST /properties/{propertyId}/operations)
 func (_ Unimplemented) CreateOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (POST /properties/{propertyId}/photos)
+// (GET /properties/{propertyId}/operations/summary)
+func (_ Unimplemented) SummarizePropertyOperations(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params SummarizePropertyOperationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete an operation (the cancelled tombstone)
+// (DELETE /properties/{propertyId}/operations/{operationId})
+func (_ Unimplemented) DeleteOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/operations/{operationId})
+func (_ Unimplemented) GetOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/operations/{operationId}/pay)
+func (_ Unimplemented) PayOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, operationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/payments)
+func (_ Unimplemented) ListPayments(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPaymentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/payments)
+func (_ Unimplemented) CreatePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /properties/{propertyId}/payments/{paymentId})
+func (_ Unimplemented) DeletePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID, params DeletePaymentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/payments/{paymentId})
+func (_ Unimplemented) GetPayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /properties/{propertyId}/payments/{paymentId})
+func (_ Unimplemented) UpdatePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Страница истории изменений платежа (двусторонний keyset, канон #597)
+// (GET /properties/{propertyId}/payments/{paymentId}/changes)
+func (_ Unimplemented) ListPaymentChanges(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID, params ListPaymentChangesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/payments/{paymentId}/complete)
+func (_ Unimplemented) CompletePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /properties/{propertyId}/payments/{paymentId}/favorite)
+func (_ Unimplemented) SetPaymentFavorite(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/payments/{paymentId}/operations)
+func (_ Unimplemented) ListPaymentOperations(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID, params ListPaymentOperationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/payments/{paymentId}/pause)
+func (_ Unimplemented) PausePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/payments/{paymentId}/resume)
+func (_ Unimplemented) ResumePayment(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, paymentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /properties/{propertyId}/photo)
+func (_ Unimplemented) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/photo)
+func (_ Unimplemented) GetPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/photo)
 func (_ Unimplemented) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (DELETE /properties/{propertyId}/photos/{photoId})
-func (_ Unimplemented) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, photoId openapi_types.UUID) {
+// (PUT /properties/{propertyId}/pin)
+func (_ Unimplemented) SetPropertyPin(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /properties/{propertyId}/recurring-operations)
-func (_ Unimplemented) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+// (GET /properties/{propertyId}/rentals)
+func (_ Unimplemented) ListRentals(w http.ResponseWriter, r *http.Request, propertyId PropertyId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (POST /properties/{propertyId}/recurring-operations)
-func (_ Unimplemented) CreateRecurringOperation(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+// (POST /properties/{propertyId}/rentals)
+func (_ Unimplemented) CreateRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (DELETE /properties/{propertyId}/rentals/{rentalId})
+func (_ Unimplemented) DeleteRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/rentals/{rentalId})
+func (_ Unimplemented) GetRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /properties/{propertyId}/rentals/{rentalId})
+func (_ Unimplemented) UpdateRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /properties/{propertyId}/rentals/{rentalId}/complete)
+func (_ Unimplemented) CompleteRental(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/rentals/{rentalId}/summary)
+func (_ Unimplemented) GetRentalSummary(w http.ResponseWriter, r *http.Request, propertyId PropertyId, rentalId openapi_types.UUID, params GetRentalSummaryParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List the property's tasks (active ones or the completed journal)
+// (GET /properties/{propertyId}/tasks)
+func (_ Unimplemented) ListPropertyTasks(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, params ListPropertyTasksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// «Удалить все выполненные» — clear the completed journal
+// (DELETE /properties/{propertyId}/tasks/completed)
+func (_ Unimplemented) DeleteCompletedTasks(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a task rule (creating a task is creating a rule)
+// (POST /properties/{propertyId}/tasks/rules)
+func (_ Unimplemented) CreateTaskRule(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete the task rule (hard; not covered by the v1 UI)
+// (DELETE /properties/{propertyId}/tasks/rules/{ruleId})
+func (_ Unimplemented) DeleteTaskRule(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /properties/{propertyId}/tasks/rules/{ruleId})
+func (_ Unimplemented) GetTaskRule(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Partial task rule update
+// (PATCH /properties/{propertyId}/tasks/rules/{ruleId})
+func (_ Unimplemented) UpdateTaskRule(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// «Выполнить» the task
+// (POST /properties/{propertyId}/tasks/{taskId}/complete)
+func (_ Unimplemented) CompleteTask(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, taskId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// «Отменить выполнение» the task
+// (POST /properties/{propertyId}/tasks/{taskId}/uncomplete)
+func (_ Unimplemented) UncompleteTask(w http.ResponseWriter, r *http.Request, propertyId openapi_types.UUID, taskId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3905,58 +6449,26 @@ func (_ Unimplemented) CreatePushSubscription(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Настройки пушей устройства
+// (GET /push/subscriptions/preferences)
+func (_ Unimplemented) GetPushSubscriptionPreferences(w http.ResponseWriter, r *http.Request, params GetPushSubscriptionPreferencesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Заменить настройки пушей устройства
+// (PUT /push/subscriptions/preferences)
+func (_ Unimplemented) PutPushSubscriptionPreferences(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /push/vapid-public-key)
 func (_ Unimplemented) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /recurring-operations)
-func (_ Unimplemented) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (DELETE /recurring-operations/{id})
-func (_ Unimplemented) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /recurring-operations/{id})
-func (_ Unimplemented) GetRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /recurring-operations/{id})
-func (_ Unimplemented) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /recurring-operations/{id}/pause)
-func (_ Unimplemented) PauseRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (POST /recurring-operations/{id}/resume)
-func (_ Unimplemented) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /reminders)
-func (_ Unimplemented) ListReminders(w http.ResponseWriter, r *http.Request, params ListRemindersParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (GET /reminders/calendar)
-func (_ Unimplemented) ListCalendarReminders(w http.ResponseWriter, r *http.Request, params ListCalendarRemindersParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (DELETE /reminders/{reminderId})
-func (_ Unimplemented) DeleteReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// (PATCH /reminders/{reminderId})
-func (_ Unimplemented) UpdateReminder(w http.ResponseWriter, r *http.Request, reminderId openapi_types.UUID) {
+// Живой стрим изменений сущностей (SSE)
+// (GET /realtime/stream)
+func (_ Unimplemented) StreamRealtime(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4010,28 +6522,66 @@ func (_ Unimplemented) ListSubscriptionPayments(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (POST /subscription/resume)
+func (_ Unimplemented) ResumeSubscription(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /tariffs)
 func (_ Unimplemented) ListTariffs(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /tenant-contacts)
-func (_ Unimplemented) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
+// List the actor's visible tasks (the global «Задачи» screen)
+// (GET /tasks)
+func (_ Unimplemented) ListTasks(w http.ResponseWriter, r *http.Request, params ListTasksParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (POST /tenant-contacts)
-func (_ Unimplemented) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
+// «Удалить все выполненные» — clear the actor's book-wide completed journal
+// (DELETE /tasks/completed)
+func (_ Unimplemented) DeleteCompletedTasksWithoutProperty(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (GET /tenant-contacts/{id})
-func (_ Unimplemented) GetTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// Create a task rule without a property (the owner's own book)
+// (POST /tasks/rules)
+func (_ Unimplemented) CreateTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// (PATCH /tenant-contacts/{id})
-func (_ Unimplemented) UpdateTenantContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// Delete a property-less task rule (hard)
+// (DELETE /tasks/rules/{ruleId})
+func (_ Unimplemented) DeleteTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Load a task rule of the property-less slice (the edit screen)
+// (GET /tasks/rules/{ruleId})
+func (_ Unimplemented) GetTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Partial task rule update on the property-less slice
+// (PATCH /tasks/rules/{ruleId})
+func (_ Unimplemented) UpdateTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// «Выполнить» a property-less task
+// (POST /tasks/{taskId}/complete)
+func (_ Unimplemented) CompleteTaskWithoutProperty(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// «Отменить выполнение» a property-less task
+// (POST /tasks/{taskId}/uncomplete)
+func (_ Unimplemented) UncompleteTaskWithoutProperty(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /users/{userId}/photo)
+func (_ Unimplemented) GetUserPhoto(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4215,343 +6765,6 @@ func (siw *ServerInterfaceWrapper) GetAdminAuditLog(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminAuditLog(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListAdminLeases operation middleware
-func (siw *ServerInterfaceWrapper) ListAdminLeases(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListAdminLeasesParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "status" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "property_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "owner_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "order" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAdminLeases(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetAdminLease operation middleware
-func (siw *ServerInterfaceWrapper) GetAdminLease(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAdminLease(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListAdminOperations operation middleware
-func (siw *ServerInterfaceWrapper) ListAdminOperations(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListAdminOperationsParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "status" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "type" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "property_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "lease_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "lease_id", r.URL.Query(), &params.LeaseId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lease_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lease_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "owner_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "q" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "order" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAdminOperations(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetAdminOperation operation middleware
-func (siw *ServerInterfaceWrapper) GetAdminOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAdminOperation(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4849,6 +7062,19 @@ func (siw *ServerInterfaceWrapper) ListAdminSubscriptionPayments(w http.Response
 		return
 	}
 
+	// ------------- Optional query parameter "subscription_status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "subscription_status", r.URL.Query(), &params.SubscriptionStatus, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "subscription_status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subscription_status", Err: err})
+		}
+		return
+	}
+
 	// ------------- Optional query parameter "sort" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
@@ -5008,11 +7234,8 @@ func (siw *ServerInterfaceWrapper) SyncSubscriptionPayment(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// ListAdminTenantContacts operation middleware
-func (siw *ServerInterfaceWrapper) ListAdminTenantContacts(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
+// ListAdminTariffs operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminTariffs(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
@@ -5020,89 +7243,8 @@ func (siw *ServerInterfaceWrapper) ListAdminTenantContacts(w http.ResponseWriter
 
 	r = r.WithContext(ctx)
 
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListAdminTenantContactsParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "q" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "owner_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "order" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
-		}
-		return
-	}
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAdminTenantContacts(w, r, params)
+		siw.Handler.ListAdminTariffs(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5112,18 +7254,38 @@ func (siw *ServerInterfaceWrapper) ListAdminTenantContacts(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// GetAdminTenantContact operation middleware
-func (siw *ServerInterfaceWrapper) GetAdminTenantContact(w http.ResponseWriter, r *http.Request) {
+// CreateAdminTariff operation middleware
+func (siw *ServerInterfaceWrapper) CreateAdminTariff(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAdminTariff(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAdminTariff operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAdminTariff(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "tariffId" -------------
+	var tariffId openapi_types.UUID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	err = runtime.BindStyledParameterWithOptions("simple", "tariffId", chi.URLParam(r, "tariffId"), &tariffId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tariffId", Err: err})
 		return
 	}
 
@@ -5134,7 +7296,7 @@ func (siw *ServerInterfaceWrapper) GetAdminTenantContact(w http.ResponseWriter, 
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAdminTenantContact(w, r, id)
+		siw.Handler.UpdateAdminTariff(w, r, tariffId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5445,232 +7607,6 @@ func (siw *ServerInterfaceWrapper) ListAdminUserAuditLogs(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
-// ListAdminUserLeases operation middleware
-func (siw *ServerInterfaceWrapper) ListAdminUserLeases(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListAdminUserLeasesParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "order" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAdminUserLeases(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListAdminUserOperations operation middleware
-func (siw *ServerInterfaceWrapper) ListAdminUserOperations(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListAdminUserOperationsParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "status" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "type" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "property_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "lease_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "lease_id", r.URL.Query(), &params.LeaseId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lease_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lease_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "order" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAdminUserOperations(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // ListAdminUserProperties operation middleware
 func (siw *ServerInterfaceWrapper) ListAdminUserProperties(w http.ResponseWriter, r *http.Request) {
 
@@ -5771,8 +7707,8 @@ func (siw *ServerInterfaceWrapper) ListAdminUserProperties(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// ListAdminUserTenantContacts operation middleware
-func (siw *ServerInterfaceWrapper) ListAdminUserTenantContacts(w http.ResponseWriter, r *http.Request) {
+// CancelAdminSubscription operation middleware
+func (siw *ServerInterfaceWrapper) CancelAdminSubscription(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -5792,63 +7728,136 @@ func (siw *ServerInterfaceWrapper) ListAdminUserTenantContacts(w http.ResponseWr
 
 	r = r.WithContext(ctx)
 
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListAdminUserTenantContactsParams
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelAdminSubscription(w, r, id)
+	}))
 
-	// ------------- Optional query parameter "limit" -------------
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	handler.ServeHTTP(w, r)
+}
+
+// ForceChangeAdminSubscriptionTariff operation middleware
+func (siw *ServerInterfaceWrapper) ForceChangeAdminSubscriptionTariff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
 		return
 	}
 
-	// ------------- Optional query parameter "offset" -------------
+	ctx := r.Context()
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
 
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "order" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
-		}
-		return
-	}
+	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAdminUserTenantContacts(w, r, id, params)
+		siw.Handler.ForceChangeAdminSubscriptionTariff(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExtendAdminSubscriptionGrace operation middleware
+func (siw *ServerInterfaceWrapper) ExtendAdminSubscriptionGrace(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExtendAdminSubscriptionGrace(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AssignAdminServiceSubscription operation middleware
+func (siw *ServerInterfaceWrapper) AssignAdminServiceSubscription(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AssignAdminServiceSubscription(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAdminSubscriptionTransitions operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminSubscriptionTransitions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAdminSubscriptionTransitions(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5869,26 +7878,6 @@ func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Logout(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// LogoutAll operation middleware
-func (siw *ServerInterfaceWrapper) LogoutAll(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.LogoutAll(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5940,6 +7929,322 @@ func (siw *ServerInterfaceWrapper) ReportClientError(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListContacts operation middleware
+func (siw *ServerInterfaceWrapper) ListContacts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListContactsParams
+
+	// ------------- Optional query parameter "property_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListContacts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateContact operation middleware
+func (siw *ServerInterfaceWrapper) CreateContact(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateContact(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteContact operation middleware
+func (siw *ServerInterfaceWrapper) DeleteContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteContact(w, r, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetContact operation middleware
+func (siw *ServerInterfaceWrapper) GetContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetContact(w, r, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateContact operation middleware
+func (siw *ServerInterfaceWrapper) UpdateContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateContact(w, r, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteContactPhoto operation middleware
+func (siw *ServerInterfaceWrapper) DeleteContactPhoto(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteContactPhoto(w, r, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetContactPhoto operation middleware
+func (siw *ServerInterfaceWrapper) GetContactPhoto(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetContactPhoto(w, r, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadContactPhoto operation middleware
+func (siw *ServerInterfaceWrapper) UploadContactPhoto(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadContactPhoto(w, r, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAddressSuggestions operation middleware
 func (siw *ServerInterfaceWrapper) GetAddressSuggestions(w http.ResponseWriter, r *http.Request) {
 
@@ -5979,49 +8284,11 @@ func (siw *ServerInterfaceWrapper) GetAddressSuggestions(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
-// GetFinanceReport operation middleware
-func (siw *ServerInterfaceWrapper) GetFinanceReport(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetFinanceReportParams
-
-	// ------------- Optional query parameter "from" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "to" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		}
-		return
-	}
+// SendFeedback operation middleware
+func (siw *ServerInterfaceWrapper) SendFeedback(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFinanceReport(w, r, params)
+		siw.Handler.SendFeedback(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6031,8 +8298,8 @@ func (siw *ServerInterfaceWrapper) GetFinanceReport(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
-// ListFreeReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListFreeReminders(w http.ResponseWriter, r *http.Request) {
+// GetHistory operation middleware
+func (siw *ServerInterfaceWrapper) GetHistory(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -6044,7 +8311,33 @@ func (siw *ServerInterfaceWrapper) ListFreeReminders(w http.ResponseWriter, r *h
 	r = r.WithContext(ctx)
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ListFreeRemindersParams
+	var params GetHistoryParams
+
+	// ------------- Optional query parameter "before_cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "before_cursor", r.URL.Query(), &params.BeforeCursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "before_cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "before_cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after_cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after_cursor", r.URL.Query(), &params.AfterCursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after_cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_cursor", Err: err})
+		}
+		return
+	}
 
 	// ------------- Optional query parameter "limit" -------------
 
@@ -6059,21 +8352,99 @@ func (siw *ServerInterfaceWrapper) ListFreeReminders(w http.ResponseWriter, r *h
 		return
 	}
 
-	// ------------- Optional query parameter "offset" -------------
+	// ------------- Optional query parameter "date_from" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_from"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "actions" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actions", r.URL.Query(), &params.Actions, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actions"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actions", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kinds" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kinds", r.URL.Query(), &params.Kinds, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kinds"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kinds", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "actor_ids" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actor_ids", r.URL.Query(), &params.ActorIds, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actor_ids"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor_ids", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "property_ids" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_ids", r.URL.Query(), &params.PropertyIds, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_ids"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_ids", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
 		}
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListFreeReminders(w, r, params)
+		siw.Handler.GetHistory(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6083,287 +8454,36 @@ func (siw *ServerInterfaceWrapper) ListFreeReminders(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
-// DeleteFreeReminder operation middleware
-func (siw *ServerInterfaceWrapper) DeleteFreeReminder(w http.ResponseWriter, r *http.Request) {
+// GetHistoryFilters operation middleware
+func (siw *ServerInterfaceWrapper) GetHistoryFilters(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "freeReminderId" -------------
-	var freeReminderId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "freeReminderId", chi.URLParam(r, "freeReminderId"), &freeReminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "freeReminderId", Err: err})
-		return
-	}
-
 	ctx := r.Context()
 
 	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
 
 	r = r.WithContext(ctx)
 
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteFreeReminder(w, r, freeReminderId)
-	}))
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHistoryFiltersParams
 
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
+	// ------------- Optional query parameter "property_ids" -------------
 
-	handler.ServeHTTP(w, r)
-}
-
-// GetFreeReminder operation middleware
-func (siw *ServerInterfaceWrapper) GetFreeReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "freeReminderId" -------------
-	var freeReminderId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "freeReminderId", chi.URLParam(r, "freeReminderId"), &freeReminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_ids", r.URL.Query(), &params.PropertyIds, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "freeReminderId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFreeReminder(w, r, freeReminderId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateFreeReminder operation middleware
-func (siw *ServerInterfaceWrapper) UpdateFreeReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "freeReminderId" -------------
-	var freeReminderId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "freeReminderId", chi.URLParam(r, "freeReminderId"), &freeReminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "freeReminderId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateFreeReminder(w, r, freeReminderId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ConfirmFakeSubscriptionPayment operation middleware
-func (siw *ServerInterfaceWrapper) ConfirmFakeSubscriptionPayment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_ids"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_ids", Err: err})
+		}
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ConfirmFakeSubscriptionPayment(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListLeases operation middleware
-func (siw *ServerInterfaceWrapper) ListLeases(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListLeases(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateLease operation middleware
-func (siw *ServerInterfaceWrapper) CreateLease(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateLease(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetLease operation middleware
-func (siw *ServerInterfaceWrapper) GetLease(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetLease(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateLease operation middleware
-func (siw *ServerInterfaceWrapper) UpdateLease(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateLease(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CompleteLease operation middleware
-func (siw *ServerInterfaceWrapper) CompleteLease(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CompleteLease(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListLeaseReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListLeaseReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "leaseId" -------------
-	var leaseId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "leaseId", chi.URLParam(r, "leaseId"), &leaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "leaseId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListLeaseReminders(w, r, leaseId)
+		siw.Handler.GetHistoryFilters(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6413,6 +8533,106 @@ func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ChangeEmail operation middleware
+func (siw *ServerInterfaceWrapper) ChangeEmail(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ChangeEmail(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestNewEmailCode operation middleware
+func (siw *ServerInterfaceWrapper) RequestNewEmailCode(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestNewEmailCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResendEmailCode operation middleware
+func (siw *ServerInterfaceWrapper) ResendEmailCode(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResendEmailCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendEmailChangeCode operation middleware
+func (siw *ServerInterfaceWrapper) SendEmailChangeCode(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendEmailChangeCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// VerifyCurrentEmail operation middleware
+func (siw *ServerInterfaceWrapper) VerifyCurrentEmail(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyCurrentEmail(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ChangePhone operation middleware
 func (siw *ServerInterfaceWrapper) ChangePhone(w http.ResponseWriter, r *http.Request) {
 
@@ -6453,6 +8673,138 @@ func (siw *ServerInterfaceWrapper) SendPhoneChangeCode(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteMePhoto operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMePhoto(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMePhoto(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMePhoto operation middleware
+func (siw *ServerInterfaceWrapper) GetMePhoto(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMePhoto(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadMePhoto operation middleware
+func (siw *ServerInterfaceWrapper) UploadMePhoto(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadMePhoto(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSessions operation middleware
+func (siw *ServerInterfaceWrapper) ListSessions(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSessions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LogoutOtherSessions operation middleware
+func (siw *ServerInterfaceWrapper) LogoutOtherSessions(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LogoutOtherSessions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeSession operation middleware
+func (siw *ServerInterfaceWrapper) RevokeSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeSession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetNotificationPreferences operation middleware
 func (siw *ServerInterfaceWrapper) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
 
@@ -6473,8 +8825,8 @@ func (siw *ServerInterfaceWrapper) GetNotificationPreferences(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
-// UpdateNotificationPreferences operation middleware
-func (siw *ServerInterfaceWrapper) UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+// PutNotificationPreferences operation middleware
+func (siw *ServerInterfaceWrapper) PutNotificationPreferences(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
@@ -6483,7 +8835,7 @@ func (siw *ServerInterfaceWrapper) UpdateNotificationPreferences(w http.Response
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateNotificationPreferences(w, r)
+		siw.Handler.PutNotificationPreferences(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6493,30 +8845,82 @@ func (siw *ServerInterfaceWrapper) UpdateNotificationPreferences(w http.Response
 	handler.ServeHTTP(w, r)
 }
 
-// ListOperationCategories operation middleware
-func (siw *ServerInterfaceWrapper) ListOperationCategories(w http.ResponseWriter, r *http.Request) {
+// DeleteAllNotifications operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAllNotifications(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAllNotifications(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNotifications operation middleware
+func (siw *ServerInterfaceWrapper) ListNotifications(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ListOperationCategoriesParams
+	var params ListNotificationsParams
 
-	// ------------- Optional query parameter "type" -------------
+	// ------------- Optional query parameter "unread" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "unread", r.URL.Query(), &params.Unread, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "unread"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "unread", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
 		}
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListOperationCategories(w, r, params)
+		siw.Handler.ListNotifications(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6526,11 +8930,153 @@ func (siw *ServerInterfaceWrapper) ListOperationCategories(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// CreateOperationCategory operation middleware
-func (siw *ServerInterfaceWrapper) CreateOperationCategory(w http.ResponseWriter, r *http.Request) {
+// MarkAllNotificationsRead operation middleware
+func (siw *ServerInterfaceWrapper) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateOperationCategory(w, r)
+		siw.Handler.MarkAllNotificationsRead(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StreamNotifications operation middleware
+func (siw *ServerInterfaceWrapper) StreamNotifications(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamNotifications(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUnreadNotificationCount operation middleware
+func (siw *ServerInterfaceWrapper) GetUnreadNotificationCount(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUnreadNotificationCount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNotification operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNotification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "notificationId" -------------
+	var notificationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "notificationId", chi.URLParam(r, "notificationId"), &notificationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notificationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNotification(w, r, notificationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNotification operation middleware
+func (siw *ServerInterfaceWrapper) GetNotification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "notificationId" -------------
+	var notificationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "notificationId", chi.URLParam(r, "notificationId"), &notificationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notificationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotification(w, r, notificationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkNotificationRead operation middleware
+func (siw *ServerInterfaceWrapper) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "notificationId" -------------
+	var notificationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "notificationId", chi.URLParam(r, "notificationId"), &notificationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notificationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkNotificationRead(w, r, notificationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6555,9 +9101,61 @@ func (siw *ServerInterfaceWrapper) ListOperations(w http.ResponseWriter, r *http
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListOperationsParams
 
+	// ------------- Optional query parameter "propertyIds" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "propertyIds", r.URL.Query(), &params.PropertyIds, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "propertyIds"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyIds", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
 	// ------------- Optional query parameter "type" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
@@ -6568,106 +9166,28 @@ func (siw *ServerInterfaceWrapper) ListOperations(w http.ResponseWriter, r *http
 		return
 	}
 
-	// ------------- Optional query parameter "status" -------------
+	// ------------- Optional query parameter "includeArchived" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "includeArchived", r.URL.Query(), &params.IncludeArchived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "includeArchived"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeArchived", Err: err})
 		}
 		return
 	}
 
-	// ------------- Optional query parameter "category_id" -------------
+	// ------------- Optional query parameter "category" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "category_id", r.URL.Query(), &params.CategoryId, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "category", r.URL.Query(), &params.Category, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "category_id"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "category"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "property_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "property_id", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "property_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "property_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "from" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "to" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "recurring_operation_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "recurring_operation_id", r.URL.Query(), &params.RecurringOperationId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "recurring_operation_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recurring_operation_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "lease_id" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "lease_id", r.URL.Query(), &params.LeaseId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lease_id"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lease_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "exclude_archived_properties" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "exclude_archived_properties", r.URL.Query(), &params.ExcludeArchivedProperties, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "exclude_archived_properties"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "exclude_archived_properties", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category", Err: err})
 		}
 		return
 	}
@@ -6685,6 +9205,19 @@ func (siw *ServerInterfaceWrapper) ListOperations(w http.ResponseWriter, r *http
 		return
 	}
 
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
 	// ------------- Optional query parameter "limit" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
@@ -6698,15 +9231,15 @@ func (siw *ServerInterfaceWrapper) ListOperations(w http.ResponseWriter, r *http
 		return
 	}
 
-	// ------------- Optional query parameter "offset" -------------
+	// ------------- Optional query parameter "cursor" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
 		}
 		return
 	}
@@ -6722,20 +9255,11 @@ func (siw *ServerInterfaceWrapper) ListOperations(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
-// DeleteOperation operation middleware
-func (siw *ServerInterfaceWrapper) DeleteOperation(w http.ResponseWriter, r *http.Request) {
+// SummarizeOperations operation middleware
+func (siw *ServerInterfaceWrapper) SummarizeOperations(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
 
 	ctx := r.Context()
 
@@ -6743,8 +9267,115 @@ func (siw *ServerInterfaceWrapper) DeleteOperation(w http.ResponseWriter, r *htt
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SummarizeOperationsParams
+
+	// ------------- Optional query parameter "propertyIds" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "propertyIds", r.URL.Query(), &params.PropertyIds, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "propertyIds"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyIds", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "includeArchived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "includeArchived", r.URL.Query(), &params.IncludeArchived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "includeArchived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeArchived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "category" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "category", r.URL.Query(), &params.Category, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "category"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteOperation(w, r, id)
+		siw.Handler.SummarizeOperations(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6754,20 +9385,8 @@ func (siw *ServerInterfaceWrapper) DeleteOperation(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// GetOperation operation middleware
-func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
+// RevokeAllParticipants operation middleware
+func (siw *ServerInterfaceWrapper) RevokeAllParticipants(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
@@ -6776,7 +9395,7 @@ func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.R
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetOperation(w, r, id)
+		siw.Handler.RevokeAllParticipants(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6786,20 +9405,8 @@ func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
-// UpdateOperation operation middleware
-func (siw *ServerInterfaceWrapper) UpdateOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
+// ListParticipants operation middleware
+func (siw *ServerInterfaceWrapper) ListParticipants(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
@@ -6808,7 +9415,7 @@ func (siw *ServerInterfaceWrapper) UpdateOperation(w http.ResponseWriter, r *htt
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateOperation(w, r, id)
+		siw.Handler.ListParticipants(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6818,20 +9425,8 @@ func (siw *ServerInterfaceWrapper) UpdateOperation(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// CompleteOperation operation middleware
-func (siw *ServerInterfaceWrapper) CompleteOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
+// InviteParticipant operation middleware
+func (siw *ServerInterfaceWrapper) InviteParticipant(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
@@ -6840,7 +9435,7 @@ func (siw *ServerInterfaceWrapper) CompleteOperation(w http.ResponseWriter, r *h
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CompleteOperation(w, r, id)
+		siw.Handler.InviteParticipant(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6850,18 +9445,18 @@ func (siw *ServerInterfaceWrapper) CompleteOperation(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
-// MarkOperationIncomplete operation middleware
-func (siw *ServerInterfaceWrapper) MarkOperationIncomplete(w http.ResponseWriter, r *http.Request) {
+// DeleteParticipant operation middleware
+func (siw *ServerInterfaceWrapper) DeleteParticipant(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "participantId" -------------
+	var participantId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	err = runtime.BindStyledParameterWithOptions("simple", "participantId", chi.URLParam(r, "participantId"), &participantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "participantId", Err: err})
 		return
 	}
 
@@ -6872,7 +9467,7 @@ func (siw *ServerInterfaceWrapper) MarkOperationIncomplete(w http.ResponseWriter
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.MarkOperationIncomplete(w, r, id)
+		siw.Handler.DeleteParticipant(w, r, participantId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6882,18 +9477,18 @@ func (siw *ServerInterfaceWrapper) MarkOperationIncomplete(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// MoveOperation operation middleware
-func (siw *ServerInterfaceWrapper) MoveOperation(w http.ResponseWriter, r *http.Request) {
+// GetParticipant operation middleware
+func (siw *ServerInterfaceWrapper) GetParticipant(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "participantId" -------------
+	var participantId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	err = runtime.BindStyledParameterWithOptions("simple", "participantId", chi.URLParam(r, "participantId"), &participantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "participantId", Err: err})
 		return
 	}
 
@@ -6904,7 +9499,229 @@ func (siw *ServerInterfaceWrapper) MoveOperation(w http.ResponseWriter, r *http.
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.MoveOperation(w, r, id)
+		siw.Handler.GetParticipant(w, r, participantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddParticipantProperties operation middleware
+func (siw *ServerInterfaceWrapper) AddParticipantProperties(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "participantId" -------------
+	var participantId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "participantId", chi.URLParam(r, "participantId"), &participantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "participantId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddParticipantProperties(w, r, participantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListGlobalPayments operation middleware
+func (siw *ServerInterfaceWrapper) ListGlobalPayments(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListGlobalPayments(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPaymentDue operation middleware
+func (siw *ServerInterfaceWrapper) ListPaymentDue(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPaymentDue(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SaveGlobalPaymentFavoritesOrder operation middleware
+func (siw *ServerInterfaceWrapper) SaveGlobalPaymentFavoritesOrder(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SaveGlobalPaymentFavoritesOrder(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListGlobalPaymentObjects operation middleware
+func (siw *ServerInterfaceWrapper) ListGlobalPaymentObjects(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListGlobalPaymentObjectsParams
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListGlobalPaymentObjects(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SearchGlobalPayments operation middleware
+func (siw *ServerInterfaceWrapper) SearchGlobalPayments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchGlobalPaymentsParams
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "category" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "category", r.URL.Query(), &params.Category, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "category"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchGlobalPayments(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7026,6 +9843,71 @@ func (siw *ServerInterfaceWrapper) ListArchivedProperties(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
+// SearchProperties operation middleware
+func (siw *ServerInterfaceWrapper) SearchProperties(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchPropertiesParams
+
+	// ------------- Required query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchProperties(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteProperty operation middleware
 func (siw *ServerInterfaceWrapper) DeleteProperty(w http.ResponseWriter, r *http.Request) {
 
@@ -7047,24 +9929,8 @@ func (siw *ServerInterfaceWrapper) DeleteProperty(w http.ResponseWriter, r *http
 
 	r = r.WithContext(ctx)
 
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DeletePropertyParams
-
-	// ------------- Required query parameter "mode" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "mode", r.URL.Query(), &params.Mode, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "mode"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mode", Err: err})
-		}
-		return
-	}
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteProperty(w, r, id, params)
+		siw.Handler.DeleteProperty(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7161,102 +10027,6 @@ func (siw *ServerInterfaceWrapper) ArchiveProperty(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ArchiveProperty(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ExportPropertyData operation middleware
-func (siw *ServerInterfaceWrapper) ExportPropertyData(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ExportPropertyData(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListPropertyLeases operation middleware
-func (siw *ServerInterfaceWrapper) ListPropertyLeases(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListPropertyLeases(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetPropertyOperationsSummary operation middleware
-func (siw *ServerInterfaceWrapper) GetPropertyOperationsSummary(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPropertyOperationsSummary(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7590,6 +10360,47 @@ func (siw *ServerInterfaceWrapper) DeletePropertyAccessMember(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
+// GetPropertyAccessMember operation middleware
+func (siw *ServerInterfaceWrapper) GetPropertyAccessMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", chi.URLParam(r, "memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPropertyAccessMember(w, r, propertyId, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UpdatePropertyAccessMember operation middleware
 func (siw *ServerInterfaceWrapper) UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request) {
 
@@ -7631,195 +10442,8 @@ func (siw *ServerInterfaceWrapper) UpdatePropertyAccessMember(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
-// ListPropertyContacts operation middleware
-func (siw *ServerInterfaceWrapper) ListPropertyContacts(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListPropertyContacts(w, r, propertyId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreatePropertyContact operation middleware
-func (siw *ServerInterfaceWrapper) CreatePropertyContact(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreatePropertyContact(w, r, propertyId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeletePropertyContact operation middleware
-func (siw *ServerInterfaceWrapper) DeletePropertyContact(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "contactId" -------------
-	var contactId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeletePropertyContact(w, r, propertyId, contactId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetPropertyContact operation middleware
-func (siw *ServerInterfaceWrapper) GetPropertyContact(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "contactId" -------------
-	var contactId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPropertyContact(w, r, propertyId, contactId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdatePropertyContact operation middleware
-func (siw *ServerInterfaceWrapper) UpdatePropertyContact(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "contactId" -------------
-	var contactId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "contactId", chi.URLParam(r, "contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdatePropertyContact(w, r, propertyId, contactId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListPropertyFreeReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListPropertyFreeReminders(w http.ResponseWriter, r *http.Request) {
+// ListPropertyOperations operation middleware
+func (siw *ServerInterfaceWrapper) ListPropertyOperations(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -7840,139 +10464,11 @@ func (siw *ServerInterfaceWrapper) ListPropertyFreeReminders(w http.ResponseWrit
 	r = r.WithContext(ctx)
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ListPropertyFreeRemindersParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListPropertyFreeReminders(w, r, propertyId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateFreeReminder operation middleware
-func (siw *ServerInterfaceWrapper) CreateFreeReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateFreeReminder(w, r, propertyId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListUpcomingFreeReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListUpcomingFreeReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListUpcomingFreeRemindersParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListUpcomingFreeReminders(w, r, propertyId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListOperationsByProperty operation middleware
-func (siw *ServerInterfaceWrapper) ListOperationsByProperty(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListOperationsByPropertyParams
+	var params ListPropertyOperationsParams
 
 	// ------------- Optional query parameter "status" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
@@ -7983,54 +10479,28 @@ func (siw *ServerInterfaceWrapper) ListOperationsByProperty(w http.ResponseWrite
 		return
 	}
 
-	// ------------- Optional query parameter "type" -------------
+	// ------------- Optional query parameter "date_from" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_from"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
 		}
 		return
 	}
 
-	// ------------- Optional query parameter "category_id" -------------
+	// ------------- Optional query parameter "date_to" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "category_id", r.URL.Query(), &params.CategoryId, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "category_id"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_to"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category_id", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "from" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "to" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
 		}
 		return
 	}
@@ -8044,6 +10514,19 @@ func (siw *ServerInterfaceWrapper) ListOperationsByProperty(w http.ResponseWrite
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
 		}
 		return
 	}
@@ -8074,8 +10557,47 @@ func (siw *ServerInterfaceWrapper) ListOperationsByProperty(w http.ResponseWrite
 		return
 	}
 
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "category" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "category", r.URL.Query(), &params.Category, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "category"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListOperationsByProperty(w, r, propertyId, params)
+		siw.Handler.ListPropertyOperations(w, r, propertyId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8117,6 +10639,920 @@ func (siw *ServerInterfaceWrapper) CreateOperation(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// SummarizePropertyOperations operation middleware
+func (siw *ServerInterfaceWrapper) SummarizePropertyOperations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SummarizePropertyOperationsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "category" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "category", r.URL.Query(), &params.Category, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "category"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "category", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SummarizePropertyOperations(w, r, propertyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteOperation operation middleware
+func (siw *ServerInterfaceWrapper) DeleteOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "operationId" -------------
+	var operationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "operationId", chi.URLParam(r, "operationId"), &operationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteOperation(w, r, propertyId, operationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOperation operation middleware
+func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "operationId" -------------
+	var operationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "operationId", chi.URLParam(r, "operationId"), &operationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOperation(w, r, propertyId, operationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PayOperation operation middleware
+func (siw *ServerInterfaceWrapper) PayOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "operationId" -------------
+	var operationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "operationId", chi.URLParam(r, "operationId"), &operationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operationId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PayOperation(w, r, propertyId, operationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPayments operation middleware
+func (siw *ServerInterfaceWrapper) ListPayments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPaymentsParams
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "search"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPayments(w, r, propertyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePayment operation middleware
+func (siw *ServerInterfaceWrapper) CreatePayment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePayment(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePayment operation middleware
+func (siw *ServerInterfaceWrapper) DeletePayment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeletePaymentParams
+
+	// ------------- Optional query parameter "keep_overdue" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keep_overdue", r.URL.Query(), &params.KeepOverdue, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "keep_overdue"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keep_overdue", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePayment(w, r, propertyId, paymentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPayment operation middleware
+func (siw *ServerInterfaceWrapper) GetPayment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPayment(w, r, propertyId, paymentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePayment operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePayment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePayment(w, r, propertyId, paymentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPaymentChanges operation middleware
+func (siw *ServerInterfaceWrapper) ListPaymentChanges(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPaymentChangesParams
+
+	// ------------- Optional query parameter "before_cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "before_cursor", r.URL.Query(), &params.BeforeCursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "before_cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "before_cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after_cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after_cursor", r.URL.Query(), &params.AfterCursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after_cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPaymentChanges(w, r, propertyId, paymentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompletePayment operation middleware
+func (siw *ServerInterfaceWrapper) CompletePayment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompletePayment(w, r, propertyId, paymentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetPaymentFavorite operation middleware
+func (siw *ServerInterfaceWrapper) SetPaymentFavorite(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetPaymentFavorite(w, r, propertyId, paymentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPaymentOperations operation middleware
+func (siw *ServerInterfaceWrapper) ListPaymentOperations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPaymentOperationsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "date_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPaymentOperations(w, r, propertyId, paymentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PausePayment operation middleware
+func (siw *ServerInterfaceWrapper) PausePayment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PausePayment(w, r, propertyId, paymentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResumePayment operation middleware
+func (siw *ServerInterfaceWrapper) ResumePayment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "paymentId" -------------
+	var paymentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "paymentId", chi.URLParam(r, "paymentId"), &paymentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "paymentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumePayment(w, r, propertyId, paymentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePropertyPhoto operation middleware
+func (siw *ServerInterfaceWrapper) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePropertyPhoto(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPropertyPhoto operation middleware
+func (siw *ServerInterfaceWrapper) GetPropertyPhoto(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPropertyPhoto(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UploadPropertyPhoto operation middleware
 func (siw *ServerInterfaceWrapper) UploadPropertyPhoto(w http.ResponseWriter, r *http.Request) {
 
@@ -8149,8 +11585,8 @@ func (siw *ServerInterfaceWrapper) UploadPropertyPhoto(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// DeletePropertyPhoto operation middleware
-func (siw *ServerInterfaceWrapper) DeletePropertyPhoto(w http.ResponseWriter, r *http.Request) {
+// SetPropertyPin operation middleware
+func (siw *ServerInterfaceWrapper) SetPropertyPin(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -8164,15 +11600,6 @@ func (siw *ServerInterfaceWrapper) DeletePropertyPhoto(w http.ResponseWriter, r 
 		return
 	}
 
-	// ------------- Path parameter "photoId" -------------
-	var photoId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "photoId", chi.URLParam(r, "photoId"), &photoId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "photoId", Err: err})
-		return
-	}
-
 	ctx := r.Context()
 
 	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
@@ -8180,7 +11607,7 @@ func (siw *ServerInterfaceWrapper) DeletePropertyPhoto(w http.ResponseWriter, r 
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeletePropertyPhoto(w, r, propertyId, photoId)
+		siw.Handler.SetPropertyPin(w, r, propertyId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8190,14 +11617,14 @@ func (siw *ServerInterfaceWrapper) DeletePropertyPhoto(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// ListRecurringOperationsByProperty operation middleware
-func (siw *ServerInterfaceWrapper) ListRecurringOperationsByProperty(w http.ResponseWriter, r *http.Request) {
+// ListRentals operation middleware
+func (siw *ServerInterfaceWrapper) ListRentals(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
 	// ------------- Path parameter "propertyId" -------------
-	var propertyId openapi_types.UUID
+	var propertyId PropertyId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
@@ -8212,7 +11639,7 @@ func (siw *ServerInterfaceWrapper) ListRecurringOperationsByProperty(w http.Resp
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRecurringOperationsByProperty(w, r, propertyId)
+		siw.Handler.ListRentals(w, r, propertyId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8222,8 +11649,335 @@ func (siw *ServerInterfaceWrapper) ListRecurringOperationsByProperty(w http.Resp
 	handler.ServeHTTP(w, r)
 }
 
-// CreateRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) CreateRecurringOperation(w http.ResponseWriter, r *http.Request) {
+// CreateRental operation middleware
+func (siw *ServerInterfaceWrapper) CreateRental(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRental(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteRental operation middleware
+func (siw *ServerInterfaceWrapper) DeleteRental(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "rentalId" -------------
+	var rentalId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "rentalId", chi.URLParam(r, "rentalId"), &rentalId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rentalId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteRental(w, r, propertyId, rentalId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRental operation middleware
+func (siw *ServerInterfaceWrapper) GetRental(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "rentalId" -------------
+	var rentalId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "rentalId", chi.URLParam(r, "rentalId"), &rentalId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rentalId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRental(w, r, propertyId, rentalId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateRental operation middleware
+func (siw *ServerInterfaceWrapper) UpdateRental(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "rentalId" -------------
+	var rentalId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "rentalId", chi.URLParam(r, "rentalId"), &rentalId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rentalId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateRental(w, r, propertyId, rentalId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteRental operation middleware
+func (siw *ServerInterfaceWrapper) CompleteRental(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "rentalId" -------------
+	var rentalId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "rentalId", chi.URLParam(r, "rentalId"), &rentalId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rentalId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteRental(w, r, propertyId, rentalId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRentalSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetRentalSummary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId PropertyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "rentalId" -------------
+	var rentalId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "rentalId", chi.URLParam(r, "rentalId"), &rentalId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rentalId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetRentalSummaryParams
+
+	// ------------- Optional query parameter "until" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "until", r.URL.Query(), &params.Until, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "until"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "until", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRentalSummary(w, r, propertyId, rentalId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPropertyTasks operation middleware
+func (siw *ServerInterfaceWrapper) ListPropertyTasks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPropertyTasksParams
+
+	// ------------- Optional query parameter "completed" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "completed", r.URL.Query(), &params.Completed, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "completed"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "completed", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPropertyTasks(w, r, propertyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCompletedTasks operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCompletedTasks(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -8244,7 +11998,244 @@ func (siw *ServerInterfaceWrapper) CreateRecurringOperation(w http.ResponseWrite
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateRecurringOperation(w, r, propertyId)
+		siw.Handler.DeleteCompletedTasks(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTaskRule operation middleware
+func (siw *ServerInterfaceWrapper) CreateTaskRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTaskRule(w, r, propertyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTaskRule operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTaskRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTaskRule(w, r, propertyId, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTaskRule operation middleware
+func (siw *ServerInterfaceWrapper) GetTaskRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTaskRule(w, r, propertyId, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateTaskRule operation middleware
+func (siw *ServerInterfaceWrapper) UpdateTaskRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateTaskRule(w, r, propertyId, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteTask operation middleware
+func (siw *ServerInterfaceWrapper) CompleteTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", chi.URLParam(r, "taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteTask(w, r, propertyId, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UncompleteTask operation middleware
+func (siw *ServerInterfaceWrapper) UncompleteTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "propertyId" -------------
+	var propertyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "propertyId", chi.URLParam(r, "propertyId"), &propertyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", chi.URLParam(r, "taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UncompleteTask(w, r, propertyId, taskId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8294,6 +12285,65 @@ func (siw *ServerInterfaceWrapper) CreatePushSubscription(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
+// GetPushSubscriptionPreferences operation middleware
+func (siw *ServerInterfaceWrapper) GetPushSubscriptionPreferences(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPushSubscriptionPreferencesParams
+
+	// ------------- Required query parameter "endpoint" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "endpoint", r.URL.Query(), &params.Endpoint, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "endpoint"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "endpoint", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPushSubscriptionPreferences(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutPushSubscriptionPreferences operation middleware
+func (siw *ServerInterfaceWrapper) PutPushSubscriptionPreferences(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutPushSubscriptionPreferences(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetVapidPublicKey operation middleware
 func (siw *ServerInterfaceWrapper) GetVapidPublicKey(w http.ResponseWriter, r *http.Request) {
 
@@ -8314,8 +12364,8 @@ func (siw *ServerInterfaceWrapper) GetVapidPublicKey(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
-// ListRecurringOperations operation middleware
-func (siw *ServerInterfaceWrapper) ListRecurringOperations(w http.ResponseWriter, r *http.Request) {
+// StreamRealtime operation middleware
+func (siw *ServerInterfaceWrapper) StreamRealtime(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
@@ -8324,335 +12374,7 @@ func (siw *ServerInterfaceWrapper) ListRecurringOperations(w http.ResponseWriter
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRecurringOperations(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) DeleteRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) GetRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) UpdateRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// PauseRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) PauseRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PauseRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ResumeRecurringOperation operation middleware
-func (siw *ServerInterfaceWrapper) ResumeRecurringOperation(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ResumeRecurringOperation(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListRemindersParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListReminders(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListCalendarReminders operation middleware
-func (siw *ServerInterfaceWrapper) ListCalendarReminders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListCalendarRemindersParams
-
-	// ------------- Required query parameter "from" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
-		}
-		return
-	}
-
-	// ------------- Required query parameter "to" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListCalendarReminders(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteReminder operation middleware
-func (siw *ServerInterfaceWrapper) DeleteReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "reminderId" -------------
-	var reminderId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "reminderId", chi.URLParam(r, "reminderId"), &reminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reminderId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteReminder(w, r, reminderId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateReminder operation middleware
-func (siw *ServerInterfaceWrapper) UpdateReminder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "reminderId" -------------
-	var reminderId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "reminderId", chi.URLParam(r, "reminderId"), &reminderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reminderId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateReminder(w, r, reminderId)
+		siw.Handler.StreamRealtime(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8886,6 +12608,26 @@ func (siw *ServerInterfaceWrapper) ListSubscriptionPayments(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// ResumeSubscription operation middleware
+func (siw *ServerInterfaceWrapper) ResumeSubscription(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumeSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTariffs operation middleware
 func (siw *ServerInterfaceWrapper) ListTariffs(w http.ResponseWriter, r *http.Request) {
 
@@ -8906,58 +12648,149 @@ func (siw *ServerInterfaceWrapper) ListTariffs(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
-// ListTenantContacts operation middleware
-func (siw *ServerInterfaceWrapper) ListTenantContacts(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListTenantContacts(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateTenantContact operation middleware
-func (siw *ServerInterfaceWrapper) CreateTenantContact(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateTenantContact(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetTenantContact operation middleware
-func (siw *ServerInterfaceWrapper) GetTenantContact(w http.ResponseWriter, r *http.Request) {
+// ListTasks operation middleware
+func (siw *ServerInterfaceWrapper) ListTasks(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	ctx := r.Context()
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTasksParams
+
+	// ------------- Optional query parameter "propertyId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "propertyId", r.URL.Query(), &params.PropertyId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "propertyId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "propertyId", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "withoutProperty" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "withoutProperty", r.URL.Query(), &params.WithoutProperty, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "withoutProperty"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "withoutProperty", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "completed" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "completed", r.URL.Query(), &params.Completed, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "completed"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "completed", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTasks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCompletedTasksWithoutProperty operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCompletedTasksWithoutProperty(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCompletedTasksWithoutProperty(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTaskRuleWithoutProperty operation middleware
+func (siw *ServerInterfaceWrapper) CreateTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTaskRuleWithoutProperty(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTaskRuleWithoutProperty operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
 		return
 	}
 
@@ -8968,7 +12801,7 @@ func (siw *ServerInterfaceWrapper) GetTenantContact(w http.ResponseWriter, r *ht
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetTenantContact(w, r, id)
+		siw.Handler.DeleteTaskRuleWithoutProperty(w, r, ruleId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8978,18 +12811,18 @@ func (siw *ServerInterfaceWrapper) GetTenantContact(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
-// UpdateTenantContact operation middleware
-func (siw *ServerInterfaceWrapper) UpdateTenantContact(w http.ResponseWriter, r *http.Request) {
+// GetTaskRuleWithoutProperty operation middleware
+func (siw *ServerInterfaceWrapper) GetTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
 		return
 	}
 
@@ -9000,7 +12833,135 @@ func (siw *ServerInterfaceWrapper) UpdateTenantContact(w http.ResponseWriter, r 
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateTenantContact(w, r, id)
+		siw.Handler.GetTaskRuleWithoutProperty(w, r, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateTaskRuleWithoutProperty operation middleware
+func (siw *ServerInterfaceWrapper) UpdateTaskRuleWithoutProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateTaskRuleWithoutProperty(w, r, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteTaskWithoutProperty operation middleware
+func (siw *ServerInterfaceWrapper) CompleteTaskWithoutProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", chi.URLParam(r, "taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteTaskWithoutProperty(w, r, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UncompleteTaskWithoutProperty operation middleware
+func (siw *ServerInterfaceWrapper) UncompleteTaskWithoutProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", chi.URLParam(r, "taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UncompleteTaskWithoutProperty(w, r, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUserPhoto operation middleware
+func (siw *ServerInterfaceWrapper) GetUserPhoto(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userId" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUserPhoto(w, r, userId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -9156,18 +13117,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/admin/audit-logs/{id}", wrapper.GetAdminAuditLog)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/leases", wrapper.ListAdminLeases)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/leases/{id}", wrapper.GetAdminLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/operations", wrapper.ListAdminOperations)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/operations/{id}", wrapper.GetAdminOperation)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/properties", wrapper.ListAdminProperties)
 	})
 	r.Group(func(r chi.Router) {
@@ -9192,10 +13141,13 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/tenant-contacts", wrapper.ListAdminTenantContacts)
+		r.Get(options.BaseURL+"/admin/tariffs", wrapper.ListAdminTariffs)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/tenant-contacts/{id}", wrapper.GetAdminTenantContact)
+		r.Post(options.BaseURL+"/admin/tariffs", wrapper.CreateAdminTariff)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/admin/tariffs/{tariffId}", wrapper.UpdateAdminTariff)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/users", wrapper.ListAdminUsers)
@@ -9207,22 +13159,25 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/admin/users/{id}/audit-logs", wrapper.ListAdminUserAuditLogs)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/users/{id}/leases", wrapper.ListAdminUserLeases)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/users/{id}/operations", wrapper.ListAdminUserOperations)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/users/{id}/properties", wrapper.ListAdminUserProperties)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/admin/users/{id}/tenant-contacts", wrapper.ListAdminUserTenantContacts)
+		r.Post(options.BaseURL+"/admin/users/{id}/subscription/cancel", wrapper.CancelAdminSubscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/users/{id}/subscription/force-change", wrapper.ForceChangeAdminSubscriptionTariff)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/users/{id}/subscription/grace-extension", wrapper.ExtendAdminSubscriptionGrace)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/users/{id}/subscription/service", wrapper.AssignAdminServiceSubscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users/{id}/subscription/transitions", wrapper.ListAdminSubscriptionTransitions)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/logout", wrapper.Logout)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/auth/logout-all", wrapper.LogoutAll)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/send", wrapper.SendCode)
@@ -9234,43 +13189,40 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/client-errors", wrapper.ReportClientError)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/contacts", wrapper.ListContacts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/contacts", wrapper.CreateContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/contacts/{contactId}", wrapper.DeleteContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/contacts/{contactId}", wrapper.GetContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/contacts/{contactId}", wrapper.UpdateContact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/contacts/{contactId}/photo", wrapper.DeleteContactPhoto)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/contacts/{contactId}/photo", wrapper.GetContactPhoto)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/contacts/{contactId}/photo", wrapper.UploadContactPhoto)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/dadata/suggestions/address", wrapper.GetAddressSuggestions)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/finance/report", wrapper.GetFinanceReport)
+		r.Post(options.BaseURL+"/feedback", wrapper.SendFeedback)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/free-reminders", wrapper.ListFreeReminders)
+		r.Get(options.BaseURL+"/history", wrapper.GetHistory)
 	})
 	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/free-reminders/{freeReminderId}", wrapper.DeleteFreeReminder)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/free-reminders/{freeReminderId}", wrapper.GetFreeReminder)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/free-reminders/{freeReminderId}", wrapper.UpdateFreeReminder)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/internal/fake-subscription-payment/{id}/confirm", wrapper.ConfirmFakeSubscriptionPayment)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/leases", wrapper.ListLeases)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/leases", wrapper.CreateLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/leases/{id}", wrapper.GetLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/leases/{id}", wrapper.UpdateLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/leases/{id}/complete", wrapper.CompleteLease)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/leases/{leaseId}/reminders", wrapper.ListLeaseReminders)
+		r.Get(options.BaseURL+"/history/filters", wrapper.GetHistoryFilters)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
@@ -9279,43 +13231,112 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Patch(options.BaseURL+"/me", wrapper.UpdateMe)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/email/change", wrapper.ChangeEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/email/request-new-email-code", wrapper.RequestNewEmailCode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/email/resend-code", wrapper.ResendEmailCode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/email/send-code", wrapper.SendEmailChangeCode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/email/verify-current", wrapper.VerifyCurrentEmail)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/me/phone/change", wrapper.ChangePhone)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/me/phone/send-code", wrapper.SendPhoneChangeCode)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/me/photo", wrapper.DeleteMePhoto)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/photo", wrapper.GetMePhoto)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/photo", wrapper.UploadMePhoto)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/sessions", wrapper.ListSessions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/sessions/logout-others", wrapper.LogoutOtherSessions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/me/sessions/{sessionId}", wrapper.RevokeSession)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/notification-preferences", wrapper.GetNotificationPreferences)
 	})
 	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/notification-preferences", wrapper.UpdateNotificationPreferences)
+		r.Put(options.BaseURL+"/notification-preferences", wrapper.PutNotificationPreferences)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/operation-categories", wrapper.ListOperationCategories)
+		r.Delete(options.BaseURL+"/notifications", wrapper.DeleteAllNotifications)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/operation-categories", wrapper.CreateOperationCategory)
+		r.Get(options.BaseURL+"/notifications", wrapper.ListNotifications)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/notifications/read-all", wrapper.MarkAllNotificationsRead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/notifications/stream", wrapper.StreamNotifications)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/notifications/unread-count", wrapper.GetUnreadNotificationCount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/notifications/{notificationId}", wrapper.DeleteNotification)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/notifications/{notificationId}", wrapper.GetNotification)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/notifications/{notificationId}/read", wrapper.MarkNotificationRead)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/operations", wrapper.ListOperations)
 	})
 	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/operations/{id}", wrapper.DeleteOperation)
+		r.Get(options.BaseURL+"/operations/summary", wrapper.SummarizeOperations)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/operations/{id}", wrapper.GetOperation)
+		r.Delete(options.BaseURL+"/participants", wrapper.RevokeAllParticipants)
 	})
 	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/operations/{id}", wrapper.UpdateOperation)
+		r.Get(options.BaseURL+"/participants", wrapper.ListParticipants)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/operations/{id}/complete", wrapper.CompleteOperation)
+		r.Post(options.BaseURL+"/participants/invite", wrapper.InviteParticipant)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/operations/{id}/mark-incomplete", wrapper.MarkOperationIncomplete)
+		r.Delete(options.BaseURL+"/participants/{participantId}", wrapper.DeleteParticipant)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/operations/{id}/move", wrapper.MoveOperation)
+		r.Get(options.BaseURL+"/participants/{participantId}", wrapper.GetParticipant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/participants/{participantId}/properties", wrapper.AddParticipantProperties)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/payments", wrapper.ListGlobalPayments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/payments/due", wrapper.ListPaymentDue)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/payments/favorites/order", wrapper.SaveGlobalPaymentFavoritesOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/payments/objects", wrapper.ListGlobalPaymentObjects)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/payments/search", wrapper.SearchGlobalPayments)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/popups/pending", wrapper.GetPendingPopups)
@@ -9333,6 +13354,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/properties/archive", wrapper.ListArchivedProperties)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/search", wrapper.SearchProperties)
+	})
+	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/properties/{id}", wrapper.DeleteProperty)
 	})
 	r.Group(func(r chi.Router) {
@@ -9343,15 +13367,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/properties/{id}/archive", wrapper.ArchiveProperty)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{id}/export", wrapper.ExportPropertyData)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{id}/leases", wrapper.ListPropertyLeases)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{id}/operations/summary", wrapper.GetPropertyOperationsSummary)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/properties/{id}/unarchive", wrapper.UnarchiveProperty)
@@ -9381,49 +13396,118 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Delete(options.BaseURL+"/properties/{propertyId}/access/members/{memberId}", wrapper.DeletePropertyAccessMember)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/access/members/{memberId}", wrapper.GetPropertyAccessMember)
+	})
+	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/properties/{propertyId}/access/members/{memberId}", wrapper.UpdatePropertyAccessMember)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{propertyId}/contacts", wrapper.ListPropertyContacts)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/properties/{propertyId}/contacts", wrapper.CreatePropertyContact)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/properties/{propertyId}/contacts/{contactId}", wrapper.DeletePropertyContact)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{propertyId}/contacts/{contactId}", wrapper.GetPropertyContact)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/properties/{propertyId}/contacts/{contactId}", wrapper.UpdatePropertyContact)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{propertyId}/free-reminders", wrapper.ListPropertyFreeReminders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/properties/{propertyId}/free-reminders", wrapper.CreateFreeReminder)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{propertyId}/free-reminders/upcoming", wrapper.ListUpcomingFreeReminders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{propertyId}/operations", wrapper.ListOperationsByProperty)
+		r.Get(options.BaseURL+"/properties/{propertyId}/operations", wrapper.ListPropertyOperations)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/properties/{propertyId}/operations", wrapper.CreateOperation)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/properties/{propertyId}/photos", wrapper.UploadPropertyPhoto)
+		r.Get(options.BaseURL+"/properties/{propertyId}/operations/summary", wrapper.SummarizePropertyOperations)
 	})
 	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/properties/{propertyId}/photos/{photoId}", wrapper.DeletePropertyPhoto)
+		r.Delete(options.BaseURL+"/properties/{propertyId}/operations/{operationId}", wrapper.DeleteOperation)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/properties/{propertyId}/recurring-operations", wrapper.ListRecurringOperationsByProperty)
+		r.Get(options.BaseURL+"/properties/{propertyId}/operations/{operationId}", wrapper.GetOperation)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/properties/{propertyId}/recurring-operations", wrapper.CreateRecurringOperation)
+		r.Post(options.BaseURL+"/properties/{propertyId}/operations/{operationId}/pay", wrapper.PayOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/payments", wrapper.ListPayments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/payments", wrapper.CreatePayment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}", wrapper.DeletePayment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}", wrapper.GetPayment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}", wrapper.UpdatePayment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}/changes", wrapper.ListPaymentChanges)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}/complete", wrapper.CompletePayment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}/favorite", wrapper.SetPaymentFavorite)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}/operations", wrapper.ListPaymentOperations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}/pause", wrapper.PausePayment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/payments/{paymentId}/resume", wrapper.ResumePayment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/photo", wrapper.DeletePropertyPhoto)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/photo", wrapper.GetPropertyPhoto)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/photo", wrapper.UploadPropertyPhoto)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/properties/{propertyId}/pin", wrapper.SetPropertyPin)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/rentals", wrapper.ListRentals)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/rentals", wrapper.CreateRental)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/rentals/{rentalId}", wrapper.DeleteRental)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/rentals/{rentalId}", wrapper.GetRental)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/properties/{propertyId}/rentals/{rentalId}", wrapper.UpdateRental)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/rentals/{rentalId}/complete", wrapper.CompleteRental)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/rentals/{rentalId}/summary", wrapper.GetRentalSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/tasks", wrapper.ListPropertyTasks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/tasks/completed", wrapper.DeleteCompletedTasks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/tasks/rules", wrapper.CreateTaskRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/properties/{propertyId}/tasks/rules/{ruleId}", wrapper.DeleteTaskRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/properties/{propertyId}/tasks/rules/{ruleId}", wrapper.GetTaskRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/properties/{propertyId}/tasks/rules/{ruleId}", wrapper.UpdateTaskRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/tasks/{taskId}/complete", wrapper.CompleteTask)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/properties/{propertyId}/tasks/{taskId}/uncomplete", wrapper.UncompleteTask)
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/push/subscriptions", wrapper.DeletePushSubscription)
@@ -9432,37 +13516,16 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/push/subscriptions", wrapper.CreatePushSubscription)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/push/subscriptions/preferences", wrapper.GetPushSubscriptionPreferences)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/push/subscriptions/preferences", wrapper.PutPushSubscriptionPreferences)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/push/vapid-public-key", wrapper.GetVapidPublicKey)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/recurring-operations", wrapper.ListRecurringOperations)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/recurring-operations/{id}", wrapper.DeleteRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/recurring-operations/{id}", wrapper.GetRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/recurring-operations/{id}", wrapper.UpdateRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/recurring-operations/{id}/pause", wrapper.PauseRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/recurring-operations/{id}/resume", wrapper.ResumeRecurringOperation)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/reminders", wrapper.ListReminders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/reminders/calendar", wrapper.ListCalendarReminders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/reminders/{reminderId}", wrapper.DeleteReminder)
-	})
-	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/reminders/{reminderId}", wrapper.UpdateReminder)
+		r.Get(options.BaseURL+"/realtime/stream", wrapper.StreamRealtime)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/subscription", wrapper.GetSubscription)
@@ -9495,19 +13558,37 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/subscription/payments", wrapper.ListSubscriptionPayments)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/subscription/resume", wrapper.ResumeSubscription)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tariffs", wrapper.ListTariffs)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/tenant-contacts", wrapper.ListTenantContacts)
+		r.Get(options.BaseURL+"/tasks", wrapper.ListTasks)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/tenant-contacts", wrapper.CreateTenantContact)
+		r.Delete(options.BaseURL+"/tasks/completed", wrapper.DeleteCompletedTasksWithoutProperty)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/tenant-contacts/{id}", wrapper.GetTenantContact)
+		r.Post(options.BaseURL+"/tasks/rules", wrapper.CreateTaskRuleWithoutProperty)
 	})
 	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/tenant-contacts/{id}", wrapper.UpdateTenantContact)
+		r.Delete(options.BaseURL+"/tasks/rules/{ruleId}", wrapper.DeleteTaskRuleWithoutProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tasks/rules/{ruleId}", wrapper.GetTaskRuleWithoutProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/tasks/rules/{ruleId}", wrapper.UpdateTaskRuleWithoutProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tasks/{taskId}/complete", wrapper.CompleteTaskWithoutProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tasks/{taskId}/uncomplete", wrapper.UncompleteTaskWithoutProperty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/users/{userId}/photo", wrapper.GetUserPhoto)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/webhooks/payment/{provider}", wrapper.HandlePaymentWebhook)
@@ -9521,227 +13602,975 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"JkzIk18d/+q4d/vx9v8FAAD//w==",
+	"7L1rcxxHdiD6VzLAjWB3uNAEQIAPIOYDh5Q83JFIXhLa3QljLpToykanWV3VrqwG2J5QBB+jx1zK4kh3",
+	"1nZ4bY01dsRsXH2BSEICCQKM4C+o+gvzS27kOSezsqqruhsgSGsnPLFrEV1V+Th58rwfv5ppR71+FIow",
+	"UTPLv5rp85j3RCJi+OtyFCa8najLg1hFsf7FF6ody34io3BmeWa1K1jU538zEKwdhYkMB1w/YW14n3Xi",
+	"qMeSrmD9WGzJaKBYn2+K04qF4k6CY7LGbTFUItFPZIhfR1sihs8CqRIZbp5WTEVxwm6LIeOhz6TvsUS2",
+	"b4uEnTo3N9dssUusJ5WS4SaLYiZ6/WTItngwEEwlPE6UHSxf0YbYlGEow80VxlmPB50o7gmfvpKKcbY4",
+	"N9ea8Wak3uffDEQ8nPFmQt4TM8szuL0Zb0a1u6LHNVySYV8/UUksw82Zjz7yLOzekz2ZVINOQ4Mp+beC",
+	"RR1YFcFiW4Z+tM0adZvEVfYED3FrvujwQQAwFCuMhywaJLNRZzbm4aaYck8BLNPdEo06s7w05830+B3Z",
+	"G/Rmlufn9F8ypL88s3MZJmJTxLD1n0mVRPHwUjuJ4qu+Gt18+u/pXrqffZ7dz+6y9GV6yNKd9Hl2P/sy",
+	"u5vupC/Yn+7+jg0G0mfZp+ludjfdTX9g6Q/pTvoye5Tdzx5kX6yw9DB9mu6lB0z68H72d+lz+PyAvfo2",
+	"/V26mz7L7mX308fpXvaIZQ+yT9Md+OEg3Uufpzuv9lss/Qc9ZrqX3Uv3WHZPj/mdnizdT/f01OlBepA9",
+	"TF+46ztMX7CGXrTeQfpDepg+Tney++mu/ptlD9Kn6U66n32ZHjRhb+lTlv26fr/ZA5YepLv46st0R3+e",
+	"fZHdZ7TOw/SJ/qnF0n9Jd/Xf2V0AyHO9k+xh+gwBpSEw5ni5Pot16avCEYs7vNcP9PO5+YsXNkRncXb+",
+	"HF+YPe/7c7N8acGfXdyY78yJs+2LfH5+xqtAc3PWnUTEdWQCVv4SQPeDPqHsU1p5+jx7kN3N7ulNMX02",
+	"eH7pXvZJ9pCl/5x+nf6v9Ov079P/ydLn6X72hT5D1ujHoi9CX0PoMH2cPcw+JuSAg9xNn3n69R14fMCu",
+	"hh0ZykT8Xxoiq1wGzWWmTzm7m32Z3c/uZY9Yupf+AERqnSjXyFqyeyy7p1Ez3dP/X//xON1Nv6c/YYDs",
+	"Qfq9Pki9lCf6YPWfiEEjK2yx9PdwlI/Sp+lh+tzM6Pwzn1yfrUaPWQCinvUg3U1fZA9Yox0Lngh/nSce",
+	"k36TXXnn1mU9dvYAUP1QA/kQLsFudh8HqgMaoGF2v8XSr9IX6S58v6s3viE6USwMaNKXdCM1mgPmZ5/D",
+	"p3gdskcTUVGjyvpUNJSQ66dciUttjUzT0ZLD7B7u0lzep0ViQASmlrZ4SFsO9Fh7mhQgaO7BbdS7fI5P",
+	"ftBosE8E4G72iDUuXbnJ5ubOzbNXf1xs0pXdS38A8CPpOUQMOYBbsAt3fHeKywt7r7663PeF7/kiEInw",
+	"x93Rn8I5nvQl/Sb9Q/rb9F/T/126pDSWxu59ugh6q+m+/md2X3/6mOFL2WcAxV1Pw/M5fLaf7rP0McDt",
+	"bvZxzY3VYkSOloiU2cP0afYg+w1gdHm1LZb+E67QsFoN+fIlWil9l+7opRwCqf+OEGs/e6QvC6zFXt0n",
+	"Gi1eAvrt663qS/EkPWyx9Gt49QH8X0BCOnQDjXRHY+Oe/oczLJEcvKt113YMY9gIog2DWyt6D4Vr7d7D",
+	"17/VBSIx3bW+whPxbhz1KnDxK4tJe4azwpV5hFzx+/Qge6T/eFI8JdzEHqDdDhKD/GwR4JovANCBz941",
+	"oz4FFq4Pms3NLcP/Yx+sXmYNh5G4XLxiNs25NXs4mE13QAqA42zWAczniVjX8mgBWFoO5Qk9HneZNfBW",
+	"o6OBjm7T8YH3AhDjU73J9IlFVADR8xyGf8EWFrNPGUpSelazIKABgNnASYE5PSlQkzcM7iQ6HrB/LsMp",
+	"xVh9tZ+CCFtkOumzE2Q5uyhzoIzxMn35ltjQbYBCNRPq82FPhIkX9UUMWtw4cNaoROm/pjvpD0CkKhiN",
+	"ixqnli6eX2ZLcwj07AEg077mO/D6Fx6bn8OHIANp2DxvvkXN50as4ZAMp1V+DtPvsv+HSPdx1R/ND/Ru",
+	"9R3Rl7IwJjC+nfR74I/PLLUHInGP6CFxe+c75nJvln6XPUS2gEi+l76wTIsozResYZcFzMO+iWPnmF1E",
+	"R3hK++jHcou3h7OLc4ssfQzYDnwVt38XuOtOQcB3RYofSIH6lJ1aWjzfXGFwJT5O90gY3C1sEISQdB++",
+	"AUoJlDAXxfViNQqRSuax7EGFIjl5jgPSJmEjoOw9BVliByUJPfZr6nd9wrgRFa/2EoI6VIGdv08PASme",
+	"E0F55MKD+EL6vRYJNfVI97X+qveyT0DZY9mngA5A65c1Xv4GlA+8q/dha3rEByVAg1J1AKf8GUB9p6h3",
+	"a5lSY9IjD2/2p0DvATCvvjU86DFbFYHYjHnv1f4yLRaJHC41p5Qkoe4Cm3me3Wt6tMJfA9l5oukQYNUD",
+	"Buf6ANa6546gVw2fmJ8Os1/DBXyh176So+/TdGf2+k0royLaZPe1ytmRd2bfXb3Frt9kV9+7+vN3WAMW",
+	"dQ9Y9afs1IWzFz0NNf2JhuKpC4sLTdDw7pKxYl9jGGwUzB+g3gCSOZj6WNOM7P6KXgJqhiMHC+ypxHKN",
+	"QvgNkAsQHwyZ+A7MLahjvlxGWf0wfapxlAFmP9NHvqf/DQws+yxnMKyxsLSkoaaV58dAYnb0hd4D/r4P",
+	"xpdPaFc5AdfL/Rj03ocGkloe/gzv5gr+BuiCtw1weM9YVixK4wWl5eLlRKx2lHG8hhrH0t1avvE3hXvW",
+	"43feE+Fm0p1ZXlhaqmJ+1w1rVJd5IjajWAr1rgwSUaGMXY56PT6rRJ/HWgBjbfxiyFQw2FSskXQFa3dl",
+	"X7HeIEjkrBKBaCfNFWb5r2JRh/FwyKKkK+J8AB4L1oFZhc+iQTLGeOpLxTcCgTZG/GaFbXdlIlSftwXj",
+	"cTQIfVqSVExuhlEs/FqrKS1hAnlywPSjtTovXTyPhEe/vxlEGzxgHSH804pstyu0ACTKZkjFbgvRh0dR",
+	"p6Pn34rafGMQ8HjYYnpbtAWp2AbANongbViITNg214BWA+GzQeiLGNYg2t1In55+LpMu48yXnY6IRZjQ",
+	"h8b0O5WdXO/jbdrJ8/Ou1wevhu1goOSWYEG0LWICDhnN+yKWkc+isHR6WqiH02sogSCkUwl4GGrkNxPj",
+	"mxtDY0f38DUu/XV4QrIt6/B2QnDXo/3EvnHiOl4RJlVqXg6RQb//fxpEjqyG5fCAffviUtzuyi3hjwLm",
+	"PdlJYLUcX2HtQcIap5YWLzaXy9SRBjH3VArFYvHXkQzzixAhTVCDXo/HQ9or/MJ7gm1JJTdkIJOhJja+",
+	"1CRu1FGjaRIPlIDbrwqLE3dgOz5S9FNLi3NA0mINV4J9LShlCRQV12wjigLBwxIMrfr1prWhfMrrQO7q",
+	"5kRiWD2pO8vcpFliv4qZ3tJE0JexaNcR+tGL0VxhXLVZIwp8oRLWkbFKmvok9dCsYe9FKLbz53UnFcG6",
+	"KrcHS53xZkSoN/hXMxz+gh9/Of4mODrmtFKE5UfSJxmCeNerb9Ovc43l1f60UoUdcFSqeIe3u1qlk/pO",
+	"qSjQ9yzpxtFgs8tkotiWFNtsU8OdrBULF5Cl8pANwtthtB1qcIdROAu3LBA0GjJW0BHZ4twi+DvLN3nI",
+	"Qh7H0bbD0ZJIv4g8D/yuDfsoFFsgIcVaIsvH0t83jyYeWZmgJ+JNzUZFvTjUd2wE03LIW0KvruKguRKz",
+	"MlQiVDLRdEUNNnAApuCTHOlzGp/IJBAg2hR+P60caTPkfdWNQEiE5bMe9wWLwmCoEcGXm/oo9RC8Fw20",
+	"vIG4FsWKNUBIVB5rayxUHutHMkyUx3yuukI1Gfd9qSfkQaDHTdpdgiWOtQxoYqaIBe1E+EyGSvrCeVXf",
+	"YNGWPR6Y9xu3o75o31ZNj6mILSzNzbGODH3FFtjS3Jw3N8f+dP8AFq6feUvFx0vw2NOyroYQbb0bBb6G",
+	"qEb/QCT6uBFzzNpxMeqoEjVofT2R8HaXa8IvYsWIBeFXevOBTETMA1WHTQic6REpiisMcP+9KzWqFKUA",
+	"h1KyWHCgHCQGX7y40FzGtwziV4sSKD/opfkDDdEkieXGgAY3wkQX7RL4rsZXXwum/UAmFkn7cfTXRMUD",
+	"jeZRSKpQmWeuOMKKWRpvJwMeFGUXu0O7XpLkFewVhXISp0DEUqxhhbozJMw07fpQTNBUpBMFQbSdSwo+",
+	"SQYGPnG0bSlOGBUXpUfTPEixgKtE48JGlHRzDqZIDLFbXDGinqOKoC2NSx/GVHhnDShI+yFtY5sHt1Vx",
+	"qajxTKmF1OKkRrIaroeSnuF69Kfd0CTedyvhyaCW7eHvWnwtEzZgOgo+blkUk/oEEqaRT/j6dm93RZyj",
+	"jRIxsIeo1x8kQmkA8E0uQ5WwJPL50NxVy3qi7VDEpxVLZE/8bRQK1jCHDuoZBOwAiAONYpobqQTpVDuQ",
+	"IkwUkZUQ2JbeQWnAWnjDxooGegIwrYBgPOPN0OYnAXp12BdHBHOOp8vu9dbrH/aFZSlM73HofEa3YVR8",
+	"riCadRCArVTtX4btqAcYd6cvQlWz7xu41MtdHm4K9Z8hLf8Z0nLyIS1FHPtxhGQ41nx0gRfDMv58oy+c",
+	"jU+Kv8hvx59DBEYRC0/EH9tcZvOt1vzcnFfnlWVLbyX6lPZmrOzDOv612jU6BVPtWAjQfLqyb3S5Ro/3",
+	"2aml82dZLLaj+HZzmeQBrRQLH951lSUjMJho3DZPeBCBHTkYbBpL0kA51vjTyng9UV/VTA/UR9AofBYP",
+	"gO9p8Ysn9qsWewd0iii2nBKGiAx3ZFcTI0OQGkwD5o6H1zTSWxi/fRN9mV4UrfI/zlhwA663ZnkzE6LB",
+	"oMbVO9Fq0GLXQ3aGBDh1hi6LTFg8CFVuUtBYWrIm2EvRqLgRLOAbIjDGav31hDuiAdQEJSdfTLShNUE1",
+	"uhrHBNTDBXHfj4VSE6/N66jWBuDjBOZV2q0C/DutHJtkPclxDVkjZAHFWkB0lGvJi2Sgjy5CLVkP9T7z",
+	"+ZzUggXUPcIo6cKlCYnKOYSRKaE1X0kaT4u9f9Jk53UFd2vAR4T/jyBLeiejBOm0HiNJRBz+WElTCXRv",
+	"j0SVJq4hUojPtYQqvxZK0wE8C2uMIlJAJERDHYyJSA/cSzDfbLH3BCf7ns+SmMtA/+G4uxG1E35b6DON",
+	"E6P4w/QTiUcs/mYgY+HPLCfxQIyLHOjJ0Pw9PwbZh1d9e0x9nnSrLMtj57Vut8FAVseNr3J1+9g8C3HA",
+	"YMTSFBgB071JT9Gq5lHHt6FvDJHL/VgNvB/p01b9KFQCwg5/yv2b4m8GQgE4NcETIfyT9/uBbAPxOvPX",
+	"Su/+V86w/yUWnZnlmVNn8szAM/hUnbkRRxuB6OFkRfj9lPsspukw/a0TyPZbmdrO9ZE3824Ub0jfF+Hb",
+	"mDif7CNv5mqoyTwPboHB8J04Rg70ptdgpjWGSgETf+TNvC96GyJWXdm/NVB9EfroLp+wHhvSq9/0NX71",
+	"7Djryg6kV5FwGWg18Xda587uZw/Slyx9Xgx+fICmgT18hRTGxxixuVwM49rFUE6wPmX3iwGsh2CUwPjB",
+	"HYhw/XX2QF8GNHkuL86d9WbgchZOxVIBvhENkuWNgIe3NWheG+iX2m3NQcgwnvtVFbMgYhuizQcK3Qux",
+	"aMu+JDMoj2Wnw3hbU5lZJ0aoJyFWR9xpC6Fh/JE3cy1K3o0Gof82EOlalLAOTPaRN3NrsGGf/TSI2rfF",
+	"W1mDOy34H3DqFRaLUGxreJPcJlhvkHBwSvk84eUl/0dQnxb7UJ+8DDfXSUtZF3ekStSH6NdGlxW9knu9",
+	"osBXVuvJ0cMXbalAVAdXCzt1bv4cWSDojTYYbzzSt8K2CAKUR40SFgs16IFwOWQIRzYIExkUvG7knFek",
+	"RMhYqBb7UIZbPJD++m0h+usGRT+0gpU73WmMasulEuNQiUKb12w8GIjzbrxNvjutu3+IA6+HUbLOt7gM",
+	"NDOtnha8UMRvhI116sRCsA2uZJugBBCLjZMHNByNRDAQeSVdlNOwUoyDriPz1c0vnjvfxFgp7vdkWFwJ",
+	"7XdzwGO490OWdKVimny22Id4CnVbojMSoQ/ucdhVmwcBbokXVwdWIJqNVoAhStvdSGF8lnFWdrmyDiY8",
+	"Vn9ZT5ZE5G6BOA7zyHy1GYHoglEafT7U4OpEMeMG59zj0ipJvgqAvCFtodrWQo71d4FfUcPD4qZ+fbaw",
+	"OeQnRZDn4DNibA65wi1gXGn0dhdUGJwCI/EGajDFosclBnOB9xW26Qyr10lAQVQwwMzdWoVRpL4F/QTd",
+	"rAaCFiPplC30Ls43W5pkrUbR+zwckpSm3ga1Wo0i1uPh0NwdNePNdAX3qeLDTZHEw1lwfVUEUol2FPrA",
+	"9ra5TMiLwmL9jVHGjAhYIajmorhe1gchHyTdKJZ/+3ZYS2G+j6wQALu+BHTpllBK4mw5hdJ/bcTRtqoC",
+	"yE/xAUPdX7Q2W+xyNyaTzC84PV4hFWG7K0I2CPs8VhgWVBLgPTPR+/yvozGz9fRjtiVivdoVFg6CwIwN",
+	"cVN6aP2jpjRG7SsfgTfTlkmFuv2XIrp6Y9ZGbOmX7NWAaISrN4zuEg80V+GBONoS8t2SIfdSMhIEOpvI",
+	"nqgCUHsQx4QkJbSOBwJXgNYrOEm2IYIo3LRyGhBWzYei7ZC1o+i2FM4x2GBJjTlbsi1W4ffyTFfgGWsH",
+	"XGlS3U8GsRsw/YES8eylTc1aeWIXAluVEcDFmLYooiCe8Wb63SiE/Wp46buTbM14MwTLCpOXNyP9KVR4",
+	"b0Yf2dV+hbILkQb6MIlD9yKlZYE2igRwhac6Qz3BLSHCoxxiVJEURyEHWtkeqkT04EpNe3E+cs0cfzUj",
+	"UT2xR2jv1QzMTahvgVPYhIuVObrlJ4BmZ72LS75PRt/3RdKNXFW7SD36cbQlfRGvRrdRKy3u/CbfZuYV",
+	"luh34MKpYdjuxlEIVkh6rFgDaEyH3xbN1lp4FRMu4P38HZAStOLB2QYPb8/qQ2GdINpmatDuauFmdfbn",
+	"XCneWqvO0pxiq2hlGN1rOwo7Mu59EAf6r4nY03dHnUjbCy/XLTQWSt0abG4KlVTSckP2RtYCpphqG6mL",
+	"XPjaL6eZXNXDSeUvgakrET01af+jm8tBwOOYD0fW6s5SveKeDC8pJTfDWyLW98XVoWoRGkWka2CXGr/k",
+	"1fxNvVYR96pp6ipYy+4In+l3DE1SuKaCJLfMelGYdDV/HQoeszaEXK6Flv5y2A6oNr1I/2cFo63ASZSr",
+	"PwKzJeCHKzwRa2Hjg9XLHpMmr6KJt8MQa5h1xpvRk2rqUh2kpmk2DVhx0elkiE0RMLTkiDF8vYHSIhVF",
+	"lUUxCzh5pSYnSLin7hyPA/P68x/4Mnkv2hw9Zyw7UnlZOJZ2quJBEy89fHszQhuTgS9oiDPeDKhXWngE",
+	"LqB/CKNw2Isgrq0zCIJ1DqaXGW9mS4ptEVeeAsiSd1CWtFHGN5zNFZaWA+QYEokIE2ls8UcGBX5s7sTE",
+	"16dk+rI/1WjE5nHpE96u4rD5OXoGVXLIu7CciHr1dJI7yDmeNrqYXF6uHWXiSsaQbEujpyTWhQWVCbU3",
+	"k0QJDyqVoxKoYTbzfu0GLgO0kd7WEm40vxhLTU3Uz/vosmHhoLchYrATlK02K2x2nsrPDUKwW6JYZt0v",
+	"s/NVGgfQ0GB4I5Zt8XOMz6+YHl9iff2WVjUokr9AB2WYnFucKToc4X/jXUDGmXIUpqUJ/qQ1/wLeeSNL",
+	"LmFDiFS96iCr4Vu5gVoseudOIkL/L2PeFrVI5POhqubg4k4Sc+aDBc33hY0bJymabepxKUG25YLi4mTf",
+	"oAsEWEHtHt6N4rbAwLYJ1wHtO1PdZFcuIjn0Bn6tr/Kx5KFxXJtWVrvHnJWdKL0yCPUW6JWdapRIoZhb",
+	"LXaYxBE1hSEIxr+Uf3E8/l5A85Pj0YYQjSrHWhC6Ot0g8O4NsB1UDdXvRklEqlhF8VHjeILXTisw0s5G",
+	"sdyUIVNJLHgP/RRJ1xYUWmouszO8L8/kR3bmV9L/6AyM4dqBwOoPRw6m6DDCaVConghE49ab7owxGyRH",
+	"2um+AqlLS+x9/2g4USULmVMrnIlnyDVFNxnMLuCxl6dtuJaHfFUTrxAVmq1QdY+O7a+Lvf16ZCxErUyc",
+	"4UROpRAIQ2dhTG2vB+w3Q3fNSb498lu/jb5DoI/AOErLsaPUrkRfXlUxPcVTvstlIPzLWst/j6vk7Jxf",
+	"BQRrSVI3RWcQ+kf54tagjf72VQ0yEpGcL0ckuIqh7NLRkVAzYf6WU71g9D20wpqA0qNhEkDzpjtAFTLh",
+	"DB8o8vkca3j9ddXYrrFmLDgGevprYnvsIcFLq1PivvPy6PDVK6s4u8qDmhJdvHF4OwFJi8cyggbjL1Dx",
+	"yEdlKshMdvSXKZD6zXGP6bh7hcidM3p9utNyElUvI1UxDRra/dArAbCSZ09zQB+QF/Ft8+nJhvhavq0G",
+	"8ZSjVHLgEW5bD6bR8/6xI3LBfXFME+BJKaHG/1N5iDERnEsTwTfZb3wCt1cZGjrmTCYCDhXm6TTuY0mU",
+	"b5TK0Ort+Y8hMfZka2jTESXZeixyzPEFd0eVhb1uqJMVjKtowpsXjt1ZV2MO8eCVrsSjE5ZOHPVu2QvE",
+	"g+B6Z2b5r6a/SuYO/bJ8QWhsRPdjkqJ8gGvT8o1pPRKhTCRPMKjF4NhAVXl8fjnu86t+tS0DEsaimILz",
+	"wDHBpL/C+IaCqhqmihdMUTDLTk2mEfvqFmCiKSlPc6CodENi0cezdpFYQJQfFXI48kpiwSkkqly8ZVia",
+	"knV5vy9CjPzblAqqM3l5iJxHcWm+txb60Xa4GXNfrJsqLb5ndrUO8Vj6B7DgrosQR1oL6W+wGuvn9tt1",
+	"DMvLv6RAQz0lsiJvLST/7jq6bPXDThS37ceV4Qn68t46MgdyLETRuCtSMVnxQkxD2c36CpOVhrLH6N6N",
+	"I4tJOXF6c2TXIYBvnvKuWp7+dh1Xo1LOtITNUXGLq/kZZCBQOKliDagA2MRg7Fh0RKwvOduA6DohN0Mo",
+	"icA2BglkA0H8NBTxBC8KKLPVoWo1TrUp5OKT8oVNnKrqlpA1TuZa95vyaeEWTvaC5FLl2PgbHLB2ZR+A",
+	"sPbj9tnWIziWtOxKn7Ld+gEPl5lMIAeu3xc8VnlUpEbg2Q5vy3DTFBNbC3noa2akcX1DsFBsB0NbXcEU",
+	"X4MMCggLdK033loICSE8wOpzpRJiWGYXbpkI21gbt8BNJt+ft+mU/nG5mF/zHjooU4/4J2UGET1IQTt5",
+	"t9wU8mASR+GwJ9uvaV+JxwZCVUnDalSwOXFdYnqrz0m5akiZjTGe6Ig6rUaoMcGWxsUwka7rcdAhUYLz",
+	"8SBcDdsBYf9Uq6k0cpeM2WQsUOPhU+NoKVx3KRTYpKuN8aYy6hQvj6Mp9rv6Ecdu5GRZeZ0f4wQl20ES",
+	"3dTcqpbHi1AjiF9TuNmdzbxZNc9l0OumiuAtJuxNiA+wCXys3Y0ihZVHgMNaT79VKdfCQtoVRLCatEKb",
+	"++Xm551WrJgBuxZKxUhtxEyrdjdSIsxfU4N4S24Jhel74g5k4kYhlO4Va6HBqRZ7nwJqp0lE9LCi8bZU",
+	"Yi2syKjEhLbFuYt1uZEtdr0nk0SDwFH0IVlP70Cz7SRiPX5bsMYci2I2P7oI21NgLXTyMYIhIxI4CgOU",
+	"aiZXcqhAlti/hRaXikoIsW/SMHwRQzFkqvK4wdu3Reiku/z06jXqYmIzSTAVj0TRxgLs6X0Ze2wR/vnf",
+	"pOIeW8KfuUpE3Oax31yxVZ87UcyiAPIaB2Es2tFmKP8WemDEvnITaHoyhjBgxUHoMUNNyJwxZcH+mxTb",
+	"Y405bm0vI0uKvJg1QQSz7pcZH6lyBBWNGljryMILkiDpjRXG8aVY9KItN4nIDNHhQaAA6CaWDod79S32",
+	"f4GmQruv9qEyOS/WTWqxq21KBm5HgX4eCz1DmAiQu3GGnki4zxOu1U/clF5Rq+AFBYI6bb7Rhgiq/UjB",
+	"YLP6QTSI2wURyFT08GbaA5VEveqaP4VEBxzDzF9JHcGm9I4WGGvJIhY8qKxAo48NbIl0DqHYZiB9AkLa",
+	"NmjzC2cXl86hDG6KuJwrlHQ5B7JjImI99P+9tub/6txH/6UKlJsxD2v6RsMjyhWKRTKIQzy6Mz1xBhZ1",
+	"ZkvEsjOcpcjLySlTsHMzZz34wOUwEXxvBBxWgs5H/4vzFy9enJubm59fWJi4Q+uJ1Ius3+GfY8hocWcn",
+	"m7p1LFdDJUOCjESomnJT9Kk8eUlU7VdkMl7Kc4XR+h7D12R/x2IoOcsw9M/xOwQcCjJU8oqeUIpvVtAE",
+	"WCejx/mUhkvadEMH76ECUlUsRPt2VTok1SKH5yyJOZA3Z7jFucrxBlXhnjf0Ij+4+R7DytYWMCxqA4Xw",
+	"J6+0LND3+zM5eCqRDmPZMC/BuU8VtBVe0Vw3iDhkZXGo8sHbCfB8E326tNhsseuYXy+w4waW9ZJYCEKv",
+	"jfrZ6LuugbYlAii1xMMh4+226OtDujlQSvKQqb4IAlPwSypTADzUuByAxJFE7C/O/w/7vxa7hAuiagJ5",
+	"eCHTSKRqK4FvRNFtrIQofJlg1wsUcVVzBUaLBlgvA2sNkPar2Tz1UC00c3y1b2YCTxflM+tJRvm2tZCM",
+	"evs0AA0FmtC9DFNkp35Z44UIN0Vsvhg9dPuKqc2GrT+GJunPA3D0uYxZH6qvAz5UJs3bobQqVxuZGkZJ",
+	"TWBqwZIzcW/HjXCd7NcjQ1DZq8cT09NJYa2RctEhbIAIpYoPsvvpbvYxNqZ8te9hY8TD9CC7l30O5YW/",
+	"f7XfYu9CrQ5xB/rXbIkYWqhgRSO9isniQo47Y66+y2pK1C0UeJFKWpm59Xhf7K3XwjVtf6BEZxBQTZIC",
+	"BMIo0eI0pYxqSbjlXlCITEfzd+2tarErIhCJqWRhh8fW6gpqB2JDBFBFWOPdn7PLl25dvnTlHY+Z1bJX",
+	"f1xgXDHewypQC3ML52bn52bnFpoYHz/rDkF6nLnPLsEYvcuvYyAdf/1fp7xA7RgjVODN3tyj3NSxiRGA",
+	"mcdJiiD0dVMiPNQPndYPtiIElJ8op0zA3MdImHhN2mM+r6fXvlT9gFNRXbq2iMjmW9oKXM2QDcIczTXf",
+	"hLKmTvuWQjsS2HUsoIAgVaMqXMCNIdw96beOQkjfjKE6vzcO+hdw0RqxjcqBl7B8IarQn5D9KPZvIrbo",
+	"SxwrZ/V5nEgezOJ49fLWsj6/CI1ZrCNF4DuN60hIgioIHlZXBk5CL7YD8PttDKFkMApXVMQDgUoddQrF",
+	"wpJYzqrEtOoxM+dzmvzBDQlDeohoNJVMWKOWojc9xrF9ci8yWIWMJzRF1S2SNaj606ZITqsKQe3HKlv9",
+	"uctD0+iOJ5yUUxZgKtwDeUXoI1eZJupJdaQxHdatRTzXXGZ9rgC1wfTH7TXQn2Mzsj6PeU8kWL+sI5J2",
+	"l8xSd6A0tWjhJbH96EyLslgwcafLByoR/lS8pcbd4ey/kioB/bJ9hMbSpY3IH+bG43DAA7crEBVOygG0",
+	"dO5iE6kINMuCJlVxiPXYqAog9lGaJcdBmwci9HlMZTYsrwUqKJUJEkTVq7qTE1TkIH6/SH0K9dFsgxCn",
+	"MYgnciMQLXbN6eUVxT2MX1BsQ3Ql0EraYIeUmaNGt4+49ieVVfZsR4dbZIAtlXSDsvudcuMKKh9v7NSd",
+	"OPpbERpEdDtq2Q6BlbmzlXVQVsefkFkNnG5DQ9mHwlB5WfX5s9B37ua7l9nZs2cvso6WqrHNXBhBlyxg",
+	"TPRvaMGVSxo406w+UCV6PExkW3mkPWDBGKhjbxV6aL3mdraz7dFsFUD4pZFUYWSzxS4heqHuMRV6aXkJ",
+	"Z+kkpmtj4VUwePw1diEBwXJxbk6rNb9LdzTf02wQm8nsZJ+ke+ketoOHdizfYyv+77KH2F/msf73A9u0",
+	"58Wr/ZWC68rtt2zLqkNXulIc0YQaNbY67xHrnec5vUfrCFCwk2L6LS5gNNC+cEGqiBk4DdCI+pcxD5N6",
+	"NlNjs78eooRZMNxDWD+pmkbCAYkCooPBgC/RpIiFRG/EwtApnjimfirjMhuK7Vn4ZRacFUkE8pJ1VlDy",
+	"MThNw+IIVEIziTYFdHW1ugoM5ItAbplARJms6AUYj64MGVRWZvNzrCfDQSLUZONBvZPhXb4VxTIRUwiz",
+	"HXpVr3ozyJnIjQ9W82cNrnca9WSbfXDjyqXVd/LuFrHpE0AGEFA/ZnuRLzvD2W34+sal1cs/qxD7zPBT",
+	"uOvtq5W7FcLX5K0+LMDIl+U6Uv1gaJsY2FpZoV+2OC8sLR7Fpm3Ww2A5YE/HSj7OkPNzk23DrrpTZx3+",
+	"GQbqYacUVW8pSr9OXxINyz7D/lws+3W6l+5nn1Pbr8ea8v0jtoaDSuN7LH2a7qbPbLOvZ6/2gdAdpt+l",
+	"++kO/L7Hsk+z+9gCLXtkdfl59uqP5yvOnLrNVC4wL3b+cGSOe3q1h3pps6arF9QvP0xfrEAXO+zhpl/G",
+	"zYAR7yHWOofGZD/gb+le9gW0BphGfiXoXrfgLkuvoAq2ZZ+HlXv6Sm8BgLif7mafML2T+7BHzSX20l2W",
+	"Pcg+pV2CrVEDvbj1P332/7H0cXZPM54dgM6X2V29s1KzucJXa2EDoWW3fZA91CNQ9fjsC9ObzcGB7AF0",
+	"DnyYvkj3mi2W/mP6As71sDjES2hG9jn0kcOD0Nvbs50I10K9pOzXcE57WLp+j4ba86DlG3zzgsE7L/QC",
+	"NLatMFQ+9QKyR3a+hrVq48zYEG4tpHl3NV6kByhKauREM+0n0BiOWss9T3eW2QiCPNdQA/TYy+5lH0M/",
+	"Pz32CxxjX48DrdleeEy/epDuroX4AYL2O2jj9n26ozejMbGwU1QKjoJmN3JkmhgRXUA8z16rMSTiamWI",
+	"Svq13rUmBrbHpN4rtBWAi6jBmt0D5HwBHSiLNCF7RH0J3FZ+ewUycPZPd//fV38812ythenvqTXfXgm1",
+	"YJw9pgUowGdDTqDb4G/0i7C+z2fzZWpgkzSm1/pIo/QKyx7YQbIvNQ6lh4AshXGwR+du+oS+vZ/fC9uY",
+	"Ee0g2b3sXvYw3dcXE/sf4m3OPoeRn6SHLPu79CB9Cri5B36DHQAR9GjQG3m2FmLzTGokjMYiB9x7BrEP",
+	"0wNwNORf773aZz8xQMB+h4+zB9kXhniMdiItbBMnh24P+T529MUr7B5of0ODJX0OCz11fv4slW2sK2RY",
+	"wqJvYMHfIS2hlo3ARz5Nd22zTemPIo+LKItND0k1NrrAdolGyG/FQhMC38u1ppZWDIphI8VnM3VFE9dr",
+	"JIL0GxfRX+r1IzeyhBe6f2peiLcGCbOGaJmOA9nQuI4NOeC8wIUxd3F2Ya65wk6ftkTNzALo/B2c02Gr",
+	"fvFgFFsPK03M6d+ne9DlcxdIkcZkd+10V3OWre+qXi1Qxh2tEi4seqZt6X3Az8N0n11ZgmaUO9l9cIzd",
+	"TQ/WQsdqP9LyE/qa0ijIYR4xA7CH+npqxPBywqJneYEAyB4V+5KurIUGVJa2UjtahqzDIT1aEzvEu6uf",
+	"QFjXQbrTYuk36Xcg1gDdqKbf0PfUzrEWNrQ8hDD895xRZY9e7bMz7NW3jfSr7GGT/kh/X8UVs89f7Xsg",
+	"uaT76XfZ32msQmKb49laiKcKbI7OB3+RPvsJWJ+ajGQIADDLfg2U44BIisbA7C508b2LW3uKhGwttDi5",
+	"V5MDaCaqQKTfGrQZubQruUmsWhjIPi8QYdaYeECeJtEWF/Ysnv4dHNSLEbmliT2S06cFAcbCTUF7Gz2S",
+	"6blsGFPOxTU6A6S+yO5XR39OV4B1PeCTbuMOCloOCk1xK68s5USiKCgdGfvrT75m2QUyOM1lKe0HbjqI",
+	"RIa/llBozJLAW7deGX6T/jaX/IszaiC5Hsb0JXQp/tywSOiFlB6kT1DtgS2V6ZN1Q47Q7VPzCxfOaeb0",
+	"PRHXZ3SN8wPbdS6FpjAlcOC1NfNOT7X+mE9QJWiALPUkewBfgfxuWy6nj7NH6Q/Z59kXJOTqI/wNtQYv",
+	"dpZaZjlNtOqCkW5G+FoOW9s8/FMiTItzi15JkNSvPAe+8RBGtgwCUAS6oaf72YPsM02Yp/TRIp5Uh3mk",
+	"/4oEqQohXZ/WLugK41CUNVwqbeISSFBxo6dNotHURZU3uBLrtaLU1zCtpqYHyMaLOjg13MYe8i81ESvq",
+	"8Tseg3Mi5QWk6k+oxbsrdLo7gCKjM94M2q/gX5EWqBLqT4b/mlAfelQihCUChmmBAZXHp0B4QY2zQv5Y",
+	"oRDEi3vQA/sFqSM/vfqXV6+troWwy5f6W70hjwE1v5899FgU+GdCsa0R7ABlDZxqJe/iTvfvMdy/R6gC",
+	"VNCptTD9A6DMPeJERcG9SmDRIKcua6R97tKL+V16jHe1wJVHqmev8yrA/vMYnPXYB6uXmQxVwsNkxcUS",
+	"V+l99W36DbZ0B4330Zn0K5DT70JEHKAXihug3DwnDWNnxDg9ptRnwmWgKhnLbnYXMMGF4ywIwY8A8S1S",
+	"4B0gKvQZaBeoku9MJ7HOa5miTMfPzp9nr/640ERzADG1A9CcciEKJY5RrRb5AhBhvYtHeNxroUZq6JVP",
+	"lxaP/qkhb4f0BGRcL1fFDlEaROTAtvorI4hTxBktq6yFDWxhCXnv8PJzgCmR1/K0epq/YBUQ/osijUR9",
+	"+hB6CH4MGjOdj5G19tF+dB+X6qIxaN32fc8FGtmNso/h6rP0MazoKZle3BWlz7y1EGwAI2ZHo42nT6Ff",
+	"oRanH3vIanMxr3Axqw6KIb5rir4WVp0Na8A5HiLVICa4WxYGoOnijjEDZJ+kO82SqafG85JbDacMCrst",
+	"Q7/SqLinkatMNEfZgiZ7z7Xao8kXKPlFTgGE6gXcpM/0d2ABQOvcYXa3iKijFgOXgdjqlN5MLEKsG0je",
+	"2xkvV8qprD1vQ2cerm6Dcbu3UcMnzajr01YRM+/XSLX/4lqBAZndIBcNUS0GAq15ieTdglNr57lNrFE0",
+	"iBmp8MmoqRmPZVQ9HhX4m5UisRKbtnhlaTeWLRUw3ysQNmOJmYK4FZjuOU0gLelHOmquE/QUBRV0J0cI",
+	"DZ8SFYSVPAeoGR0IfQdPiUbCoE/hg+/N7dLCy1oIwvAhuF0/xY9JfEGhNjdGr4zMimZC0k31bkctbfD6",
+	"bq4ZvET188E4snWA/NIBioXhC/joJakXMO5dkOSJGu/DpzuofQLF0StfC7OPNdLAKh6S6MIa6Q4ozhrE",
+	"py6cP6dJ729dOfax8R/cQxk2Nyxq1mgMiUWd9+iG6FuIdZPLcri1gdeLf+UF9o2aWbS9VRizRhXqUZ2w",
+	"IP0TiXS6ZriitXN7KtppaOFqjLWcXD5j3VSzgNYahSBgvExdx/msmJVgDrNPATMbFGlAtjtQ2R4DJhkV",
+	"2wzmsVNLFxYqfGvjCr6fQD3qOq38g5vvMWfxT0gAqlu+a9QgfRiwuJL+Hb0O+ZgaOXnZcBefkrqmPtYr",
+	"synG+FW/cU3wRddJ0Z06ouiAO7WRPgXBzrx2CGKHlnkwrK2gd1Y5VI8WkOf6gmqC8dbbNdF46b+ku0hT",
+	"0x+INiN7AXfmXfSvjfok0m/SP6S/Tf81/d/p/2SN9DE1u6RpGFJjiJv5AuwTT8CD+AO5ATS13mlSg+tD",
+	"UB/3c3bhQhskZ/jiM2AHu+ivqZBW0Rrw0kBd7wAsMuioserpIXDOwvHuGu1oB+75Z8RGUIRCeozWmyc5",
+	"WlcbXvux2DpxSP9z+nX6v9Kv078nSEPY0xEB3Y9FX4S+y0F202ceieuAt48hguBjkmQsQ0WRGiSmH5DZ",
+	"op9kTyvu2cdala4+DziE/exzLYVXHE75DOq67U1XMKrC1zoK/38rGr3GE/pWnncFfp8DZMXTmU1fgs/+",
+	"PtDCuxpQ49wOYNohg8ZYn4NdjFWS5+eWPAajgSCnf1k421yhQClSpUxgwg5oteSYIlWtYqJHKyzn3tZD",
+	"4zhPS1Zrkq9deSz3oqyshVKtY3kMGOoH+BgE7BGNa7SnfQPkMHRfLsydOz87f+7s0sKF5gokYukRtXLp",
+	"2MVgCfvgCXbWUxhm/sLi7MXFhXPzmv7A71qcgn/lXk4UQE3T/nJwjFZpv7ceuexTolfIAbRsajym6S4G",
+	"LBgXyM5ofMeU9tmVtRAr3lrnUPo8+wS96eMif/7gxqW82j/z6tv031xHupZagWGVbS8aVcrGl3OV7uM6",
+	"r+sfXMxjOeLVOUlrhIWxftF/rMfMfJoRB2MDNvUEDBYWy8fdvGo1buoiiHgBKpZfM6F7N4CUfgwWmkfg",
+	"RnYMHuUL82JcEFd1fcTjiIYFh02FK+HH5bYpyaMY7lGMoHo2souK0JFDCrXb1a8XWMUyM7LBf7QPpcZ7",
+	"8s+jVA69l3eNW2VC+B8ScDQ3GQ8rKe/M0ndUD14S4dRD4/dfvJ5fJS+oPmp1noIGNq6cq0AhtBgvaTR6",
+	"nD0ES869orX/gKR+zQPWQmOqNObrZ4xCY/ZRSlu2McrGVVjDXBkG/GiYf59bUJDu77D0MZlJ8oNouHyS",
+	"wg2Rw5XYDlnL9wzm0lox6uqghlPdRzNNzs80a6VyO2h/oMH2yaNZkOqKRpgiZ2uAmoiGaiuIgxVa0y9j",
+	"fX5MCpJ1iunN79hlgzKAKwP7VIXbcgfHAIvnfZTTwUK1t0IcbA8dTd9bH3wJwOPIaXlCQ3WIoT4rCbn6",
+	"9J6CqPzEUuPcN+kxXBwMdmjBrO/eXiE+l+IjnqSHxSa7pt22Forh28mx/a6ibCw0BduMZU5F9ZkMMXT3",
+	"xkjcxqhUHYK4lx6MGBVdW1chQHFvxdEtyF5SZU00cu2hVqCQjhmT5DONExREapx7j0/MnMjGWRNJzTxR",
+	"cyKbzppYIZMFMrx9NLPge/oL6EJ9J5lcyhvemowW79EyRqwrNmxxBD2MX7+kBz9gI8GeDeBoRCTQUrWL",
+	"1CV76LFy4KMmB7VuLvTVFe3Q2cejazuEy1p0jJUiU/HDkYjNqkM6osPoTbplSsdLBlhZXTDpfVGf4vNn",
+	"UHJ2Yl/IjgzEsSog9MTxyh6YOQuVD/JaPyh+xYL7ylZynlpUPF5h3aN0F5g5YsFck5U4Cv+rl65dypMW",
+	"pS/CRHakiD0mWpst9s5Ao+KZ9yPVxg66r9GRCcBThfzXIj0nVtS6VBft808g0LzUBG62SJqIuOUcokzW",
+	"IFgaTRqooFI4PDhyd0jcbZQF2vNnz5c68iNpoOYTllSsmxAgpBTheoFwhOtEJ/BRTmcKf68jFVH5N1BB",
+	"vjTieg/aPqlKVHKBaApO3rBFJKuE/X8HIfgJyr1aKH+Y3c2+1Lz3AAU0ACd5FdE0iaay+8iUgYk/s45K",
+	"VNfQrufIq0WQUiYzGtPITfo98F2KUdrLviBFYSd9DrM9wBpDHusPVBcFDDjvB5ZfGEfBboulf0D7Y/Zr",
+	"8Nl/Q2LgbvrCxFU9Jgc94MFjG+W0i0lQ4Op9CiLl5xSL9DGFvlBwxKhjwfTYW7d8QlUl6lnWUvlMdXks",
+	"fKO9Vb6iEUlNkQJY5mCFhZlhyjNOupdXIFJpTNv8tt14Cc1+V468cg2BdComfFlLARQCQNrdF2iYe4ZK",
+	"g1bdct3SHNpojMCoeprf5qncPxUkqcILtBH5w0p+ZxJ8qx+ih3XdVi6dSL6LYW5T1mHa0hTDuAVfo99c",
+	"EHG/qsAfPJh1834Ypgs5wel76QuMa686juU8L/1X0vfAbOitheR8/Mijrkr5MyQbH3mMCK90Gga5/4bE",
+	"/LXQ/GkOw2Ma9eFN+Ec8CAT8RcS3K/v0UBNf9isVDDb1MFDm0mOYxL1ObRA8qqW8PggTGXzUstmx6Z7r",
+	"KnCgAWGYuSt7N30+ApYK+/38xdbcxdbC3MI5j506v0hBno7Nq+Qe9zDa0zpJn9kY+MfuanZtIOA9a8lj",
+	"5eAVIHcOhGFL0scvISJUL9eBtG8q6qBeVVUXoAoTlm0Bi58Uxz5kfwFBg9VjAUAuNluF08w10HwQUEAw",
+	"lWZvuaBKOg/Q8+E+3M2+LG+VlSWPx+Ao/FLD96UJf9FUrHHq/NJcE7JpDrH0gfFr56RvZy3Ur803nbjG",
+	"Ii4SDhUz+0prcFdl7V9fZL/JHmRfUK6IHvtLa7Eik9YTsNfYg2iN3peKjMYy998rASh3032Zfm8VtxwE",
+	"6bO1cBqkX2zNzwHSN5fZr7DU8jJbM2Wa12Y8qBn9EXnKAEcwvXUfLUFWFiFDG5kC0crnDIjVnvV4msA4",
+	"49Vk64BV5DB9tlIfOg7494ISE5866cB5MhLestnR9UFOMHC2nfQJ5MiiGZks3yaQiYGZ46mWSFos/ZfK",
+	"wNLD9GX2AI2psNDH5Ugt14XWWgvTrzBxGjfu2OYPUZxDN95KdYQ5KwaY1wRra21qHAubQotJgml7ojns",
+	"z2HHeUkOYN05f/OsADMx7skVDWpShb+pzhAuSsoIabSGGkt2DZ8sXELX1ueZNNkCH/YYJccYxDOC/qjs",
+	"OpUEM6KJFYhA9ohlD5AQgs3YmJmfsUYhytbRKg6B+6GAYG9Rs5igWiO8ThSmxh2FxuTqaPOCU74Q7XqG",
+	"YtH2sl/nJAQSA8qqRRUUskev9qe0Hkydy+AS1DedyVBM9zuCwDniuN5LX5ZWPkqgt+bHquFl3Fj3B6/Z",
+	"S7latk3/gCku36e7rBMLMQt1teh1DxWNQ8O0Ne+vV5RG2Z3ekGeKL6CK/RwMqotnm8uWWmDQ9QFLD4yf",
+	"hcGrT4si9iH4R8pipfHdf2wSCCqNv0VPLtjI91FxLkV7P3Ylzt210KVo30HewAM3mZng1MrLHJ6aXzi/",
+	"1KyNMiuwLusXzAmbu9v/g1jLEdiIY6eZXJpnWrW1yghUXTjnSMubaKV+++tT5cjT1wn8HGHvbyr6sxRk",
+	"+GwkTHGlLomoWLwlv46vF+/nlE4cV0U7L5RIdaBMG25GrBhqZ5M+R9X+w7bAdjFuLUJGwVdtHsdSKBZt",
+	"idgfCKhkTeWyZvX5DBLhsy0pts0HDVMXz5r6sXRdoKnAkGrF1dTFN5bu5nFKIdZXOnyvWvowKE49dEzl",
+	"QlvcMGE9nohY8kD+LfWTkD1RGRg1vqbiFVSMZguNgPLpopjJdhSyGEp2yXDT9YZgMcqp6hyb6ooTK+9N",
+	"yYHRx1NVgt40jXDKcvIeNBPqafzSyr6LXA1COOpKFIViNup0XHRjDfwDSh2WP8fCvwZpsQaiTBS+JxWV",
+	"Y0d1HJDOtiJBOGJZXy5j1uPxbUWlLeGbWRhDiwR5PdH5s+fnm8ul/fX5pmCqG21T1WO9XUwPZbH+kSuK",
+	"B89Hl1FYaE4FG3Q8l5WpYlz6V2qO8XVbkuNxQulMAB1hGcJEJhaM1BsdjgUXfbwG6WOr/b6RiuO2IOVm",
+	"EG3wgKl2LER4WukjokveqKo77rGODAJhy8XS59SXluAkAiWwXYote2mbr8E8k2qVN6fUNPLwL+v/Roo6",
+	"g/gx480QMa5EoTpZ6ViFM0s10selcNsQEtCid3Mbzz2bQ1jI22fp12SO+pQCtnaKr+wUgvIPre3qYbFe",
+	"lglg8yiJ1igAWm79NYrv4H9EQbpQKcEZc7kQkoTRu/ukSX9P8rkpBGeDHx/n3B3j39BGu2PrakGNimL6",
+	"EPrzbBol7vFu9ggU0+fOmlj6WKsXGI1TMk6Akqgl9/mLILl/5VqhdoxV7wcycFFRsgIIyQ5WUFt38sj+",
+	"ijInx27kmtMBl0RZ9uIZ+mZpn70C3rSVWpHBl9jwpEL5VqI6sTLhozLa2ywUvnTx/BsoFN4RAmryH61I",
+	"uNMudXSH290oEEy1o744rbBiclufKxto+QdmhaWeVpouJyJW7iYvNk3w+kG6kz4DVD1ID9m1V/vLOW/u",
+	"x8LXaoIwMNBc2mMy9CEtCKRfhCaC0aPgijYPNBcQWxpU2zy4LXyCymrOGDRMYHEi8FnjL99ZZWdyMxiJ",
+	"DgbtZ2GfvmEmiqkuj7HMr1QMMQdaHNhAliO3z5+uAnuO7rcGvR6Ph5drbYjYjgefQo3pRENli85GwefQ",
+	"Dwv21mI3tQRkulbxvFy4FXGppi40gWcuD5UxOe4UU4kMAkIE0g9gYlXR96Ys10+Ux6vR82jaxOvXnS6R",
+	"pzL1MsTOXdpUJ1mvEq66Qqyioxua6vMaxq++BT5cKA5ebi6G8o1aNn2nZOTT2WjpxpcxyVK2CLrWDQ0S",
+	"bMSC3/aj7bDF3o9CAcXKCaqmab2JG5u70Kw97DJBnooOj6B6BT2m01s9OkIgAhz5w/L1HR2lelGeC4oq",
+	"vHByAaEs+fVBAhhaHdUn4lkro8ZCDYIEO784FVmxPHmLrVG/7rWZM2szaqCAgvprM9ijzXGKQqVy06wO",
+	"CuDHoi37EpvnkudeBVECL3ZiIdiZnLM0V9jaTB/bxJjBQybDLZkgG9QfUb8Zg2rwVJg66ZqCbGBfVj2W",
+	"ui37feGv+wNsCSloVKd9mjFLdKPAV6bnGTYTo341zvxR0WzhTmGaTLszGOhKxcxj1gCQ6nGhBjvOJxXr",
+	"RPGG9H0RNleYMywYRpwxsR1NuS8FNvxD8txTIui4KxuEfItLYNY1iwsjS3E1MKBJD/UR7PEQFF9N51mD",
+	"uih7erVCboaehpRtk80GIb6upyrF5iH+QJt6wh7oUIqNNr3Rg3J+M6BzfjKRmxVbrNRhyhfjJqB7hbRn",
+	"j7qylGTem9J3sUL6K0zLY9DBqhPFBnOOpTUXAgzGL8G5diNLQHifsdA+1lqinH6MrVtQQ3aOXPmmXBq6",
+	"UJDDLGYawofne2JifQ36TKwqUmvLdQa8CvTrqBX/8Ssie2AyE5tSJdCUAUkhIABPhHLQRBk/ZDBcwZZs",
+	"I59tCA1kVUH8FOsHA4U9SV2aS3ItmsuwejfKym4rUnzV6VJSknRNos640kmqRrrBObUyg800iKYmEXEn",
+	"K4RSbxmemA2ANZddMTSHSWjdEwS8r4RpqoldZXNjZClIcaJZqyfBTaHcViZW9ChHpE+ZIVjTXsE0mXNB",
+	"NgH7blhku+T79T2uj3II3PdtQ9J8otMKGx8hb4EDqj0d6ony53E4xz+UYT35GpOp7DbTO1rGhscCuSUY",
+	"NMzmfkVCBo5ZzMjQ0wViEwysWp0VQWdWDTod2ZYmNTTvv8VCIXz4+ky+H/bXkQyBZ0H/4i2e8BgL2FGY",
+	"8WH6nJ2aX1hcZOnL1tma5OgjdsWcthLbMXGgPoUXCSPgfyA7oj1sBwLFSqksjJfrBW6HmHsFYZkorCXX",
+	"RxC/jmdEPnYloyJbN5a9Yvql1YVzTJ9wacaFvmtwy41ArOcP1sHOUH0+4UDDWCtDDpZih28AIx1gq1In",
+	"5JubsdjkiVgfiwLmLbbB/U3BGlKpgWCnzl0824TTDwJnsUYXcmfXJBCNVLkkXxThQWYHjQrbfNaNMgY+",
+	"ZCLr6VGgs9e6uNMWwtH9EhYIrrBVucUtVzKtUwJhOFDoujJpttgVcu60o/5wGVuXOeVIMNeYWhQUzRPp",
+	"C1O5/ndu3kJ6yK6NVFexNe4xUzt7iHQE4vHSF2jaH/mkdJMKJzPjGejOeCUIVV4rcmHV1PZYtWrpaVX0",
+	"dmHvGK3zUlqZZ7x0PIzCYS8aKPJvnUw1nbxxr5UEYzA1d0Uuy+k/YNJpqW+NMLtq1XgzONoh8olXaC2O",
+	"uDpQIvbIgogfkffNh3cN9BpFLqa/Ig4WGhV1RAidMo9zdBMqgVK2pjG7TdYjsQjyD4DQO9d/uEyXtrCz",
+	"0wqa1NpTLoJn5GDqanONFxNG5yxkek4lNaxMripLHJoSQvVM6syv9H+u5j2xNc0C2G139fyGjIkYrOVC",
+	"UTs2BK+hdza+RA+2Aq9sRbeFb2gbD9W2iBVbnFu05iISRDo8CBS6SIysGvC26EaBL+IWu1aN/vADoFBu",
+	"6z5GT24p1IS7byQEsamMzalA1U8rhzVN3QRsnIhZYRfVG620Qdws4g0YHyoIBt1KzEs9ou2hyo84wlm9",
+	"say9AO4JwsObsBTUg/YIZoKBElfDRMRbPPhvUmxXe2r6+jUwqev32F914qh3BZqfJpH+b1PfDQyEgb8N",
+	"7SZJIOqLcBb5NoxU0d+QBpwqtgjnOEb8SrlTopm0GjLgRsYWnLU5yf+KSUDlAtNja7gYwgbdEZbz/Jnn",
+	"lNNKUel7VEpwB4oE7ngM6r78AIVW3Co0e5D1+g8wxC4WV8xjIbDSxx5WW/y4UAS3mCFVaCd26BUWbWIs",
+	"nmP4McYNvKCqK7ssu8eo1EuhMdb82fPnC0WKyFUOAs1ACcyfVoNejSBTOIB3pQj8ynJF+ySC3MW8qEMs",
+	"WUL1z6luFsRcUDi3hS984jmhHG46OBUXpVAFWxsk3aFWCgduDsZKOcLCqWNh11FO46HUKrsWDBEtSoKV",
+	"oQkm/xDAZ8wSjqtvXaHrT4T+Ol0LPkii9T7H4hY9GfoiXo86HSWSdZ8P1WTwH6khXhHdX68p3pK+IM8p",
+	"QB0D3QH+Fb0+qJAWXoE9jbWU7FFAdC3c7zEaZ6+Q7/QU3jmgFjH3ss9bLP1jupe+dJMC3d3uuUHvmD2k",
+	"B8fWIGolT8qbsoXf5Kyzqvy78W3+8K5jGZ/v0n0Mpt9JX2afwZXA3AIsslRoAGJyuOqa2o1nUaOkc3wD",
+	"rX/COzhyguUzbgCCfAZ5ksUqUTWdNptVksGoKx9PrDJ1HfIhcrpiathqHPzTJ1/Z2mW7lF7r3GcqH28p",
+	"w/N0F5ouIvU7Q7SP6m0WSuy+gDype+keNBu8Z3J0odMn4OxeXvEMgGbLKFCNJ5f/HCXpnU4OqC0eX5XY",
+	"dpxk9NeMB4b6gphT+dx0ATu0zUi/pwgdZHpuWpZbFZfKlhZ51OJCcxklF1tPrRRyn1fHugu5ejWthmpr",
+	"0zWoI21RJniKheJoJelOc2UtBDJNvkhDN0eqV1iB4Iy+ytkjGGSXATv7GJJ/Ldt6YUycywWbw1qYPcg+",
+	"y75MsUOx/dA228LmB0AInQ6FFHBZslU4S9Zs5DhCtyELTm16cyEn5tAUSI06Su3xYnU46OaBRNrkLpai",
+	"M6euPr702pXHR1nvn0X98VKR3uPXIIfyxPtUefY/a5D/WdcgN3cByEBtd/5LNnUDEztCxvNuuOBBUjJs",
+	"U5oQOJEguUiJhDWSyOfDyelCYN+hIMN2W/QT4UMyimPzWQFzDyg5jsdQMR4LCIDZFKGI9dPjpB71+B3Z",
+	"00R3fs78D7yL9GOlo2CQRDc4BV9CetDMcocHSlTVLB6fXqR/NdGsNFYeg2lyjhpgq8kjyBiPY83KpD6O",
+	"gCciZiqQbVFd+FmENi1lRM1AlevTvB1RoeYElkBgVKUJ73m5y8bjEUFB4366A6VttUjRyJUp7G8HGKPJ",
+	"WV5HvlxV5MCoHT+QIH9IxaQP3HD6Z6M1UDRZWpybQ5eCrW1S2CVWsN3FCPrvkRBC4rSW+cbttMC2Xu2X",
+	"BJ75pcVmi6X/BPwLCt9Sk12MzH/hDvdiBGxIJaBwLf5UkR4+jZkyjBLZGV4C/DQKQRFByzW9IWUC6xvs",
+	"YA0ULEjvVBaBOv+/pcq1ThUS4PVuJ8VX+6ascn6cULFlfv7CRQ2d3+W1REwp/rzfGxwerJI1Xn2LmFfI",
+	"+4c6YdDN2KmQf3ZhfnH2/ML5sxebK9gGEVkEiJ60jN30AAcek4pXKCZmtf8JAsXN/M2PchPAdbAAXOHD",
+	"KsXnHxArnrukHpNuntkKstkD+tf31E7yc1Zx1bTMDXDagTPAKuV5X7Eiwu4C2Bz/0YUFLaDPe+ysEU/P",
+	"o/H8TNSTiUnJQ522NLotfAQlw7BN1khVE73GJhCQyuVhYeIvUQrZzdtgoqaFhILIbIul/1YuhpPdM09/",
+	"ok+RTB1U38WUSU8Ps19nv4bGY/dtKbNCco1pCXQXFAK3eW36GDFoipI6iPJPQODdhxt8ACVmNNafW85r",
+	"Phfq95h+zNBxI91hBndmoezuc+yjfWDUn+fpTvpDXnndtf7Ne2e98/UKghsDb+ICevzOeyLcTLozywtL",
+	"S8DszN/z3omknpXr747PBKq0tgG7HCO4XBnUGM+uhxAY/y+mrBUC/cGrfXKD2kzRxXOU7tHQso3T07+J",
+	"Cacq4SaQjtw4eEQmeccEyCiKoO/zTXEakq59LQ9xlI82BjAf2e1Rnjmt8nxhzfx9PlTviU6CTlqUodjG",
+	"QAYYcQOOWtVcZnPsT598NVJwRN/sefPkHxDdsPqIxxZarbPm0R/JaPaDvvL2y8VW6/zoG+ctUXq1v2Jz",
+	"cBy5I7FbU6dZR96B3FNfxB4uDxk7KSRE4aF1hwyV9LUgKSrNYK+RKD6JVps8AnDGQMY1An0Ug/yBAF/L",
+	"nz77iqEQ25jTUNoYOklHpyErXyXxoI04Y9CBDvy2GFrPZXewAWhxWhWhfM2BMsPSWQWh3tklrakmKQsR",
+	"0iLwaYUCeeNKviya3xfcD2RoM3JbFVLGqPHIDFyXnlyxACqxRqgDP4gwkcmQNSjJvM1DqFAwZMl2ZIbQ",
+	"aLaMUD+tLAAhwa0zSAYxoE6zulf+UZOqXdWmuGICViDD2yZsv5E4X2BSTdMD7aOQbE5Bs5B2NuUi/wNz",
+	"rQ3pov0ikUV6U6lKTCPhQHgCQtRSzEBwHzQ+1pg/c/bM+Rwt7WXSULtWwdfG8LEK/6XPhxPiKo3+2eaB",
+	"CH0e001BG9PihaazKtbjSZfFPGR8k8tQJdVC+RtgmIVUW+fylTNyXVyo568V9XQAUDlVcahh5SGP4cOu",
+	"SXtMW4UHUFRxB20maASkLqHkx1se5wEoelDQLVtoqo4m35dgbTTFuaCpNrp+is7JL3LflOszXmgakdct",
+	"aF3oEZ7dm81lNii1dTf3PaW76YvltbDoTMx7795DNdaU89tNn68wRzUutm5zW4Okz9h/vXX92mzR1Jyr",
+	"HtgOC3qUGQKlWvnIzRVmPJaUfPuLX/ziF7Pvvz975YpW2Mg6r+XHFaZP+QzgkSmQ6fS7MN5OXOt34M+D",
+	"pikrrMr7iQ4YuO9GxcBJCg5VGAwLwiLh+cgWkxwoERuufdX31kJ6TitzujLcM1UXrQMOtWzrnjOluoo1",
+	"BPIAgT0CIgB/LbQrxMC8kpnhmTFJL15kr/44X9nSomP86lPbo9ETDwbo7UpTaN1tyLGZXPIVF8H0Qy3d",
+	"g0Z2L33RYlQe/J5Vz8D9A4XJmy0QACpjBH5POio2jnvryyoHnQD8cK0IxDFU6y8hGbxegShaPTsm5gaS",
+	"YrYkhC2xnog3hY9J9nmO+/mlZrmUCcR15qr43qt9K43xhFMQIaggMskjyfE2eCT/8FioBFLOfb0kLMtE",
+	"0pEt72SirNRJydaOobPesHlUwbvDt6JYJuK61hfGyg/9SElM06vOcMSgOyhDhEOiDuKexrkVJ2OUB6w9",
+	"SCAZ/tT82bkLHrsyv0BK4PzsBlfCz+fEOjo4rmLClwnrRb6AlIwtwbhScjMUPkUc2jBVrKwNcapg04bg",
+	"RN+eMW1Fq5d8yyhNecEGOx+lbTMVxYlWPApAw/BJTUwVC7gi4TQU27PmtVmezCZdMStCH6ZtrtiCECRr",
+	"4cRSsUGITsHxxSHc1OlpGwlepu4NNeI3qgUkrc6aVg+sE/DNgpo+n1+ooiL1e+OgQo+95uuHblkaU1TC",
+	"ljpTIkkCARfbTBcKpVjj8vVrq+/8j9VWz/esEo3hErbv5LNCAeZX+808hhWi8DCST9xpC9hjHtJsXCLS",
+	"p0IUMd/OlwS7NdGur74lQ5id+tW+yffnIcyDQQ5afh0kpjZIg2iNUhxqPthFND1LI4BKxdG2rQkXRjiU",
+	"svk7FF+bRCwWfcETunIqCgb2QhQVIOZHQhm1WKOaFTJgSr01zF2EmWY7sSAQYCK4PXPEUfTndCGTOvcA",
+	"wcK15hiLYLhSWISp4aWVC7OthACMWETU3rivWw5ONguatkPWpHqXLlFd6PUkIqQgDerGB6v2p8lEqKbf",
+	"JdL9as3/1bfpl2Bu/D7dSZ+hXG1QXvA4kMAxMOXe1PVzSgyGEBPdwWIyPh96UCXLEiqMUzaVtjDhb0Mf",
+	"kOVBkSVFGE7tFBIsE0X7DWWggT7vFpkrYDcGa+NlJfJ1THdIFPhCJdeRP16fZMXAty07LVkzGrY+TQ5E",
+	"h/tqPYlBvn1f8NuKRZ2cbJkRK8wKxaplPS5Dc7ccJnahWU7pix1gjqxXVVseJkMr30ld6pMVhupgpfkb",
+	"CP/k/u3JcKBAroHWEXnWkUPVX31bMIQFMhTH2e9kzhWVEOFyfSIZXYHRuepqZJoKgnrXzRU2V7n2sNa+",
+	"96OsuFdpA3oL5heUDCzRKJthyqmpaEtXFYbxM2WLuB1CJpBQr1lH1GG3w2jbJsKXAhTemtFHnpx9x8jt",
+	"BW5WlrxzM5DLZoqCW92dKRKLMYR2jA72PrTcGk3b0FTy1lCRbjZes7Bv5tGTl44QPEmX5H2ublditLjT",
+	"r+a9emYm7vRl7Ea4bEkfUMfcPVwEa7z//i9+USDhVIylNX3G2hTi9iVMFK7U1czipqzDbV8vgshzz8aZ",
+	"0oX9xAM/wYQdF41eJ1UHxrkOP9SbBIzaX8xhA43dCMUJh4JYri1g2Vb9Y5txNOhD+RnKW9O3dLbPh/jE",
+	"iur6KlYq8JiGWImodOFvajG6mgKPhnBYYwROb4UVgMNplS8PhPPWEUOdEZw/F5V1u2r7uENBovG7+P10",
+	"qw+jcPYN7mB8203wAWM9BC1HQ0rmyAqxAkYDSWeT3sqR58JCcyWXMfoxlITBt5STxoFVXXpaNOuLmEb3",
+	"KOlT+EY72+Dt2yIcKQ1BHp9CYYgpEyKlFoIuJXV1EkrKUV8WJNrzXr1GdN4EjmuIhVHCcCrciVQ4tsc4",
+	"60U9U6iCXsFgxKQrQtQz9TkoUlRgPnwNIW8OxC12Qz5sCkcMAR2LtVDG9O046bLKJ1au4arTV9tQkRLN",
+	"KFw953QdTKcFTSSh+sZUUtDbYkjp4XntM6CZVSQTpGayfcgEiKOmtUYgB/3eOpiFz/yokmh2uSKppIYx",
+	"ui7iI9a4cpx0zjQT4aPQ+Dy+8GNuOv469/pkD21BRyPSG4cP6/F+EYwnFCzvsMXXZrFjCn38WIzTxxAi",
+	"nfjaIxsoTsKWeqvU0MGxcoJJhjAFLtSxLJ3LwBvKFiR0bZr7KMN2MPApahAiuiPXwLMhhhGJN2Cwzpsz",
+	"CLIaasIQDnP7EVBgtF4ZerwdyyQRoWFpJjbcFzGUZ7Slf8EgGMjbYjQ0A1eLzIGM4cYArXjHGJ+nsi03",
+	"oeaSKllwjJ219SOyLcKZxCIZxCGIn9aXkgfYBFIlasVyPKopAZMh7AMe+gq/NSwYAjy4X7fTm9BJdIIP",
+	"AIpOQo0GeJtJxXKjcKOIoOBYND21ILwcAk2X3fa0ux5L/xGE3CfQrO3f3ETQdHeFWb/C/NKFJuJB0aaN",
+	"roV/tFlLexh+u2M6eEIkoTn5YFioemG2MAg7MpSqK5wYKMF98AEAhluLzKkL8xfYJk8EMr3egOpSQoER",
+	"lfChwvdnNwLNCBv6itA8cbTNOjKEO6RcPaTp4SEBLhfs4vghLqDH210ZChaFtuIbgWEQd3hbKKZMlSL6",
+	"pdxCgxJzlUjGo8D7UFjUr7ezmeBIXJ+tXOrDD3ZdJPIunfXsIV6Yv9CEniU5RPKOR0wmHnPghdtGQ7bj",
+	"eLCHBrC0coaZ1T4gbY9cOPYrgAZE7sGRxoOkmxdEA6bmFX0WfOgVlT9beJkIrAh9T8Pe0myDFIo1wDzu",
+	"Mcxw9VifJ+2uR80/muRGYotzF4t+kg5vJwpu09dW99vDUPpm7iAqUBiNemCRN/vVxIKC9axrJ3KNcF3p",
+	"E5pZJKa+j66hLRA8Do2lbXHuItyk4/k+vimkce1gornTzpa6Jbzaz8WiixfnPZZzwOaxfCWuiRCDQ63x",
+	"cpwL5aguEaqgPM4rgmdDKpwVBKFJim1nIhOHL0bbiBhKhpuBwP45eLR+BJoWyRBG4ObBtqZAeO5almmd",
+	"VE5KZUVrQtdNhz5On3gCreNMqsky5ZFUdSzeqbCC7LD0CVTisJUHXkDsyqeQA1XIWsnTVdyB3dyV2uQU",
+	"7Da8a3L+AG/30hc1S4KUIdtHeseUJWGY7/Ai3aM8q08g8uwZa1B3P4ALZs3sQtbTLqWbPDE9Tp5ATsO9",
+	"7F6642GWQo37ER3ER9AYyjVvqgwnR9OB32QuTiEGmN4/rZxgVevLKifOrOQGirEZMi2W/v0REl2Ok9UB",
+	"Jo/pqvu8weZCJ9Jg5ihpIrht19NRIjMFf0jBC1L0b5R9H0WZpUqQtffC1RYnNawhDfgDeKk23fYGFiS0",
+	"WIljLgMjoKwsbFwiNZp2Eid4h5EaCkJJLGdzccd8ia3YtFQEyNvWvBgYRCMvI9X0GEd9TIlEWXmnmOSr",
+	"OYXwJVTMe/sZt5MzbKfPgF01gFouQUnzni0eDMQRgQUptQcmH8xJgh3JFV3GoMc9IPwjGbDIuPKUcmws",
+	"79RRwJRzzQ8/pVpAI0mttgxv9jnwtOxe3tvyMH1x1LReCMpEHcyNW7Z5dVhIhRpukii2m5fqeUlRn7tQ",
+	"tAUWuJt92Vx+W+m6LQbxqhTu61GOMUY3P8G+/hhjehcEgWLgKVY2osxeD9d4YBKVq7eYfWFqHpy8wGSv",
+	"t+k/zl59W5UqC9VJqsWLXS0XG2FpFPfxeJPCHUgGcaiOJZVFnY4HcssZFJHMdRnnaXhL+bg5LHO2XzSt",
+	"5lksR8q2PSJYzSQKgYVR8wAnMM+YtRWKxPxYUz/rmJ+6MhDjrd7VeZsmS6kqdxP7kVG+jgzBGwb2v3KK",
+	"k1RM9XgQsI1hIXEP47rKzWLxyHjCepFK3Pw0x/zZFzGFbReyQ6FjTA/tkZx1YjKTOFZY1WwxN0xCQUwF",
+	"RV3mHc9OU0MtuxNo0yo3B9SolOyX8JJGHFDTqnwgo3NNl8U3sgJcFQUuVAQGH8e/YPJ4p3MueFWbGSNv",
+	"WbkPQl5Q+qre/JhQ7xjFtUJYOaFfOSfAWlEwoNUGe4diuxTqbeOdQV+nRncwNTl40NomK71a1vWkxm+m",
+	"dhlkB8BMYwxlV8zXV3okED63+o4G1zeP2rVh7BE7uxp3pEdzn5XDBSrSNayT3Qm/dC7WdL3Pqu/dNaNd",
+	"1OmfQJM0cmlFcxZk+sZI/rHNN7rQZLwXkfmsmli6kYoFejmS3IqNs8F2uVwRO8cac01vJKWcNebx15os",
+	"5sZCq3W+WTZ2GfqsmOj1k+G08ZrTEq6JkODtOFLKYRjmvlJzrGpA2ZoMplvnlT999tU19qff/DtZ/vS/",
+	"rjSrXGMutaf+AzmHIPeYtQDncbAj22CNa01KF1ohT0zI4zjaxngIzpTgcbvbYtdHA1VNdSTEYx97NzZo",
+	"oq+gdJ41MOn/S618KVHfpARvh9RUoVkXumqIzbho2pJfq0SfJhyPAx9a9l76Q/od1cLC8n3TwYmyuMfF",
+	"4dds8li8zckyq7CElSMrx2F4RRyyGvR6UDD9iLCrOfJpMa0SPjW8uogZtTuuvOhemXyOYwknHFJ4IvW/",
+	"cWW3AGpHYFlu5qHK0XYkPqbHk3YXfc3U3sv5Ne/g2Yb8G+PkKXbvhZeRPFSxrzeA8rS8y0dvC1qO0/g/",
+	"vDMzAgJp9Bvrzuycb7k9c95UoSv71Kn5R9Co+bV6KI8iVwEtDOAqbyv2PbgR9Qf9McSkD88LOHtECRcH",
+	"qFwCRNxNsA+vYgwjS6LNzUCwjciHiLobH6zWBFhaRotfQOJFGIVNMCnzJOrJNvvgxpVLq++YOBbSCSD2",
+	"EqMgMXahF/myM5zdhtFuXFq9/LMW02sGtm57sc5ShCU5JY3JWesOclOaQFCsBKJnu/HBKpaG6fWjRITt",
+	"XBhCZSOXdmlgXJPqyk6iKkLc8K0qM3H5JPDFypOIo40Ao8BLiQmRX0G738dAilnb5ETEcRQz/TJEAnS4",
+	"DAaxcOs/sd5AS/zYU28gVTdPd4RSlrLNfra6eoOCoVhDtDZb7EOnvaht1/RhdclHzIystoXr1R2BrCMw",
+	"3tFfVdFd7ErZrvYrkeJ81a98mjfZOlKNFzJJHaniGE015rRxgyNHngOyeOg/G/R46Bz5Ha0DcNfQs8UD",
+	"6eMvhAGVJ9Wp7r/wX29dv2biZamJkB7PtK0HhFib6QRRFK/NVOFATXEE2k8NIGjjY8I0qZ/vuBZsPk+4",
+	"jZCwvZNt1gSyI9M0bX7h7Nli030pFKR5Qx0Da202pbRf7TMRJvFQUyuZUIR4PgvynzBiG4MkicLRZqaF",
+	"NyGAawXbFPnu/FpKiOXGIAEFqivDTeRM1kc1dwIqwhRtfOw1X8c1Tqdc5b3caGeFxoPvXn33etmSc35u",
+	"obls3jb9QEuJ2D3UAtw+4KobxQnfhIAkCi7kim0Eg3gWEiCcvkwm/MiGMqM3/KnT9o2CKp1gIcj4h1XQ",
+	"/qmzXSeKkjBKwAo6ZLGAeVrsnV4/wQ7KgH0o9dr2daiGW0sYNHw7QgH/Wwaot2Al5vSqTm1MGmT5qGqz",
+	"IHO1DUZ7te9yD4CCvRtfU3zIPsDyc3aNUQuZR9kn6S5cGQpXw36FJgPSyTShIhkJV7eVMSujhQPt26eW",
+	"FuabU+VB1ohmJtGwRD/GkyFUncYrTc6lJVVJy5H53s7NzZf0JUwJoSDYgsx/miycJ6ALTXG335jCglv+",
+	"8SgsNSjh7H8MGgwvQZuwy1GYiDsV7Y3hpq/XNCe8bphQG+lG3oEPq21rVmjb72tA83YCQaQYJOqLQG5A",
+	"XXHN3yOFxQfRFG5CYhvvys0eZwsLc3OzF8+fhVa8uXoUKahYyBUrkY+Ws+4WuxELBbGmobMwFhPymDDj",
+	"Qn0ZisKwwYgraFh1ErtgUxRbSJ0Z43JFDy2YmFMcTcWDJVZ3uwTIltpcrs1c0/+9hU0u12b0fOM6Wtos",
+	"K9bvRiGGN5pu41M2u8xBNwE8y3Ww1SyCFB+Mm9RiQQP8ABAAifQqp8fEI4G9oYNmuxspG4QpEyZVi13f",
+	"DnEkipws5/2XgTyh2aMRpo7e4rGm4/KYfo6UK/A6LR1huWUPQAEfcaY6fFxh/fEXwjk0Og97dlOaUExv",
+	"6FKzA5PVEFU2dsYtkHzhcB6POa2lz2BjaXjNCFShUK2cAhSa+tMV6PcFj9FAbzCNNi1Cvx/JMHE6Yp5l",
+	"VZpgsX0MrFWz6+M3Pp9Mla/ajtUjXSSKVLqGPl91O6O22CW3qynSAWhzaBUBpzUxqp2JFt95yAbhyJcb",
+	"oh31AFNNT8tyf+2R3rEn1UF8XIv/yUB9HzY5AaDH7m0+dWPQJKJe/rbZ9BQNv0o7N5Mdce/16uf4FsxO",
+	"A8//yA7MJneN+FqeTEx4Xs0IxvRXLqQfm4uBWbwt9q4MgkLuW7Tt0useHzIlBFF1e8TOkKgmjV4SxTik",
+	"0DWQ7PmiLZWm0QtzC+dm5y7OLsx57NT5pQvLRkXWTNfVGREL1UjpItNN2Zc+MGlKVTjJhs7vO4TCbXAL",
+	"HGMYJl2hIPEQtxZH2y32bqH/bQ4GAqhUJtnHeST9YxZakmodCXRlOGvAVbKu+R/1gSvu7b8bOGJfacKH",
+	"bU6VABWkRHYMVgRgKane1uulso8XWYo4+9YElzz/U1g1CWQDklsKHB0lFvxEv1S8F3WdpL0aLCq1lfbq",
+	"O06vMD7Sb18DSQPA7XvdyF8iIqwEFO6D69Y8Wl/so8lF0yi3BZKtvyuYdGsvZCA7oj1sB8Km+q7ldq61",
+	"GdYTPDTpgGS6Oa0KZieN66ZTv82UMwL4iN2qMAzGWoU+8jaQRQm0gzDRZBVn6MQa0IO+Xhsd/doMBPYZ",
+	"BcW5SdtcJho3OqV+71BHESluqbWfKZpjtz3jmWkqmXZuBhxLEBzxSIPIfuUSYJy7dexrXys/uMx3XGfx",
+	"Igl6/fbiJRnDoa2TrP7VSDwFNTPqgdsJ7UOY80PDJAgbkTI0HGJhpAFKNeRaQM3PrbnCPnREuQ8BVT9E",
+	"RvohmF4Ab4s6xGsJ/tWQGPFCnoj0eTwlg0jHiUV4jBM4XyPcwwybkOPAVGyCEEoe3HCWjGhduj4intWD",
+	"QgF211vS5TFvJyKWKpFt1WI/F0OU2CCEHO1xMmTvhJuBVF2mQn5brLe5Eivs5kApyUNqHwNvck0Ww0SE",
+	"/hnu92TI2lHYFjE5SpQAfz16mqBkFfrxbY0DuyxYKqRKK+PoGik1lHev0wKo9fcsNVvsUkjmKronSPPX",
+	"ZsKovOG1mRa7rqUYkmhgVVCFFC4QkRgHFoVKEQVZe/SwJihZTr0tJ2x+aW6u4hbxwrlPhYD5Fx+VsKEY",
+	"pj9XOWGNXa6P6NZi13uQqxRrgdBHaDc1SwpE4rr5TedEtP1CgLnhm8XDpmiQf04Ps0daC3pMetCe6TSE",
+	"D9NnmEl7N91Jv2cLbvL1/NzcfNMgWizz9HlbEMuW3s69/o7py9j5SayDVTWsP8/UHzHZ8D7bjEJb9hrq",
+	"PeU1KJ0RnHLItCpnwedNXG85beLkSzWRw9rg3Dgac73dHvR52B5Wd5ej3sVUuKTQoDjdYY0cCmYYlLVB",
+	"4d3Pvsg+gZyrU0sXFvNCC0sXlope2uFp5ZTVhvwZQByZKMoud4tgkP/JeJ6Sspe4nEfvhCqHUWglK9TO",
+	"mU1re5Ddg0BfqAAnw03PDW92fV7Kqa2HlaJYoShpWSZlDZSTzvS41NSSh23RBPmP+bIDBSYSJJ39xKk/",
+	"YcfDYCvnYyrlIUMAEL0Oy26xG1F/ELj0E4RUY/czTmqTS0SUGMNw9K5KxlFVEROD4cnrpgtItYwzclz6",
+	"1uUlKchDOZ2/sVSf1fFXalGB9aIw6SqiNFQvNxcVseYBZlgaUEW5ElVbkXWi7KoSHidHhAB8A3s3UrSz",
+	"jGMuolJDGrMAjZC2aI/+WbGtqM03BgGPh6xBv50p1LUY9NsRqNXWcQEbQfs71HkQbCgSONDfmtI22Ffx",
+	"ypXW+++/2seb01whlcEJisdaK4NQrbBQCF+tc81rbZnwUi0TmLPPldLirr2FpnyKKTpBBX/ycA+7Irci",
+	"vq0ABGvz4ObBfdYqv4pCjUdRKExYyCgFamgF7k4/kG2ZBMPKMjBdqUWLIQUP9KM4wcLNzaKcbQBMzdVB",
+	"nytBA3LSwykK/06hp4wJyUG5W/8rCK53Zpb/6igCsHGsfvTLj7zxBUZfU8Bx2s1PX523KBSNPO9ytU4h",
+	"5et5YPzYOg+KdXnQMRKAZRWIRI0aPlhifawbBb7KK5mD85Li80drx6AvuVRaJo62GcnMVDZ8Ekv0qqJu",
+	"CwUAAwwnVIS1xulvVlaozn+TdvyTkRtspQJ2/WZeRmo6LuWGlCw1c54lAiW2uyIWtS0XpqsFUl811pWI",
+	"psHNXISawpRpjh3eg5zAyfZLY6nM7+qZX0ljqvRQ+nYqyCuhwLjejqLbUpx0kdZKs9GPqEorFJ+rqdLq",
+	"5cpATwkoaWRmgCjiYxZxZSaSWqKLkDZItSCwaph1oCBUunSHYrnZTaizioRyaVtQDQ5VERlu4uB+BFEE",
+	"AQ83B3xT05ogoDAcFBw1ozuEpmWH6eO8n3keIXeG9WPZ0zzeoCA0Ha+hUStm7ETrz07OuV69vjmvY+3P",
+	"pZZpbtctfPtYapGto3IETlFVWIaq3ZbUKruTAkMrcKfCAtwbNI4937LwGTHyOlqAEwA31hS3Wsq65xp3",
+	"9SUCK2fU0+OYn3BPA19GM95MNxooqMYe9XoibksezHgzUacjYe5tHgvzxiaP+aaAUjbxbRRjAh6OX9YE",
+	"q+DxzSVHFFwcueKXZTvau5oiUUQoVg20uQVJk6wiaBEQgY/2EGjmZcfMK+qsoOmEl2xVSYTFYBgPghHz",
+	"3Fp4ksYcWKxZojXQOCV/rB0NhzJVauyrKMMaGw/EAx7PvFOy4iwf2ari5RMr0TalYHM7EO+Tp+tY1pe3",
+	"R54qq1sMVPdGXney9oK0C1lv4+a8FiWyo0U8GYUm8c2ZgUoageRV4YkZqG4eNvTBzfcYGEqw0s0zLD5H",
+	"FYkOs/ss/T7d9bCE6qEp5gMVTp5SDZzn6S4kGBTQePHCxLAXs0DP3fgvp4FfXcBv+g3VNDrMHpmOkNVb",
+	"uwfx5M8hSmNu4UJzGQM37mOGO9RSekZpr6aEzui291YYlAB6od/ZAZa8MDfHflJ+b4dhTb/sc/3sRboD",
+	"C9nN7s5CZPsL6D+6m92tXizUI9K8/NPsy/RAK+RO09Xi0PZNTMZ7td/0wFGsH2UPiw9HzUBvDP1OEg9u",
+	"DTbsiU8yzw80KtYVk1TOQEy/qulOLBKPbXAlzi0O4oA1br57mV1YuDhfxu+l+YUKKvOW7i/sYOQOg/8k",
+	"d7HE0bbSQq1+TysTsi2muaNQuEeiZroOwlStC4EVIJh/ZkLvSM0cXRNCde7sXPP4bub+wtI5v+Z0yaj4",
+	"zuUrP2M3ZheWzrH+YCOQbXZb/P/s/WtzFFeaL4p/lRXyP4Kq/1TpAgKMFH5Bg93NboPZBu+O2S0feqly",
+	"lZSjrMyazCyJam9HIOTrwdNs9/SZ6Zizp/v0XE5HHL84QkamQEJE6BNkfgV/khPPZa1cmZV1kUBCYHbs",
+	"mDaqzFy3576e5/d0D326g4mWp1IjehuHbi/jBcTgZMgDnnwcWPmNooIhALzwwlwfEfj6pBbVc8npcZY2",
+	"OAz1QpnjMMGiIRJp7ADDi3E9bIk30K8YIQs/zEGelcDGaPRg6TeWqSRE5qADasJx4aWW6+uozYrrO1wR",
+	"Ry8RirkJLRtIPzeOlNckh9IL1lTIjeOCpr4vZEAtC+hYdzlVsQUWOSl+pdQKQqjKUInpd250fEd2JyfP",
+	"vXNDxp0Q/ltcll1xZkY0PNkCj5XSefCK4BTntDmyOy/eU4vi9AX9GPi0gV/3lGyLLhq9JtCtd4bcfyd0",
+	"mzFeilj7QTU3LdluwyHCBkvX644GlbuMj9UmcHbjvHCVH6xNrCm1Ms4bv6LnahOwqnFe+Ft6rq8n4AQc",
+	"NwbHfDWGd1Vc5Ke1cZ/nGY//gt6U8d/Qa/w4xxk00T5JhOu2vGc625FBeHxtOCvqifcbpv8JpjR4Tg/S",
+	"e4IglMCa7iWPENfpgya+KpIeEjRQPEZ67iePsgxjfKXSj5NJeNQPdd96+N8qgVInT9NvxMzk5JlpkWwh",
+	"QCWCutwF2zX93L6W24R/Pko2kx8QRXQz+y42xTdAozjxHuF30uftjwhGmE7Xk4eIVPp9slmCl5ne7zc+",
+	"rV3IpeoYKNgzIyFgW/L2FXqNn+V/zRSSdmoTHd/9e0KV42ybT2t9VKFZuCzgwWdUcs5/QGwmArjs5Q4O",
+	"AXU2kwcEOk+Z47B9W+PvbmWMQ8Qc9C1BfozxS5KegfnuUfuWQSOWAn0fnBOY50fyHku9sk1eY81QTg7n",
+	"RhVbZ9Rw/qDEULZcaz7DV86iqL80geglo+eZUfRc3CsW+GV71dJ8kyEnnx7++fI10ndqONnyZdpI1wNR",
+	"SPqasiAEatYh5d5cGWXmOjRUQPAgxC+iHX/9H9lP8I903caim9eZH4SLljzFrA/ywjNwfI0q/AR7YgO1",
+	"360icO9e8gxB8veoXwwwLHU52kr2kkfJFkqwuyQfdwgNuMR71lfFg1o9ldxeYj7Th1gaP0bHq/weg0jH",
+	"+fSIdTM4nm1Bew/bkOzs70yWQeYMh9gu5SgMGpe5Jcm/cUnMkyxClK5jZGM32R6NPZFfaT/dFR7P7/QQ",
+	"Mi2GB/qDRckjbP/TT6Ci8o5ActvDeM0dVKvbQHaFd7bTb0UOQnLT+o6+tDG9RkAv/6tN13f+UCBlgfje",
+	"HGp6lPxA8NF74uZ/p8EfcFwIYdk0djhSJknyXZF+iZp2ByG8rblsMqK1WUL6Len46rzhGzQsEG28ALKd",
+	"bPNcDSD2Xm6KGbNungjA94xURwfX4WEXr1cPP8XpcdAquYK8rLu8ndGC8cs7upoMDuEuRxfRXkRk8R7F",
+	"I7fw2B6SmYE2ArXyQLyMzcnDlB6xVDrirWBPlI2o4UY+8PL17Hl4m7Ik3h2E2n+t43lTOrkA9/EB9TNh",
+	"TMOnpGss3kC+3D4o4n2xRUxOgLABSeyLzP27XN8h6uzBuYpYMVgTZU0A8PBRjtD8kydorKV3sAfMDrsU",
+	"T0kEF1DGk8eHTIUbBxkdtDzTWyb9GeiV1AB2X+L/+oFIGxNOC7McJjEPhqleE8VGLHNipibOaKl6noq2",
+	"8rQxoj9LPvuNjYketidgumAT/C5K13I0/b1kd56OzfQJ2krvJQ/QmN8kLyv9h+QJQ5Zua23+ryxc7QlS",
+	"Yy4Gh6c2Pvg9kha7+IGH6YZI71PaAML4X3i7r2KuRHpMn5+cobDswdvMxDKMx7Z9OrHruVnA04DHY4o2",
+	"iBgVqzC6FfgY6sD6kVA1lNuORzvqxbYwlqyxp2lPIlMng82Ja+p2zGKohBf+j+QhnE5OO6MifZBuYA+y",
+	"r5PtZFvnd9WLwgSeHNuKOIyGLcFOHttOld3oIz8uqz52cijUIy2VclR4kwpXqhj/byLP8uZYxIH9fesK",
+	"DUqRm65/cOOmyOVbZb2FPp3K0gOnPrEm9OlUm9ouHayw3V5STW9skS6zfR1MdNdzerIv2MBBgpxWybtZ",
+	"xhjMhxJmfrzzj2dmtFjMXSguYHhjYUKLoDGjE/s7k2L/uzMzdZCCZlRww3r5T2bRr1wfMuCBub4wFdqw",
+	"Vva4bnTTF6Z6UgxqbCe76YbWu6Y1pNj/6yzKtyzoOb5HnkkqWE6JIPq4eG4IRjvONfX4zD8nzE94Zfwl",
+	"xpmsnehRizf7c7jt7F7kaOVpfqxt1nqURGapih8/+6ez1Ulh8Pd1+yFEeEdJ9rCow4pzAM2Imoqd1kfc",
+	"ma5XMJveOntmpjqXe5u76PSQ/e9yqyK+lEcCKV7dU/eezXxpC8piCrz9Dm1pkTxM76QbYEmTtWf1AcB8",
+	"70mR/F/JNgYyH1Ee3czMuZk5AXT1qNgXmY7JXkqu9Q1oAQwufMuueraXoFtrgqwL8pk3aXal7I30T1ue",
+	"3jc+gcE/hM9ssPu3pQ2Z/CHPI4YXUyjYIeSAgn2jWzgece9tP69KR5v/tu59fu/B7uhe4Mx/N222MFyU",
+	"7FIgKNs9POU/WwfLLvxWej95lH4jZuZmctJmRpeujEk0zFgDCEen3/TH13qc+Fkg1uqhfMBxrP/3i92Q",
+	"dE9e3t5TkdUX6dDtEQ9uiQ7pwT/UMBxtAF4PgyWdwFggmz9TUES3zbQtki81MDZx6tX+YiibXE4jMp/r",
+	"XKUKKCSuTIXDL3UUB9ums+fjgu6YF4hizR9IelxM9aFqSdfXBT/on2ifDVyFzDPuo8iKId+iE72XPK5O",
+	"6voBe8br7DhjEJJ87XxTAUxcGlvlicpbb8+cr+asmYGG9OO8E7//XT6+tr8zLI5mMR5nf2Wnld7jnnDw",
+	"LHcMf0ixQXgyR9PF1fYses7L1sLpwJ9G+1q5LR/vlYyoBuApZ0Qzzgf7uMx8Pf+pWt8Ci7MfzG9D8vwK",
+	"FWnYb5dpw4jt3Twd7tEfCoZXsjuXKxet8dllvFwrunD9sdISX66nG8BQEM9cOJCVej9d1+HY5BEKPTS6",
+	"cnKg9IZBa8xDxjDHCVGOuMUYqTuyjqcHKOMaGXIcoxWQfZtyKduqcQOe9OLzzWHMLKL+8OWBd7lt6aIx",
+	"7B/99GHaK/sHM9Vsz+fAYaGor0xivDJKQ7alt6NYXTFy+jfxKdM+RGM0v9RQVn8LZFOeYgey8lybD2wV",
+	"mKtMVAzggQE8ld2u5KnDIsoMzzmTBoPl/I1OqyXD7hBx/0e0V77v8xX7vdSZM+A7oktTai31inAHKKB3",
+	"0t8lD0rbwoIkBycR7B20B8i+0ZfRaKeU3Atsaee4h3bHtvi1Oa4aIUl9PJ97xPTztRrj9n2XO9T20I/d",
+	"oZTvh8keO4P3MBBH2Tb6T7XSrriYiwRe5Bf55KLkcb/S4T6eB3P+mmHQGot3qF3owT6OWHEH9EY7Onx5",
+	"MHRyXId+uzjbWnFvilMbTPEjmrgkf+USgV52V/XMtCbud/AtnijcL3P7Yd05moIndAcC6qVOuUrpfVHJ",
+	"66SayIuNmuiTGjVhrjPpV+XHNdHvOTJWR38fbd1+2k7NeMQXyczRNb7DQCecrjv20M77mkymSZH8RYdM",
+	"auUBk1rffQwY97Vyt5P6OI9xF47d+Z+mn6Op+JSjmbTLFJSxIwTDIvk5V55jAsW7SdzA2ekLJ/1ifbRp",
+	"eBIu2v/fPEFxkPtf7Ht2ts3Tu4XcmZ/SFXrZPuWIkpmX2KSng88lIYJ5lkJb2i3+CmXXtqj8+PV/6val",
+	"C53p6TMql0dSPWSz/E3d+f5OsglHWxpG/Ztx2Hx/R2CQZgcHAweSoxu6y72OqQ9uYZ/rel82Ri33vf7W",
+	"9ul6X6pvui5Q8hCQ09dJL9nVKcBP02+T3fkDpzGUXA2QzJk+wvSBrLE6JbHVkZ4eJ7ulshnnd6x5A4du",
+	"zs5DD7q4rw5p3i6SvwxULJRzMKZimc+R1bOkB6RgboisDOHkh3SDonTJDrVNpbd0MK3y1szp6bcPlxLw",
+	"oj2jAdbUC4N+LISdDg/2yJbdNbX2bku63qXAGVzthYCdA2p4Ytfz6p67yrCeIg5WlJ/1UlrsiqmWmkLA",
+	"2alVFbrNbp1pdD6HpL3o+g5WzrhxBgocOAo7VlPdoIZQ89WawQ4vhVjhNZXP2Hp7XkPauD7VCDVk1FeC",
+	"WFKsXdhk2h5r3PL9jpTvHMVeU12ThktmiFpYJW76fG4nQ1UvbKbefzemIxidCkszLFvjDeU7QxdnAOLL",
+	"oLj9MVri0WPDxx7EaKGKw+7FZqxKmhXdwHr+SCMZabwV3LaG9MWiaaCvnFLvLSpNufnVssLvSPoSIhoj",
+	"oENTepES7zAQcxSrttDLrI4ubsDBBm3CddiiS4iuMPQszI6r27LVBhk58TfnL1y4MD09PTNz+vRIMhh2",
+	"FGhAv+9G8eDTYLSg8SXfRQyt8bdHCj7z+dIJWtWgZWBkMBCboldVvBw4Y/YN5ofZQflQgUDwQf84AzwV",
+	"EoTXVeiOHuOi03J9e+Y8KL/9qYHfprMfEtweHbnlTrLjxVRzc8q/aX3rxa7xJkKpjwyX0lPAnkEnLCtD",
+	"bUvXybq1ItJ1W3YjIx0Zsr0ShAgWSJAhoVJiUUZuA2/4qvMLPlevE06aLwiWWEaRuwQ60PoQ4Yg33dvw",
+	"ZxW2NBTjgq/rXnVTydNnzxbQ+mCuEyBpcKxykPWxMETsDbZwRA64pQiZ/FFp0GpMQiuix9Kn7fgxnVoJ",
+	"O43i6oFJkB/4Kg8K0FiW4ZIy235u5gLY1X7WSgvUJvxbHxBh4YWq2UGsF/1nq0swNc7KgNHMs4yDqc0b",
+	"3V/NRWxKCpQwtrC75GeP0VvU3IUAsD+6IhqBv8pwd0SUBIktQsVGvi/ioK0TH+gb8zyIqZc2SFv4WW8N",
+	"SN9MaIViAy8m1+YQV24I16Cii/FQMERgqdapSMhF7MClhKOk47m+daRvT1etft8a+oHxg1ZdR4ViKUCs",
+	"QQK2ddxQNWLzIdOeQSPBekGkdHcHMHPrcVDXs/FcfwWMXoamjsNOvGy3A3U6bQ9xAxgbGmYvbt58nzt1",
+	"BL5oqbCxLP247vpu7GLdO9GoKQ/vmpZssAnUp6t1eJyKcW8ED6IQS3jxkgwd6zsfEVThGLroBSkOPuoR",
+	"XZwPuKhMfEadBnXzeB7FezAZXHYRZ4Qo71t/RpGRrmZHRl2BDTrMcmQTGToWjAOYvES+jBSZF7RSRL5s",
+	"R8tBLGIJzoyMBU4GYTxD0XR96bm/zTWl5k8bttRgtwbEkB+ot5BUCUvdDXyrGY7BG80JAQMG4we0jGYQ",
+	"lkEQhc6NbhRTc/Vh53Qpe/LTmu77dVVGK2X916MV3ZLR77QWVVgT3B979sz09P+f/9/M6TOzCxOjXTR7",
+	"rJo94zGP98YAgOf3cxjjhGMv8/qUt3ZSfIhaj0Azmh3PqxMhMsgq5ZGcOc+S2VNLstElfEvp3TIak9GV",
+	"4e+mJ7mBja6xZuW+XdS3JlahLxFKXIWrRDfRMqhkdpCxr4uMtKM8aRtY3L7GYmYQqtjPES+SaVLmPwe1",
+	"uinZ0BcW/ykzcg4fBBpiupcyN8YedIih7Ngt9j7HdlRbhbjptcwgagR+0w1biAykrRyjv1Htd3NqGrHX",
+	"HWx9jqAv2MkPDaWbN99npBcCQTVtOwJ+HdHlA+o4ZRreIozvizFraCWszIabMONZPS9K35EiuMagjKPV",
+	"CT5ZbpJfIxjSgRrF2gR7yaMIbgje6FIo0e5vSL+hPG9Azsygdub9PVGHtZPXciXX1rzYVh6xwUxPeJB6",
+	"vsHSVK12EMrQ9bqi48tV6aKOF4uqITuRygH7sheIfduBYHUHMCJm/La230FNhUp63IdBTyBr1jxzpn7h",
+	"wszMmazRRFt2vUA6Brgy15cERaAbewSoqaN+ba8TWb6v7h/N+xGh8FQqNrMyo5++UMdrwdPVsk7jhOd+",
+	"KxzYjMruZ5Z1qlWi2C3OFs9jd4OyQFxL+hDrDdFboHcPdte0RdbrdePJibGxTnOfp70+zMeHtgO3WymX",
+	"twS3zw0bnIzTEpxeLusJnh30XL4THaGuGzdSEqwsN8K0DhMxwYt9ld8d1ej7EP28c12mCU0v30F1/7vk",
+	"j8luel8k/4ENT7GwDNOtj7KTavlCdMLcrbG8r2Lo1Xq5lmM2gxmdgUVbW5anrTL5nMXVSmOiPO77IL/K",
+	"c7S5ovx66DYOmDPlH1BVaXSxAw9V2Ey9YSUrLF9O6cCDN1OrYC3GMHJIEnOiNrHYiVw/3ywpIxL6wAuz",
+	"HbPY3SHNxZsyWvlQtVUZFP8vgjURNGNm6LBDXdWdTgMUkYxWoklxXYaS7lNFhZGK8IK5JhzZrQfNOu42",
+	"IelXhROgzaZuuxE2UV+dyXDyCfoPK3ulB0amE6LnZ2PnzQkCbrIux+m9U5Hg0WuCz3eKTpSA+frg+/Am",
+	"kMDzz8xEsfjxi9+L029Pnb5QE++pxbAjw644fYH/XAjaBgSZ7jDo3ppGxmsZUL0hkEm034NSTj/wFe6s",
+	"jkjClgcNA4CoDeuOj3DhMhZLKo6sdjGLXbEsfWeSVNUUp01NOR11WcYK/vem21LUqI6d9Cjz0lsyRuBr",
+	"ds7nTZOfyGrNVjfttbDrwGIHbSpuTFUzbT1gAQZaG/7Qcn1wBfAePqJHw+wJRTCO1G6kyzF1NKrRt4Q9",
+	"mQezScbKmc8WXGqpNA6Qhd9XeFAS/aBHQOU1ZSOeF26M3Reo41Z+kQgueZjMlcOUL9ChHiqPnwmh5NJU",
+	"h260BU0omrA2mAcXG72j+8IodP0nS4Zsyxjc9om5if+t8uvpmY9/PV2/8PH/OP3r6fqZj6tzv56un6U/",
+	"/f8mniN8masp6D85ukXXT9UMyQPxlpG7tTZkQqs/sgaT18Uypw9X4ZiHwiybc8684UPIr8OIzCUvWJSe",
+	"iBqhUj4a3Wts5FTwoqMdBiDlMczme91a1n3bfp3b8/DqTUuczAPRw9I42hqM8j8udjHQ7mqOHCNVS+uc",
+	"8bosWHqqv7sCt8NxOg1shk00SyMIGdneoAXHyrv24xc7oiXDlUnxIeZDLYdBZ2mZWwmtKgatxVBDRj7c",
+	"YibgfjEkqN3I9HhExfJ3QYfiVsGadZXUwEud7GsRfTwHWRtjw6TSrYSt63hqEMnnd4EPFZaH2SADp4dp",
+	"JNJBYXs4yo4Ge/6sEjCjHQX46MoZ0F6l0RfGKr74XEDIucoW3s1MnmbSUU8kX3qCNNhf/GJi8Jkot6c7",
+	"0PbqeGoEYtxNLY+QyujzOjDAPX3gL24kAo2RzpfWvN/0YoW77jdUNTPjpO6KCQ964DvjSOBXfcuYqhqh",
+	"Y3+nSjZHJjdVJNxWSzkuvNyltCSszeYtj4yemMf7VWRISsOJl6VP/NP37AidbiVyzZQjqw3RjMM04Sjx",
+	"g8/lRNe4Asui6GIaWsv1zWpG3qYzNfIEhpHUGCZmiAY1GXYxX17KuM/Cv4JRLQKt5rCsIf3M3AtCQ2wk",
+	"YYOIzUxzqeDG5psZA9oCylYodaTFyHMbytK5c5mwzWGE6xBBsOaLxSBYeW6r8LmssZLQGAl29nG0CqI+",
+	"NZZ5b7XzfMdsZwWZpF8wP7ep9yvpefWGFzRWiGd/8Yu5q1fRLiJLvR2qhhsVDaNXzOjLzR0J58Ubdc8l",
+	"D45Bw/UrsTJVlym2A+uvEXVl1+kGkLafvjiHwXbOdKeeVy545c3Y7nNlyrt4vnTzY/mwpryLmv3BSWet",
+	"ploH1SPjsNKL8LjGN3hJ43xcZgMepw4qPfjnFioR5+eSalF+zFciEV5r413e84gTmGM0Wg1Goi2XWA9i",
+	"lCzzFjg3mEMcNVJgQSw9urw0XYF/n94z4OuI64EVu9f2d+g5FVZN4KaklarWBvDfKLtk2LU7i/8lDyMy",
+	"tf8d1e5hLe3m/g7sIwLIlZH7QYOJVmyqL6RoFaeXuK32wnTBCrXmNq1iy9RXv+kPGzzABrb2XufAgZes",
+	"Q1DajYIDrU6OjhLTnugh9fJKBV1Wo99fsfZ7A2OnDz+H3JTD1dV1r+aSweC0PMlXAk6K5M8aV85gMWWV",
+	"U4WnM/HHnRC4/Geb4PrnxEdXrGqcYYWHfcXtb509/XYpKIhV6jhSZ6Olc21Ql1xPDvlxzCKCbD72aNa3",
+	"a0OS2z/ywfm9BIQ1pJEQ/HyYywh6sXTcSIUjmlfqG5SiyB4daZJxGPjdlts41OtRJzz00CD4f8unlueV",
+	"KxevXRT6Z+E6yo/dpmsSo97twNqnrgZRI1gr1Oycmx0n97hvi/+bbLvOdbw5/KUa0q2cLhdvragB8k22",
+	"Occz8DkOfioS/+3i9SuXh/b60sZmWzqYiKB7f52uTorrErxtbBgciN+0O9HyVYQyCydN36zKJ/bAN3Dc",
+	"X6qu+LT6m9EJY9aSyojvv2Hh1tBykkbgFCngXM5aOJfT0QsLzifnPi1VxgcvEhpGRj+jjm51R8WqARo6",
+	"T1dGgVNrMth3R2Euf+WKH3uTYMOB9fIeMnKlOskhTYdazEWV6iR8679jc31xEQ4Ao6aeud3GcBluGodj",
+	"IiGxPKsTqXAeywUWqQlaKFwfs+q5NVp2cZUjduGopux48aS4suRj+RpYAHhPBtOHz2ZZDS3pd0ARLgew",
+	"JnaBEQPCU6LtNlbAU9d2FTjoayEY2v7kmPU/NTr4IURD+h0L30YST9mFisM94vhWTtsLlCWACUe6fGnm",
+	"9JnZs+cKouAwNNgnlEtXiFVfjU7oxt0bYBTl6pouYRP0gR3L8UzwEQreO6qtwL7lcPtv6Lcb8Hn1Gx1z",
+	"mRO/4a/fcp3fEH25Ps6B3J3f3Lr1iyCK631P0TNk9LkwDfq+TheYm8jeyHZDtt1fqu7Ep58iCEozQMYj",
+	"t2DiYqh8R4rrnvQxg/3i9SsTtYlVFUbc+WNyZnKagZN92XYn5ibOTE5PniFDnfDbprBMZkp2HDeue8ES",
+	"lT8qJI8c3vLE+24UY8bbRXj2fXgUmz7zbTK6R7isv++osJutyuNbfLJZ6TCQdSbmTk/nAQ5GdaIpHyDA",
+	"2vHyEUb0Khn0SUwVo3PIPjoyPaRIZu/exqoOutBpul5s9KbsxMuTXrDkIosPmAEhVmXjjzkeqGjdjDk3",
+	"qA4xDBqSXrzFjc4PMO4VfUOc7/HnCxOYEBVKE4jF9PQc/n/x0c1L1UEzgYdvMaZOyf4PguQZPK9Ouz1g",
+	"Xi0ZN5aVI2REzs/fiNOzyzWhbvOrw+cYB883wxtBGHM0pdKQLeVdkhGqMA920pnLZjopLhNNo/GRLQC+",
+	"lyVRl000CsL4YOeJs6L6Gzfw54SMGqAX4SFRYdbCfw3cnCCkkoZsUHPHFDUm6DKwrHT/Y5D5ZPGhIDo9",
+	"Pa19F44BWdbV1N9FVDmajTIyW9fIrsxr/rTYZ33iIlUOwqPCC5bwwhXE6CzNpmwQM+upn0lHa1h8ZWb0",
+	"Kx/5IA+C0P2tcuilM6Nfei8IF13HUVjDenacmV3htHyySt8NwyDM6U+U4AXN+euPP/0YnulTE1OfuM6n",
+	"A3XFz1VeVQzQFKCFMqJxKalfq3zyGMYXv8dGOwchHeXHYVc4KpauF51sGpqdnh39xrUgfg+k6HESXQGa",
+	"Yahtcj179rU1TrLK3P5PTkjPsxLfzI2+DBvL7ipe5MMTH4+hm0AV1cGy9bkUFZxcfFpECr4nFjnpxcpl",
+	"H6QQ/n6UBirdO8yTfV4rbKSOhdFqmUqtCXOHUuN8urzyNT+/Ub4HE6AZc44WoRnTv1G/JZJwPPVrinFe",
+	"B/WrFzM27bzRuy+E2rp1DtWPr367l/QbfYSXP6/30D/VpSsRaJTsjl9DIcgookRpQkrKnXBbLikRy8WB",
+	"wjBfpXEgNfLK2QvHxoL6eA/AiuaI30hzzV9gW0QjZfgNfOqoT5ZGKTnG656MgVfqa66j9PU4oaeEqqF8",
+	"im+tunHXAjODk3dktLwYMNzE63ZyVgHtlIYxGC0dy0rSx3NTOtGhDOExvYdDwm0MCkBiSE0H0WHmpyKB",
+	"9xQMqjBIVOMi9YXGASxmUiJRhifBqgJhWazkhlypPBfKZEBPswNViP3erefYvsH7Nn4YsCZydd/lDsrr",
+	"Gh18o5PHwx8YQy+XwUa80c0jJPzUJ6ZJ2GjfqwwjZBw3zO5DdoK9sVIIlINQ2xsPawwqmyKMG7yrD6IS",
+	"aiN8n5NGa7NlKcUETWPwe14vn3x2+sLoFy4FftNzKS/j5JBY1PUbgwnsRtdvvELkBYtZDgM/O/o39HIg",
+	"eiFwnDGcGYZFOHLPtAi/UKZkPI9BfaIalatj6t4yHo8IfBW9NhZKzbBp4bLGJLUxulHbk77l3ZyrUt0h",
+	"3tc0gpaKsjJ4hNJ0FvwMKcOCd9O4pr9VPqG2GbTStutH80LSJ+NlGS/40guVdLqUBhcJ6Udr4JjNTl+g",
+	"rKc8KdGcrUNmMaGi+GeB032xZESD0ThGn+RzzEyhRo6cZ46CnMuoGBPtyHPjQzzpOvLCC9ua62Gw6KlW",
+	"KXNrimb0IjfiS8ccrb0EETn1Cf0HOwPtTglbUq54xpanItEO3YaKahQ2U3UTICU4MrxK5YDagp/n31+4",
+	"lJHsRoTC/g7i11dFqFqBKe8HttecveADx9abEsvLGTYAh1j0gsZKhAmwkfLIk5/PsldtoyGqLfih8tWa",
+	"9DLQZA00qFE/VxRi5zdVqHwczI0nxXXpOoLw6qJMNmDjAuVgNZgfgEGIO5LV+fvqNkKdwYgGdJdWQxev",
+	"tIVlEoW2Oy9RRpsp+hif30o5ItlFyzqE7Jo+TtmlT+fVkF0n1CPEvPHRxtdH+Nhrm+EyVhC4NIUVqxYO",
+	"8SLjtvVHJDEHBaHcWq5/gKDkyQoam5SVN2mkL0YiA/+NjrJSFcibqGpOuo2XugI7/FqkrcBCxqOUN+kq",
+	"L4i4DlTNAuczqqLlhVJc7dXU029KW96UtrwpbXkdS1swcSfwKVfjjfJ5XuVzkHIFUD4jSxbeaJ+XWgfx",
+	"pn7gVawfQIP6lSoieBVkW+42mfqC2FfHxQIi+J2RqO0MkHxq4KJall4z13IxaxS34EeqJf3YbURgx1iv",
+	"BWu+4M4kBPKh48d8XUC4DWtBuOL6Swt+x49dTyCwwy387xpYqkEdA80iWnPBVqKu3BZAJgWxF/xcQByB",
+	"JeaFFLrhZG5xboQ3FU4o13yx2F3wQ0U9KAkYzQ/i3LRLL8bw9740m5fjDpdctt/ItW403WHeXLe/ON5q",
+	"BmFD1QlXbzCHvWc9VcJnum9qH2cBydOPCz7K5DwsrAWCY7o70k3xchApn+906JrJD9YmF/ybxaEz9GRq",
+	"HyoqUmCb12ISLhZ4uE5NyKyBK9ii9BP/pTqPTXqiyJboi6ob8HWUvR6+RwuV0Lp+UnwUKYf6orSlG/Yn",
+	"AivhdLCw0fUbiHEUlbEl7jb39S3y5gGum9yTe9FkrfAQt00lkuKmabhr6PRN5tdLFi3Y1quubsfUFWiw",
+	"dHkXHuHmQviSWHN9J1hjOCOvW5AsS6b7Bxpf6nYcygXfAT6OA9F0b8Nvrun7KKgz5KT4wPe6xQaGrs9D",
+	"Ut/3BR/n6yiHsJroLrlObc4cPS9EQ4bxQeubVkaxcII1fymUjnIW/K6KheKFWQKsj9lp8X18/nPuifZK",
+	"szmtDZfyvAz+c5su9Bm94fCXy+G6OflAzr6IBmk0yITtNxjYksDu61b39AXfbp+e9YS1LOug2ZwXzJZW",
+	"yxh8D5M6ciM3pedFGmSMurvz0HaXh0bQagW+7lEJbMcmSGZoGxQ1lkilNUDUsgfNklC1pOs7Klzws0aV",
+	"sWysTIqLvui0UXwU23mX7Z0nY/gINgYPY+zhsCgbK7AmHMhk3cHmkCFVJn7ohEj80DAvxRM4IgFEqytZ",
+	"2POKoxtlR0JU8UYsvWyxFIcSoUQC346M9icS5X0Y8xLGq4OmiVSfioZJLbWqwm6u1z/JETJCKZmQGs3L",
+	"KPBrgvu8B6GowMd19jwiW1f78t7Q0sDOoo5wwatXayqKqT9AGTuXloDetPbjdbjpHrC2YbG6G4OP+ice",
+	"eevEy1NesBRQVml5bcb79Ps4gvH9YGlJOSLo4G2bbj1qufqXPCXD+g03VvXLMpZz4tJyGLSUzhR1lOeu",
+	"EjIrIbXSgILCatjRI3SXXF/84ubN6/WGbACzdMIlJZqu70bLKhKVmZkf7/zjzKxAgE3sqssQqFFNRF6w",
+	"Vqf1CseVS34QuZE4PX36XH1muj59rlozPAgjCBphOfAc7FZK6RMylkL63TWJ98DLSjqcTHdDxfUMC3Rw",
+	"MP3Tw9HcgQ41UsPquW4o37kUOOqIUuH1519SFmk2/GCRcEljzR5aXR9QLc6eHuOFm0FwVfpdHud5080z",
+	"alhFeN7B9JBhPh8RRfSDSh8zTVwdSg0XO/Gy8mP4NF7aHZqpj8vse0WIr+G5yo/rCv4WDSsvbQdhfAkf",
+	"pvePhgqtEWjIQ3sA+A0R4kewfXk7Przlf6jD4Q0eBzPpgDBJjGuR75c0KS6KlhtFoJoJsRxb9+Y63q+6",
+	"kYvd8INgZY6jcHR/FjpW+3kD+EQj0K/s7FqB93hZdTEuh+1kuVvI6bepgSwGB3Lt/clY5o60JV/mh60B",
+	"9IR4lh1fZzepqDpvtYHieerCFqvPZRYrwDkuYQuspmmXlmsidfrtKsPZSN1JHadHH48D7hD/gsGlDoq1",
+	"GKxysx0sfsJ0hKhGsCo1gmGviZaKIuUvqRDtIQPNGAaesqkkCIXCzu9ELo4byUWP4ySUVTcv3r/yy3dF",
+	"S8WysSxD2UB8Fcatp7dkCIQWq1B6A0EfaeoHS19ABxB4d0V158Rv4Eu/MVe7zFSnokJPeU5rqM6L3+gj",
+	"yV7Ks8spLh8zvfA1ddGhU4c31xeLQbycpVFE2F/xT8mD9GvssZJv55Le29+p1kwDfmoEGzoqFK4fuY6a",
+	"F7/h7BBrKTJ0TkWUNQIeTytAx7ISu9ga5623Z8+bZ/e/S9eTrWQ7+aF0cEG/pnfSz9ON/R1YasuNTPdn",
+	"mMGclWoiPCR0swHNUIF9HvMOrC3LWGliA4EBfrb7W0W9InUCCS8vEjJq1EQUCCkWsXlgEMbv6CpGEkSB",
+	"56gortPOmk56MKjPN3o4W18pBzx1oW6DFnF5jHdg4jV99x9jWx/dMgFM6cgqbDWIdUA8ETABvvRhJ4pc",
+	"6YtGoFMF4oBBiqj8FXQPthiPQcouhUGnfZCUnCzpiLvY63QZ/mc7Q2HknRkr78hwQj6Zhw/R0LxO7hme",
+	"R9Sf02OlSmFWz9gQPGXqMNNeU1qnUfP+A7xwqRNGYKAcZZxiHOA6/QxiCxJx8f2GGyFhqRh+cn2iJSOY",
+	"WQ1xaoqWYSiBXSdj7HPT0xxUR+xCBjkMVdRpqUjARjdirytkU3dXa+C+nIqoU00UMJ9qJsPj517yKl5T",
+	"yhdeIE2XNqdDe4UNP50waJexi55shGK91YlBIYiKLWRrVudoF0mtOocdYlnaiVDB30HLSpwhXcRJbwWv",
+	"4XT1J4M5gvXQClaVcMFIC4OI2Jv3WTdVI5GjFwqb6WKeAs2PxQ4MoUh885KxGpaWSXsHrxltHjNbTbEI",
+	"i8WajATGDh3R8eFvIKRUYzmgQlaSlJK7x+MlAmwXyD4xOz09iQWrl8xA+TbTlINN+6puL8tOFCsM+J/Y",
+	"6NbBUAjKKvqZgY7KVaCv5zswH3MlP89hDCmiqfe1unsYN96lfaCpT0yzt09J9YC86iefy/j3jHxGh8Tt",
+	"JnJHnPSmD5SF7avOwIOK707C7k+/BEZ95QUyKJr+EyXogJd0qEcm/PMtGI85YHkA4c+Z/m+EPwv/qfZy",
+	"EAdjq4Dr+PQJ0wM4qbwW+Amd7EjF8fLPrMjpbksuqam/a6ulPI+bLy+6vkRfub8BIb3b9g/96ppabB/0",
+	"3XJkKG1Pgp+DbCQWuzFencahkq0MIX9RNlaU7+jw5rmz1TnuclgHgqqJS7KxrOpwXmHgiXborspY1cS7",
+	"N+WSDtOCr7Uso2VOkUIvBryhK836tcBX9asYPdH4XmemZ60m/VEchODZgsM3KS42MG+7GXhesJaFV00H",
+	"/1l0I7MQnMBOndJBD1QDOWexu1VXwZA1IXNx4Sw0HqxQU2ss0mBH60xparId+sG1R7HrecZjs7PGcL8n",
+	"n4Nzj80D+6gNzv/L5MVBSr/V8WK3LcN4CuHkHRnLPGPk6yabrqfGZTW7TSi+V9Im9KSZCEB+xMahanuy",
+	"oRxRwRbLIDZEW4XIDTVhMTGxglp1g04kaGHELa1gFaM/UVxXzWYQxrV8kkZDhqGrU7MZpQl5zcSAMRkR",
+	"ZvNR6JnoxE/MYHEk0ORU1FlaUhEG/ae4qdVwsBJ85Eb21niwTPqfg7mt2MXb6qB75rizu4prHF5/iU8L",
+	"ayOPk56OPjerqZQDSnZwfjW1LxeepFi9fkFgl95K8iTZTO9gE/+3ZqZnplED4qIxBVonCO9/l/xzspk8",
+	"TDbTu+k3ItlK9pJn6Z1kL13f3xGtwJEefHBNhk6m/HnIU5F9+wMK9HZ3UnwoY0U4gwqB+cSV6xRibako",
+	"ArHjRnSVqEyktBH4TXepEypHvPfuu5d/dvHSL2+9e/XilfdFqBpuG9RnWb7jDeU77+ltOhpXUH/+eVOG",
+	"9XdMsgBG7P++ozrc05tT37rHmkQAdHzmOOA1zfJdSnq3DrziB9kpE2FUdXoDAz8OzONN/s9km+4oRfJD",
+	"upHeSZ4mm8kO/PNhsp08TtfTu8lW0ksei+RZsieSveRB+r8n28kTvNfcrcFze/BUupE8S56m95JdkX6Z",
+	"9ODn9G6yneykvzMm7ozY/+v52oJvc9b56dmaSO8mveRJsp3ehT+8XZ3LDZTeq4nke5hQ8dPfoOGbbMGM",
+	"ccI7yXb6hagkW8kTGDn9MtlM7y/4ONznSS/Zwilu02s9XN1eeifppfdhfdvpHb693Uo2cTbZi9WaSHqF",
+	"aYl0XSTbyfewMXjJa0bYXfDTDRx9Hf+6neyKZsfzbkm0s6fIPhaV7PvCev4p7Ea6IWA5cDrwn09h9Xfg",
+	"geRJeie9Z6b4450/0I4mT5O95Ck+iUf2MOklu3Q4MPNsCzZr4q2Zc2eqkyL5Myyen6EPbNGg+N/bIr8I",
+	"UYk6URtrh6oLfnF2ybN0A2ZH85oX6Zfphr4Kz29bforpPX0cnwukpDvJXvJEJFsi2UPq24bTxpfSu5ML",
+	"/oKf/AnffCrSf0ieJg+BMuGfcF4w0HqywyObY9xK12E1/wB7BwuFSTARpveQCJnkvgaCMRufbAK1Fugk",
+	"xwKiYiWXROId+Jnm5jpVoJj975I/2JyU3u87aeC2rQU/9+Ht/R1R0e3NI/hQcRxmx4d4UrvpRk3AGtM7",
+	"lGMgLl67fAp4hfYVieStt2dn5s0Ek730S6RVZG3czS+Rg/YwhwFmBceS7dl4S9nfodfWk6fp/fTugg8S",
+	"RaSf4anClm4D9Z05N1MT2fJy2yY0PabfpnfTddjyLRRKQC8sYT5LesD+TCy7C37yDE/zHhD1P8HJI5vj",
+	"3nyf9EACIO19C0spqPYzp2dr4jJY7jQhzIC4hTev9AdP8r8z8fM7mhkQR/JIsL6nSd0XuGKcARgFX2px",
+	"o8eEfcczt6eENAys88hibThQkC647vvpV7jH2zjobnp/Kv0MRDAMmvTS383jniPPP0l6vBZrFagYsr3l",
+	"FVgcl+wBKeS0QG3BT9eTB0j7KJCAIYFMgSB+gFmChCEBCAOD4OgBsaafJXvJTvIAqIf2w0wOeNtQtngH",
+	"L2JBmpD45oUbcpkUyV8wZwaP81myl97HL+FI6X2NxScql2eqInmUbAItp+uax+FgekVdBjNc8FHWg/SA",
+	"r9/XlIbajJngabI3L9KNnFB6iEtNPwea3MKT4bPbQTGHn9nA/3s32Uo3WGQl/5jeQQUJk7uDHwcK2P+O",
+	"zEZgtS9+n5Ms9AdDIZqrYN8f4ClsWpyZbMLhp18iw3xJfLjg73+Hx/gYV/802RPX9ndYiooKrD79irYx",
+	"2QYJeK5KsvVfgADSdThzWO4WCHUWf3uoF3rJ4zmxqJpBqG7xxT0xAGxOskN0AYLH0g9bgsnuTrqR/k7Y",
+	"X0w3FvxK8iDZRt2xhxPUgomUHX51h3Yc06eqNcq7MMPjuaN2/MqW+hk59ARSHpzrD8BBqB+26Ynv8Wx+",
+	"IK2X3ks/B5muQM2R/NiCv9WEpWKv+E3Xd2P1X8E5vAn21nxmPjxMNmEG4AyQTEfix4N6lG7gMWI6QvIX",
+	"w3g9TWKbSNVfAOVuMfMjgfWSh0BVJPQrfFd9S8Y10DIL/uV3b1wCZQ7cgRS+hfuwTSTdE+kGzmon/ZaW",
+	"CCvfRUvnIRxOtgmPcJG7sF25vUP1/jDdSB6grMFDzCQgGyd3mZO0ZCGhZ1MTMMwj3BK2NNL7cFB5OYTC",
+	"5BmzIWbRsSFH5Pln0PVAF+LvgRG/ppNGZUjU84Stw6fJZvoFcjv+8wkRoC3vSFKtI5c8S79i4baVE8xA",
+	"myhtxd/QrL6Er1S1RCeSgkG3OQOUUl6SXZoFmlekux7hkjfZtHpsZJO10XPItHAEaP7cVJ5aCmWLmZ8W",
+	"+RRVChwmCCaWVKDSniFLf4am4zpYq/A4CtLN5HuSzcyLwHO4CT0U7/oTMBl8R/8JNBow6S7QxHyOJOsf",
+	"fEgL2Ea1jXsu2qFqurfr7928IT74UFzB3FSYL45iLBMwI3Gq+Lf0S/HW22cu5F2At2dPV5FBNpJdtA/h",
+	"UJ7pg2db0LY9togg8bBQNttnrk1HE6QDN+Rstcwf/rmKf8EeU190aER6HL/3M5SLOkeuNu5rF0GcHfit",
+	"sXP3+PnLMlbvhUHrgK/cDA7wws9kpC42dDhp3Ld+6frOQZ6/CPbDlQO9opviHuwtFPFHm+yo5yeXhpbY",
+	"sL5gFQH8qvXrveONA7/oqG5tIuq0WjLsDl8kWEt/zHtihRAFuEyDLBbOCM2p8bfOXjhfnbDjJFOUVz+4",
+	"7jn5U/JMa5W8D7JlTzUX8ABR9ifUnCis0m9gJf9e8Jv2ki2wzmj2nwtjTm2RAgLlsZPeh6HT++LyzCx6",
+	"e8/YT3tr5sz06bwInTkzDR4N2FXJo5zvCB/8HiX8A1Qj36BKsX1e0m6oDOHnJ6ATin5eTyT/K/lT8sfk",
+	"P/MOMWxEIUhzH3zoXEAmC5oUwjIVO5STfgO+E0UUyKsC42DTOsFkU0xPT8/Mnib7C6ZL8+TA04JPRSv1",
+	"XJBqsz9gRHbAXskqOYjBZkne9YczL+4kOqM50tjuj90AjYB+y/v0lf5Aw0NedHHoKjn0MOfkATPANpP6",
+	"E7L4+s9LG8l7bPezGbKXkWbSEz9+9f/oaElmBqX38AjZdNrGT/+OSizYPxfJdvpt3nmE0ySL6pG2e8jy",
+	"7KFvjJN4SHZqn1ea30Jwo8AMQMPUhIryFmoheAcfIm8V/el5cfkcvUn8gBxF7ip5QI/BHODSEROn0nZX",
+	"IXiV3zA0CLU3mq6jwWNWjIG/GuzkQzZ5KFhBDjJsTl17C8AL8CtYcmws7bHLC/t1B11t8q/1uzXx1tm3",
+	"gfY5fotGOhIRSKhnaHWi+YW5A41ufRZjrTBh4GhLYM1l8ZdibA5IBCMM9EsP17ZNlIW/ug4R4+z0bGYi",
+	"7tnkto62O4h2dIs20vWyEFhZUOZcdU5jQ7xjbvn/h75KRZq8h9JmPedLUABmB/9NHhe/WxN4CDvIIVpk",
+	"fKNNcy2vBK0v/UYYcsrEDwxapIFKiUChQb7kPSYW3aux1T8s4nqXfFQ99l4VGzvhgq3pmy/s4IF/UxDX",
+	"OScnH9hH4xup64k5WXRxgQSq8xhKA6eXBBFNClXRAyTVHRMz4AlijHGTXmC3p2cEd4/iN8kT1Fy/Q81X",
+	"9EX3d6xQBsZlYEUbFAiyV6U9JqDDZ1rJA31+b6Ir2+g22IGQnrg2ddV6hKKcT5IHsAHIkFsYPt9BZn2K",
+	"UTetwHQQDt0f+l8Y33wrvbfgV2bxLPgkKX6QN0zS+zVxXjBP7SVbrF7XWUVam0URD/bH0jtwqlaMZ8G3",
+	"zYrZEQ4Md1s/rB+Ts5aPwfrl6Q41gIfZXjmGfI3sYWvNXxFR9i8+bxj3xzsf7++QldtSw1IkrqqJl4Yf",
+	"cIllewZtf+JSCkbkbl89KuSHjyIVvtRE6uEnB9N7OQnUJw5Wq6Wm8JJlqh8PuFB/hb+/y03QjiQBPxvh",
+	"RFINzky8FKTZk4/8cVByYwKq+2qtjn+pNwJHDUMLweevqTU8hiNErSkZ6bmhijkNkq4zixWj2LWU61ED",
+	"BzOlIgSCC4Qbv6Gz56WzSPnOSOKCh46esHKjPC9RIZhVqOqaVjCFlyv4DbG9IZ/nI58xiOeGOVTUDIaA",
+	"xjo/+/B0rODNwb2AgyPwszrv6UgQNHrsKK2b/oFekpFj0erPQfOM4+KQ4sI9dZVDuirwVT12W6y/ED6B",
+	"gA4w898PBGe4s7LrquPVZSeZRBFaaUyL+zr3Kz46ixtHOJEWN87sjcX9YshtTFWGe15QZUcDFloY6YXY",
+	"Q88F7vmGUMYrob6qdPXfiS5pPsYC5YE78noWDDO28qtUK4yNYNBswQpeAmR043kRLQdrGnparspYhmCP",
+	"B/EyQx1GhMYUqbYMsZuTargRgnN1YiyAipfdCEuoQ9mIf6pVwTYDvKnSHWXXjC7QZQ47uhpdzcIno0z3",
+	"SIpuW2Dz4E/DkXJv6IeOFJ0cx4Dhhta3NgihlWekYWwb1k1TTbSCKBahasBfsPmsG3cJXPQEF7Zah8G9",
+	"B+ooY6NRLQg+gKcGH1EZTDO25yAJzmPqjUQsf9AtKmy5vnwerK3j3bJP+L9GoJx9qFaDFcW7NRY6g/nu",
+	"0aPbIOgon8eLOYPXoa+NH8Ruk4VKvR0qxIFsqMHpnHQNhUleT7kiC7OQNqhSbU7n4G1qMN/Pkl7yPabT",
+	"bHIupi72WqeMdJ14o2/fN4ulNgv+W+fPvK2V0dm3q5Mi+StmKt3TyYKbphqEa1kwD2tbmNKG7/VN/7yu",
+	"58kl/FBF6Fa6nn4rrMRLLAKaFMm/YapZL/0MU/H+wlmH28muTtDLlZ7k3k/vUfqePcu95DFO7HMs9dvu",
+	"q2TTOX0D0lWuWWd23TqyI1QgA4Ycmnvyb5jEtKHrQzHPCXfxi2Rz4sjakeRSQf6XPSaFEeu5c9hOnhRJ",
+	"GOfW7pRohOudoVv/4sMUA3f9pQTLDkMDf0n20s+5fhiz1wbSwnHYegcln3/G9DXKVMXcRmve6cb49FQU",
+	"tFFeiRb27H+l95PvUXhumzK0LIMQJU2h7DvLoh+Yn9lfvXjmfHVuwc+nPfZXuurYCVbOZfnulP5tZw3q",
+	"HMM7WKzb41RNTu7roajjhONsDJ3hB6L8G6rGSx5y/fqd5AeuwuzpauCnXItmyhSo1E1nIWLKbJ+8pJjR",
+	"Rc+7ljuAcSyG5PekotZzVYdZPvoxUSFnf2oa1HoT89cfYgLpjs6mnsiCRIWl/KcuEUEavp87ygE0o3u/",
+	"Mb49VYPUk2dYHNfTxYJAW1kaMqrq2ZooobaaeOv8LCIo9KWzFpJvn5q6ZSp4NOpQ5CptSWcbqkseoYmh",
+	"62AXvWARk9YRxDpXdbudPEzvYXno18k2JpDmK0nn+/6y4BfL2AcXX5r/RDPI+j6urmYKZPuWPby8VJsK",
+	"pSWlYlBF6SSB4oiZycmZ6Wld4bhBlb1YFPkUk4zPTg/q7Vdkm6HdXJJ/s3OPBwiEwsIH4fp3/FBJp6zF",
+	"xmIQeEr6hNlf9iquubwlwNnp2kRL3nZbndbEHGzJRMv1+V/GsXD9WC2psKx1QfKvA+gtX7abL+7WtQ6V",
+	"PlLcS7/C5OV+IuRc5bLl0QeGNh/5+JjsgOiVKMF7gRV1ZXI3eSwqw2vlcsp/Cui6Lj1vcOzhqgxXiirr",
+	"Q+KGsdXWmOxH4n8XS5S2MwSI4ku7OkX8yDf/z/bolsor20kK+g8rPaS2No8HKblvTBUBec/1G8qPxbur",
+	"sCK9TT2sMLLxl0DDvXV+9vT8gs8B0mnQa//TlID0QIKzdsRaGrp4QNNtPV2nwid0IKkGiUMmV13H8dSa",
+	"DNX8gq/rrgglaQ8hT9LPGYBjBwFrDNjPl1x4MTs9I9qEiPU3wNQEvmFwJKxifrQDJhf85D90vTqYY0+4",
+	"7Gov2cJ5/+oXF2/+6ufixo1350So4rBbx318yJhFjwiUpWePsMdVWFxod49gkLBttK8asXIsO47e2K5x",
+	"QRQBTjzlEjjjLNgKNXd2+ChVHVVs8bvgvy+juI6nWL9yeZ7C3F1wwldnTGnhdhFkoFoTCl6xak2SB1Q3",
+	"oGt6SCc/gH9oSBlRsUlykoEmaiL3V9JltxpBx4/nLQuAPkLIC7QDm8lDLEhjXKxkr1qj7p/w63+58cG1",
+	"OmM2EK7HXfHJak0EDQzROhfjmmjLrhdI59PJBf8XSobxopIxvbOrEQ0omIE6CzFpHqJQOH1WpOs1Ordt",
+	"xjsyXscjJEMLQ4tsoC+5hPCRoNq0BV+X4m3XwQGiOj+s2PmMMQ84BMR1SboGEakqF3bpJT3gqX8hikzv",
+	"2RcMc1THyb7AfT1JuyIJy1dRiNjgQNl8mTi/1BKxgIpFxaYZBWvconwFpEDkmq81HaKxl5cUM7NVhFb4",
+	"B5zpXVukkDm3RUVk6f30LobOEAxom7BLFnxkhYea2gnHKePfvWRXgDLxYrelWBYinbBQOi2iTluFkXKA",
+	"6x5xDGudsHTSjQV//69n9bPT86b5Fqq+JzBZnDUauLbUIGrYZS8MrZtSoESczwivq2iVxOp2PIVcWM9k",
+	"+5AGmH3mxp9ZejzJC6DHeAqfZbIu2Rb9Yx0+GH8sgIZsl2jiyVVobydPRSX9HEQWS7j1vvirxlECWXdw",
+	"vfxPVFuZmao9pMb8Jg8MP9y48W6pLUSSsY6ScbAe/yvVqw5xKtLPKa5bgO0pBEoOFB3BAlz8ww+WzGMp",
+	"gwK1RhqYAwKMWdiPS4SIdoPMmv2deYIB/AoexJCSBoAzJZUakxBeIqmBDiB6eQNixB/hvtrcdwm3+Aj9",
+	"AhoShxnqEfwzA/LozS7CcB2bkT9e9KqMaj+x/9l3KXageJ5GLMiHCeZLniydoZHPNqEWtnRyQFDMpo6x",
+	"buvyqz76KzsL72vTirxh5TvGDZNdtA61lQHm0ksJypV6hduDo3F/4isy68jzXua6tuPAkMH6+j0OPLP6",
+	"BjPBRkfcTp6Iig27UFvwuXD+e6zy/coAUDxGkM1iwTV4eDVhowNodDeq4CaDLYNu0NBXuuY+2QWLomiW",
+	"EXBd0UbS30Mch37020HRatFv9CFm7FekGRg/IDccnU3GSJsahQwY5xkphaeMvXqHlEMmrNdR7t5FKMHs",
+	"no4BU+AlrII3X6rDFuAyvoBdnhTJXxEIBZ0YnlxOPeEvORIgpLvZMe79Xj6/Hk1A6TKCUw7VH/9exmuI",
+	"I1JC0q8KaFN5PB9X9QNjs+4O4NpxFBTGnAajuid/LJemBkQvA7egYCfM5xHBCDzV0IhPCU6khEv7FdBV",
+	"Ga7Yx87BrROugvrU7+ZLi4kN0jhACmarB2dx3FxWYskLFqWHuagCU0k5Syl7HfNK1W2rd/PZ2WnuSmzS",
+	"+9zyhuwtFS4pBxsE6J6wrmN/m0bjRuj9LdKDSI3foH1eSJ9mUI8aQVs5Ajuv1k1jV1yk7tCMU3Q9N+6K",
+	"dqgc6iHruavKNAKP4iBUpyJx47++T8mMsYxWIr1jsKZTkQg7nuLNgL/ARsAa64HvdedE25O+z5D7waoK",
+	"nY7ScRq/wW1T7Q5AImqESvnRKbEaNORix5NhtwZLbSjPU7mdcwLEs1e33ShGHH9MJ6aZ5DdYho1ldzXf",
+	"gh4Ghtd5qTj1ju+pCFbf8DqOuqjf8txmrBODY1F56+zsBV5wO8M64cbqwpdhqPsg4Ue5rtBzozg3g5pQ",
+	"srGse9o7pqe9G0dWT3tMufZFx1/xgUCCUPiBX9fU5Tqa7hioCdWmoNy7MFgzSad6otew0W9p03S7FzCv",
+	"ToVu4NQYnrQmQHLgQQKlLAVh1zqjbB58jqZZ8rzd+HfcBssDmyufvQAWEO5wtOw24fHxuiLjTrZlFOUz",
+	"eNtyCSjc6vBLrSIi3Vm4Eg/vMlzWX7g6KT5U2Vxg7oPuFT/IhNRB8XayVy3IHULDGQemMnv9IOCe+bfG",
+	"w/fM3rmBlHSwd2522+owq7qS5+KDvXyJKNxVh9rQG0EYH+yND7B7+4FeGRvC1VrVMTRgz0YbWlNY0ILU",
+	"iZ0B29xIN01HZVnRovRUhD3fSDrSs9X5nGjTUmiocJu3ud3Oyoc/a4EAe+H6HRJQFWz5rfWm1nKm23f1",
+	"lc/Ut60skEqlpkzRcsFzYVsAARDpFoOxs/d3WJVXi9bYlBlrtFUWr7l+wf7p2nPgT+Uts0yhREATJaYY",
+	"yPefv3tTWLOaG2CZmW0ot88Gm2WkZo3pEfgKSAZlkjPQegB1FxvVy8YEKdDlwFMCzTqixCCWXmReMCp5",
+	"MVRyxYHJSs9dUaR9UXMXDJRA12I1jKwTMgxll009/j4xYqjaoOsWg3hZOG6oCKZ5Pj90iQVkzzoOAsND",
+	"hdkXJl3Luki23DAMQl0aRiOgSRbFfeGRAgQs+JPTM5MzYKqT4tHiIbMzMsNXz0xTFJ8+2T7K4TVEMexG",
+	"I/AjMOf8mCp3wGSDb9pmExe35YdzYCQwayqRIvOhFIvvBs7B/a36iVkHB1abr7A9cTw6mCipO1QVE7ky",
+	"RzLZD5L5i92M/S0RqMJ6vwAibhhHjvQxH7A+dYmFP7dEHCwprCSCB9eWXU9lYi3nkDAKtxacA2XcpMhO",
+	"xEBlWOt0fWZ4cBPlYqQ0NhS+DXIkAIuN62xhiTXhyXBJgSvqhlE8+foYBEYaHYFV0JZh7DbctvTjodng",
+	"N/MfzcCh6TbQugLWRSi7+ztYl5eVnZVgp+N8mJor6MGJt2bOYMNGxLyQnseVnZFQ6FS3VGtRhdGy22bC",
+	"8xvK0z9q4CfXX3VjMh0lRmAEfChvKCB1w8O4oWBdEBvkDQYORVDQBulUIrcBccuO48ZC+XFIbvLfBZ3Q",
+	"x0hWIwgdXX0KLjrOxA4ZYnWrLlmVVO5YWNl7V977AD9FdXxNilbIZpOyl0zbQHDWdWs3QT3qVDQprgXC",
+	"c5uq0W14iq5zKeRCnOSpJTBAuDwQi8GjU/YGgZ4VHT8OOqB8J8UVR7XaAUjGOSF9Lh9nvo2xGN1TzThj",
+	"26jTaCjlRGDoSeEH9aA9KS762WYjPleQ2ZRYwtvsRMqZgy3OyBKW3gxC5S75XO7LAmN2+kwNC9xD6S/p",
+	"2UgdiKm3QxWpcBXGGXCVQWWCFz3vus0E49bwaT6MliWaR24kGl4QMakQPXpqCSlgRTk1Ch1Ze4V1z/Ab",
+	"saxrdpi2K3NqXtGWv7YIo60WhOnPVEp9WJlx8+dtyzmrHH7QPeZNEi6/pyZSJQj6+ztssLKIOXfhDEsY",
+	"ubQUKgz0AUdjzbkKo8BnqIVQLYGdCZPGotkgRP4nKaNMCSILGVqLH/j1YsCzO0jiVJCTMFarOcf1G0pc",
+	"frsmjDycnp1jW5gkZbSc8x/aKmh7lnIg8WcinxzaZt7hwCk9CLo9Ul6T42Sy3VYyjCbFRd6FUxGQpQ9y",
+	"S4Wi4jpVbcEXNuZUJDodl4gciRlnwIIHY8PZtoXB2qBg3HBGfHH2mT3OKIQCPCCgQ+sd9BzI9rADG7U8",
+	"aUTCk8eVK26CBqXTrWRkjq55XhuWmAJTdICDb+pgZxDJoq4hGDKVm6n7v2CSwG6u6YBtK+zviOXOosWW",
+	"s9VJ8YGv6QbvLHxgTQ84Vbp+FAtJrBw0Ld3hsOoWkS/b0XJghIhWGI3lIFK+kDxPJWK3pebNz9IB5elJ",
+	"jADwvYSWVZ04aMnYBVOkC5xhUT7NcknFYCdEMQivTIlHooIaO5ul77irrtOBD4nIC+J6Y1k1UDVEgZBi",
+	"EVFcGtIXLfe2NgpgCzL1Hqqo48VRdZ6uJMqnAjtWYggxngbNBT6rbstG7HXxed4V+gq7y/YGmisNMpRt",
+	"weY6ohG0VERxe+OOg5GUBYw6MTwzKdjQNkgzVmjHoMLCTjh6pDJJcQUna/HwEZW9WiPQkC+p4NWah4Yq",
+	"BCoYCa1inwChEzL91OjMY9ViO1QfquuABcf/Jg9LVLKbHOCzRuB5sh0pfQVDRXnZjeLxxmIPKCXpGMmE",
+	"ByUfByICzSe9vGmphU6JYPzE+teIjDs2S/qcpSz/htK2LEfJ5yvqzBpqyyWVE5Bzwx2iEs7nCAEseDnw",
+	"nMgMM8wfaklfLiltoKDhQxLJ6oXNY1NXDPKU8AM5D4p+wy0FSz2ipdbYXPdzXpTtFaGHVeYHZcspdX3E",
+	"2rLy9WRBzEZiTYVKNEMFjswwv2hSvH9Qv0hbSnlfiO+0jYuAhh2KtvG9E8qNzEu5oUWPFwcYZXh2ft4k",
+	"M8WO+ayWHG0PTWo5NPSJ3i6ZQTahHzDY5D+BERl2Z4A8aREFlxVXBEZW8QqDhMxQRwavTDJ7TcevRaji",
+	"TuhHaEyTioeNnDMGqCNjyVce5mW+z0Ntj+zDfAt+aU5TsxFHhpbvWCzCn7A9J6B6JCxOnYj6HaUaUBxp",
+	"dOuhnGxSSlRgKGwHbPkUxALZa/qqH7aFqdossMp2CXFdBkVXEGaGBQtyyhAjZvnw3gBlgozras+d3hrM",
+	"vOS+O0q1657rr4h24LmNTFIVZPmg3j8vitH7Nvm4+P1I7J2RNk72qE0XJ1RsgGczYMZERH3EMtoAmcrD",
+	"BQ721jidWOdhrxsch1yXvIPaItLhOzb2sGybIkAhcJu9CaOyszXnbC2KS1jhBiMBPHdFkfxaWwZNrrxI",
+	"lU3v4vUr5WEbOzpR1ISisrbsNpZFS3aF9EBsdMWyXFVWXljQ/0VMMDJ/iWWInteSKjiAORMcbBGBLl8k",
+	"gDm6VRMvoN4fue9k9ltk/OCBXpqv1jy28cHseqE+W4m4uug4Fo9ezwjwxFsoR+okZhtx0XHe+IonzVc8",
+	"aumO+50XeZZwYusiDkQrCFVmCZJ877YUX8AdOE2aX8Y04MjKwzl/9jAZ0mQmwrdGJUYrHnFUcrTx8/pu",
+	"uV5+2nRNmO06PaO3S69qzKTlsmzfkSlwNRbbMgTmAeZ1YMsxPaWy/13yLRZ3/pBsJo+xz+7j/R26AlAy",
+	"9Fx8B9bomPRuI6DRew0tq1oHhOPAkd0aKU99euRr/R1fK5DuXERvWM8I+bom/CCX9GfyhnRGudHp0Rx3",
+	"cOpkNzk8ksk+z+6q9WfArtARW89BeYLqTjiyG9UoWwGYtQOCRweC8ylp9io1Zc2+XeVLYjgWlFf0e8St",
+	"ZhCGWoTKd1QYUcAaIRqTh8nT9P7+ztT+dwi+tkVVMvs7Blh7xc/wss3Ybkv9NvDVpGjK1SB0Y4VFqLQZ",
+	"nJDOP+R5h5K0ND9y3kOWr29lseD3ok4ryu2+vaN0E+XGhl32v9NALL3kUfKAq324afe1Khh8vmM9xY1/",
+	"udJju/AsJYbwvFsS73tDpfx54SsXgyaOAqMGoyiSs7cmRckqYFSno64RD1zGtC4Zhl096X9NNgWWtO1Q",
+	"62EePJNwM2dmz1XNMkPVcuEYdaK7SUE0P9CWG2T0ThzU27I7b9+snaI0MjCGlNcEgYlJilo+TzkdNX5m",
+	"+c9R3FzXsv1IlT6NQSOO0vWazmg/MBvTwF9bJ4o5uB0fTLlJcV12IoV2WqTi2FMOvx2HclV5+uods3R9",
+	"faCxOvwN9otLmc0rx1wWy5+JtKj1eH9iTHbmQ/VyOalmBIW6K0+0c+z00IVzhTSRIaCqaEs3BFGrHflS",
+	"AgfC7/iY/dOnBDiMffnHr35/Tfz49X+w2IP/uiwq9I9S8dmQnvIdGWqQW5Cg7Gll7IM2ji8XkQz0rCr6",
+	"v24FzWak4lsgusXM1Jmp8ySEr31geI4OQo9pWgn0sTL4ZE03VHSBrF/GidRyF+JOoCLUy8BOkjasdQh9",
+	"zt+bR2WDeJP8OjyHtUdWKrzrL6sQ79kxFDVfJo4rl8VCZ3r6TINOoGoGREeWF9xF6wXmMFIK7+9gFk3Q",
+	"BlcbeFKsKNWGtRu5V8gEA8IzkVacfSfuhErTTC1XDOb6aFlK/rae7JLy4aPKqfJVZZvEAZqJ2PPBXezE",
+	"dATLrr/EGx+sYbIfrw1tog5wQXRKNN3bKE7IaZDd6H3VjIWMGtUaqWGCZqC25xlO0f6OniIwUMXpqMvU",
+	"jCJq1PI1g5i5QLafqzAjsjpvTUF4clF5WfWbaUhBtgBGE5vCTMykRyI4l1jsuJ6Dm06fofWSFudjsNxr",
+	"vvxgOWBRrRuJqCU9Tyx2MaM5DjsNEgAwnh9YJVrzZRo0VG0l2bCAzT5FAruWxUub7hKcdU6JWXKdFC7N",
+	"3poUIqFw9aDsYr4SWtf5a6OuUL7TDlw/jvp1IlqMGhJINEMJu1G5PPN2prBpy2G0OvYmGZgSgtO+3FHH",
+	"oUEvd9S46pMPGql8CHlPvmQNWK6ecNY5YsyFG1n1aWs1msKlYHyxM0ANmmeFctxYtAIHbH7KAdHQy+a6",
+	"s9KSbXBRz1gO2Plz89bVnvRA3qIR99bMmem3ufGHDjeAlZb3ZguWNZ2IG2JDD5Iz2tlgJg4VszEOGkSu",
+	"STwuXFUixToKPOiZ+qIEwZd73NzQ0HmL/G6AhDFLqlyeOc0riWKZTYknGJokLmA6DpCB970WhCvwJ4R2",
+	"hOnxb5FcVcx1dCUs/axlD0izYI2FEz6JlxjNDubUYsOVlq6gKF5YqnjOWoN9sYIr9QJyIt3Q2gpYTBPE",
+	"GUd7FHgwzdxtDHuTEUWGW20uUxWhilThPEmasoaQ2fGCW+GL/vw60oMYxeQZsYVEj2LiGd+gaWsmC3zS",
+	"MK4fy0as75R0wbDriFYnisUi6EV8LUu0W5Z4IxyGeNmNN0Q8Hc1+tBctvEanyAnFQepWHMQuSTYL05VK",
+	"1Tkh/a5wlFbCGqSQK5JrOjm2hvFTHNX6DFjsbqvtdSmnieeKvanciFfB91tWFXPhhqsmpLAje0RIs9PT",
+	"rOjdpWVMZ6VtzDFxpGL9bXOEMItTbMFhVKEh25IjOsAhHIiAnzDzAJ1zojaLJkFkcdLve0DSFynABlT4",
+	"AViWeE1pjpmaYeVIQ4pmqKJl880akoL+1wdEEpEwpYdREMaU0icqvlqr6yfrMq7Hy6qufLCPYPzrH93M",
+	"VgsuFdiksATKP5OhixHBOGhRWtmc6Pj8PNEpMbPNDuAsVGxJpYm3WgMNar3tSfC+Zax5kM6oJf2O9DSh",
+	"5w8kymr+Tdl3ruYT6975xY7PjSir87ChYF7Qb2u4WrJc6D4WRHtEO9JnDSBKQWfRc6Nl5aBlULOIJsa7",
+	"3bLCLLmqcn71e3oNVMB7VDF+Uojv2bTxEbaQeq5m6GZTQTo7r1PFCmibuEh2hWQIwyE5J71ggug4+TAP",
+	"nJMXwD/jIdjH118p+OBnz+s+YkVjqSx12+UcJiPAOTF0cFwb8/9lYznTL2STLIVBp41hSNaQ8VoAtN5Y",
+	"oZ9YJBpHF/9Ilyb4i44DwD8pTr+CgfYw7OpQJL7CwW0Q1IjeEGex16Ynl4i3YQlOwEVV5WFUKwigfQQs",
+	"4kQYcFPpZafZLnaFFA0ZqbrrR8oHSbWqRNRZpFu4LCjngwjgXHFukDyvzSK8H6VqtSwgSCOciuwLirVl",
+	"GSv9RZoUNRF0yEkmstDSn86g6yqw+cj2oF0/ZETvA6bMg9aFamFCpZP/FSHVjzidwp7vwWKEFg/oGKFL",
+	"kVQ+qZft3pRPUEsUpqa+kjiT7pDeGxj3I2If50oOQ6hU8Jj1/czxSkH0jMcjZGu6Madk5Sq9tRPN/QTg",
+	"B+kFSxSPKNy7RF5nSfMaFrHor5yKTEu9DHMmpOCFMTOKMXBtuJkYgg4StWUY54u2s3agmi+tms/Mg3Pw",
+	"trQR2zWi5oIBX2PezaIw+PUsTK13pYFZFyisrfiq+dmcwrnp01VahS4ZbVHuPYZVqHwUJAhJCTrCzAA3",
+	"KWkd35TDZ1F0kk9mTL0hjaDNG0wOT4d8xzbm2AZNcXY6t3HP97rZGddvuj6a3I0w8DyxJj1gB+19i1CB",
+	"Z1kdEyGowqDi2IPHdap5UKAcPIdtNdaADYFXO3QNo3yMBuHFHHyQwB8OgShUG4UkZAXhDJ7QpPjI116K",
+	"3uYprGMG6tEQCnSxvqQyLAW+MVx2tXqNuA66n7RZeZG8WFTWFZ+mZwtFgj+qFxkth66/wgFyE+87JRrS",
+	"D/xykxjPvO+y6QUopdrYr/Hiu+OX9es3DwYGoN8aG3rHTPAYgHfyeziens0LOEuD8Q/1vGx7XuQc3WMZ",
+	"ZHYJes5Ra3EGAXn+izr8jlbYQbvTjqY4k25gi9ufq/g6PXIdXzjSaLI90BiNbmkJmYJelnSbFYEI7CqQ",
+	"tr5JHwkYqeqIzsve00/wf3+pup9OwVSG94nB1d6Ax8bBz9RffvFFBjgP0ZLhCsEM4SZWsurq6omqTqLt",
+	"zqXwDuzQnEu0PDriNaMMBS3J7G6wSI5wgwZ1XL+ExojG1jmqyA9/ngY7UE7nzAufxBjn0RVsox1vLGkM",
+	"sIEbnUUz3595QWPlcAwyxeGZoYyiIYJOEsNcLAkrHTHnFHZuDId2ubNo6eTIcxtqTMf23PTM2I6tlROJ",
+	"cSCsAqIgEMeZcGCOUmNKEuzUqcwDHAUJh4WHI+N0Jv+0WnLv8qK8rXF9K8oKLXpVWMgfxyr0M/+KDgmW",
+	"rr3/7Frt+Lyoi+zIUcE6lcBhySbj7eglYxqs5JAFpsyAmcfuFFNaHT+Edw+E9hrgTVwkFoNgpQbENT3E",
+	"9RlWfzDKPTCvHtTxKbw4vkNSePFYHJPCmOM6JRlnHbHfcQIrxYe5KpnAqXCual9EMeegZCL4E3d4xTjV",
+	"/BaAnA32Gkkyz8OIviNjOQc8GEsvqpmrDiuPMKpx3jvK1ziWeKiatybFlTAEiYCLmhSsky1wNzMBcEcQ",
+	"bwLEG97X0bDcUpAy5YRrgNcGVDJnltpo98A9Bkh9YzJxa+mXYP8c+B4OXrgw+oVLgd/03EY8roU90GN+",
+	"qWc2/XIsaAdbf0RHSw5XjRlyQyMYHM21LPhPIH37z5cusI/9iI/OSaMFvazCu4OQWAdn+oo4aUdClSWK",
+	"0Xbtyl1+9qF+klJJZrC3ry0B6GS9ISTwkX7kJ0kEZoNeWzLIINk/naKS2SmrEn4wwgEhO4HfiRH0xS5X",
+	"kYtf6bwZqppfVF7gL0WlRf3kCVsBApezNSXmgRLCm9cVFSCkVemxIysdRhOhNzH1PVep70aILlSdJ1ih",
+	"NTdSRZwOaQoCqKwTTXYRuf6Sp0o/RshDfV8gH1/dbrshX7HqBUR5JDtGSaLd0vuQ3UBR+QBvYa6IuBOx",
+	"f8LhFVo0/Kut5jRazMIERVsWJqYWJgxE08IEFfL4JWh5NbEwwevRj+m9yJZXFgPIh4EpCfSKeeOwEYHu",
+	"FWfiqM2V4lxPRIyZJkXW6TCRRE8wcGLGGkFYRpUnNSb9PAC4R+GJlULV5eQZItblQHQ5kqbl5sQBJerU",
+	"J9k/+uDshrnxL5TTauVa25rZ0YcDrlj0qrudvTb4y5dwReVaJ3JBk4Fe84OCxpoY13t85ajhqMU6yccT",
+	"4ZGOK9ItBkAcuJPqpB4n22CpQynbYE2Gp5BpfLXWxzjPJYZh7sp3BrtBH+Lvr7csVhmAIPDCybcEXhTX",
+	"LnqqVcagdOiiEQQetmrSaUIKQZYc0VXxIZAs8ZsZZrtGRTs9W18OOqEZbTySZoN+nDSWnFyKnt9QP0Yp",
+	"Go0XsbExcp/rsv9YOs6Z6548cjzB/9pFKLwgMg7GSM2xd+7k+2M0z1fWF3vjYx0csa2vy8fze1jMI1OR",
+	"8prDfKr3lRwWynwuGViiVxHMIr+Y18RSu6G8Zl3ddjX2sj7DQ53aJ/Qfh/CHX4CUK7e/9IyO3vZiacKQ",
+	"Ma9bByIdpT0VMXuPxuLWDUBtRa6xBGpUWiq9wFdzupqpAMddhq9NSAp5jO2aFaY2bccCX1c88ixgPIZG",
+	"ipTS+tlgKJ2ePn2uPn2hfnq6Jt46f/btaoYCK60aXF6DdHJQcfQt0wLVsgPmgaMM1L4VIudALbfgWtIo",
+	"DoOQsnXGXU1cPjt1+Tw1N6oOCGZTB4BoDatMA8x6sYPl1DeFM3D+Z/IkeZJsphvJ0/SuSJ4m2yJdx7YL",
+	"D5PN5KkGj6MlI6Cw9LsUjx8EyH0EjN1PYWGwdirS2Y+4fgsP36a4OUO6dDXh1AbcITDMMWkyN4PNjLp+",
+	"vKwi4E8+aBux0g/yX6fKYTOzLP1TVwjz52tmWmXHpecgI7GmPI92+vik28uLpdw0p5chNzSp9DjHgcFa",
+	"9SRjlZe4BNl6eH3AVwcNFL4CavJNgHCQn/EmOFgIDhqLwmoZNMDQzJIzxwqRDGs/XVZUlfHH89D/gRpA",
+	"o+nyurW1/oBr7A7wytgZ4NYoCJR5chtuv6ye2WNF1yycS2rtqSFOjOmMuQxkWr/DP1ZfbYgdK+BWlrVP",
+	"UDu+qgfNJmxD0FJT6nYbkeuashH3AThmlSbnLlQnxRWE6loMQp+bSvsWUGOdG3wQRPmibKw4Mnb9pQzB",
+	"b+bMhdPVOXrgHfzCZfpPqz2IxpfFp6hbKILRuv4AHBqG1KZ0FfSvEIIs4p7gFtL3PHYQD12qq/GXCD9j",
+	"US27iIEjKpwif8VBSC90OhgLFb9ZsG/NTLkMaXZ6GvyMP2AhMuMpWn21yeVIdpO95IdkG1yQB+k902Dl",
+	"QbqRPEw30q+pLzaD7sgotu1vL1hTIdXLUM6Nqf0mlGXspWyBftQ16AcCfCD6XqjUb5V5zjTDNDhECA8y",
+	"2YeXJheDVYUuJWVqzA9E2UO7r5OlK3G1DobfBmfnGNY+Ti12RFZcYUUvKURsjT9YVpqHdAKOqBjmnh/O",
+	"pxl7FjsIcOLYYlQopT7qy6+fZT1BGb2vJT2gAXBNA6dLTi8uKut9MKg9wIti5OpPN3ZOfIDHQHrHEFuF",
+	"KzBRDaEiAeVTHdcwnjJjDDCQb+Dv7m/VGyv55VrJPwVblIhteHa2Ct3AEXEQS6/YDqd7KrItVewXHmrE",
+	"ZV2t3FZhhvOCWOVOsOaTDcBfZUihULWDMKZ+KOZDFjAWTZabdGBkGsFndQVhwaxgrCMDcWRgivLwRHoK",
+	"eQwyQs8PsWuau8INbTDG2nLDMAg1IqGByCIrPb2TbKdfIaB9D+TsVrKTbCYPk+1kJ/0m/SLZFNMzkzPT",
+	"VO2c1SIiQFNhvqb/fXFGk8ICY+K+rPYpYIsL7LESKtZkZJHRelzGA+aYJ6y+ZoDCuMTx1XYjxhTEn1hy",
+	"d2jZ6kXTgaJit6Vx1GJcxZRg9CaMgjC3BCbPUsRBazGK8RIFHr6lrfyGp7IifrvbFaiUGlvDi7EhzmU3",
+	"ioG0qZ2w40ay3VYyrJkHwmDNgorWPsEt16mh7VBFSE2+VsDWCZRRH6p6S8YqdKXn/pYT4LPGCZPiA02L",
+	"uqVTvstCdqdiui1lwHm4qwiQZvhYd19yCWrM0XC+evWeWlXe4KbBL8XeLg/I2tM78qtLy+A9+Rm8R22g",
+	"ESmAG1cwzUq4rjoxpAj4J0FN0y/LNeNqY1Hh0hl2qqlJQd00PVt11Vr1lQ6dH0rrTLVld3AW7HXZfUOc",
+	"R0mcqLj9YE1UtCL78Yvf419rucCBHcMrhu7m8yrNtGpClJqfmAM9lAdKuoAObIdzwjzdm27sKe0OHgfG",
+	"5lB/TKO+g8cxb6XP2MA1jI3M+DVkVVFoW4ezL1yY4UZMHc/L4s+GkCn7mr5gmYKHxtI84guD0gxdWvhr",
+	"EJXllbzctF2awxik+aYg8kXKy6lPzM3OOPmax0/z5eaCmfTzfjtPYr9Uqm088JLGkDIij7kCI6F3TvuV",
+	"jxT1O9yVpvQiVZ0U7+U9W/vTocqwrxFSyTRxR7TAbO3ggd/iSU7Yy+WrLb0PvNrFIPCU9McGdtLy3MZ1",
+	"esNlhwKAer245RhMkzHE/wkzEIam7b2G539k1sfLTeYb3/p4HXP3ToT1MUWt0QZ3q0r+Kd1I7yRPk81k",
+	"h3r8biZbyV7yJPtHD1veclrLubM1kd5NeskTvIp+a2bmbe6gmv5D8oSaaor975I/puvp3WQvvZP00vsL",
+	"vm71iYD5m/s7NZHeIfD8ZBce7yWPkl28g8F7mPT+/s6coK73yaaAb6V3YFbUe3dT4P3MYxxji65tniV7",
+	"yU76TfIo2Uu2eKid9P7kgp/8mRcCb6cb6Xqyg8/0ksc0cfvr1GDzHSZIka7DUL30s2Qv2eVBYGR8KdnE",
+	"17Z//OL31BAY/rHgV8wIm+md9BuR7KYb+PAXSS/ZS57is98newKLA+Drd5PNGn48vZPeTx7i9mezEvb3",
+	"sOny4+o8PA6vP4LN6C34ODis/QFPZcfcaBXW2ONeyUCDnRav8RnsS3o3vZfsCiaZSZH8JStXoE3uLfg4",
+	"5U3r89ZEKVHhWdJLv4Ili0rfw1gRsQ7/lxYukh9s+sPV2HS3l+xW5xd8+AG/u46bD8u0+scmm+nnIukJ",
+	"bukKNLQ7hWf1CAloWx/dMxyWVkNpFeld2p7Pks3kCUwHhgXaeop0tuDz6qhV7BewgkJ2xqRI/ifS8lMY",
+	"Cw5HpF/BCfBGUMbGlkBugPXCN6xFz2ULfoID5gkUzxw/nt4TlXQ93Uh2k12kF5wm0FfWSPdeTcCXYCzz",
+	"t2+TH2oCT34veYodrPEoqgLmgyP/kGzCLNN15NQtAfusmRe2dcPMcCe9D7up6TfH1JML/oKf/DP3yWY2",
+	"1tyzSULjGTJ6D8llC2aS3hN0Ej2c3/dwPLpWJqPYerpeBxZM78DS4UvZF2Atye7cgo8feAb0gUSOx/ol",
+	"ksxOsjdP8ub7dAPWgHu/hyN8gw8iQT5F5uzB5JFEYfv/y40PrtWB3DSYrvhQ6cDKgl9JdvGtH+ANFEXY",
+	"Fj3ZhIXv4h/vp1/yH7IFgMB7gvv+EOnFPPpFTczUxMx0TcyczSa/ub8jkm047vSuJsh0A5F9N3AfHotP",
+	"VlzfmROtwI+XvW4N24R/0LwK/5wTvzbf/PhTEBwPiVRg4Qv+/nd/+7d/+7f1q1frly/DOMB0PQwwzSMH",
+	"ZEef8XCPfnmUHUCfjJkvpUMaElOW4HNbcC40CDB60sP/zj6IrfoLU3rCBPe91i166PX0XrJDIn492YP/",
+	"Q7P/CsgcPr/gk+hOHugW7puUVIV6B1gz48OeqHwSeZ2lGuUnfqon8UknUqFuLXTF0T9XaWFwYskzOri7",
+	"wFMsd/AUUTBuIxX2WNUZCgZyoQHyAhP+Xq7XvkEK3UseI93ntgRF0r8hta6ndwVNCgUSlp89QOZBhhfp",
+	"Z3hesPhKaOj6fVhTbcEn0/Vq4KvuL4O2ws6pPNgmSqjv+44jeVwlMfAvQJowXnoHCG6L1As+RBqwlzye",
+	"E4uqGYTqFgG40/7vofrb0TKpoB+2jN5NN9LfCfub6UZtwcc8O/O9R5p806+SHu41fjHTJT0igB1iYdh8",
+	"lM7wwPfIYz8QQ6f30s9FpR2qtvKdBV93/08/Jz1Mp/oQaWeTEvNgn9Fuga1+lG4glWJ74uQvlibOaxcQ",
+	"hluo4lgO9jCz7y4SwYLf1+zs8rs3Ls0Thd1HdbGFC0VZgkIFJcyGvaBHKHh2YeW5bXgKhgs8jNzRo/0l",
+	"lSB0BiIcNBgo+odJkfyBpehG8kwfXw/lwp5RhllLgzmRfol7upds18AkRIrZoxPNWS3w39uaJVCBk1ru",
+	"4XGRcODXiSVoKOwLjY/TJEgo02/9Ygilwg/J9og2/5fYgH59onPjNSjjdf8MWVT3BDjo2xeBHw/7Mtev",
+	"HEOEhAcc5qky22o7cLNoJBU9GIvkyDx6fVopP/dWiMoglcC9SGqWQUatHCcO4flyG4DBCK3JP6PIBqFm",
+	"5f8Vpppzds+cP8+e6xZbsvfhr7PT88W/Usv4t2ZmT5+rzpGwLY6kdT3Y1Lb5gX4P7qJIvk3+QAbO53rH",
+	"M+vb+mb6reVWotqlrb2vrQi2qDFNnEzVdANGnRTJP6InfRfUtBHm2jyG09xDwfuUhO5mwdWp9C0bDK/0",
+	"PplYZGlu9Hkf6f0a2MBb6Xr6bea+kNOwh1YoOifJk/QOZrqDrtf+broxYDuL8ycaeiKKPih6TntC+ZQr",
+	"gFqYtMYz3MBN/iYsEBUlzk7rfPhTdVIkvwc9Ta/l5w+vbRdf2iZ7dA+tfNaqD5JtOGHQlag50Trbmhfl",
+	"3+urCWC9mWnpPr/NdluAkrPMQnHto/ffR8NBvPfLGpcoiVP8wCmwalB/kvNvDFodUxHGkSbflv2Xu7jM",
+	"Pv99vmDD5WJMhXAAmxV/xm2jlbAtUHbig82AuWL0KnlAZjS8zY5/f1eQSywxXvsrhpIbqg87njKdUzKI",
+	"BqxYC6lPFF9eUcpePoE2wgxWbhSqM17xwq5Q4vYmXDtcaTXlahC6rLQ6ZaUm5gbsPf3om5uQYSae3qZX",
+	"5SpEUwDWCStB5dhvbkVeLJuNC3pAb7y0aq6X6AW+wVN4kXgKJwClgMVLAaTgNS4bKmV8vPoalr7didSb",
+	"DJOj0Gt06fhGMQ2nT7qTHYqy3Wm9odAjoVC+D39DohmJLgdxMD7g6HV8/LhTt0fmXsKsXsvMyxfTSfME",
+	"nFqR3d2WXFJTf9dWS3lGN19edH2J2bt9YorfbfuHfnVNLbYP+m4p2mKGVYgUuNiNVVQTURwq2crQKxdl",
+	"Y0X5TpZfVZ0TDTzBOpBTTVySjWVVvxT4cRh4BGMaq5p496Zc0qV5Kwpb4i4bGJK4sez6S+JKs34t8FX9",
+	"KvzBIGGemZ7F2EzQibmllVwiFFcuFTlTxkY3De7SqYgGj2LX80wjZazjxBvkmBY8+SpUnXzU9gLpvFxW",
+	"GBTzaHW82G3LMJ6Cz9QdGcs8XWZiG8dyPTUupWcz/jW997F5inCBT2KvUuQpZKVQtT3ZUI6oBL4SyLai",
+	"rUKh/NiNuzVhsVKukzxjHruRxpIWiyqK66rZDEKu3Tdd5ezSLJ0NaDja1CL4ao3mdKsTesfaPfy1tDdc",
+	"3wp85k//hoojEYSEvxDl2qC3VRgFvvRE2/WHIMqdP2/Qr+nxRicOVlWIkM/nq3Ni/7t8ouk2Z4i903el",
+	"lmzv77CwDVUdhiUEB6w2JcA3mk3stlSNWpXDPx2rm3oYrE2Ki37Xxs+GZzC8vuqqNRG6S8sxochJCxqt",
+	"HPZahsrGuaZkiFLENAMfd4HQV8x+UMRxLcS2lX5gAvkEo+yIdmfRc6Nl+jFU0oPViSbIyrIkihuWjeG+",
+	"DkBr113fV86r09MZqOlNFPmFSCYwa6Q3PFr8IT9zUvsG8fyGkQ4/wshIHb/5/7H3dTtSHFn+rxLCF92l",
+	"yaqubhobd2suWoD/g8b2IGjGN/y1E1UZXZUmK6OUkdXtWoQEtFlssTLrkXa1NzPWaFbyBTcNBtEGGkv9",
+	"BFmvsE+yinNOREZmZX00pvrL3BhDZWZ8nXPinIhzfr8g0grv59h2slvCRt/8BXAjeCIqJ6fUGMd6HOl/",
+	"sGdHWjmMXZgsKhmOo0X07PCIt4TPMBLAs5XK6bQ+s0aYNPZrJe/S8FC7DBDyoWth1RTNlAdotLTvA2Zm",
+	"oFgvQicj0F3mABGFGL32H1irx2PfholN6Qv2F9PovzgP/iVzqhbr5wgZjUANUCosIKvcKO2h3pb6ijWQ",
+	"yJv1oiQIEcnV6Y6IfAXAmG6a1i54ZJB19BpTl/dfGY9mi/chnK6sWl4SBS0x2RVR7Z3tAgu38H8mYJBd",
+	"dJ09HHa+mHmUtqALSK9o56slhTImOBah4Mpg2Zk3PvljhSC/OItkUlUJj0Et9x9nCcpQOwI5OM8gTYwy",
+	"qe9BhQF4s2GYVVFbAAksoyb4MO0HtiR44VHYryDGabYjUKfJzwWOFurJsAwYQVuufwytBwkC6MFok3Ys",
+	"e622s7/U2J+ohty5w1K9eDPYFLm54KqId+iLRlIbgUz2DraB8rNxIyOHkLvjTvqUpvg3bVfXM/UCG0r2",
+	"1IiqFkYUVi2TQaQSwX2tXoxnRnjInoLQvbUJJRr6IS2Zo7yrQEarZZo272AMVmx8yRXVVtR+7SnxSVOP",
+	"+qG7QCeodv4ELOasvOkjjdqn9qZPdR384XrLZB8DldlML+9GF53k4o/DFt5kxb4Tp1lbfHSaJ3nLHktE",
+	"3FFM+Eg4R2wi87ZgLqvNjAOfPE4gCryytn7hD5WZeL5T1FeYfGrXBV5hsWjK2DdEDbnTA4CcjBP2v9/+",
+	"D/5d/89YKD9Ykv3H6Q+2HDndG2xnIcH1y3PaSWyoJEh6up0KeLDuOWypB07NwSQmMY8U4gJYCSjBGrIc",
+	"ecVByQgPZ2UcMV9uRSiGBhBJRuIgbqzDhQh8KIIinCACj88c2c5jKraT8g8CHQbRzezq0cn970VY9e9X",
+	"CJG76Gfg+TaPWNDR4toIhVEegy+OMqqlWncEDrDhuJo0A5xS/TFKt6hlmeG/h9xwbFiC8IA325UqMLSW",
+	"oKwkOh6ANboosjVGoqbDIm5ClcwCBJ2uVCrQnW70mS9U0Iro+B4FDsGdcc3p7VDwTZKQTR4GPtsKIl9u",
+	"MdHpJn02v1yvV0ZXEPyGN9psCo73Vmsl/BAZQ9ZLrENgXHU0OCCOWodcYXy/ubshW5BFbHYRZxydaVvR",
+	"dExM2ZEWWCh3Kw+S2Wy8k9hIbNRGTBHH1QwNAQUSbQVkw4CXo4JNUamxiwjBZ3nPiyq0UXoI5SGX7lag",
+	"xDRwwM5HO1wlIsa0AbGlstt+l3CMlDaTilHIgnC4eaZ0YvSHjiSqnYJDZD3ve2h3o+p4O4ZbZJN4jUgJ",
+	"urCEpzirPOHq5nRMmevw5OGm6A4vYaMHdkyJUDQTGa8wAM1k8wRrWbEerXZwtQeqe42nSqoZCxHNKQYA",
+	"Wm8AzOKNW5W6kP4DoT+gHPjRgkGWWUi/x9pWgzSjiGCi4jE9KNtmprJfyl4cmeOspgxD3kV/bf9x+tfB",
+	"QwLe2sva3n9lvlqpoTAaoM+m7EWJEwPhDDhEzwX9zByBUthPmK8S3M8pIKj1VE5dNAJPH0a9CDQ0VvNB",
+	"BLq8JWpsMgWAkbB5FCDPBDae3oM5RN12hjNpw0xCojKJhKB4sMQ0o+VWhmmRZ3SIlGxotwDiXc/J5P6r",
+	"BXOBhKAFmdyoQ0/XmiUog7Y8xXiRdJk0G2JFmqYhxZsAsABfWsg0Zcyt11XIrFN0tJE1pD9RpKLSywYS",
+	"YMSCrjCqUHZsbIKJeEM9Cv2LmnM3e7mlkPBpFX/EqNO1Zjr67kWJ7DXb2lO8xJvt7GMslHCbBt8BHiA3",
+	"job1kxGLeaCAnoR1+Ffz5qbF74nK7xYt6b+hBnKvzlDCHaYexls8iEy677lFHefzDqZzLdWXPqwu1qv1",
+	"xcpoKh0TYPmHvsFMdRl1Ycim07ScGpbt/cfpPwlSYpdoGBEM4umIjQqiBz0J5bo3jeqBZI8+aVsHWrNY",
+	"JY6kYRzS5t2uQIYxuyM2eRjiISmZaKucENjgP+kWPdLiTKC1yKNNzgistPqE9txERpRZAHxb2jZ3eiph",
+	"DeOEy5iFuo+TCXb1tBGrL/UHVTkWX4qmjvlGsrtqzbjaC8UpyDk0QznSbCDTiUleAxrU91QCv4K7NLHT",
+	"iHBveKIJ/xoo5vyTfqYytelYuKX/mJCwcgmUvReVb9rQKa2TdPbteHqg2XNqhEWA3A7Fuu2+CrTp6Zvs",
+	"+9URQQAmB9ksBkMardg8DoIpkeitmEiz19sihnO0SDIXxp/xiIey1RMrzIDg6YDkgQF+JaTBnwC6dMRm",
+	"exSWZMSRCwx99vt3pse5krlTsG9ftKwSrpa1eeyvwo1CU8tNdjuyuciuXx5LQ3fKhaN+NPvHMc2nKBCS",
+	"dYIkgbxoEZokQ3uHtqptWkdEiaedIEAZg0vHnlgPOsjxmsRBFVPz54HMCata6PJN+JB2BNdO3FxTRjKp",
+	"9kVS1YataKLpwMa4broxva7NJOw7bpnKwm/gEVUJjyjuzhtsjFDA/m7EQrUzC7xqT97Rvvqs2BEHB2oj",
+	"lv8qouzlGltjkdgK+2C/J7iHZSYZczhOn9bNzms80qyXg3mN7ykgDu41XuFxEvDQ2c5wFqdxC2/pP6bL",
+	"4yhcW25wrKFUCe90LROye8MyMqZbhUv8LpYMOJ+EuzNbkEZMeC7nsN6fzQFOWdhHY9DidPR2AWf2eO/G",
+	"k3Qys+snmwZ21ipYuJ+AA6H9V9bJPJAmZtv6gXXRHD2aCAwtAqTO2GtT5xx41WWcdPXMOSa9YlJmICk/",
+	"I77HQ9NgUyhKoTFhWyy34AzJJqLH9FFU7bIN3Q74veK+K8WNheyK6L3eTtbbvw/uEUy1PcbNn99imXdB",
+	"lXuqvaB6DTvvagp8nJ5qX3NeOTOj8uRCM6a+5QDOX8l5AIDxPiOmAGRQcvCUd2os/W9gonkNPAT3kEsD",
+	"8JfnB3eBj0W/9MFifek82//xXGWFLdWXAeEZkHtvREBDc3ewDf9FOqfdPF8R4PzuwneRqQOwox+mL9NX",
+	"g+9ysNHQol1AwER+A9C/u4P7QKM02B48SHcGjwb3vRvRcn3ZocAYbCOB0As4139gmByQ+QAKqJ4gZjaA",
+	"FB/m3eE7oNU9Ggk8WvLbQmfGlsz3dJTrPAywONqI9rpKxFTrLCK/K4NDrWadOl1lyCwtdGOxIfAWcjT7",
+	"2w+D7cE3qGB7xI5GimfI1Z4jxrsDu/3BR2fPV1YYUDHdRVKQKsCuvwbykOeDO5SRbdXt3uDfge9je/BN",
+	"dbANyOLPgHjnVUb3BkDsD0C/HuoGS7hliIhl8DXkef9kSXx+yVmo5yx9AkDp2+kLhEyv3YjSfw4NDCD2",
+	"n5G92h18DWQGwHxilNwuOLt+9VOcJMI5d9megDPN2iKgidu9EQGNy0uYuXsZd1zWy102f/WTC+x8/Wyd",
+	"7f94vna2UmPpj0SP8vPCCBYT2yGkk1kuc6r+n0iKon/FEYVyJ6uQE2PaGesKdfhXn4qolbTPrCzVl88f",
+	"Mq5fT7WdYY2l7kAyJOA+QCT+ApZLmdifJr6Ov6Gi4vhA9lAXkchwxNhLQXggkwZ9pp0SBS392Eg/oFzB",
+	"9XIYBdfewTPwCH7KmA68oirtgDfxfPB9poXD/Ag1lv4tfc7QnBuDV6JiSMCXH8NgO1M8+9tPMGDtQsxr",
+	"N2PPkLsBWdceqDyM481gG5t6Zig1kPVy5UaUt6DDYonMZjDjbwrsHS773ZBp8diQe7QL/E6Og0ukIxcv",
+	"fXpp/RIr2T9KM1Cu9CbYlll5FTlVPxrknQMYnH+kbwxhi2Vm+S0ansxa7Bpn+sCWyHo3m7wb+FXAoGpW",
+	"b4qx+e9/1s9egUf/KPpnZigW+ZYmJVQ77VBAPqfYn9euXL6I4FpNgHKcb3AlPlzuxaHHwElY+nipMmMH",
+	"0sB5LSA+5WiP8a+Ws+nn8eSE2jxew0OHayJK2KVN3VFjQHfT1xnz5rPBHSACTffAqr0Cx4yYbojg8A4k",
+	"En/w0eJynpLpo8UPVw3e31IFe4RYIfeZoanCqBCRLsyz9RvRfFvwOGkInrClc2xw12Pr658ycFjvejm+",
+	"1sH9dCd9AtvMk8F36TMg/LzHziOj4nMkSMrIroA4dhQhsccGD/S3wd/dZguRTIINkglFs699wf+wDDh6",
+	"j4LJQLLLGxHBg2oXc3B3cBd+gM+/xu5ewzX+LPD9UGzxWKxatiFguYWv7uhRIZUT+uwQveupe4DEPjo+",
+	"XmRdLMn5ndaKYdwQZzXhKOA/cSpyZKhE5fdadxIIKAcPweGmwSBmY42uTj3M8dWSgdSrwBtFK3qP3dr0",
+	"TDKav5Z4rMv7oeT+beAdQobDJ9ofvxHRL8w5b/UIH/L2CrMUnMhWlmNYHjyyVEnKcwo8vRsRnNd6TBsO",
+	"3tS/UnWOZ288PELq8zJMhhImpqgXhuDaAJnSU2KRyh7BOKfIlLQHrgMYzafgID0jbfu3dKcCZIw7lqyS",
+	"vAWHxov0zFA97oHsfE/8x9pXACJd5EFFwBikfRo8tMyZZRvYAwKXecHWrlwGLmRDaW34WU3L6Q7Rv5bz",
+	"RLr0XRSMPsADH/Rx8lNYyt5K5JVgL5AlKyOf9IAi27hEQNC7YzVsZzWbn8FdlonM7+Fyfr58icDzcihj",
+	"3SWC1oprZMeYcSlToAkxojYWL4EW3HRssL2KavlCr4IlxCwjznyJfGsZAxqZIKjaAAuV01VmOMfQFP0C",
+	"DwF9++BbdJody+yV2bnnxPb9AmzKnUxM6HjsquiGvM/Sp2xz0aXaxt4zQ4CMsbFD9kYUghmvKjq3eWcW",
+	"d4UpRBZ87acj3K9S0EowwFdpN5zsOSTiq2RB6K2tmu2cmeswESg6/YH4iV/mrKNWiKcsx3n9nA239bZ+",
+	"3zk8vp910SYxReq93g2BQD6fp3ts3mysSE9IJIFf63gPGOMcmu/Kwb3P/6Kl/9n1OUrIKQu2Urui89eu",
+	"XaLkSjcoGudyDh2vzsjhzLVThoJBZTG5fh9SfKAFa4rA5XKUiDjiIXqHl+JYxtM7qu64FngvkdVYRGIL",
+	"bkzLsW/WZasVirVeIq/Ck7OJUu33f+2Fy5od09HkxMz2mu7QRaTJo6YIRzOqXIDfD+FyZLghR1Kmkgz3",
+	"XYbjCn9Vfu4sljp3/3OEyw7xxJhlh9/XeRxsbMxqwZ0mjujQKt+FcZkD+gmGk8aCKEiC02F4jok0UjxZ",
+	"7YikLf2pSAc/o0dnz41ELU1DkUT9d6jj3sr5nOXcj7oIX/P93Hhn5QYUmjkixR/uxrSLy7jvCx+YFmS0",
+	"EcQdPK28fvVTyic7bLNwQPdieWmKF9al/IxHfeqcOnqLsKD6UXP0bnWtHzVPgl3Qo7AZwZgIvBkg0eZx",
+	"tBUTV+VWUKyYK83vKtiVyVmMwWHwnuXV+tdXc52ywKBsrRcgR5YnYxzHNXriRCy6GY5/ak8AzEn9WJcq",
+	"d19tXjikMxrT3jgzmgvszIiOs5M1tAzT8ZaOPyMrA5PAIBddkF7ky0g41HXNNo9bApEMcsl7gTLJ7ljK",
+	"FkQq8AUUE5v6NYDPRLQqj2XHSPpVEfFG6OTSw6Ox6PAAQOUCxW6K7vtAx8hBArHjeAVcp2dmmhwPTUyO",
+	"co+9YhUhxobTCFqhbPAQCC4YSLaBYIUSTJjOrxILMbPkMcuBtrRYqbEvrAZlQDxA755nwAvyLGubAZaD",
+	"dETcEj7bEMJfoUpPuRVR24DZoQUXCcPo89VQKEXYAT38Kj6EL+VRgYh0r8+aPEKEKXuLB3wSba43RKI+",
+	"I3wdJahKVvfKVp3lm4e2qMLWtltkRwsIYySSFgMYPqn7HsmoWva8HVO+vWaP+CzmTQJDusM+OLd43mOF",
+	"hNqPqVeF1VCE2sa01VNh0BQrztVkVsvrzqEW7XzvkCLRdwnqIlG1TcF3mRIdHiVBU3lM6QnlYYZ0rEVH",
+	"zybQUVaxS45ELX9UMTAx1DhYSyVDPU2GxsNCAreg5hn6FBmJQnTiAnmdGdFWW4ZaKCFSq6wa829Jzmw/",
+	"c5OPw6JPGAnWYtqQ8ibJwJa0E92UnUYQCbYRCxFm3+xFtJtYOcAX5hTbf5z+PX0y+BZvQi22RLq7/4r9",
+	"jogm1VDq9PClMGI+1T+u1j8i2pr8QACWCsrLDaWNcIeSKXmlxhC/I0hEZ045yG225Ac2Q5XAYpRCqXUk",
+	"0s9wo+Rd3hJATKi6PMLHVaUAyqb7BJAkNMs5XDYL7MX7qPI87r8VWBtWuOd6TUyPWLteDXzWiHnUbJMy",
+	"bYQ8YTKmHbvRzwrOixKTAR1SY1VtQYNWT/YUABA1LEgoPsmUjBNaGnItsMKKuorgdlX4YT79JX1DSIh0",
+	"CZ2+gAIayHtnCwwf2IPKE8rpHHznsTC4Kcq6Wamxq0BshJZP62HZPTbuuqUAYfn95BO0/A1aH9d0YHlf",
+	"U3Y6vKqE/oqWIuCGkxtglWTMOjJ2+nj9+uWLtFZTGI4aWzPQA5MslFblbBNbGbYwBew7x9hwppKYRy0R",
+	"I75bwdBUvNEggzV2jcxh4FtzXDC6UuW2LqAgFTkFyuixMgtpUA+MDaQaTeICLTWQfLJ59IZVUw8DsbrK",
+	"9i4t6XHQ6CWw5QFp9FTb1QUwmPrxIMHjnqJdpi6gCZ2x2eSsw0MdPwsfJNBs3SCqVIBaH40AmqspHZ27",
+	"UYqveoBtB8i4KA8vl820/8pQFoMZH55bZ9eH+cSp1RtYs5eoEVvgxJ3jQJM8evYKC39gFNWTjln7Hn72",
+	"xMDPrloV+VwvTeCGIi7PRqAgd02vkHVWTMwltzAY6IVhkWvasQGnE1u2GAo6ikfTQ/5bZtTJaTmTRbbT",
+	"wciCHZDyZnUL3KutIBoCj83hizo832c/rKyMhZ8dMswOIXwRkRaFA0FmzXlQbrkBVjfzwnNAm6Dq3khk",
+	"WzU1tO1JAa0Fz7vEz5jLhgw7EkFDmcD+XMVBE23r7lQTWf66Ds4B15+ikTlYQeUAS2thCBT+XFVN2RVO",
+	"GnCNfS4J3U67eZjwoPK4WOAwRLIqu9OC8H4xtAUePk7u4YLYGhXKVHQErO3U8LVjHKkRx1qVlSIeCene",
+	"kH7T8lqUSGtCEmkCCcZZLAHsxMu+MRwSWDGFkx18aKst4awKcU+ZbodC0GODyIszMI4E40CYvTOA6i1T",
+	"ofdouhmaLpt3ggAtxb0wPF44BBPgbLeGD53nXVkyyloZshvvCrt2lhi0f4LdBo97s1BuIqzssNRPvkY+",
+	"iUCwhwDrykuO+x2IVxfItQDlWbZ0K4yDKxi0IrLygGIM1IuIv0z3D2Ci++S1ZKKtny47bKqxNewU3X9I",
+	"Vx8C5Zz5QGyhRZYnbbri1Huidc6Cr0aAPxw72ToqRMnRFvP4RViS+zlrWYh1XKcIrCZAxNrYaiRM7XqO",
+	"CDS75imSS5KUyWOGanty4GpHulUTYWyPUk3fA88eFfDsiYCRHXO+5Tpps0SSnQmAbLm3tmoM8IG25klo",
+	"tG+j3u/xY0+qJo1Agy3zTUs16HQjwM5a7/Jwsr9VzTssANgTCuc6Whd7SsRq4Zb+Q+tity0TOa7i+7oS",
+	"8RV4aBrRws/OWLSCDm+JhS+7opUXKvvlRhAhI/DQ5Ta9243e+tUt0ege9N1RtLMb2tbACrBGPxHKY4h4",
+	"kNGzNHjzJjAFE6DPuVU2+UL7g8Wl8x8irto9gLJBcLX0Odt/DLLyMt1JXzCCrQRQOMQTSV8DQmX6wuAH",
+	"nausMESbyMBRdgzMYwkkEnMwLwYP0589gKx5iaA9hE77dPAIkT7MJ+8DNu4jlj4ZPGRwZb2b7uWSBzyn",
+	"E+lrBFJ5A0kGu+lrwvwguKY9GKuDieIxX8RwUaNjJAD50C+9BhCPO4CBu5e+qSByHo4QeoigOYBEgrAe",
+	"AFOh5xPwPWw3d3MYSsv15ZVxIHb2IwgGcUfPfwmwCEMLUNXWyGMXeLMtqhdklMQyxHOWRHjs0jpv4Srf",
+	"1xKR4QLurGAG1tP0F8gy+wYAIC5vVD+Xkah+poPoIRwkdra+bPCTMkiawSNmIN5wMgbfIo/Ube/M2dLj",
+	"NMt6OqewgyoJwpB1dKMUDZvUORD82nGjRN4SjbaUN5WpuQAseyjvuj068f8PPPJDUyzzBX5hWqB3LB0b",
+	"ZzHfYVTLfT/QP/Hwir13NA1SM5ieNIto9iCNe4g50w15EB0QbIbmXxvYplBK+KtZtndD+uBumXmvqq5o",
+	"BhtBE+AJQEa0/4Dr1YvDMytn2knSXVlYCGWTh22pkpXz9fP1M7f//+3/CwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

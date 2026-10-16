@@ -32,8 +32,16 @@ func setupAccessDB(t *testing.T) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
+	// Tests run in parallel and each holds its own pool for a single rollback
+	// transaction (two connections max — see slot_owned_props_tx tests). The
+	// production DefaultPoolConfig keeps MinConns=16 warm per pool; across the
+	// ~20 parallel fixtures that is hundreds of connections against one
+	// PostgreSQL, so the test pools stay minimal.
+	cfg := database.DefaultPoolConfig()
+	cfg.MinConns = 0
+	cfg.MaxConns = 2
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, databaseURL)
+	pool, err := database.NewPoolWithConfig(ctx, databaseURL, cfg)
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}
@@ -48,7 +56,13 @@ func beginAccessTx(t *testing.T, pool *pgxpool.Pool) (context.Context, pgx.Tx, f
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	return ctx, tx, func() { _ = tx.Rollback(ctx) }
+	return ctx, tx, func() {
+		if err := tx.Rollback(ctx); err != nil {
+			// Rollback failure means test isolation broke: rows written in the
+			// aborted test transaction would persist in the shared database.
+			t.Errorf("rollback access test tx: %v", err)
+		}
+	}
 }
 
 func createAccessTestUser(t *testing.T, ctx context.Context, q *genpostgres.Queries) uuid.UUID {
@@ -72,6 +86,13 @@ func createAccessTestUser(t *testing.T, ctx context.Context, q *genpostgres.Quer
 	return id
 }
 
+// propertyTypeApartment and statusActive are the column fixture values used by
+// createAccessTestProperty and its inline copies.
+const (
+	propertyTypeApartment = "apartment"
+	statusActive          = "active"
+)
+
 func createAccessTestProperty(t *testing.T, ctx context.Context, q *genpostgres.Queries, owner uuid.UUID) uuid.UUID {
 	t.Helper()
 	id, err := uuid.NewV7()
@@ -82,11 +103,11 @@ func createAccessTestProperty(t *testing.T, ctx context.Context, q *genpostgres.
 		ID:          pgUUID(id),
 		OwnerID:     pgUUID(owner),
 		Name:        "Test Property",
-		Type:        "apartment",
+		Type:        propertyTypeApartment,
 		Address:     "",
 		Description: pgtype.Text{},
 		Attributes:  []byte("{}"),
-		Status:      "active",
+		Status:      statusActive,
 	})
 	if err != nil {
 		t.Fatalf("create property: %v", err)
@@ -95,6 +116,7 @@ func createAccessTestProperty(t *testing.T, ctx context.Context, q *genpostgres.
 }
 
 func TestMembershipRepository_CreateAndGet(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -146,6 +168,7 @@ func TestMembershipRepository_CreateAndGet(t *testing.T) {
 }
 
 func TestMembershipRepository_DuplicateUnique(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -156,22 +179,29 @@ func TestMembershipRepository_DuplicateUnique(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	id1, _ := uuid.NewV7()
+	id1 := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: id1, PropertyID: property, UserID: other, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
-	id2, _ := uuid.NewV7()
+	id2 := uuid.Must(uuid.NewV7())
 	_, err := repo.Create(ctx, domain.Membership{
 		ID: id2, PropertyID: property, UserID: other, Role: domain.RoleFullAccess, GrantedBy: owner,
 	})
 	if err == nil {
 		t.Fatalf("expected duplicate (property, user) violation, got nil")
 	}
+	// Гонка exists-check/insert двух параллельных грантов (#1122): raw
+	// unique-нарушение должно приходить доменным сентинелом, иначе
+	// batch-грант отвечает 500 вместо skipped_duplicate.
+	if !errors.Is(err, domain.ErrMemberAlreadyExists) {
+		t.Fatalf("duplicate Create: expected ErrMemberAlreadyExists, got %v", err)
+	}
 }
 
 func TestMembershipRepository_UpdateRoleAndDelete(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -182,7 +212,7 @@ func TestMembershipRepository_UpdateRoleAndDelete(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	id, _ := uuid.NewV7()
+	id := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: id, PropertyID: property, UserID: other, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
@@ -210,6 +240,7 @@ func TestMembershipRepository_UpdateRoleAndDelete(t *testing.T) {
 // can return RoleSuspended), while the active-only GetRole projection treats
 // it as absent.
 func TestMembershipRepository_SuspendedMembershipVisible(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -220,7 +251,7 @@ func TestMembershipRepository_SuspendedMembershipVisible(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	id, _ := uuid.NewV7()
+	id := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: id, PropertyID: property, UserID: other, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
@@ -243,7 +274,52 @@ func TestMembershipRepository_SuspendedMembershipVisible(t *testing.T) {
 	}
 }
 
+// TestMembershipRepository_SuspendedInsertStampsSuspendedAt proves the
+// suspended insert carries the moment (issue #767): the FIFO recovery queue
+// orders suspended memberships by suspended_at ASC (ListSuspendedMembersByUser),
+// so a grant created directly in the suspended status — invite activation or
+// AddMember without a free slot — must not leave suspended_at NULL and
+// degrade the queue to updated_at DESC. The active insert keeps it NULL.
+func TestMembershipRepository_SuspendedInsertStampsSuspendedAt(t *testing.T) {
+	t.Parallel()
+	pool := setupAccessDB(t)
+	ctx, tx, cleanup := beginAccessTx(t, pool)
+	defer cleanup()
+
+	q := genpostgres.New(tx)
+	owner := createAccessTestUser(t, ctx, q)
+	member := createAccessTestUser(t, ctx, q)
+	active := createAccessTestUser(t, ctx, q)
+	property := createAccessTestProperty(t, ctx, q, owner)
+
+	repo := NewMembershipRepository(tx)
+	suspendedID := uuid.Must(uuid.NewV7())
+	created, err := repo.CreateWithStatus(ctx, domain.Membership{
+		ID: suspendedID, PropertyID: property, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: owner, Status: domain.MemberStatusSuspended,
+	})
+	if err != nil {
+		t.Fatalf("CreateWithStatus(suspended): %v", err)
+	}
+	if created.SuspendedAt == nil {
+		t.Fatalf("suspended insert left suspended_at NULL — the FIFO recovery queue orders by it (issue #767)")
+	}
+
+	activeID := uuid.Must(uuid.NewV7())
+	createdActive, err := repo.Create(ctx, domain.Membership{
+		ID: activeID, PropertyID: property, UserID: active,
+		Role: domain.RoleViewer, GrantedBy: owner,
+	})
+	if err != nil {
+		t.Fatalf("Create(active): %v", err)
+	}
+	if createdActive.SuspendedAt != nil {
+		t.Errorf("active insert set suspended_at = %v, want NULL", createdActive.SuspendedAt)
+	}
+}
+
 func TestOwnerResolver_ReturnsOwner(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -262,9 +338,60 @@ func TestOwnerResolver_ReturnsOwner(t *testing.T) {
 	}
 
 	// Missing property does not leak existence.
-	missing, _ := uuid.NewV7()
+	missing := uuid.Must(uuid.NewV7())
 	if _, err := resolver.GetOwnerID(ctx, missing); !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Errorf("expected ErrMemberNotFound for missing property, got %v", err)
+	}
+}
+
+// setAccessPropertyStatus flips the property's lifecycle through the sqlc
+// queries the property service uses (archive or unarchive).
+func setAccessPropertyStatus(
+	t *testing.T, ctx context.Context, q *genpostgres.Queries, archive bool, owner uuid.UUID, props ...uuid.UUID,
+) {
+	t.Helper()
+	for _, prop := range props {
+		var err error
+		if archive {
+			_, err = q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)})
+		} else {
+			_, err = q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)})
+		}
+		if err != nil {
+			t.Fatalf("property status flip %s: %v", prop, err)
+		}
+	}
+}
+
+// assertSlotAccounting checks the recipient's slot accounting: the number of
+// used slots, which properties occupy them, and how many suspended memberships
+// wait in the FIFO recovery queue. The stage argument names the assertion phase.
+func assertSlotAccounting(
+	t *testing.T, ctx context.Context, repo *MembershipRepository,
+	recipient uuid.UUID, stage string, wantActive []uuid.UUID, wantSuspended int,
+) {
+	t.Helper()
+	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != len(wantActive) {
+		t.Errorf("CountActiveByUser %s = %d, %v; want %d", stage, count, err, len(wantActive))
+	}
+	rows, err := repo.ListActiveByUser(ctx, recipient)
+	if err != nil {
+		t.Fatalf("ListActiveByUser %s: %v", stage, err)
+	}
+	got := make(map[uuid.UUID]bool, len(rows))
+	for _, m := range rows {
+		got[m.PropertyID] = true
+	}
+	for _, prop := range wantActive {
+		if !got[prop] {
+			t.Errorf("ListActiveByUser %s = %+v, want %s among the active slots", stage, rows, prop)
+		}
+	}
+	if len(rows) != len(wantActive) {
+		t.Errorf("ListActiveByUser %s = %d rows, want %d", stage, len(rows), len(wantActive))
+	}
+	if suspended, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(suspended) != wantSuspended {
+		t.Errorf("ListSuspendedByUser %s = %d, %v; want %d", stage, len(suspended), err, wantSuspended)
 	}
 }
 
@@ -274,6 +401,7 @@ func TestOwnerResolver_ReturnsOwner(t *testing.T) {
 // CountActiveByUser and the FIFO recovery queue ListSuspendedByUser — and
 // re-enter the selection when the property is unarchived.
 func TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -286,19 +414,19 @@ func TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries(t *testing
 	archivedSuspendedProp := createAccessTestProperty(t, ctx, q, owner)
 
 	repo := NewMembershipRepository(tx)
-	activeID, _ := uuid.NewV7()
+	activeID := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: activeID, PropertyID: activeProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
 		t.Fatalf("Create active: %v", err)
 	}
-	archivedActiveID, _ := uuid.NewV7()
+	archivedActiveID := uuid.Must(uuid.NewV7())
 	if _, err := repo.Create(ctx, domain.Membership{
 		ID: archivedActiveID, PropertyID: archivedActiveProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
 	}); err != nil {
 		t.Fatalf("Create archived-active: %v", err)
 	}
-	archivedSuspendedID, _ := uuid.NewV7()
+	archivedSuspendedID := uuid.Must(uuid.NewV7())
 	if _, err := repo.CreateWithStatus(ctx, domain.Membership{
 		ID: archivedSuspendedID, PropertyID: archivedSuspendedProp, UserID: recipient, Role: domain.RoleViewer, GrantedBy: owner,
 		Status: domain.MemberStatusSuspended,
@@ -314,44 +442,13 @@ func TestMembershipRepository_ArchivedPropertyExcludedFromSlotQueries(t *testing
 		t.Fatalf("ListSuspendedByUser before archive = %d, %v; want 1", len(rows), err)
 	}
 
-	// Archive two of the three properties.
-	for _, prop := range []uuid.UUID{archivedActiveProp, archivedSuspendedProp} {
-		if _, err := q.ArchiveProperty(ctx, genpostgres.ArchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)}); err != nil {
-			t.Fatalf("ArchiveProperty %s: %v", prop, err)
-		}
-	}
-
-	// The active membership on the archived property occupies no slot.
-	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != 1 {
-		t.Errorf("CountActiveByUser after archive = %d, %v; want 1", count, err)
-	}
-	rows, err := repo.ListActiveByUser(ctx, recipient)
-	if err != nil {
-		t.Fatalf("ListActiveByUser after archive: %v", err)
-	}
-	if len(rows) != 1 || rows[0].PropertyID != activeProp {
-		t.Errorf("ListActiveByUser after archive = %+v, want only the active property", rows)
-	}
-
-	// The suspended membership on the archived property must not waste a free
-	// slot of the FIFO recovery queue.
-	if rows, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(rows) != 0 {
-		t.Errorf("ListSuspendedByUser after archive = %+v, %v; want empty", rows, err)
-	}
+	// Archive two of the three properties: the memberships on them occupy no
+	// slot and leave the FIFO recovery queue.
+	setAccessPropertyStatus(t, ctx, q, true, owner, archivedActiveProp, archivedSuspendedProp)
+	assertSlotAccounting(t, ctx, repo, recipient, "after archive", []uuid.UUID{activeProp}, 0)
 
 	// Unarchive: both memberships re-enter the selection.
-	for _, prop := range []uuid.UUID{archivedActiveProp, archivedSuspendedProp} {
-		if _, err := q.UnarchiveProperty(ctx, genpostgres.UnarchivePropertyParams{ID: pgUUID(prop), OwnerID: pgUUID(owner)}); err != nil {
-			t.Fatalf("UnarchiveProperty %s: %v", prop, err)
-		}
-	}
-	if count, err := repo.CountActiveByUser(ctx, recipient); err != nil || count != 2 {
-		t.Errorf("CountActiveByUser after unarchive = %d, %v; want 2", count, err)
-	}
-	if rows, err := repo.ListActiveByUser(ctx, recipient); err != nil || len(rows) != 2 {
-		t.Errorf("ListActiveByUser after unarchive = %d, %v; want 2", len(rows), err)
-	}
-	if rows, err := repo.ListSuspendedByUser(ctx, recipient); err != nil || len(rows) != 1 {
-		t.Errorf("ListSuspendedByUser after unarchive = %d, %v; want 1", len(rows), err)
-	}
+	setAccessPropertyStatus(t, ctx, q, false, owner, archivedActiveProp, archivedSuspendedProp)
+	assertSlotAccounting(t, ctx, repo, recipient, "after unarchive",
+		[]uuid.UUID{activeProp, archivedActiveProp}, 1)
 }

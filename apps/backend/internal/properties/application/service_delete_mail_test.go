@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -27,21 +28,33 @@ type fakeSharedDeleteFlow struct {
 	sentWith []string
 }
 
-func (f *fakeSharedDeleteFlow) RecoverSuspendedForProperty(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (f *fakeSharedDeleteFlow) RecoverSuspendedForProperty(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
+	return nil, nil
 }
 
-func (f *fakeSharedDeleteFlow) EnforceOnUnarchiveForProperty(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (f *fakeSharedDeleteFlow) EnforceOnUnarchiveForProperty(
+	context.Context, transaction.Tx, uuid.UUID,
+) ([]accessdomain.Membership, error) {
+	return nil, nil
 }
 
-func (f *fakeSharedDeleteFlow) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) error {
+func (f *fakeSharedDeleteFlow) RecoverAfterPropertyDelete(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
 	f.events = append(f.events, "recover_after_delete")
-	return nil
+	return nil, nil
 }
 
-func (f *fakeSharedDeleteFlow) RecoverSuspended(context.Context, transaction.Tx, uuid.UUID) error {
-	return nil
+func (f *fakeSharedDeleteFlow) RecoverSuspended(context.Context, transaction.Tx, uuid.UUID) ([]accessdomain.Membership, error) {
+	return nil, nil
+}
+
+func (f *fakeSharedDeleteFlow) EnforceRecipientPoolGrowth(
+	context.Context, transaction.Tx, uuid.UUID, string,
+) ([]accessdomain.Membership, error) {
+	return nil, nil
+}
+
+func (f *fakeSharedDeleteFlow) RecipientPoolFull(context.Context, transaction.Tx, uuid.UUID) (bool, error) {
+	return false, nil
 }
 
 func (f *fakeSharedDeleteFlow) CollectFormerMemberEmails(_ context.Context, _ transaction.Tx, propertyID uuid.UUID) ([]string, error) {
@@ -62,33 +75,31 @@ var (
 )
 
 func TestPropertyService_DeleteProperty_NotifiesFormerSharedMembers(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	propertyID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	repo := newFakePropertyRepo(
-		domain.Property{ID: propertyID, OwnerID: ownerID, Name: "Квартира на Невском", Address: "Addr", Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive},
+		domain.Property{
+			ID: propertyID, OwnerID: ownerID, Name: "Квартира на Невском",
+			Address: testPropertyAddress, Type: domain.PropertyTypeApartment, Status: domain.PropertyStatusActive,
+		},
 	)
 	shared := &fakeSharedDeleteFlow{emails: []string{"a@example.com", "b@example.com"}}
 	svc := NewPropertyService(
 		repo,
-		fakePropertyPhotoRepo{},
-		fakePropertyPhotoStorage{},
-		occupiedSetOccupancyProvider{occupied: map[uuid.UUID]bool{}},
-		nil,
-		&recordingBillingLifecycle{},
-		stubLeaseRepo{},
-		fakePropertyTxBeginner{},
-		nil,
+		newFakePropertyPhotoStorage(),
+		newPropertyTestFactory(repo, nil),
 		fakePropertyClock{now: time.Now()},
-		fakeTzResolver{},
 		testOwnerPolicy{},
 		nil,
 	)
 	svc.SetRecipientSlotPolicy(shared)
 	svc.SetSharedMembersDeleteMailer(shared)
 
-	if err := svc.DeleteProperty(ctx, ownerID, propertyID, domain.DeletePropertyModeCascade); err != nil {
+	if err := svc.DeleteProperty(ctx, ownerID, propertyID); err != nil {
 		t.Fatalf("DeleteProperty: %v", err)
 	}
 
@@ -108,8 +119,9 @@ func TestPropertyService_DeleteProperty_NotifiesFormerSharedMembers(t *testing.T
 			t.Errorf("sent with title = %q", title)
 		}
 	}
-	// Sends happen after the collect/recover (post-commit).
-	if shared.events[len(shared.events)-2:] == nil || shared.events[len(shared.events)-1] != "send" {
+	// Sends happen after the collect/recover (post-commit): the last two
+	// events are the two sends.
+	if len(shared.events) < 2 || shared.events[len(shared.events)-2] != "send" || shared.events[len(shared.events)-1] != "send" {
 		t.Errorf("sends must come last (post-commit), events = %v", shared.events)
 	}
 

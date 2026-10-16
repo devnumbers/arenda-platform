@@ -1,0 +1,246 @@
+import type { Page } from '@playwright/test';
+import {
+  captureScreen,
+  expect,
+  execE2eSql,
+  openCabinetWithSeededSession,
+  test,
+} from './fixtures';
+
+// Карточки хаба «Объекты» карты «Совместный доступ 2.0» (тикет #702; поля
+// карточек пересмотрены решением владельца по итогам обхода #756 — ряд
+// участников своих объектов снесён, ряд владельца носят только ЧУЖИЕ
+// карточки) и блюр-карточки подвесших чужих объектов с шитом причины
+// «Превышен лимит объектов». Suspended-доступ владельца Ивана на чужой
+// «Даче у Марии» грантуется через execE2eSql (workers=1) и убирается в
+// конце каждого теста. Выход с подвесшего доступа разрешён правилом #702
+// (раньше ErrCannotLeaveSuspended).
+
+const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+const FOREIGN_OWNER_ID = '12111111-1111-4111-8111-111111111121';
+const SUSPENDED_PROPERTY_ID = '34444444-4444-4444-8444-444444444444';
+const SUSPENDED_MEMBERSHIP_ID = '99999999-9999-4999-8999-999999999939';
+
+async function grantSuspendedAccess(): Promise<void> {
+  await execE2eSql(
+    "INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status) VALUES " +
+      `('${SUSPENDED_PROPERTY_ID}', '${FOREIGN_OWNER_ID}', 'Дача у Марии', 'house', 'Москва, ул. Дачная, 5', '', '{}', 'active') ` +
+      'ON CONFLICT (id) DO NOTHING',
+  );
+  await execE2eSql(
+    "INSERT INTO property_members (id, property_id, user_id, role, granted_by, status, suspended_at) VALUES " +
+      `('${SUSPENDED_MEMBERSHIP_ID}', '${SUSPENDED_PROPERTY_ID}', '${OWNER_ID}', 'viewer', '${FOREIGN_OWNER_ID}', 'suspended', now()) ` +
+      'ON CONFLICT (id) DO NOTHING',
+  );
+}
+
+async function revokeSuspendedAccess(): Promise<void> {
+  await execE2eSql(
+    `DELETE FROM property_members WHERE id = '${SUSPENDED_MEMBERSHIP_ID}'`,
+  );
+  await execE2eSql(`DELETE FROM properties WHERE id = '${SUSPENDED_PROPERTY_ID}'`);
+}
+
+// Прослушка запросов deep-link #769: деталь объекта отдельно, зависимые
+// (property-scoped секции) — отдельно; ассерты считают волнами.
+function trackPropertyRequests(
+  page: Page,
+  propertyId: string,
+): { detailRequests: string[]; dependentRequests: string[] } {
+  const detailRequests: string[] = [];
+  const dependentRequests: string[] = [];
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === `/api/properties/${propertyId}`) {
+      detailRequests.push(pathname);
+    }
+    if (pathname.startsWith(`/api/properties/${propertyId}/`)) {
+      dependentRequests.push(pathname);
+    }
+  });
+  return { detailRequests, dependentRequests };
+}
+
+async function openHub(
+  page: Page,
+  seededUser: Parameters<typeof openCabinetWithSeededSession>[1],
+): Promise<void> {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/properties');
+}
+
+test('свои карточки без ряда участников и без бейджа роли', async ({ page, seededUser }, testInfo) => {
+  await openHub(page, seededUser);
+
+  // Решение владельца по итогам обхода #756: на своих карточках ряда нет
+  // вовсе — ни участников (#702 снесён), ни владельца, ни бейджа роли.
+  const apartmentCard = page
+    .locator('li')
+    .filter({ has: page.getByRole('heading', { name: 'Квартира на Ленина' }) });
+  await expect(apartmentCard.getByTestId('property-participants')).toHaveCount(0);
+  await expect(apartmentCard.getByTestId('property-owner')).toHaveCount(0);
+  await expect(apartmentCard.getByText('Мария Петрова')).toHaveCount(0);
+  await expect(apartmentCard.getByText('Управление')).toHaveCount(0);
+
+  await captureScreen(page, testInfo, 'properties-own-cards-plain');
+});
+
+test('блюр-карточка подвесшего объекта и шит причины', async ({ page, seededUser }, testInfo) => {
+  await grantSuspendedAccess();
+  try {
+    await openHub(page, seededUser);
+
+    // Блюр-карточка после своих карточек: настоящая карточка объекта под
+    // блюром с теми же полями, что у любой чужой карточки (название, адрес
+    // и ряд владельца — Figma 2213-99113 + решение по обходу #756), и
+    // плашка «Узнать причину».
+    const blurCard = page.getByTestId('suspended-property-card');
+    await expect(blurCard.getByText('Дача у Марии')).toBeVisible();
+    await expect(blurCard.getByText('Москва, ул. Дачная, 5')).toBeVisible();
+    await expect(blurCard.getByTestId('property-owner').getByText('Мария Петрова')).toBeVisible();
+    await expect(blurCard.getByText('Объект недоступен')).toBeVisible();
+    await expect(blurCard.getByText('Узнать причину')).toBeVisible();
+
+    await blurCard.click();
+    await expect(page.getByTestId('suspended-reason-sheet').getByText('Превышен лимит объектов')).toBeVisible();
+    await expect(page.getByTestId('suspended-reason-sheet').getByText('Владелец объекта')).toBeVisible();
+    await expect(page.getByTestId('suspended-reason-sheet').getByText('Мария Петрова')).toBeVisible();
+    // Почта владельца — сознательная экспозиция шита причины (2229-100002).
+    await expect(page.getByTestId('suspended-reason-sheet').getByText('e2e-member@example.com')).toBeVisible();
+    await expect(page.getByTestId('suspended-reason-sheet').getByText('Выбрать тариф')).toBeVisible();
+
+    await captureScreen(page, testInfo, 'properties-suspended-reason');
+
+    await page.getByTestId('suspended-close').click();
+    await expect(page.getByTestId('suspended-reason-sheet')).toBeHidden();
+  } finally {
+    await revokeSuspendedAccess();
+  }
+});
+
+test('блюр-карточка и шит причины безымянного владельца: «Пользователь» (карта #1105, аменд #1123, #1109)', async ({ page, seededUser }, testInfo) => {
+  // Owner-строка suspended-плейсхолдера собирается shared_list_enricher'ом
+  // через DisplayNameOf — канон карты #1105: «Имя Фамилия», иначе
+  // «Пользователь» (#1106, аменд #1123); почта в шите — сознательная
+  // экспозиция. Сид
+  // инлайновый (workers=1) со своими id — утечка строки не подменяет данные
+  // теста Марии выше.
+  const NAMELESS_OWNER_ID = '15111111-1111-4111-8111-111111111153';
+  const NAMELESS_PROPERTY_ID = '34444444-4444-4444-8444-444444444451';
+  const NAMELESS_MEMBERSHIP_ID = '99999999-9999-4999-8999-999999999953';
+  const NAMELESS_PHONE = '+79137654326';
+  const NAMELESS_EMAIL = 'e2e-nameless-suspended@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_OWNER_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status) VALUES ` +
+      `('${NAMELESS_PROPERTY_ID}', '${NAMELESS_OWNER_ID}', 'Дача без имени', 'house', 'Москва, ул. Анонимная, 8', '', '{}', 'active') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by, status, suspended_at) VALUES ` +
+      `('${NAMELESS_MEMBERSHIP_ID}', '${NAMELESS_PROPERTY_ID}', '${OWNER_ID}', 'viewer', '${NAMELESS_OWNER_ID}', 'suspended', now()) ` +
+      `ON CONFLICT (id) DO NOTHING`,
+  );
+  try {
+    await openHub(page, seededUser);
+
+    const blurCard = page.getByTestId('suspended-property-card');
+    await expect(blurCard.getByTestId('property-owner').getByText('Пользователь')).toBeVisible();
+
+    await blurCard.click();
+    const sheet = page.getByTestId('suspended-reason-sheet');
+    await expect(sheet.getByText('Пользователь')).toBeVisible();
+    await expect(sheet.getByText(NAMELESS_EMAIL)).toBeVisible();
+    // Телефона ни в карточке, ни в шите нет (аменд #1123).
+    await expect(sheet.getByText(NAMELESS_PHONE)).toHaveCount(0);
+    // Масок нет нигде — ни в карточке, ни в шите.
+    await expect(page.getByText(/\*{3}/)).toHaveCount(0);
+
+    await captureScreen(page, testInfo, '1109-suspended-nameless-owner');
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '${NAMELESS_MEMBERSHIP_ID}'; ` +
+        `DELETE FROM properties WHERE id = '${NAMELESS_PROPERTY_ID}'; ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_OWNER_ID}'`,
+    );
+  }
+});
+
+test('«Покинуть объект» из шита: suspended-доступ снят (серверная правда)', async ({ page, seededUser }) => {
+  await grantSuspendedAccess();
+  try {
+    await openHub(page, seededUser);
+
+    await page.getByTestId('suspended-property-card').click();
+    await page.getByTestId('suspended-leave').click();
+
+    // Плейсхолдер уходит после инвалидации (useLeaveProperty, #701).
+    await expect(page.getByTestId('suspended-property-card')).toBeHidden();
+
+    const count = await execE2eSql(
+      `SELECT count(*) FROM property_members WHERE id = '${SUSPENDED_MEMBERSHIP_ID}'`,
+    );
+    expect(count).toBe('0');
+  } finally {
+    await revokeSuspendedAccess();
+  }
+});
+
+test('«Выбрать тариф» ведёт на смену тарифа', async ({ page, seededUser }) => {
+  await grantSuspendedAccess();
+  try {
+    await openHub(page, seededUser);
+
+    await page.getByTestId('suspended-property-card').click();
+    await page.getByTestId('suspended-choose-tariff').click();
+
+    await expect(page).toHaveURL(/\/profile\/tariff\/change$/);
+  } finally {
+    await revokeSuspendedAccess();
+  }
+});
+
+// Deep-link гарды #769: деталь не ретраится (глобальный no-retry 4xx) и
+// property-scoped запросы секций гейтятся успехом детали — гард виден
+// сразу, без волн повторов и 404 зависимых (аренды/платежи/операции/
+// контакты/задачи) по нечитаемому объекту.
+test('deep-link suspended: гард сразу, зависимых запросов нет (#769)', async ({ page, seededUser }, testInfo) => {
+  await grantSuspendedAccess();
+  const { detailRequests, dependentRequests } = trackPropertyRequests(
+    page,
+    SUSPENDED_PROPERTY_ID,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/properties/${SUSPENDED_PROPERTY_ID}`);
+
+    await expect(page.getByText('Превышен лимит объектов')).toBeVisible();
+
+    // Окно покрывает только первую волну дефолтных ретраев (~1с) — вторая
+    // (~3с; попытки с паузами 1с/2с/4с, query-retry.ts) в него не попадает:
+    // за окно нет ни повторов детали, ни запросов секций.
+    await page.waitForTimeout(2500);
+    expect(detailRequests).toHaveLength(1);
+    expect(dependentRequests).toHaveLength(0);
+
+    await captureScreen(page, testInfo, '769-suspended-deep-link');
+  } finally {
+    await revokeSuspendedAccess();
+  }
+});
+
+test('deep-link несуществующего объекта: «не найден» сразу, зависимых запросов нет (#769)', async ({ page, seededUser }) => {
+  const missingPropertyId = '0e999999-9999-4999-8999-999999999904';
+  const { detailRequests, dependentRequests } = trackPropertyRequests(
+    page,
+    missingPropertyId,
+  );
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/properties/${missingPropertyId}`);
+
+  await expect(page.getByText('Объект не найден или у вас нет к нему доступа')).toBeVisible();
+
+  await page.waitForTimeout(2500);
+  expect(detailRequests).toHaveLength(1);
+  expect(dependentRequests).toHaveLength(0);
+});

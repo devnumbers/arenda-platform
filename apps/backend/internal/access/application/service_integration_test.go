@@ -21,7 +21,7 @@ import (
 type memRepo struct {
 	rows      []domain.Membership
 	byPropUsr map[[2]uuid.UUID]int
-	// owners maps property_id → owner_id, mirroring the properties table join
+	// Owners maps property_id → owner_id, mirroring the properties table join
 	// used by the SQL implementation of ListActiveByPropertyOwner. It is
 	// populated by SetOwner in tests that exercise owner-wide queries.
 	owners map[uuid.UUID]uuid.UUID
@@ -113,6 +113,10 @@ func (r *memRepo) UpdateRole(_ context.Context, id, propertyID uuid.UUID, role d
 	for i := range r.rows {
 		if r.rows[i].ID == id && r.rows[i].PropertyID == propertyID {
 			r.rows[i].Role = role
+			// The production table maintains updated_at by trigger (000094);
+			// the in-memory double mirrors it — the role-change event stamps
+			// its dedup key with this instant (тикет #830).
+			r.rows[i].UpdatedAt = time.Now()
 			return r.rows[i], nil
 		}
 	}
@@ -180,16 +184,6 @@ func (r *memRepo) CountActiveByUser(_ context.Context, userID uuid.UUID) (int, e
 	return count, nil
 }
 
-func (r *memRepo) CountSuspendedByUser(_ context.Context, userID uuid.UUID) (int, error) {
-	count := 0
-	for _, m := range r.rows {
-		if m.UserID == userID && m.Status == domain.MemberStatusSuspended {
-			count++
-		}
-	}
-	return count, nil
-}
-
 func (r *memRepo) ListActiveByPropertyOwner(_ context.Context, ownerID uuid.UUID) ([]domain.Membership, error) {
 	var out []domain.Membership
 	for _, m := range r.rows {
@@ -221,6 +215,46 @@ func (r *memRepo) ListActiveByUser(_ context.Context, userID uuid.UUID) ([]domai
 		out = append(out, m)
 	}
 	return out, nil
+}
+
+// ListForRemovalByUser mirrors the SQL removal scope (issue #694): the
+// person's memberships (any status, archived included) on properties the
+// actor owns or manages as an active full_access member.
+func (r *memRepo) ListForRemovalByUser(_ context.Context, personID, actorID uuid.UUID) ([]domain.Membership, error) {
+	var out []domain.Membership
+	for _, m := range r.rows {
+		if m.UserID == personID && r.inManageScope(m.PropertyID, actorID) {
+			out = append(out, m)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Membership) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// ListForRemovalByOwner mirrors the SQL owner-wide removal scope (issue
+// #1310): every membership (any status, archived included) on properties
+// the actor owns.
+func (r *memRepo) ListForRemovalByOwner(_ context.Context, actorID uuid.UUID) ([]domain.Membership, error) {
+	var out []domain.Membership
+	for _, m := range r.rows {
+		if r.inManageScope(m.PropertyID, actorID) {
+			out = append(out, m)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Membership) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// inManageScope is the in-memory twin of the SQL manage-scope predicate:
+// owner-only since the D8 decision (issue #1304) — the actor owns the
+// property. Member management is the owner's prerogative; a full_access
+// member of a foreign object is out of the scope.
+func (r *memRepo) inManageScope(propertyID, actorID uuid.UUID) bool {
+	return r.owners[propertyID] == actorID
 }
 
 func (r *memRepo) CreateWithStatus(_ context.Context, m domain.Membership) (domain.Membership, error) {
@@ -304,14 +338,16 @@ var (
 // listed; a stranger is denied; the owner is always listed first and cannot be
 // re-added; a duplicate add is rejected (issue #156).
 func TestAccessService_AllowDenyPath(t *testing.T) {
-	owner := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil,
+		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	// Owner adds a full member.
 	m, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleFullAccess)
@@ -332,12 +368,13 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 	}
 
 	// Stranger is denied listing (privacy → not found).
-	if _, err := svc.ListMembers(context.Background(), uuid.New(), property); !errors.Is(err, domain.ErrMemberNotFound) {
+	if _, err := svc.ListMembers(context.Background(), uuid.Must(uuid.NewV7()), property); !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Errorf("stranger ListMembers: expected ErrMemberNotFound, got %v", err)
 	}
 
 	// Duplicate add is rejected.
-	if _, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrMemberAlreadyExists) {
+	if _, err := svc.AddMember(context.Background(), owner, property, member,
+		domain.RoleViewer); !errors.Is(err, domain.ErrMemberAlreadyExists) {
 		t.Errorf("duplicate AddMember: expected ErrMemberAlreadyExists, got %v", err)
 	}
 
@@ -346,17 +383,30 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 		t.Errorf("add owner: expected ErrCannotAddOwner, got %v", err)
 	}
 
-	// Self-add is rejected.
-	if _, err := svc.AddMember(context.Background(), member, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrCannotAddSelf) {
-		t.Errorf("self add: expected ErrCannotAddSelf, got %v", err)
+	// A member's self-add is refused like every member-management attempt:
+	// owner-only since D8 (issue #1304), the privacy-preserving not-found
+	// fires before the self-add argument check.
+	if _, err := svc.AddMember(context.Background(), member, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("self add by member: expected ErrMemberNotFound, got %v", err)
+	}
+	// The owner's self-add stays the argument-level ErrCannotAddOwner (the
+	// owner gate outranks the self gate for the same person).
+	if _, err := svc.AddMember(context.Background(), owner, property, owner, domain.RoleViewer); !errors.Is(err, domain.ErrCannotAddOwner) {
+		t.Errorf("owner self add: expected ErrCannotAddOwner, got %v", err)
 	}
 
 	// Policy resolves roles correctly for allow/deny reasoning.
-	roleFull, _ := policy.RoleForProperty(context.Background(), member, property)
+	roleFull, err := policy.RoleForProperty(context.Background(), member, property)
+	if err != nil {
+		t.Fatalf("RoleForProperty(member): %v", err)
+	}
 	if roleFull != sharedpolicy.RoleFullAccess {
 		t.Errorf("member role = %v, want full_access", roleFull)
 	}
-	roleNone, _ := policy.RoleForProperty(context.Background(), uuid.New(), property)
+	roleNone, err := policy.RoleForProperty(context.Background(), uuid.Must(uuid.NewV7()), property)
+	if err != nil {
+		t.Fatalf("RoleForProperty(stranger): %v", err)
+	}
 	if roleNone != sharedpolicy.RoleNone {
 		t.Errorf("stranger role = %v, want none", roleNone)
 	}
@@ -365,14 +415,16 @@ func TestAccessService_AllowDenyPath(t *testing.T) {
 // TestAccessService_LeaveProperty verifies self-exit: a member can leave, the
 // owner cannot (issue #156).
 func TestAccessService_LeaveProperty(t *testing.T) {
-	owner := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil,
+		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	if _, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember: %v", err)
@@ -383,7 +435,10 @@ func TestAccessService_LeaveProperty(t *testing.T) {
 	}
 
 	// Member no longer listed.
-	members, _ := svc.ListMembers(context.Background(), owner, property)
+	members, err := svc.ListMembers(context.Background(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers after leave: %v", err)
+	}
 	for _, m := range members {
 		if m.UserID == member {
 			t.Errorf("member still present after leave")
@@ -393,5 +448,48 @@ func TestAccessService_LeaveProperty(t *testing.T) {
 	// Owner cannot leave.
 	if err := svc.LeaveProperty(context.Background(), owner, property); !errors.Is(err, domain.ErrCannotLeaveOwnProperty) {
 		t.Errorf("owner leave: expected ErrCannotLeaveOwnProperty, got %v", err)
+	}
+}
+
+// TestAccessService_LeaveSuspendedProperty verifies the reason sheet's
+// «Покинуть объект» (ticket #702): a suspended membership no longer blocks
+// self-exit — the recipient sees the blur-card placeholder and may leave
+// without freeing a slot first. The delete frees no slot (suspended holds
+// none), so no FIFO recovery runs.
+func TestAccessService_LeaveSuspendedProperty(t *testing.T) {
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+
+	repo := newMemRepo()
+	resolver := staticResolver{property: owner}
+	policy := NewMembershipPolicy(resolver, repo)
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil,
+		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
+
+	if _, err := svc.AddMember(context.Background(), owner, property, member, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	m, err := repo.GetByPropertyAndUser(context.Background(), property, member)
+	if err != nil {
+		t.Fatalf("GetByPropertyAndUser: %v", err)
+	}
+	if err := repo.Suspend(context.Background(), m.ID, property); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+
+	if err := svc.LeaveProperty(context.Background(), member, property); err != nil {
+		t.Fatalf("LeaveProperty on suspended: %v", err)
+	}
+
+	members, err := svc.ListMembers(context.Background(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers after leave: %v", err)
+	}
+	for _, m := range members {
+		if m.UserID == member {
+			t.Errorf("suspended member still present after leave")
+		}
 	}
 }

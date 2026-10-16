@@ -52,7 +52,7 @@ func (r *OwnerResolver) GetTitle(ctx context.Context, propertyID uuid.UUID) (str
 
 // propertyStatusArchived mirrors the properties module archived status. The
 // access module must not depend on the properties module, so the status value
-// is duplicated here (same convention as leases/application).
+// is duplicated here.
 const propertyStatusArchived = "archived"
 
 // IsArchived reports whether the property is in the archived status (issue

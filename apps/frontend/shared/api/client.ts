@@ -1,16 +1,19 @@
-import { ApiError, type FieldError } from './errors';
+import { ApiError } from './errors';
+import { normalizeRequestHeaders, parseTransportResponse } from './transport-wire';
+
+/**
+ * Транспорт API-запроса — шов двойного префетча #887: дефолт (браузер)
+ * ходит через same-origin прокси `/api`, серверный слой префетча подставляет
+ * serverApiClient (прямой ход в BACKEND_URL с cookie). Одинаковая сигнатура
+ * и семантика ошибок — queryOptions-фабрики пишутся один раз.
+ */
+export type ApiTransport = typeof apiClient;
 
 export async function apiClient<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const headers = new Headers(options.headers);
-  if (!headers.has('Accept')) {
-    headers.set('Accept', 'application/json');
-  }
-  if (typeof options.body === 'string' && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
+  const headers = normalizeRequestHeaders(options);
 
   let response: Response;
   try {
@@ -23,51 +26,5 @@ export async function apiClient<T>(
     throw new ApiError('network_error', message, undefined, undefined, error);
   }
 
-  const requestId = response.headers.get('X-Request-ID') ?? undefined;
-
-  if (!response.ok) {
-    let code = 'unknown';
-    let detail = `Ошибка сервера (код ${response.status})`;
-
-    let fieldErrors: readonly FieldError[] | undefined;
-
-    const contentType = response.headers.get('Content-Type');
-    if (contentType?.includes('application/problem+json')) {
-      try {
-        const problem = (await response.json()) as Record<string, unknown>;
-        code = String(problem.code ?? problem.type ?? code);
-        detail = String(problem.detail ?? problem.title ?? detail);
-        if (Array.isArray(problem.errors)) {
-          fieldErrors = problem.errors
-            .map((e) => (e && typeof e === 'object' ? (e as unknown) : null))
-            .filter((e): e is Record<string, unknown> => e !== null)
-            .map((e) => ({ field: String(e.field ?? ''), detail: String(e.detail ?? '') }))
-            .filter((e) => e.field !== '');
-        }
-      } catch {
-        detail = `Ошибка сервера (код ${response.status})`;
-      }
-    }
-
-    const retryAfterRaw = response.headers.get('Retry-After');
-    const retryAfter = retryAfterRaw ? Number(retryAfterRaw) : NaN;
-    const validRetryAfter =
-      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined;
-
-    throw new ApiError(
-      code,
-      detail,
-      requestId,
-      response.status,
-      undefined,
-      validRetryAfter,
-      fieldErrors,
-    );
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
+  return parseTransportResponse<T>(response);
 }

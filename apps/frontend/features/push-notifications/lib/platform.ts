@@ -14,24 +14,12 @@
 import { isStandaloneMode } from '@/shared/lib/pwa/standalone';
 export { isStandaloneMode };
 
-/** `window.MSStream` is the legacy IE/Edge UA spoofing guard for iPadOS. */
-type WindowWithMSStream = Window & {
-    readonly MSStream?: unknown;
-};
-
-/**
- * Detects iOS / iPadOS devices. iPadOS 13+ spoofs desktop Safari in its UA
- * string, so the check includes the Mac platform alongside the classic
- * iDevice tokens. The `MSStream` guard stops Edge / IE from false-matching.
- */
-export function isIosDevice(): boolean {
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
-    const ua = navigator.userAgent;
-    const platform = typeof navigator.platform === 'string' ? navigator.platform : '';
-    const hasIosToken = /iPad|iPhone|iPod/.test(ua) || (/macintosh|macintel/i.test(platform) && 'ontouchend' in document);
-    const isMsStream = (window as WindowWithMSStream).MSStream !== undefined;
-    return hasIosToken && !isMsStream;
-}
+// iOS device detection moved to the shared layer (12.10.2026): the
+// pull-to-refresh gate in shared/ui needs it too (ADR 0031), and shared/ui
+// cannot import from a feature. Not re-exported: within this slice only
+// requiresInstallOnIos() consumes it, and the slice exports only what other
+// elements actually import.
+import { isIosDevice } from '@/shared/lib/pwa/ios';
 
 /**
  * True when the current browser exposes everything Web Push needs: an active
@@ -68,4 +56,53 @@ export function readNotificationPermission(): NotificationPermissionState {
         return 'unsupported';
     }
     return Notification.permission;
+}
+
+/** Отписка от событий пробы (для useSyncExternalStore-cleanup). */
+export type PermissionChangesUnsubscribe = () => void;
+
+/**
+ * Live permission updates (спека #1028 §6, слайс 2 #1038): the browser emits
+ * no event for `Notification.permission` itself, but
+ * `permissions.query({name:'notifications'})` returns a PermissionStatus
+ * whose `change` event fires when the permission is granted/revoked outside
+ * the page (late opt-in from Site Settings, Chrome auto-revoke). The
+ * subscription wires that event; without the Permissions API (Safari < 16,
+ * SSR) it degrades to a no-op and the probe simply never updates live.
+ *
+ * The wiring itself is async (the query resolves in a promise): a change
+ * landing in the same tick as the subscribe call can be missed — the store
+ * re-reads the permission on every change anyway, and permission flips in
+ * that window are not a real scenario.
+ */
+export function subscribeToPermissionChanges(
+    onChange: () => void,
+): PermissionChangesUnsubscribe {
+    // permissions может отсутствовать в рантайме (старый Safari), хотя
+    // lib.dom считает его обязательным — проверяем через локальный срез.
+    type NavigatorWithOptionalPermissions = Omit<Navigator, 'permissions'> & {
+        readonly permissions?: Permissions;
+    };
+    if (
+        typeof window === 'undefined' ||
+        typeof navigator === 'undefined'
+    ) {
+        return () => {};
+    }
+    const permissions = (navigator as NavigatorWithOptionalPermissions).permissions;
+    if (permissions?.query === undefined) {
+        return () => {};
+    }
+    let removeListener: () => void = () => {};
+    permissions
+        .query({ name: 'notifications' })
+        .then((status) => {
+            status.addEventListener('change', onChange);
+            removeListener = () => status.removeEventListener('change', onChange);
+        })
+        .catch(() => {
+            // Permissions API rejects for 'notifications' on browsers without
+            // live updates — the synchronous probe still works.
+        });
+    return () => removeListener();
 }

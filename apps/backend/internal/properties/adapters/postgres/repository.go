@@ -1,3 +1,5 @@
+// Package postgres holds the properties persistence adapters: property, photo and contact repositories with
+// occupancy queries.
 package postgres
 
 import (
@@ -5,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -13,6 +16,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -101,18 +105,20 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		}
 		return domain.Property{}, err
 	}
-	return propertyFromCountsRow(postgres.Property{
-		ID:          row.ID,
-		OwnerID:     row.OwnerID,
-		Name:        row.Name,
-		Type:        row.Type,
-		Address:     row.Address,
-		Description: row.Description,
-		Attributes:  row.Attributes,
-		Status:      row.Status,
-		CreatedAt:   row.CreatedAt,
-		UpdatedAt:   row.UpdatedAt,
-	}, row.OverdueRentCount, row.MembersCount), nil
+	return propertyFromRow(postgres.Property{
+		ID:               row.ID,
+		OwnerID:          row.OwnerID,
+		Name:             row.Name,
+		Type:             row.Type,
+		Address:          row.Address,
+		Description:      row.Description,
+		Attributes:       row.Attributes,
+		Status:           row.Status,
+		PhotoKey:         row.PhotoKey,
+		PhotoContentType: row.PhotoContentType,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+	}), nil
 }
 
 func (r *PropertyRepository) GetByIDAndOwnerForUpdate(ctx context.Context, id, scope uuid.UUID) (domain.Property, error) {
@@ -139,18 +145,20 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		}
 		return domain.Property{}, err
 	}
-	return propertyFromCountsRow(postgres.Property{
-		ID:          row.ID,
-		OwnerID:     row.OwnerID,
-		Name:        row.Name,
-		Type:        row.Type,
-		Address:     row.Address,
-		Description: row.Description,
-		Attributes:  row.Attributes,
-		Status:      row.Status,
-		CreatedAt:   row.CreatedAt,
-		UpdatedAt:   row.UpdatedAt,
-	}, row.OverdueRentCount, row.MembersCount), nil
+	return propertyFromRow(postgres.Property{
+		ID:               row.ID,
+		OwnerID:          row.OwnerID,
+		Name:             row.Name,
+		Type:             row.Type,
+		Address:          row.Address,
+		Description:      row.Description,
+		Attributes:       row.Attributes,
+		Status:           row.Status,
+		PhotoKey:         row.PhotoKey,
+		PhotoContentType: row.PhotoContentType,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+	}), nil
 }
 
 // GetByIDForUpdate is the pessimistic-lock variant of GetByID (T3, issue #156).
@@ -165,6 +173,11 @@ func (r *PropertyRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID)
 	return propertyFromRow(row), nil
 }
 
+// The two owner list reads share one shape: sqlc.embed carries the model
+// row, so both wrap propertyFromRow — the queries stay separate (their
+// ORDER BY differs: pin-aware for the main list, recency-only for the
+// archive).
+
 func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error) {
 	rows, err := r.q().ListActivePropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
 	if err != nil {
@@ -172,18 +185,7 @@ func (r *PropertyRepository) ListActiveByOwner(ctx context.Context, scope uuid.U
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromCountsRow(postgres.Property{
-			ID:          row.ID,
-			OwnerID:     row.OwnerID,
-			Name:        row.Name,
-			Type:        row.Type,
-			Address:     row.Address,
-			Description: row.Description,
-			Attributes:  row.Attributes,
-			Status:      row.Status,
-			CreatedAt:   row.CreatedAt,
-			UpdatedAt:   row.UpdatedAt,
-		}, row.OverdueRentCount, row.MembersCount))
+		properties = append(properties, propertyFromRow(row.Property))
 	}
 	return properties, nil
 }
@@ -195,18 +197,55 @@ func (r *PropertyRepository) ListArchivedByOwner(ctx context.Context, scope uuid
 	}
 	properties := make([]domain.Property, 0, len(rows))
 	for _, row := range rows {
-		properties = append(properties, propertyFromCountsRow(postgres.Property{
-			ID:          row.ID,
-			OwnerID:     row.OwnerID,
-			Name:        row.Name,
-			Type:        row.Type,
-			Address:     row.Address,
-			Description: row.Description,
-			Attributes:  row.Attributes,
-			Status:      row.Status,
-			CreatedAt:   row.CreatedAt,
-			UpdatedAt:   row.UpdatedAt,
-		}, row.OverdueRentCount, row.MembersCount))
+		properties = append(properties, propertyFromRow(row.Property))
+	}
+	return properties, nil
+}
+
+// SearchVisible walks the actor's visible non-archived properties matching
+// the search — the search endpoint's keyset window (ticket #601). The store
+// escapes the ILIKE metacharacters (ESCAPE '\') and carries the raw keyset
+// key: each row's own (name, id) resumes the walk strictly after itself.
+// access_role arrives resolved per row ('owner' or the membership role).
+func (r *PropertyRepository) SearchVisible(
+	ctx context.Context, actor uuid.UUID, q application.PropertySearchQuery,
+) ([]domain.Property, error) {
+	var afterName pgtype.Text
+	var afterID pgtype.UUID
+	if q.AfterName != nil {
+		afterName = pgtype.Text{String: *q.AfterName, Valid: true}
+	}
+	if q.AfterID != nil {
+		afterID = pgconv.UUIDToPgtype(*q.AfterID)
+	}
+	rows, err := r.q().SearchVisibleProperties(ctx, postgres.SearchVisiblePropertiesParams{
+		Actor:     pgconv.UUIDToPgtype(actor),
+		Search:    pgconv.EscapeLikePattern(q.Search),
+		AfterName: afterName,
+		AfterID:   afterID,
+		PageLimit: q.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	properties := make([]domain.Property, 0, len(rows))
+	for _, row := range rows {
+		p := propertyFromRow(postgres.Property{
+			ID:               row.ID,
+			OwnerID:          row.OwnerID,
+			Name:             row.Name,
+			Type:             row.Type,
+			Address:          row.Address,
+			Description:      row.Description,
+			Attributes:       row.Attributes,
+			Status:           row.Status,
+			PhotoKey:         row.PhotoKey,
+			PhotoContentType: row.PhotoContentType,
+			CreatedAt:        row.CreatedAt,
+			UpdatedAt:        row.UpdatedAt,
+		})
+		p.AccessRole = sharedpolicy.Role(row.AccessRole)
+		properties = append(properties, p)
 	}
 	return properties, nil
 }
@@ -225,6 +264,86 @@ func (r *PropertyRepository) Update(ctx context.Context, scope uuid.UUID, proper
 		Description: pgtype.Text{String: property.Description, Valid: true},
 		Attributes:  attrsJSON,
 		Status:      string(property.Status),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Property{}, application.ErrNotFound
+		}
+		return domain.Property{}, err
+	}
+	return propertyFromRow(row), nil
+}
+
+// ActorPin reads the actor's personal pin row (the cutover #1307, D11):
+// no row — not pinned, the row's moment — pinned since then.
+func (r *PropertyRepository) ActorPin(ctx context.Context, actor, propertyID uuid.UUID) (*time.Time, error) {
+	at, err := r.q().ActorPin(ctx, postgres.ActorPinParams{
+		Actor: pgconv.UUIDToPgtype(actor),
+		ID:    pgconv.UUIDToPgtype(propertyID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return pgconv.TimestamptzToPtrTime(at), nil
+}
+
+// InsertActorPin pins the property for the actor: one atomic INSERT — a
+// re-pin keeps the original pin time (the PUT's idempotency), a fresh pin
+// takes the moment resolved from the application's clock; the effective
+// time travels back for the response.
+func (r *PropertyRepository) InsertActorPin(ctx context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error) {
+	at, err := r.q().InsertActorPin(ctx, postgres.InsertActorPinParams{
+		Actor:    pgconv.UUIDToPgtype(actor),
+		ID:       pgconv.UUIDToPgtype(propertyID),
+		PinnedAt: pgconv.TimePtrToPgtype(&pinnedAt),
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	// The column is NOT NULL — the row is the pin.
+	return at.Time, nil
+}
+
+// DeleteActorPin unpins: the personal row goes, an absent row deletes
+// nothing and succeeds.
+func (r *PropertyRepository) DeleteActorPin(ctx context.Context, actor, propertyID uuid.UUID) error {
+	return r.q().DeleteActorPin(ctx, postgres.DeleteActorPinParams{
+		Actor: pgconv.UUIDToPgtype(actor),
+		ID:    pgconv.UUIDToPgtype(propertyID),
+	})
+}
+
+// ActorPins reads the actor's personal pins for the listed properties — the
+// list overlay's batch.
+func (r *PropertyRepository) ActorPins(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	rows, err := r.q().ActorPins(ctx, postgres.ActorPinsParams{
+		Actor:       pgconv.UUIDToPgtype(actor),
+		PropertyIds: pgconv.UUIDSliceToPgtype(propertyIDs),
+	})
+	if err != nil {
+		return nil, err
+	}
+	pins := make(map[uuid.UUID]time.Time, len(rows))
+	for _, row := range rows {
+		pins[pgconv.UUIDFromPgtype(row.PropertyID)] = row.PinnedAt.Time
+	}
+	return pins, nil
+}
+
+// SetPropertyPhoto writes the photo columns in one UPDATE (ADR 0065): the
+// key and the sniffed content type move together, nils clear the photo —
+// one image per entity, no gallery. Existence and the edit capability are
+// proven by the application under the row lock; the scope is the property's
+// owner.
+func (r *PropertyRepository) SetPropertyPhoto(ctx context.Context, id, scope uuid.UUID, key, contentType *string) (domain.Property, error) {
+	row, err := r.q().SetPropertyPhoto(ctx, postgres.SetPropertyPhotoParams{
+		ID:               pgconv.UUIDToPgtype(id),
+		OwnerID:          pgconv.UUIDToPgtype(scope),
+		PhotoKey:         pgconv.StringPtrToPgtype(key),
+		PhotoContentType: pgconv.StringPtrToPgtype(contentType),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -265,31 +384,34 @@ func (r *PropertyRepository) CountActiveByOwner(ctx context.Context, scope uuid.
 	return int(count), nil
 }
 
+// CountArchivedByOwner counts the owner's archived rows — the «Архив»
+// button gate (issue #1233).
+func (r *PropertyRepository) CountArchivedByOwner(ctx context.Context, scope uuid.UUID) (int, error) {
+	count, err := r.q().CountArchivedPropertiesByOwner(ctx, pgconv.UUIDToPgtype(scope))
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
+// CountByOwnerAndType counts the owner's properties of the type in every
+// status (archived included, deleted gone) — the auto-name serial
+// (ticket #1001).
+func (r *PropertyRepository) CountByOwnerAndType(ctx context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error) {
+	count, err := r.q().CountPropertiesByOwnerAndType(ctx, postgres.CountPropertiesByOwnerAndTypeParams{
+		OwnerID: pgconv.UUIDToPgtype(scope),
+		Type:    string(propertyType),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
 func (r *PropertyRepository) Delete(ctx context.Context, id, scope uuid.UUID) error {
 	return r.q().DeleteProperty(ctx, postgres.DeletePropertyParams{
 		ID:      pgconv.UUIDToPgtype(id),
 		OwnerID: pgconv.UUIDToPgtype(scope),
-	})
-}
-
-func (r *PropertyRepository) DeleteOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
-	return r.q().DeleteOperationsByProperty(ctx, postgres.DeleteOperationsByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(scope),
-		PropertyID: pgconv.UUIDToPgtype(propertyID),
-	})
-}
-
-func (r *PropertyRepository) DeleteRecurringOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
-	return r.q().DeleteRecurringOperationsByProperty(ctx, postgres.DeleteRecurringOperationsByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(scope),
-		PropertyID: pgconv.UUIDToPgtype(propertyID),
-	})
-}
-
-func (r *PropertyRepository) DeleteLeasesByProperty(ctx context.Context, scope, propertyID uuid.UUID) error {
-	return r.q().DeleteLeasesByProperty(ctx, postgres.DeleteLeasesByPropertyParams{
-		OwnerID:    pgconv.UUIDToPgtype(scope),
-		PropertyID: pgconv.UUIDToPgtype(propertyID),
 	})
 }
 
@@ -303,24 +425,21 @@ func propertyFromRow(row postgres.Property) domain.Property {
 		attrs = domain.Attributes{}
 	}
 	return domain.Property{
-		ID:          pgconv.UUIDFromPgtype(row.ID),
-		OwnerID:     pgconv.UUIDFromPgtype(row.OwnerID),
-		Name:        row.Name,
-		Type:        domain.PropertyType(row.Type),
-		Address:     row.Address,
-		Description: pgconv.TextToString(row.Description),
-		Attributes:  attrs,
-		Status:      domain.PropertyStatus(row.Status),
-		CreatedAt:   row.CreatedAt.Time,
-		UpdatedAt:   row.UpdatedAt.Time,
+		ID:               pgconv.UUIDFromPgtype(row.ID),
+		OwnerID:          pgconv.UUIDFromPgtype(row.OwnerID),
+		Name:             row.Name,
+		Type:             domain.PropertyType(row.Type),
+		Address:          row.Address,
+		Description:      pgconv.TextToString(row.Description),
+		Attributes:       attrs,
+		Status:           domain.PropertyStatus(row.Status),
+		PhotoKey:         pgconv.TextToPtrString(row.PhotoKey),
+		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+		// The row carries no pin column: the actor's pin arrives through
+		// the ActorPin/ActorPins overlay (user_property_pins) — the domain's
+		// PinnedAt stays unset here by design, the global column went with
+		// the contract migration #1311.
 	}
-}
-
-// propertyFromCountsRow maps a property row plus its scalar projections
-// (overdue rent count, shared-access members count) to the domain model.
-func propertyFromCountsRow(row postgres.Property, overdueRentCount, membersCount int64) domain.Property {
-	p := propertyFromRow(row)
-	p.OverdueRentCount = int(overdueRentCount)
-	p.MembersCount = int(membersCount)
-	return p
 }

@@ -1,0 +1,237 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"testing"
+
+	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/objectstorage"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+// recordingRecorder captures every Record call so a test can assert the audit
+// entry was written with the right action and actor inside the transaction.
+type recordingRecorder struct {
+	auditapp.Noop
+	entries []auditdomain.Entry
+	err     error
+}
+
+func (r *recordingRecorder) Record(_ context.Context, entry auditdomain.Entry) error {
+	if r.err != nil {
+		return r.err
+	}
+	r.entries = append(r.entries, entry)
+	return nil
+}
+
+func (r *recordingRecorder) WithTx(transaction.Tx) auditapp.Recorder { return r }
+
+// profileHarness wires a ProfileService to a fakeUoW + the shared identity
+// fakes, returning every piece the tests need to assert behavior.
+type profileHarness struct {
+	*fakeStores
+	svc     *ProfileService
+	audit   *recordingRecorder
+	photos  *objectstorage.FakeStorage
+	checker *fakeSharedChecker
+}
+
+func newProfileHarness(t *testing.T) *profileHarness {
+	t.Helper()
+	stores := newFakeStores()
+	audit := &recordingRecorder{}
+	photos := objectstorage.NewFakeStorage()
+	checker := &fakeSharedChecker{}
+	svc := NewProfileService(stores.factory(audit), photos, checker, slog.New(slog.DiscardHandler))
+	return &profileHarness{fakeStores: stores, svc: svc, audit: audit, photos: photos, checker: checker}
+}
+
+// seedProfileUser creates a verified owner in the fake user repo and returns it.
+func seedProfileUser(t *testing.T, users *fakeUserRepo) domain.User {
+	t.Helper()
+	phone := mustPhone(t, "+79160000001")
+	user, err := domain.NewOwner(phone)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	user.Email = new(mustEmail(t, "owner@example.com"))
+	user.EmailVerifiedAt = &testNow
+	users.byPhone[phone.String()] = user
+	return user
+}
+
+// TestProfileService_UpdateProfile_UpdatesPersonalData proves a name change is
+// persisted and the transaction commits.
+func TestProfileService_UpdateProfile_UpdatesPersonalData(t *testing.T) {
+	t.Parallel()
+	h := newProfileHarness(t)
+	user := seedProfileUser(t, h.users)
+
+	updated, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Name: new("Ivan")})
+	if err != nil {
+		t.Fatalf("UpdateProfile error = %v", err)
+	}
+	if updated.Name == nil || *updated.Name != "Ivan" {
+		t.Fatalf("updated name = %v, want Ivan", updated.Name)
+	}
+	if h.beginner.committed != 1 {
+		t.Errorf("committed = %d, want 1", h.beginner.committed)
+	}
+	if h.beginner.rolledBack != 0 {
+		t.Errorf("rolledBack = %d, want 0", h.beginner.rolledBack)
+	}
+}
+
+// TestProfileService_UpdateProfile_EmailIsUntouchable proves the profile
+// update cannot move the email (issue #721): the command carries no email
+// field, so the stored address and its verification stamp survive any profile
+// edit — the address changes only through the confirmed two-code flow.
+func TestProfileService_UpdateProfile_EmailIsUntouchable(t *testing.T) {
+	t.Parallel()
+	h := newProfileHarness(t)
+	user := seedProfileUser(t, h.users)
+
+	updated, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{
+		Name: new("Ivan"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile error = %v", err)
+	}
+	if updated.Email == nil || updated.Email.String() != "owner@example.com" {
+		t.Fatalf("email = %v, want owner@example.com (untouched)", updated.Email)
+	}
+	if updated.EmailVerifiedAt == nil {
+		t.Fatal("EmailVerifiedAt = nil, want preserved")
+	}
+	if updated.Name == nil || *updated.Name != "Ivan" {
+		t.Fatalf("name = %v, want Ivan (the edit itself applied)", updated.Name)
+	}
+}
+
+// TestProfileService_UpdateProfile_RecordsAuditInTx proves the audit entry is
+// recorded with the profile-updated action for the acting user, and the
+// transaction commits — so audit shares the mutation's transaction (ADR 0020).
+func TestProfileService_UpdateProfile_RecordsAuditInTx(t *testing.T) {
+	t.Parallel()
+	h := newProfileHarness(t)
+	user := seedProfileUser(t, h.users)
+
+	if _, err := h.svc.UpdateProfile(context.Background(), user.ID,
+		UpdateProfileCommand{Name: new("Ivan"), Surname: new("Petrov")}); err != nil {
+		t.Fatalf("UpdateProfile error = %v", err)
+	}
+	if len(h.audit.entries) != 1 {
+		t.Fatalf("audit entries = %d, want 1", len(h.audit.entries))
+	}
+	entry := h.audit.entries[0]
+	if entry.Action != auditdomain.ActionProfileUpdated {
+		t.Errorf("audit action = %q, want %q", entry.Action, auditdomain.ActionProfileUpdated)
+	}
+	if entry.EntityType != auditdomain.EntityUser {
+		t.Errorf("audit entityType = %q, want %q", entry.EntityType, auditdomain.EntityUser)
+	}
+	if entry.ActorID == nil || *entry.ActorID != user.ID {
+		t.Errorf("audit actorID = %v, want %s", entry.ActorID, user.ID)
+	}
+	if entry.EntityID == nil || *entry.EntityID != user.ID {
+		t.Errorf("audit entityID = %v, want %s", entry.EntityID, user.ID)
+	}
+	if h.beginner.committed != 1 {
+		t.Errorf("committed = %d, want 1 (audit in-tx, not early-committed)", h.beginner.committed)
+	}
+}
+
+// TestProfileService_UpdateProfile_RollsBackOnGetError proves a failure to load
+// the user aborts the transaction and returns the error.
+func TestProfileService_UpdateProfile_RollsBackOnGetError(t *testing.T) {
+	t.Parallel()
+	h := newProfileHarness(t)
+	// No seeded user → GetByIDForUpdate returns ErrNotFound.
+
+	_, err := h.svc.UpdateProfile(context.Background(), uuid.Must(uuid.NewV7()), UpdateProfileCommand{Name: new("Ivan")})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("UpdateProfile error = %v, want wrap of ErrNotFound", err)
+	}
+	if h.beginner.committed != 0 {
+		t.Errorf("committed = %d, want 0 on error", h.beginner.committed)
+	}
+	if h.beginner.rolledBack != 1 {
+		t.Errorf("rolledBack = %d, want 1 on error", h.beginner.rolledBack)
+	}
+	if len(h.audit.entries) != 0 {
+		t.Errorf("audit entries = %d, want 0 on rollback", len(h.audit.entries))
+	}
+}
+
+// TestProfileService_UpdateProfile_RollsBackOnAuditError proves a recorder
+// failure rolls the transaction back and returns the wrapped error, so audit
+// failure cannot leave a committed mutation without its audit entry.
+func TestProfileService_UpdateProfile_RollsBackOnAuditError(t *testing.T) {
+	t.Parallel()
+	h := newProfileHarness(t)
+	user := seedProfileUser(t, h.users)
+	auditErr := errors.New("audit writer down")
+	h.audit.err = auditErr
+
+	_, err := h.svc.UpdateProfile(context.Background(), user.ID, UpdateProfileCommand{Name: new("Ivan")})
+	if !errors.Is(err, auditErr) {
+		t.Fatalf("UpdateProfile error = %v, want wrap of %v", err, auditErr)
+	}
+	if h.beginner.committed != 0 {
+		t.Errorf("committed = %d, want 0 on audit error", h.beginner.committed)
+	}
+	if h.beginner.rolledBack != 1 {
+		t.Errorf("rolledBack = %d, want 1 on audit error", h.beginner.rolledBack)
+	}
+}
+
+// TestProfileService_UsesRunInTx proves UpdateProfile goes through the UoW seam:
+// the user repository is bound to the transaction exactly once and the UoW
+// commits. This is the core ADR 0033 assertion for the Profile migration.
+func TestProfileService_UsesRunInTx(t *testing.T) {
+	t.Parallel()
+	users := &countingUserRepo{fakeUserRepo: newFakeUserRepo()}
+	codes := newFakeCodeRepo()
+	attempts := newFakeAttemptRepo()
+	sessions := newFakeSessionRepo()
+	beginner := &fakeBeginner{}
+	factory := NewTxStoreFactory(users, codes, attempts, sessions, newFakeGrantRepo(), &recordingRecorder{}, nil, &fakeUoW{beginner: beginner})
+	svc := NewProfileService(factory, objectstorage.NewFakeStorage(), &fakeSharedChecker{}, slog.New(slog.DiscardHandler))
+	seedProfileUser(t, users.fakeUserRepo)
+
+	if _, err := svc.UpdateProfile(context.Background(),
+		users.fakeUserRepo.byPhone["+79160000001"].ID, UpdateProfileCommand{Name: new("Ivan")}); err != nil {
+		t.Fatalf("UpdateProfile error = %v", err)
+	}
+	if users.withTxCalls != 1 {
+		t.Errorf("users.WithTx calls = %d, want 1 (must bind inside runInTx)", users.withTxCalls)
+	}
+	if beginner.committed != 1 {
+		t.Errorf("committed = %d, want 1", beginner.committed)
+	}
+}
+
+// TestProfileService_Me_ReadsOutsideTx proves Me is a plain read that does not
+// open a transaction (ADR 0033: reads stay outside runInTx).
+func TestProfileService_Me_ReadsOutsideTx(t *testing.T) {
+	t.Parallel()
+	h := newProfileHarness(t)
+	user := seedProfileUser(t, h.users)
+
+	got, err := h.svc.Me(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("Me error = %v", err)
+	}
+	if got.ID != user.ID {
+		t.Fatalf("Me user ID = %s, want %s", got.ID, user.ID)
+	}
+	if h.beginner.begun != 0 {
+		t.Errorf("tx begun = %d, want 0 for a read", h.beginner.begun)
+	}
+}

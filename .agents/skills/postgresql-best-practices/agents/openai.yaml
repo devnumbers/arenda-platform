@@ -1,0 +1,3 @@
+interface:
+  display_name: "PostgreSQL"
+  short_description: "This repo's database rules and primary sources"

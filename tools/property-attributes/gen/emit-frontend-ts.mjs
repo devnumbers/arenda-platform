@@ -82,7 +82,7 @@ ${emitFieldList(t, catalog)}
 
   return `${HEADER}
 
-import type { PropertyType } from '@/entities/property/model/types';
+import type { PropertyType } from '@/entities/property';
 import type { AttrKey } from './attr-keys';
 
 export type AttrGroup = 'about_object' | 'about_building' | 'about_house' | 'about_land';
@@ -231,7 +231,7 @@ export function emitValidate(catalog) {
 
   return `${HEADER}
 
-import type { PropertyType, PropertyAttributes } from '@/entities/property/model/types';
+import type { PropertyType, PropertyAttributes } from '@/entities/property';
 import { fieldsForType, findField } from './catalog';
 import type { AttrKey } from './attr-keys';
 

@@ -7,7 +7,10 @@ dependency vulnerability scanning moved from the osv-scanner job in
 `security.yml` to Dependabot — security updates plus grouped weekly version
 updates targeting `dev` (`.github/dependabot.yml`) — with govulncheck in
 `ci.yml`; `security.yml` keeps only SAST (semgrep) and the nightly trivy-fs
-scan)
+scan; amended 2026-08-21: §5 superseded by
+[ADR 0045](./0045-github-hosted-runners.md) — the pipeline moved to
+GitHub-hosted runners and the VPS runner is decommissioned; everything else
+in this ADR stands)
 
 ## Context
 

@@ -7,7 +7,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// Wire spellings of the subscription periods: ParseSubscriptionPeriod tests
+// must pin the raw wire values, not the constants they map to.
+const (
+	wirePeriodMonth = "month"
+	wirePeriodYear  = "year"
+)
+
 func TestClassifyTariffChange(t *testing.T) {
+	t.Parallel()
 	basic := Tariff{
 		ID:                  uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 		Name:                TariffBasic,
@@ -70,6 +78,7 @@ func TestClassifyTariffChange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := ClassifyTariffChange(tt.current, tt.next)
 			if got != tt.want {
 				t.Errorf("ClassifyTariffChange() = %v, want %v", got, tt.want)
@@ -114,8 +123,8 @@ func TestParseSubscriptionPeriod(t *testing.T) {
 		want    SubscriptionPeriod
 		wantErr error
 	}{
-		{"month", "month", PeriodMonth, nil},
-		{"year", "year", PeriodYear, nil},
+		{"month", wirePeriodMonth, PeriodMonth, nil},
+		{"year", wirePeriodYear, PeriodYear, nil},
 		{"empty", "", "", ErrInvalidPeriod},
 		{"invalid", "weekly", "", ErrInvalidPeriod},
 	}
@@ -128,6 +137,183 @@ func TestParseSubscriptionPeriod(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("ParseSubscriptionPeriod() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestTariffPrice pins the price-for-period rule (issue #283): the period
+// selects the price field, and an unknown period is an error instead of a
+// silent fallback to the monthly price.
+func TestTariffPrice(t *testing.T) {
+	t.Parallel()
+	pro := Tariff{Name: TariffPro, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000}
+	free := Tariff{Name: TariffBasic, MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0}
+
+	tests := []struct {
+		name    string
+		tariff  Tariff
+		period  SubscriptionPeriod
+		want    int64
+		wantErr error
+	}{
+		{"pro monthly", pro, PeriodMonth, 49000, nil},
+		{"pro yearly", pro, PeriodYear, 440000, nil},
+		{"free monthly", free, PeriodMonth, 0, nil},
+		{"free yearly", free, PeriodYear, 0, nil},
+		{"empty period", pro, "", 0, ErrInvalidPeriod},
+		{"unknown period", pro, "weekly", 0, ErrInvalidPeriod},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := tt.tariff.Price(tt.period)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Price() error = %v, want %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("Price() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestTariffValidate pins the admin-editable tariff invariants (issue #256):
+// prices are non-negative kopecks, a price never exceeds the sanity ceiling
+// (issue #425), and the property limit is -1 (unlimited) or a non-negative
+// count.
+func TestTariffValidate(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		tariff  Tariff
+		wantErr error
+	}{
+		{
+			"free plan",
+			Tariff{Name: TariffBasic, ActivePropertyLimit: 1, MonthlyPriceKopecks: 0, YearlyPriceKopecks: 0},
+			nil,
+		},
+		{
+			"unlimited limit",
+			Tariff{
+				Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit,
+				MonthlyPriceKopecks: 99000, YearlyPriceKopecks: 890000,
+			},
+			nil,
+		},
+		{
+			"monthly price at the ceiling",
+			Tariff{
+				Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit,
+				MonthlyPriceKopecks: MaxTariffPriceKopecks, YearlyPriceKopecks: 890000,
+			},
+			nil,
+		},
+		{
+			"yearly price at the ceiling",
+			Tariff{
+				Name: TariffBusiness, ActivePropertyLimit: UnlimitedPropertyLimit,
+				MonthlyPriceKopecks: 99000, YearlyPriceKopecks: MaxTariffPriceKopecks,
+			},
+			nil,
+		},
+		{"zero limit", Tariff{Name: TariffBasic, ActivePropertyLimit: 0}, nil},
+		{
+			"negative monthly price",
+			Tariff{Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: -1, YearlyPriceKopecks: 440000},
+			ErrInvalidTariffPricing,
+		},
+		{
+			"negative yearly price",
+			Tariff{Name: TariffPro, ActivePropertyLimit: 5, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: -1},
+			ErrInvalidTariffPricing,
+		},
+		{
+			"monthly price above the ceiling",
+			Tariff{
+				Name: TariffPro, ActivePropertyLimit: 5,
+				MonthlyPriceKopecks: MaxTariffPriceKopecks + 1, YearlyPriceKopecks: 440000,
+			},
+			ErrInvalidTariffPricing,
+		},
+		{
+			"yearly price above the ceiling",
+			Tariff{
+				Name: TariffPro, ActivePropertyLimit: 5,
+				MonthlyPriceKopecks: 49000, YearlyPriceKopecks: MaxTariffPriceKopecks + 1,
+			},
+			ErrInvalidTariffPricing,
+		},
+		{
+			"limit below unlimited",
+			Tariff{Name: TariffPro, ActivePropertyLimit: -2, MonthlyPriceKopecks: 49000, YearlyPriceKopecks: 440000},
+			ErrInvalidTariffPricing,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if err := tt.tariff.Validate(); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Validate() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestNewTariff proves the constructor mints an id, keeps the requested
+// fields and rejects invalid pricing before any persistence sees it
+// (issue #256).
+func TestNewTariff(t *testing.T) {
+	t.Parallel()
+
+	tariff, err := NewTariff(TariffPro, 5, 49000, 440000, true)
+	if err != nil {
+		t.Fatalf("NewTariff() error = %v", err)
+	}
+	if tariff.ID == uuid.Nil {
+		t.Error("ID = nil, want a minted uuid")
+	}
+	if tariff.Name != TariffPro || tariff.ActivePropertyLimit != 5 ||
+		tariff.MonthlyPriceKopecks != 49000 || tariff.YearlyPriceKopecks != 440000 || !tariff.IsActive {
+		t.Errorf("NewTariff() = %+v, want the requested fields kept", tariff)
+	}
+
+	if _, err := NewTariff(TariffPro, 5, -49000, 440000, true); !errors.Is(err, ErrInvalidTariffPricing) {
+		t.Errorf("NewTariff(invalid) error = %v, want %v", err, ErrInvalidTariffPricing)
+	}
+	if _, err := NewTariff(TariffPro, 5, MaxTariffPriceKopecks+1, 440000, true); !errors.Is(err, ErrInvalidTariffPricing) {
+		t.Errorf("NewTariff(monthly above ceiling) error = %v, want %v", err, ErrInvalidTariffPricing)
+	}
+	if _, err := NewTariff(TariffPro, 5, 49000, MaxTariffPriceKopecks+1, true); !errors.Is(err, ErrInvalidTariffPricing) {
+		t.Errorf("NewTariff(yearly above ceiling) error = %v, want %v", err, ErrInvalidTariffPricing)
+	}
+	if _, err := NewTariff("premium", 5, 49000, 440000, true); !errors.Is(err, ErrInvalidTariff) {
+		t.Errorf("NewTariff(unknown name) error = %v, want %v", err, ErrInvalidTariff)
+	}
+}
+
+// TestTariff_IsPaid proves the paid-sections gate's domain rule (карта #997):
+// every plan except the free basic one grants the paid platform sections. The
+// polarity is "not basic" so a future paid plan added to the name enum is
+// covered by default; the free basic is the only gate.
+func TestTariff_IsPaid(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		tariff Tariff
+		want   bool
+	}{
+		{"basic is free", Tariff{Name: TariffBasic}, false},
+		{"pro is paid", Tariff{Name: TariffPro}, true},
+		{"business is paid", Tariff{Name: TariffBusiness}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.tariff.IsPaid(); got != tt.want {
+				t.Fatalf("IsPaid(%s) = %v, want %v", tt.tariff.Name, got, tt.want)
 			}
 		})
 	}

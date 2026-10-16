@@ -1,0 +1,260 @@
+'use client';
+
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
+import { apiClient } from '@/shared/api/client';
+import type { ApiError } from '@/shared/api/errors';
+import { mapContact } from '@/entities/contact';
+import type {
+  Contact,
+  ContactCreateCommand,
+  ContactUpdateCommand,
+} from '@/entities/contact';
+import { contactKeys } from '@/shared/api/query-keys';
+import type { components } from '@/shared/api/dto';
+
+import {
+  contactBookQuery,
+  contactDetailQueryOptions,
+  contactsListQuery,
+  deleteContactPhoto,
+  uploadContactPhoto,
+  type ContactBookOrder,
+  type ContactBookSort,
+  type ContactsPageData,
+} from './queries';
+
+export type { ContactBookSort, ContactBookOrder, ContactsPageData };
+type ContactResponse = components['schemas']['ContactResponse'];
+
+/**
+ * Книга контактов объекта (ADR 0054, экран #508): порции по 50 keyset-курсором
+ * (#600) — pageParam это курсор прошлого ответа, без него чтение с начала.
+ * search — серверный регистронезависимый подстрочный фильтр по имени,
+ * телефону, почте, имени пользователя мессенджера и роли ('' = без фильтра).
+ * sort — серверная ось сортировки ('created' — «свежие сверху», #847),
+ * order — направление ('asc'/'desc', дефолт asc); оба едут в ключ кэша:
+ * срезы разных осей — разные наборы, один ключ смешал бы их.
+ * Чтение через view-гейт объекта: участник с ролью CanView видит привязанные
+ * к объекту контакты (403 — проблема Forbidden).
+ * keepPreviousData — прежний срез держится на экране, пока едет запрос
+ * с новым ?search= (набор не мигает скелетоном, канон платежей #609);
+ * смена propertyId держит список прежнего объекта до прихода нового —
+ * осознанно, как у платежей.
+ */
+export function useContacts(
+  propertyId: string,
+  search = '',
+  options: {
+    readonly enabled?: boolean;
+    readonly sort?: 'created';
+    readonly order?: ContactBookOrder;
+  } = {},
+): UseInfiniteQueryResult<Contact[], ApiError> {
+  // sort/order едут в ключ кэша: срез 'created'desc и дефолтный 'name'asc —
+  // разные наборы, один ключ смешал бы их (канон contactKeys.list).
+  const sort = options.sort ?? 'name';
+  const order = options.order ?? 'asc';
+  return useInfiniteQuery({
+    ...contactsListQuery({ propertyId, search, sort, order }),
+    select: (data: InfiniteData<ContactsPageData>) =>
+      data.pages.flatMap((page) => page.items),
+    placeholderData: keepPreviousData,
+    enabled: (options.enabled ?? true) && Boolean(propertyId),
+  });
+}
+
+/**
+ * Плоский список всей видимой книги (глобальная страница контактов, макет
+ * 1726:65083): GET /contacts без property_id — сервер отдаёт объединённый
+ * срез (свои карточки + привязанные к доступным объектам, ADR 0028/0054) с
+ * серверными search/sort/order; propertyName в ответе — имя привязанного
+ * объекта для подзаголовков и групп. Порции по 50 листаются keyset-курсором
+ * (#600): pageParam — курсор прошлого ответа, смена queryKey начинает свежий
+ * обход с пустого курсора — sentinel не наследует позицию прошлых порций.
+ * Склейка порций без дедупа: один сортировочный ключ, повторы keyset не
+ * порождает (решение тикета #600).
+ */
+export function useContactBook(
+  search = '',
+  sort: ContactBookSort = 'name',
+  order: ContactBookOrder = 'asc',
+): UseInfiniteQueryResult<Contact[], ApiError> {
+  return useInfiniteQuery({
+    ...contactBookQuery(search, sort, order),
+    select: (data: InfiniteData<ContactsPageData>) =>
+      data.pages.flatMap((page) => page.items),
+    // Набор в поиске и смена сортировки держат прежнюю выдачу, пока едет
+    // новый запрос (#609, канон платежей): скелетон — только когда данных
+    // нет вовсе.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Создание карточки (экран #509): POST /contacts с уже нормализованной
+ * командой (трим и телефон собирает contact-form). Инвалидация — вся книга
+ * contacts: список объекта читается с серверным ?search=, точечно
+ * инвалидовать его нельзя.
+ */
+export function useCreateContact(): UseMutationResult<
+  Contact,
+  ApiError,
+  ContactCreateCommand
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (command: ContactCreateCommand) => {
+      const response = await apiClient<ContactResponse>('/contacts', {
+        method: 'POST',
+        body: JSON.stringify(command),
+      });
+      return mapContact(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactKeys.all });
+    },
+  });
+}
+
+/**
+ * Карточка контакта (экран #510): GET /contacts/{id}. 403/404 — состояния
+ * экрана (доступ по view-гейту привязанного объекта, ADR 0028).
+ */
+export function useContact(contactId: string): UseQueryResult<Contact, ApiError> {
+  return useQuery({
+    ...contactDetailQueryOptions({ contactId }),
+    enabled: Boolean(contactId),
+  });
+}
+
+/**
+ * Правка карточки (экран #510): PATCH /contacts/{id} полной командой
+ * формы (пустая строка очищает текст, propertyId: null снимает привязку).
+ * Инвалидация — вся книга contacts: список объекта читается с серверным
+ * ?search=, точечно инвалидовать его нельзя.
+ */
+export function useUpdateContact(
+  contactId: string,
+): UseMutationResult<Contact, ApiError, ContactUpdateCommand> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (command: ContactUpdateCommand) => {
+      const response = await apiClient<ContactResponse>(
+        `/contacts/${encodeURIComponent(contactId)}`,
+        { method: 'PATCH', body: JSON.stringify(command) },
+      );
+      return mapContact(response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactKeys.all });
+    },
+  });
+}
+
+/**
+ * Удаление карточки (экран #510): DELETE /contacts/{id}; контакт
+ * отвязывается от аренд и объектов на сервере. Кэш книги снимается
+ * целиком (deletes — removeQueries, конвенция react-query): данные
+ * удалены, списки перечитаются при следующем маунте.
+ */
+export function useDeleteContact(
+  contactId: string,
+): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      await apiClient<void>(`/contacts/${encodeURIComponent(contactId)}`, {
+        method: 'DELETE',
+      });
+    },
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: contactKeys.all });
+    },
+  });
+}
+
+/**
+ * Загрузка/замена фото карточки (ADR 0065, тикет #1229): ответ несёт
+ * обновлённый контакт — он сразу становится детальным кэшем (фото видно
+ * без рефетча), книга инвалидается как обычная мутация карточки. Бастер
+ * photoBuster инкрементится рядом: путь выдачи не меняется, без него
+ * <img> показал бы прежние байты из кэша браузера (private, max-age=300).
+ */
+export function useUploadContactPhoto(): UseMutationResult<
+  Contact,
+  ApiError,
+  { id: string; file: File }
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: ({ id, file }) => uploadContactPhoto({ id, file }),
+    onSuccess: (contact, { id }) => {
+      queryClient.setQueryData(contactKeys.detail(id), contact);
+      bumpContactPhotoBuster(queryClient, id);
+      void queryClient.invalidateQueries({ queryKey: contactKeys.all });
+    },
+  });
+}
+
+/**
+ * Удаление фото карточки (ADR 0065): 204 без тела — деталь патчится
+ * локально (photoUrl без фото) и инвалидается вместе с книгой; бастер
+ * инкрементится, чтобы повторная загрузка в окно кэша выдачи перечитала
+ * байты.
+ */
+export function useDeleteContactPhoto(): UseMutationResult<
+  void,
+  ApiError,
+  { id: string }
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: ({ id }) => deleteContactPhoto({ id }),
+    onSuccess: (_, { id }) => {
+      queryClient.setQueryData<Contact>(contactKeys.detail(id), (prev) =>
+        prev === undefined ? prev : { ...prev, photoUrl: undefined },
+      );
+      bumpContactPhotoBuster(queryClient, id);
+      void queryClient.invalidateQueries({ queryKey: contactKeys.all });
+    },
+  });
+}
+
+/** Инкремент бастера кэша выдачи (см. contactKeys.photoBuster) — общая
+ * точка фото-мутаций: одна запись, все читатели перерисовывают src. */
+function bumpContactPhotoBuster(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string,
+): void {
+  queryClient.setQueryData<number>(
+    contactKeys.photoBuster(id),
+    (version = 0) => version + 1,
+  );
+}
+
+/**
+ * Текущий бастер кэша выдачи фото карточки (тикет #1229): чтение из кэша
+ * без сети — пишут только фото-мутации (bumpContactPhotoBuster), ноль до
+ * первой мутации сессии. Подписка реактивна: слот и карточка
+ * перерисовывают src вместе с любым инкрементом.
+ */
+export function useContactPhotoBuster(contactId: string): number {
+  const { data } = useQuery({
+    queryKey: contactKeys.photoBuster(contactId),
+    queryFn: () => 0,
+    enabled: false,
+    initialData: 0,
+    staleTime: Infinity,
+  });
+  return data;
+}

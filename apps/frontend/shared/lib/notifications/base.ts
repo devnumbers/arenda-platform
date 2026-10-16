@@ -6,17 +6,22 @@ import {
   type ToastBodyProps,
   type ToastVariant,
 } from '@/shared/ui/toast/ToastBody';
-import { CloseToastButton } from '@/shared/ui/toast/ToastProvider';
+import { CloseToastButton, TOAST_AUTO_CLOSE_MS } from '@/shared/ui/toast/ToastProvider';
+import { showDisplacingToast } from '@/shared/ui/toast/show-displacing-toast';
 import type {
   NotificationKey,
   ScenarioOptions,
 } from './types';
 
+// Автоуход всех тостов — канон TOAST_AUTO_CLOSE_MS (решение владельца
+// 28.09, аудит #876 — как в iOS); hover и потеря фокуса ставят таймер
+// на паузу (ToastProvider). Ключи остаются раздельными — длительности
+// типов могут разойтись решением владельца.
 const DEFAULT_DURATIONS = {
-  success: 4000,
-  error: 4000,
-  info: 4000,
-  warning: 4000,
+  success: TOAST_AUTO_CLOSE_MS,
+  error: TOAST_AUTO_CLOSE_MS,
+  info: TOAST_AUTO_CLOSE_MS,
+  warning: TOAST_AUTO_CLOSE_MS,
 } as const;
 
 function normalizeError(error: unknown): string {
@@ -55,16 +60,18 @@ function error(
     typeof titleOrError === 'string'
       ? titleOrError
       : normalizeError(titleOrError);
-  return String(
-    toast.error(
-      ({ closeToast }) =>
-        createElement(ToastBody, {
-          ...toastContent('error', title, options),
-          closeToast,
-        }),
-      {
-        autoClose: options?.duration ?? DEFAULT_DURATIONS.error,
-      },
+  return showDisplacingToast(() =>
+    String(
+      toast.error(
+        ({ closeToast }) =>
+          createElement(ToastBody, {
+            ...toastContent('error', title, options),
+            closeToast,
+          }),
+        {
+          autoClose: options?.duration ?? DEFAULT_DURATIONS.error,
+        },
+      ),
     ),
   );
 }
@@ -91,58 +98,66 @@ let promiseToastCounter = 0;
 
 export const notify: NotifyBase = {
   success: (title, options): NotificationKey =>
-    String(
-      toast.success(
-        ({ closeToast }) =>
-          createElement(ToastBody, {
-            ...toastContent('success', title, options),
-            closeToast,
-          }),
-        { autoClose: options?.duration ?? DEFAULT_DURATIONS.success },
+    showDisplacingToast(() =>
+      String(
+        toast.success(
+          ({ closeToast }) =>
+            createElement(ToastBody, {
+              ...toastContent('success', title, options),
+              closeToast,
+            }),
+          { autoClose: options?.duration ?? DEFAULT_DURATIONS.success },
+        ),
       ),
     ),
 
   error,
 
   info: (title, options): NotificationKey =>
-    String(
-      toast.info(
-        ({ closeToast }) =>
-          createElement(ToastBody, {
-            ...toastContent('info', title, options),
-            closeToast,
-          }),
-        { autoClose: options?.duration ?? DEFAULT_DURATIONS.info },
+    showDisplacingToast(() =>
+      String(
+        toast.info(
+          ({ closeToast }) =>
+            createElement(ToastBody, {
+              ...toastContent('info', title, options),
+              closeToast,
+            }),
+          { autoClose: options?.duration ?? DEFAULT_DURATIONS.info },
+        ),
       ),
     ),
 
   warning: (title, options): NotificationKey =>
-    String(
-      toast.warning(
-        ({ closeToast }) =>
-          createElement(ToastBody, {
-            ...toastContent('warning', title, options),
-            closeToast,
-          }),
-        { autoClose: options?.duration ?? DEFAULT_DURATIONS.warning },
+    showDisplacingToast(() =>
+      String(
+        toast.warning(
+          ({ closeToast }) =>
+            createElement(ToastBody, {
+              ...toastContent('warning', title, options),
+              closeToast,
+            }),
+          { autoClose: options?.duration ?? DEFAULT_DURATIONS.warning },
+        ),
       ),
     ),
 
   // toast.loading hides the close button and disables dragging by default;
   // both are re-enabled to match the previous behavior.
   loading: (title, options): NotificationKey =>
-    String(
-      toast.loading(
-        ({ closeToast }) =>
-          createElement(ToastBody, {
-            ...toastContent('loading', title, options),
-            closeToast,
-          }),
-        {
-          autoClose: false,
-          closeButton: CloseToastButton,
-          draggable: true,
-        },
+    showDisplacingToast(() =>
+      String(
+        toast.loading(
+          ({ closeToast }) =>
+            createElement(ToastBody, {
+              ...toastContent('loading', title, options),
+              closeToast,
+            }),
+          {
+            autoClose: false,
+            closeButton: CloseToastButton,
+            draggable: true,
+          },
+        ),
       ),
     ),
 
@@ -161,49 +176,50 @@ export const notify: NotifyBase = {
     promiseToastCounter += 1;
     const key = `promise-${promiseToastCounter}`;
 
-    void toast.promise<T>(
-      promise,
-      {
-        pending: {
-          render: ({ closeToast }) =>
-            createElement(ToastBody, {
-              variant: 'loading',
-              title: options.loading,
-              closeToast,
-            }),
-          closeButton: CloseToastButton,
-          draggable: true,
+    return showDisplacingToast(() => {
+      void toast.promise<T>(
+        promise,
+        {
+          pending: {
+            render: ({ closeToast }) =>
+              createElement(ToastBody, {
+                variant: 'loading',
+                title: options.loading,
+                closeToast,
+              }),
+            closeButton: CloseToastButton,
+            draggable: true,
+          },
+          success: {
+            render: ({ data, closeToast }) =>
+              createElement(ToastBody, {
+                variant: 'success',
+                title:
+                  typeof options.success === 'function'
+                    ? options.success(data)
+                    : options.success,
+                closeToast,
+              }),
+            autoClose: DEFAULT_DURATIONS.success,
+            closeButton: CloseToastButton,
+          },
+          error: {
+            render: ({ data, closeToast }) =>
+              createElement(ToastBody, {
+                variant: 'error',
+                title:
+                  typeof options.error === 'function'
+                    ? options.error(data)
+                    : options.error,
+                closeToast,
+              }),
+            autoClose: DEFAULT_DURATIONS.error,
+            closeButton: CloseToastButton,
+          },
         },
-        success: {
-          render: ({ data, closeToast }) =>
-            createElement(ToastBody, {
-              variant: 'success',
-              title:
-                typeof options.success === 'function'
-                  ? options.success(data)
-                  : options.success,
-              closeToast,
-            }),
-          autoClose: DEFAULT_DURATIONS.success,
-          closeButton: CloseToastButton,
-        },
-        error: {
-          render: ({ data, closeToast }) =>
-            createElement(ToastBody, {
-              variant: 'error',
-              title:
-                typeof options.error === 'function'
-                  ? options.error(data)
-                  : options.error,
-              closeToast,
-            }),
-          autoClose: DEFAULT_DURATIONS.error,
-          closeButton: CloseToastButton,
-        },
-      },
-      { toastId: key },
-    );
-
-    return key;
+        { toastId: key },
+      );
+      return key;
+    });
   },
 };

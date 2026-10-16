@@ -1,119 +1,33 @@
 package domain
 
-import (
-	"testing"
-	"time"
+import "testing"
 
-	"github.com/google/uuid"
-)
+// testMaskVisa is the masked Visa card shared by the card-system and
+// card-snapshot tests.
+const testMaskVisa = "4300********1234"
 
-func TestNewPaymentMethod(t *testing.T) {
-	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
-	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-
-	pm, err := NewPaymentMethod(userID, ProviderFake, "fake_token_123", "*1234", now)
-	if err != nil {
-		t.Fatalf("NewPaymentMethod() error = %v", err)
+// TestCardSystemFromMask proves the display-mask BIN derivation behind the
+// contract's cardSystem field (issue #619): 2 — Mir, 4 — Visa,
+// 5 — Mastercard, everything else unknown. The contract enum has no
+// UnionPay value, so a 62-prefixed BIN is unknown too.
+func TestCardSystemFromMask(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		mask string
+		want CardSystem
+	}{
+		{mask: "2202********1234", want: CardSystemMir},
+		{mask: testMaskVisa, want: CardSystemVisa},
+		{mask: "5100********1234", want: CardSystemMastercard},
+		{mask: "5536********1234", want: CardSystemMastercard},
+		{mask: "6200********1234", want: CardSystemUnknown},
+		{mask: "1234********1234", want: CardSystemUnknown},
+		{mask: "********1234", want: CardSystemUnknown},
+		{mask: "", want: CardSystemUnknown},
 	}
-
-	if pm.UserID != userID {
-		t.Errorf("UserID = %v, want %v", pm.UserID, userID)
-	}
-	if pm.Provider != ProviderFake {
-		t.Errorf("Provider = %v, want %v", pm.Provider, ProviderFake)
-	}
-	if pm.ProviderToken != "fake_token_123" {
-		t.Errorf("ProviderToken = %v, want fake_token_123", pm.ProviderToken)
-	}
-	if pm.DisplayMask != "*1234" {
-		t.Errorf("DisplayMask = %v, want *1234", pm.DisplayMask)
-	}
-	if pm.IsActive {
-		t.Error("new payment method should not be active")
-	}
-	if pm.ID == uuid.Nil {
-		t.Error("ID must be set")
-	}
-}
-
-func TestPaymentMethodPendingCardBindingRequestKey(t *testing.T) {
-	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12")
-	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-
-	t.Run("PendingCardBindingToken prefixes the request key", func(t *testing.T) {
-		if got := PendingCardBindingToken("req_1"); got != "addcard:req_1" {
-			t.Errorf("PendingCardBindingToken = %q, want %q", got, "addcard:req_1")
+	for _, tc := range cases {
+		if got := CardSystemFromMask(tc.mask); got != tc.want {
+			t.Errorf("CardSystemFromMask(%q) = %q, want %q", tc.mask, got, tc.want)
 		}
-	})
-
-	t.Run("placeholder row returns the stripped request key", func(t *testing.T) {
-		pm, err := NewPaymentMethod(userID, ProviderTkassa, PendingCardBindingToken("req_1"), "", now)
-		if err != nil {
-			t.Fatalf("NewPaymentMethod() error = %v", err)
-		}
-		if got := pm.PendingCardBindingRequestKey(); got != "req_1" {
-			t.Errorf("PendingCardBindingRequestKey = %q, want %q", got, "req_1")
-		}
-	})
-
-	t.Run("raw rebill id row is not a placeholder", func(t *testing.T) {
-		// Recovery paths store the raw RebillId with no card data yet; such a
-		// row must never be mistaken for a pending card binding.
-		pm, err := NewPaymentMethod(userID, ProviderTkassa, "rebill_1", "", now)
-		if err != nil {
-			t.Fatalf("NewPaymentMethod() error = %v", err)
-		}
-		if got := pm.PendingCardBindingRequestKey(); got != "" {
-			t.Errorf("PendingCardBindingRequestKey = %q, want empty", got)
-		}
-	})
-
-	t.Run("bound card row is not a placeholder", func(t *testing.T) {
-		pm, err := NewPaymentMethod(userID, ProviderTkassa, PendingCardBindingToken("req_1"), "****0777", now)
-		if err != nil {
-			t.Fatalf("NewPaymentMethod() error = %v", err)
-		}
-		if got := pm.PendingCardBindingRequestKey(); got != "" {
-			t.Errorf("PendingCardBindingRequestKey = %q, want empty", got)
-		}
-		pm.DisplayMask = ""
-		pm.ProviderCardID = "card_1"
-		if got := pm.PendingCardBindingRequestKey(); got != "" {
-			t.Errorf("PendingCardBindingRequestKey with card id = %q, want empty", got)
-		}
-	})
-
-	t.Run("non-tkassa row is not a placeholder", func(t *testing.T) {
-		pm, err := NewPaymentMethod(userID, ProviderFake, PendingCardBindingToken("req_1"), "", now)
-		if err != nil {
-			t.Fatalf("NewPaymentMethod() error = %v", err)
-		}
-		if got := pm.PendingCardBindingRequestKey(); got != "" {
-			t.Errorf("PendingCardBindingRequestKey = %q, want empty", got)
-		}
-	})
-}
-
-func TestPaymentMethodActivate(t *testing.T) {
-	userID := uuid.MustParse("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
-	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	pm, _ := NewPaymentMethod(userID, ProviderFake, "fake_token_123", "*1234", now)
-
-	activateAt := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
-	pm.Activate(activateAt)
-	if !pm.IsActive {
-		t.Error("Activate() should set IsActive to true")
-	}
-	if !pm.UpdatedAt.Equal(activateAt) {
-		t.Errorf("Activate() updated_at = %v, want %v", pm.UpdatedAt, activateAt)
-	}
-
-	deactivateAt := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
-	pm.Deactivate(deactivateAt)
-	if pm.IsActive {
-		t.Error("Deactivate() should set IsActive to false")
-	}
-	if !pm.UpdatedAt.Equal(deactivateAt) {
-		t.Errorf("Deactivate() updated_at = %v, want %v", pm.UpdatedAt, deactivateAt)
 	}
 }

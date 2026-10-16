@@ -55,6 +55,7 @@ func noopEncryptor(t *testing.T) encryption.Encryptor {
 }
 
 func TestUserRepository_Create_ConcurrentRace(t *testing.T) {
+	t.Parallel()
 	pool := setupIntegrationDB(t)
 	ctx := context.Background()
 	repo := NewUserRepository(pool, noopEncryptor(t))
@@ -128,6 +129,7 @@ func TestUserRepository_Create_ConcurrentRace(t *testing.T) {
 }
 
 func TestUserRepository_Create_EmailAlreadyTakenDifferentPhone(t *testing.T) {
+	t.Parallel()
 	pool := setupIntegrationDB(t)
 	ctx := context.Background()
 	repo := NewUserRepository(pool, noopEncryptor(t))

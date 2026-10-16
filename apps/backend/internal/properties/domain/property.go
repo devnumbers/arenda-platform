@@ -1,3 +1,5 @@
+// Package domain defines the property domain model: properties with per-type attributes, photo metadata and
+// property contacts.
 package domain
 
 import (
@@ -16,6 +18,7 @@ const (
 	PropertyTypeApartment  PropertyType = "apartment"
 	PropertyTypeRoom       PropertyType = "room"
 	PropertyTypeApartments PropertyType = "apartments"
+	PropertyTypeStudio     PropertyType = "studio"
 	PropertyTypeHouse      PropertyType = "house"
 	PropertyTypeCommercial PropertyType = "commercial"
 	PropertyTypeOffice     PropertyType = "office"
@@ -40,6 +43,7 @@ func (t PropertyType) Valid() bool {
 	case PropertyTypeApartment,
 		PropertyTypeRoom,
 		PropertyTypeApartments,
+		PropertyTypeStudio,
 		PropertyTypeHouse,
 		PropertyTypeCommercial,
 		PropertyTypeOffice,
@@ -80,74 +84,98 @@ func (s PropertyStatus) Valid() bool {
 	return false
 }
 
-// DeletePropertyMode selects how a property is deleted.
-type DeletePropertyMode string
+// OccupancyStatus is the computed occupancy state of a property («Занятость
+// объекта», резолюция #584): derived from the property's single unfinished
+// rental against the data owner's today (ADR 0048) — never from the property
+// lifecycle status (active/maintenance/archived).
+type OccupancyStatus string
 
+// The four occupancy states: the three unfinished-rental statuses (the
+// rentals vocabulary, rentals/CONTEXT.md «Статусы Аренды») plus the
+// no-rental state.
 const (
-	DeletePropertyModeCascade DeletePropertyMode = "cascade"
-	DeletePropertyModeDetach  DeletePropertyMode = "detach"
+	// OccupancyUpcoming — the unfinished rental starts later («Аренда с DD.MM»).
+	OccupancyUpcoming OccupancyStatus = "upcoming"
+	// OccupancyActive — the unfinished rental runs.
+	OccupancyActive OccupancyStatus = "active"
+	// OccupancyNeedsAttention — the rental's planned end has passed and the
+	// rental is not completed («Аренда завершена» badge, the red dot).
+	OccupancyNeedsAttention OccupancyStatus = "needs_attention"
+	// OccupancyNone — no unfinished rental.
+	OccupancyNone OccupancyStatus = "none"
 )
 
-var ErrInvalidDeletePropertyMode = errors.New("invalid delete property mode")
-
-func ParseDeletePropertyMode(s string) (DeletePropertyMode, error) {
-	m := DeletePropertyMode(s)
-	if !m.Valid() {
-		return "", fmt.Errorf("%w: %q", ErrInvalidDeletePropertyMode, s)
-	}
-	return m, nil
+// Occupancy is the per-property occupancy projection (ticket #585): the
+// read-side view the lists report for the badges, the red dot and the «По
+// статусу» sorting (резолюция #584). The rental fields describe the
+// property's single unfinished rental; a property without one reports
+// OccupancyNone with both dates nil.
+type Occupancy struct {
+	Status OccupancyStatus
+	// StartDate is the unfinished rental's start («Аренда с DD.MM» of an
+	// upcoming rental).
+	StartDate *time.Time
+	// PlannedEndDate is the unfinished rental's planned end («Осталось N
+	// месяцев»); nil for an open-ended rental.
+	PlannedEndDate *time.Time
 }
-
-func (m DeletePropertyMode) Valid() bool {
-	switch m {
-	case DeletePropertyModeCascade, DeletePropertyModeDetach:
-		return true
-	}
-	return false
-}
-
-type PropertyOccupancy string
-
-const (
-	OccupancyFree     PropertyOccupancy = "free"
-	OccupancyOccupied PropertyOccupancy = "occupied"
-)
 
 type Property struct {
-	ID               uuid.UUID
-	OwnerID          uuid.UUID
-	Name             string
-	Type             PropertyType
-	Address          string
-	Description      string
-	Attributes       Attributes
-	Status           PropertyStatus
-	Occupancy        PropertyOccupancy
-	Photos           []Photo
+	ID          uuid.UUID
+	OwnerID     uuid.UUID
+	Name        string
+	Type        PropertyType
+	Address     string
+	Description string
+	Attributes  Attributes
+	Status      PropertyStatus
+	// PhotoKey is the storage key of the object photo (ADR 0065): nil — no
+	// photo, a key — the private object streamed by
+	// GET /api/properties/{id}/photo. The content type travels alongside
+	// (PhotoContentType) — the sniffed value of the upload, not a client
+	// header.
+	PhotoKey         *string
+	PhotoContentType *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	OverdueRentCount int
-	// MembersCount is the shared-access participant count: membership rows
-	// (any status; the owner is never a membership row) plus pending email
-	// invitations (issue #163). Filled by the read queries that carry the
-	// members_count projection; zero on write-path responses (create/update),
-	// mirroring OverdueRentCount.
-	MembersCount int
 	// AccessRole is the role of the requesting actor on this property
 	// (issue T11): RoleOwner for own properties, the membership role for
 	// shared ones. Empty when not populated (internal use). Filled by the
 	// read/write service paths that resolve the actor's role.
 	AccessRole sharedpolicy.Role
+	// PinnedAt is the actor's personal pin (ticket #577; the personal
+	// cutover #1307, D11): nil — the actor has not pinned it, a moment —
+	// pinned since then. The lists order the pinned first, among themselves
+	// by this time — the actor's order, never another participant's; the
+	// state lives in the actor's user_property_pins row and survives the
+	// archive (D16).
+	PinnedAt *time.Time
+	// Occupancy is the «Занятость» projection of the list reads (ticket
+	// #585, резолюция #584): nil when not computed — the write paths and an
+	// unwired projection port; the list reads always report it.
+	Occupancy *Occupancy
+	// HasOverdueOperations is the payments half of the red dot (ticket #585,
+	// резолюция #584): the property has overdue planned operations — stored
+	// planned rows dated before the data owner's today (ADR 0048). Reported
+	// by the list reads alongside Occupancy; false when not computed.
+	HasOverdueOperations bool
 	// OwnerName is the public display name of the property owner ("Name
-	// Surname" or a masked phone, never an email), filled only by the detail
-	// read path when the actor is not the owner (issue T11); empty otherwise.
+	// Surname" or «Пользователь», never a phone or an email — карта #1105,
+	// аменд #1123), filled when
+	// the actor is not the owner: by the detail read (issue T11) and by the
+	// list reads for shared rows (owner decision on the #756 walkthrough
+	// fixes); empty otherwise.
 	OwnerName string
-}
-
-// Photo is a photo attached to a property.
-type Photo struct {
-	ID  uuid.UUID
-	URL string
+	// OwnerEmail is the property owner's account email, filled by the detail
+	// read when the actor is not the owner (Figma 2200-97365, the owner
+	// contact row) — a deliberate exposure on this surface, the same posture
+	// as SharedSuspendedMembership.OwnerEmail (#702); empty otherwise (the
+	// owner, a resolver failure, an owner without an email).
+	OwnerEmail string
+	// OwnerPhotoURL is the owner's profile photo streaming path (ADR 0065,
+	// решение #1286), filled like OwnerName — by the detail read and the
+	// shared list rows; empty otherwise (no photo, resolver failure).
+	OwnerPhotoURL string
 }
 
 var (

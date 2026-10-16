@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
@@ -24,12 +23,17 @@ func newPropertyHandlersForMapping(t *testing.T) *PropertyHandlers {
 	return &PropertyHandlers{logger: slog.New(slog.DiscardHandler)}
 }
 
+// attrFloor — код атрибута, повторённый маппинг-тестами пакета.
+const attrFloor = "floor"
+
 func TestPropertyResponse_IncludesAttributes(t *testing.T) {
+	t.Parallel()
+
 	h := newPropertyHandlersForMapping(t)
 
 	property := domain.Property{
-		ID:         uuid.New(),
-		OwnerID:    uuid.New(),
+		ID:         uuid.Must(uuid.NewV7()),
+		OwnerID:    uuid.Must(uuid.NewV7()),
 		Name:       "Flat",
 		Type:       domain.PropertyTypeApartment,
 		Address:    " ul. Pushkina",
@@ -37,10 +41,7 @@ func TestPropertyResponse_IncludesAttributes(t *testing.T) {
 		Attributes: domain.Attributes{"rooms": "2", "area_total": 50.0},
 	}
 
-	resp, err := h.propertyResponse(context.Background(), property.OwnerID, property, leasesdomain.Lease{})
-	if err != nil {
-		t.Fatalf("propertyResponse error: %v", err)
-	}
+	resp := h.propertyResponse(property)
 
 	if resp.Attributes == nil {
 		t.Fatal("resp.Attributes = nil, want non-nil map")
@@ -57,11 +58,13 @@ func TestPropertyResponse_IncludesAttributes(t *testing.T) {
 }
 
 func TestPropertyResponse_EmptyAttributesWhenNil(t *testing.T) {
+	t.Parallel()
+
 	h := newPropertyHandlersForMapping(t)
 
 	property := domain.Property{
-		ID:         uuid.New(),
-		OwnerID:    uuid.New(),
+		ID:         uuid.Must(uuid.NewV7()),
+		OwnerID:    uuid.Must(uuid.NewV7()),
 		Name:       "Flat",
 		Type:       domain.PropertyTypeApartment,
 		Address:    "ul. Pushkina",
@@ -69,10 +72,7 @@ func TestPropertyResponse_EmptyAttributesWhenNil(t *testing.T) {
 		Attributes: nil,
 	}
 
-	resp, err := h.propertyResponse(context.Background(), property.OwnerID, property, leasesdomain.Lease{})
-	if err != nil {
-		t.Fatalf("propertyResponse error: %v", err)
-	}
+	resp := h.propertyResponse(property)
 
 	// The required response field must never be nil; an empty object is encoded
 	// as {} rather than null.
@@ -102,13 +102,15 @@ func TestPropertyResponse_EmptyAttributesWhenNil(t *testing.T) {
 }
 
 func TestHandlePropertyError_AttributeValidationErrors(t *testing.T) {
+	t.Parallel()
+
 	h := newPropertyHandlersForMapping(t)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
 
 	err := &propertiesapp.AttributesValidationError{Errors: []domain.AttributeValidationError{
-		{Field: "floor", Reason: "must be between -3 and 200"},
+		{Field: attrFloor, Reason: "must be between -3 and 200"},
 	}}
 	h.handlePropertyError(rr, req, err)
 
@@ -129,7 +131,7 @@ func TestHandlePropertyError_AttributeValidationErrors(t *testing.T) {
 	if got := len(*prob.Errors); got != 1 {
 		t.Fatalf("len(*Problem.Errors) = %d, want 1", got)
 	}
-	if got := (*prob.Errors)[0].Field; got != "floor" {
+	if got := (*prob.Errors)[0].Field; got != attrFloor {
 		t.Fatalf("Problem.Errors[0].Field = %q, want \"floor\"", got)
 	}
 	if got := (*prob.Errors)[0].Detail; got != "must be between -3 and 200" {
@@ -138,11 +140,13 @@ func TestHandlePropertyError_AttributeValidationErrors(t *testing.T) {
 }
 
 func TestProblemWithFieldErrors(t *testing.T) {
+	t.Parallel()
+
 	p := httpsupport.ProblemWithFieldErrors(
 		context.Background(),
 		"Bad request",
 		"msg",
-		[]openapi.ProblemError{{Field: "floor", Detail: "too high"}},
+		[]openapi.ProblemError{{Field: attrFloor, Detail: "too high"}},
 	)
 
 	if p.Errors == nil {
@@ -151,12 +155,14 @@ func TestProblemWithFieldErrors(t *testing.T) {
 	if got := len(*p.Errors); got != 1 {
 		t.Fatalf("len(*Problem.Errors) = %d, want 1", got)
 	}
-	if got := (*p.Errors)[0].Field; got != "floor" {
+	if got := (*p.Errors)[0].Field; got != attrFloor {
 		t.Fatalf("Problem.Errors[0].Field = %q, want \"floor\"", got)
 	}
 }
 
 func TestProblemWithFieldErrors_EmptySliceOmitsErrors(t *testing.T) {
+	t.Parallel()
+
 	// Guard against an empty field-error slice being encoded as a null "errors"
 	// array, which would violate the response contract.
 	p := httpsupport.ProblemWithFieldErrors(
@@ -171,12 +177,16 @@ func TestProblemWithFieldErrors_EmptySliceOmitsErrors(t *testing.T) {
 }
 
 func TestPropertyAttributesPtr_NilReturnsNil(t *testing.T) {
+	t.Parallel()
+
 	if got := propertyAttributesPtr(nil); got != nil {
 		t.Fatalf("propertyAttributesPtr(nil) = %v, want nil", got)
 	}
 }
 
 func TestPropertyAttributesPtr_NonNilReturnsMap(t *testing.T) {
+	t.Parallel()
+
 	in := &openapi.PropertyAttributes{"rooms": "2"}
 	got := propertyAttributesPtr(in)
 	if got == nil {
@@ -188,6 +198,8 @@ func TestPropertyAttributesPtr_NonNilReturnsMap(t *testing.T) {
 }
 
 func TestPropertyAttributesPtr_EmptyMapIsNotNil(t *testing.T) {
+	t.Parallel()
+
 	// An empty (but non-nil) attributes object means "clear all characteristics";
 	// it must round-trip to a non-nil pointer so the service treats it as a
 	// full replacement rather than an omitted field.

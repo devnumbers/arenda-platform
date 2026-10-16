@@ -11,7 +11,7 @@
  * The DB name (`rentli-pwa`), object store (`pwa`), and key (`standalone`) are
  * duplicated inline in `public/sw.js` (a static script that cannot import TS).
  * The guard test `standalone-store marker sync with service worker` in
- * `cabinet-routes.test.ts` fails if any of the three markers drift between
+ * `app-routes.test.ts` fails if any of the three markers drift between
  * this file and the SW copy.
  */
 
@@ -22,7 +22,7 @@ export const STANDALONE_DB_KEY = 'standalone';
 /**
  * Marks the current context as a PWA client. Called after SW registration when
  * `isStandaloneMode()` is true. The flag persists across SW restarts and is
- * read by `sw.js` to redirect PWA navigations to `/` back to `/dashboard`.
+ * read by `sw.js` to redirect PWA navigations to `/` back to `/properties`.
  *
  * SSR-safe: no-ops when `indexedDB` is unavailable.
  */

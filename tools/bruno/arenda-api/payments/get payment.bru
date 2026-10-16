@@ -1,0 +1,28 @@
+meta {
+  name: Get Payment
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{paymentId}}
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should carry the pauses history", function() {
+    expect(res.body.pauses).to.be.an("array");
+  });
+}

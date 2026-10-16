@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	// credentialKeyword matches words that suggest the adjacent value is a secret.
+	// Matches words that suggest the adjacent value is a secret.
 	credentialKeyword = `token|password|secret|key|auth|credential|bearer|authorization|apikey|access_key`
 
 	// Redact common credential patterns (case-insensitive, optional surrounding quotes).

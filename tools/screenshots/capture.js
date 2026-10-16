@@ -35,7 +35,7 @@ async function login(page) {
   await page.waitForSelector('text=Введите код', { timeout: 10000 });
 
   const code = extractLatestCode('/tmp/backend.log');
-  if (!code) throw new Error('Could not extract SMS code from backend log');
+  if (!code) throw new Error('Could not extract login code from backend log');
 
   await page.getByLabel('6-значный код').fill(code);
   await page.waitForURL('http://localhost:3000/', { timeout: 10000 });

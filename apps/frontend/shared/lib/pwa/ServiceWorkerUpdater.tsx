@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, type JSX } from 'react';
 import { usePathname } from 'next/navigation';
+import { reportClientError } from '@/shared/lib/error-reporting/report-client-error';
+import { shouldActivateWaitingOnRouteChange } from './sw-update-timing';
 
 /**
  * Silent service worker update lifecycle.
@@ -15,20 +17,24 @@ import { usePathname } from 'next/navigation';
  * moments guaranteed not to interrupt the user — on a route change (the user
  * is not mid-form) or when the app is hidden (backgrounded / tab switched).
  * Reload happens on the same route change, or deferred until the user returns
- * if the SW took over while the app was hidden. See ADR 0032.
+ * if the SW took over while the app was hidden. See ADR 0032. A route change
+ * caused by popstate (goBack / back button) does not activate — the reload
+ * would land on the arrival screen and erase the one-shot state that
+ * navigation just carried in (#771); the next push navigation or hidden
+ * trigger applies the update instead.
  *
  * Guards:
  * - First visit (`navigator.serviceWorker.controller === null` on mount): the
  *   SW is only being registered now, there is nothing to update — bail out so
  *   we never reload a freshly-opened app in the user's face.
  * - `isReloading` ref prevents a double reload when `controllerchange` fires
- *   in multiple cabinet tabs simultaneously.
+ *   in multiple app tabs simultaneously.
  *
  * This component is independent of `ServiceWorkerRegister`: it obtains the
  * registration via `navigator.serviceWorker.ready`, so it does not matter who
- * performed the registration. It must be mounted on every cabinet route (it
- * lives in `CabinetLayout` next to `ServiceWorkerRegister`) so the route-change
- * trigger fires across the whole cabinet.
+ * performed the registration. It must be mounted app-wide (it lives in
+ * `ScreenLayout` next to `ServiceWorkerRegister`) so the route-change
+ * trigger fires across the whole app.
  */
 export function ServiceWorkerUpdater(): JSX.Element | null {
     const pathname = usePathname();
@@ -42,6 +48,11 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
     // mount as a "route change" — otherwise a SW that was already waiting at
     // mount time would be activated instantly on the first render.
     const isFirstPathnameRun = useRef(true);
+    // Date.now() of the last popstate traversal (goBack / back button / back
+    // gesture). popstate fires before the router reacts, so the timestamp is
+    // always in place by the time the pathname effect runs; see
+    // shouldActivateWaitingOnRouteChange for why activation defers (#771).
+    const lastPopNavigateAt = useRef(0);
 
     // Shared activation helper: posts SKIP_WAITING to the waiting worker and
     // clears the pending flag. Used by both the route-change and the
@@ -53,19 +64,37 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
         pendingSkipWaiting.current = false;
     };
 
-    // Trigger: route change. When the user navigates between cabinet screens
+    // Trigger: route change. When the user navigates between app screens
     // (so is not mid-form), activate the waiting SW if one is ready. pathname
     // is an effect dependency, so this runs on every navigation. The first run
-    // (mount) is skipped — it is not a real route change.
+    // (mount) is skipped — it is not a real route change. A route change
+    // caused by popstate (returning to a previous screen) is also skipped —
+    // the reload would erase the one-shot state the navigation just carried
+    // in (#771, staged success popups); the next push navigation or the
+    // visibility trigger applies the update instead.
     useEffect(() => {
         if (isFirstPathnameRun.current) {
             isFirstPathnameRun.current = false;
             return;
         }
-        if (pendingSkipWaiting.current) {
+        if (
+            shouldActivateWaitingOnRouteChange({
+                pendingSkipWaiting: pendingSkipWaiting.current,
+                lastPopNavigateAt: lastPopNavigateAt.current,
+                now: Date.now(),
+            })
+        ) {
             activateWaiting();
         }
     }, [pathname]);
+
+    useEffect(() => {
+        const onPopState = (): void => {
+            lastPopNavigateAt.current = Date.now();
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -123,7 +152,7 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
                 if (pendingSkipWaiting.current) {
                     activateWaiting();
                 }
-            } else if (document.visibilityState === 'visible') {
+            } else {
                 // User returned. If the SW took over while hidden, reload now.
                 if (needsReloadOnVisible.current) {
                     needsReloadOnVisible.current = false;
@@ -139,7 +168,7 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
             registrationRef.current = registration;
 
             // A SW may already be waiting at mount time (installed before this
-            // component mounted, e.g. after a re-navigation within the cabinet).
+            // component mounted, e.g. after a re-navigation within the app).
             if (registration.waiting) {
                 pendingSkipWaiting.current = true;
             }
@@ -157,6 +186,16 @@ export function ServiceWorkerUpdater(): JSX.Element | null {
                     // the next interval or the next navigation will retry.
                 });
             }, UPDATE_INTERVAL_MS);
+        }).catch((error: unknown) => {
+            // Covers both failure sources of the chain: `ready` rejecting
+            // (SW infrastructure broken — registration failed / browser gave
+            // up) and an exception inside the then-callback itself; either way
+            // silent-update watching is simply off. Reported for diagnostics,
+            // not shown to the user: the update strategy must never interrupt
+            // the session.
+            reportClientError(
+                `serviceWorker update wiring failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
         });
 
         return () => {

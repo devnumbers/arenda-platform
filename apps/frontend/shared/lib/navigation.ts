@@ -2,8 +2,6 @@ import type {useRouter} from 'next/navigation';
 
 type AppRouter = ReturnType<typeof useRouter>;
 
-export const RETURN_TO_PARAM = 'returnTo';
-
 /** Allow only internal absolute paths; reject protocol-relative, scheme and backslash tricks. */
 export function sanitizeReturnTo(value: string | undefined): string | undefined {
     if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
@@ -18,7 +16,7 @@ export function sanitizeReturnTo(value: string | undefined): string | undefined 
  * a literal `?` inside a value is not supported and would be silently truncated.
  */
 export function buildReturnUrl(returnTo: string, params: Record<string, string>): string {
-    const [path, query] = returnTo.split('?');
+    const [path = returnTo, query] = returnTo.split('?');
     const search = new URLSearchParams(query);
     for (const [key, value] of Object.entries(params)) {
         search.set(key, value);
@@ -36,4 +34,18 @@ export function goBack(router: AppRouter, fallbackHref: string): void {
     } else {
         router.replace(fallbackHref);
     }
+}
+
+/**
+ * Полная перезагрузка с заменой текущего entry истории (канон auth-границы,
+ * #1098; исключение из router.replace зарегистрировано в CODING_STANDARDS
+ * «Navigation and browser history»). Клиентская навигация рендерит цель в
+ * том же JS-дереве и везёт RSC-кэш и react-query heap предыдущего документа
+ * в новую страницу — после выхода «Назад» возвращал бы кабинет без сетевого
+ * запроса, после входа в кабинет уезжали бы гостевые RSC-остатки. Новый
+ * документ сносит heap целиком; replace не оставляет предыдущий документ в
+ * history. Bfcache-ближний этого рубежа — корневой BfcacheGuard.
+ */
+export function hardReplace(href: string): void {
+    window.location.replace(href);
 }

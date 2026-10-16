@@ -1,14 +1,12 @@
-import type { components } from '@/shared/api/generated';
-import type { TariffName } from '@/entities/user/model/types';
+import type { components } from '@/shared/api/dto';
 import type {
   AddPaymentMethodResult,
   ChangeTariffResult,
   PaymentMethod,
-  PaymentPeriod,
   PaymentStatus,
+  PendingPayment,
   Subscription,
   SubscriptionPayment,
-  SubscriptionStatus,
   Tariff,
 } from './types';
 
@@ -22,7 +20,7 @@ type AddPaymentMethodResponse = components['schemas']['AddPaymentMethodResponse'
 export function mapTariffResponse(response: TariffResponse): Tariff {
   return {
     id: response.name,
-    name: response.name as TariffName,
+    name: response.name,
     monthlyPriceKopecks: response.monthlyPriceKopecks,
     yearlyPriceKopecks: response.yearlyPriceKopecks,
     activePropertyLimit: response.activePropertyLimit,
@@ -35,6 +33,8 @@ export function mapPaymentMethodResponse(
   return {
     id: response.id,
     displayMask: response.displayMask,
+    cardSystem: response.cardSystem,
+    expDate: response.expDate ?? undefined,
     provider: response.provider,
     isActive: response.isActive,
     createdAt: response.createdAt,
@@ -46,24 +46,41 @@ export function mapSubscriptionResponse(
 ): Subscription {
   return {
     id: `${response.status}-${response.tariff.name}-${response.validUntil ?? ''}`,
-    status: response.status as SubscriptionStatus,
+    status: response.status,
     tariff: mapTariffResponse(response.tariff),
     pendingTariff: response.pendingTariff
       ? mapTariffResponse(response.pendingTariff)
       : undefined,
     autoRenewEnabled: response.autoRenewEnabled,
     validUntil: response.validUntil ?? undefined,
-    currentPeriod: response.currentPeriod
-      ? (response.currentPeriod as PaymentPeriod)
-      : undefined,
+    currentPeriod: response.currentPeriod ?? undefined,
     activePaymentMethod: response.activePaymentMethod
       ? mapPaymentMethodResponse(response.activePaymentMethod)
       : undefined,
     pendingChangeAt: response.pendingChangeAt ?? undefined,
-    pendingPeriod: response.pendingPeriod
-      ? (response.pendingPeriod as PaymentPeriod)
+    pendingPeriod: response.pendingPeriod ?? undefined,
+    pendingPayment: response.pendingPayment
+      ? mapPendingPaymentResponse(response.pendingPayment)
       : undefined,
   };
+}
+
+function mapPendingPaymentResponse(
+  response: NonNullable<SubscriptionResponse['pendingPayment']>,
+): PendingPayment {
+  return {
+    tariffName: response.tariffName,
+    period: response.period,
+    amountKopecks: response.amountKopecks,
+    confirmUrl: response.confirmUrl,
+    expiresAt: response.expiresAt,
+  };
+}
+
+/** Служебный `refunding` (возврат в полёте) наружу — как pending:
+ * «В ожидании» без знака (решение владельца 11.09, #614). */
+function mapPaymentStatus(status: SubscriptionPaymentResponse['status']): PaymentStatus {
+  return status === 'refunding' ? 'pending' : status;
 }
 
 export function mapSubscriptionPaymentResponse(
@@ -72,11 +89,14 @@ export function mapSubscriptionPaymentResponse(
   return {
     id: response.id,
     tariff: mapTariffResponse(response.tariff),
-    period: response.period as PaymentPeriod,
+    period: response.period,
     amountKopecks: response.amountKopecks,
-    status: response.status as PaymentStatus,
+    status: mapPaymentStatus(response.status),
     provider: response.provider,
     paymentUrl: response.paymentUrl ?? null,
+    expiresAt: response.expiresAt ?? null,
+    paymentMethod: response.paymentMethod,
+    succeededAt: response.succeededAt ?? undefined,
     createdAt: response.createdAt,
   };
 }

@@ -1,0 +1,921 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historytest "github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+// This file covers the mutation side of the owner's participant aggregate
+// (issue #694): the multi-object invite, «Пригласить в объект» and «Отозвать
+// и удалить» — through the real ParticipantMutationService + AccessService +
+// MembershipPolicy + SlotCoordinator on in-memory ports (the same seam as
+// invitation_service_test.go).
+
+// capturingRecorder is an audit Recorder double that keeps every entry for
+// assertions.
+type capturingRecorder struct {
+	entries []auditdomain.Entry
+}
+
+func (r *capturingRecorder) Record(_ context.Context, entry auditdomain.Entry) error {
+	r.entries = append(r.entries, entry)
+	return nil
+}
+
+func (r *capturingRecorder) WithTx(transaction.Tx) auditapp.Recorder { return r }
+
+// actions returns the recorded entries with the given audit action.
+func (r *capturingRecorder) actions(action auditdomain.Action) []auditdomain.Entry {
+	var out []auditdomain.Entry
+	for _, e := range r.entries {
+		if e.Action == action {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// mutationFixture bundles ParticipantMutationService with its in-memory
+// dependencies.
+type mutationFixture struct {
+	repo        *memRepo
+	invitations *memInvitationsRepo
+	owners      staticResolver
+	statuses    fakeStatuses
+	lookup      *fakeLookup
+	emails      fakeEmailResolver
+	titles      fakePropertyTitles
+	mailer      *fakeAccessMailer
+	events      *fakeEventPublisher
+	clk         *fixedClock
+	limiter     *fakeRecipientLimiter
+	audit       *capturingRecorder
+	// Scope is the «Отозвать доступ всем» gate double: the fixture default
+	// speaks owner so the non-RevokeAll tests skip the gate.
+	scope *fakeRevokeAllScope
+	// History is the action-journal recorder the factory hands to every
+	// transactional core — the journal assertions read it back.
+	history *historytest.CapturingRecorder
+	// Realtime is the recording carrier both services dispatch their frames
+	// through — the realtime seam's test double (карта #714, #716); the
+	// participant service publishes through the access service's carrier.
+	realtime *realtimetest.RecordingPublisher
+	owner    uuid.UUID
+	svc      *ParticipantMutationService
+	access   *AccessService
+}
+
+func newMutationFixture() *mutationFixture {
+	repo := newMemRepo()
+	invitations := &memInvitationsRepo{removalScope: repo.inManageScope}
+	owners := staticResolver{}
+	statuses := fakeStatuses{}
+	policy := NewMembershipPolicy(owners, repo)
+	lookup := newFakeLookup()
+	emails := fakeEmailResolver{}
+	titles := fakePropertyTitles{}
+	mailer := &fakeAccessMailer{}
+	events := &fakeEventPublisher{}
+	clk := &fixedClock{now: time.Now()}
+	limiter := newFakeRecipientLimiter()
+	audit := &capturingRecorder{}
+	history := &historytest.CapturingRecorder{}
+	scope := &fakeRevokeAllScope{owns: true}
+	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
+		events, audit, noopBeginner{}, clk, nil)
+	realtime := &realtimetest.RecordingPublisher{}
+	factory := NewTxStoreFactory(repo, invitations, audit, history, fakeUoW{beginner: noopBeginner{}})
+	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator,
+		events, factory, nil)
+	access.SetRealtimePublisher(realtime)
+	svc := NewParticipantMutationService(access, owners, statuses, lookup, emails, policy,
+		scope, coordinator, mailer, events, titles, factory, clk, nil)
+	return &mutationFixture{
+		repo:        repo,
+		invitations: invitations,
+		owners:      owners,
+		statuses:    statuses,
+		lookup:      lookup,
+		emails:      emails,
+		titles:      titles,
+		mailer:      mailer,
+		events:      events,
+		clk:         clk,
+		limiter:     limiter,
+		audit:       audit,
+		scope:       scope,
+		history:     history,
+		realtime:    realtime,
+		owner:       uuid.Must(uuid.NewV7()),
+		svc:         svc,
+		access:      access,
+	}
+}
+
+// addProperty registers an owned property with the owners resolvers and a
+// display title.
+func (f *mutationFixture) addProperty(propertyID, ownerID uuid.UUID, title string) {
+	f.owners[propertyID] = ownerID
+	f.repo.SetOwner(propertyID, ownerID)
+	f.titles[propertyID] = title
+}
+
+func TestParticipantMutation_Invite_PendingGetsInvitationsAndOneEmail(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.addProperty(p2, f.owner, testSecondTitle)
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testNewUserEmail, domain.RoleViewer,
+		[]uuid.UUID{p1, p2})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %+v, want two", results)
+	}
+	for i, want := range []uuid.UUID{p1, p2} {
+		r := results[i]
+		if r.PropertyID != want || r.Outcome != ParticipantGrantPending || r.InvitationID == uuid.Nil {
+			t.Errorf("results[%d] = %+v, want pending for %s", i, r, want)
+		}
+	}
+
+	assertBatchInvitations(t, f, []uuid.UUID{p1, p2})
+
+	// Exactly one invite email listing every object of the batch.
+	mail := f.mailer.only(t, "invite")
+	if mail.to != testNewUserEmail {
+		t.Errorf("mail to = %q", mail.to)
+	}
+	if !slices.Equal(mail.titles, []string{testFirstTitle, testSecondTitle}) {
+		t.Errorf("mail titles = %v", mail.titles)
+	}
+
+	// An audit entry per created invitation row.
+	if got := len(f.audit.actions(auditdomain.ActionPropertyMemberInvitationInvited)); got != 2 {
+		t.Errorf("invitation audit entries = %d, want 2", got)
+	}
+}
+
+// assertBatchInvitations checks that exactly one pending invitation per wanted
+// property exists, carrying the batch role, the inviter and the send anchor.
+func assertBatchInvitations(t *testing.T, f *mutationFixture, wantProps []uuid.UUID) {
+	t.Helper()
+	if len(f.invitations.rows) != len(wantProps) {
+		t.Fatalf("invitations = %+v, want %d", f.invitations.rows, len(wantProps))
+	}
+	byProp := map[uuid.UUID]domain.Invitation{}
+	for _, inv := range f.invitations.rows {
+		byProp[inv.PropertyID] = inv
+	}
+	for _, prop := range wantProps {
+		inv, ok := byProp[prop]
+		if !ok {
+			t.Errorf("no invitation for %s", prop)
+			continue
+		}
+		if inv.Email != testNewUserEmail || inv.Role != domain.RoleViewer || inv.InvitedBy != f.owner {
+			t.Errorf("invitation %s = %+v", prop, inv)
+		}
+		if !inv.LastSentAt.Equal(f.clk.now) {
+			t.Errorf("last_sent_at = %v, want %v", inv.LastSentAt, f.clk.now)
+		}
+	}
+}
+
+func TestParticipantMutation_Invite_RegisteredMixedSlotResults(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.addProperty(p2, f.owner, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 1) // One free slot: the first grant fits, the second suspends.
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleFullAccess,
+		[]uuid.UUID{p1, p2})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantActive || results[0].MembershipID == uuid.Nil {
+		t.Errorf("results[0] = %+v, want active", results[0])
+	}
+	if results[1].Outcome != ParticipantGrantSuspended || results[1].MembershipID == uuid.Nil {
+		t.Errorf("results[1] = %+v, want suspended", results[1])
+	}
+	first, err := f.repo.GetByPropertyAndUser(t.Context(), p1, member)
+	if err != nil || first.Status != domain.MemberStatusActive {
+		t.Errorf("p1 membership = %+v, %v", first, err)
+	}
+	second, err := f.repo.GetByPropertyAndUser(t.Context(), p2, member)
+	if err != nil || second.Status != domain.MemberStatusSuspended {
+		t.Errorf("p2 membership = %+v, %v", second, err)
+	}
+	if len(f.mailer.sent) != 0 {
+		t.Errorf("registered invitee must not get the invite email, sent %+v", f.mailer.sent)
+	}
+	if got := len(f.audit.actions(auditdomain.ActionPropertyMemberAdded)); got != 2 {
+		t.Errorf("membership audit entries = %d, want 2", got)
+	}
+}
+
+func TestParticipantMutation_Invite_SkipsDuplicateArchivedAndForeign(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	pDup, pArch, pForeign, pOk := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()),
+		uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(pDup, f.owner, "Дубль")
+	f.addProperty(pArch, f.owner, "Архив")
+	f.addProperty(pOk, f.owner, "Новый")
+	f.statuses[pArch] = true
+	// An existing pending invitation on pDup makes it a duplicate.
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: pDup, Email: testNewUserEmail,
+		Role: domain.RoleViewer, InvitedBy: f.owner, LastSentAt: f.clk.now,
+		CreatedAt: f.clk.now,
+	}); err != nil {
+		t.Fatalf("seed invitation: %v", err)
+	}
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testNewUserEmail, domain.RoleViewer,
+		[]uuid.UUID{pDup, pDup, pArch, pForeign, pOk})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	// Duplicate request ids collapse; every requested id reports its outcome.
+	if len(results) != 4 {
+		t.Fatalf("results = %+v, want four (duplicate id collapsed)", results)
+	}
+	wantOutcomes := []ParticipantGrantOutcome{
+		ParticipantGrantDuplicate, ParticipantGrantArchived,
+		ParticipantGrantUnavailable, ParticipantGrantPending,
+	}
+	for i, want := range wantOutcomes {
+		if results[i].Outcome != want {
+			t.Errorf("results[%d].outcome = %q, want %q", i, results[i].Outcome, want)
+		}
+	}
+	// Only the non-duplicate object got a new invitation row.
+	if len(f.invitations.rows) != 2 {
+		t.Fatalf("invitations = %+v, want two (seed + new)", f.invitations.rows)
+	}
+	mail := f.mailer.only(t, "invite")
+	if !slices.Equal(mail.titles, []string{"Новый"}) {
+		t.Errorf("mail titles = %v, want only the granted object", mail.titles)
+	}
+}
+
+func TestParticipantMutation_Invite_SelfEmailRejected(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.lookup.add(testOwnerEmail, f.owner)
+
+	if _, err := f.svc.Invite(t.Context(), f.owner, testOwnerEmail, domain.RoleViewer,
+		[]uuid.UUID{p1}); !errors.Is(err, domain.ErrCannotAddSelf) {
+		t.Errorf("self invite: expected ErrCannotAddSelf, got %v", err)
+	}
+	if len(f.repo.rows)+len(f.invitations.rows) != 0 {
+		t.Errorf("nothing must be created, got memberships %+v invitations %+v", f.repo.rows, f.invitations.rows)
+	}
+}
+
+func TestParticipantMutation_Invite_ManagerOnForeignPropertyUnavailableAndSelfRejects(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p := uuid.Must(uuid.NewV7())
+	other := uuid.Must(uuid.NewV7())
+	f.addProperty(p, other, testForeignTitle)
+	// The actor holds full access on the foreign object — but member
+	// management is owner-only (issue #1304), so the object is out of their
+	// manage scope: the per-property outcome is the privacy-preserving
+	// skipped_unavailable, not a skip about the owner.
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p, UserID: f.owner,
+		Role: domain.RoleFullAccess, GrantedBy: other,
+	}); err != nil {
+		t.Fatalf("seed manager: %v", err)
+	}
+	f.lookup.add(testOwnerEmail, other) // The property owner's email.
+	f.lookup.add(testRecipientEmail, f.owner)
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testOwnerEmail, domain.RoleViewer, []uuid.UUID{p})
+	if err != nil {
+		t.Fatalf("invite on foreign object: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantUnavailable {
+		t.Errorf("outcome = %q, want %q", results[0].Outcome, ParticipantGrantUnavailable)
+	}
+	// The self-email rejection is argument validation, not a scope verdict —
+	// it fires before the per-property gates.
+	if _, err := f.svc.Invite(t.Context(), f.owner, testRecipientEmail, domain.RoleViewer,
+		[]uuid.UUID{p}); !errors.Is(err, domain.ErrCannotAddSelf) {
+		t.Errorf("manager self invite: expected ErrCannotAddSelf, got %v", err)
+	}
+}
+
+func TestParticipantMutation_AddProperties_RegisteredUser(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.addProperty(p2, f.owner, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	// The participant already holds full access on p1: a new grant there is a
+	// duplicate; p2 is a fresh active membership.
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p1, UserID: member,
+		Role: domain.RoleFullAccess, GrantedBy: f.owner,
+	}); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+	f.limiter.set(member, 2)
+
+	results, err := f.svc.AddProperties(t.Context(), f.owner, member.String(), domain.RoleViewer,
+		[]uuid.UUID{p1, p2})
+	if err != nil {
+		t.Fatalf("add properties: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantDuplicate {
+		t.Errorf("results[0] = %+v, want duplicate", results[0])
+	}
+	if results[1].Outcome != ParticipantGrantActive || results[1].MembershipID == uuid.Nil {
+		t.Errorf("results[1] = %+v, want active", results[1])
+	}
+	if len(f.mailer.sent) != 0 {
+		t.Errorf("registered target must not get the invite email, sent %+v", f.mailer.sent)
+	}
+}
+
+func TestParticipantMutation_AddProperties_PendingEmailGetsInvitationsAndOneEmail(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.addProperty(p2, f.owner, testSecondTitle)
+	// The person is an existing participant: a pending invitation on p1.
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p1, Email: testPendingEmail,
+		Role: domain.RoleViewer, InvitedBy: f.owner, LastSentAt: f.clk.now, CreatedAt: f.clk.now,
+	}); err != nil {
+		t.Fatalf("seed invitation: %v", err)
+	}
+
+	results, err := f.svc.AddProperties(t.Context(), f.owner, testPendingEmail, domain.RoleFullAccess,
+		[]uuid.UUID{p1, p2})
+	if err != nil {
+		t.Fatalf("add properties: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantDuplicate {
+		t.Errorf("results[0] = %+v, want duplicate", results[0])
+	}
+	if results[1].Outcome != ParticipantGrantPending || results[1].InvitationID == uuid.Nil {
+		t.Errorf("results[1] = %+v, want pending", results[1])
+	}
+	mail := f.mailer.only(t, "invite")
+	if mail.to != testPendingEmail {
+		t.Errorf("mail to = %q", mail.to)
+	}
+	if !slices.Equal(mail.titles, []string{testSecondTitle}) {
+		t.Errorf("mail titles = %v, want only the newly granted object", mail.titles)
+	}
+}
+
+func TestParticipantMutation_AddProperties_EmailOfRegisteredUserActivates(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 1)
+	// The person exists as a pending invitation only; the email already
+	// belongs to a registered user — the grant lands on the user.
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p1, Email: testMemberEmail,
+		Role: domain.RoleViewer, InvitedBy: f.owner, LastSentAt: f.clk.now, CreatedAt: f.clk.now,
+	}); err != nil {
+		t.Fatalf("seed invitation: %v", err)
+	}
+
+	results, err := f.svc.AddProperties(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1})
+	if err != nil {
+		t.Fatalf("add properties: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantActive || results[0].MembershipID == uuid.Nil {
+		t.Errorf("results[0] = %+v, want active (the email resolved to the registered user)", results[0])
+	}
+	if len(f.invitations.rows) != 1 || len(f.mailer.sent) != 0 {
+		t.Errorf("registered-by-email grant must not touch the invitation or send mail: %+v / %+v",
+			f.invitations.rows, f.mailer.sent)
+	}
+}
+
+func TestParticipantMutation_AddProperties_UnknownPersonNotFound(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+
+	if _, err := f.svc.AddProperties(t.Context(), f.owner, uuid.Must(uuid.NewV7()).String(),
+		domain.RoleViewer, []uuid.UUID{p1}); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("unknown uuid: expected ErrParticipantNotFound, got %v", err)
+	}
+	if _, err := f.svc.AddProperties(t.Context(), f.owner, "ghost@x.ru",
+		domain.RoleViewer, []uuid.UUID{p1}); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("unknown email: expected ErrParticipantNotFound, got %v", err)
+	}
+	if _, err := f.svc.AddProperties(t.Context(), f.owner, "not-an-email",
+		domain.RoleViewer, []uuid.UUID{p1}); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("malformed id: expected ErrParticipantNotFound, got %v", err)
+	}
+}
+
+func TestParticipantMutation_AddProperties_PersonWithoutManagedLegsNotFound(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	other := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, other, testForeignTitle)
+	member := uuid.Must(uuid.NewV7())
+	// The person's only leg is on another owner's property — outside the
+	// actor's scope, so the aggregate (and this mutation) does not know them.
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p1, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: other,
+	}); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+
+	pMine := uuid.Must(uuid.NewV7())
+	f.addProperty(pMine, f.owner, testOwnTitle)
+	if _, err := f.svc.AddProperties(t.Context(), f.owner, member.String(), domain.RoleViewer,
+		[]uuid.UUID{pMine}); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("expected ErrParticipantNotFound, got %v", err)
+	}
+}
+
+func TestParticipantMutation_Remove_RegisteredAcrossOwnedProperties(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p3 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	other := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testOwnTitle)
+	f.addProperty(p3, other, testForeignTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.emails[member] = testMemberEmail
+	// Active leg on the actor's property; active leg and pending invitation
+	// on another owner's property.
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p1, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: f.owner,
+	}); err != nil {
+		t.Fatalf("seed p1: %v", err)
+	}
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p3, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: other,
+	}); err != nil {
+		t.Fatalf("seed p3: %v", err)
+	}
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p1, Email: testMemberEmail,
+		Role: domain.RoleViewer, InvitedBy: f.owner, LastSentAt: f.clk.now, CreatedAt: f.clk.now,
+	}); err != nil {
+		t.Fatalf("seed invitation: %v", err)
+	}
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p3, Email: testMemberEmail,
+		Role: domain.RoleViewer, InvitedBy: other, LastSentAt: f.clk.now, CreatedAt: f.clk.now,
+	}); err != nil {
+		t.Fatalf("seed foreign invitation: %v", err)
+	}
+
+	if err := f.svc.Remove(t.Context(), f.owner, member.String()); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, err := f.repo.GetByPropertyAndUser(t.Context(), p1, member); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("p1 membership must be removed, got %+v (%v)", firstRow(f.repo.rows, p1), err)
+	}
+	if _, err := f.repo.GetByPropertyAndUser(t.Context(), p3, member); err != nil {
+		t.Errorf("foreign-owner membership must stay, got %v", err)
+	}
+	if got := len(f.invitations.rows); got != 1 || f.invitations.rows[0].PropertyID != p3 {
+		t.Errorf("invitations = %+v, want only the foreign-owner one", f.invitations.rows)
+	}
+	if got := len(f.audit.actions(auditdomain.ActionPropertyMemberRemoved)); got != 1 {
+		t.Errorf("membership audit entries = %d, want 1", got)
+	}
+	if got := len(f.audit.actions(auditdomain.ActionPropertyMemberInvitationCancelled)); got != 1 {
+		t.Errorf("invitation audit entries = %d, want 1", got)
+	}
+	// The removal itself sends nothing; the FIFO recovery emails come from the
+	// shared slot coordinator (cut with the lifecycle emails, issue #695).
+	if f.mailer.count("access_revoked") != 0 || f.mailer.count("invite") != 0 {
+		t.Errorf("removal must not send revoke/invite emails, sent %+v", f.mailer.sent)
+	}
+}
+
+func TestParticipantMutation_Remove_FreesSlotAndRecoversFIFO(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p4 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	other := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testOwnTitle)
+	f.addProperty(p4, other, testForeignTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.emails[member] = testMemberEmail
+	f.limiter.set(member, 1)
+	// An active leg on the actor's object occupies the member's only slot; a
+	// suspended leg on another owner's object waits in the FIFO queue.
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p1, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: f.owner,
+	}); err != nil {
+		t.Fatalf("seed p1: %v", err)
+	}
+	if _, err := f.repo.CreateWithStatus(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p4, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: other, Status: domain.MemberStatusSuspended,
+	}); err != nil {
+		t.Fatalf("seed p4: %v", err)
+	}
+
+	if err := f.svc.Remove(t.Context(), f.owner, member.String()); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	recovered, err := f.repo.GetByPropertyAndUser(t.Context(), p4, member)
+	if err != nil || recovered.Status != domain.MemberStatusActive {
+		t.Errorf("suspended leg must be recovered FIFO, got %+v (%v)", recovered, err)
+	}
+	// The removal itself sends nothing; «access_restored» comes from the
+	// shared slot coordinator's recovery (cut with the lifecycle emails, #695).
+	if f.mailer.count("access_revoked") != 0 || f.mailer.count("invite") != 0 {
+		t.Errorf("removal must not send revoke/invite emails, sent %+v", f.mailer.sent)
+	}
+}
+
+func TestParticipantMutation_Remove_PendingEmail(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	other := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testOwnTitle)
+	f.addProperty(p2, other, testForeignTitle)
+	for _, tc := range []struct {
+		prop uuid.UUID
+		by   uuid.UUID
+	}{
+		{p1, f.owner},
+		{p2, other},
+	} {
+		if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+			ID: uuid.Must(uuid.NewV7()), PropertyID: tc.prop, Email: testPendingEmail,
+			Role: domain.RoleViewer, InvitedBy: tc.by, LastSentAt: f.clk.now, CreatedAt: f.clk.now,
+		}); err != nil {
+			t.Fatalf("seed invitation: %v", err)
+		}
+	}
+
+	if err := f.svc.Remove(t.Context(), f.owner, testPendingEmail); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if len(f.invitations.rows) != 1 || f.invitations.rows[0].PropertyID != p2 {
+		t.Errorf("invitations = %+v, want only the foreign-owner one", f.invitations.rows)
+	}
+}
+
+func TestParticipantMutation_Remove_NotFound(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testOwnTitle)
+
+	for name, id := range map[string]string{
+		"unknown uuid":   uuid.Must(uuid.NewV7()).String(),
+		"unknown email":  "ghost@x.ru",
+		"malformed id":   "not-an-email",
+		"the actor self": f.owner.String(),
+	} {
+		if err := f.svc.Remove(t.Context(), f.owner, id); !errors.Is(err, domain.ErrParticipantNotFound) {
+			t.Errorf("%s: expected ErrParticipantNotFound, got %v", name, err)
+		}
+	}
+	// A registered person whose only legs are outside the actor's scope.
+	other := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	f.addProperty(p2, other, testForeignTitle)
+	member := uuid.Must(uuid.NewV7())
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: p2, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: other,
+	}); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+	if err := f.svc.Remove(t.Context(), f.owner, member.String()); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("out-of-scope person: expected ErrParticipantNotFound, got %v", err)
+	}
+}
+
+// firstRow returns the membership row for (property, any user) or nil.
+func firstRow(rows []domain.Membership, propertyID uuid.UUID) *domain.Membership {
+	for i := range rows {
+		if rows[i].PropertyID == propertyID {
+			return &rows[i]
+		}
+	}
+	return nil
+}
+
+func TestParticipantMutation_AddProperties_ArchivedPropertySkipped(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	pActive, pArchived := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(pActive, f.owner, testFirstTitle)
+	f.addProperty(pArchived, f.owner, testSecondTitle)
+	f.statuses[pArchived] = true
+	member := uuid.Must(uuid.NewV7())
+	f.emails[member] = testMemberEmail
+	// An existing participant (a pending invitation on the active property),
+	// so the batch passes the existence gate.
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: pActive, Email: testMemberEmail,
+		Role: domain.RoleViewer, InvitedBy: f.owner, LastSentAt: f.clk.now, CreatedAt: f.clk.now,
+	}); err != nil {
+		t.Fatalf("seed invitation: %v", err)
+	}
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 1)
+
+	results, err := f.svc.AddProperties(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{pArchived, pActive})
+	if err != nil {
+		t.Fatalf("add properties: %v", err)
+	}
+	// The archived object gets no grant (issue #163); the active one does.
+	if results[0].Outcome != ParticipantGrantArchived || results[0].MembershipID != (uuid.UUID{}) {
+		t.Errorf("results[0] = %+v, want skipped_archived", results[0])
+	}
+	if results[1].Outcome != ParticipantGrantActive || results[1].MembershipID == uuid.Nil {
+		t.Errorf("results[1] = %+v, want active", results[1])
+	}
+}
+
+// TestParticipantMutation_ActiveGrantPublishesGranted checks the batch side of
+// the instant landing (issue #829): every ACTIVE leg of the Invite batch
+// notifies the new member — one granted event per leg, the granting actor
+// named (the subscriber renders the №5 «Приглашение в объект» row).
+func TestParticipantMutation_ActiveGrantPublishesGranted(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.addProperty(p2, f.owner, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 5)
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1, p2})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	for i, r := range results {
+		if r.Outcome != ParticipantGrantActive {
+			t.Fatalf("results[%d] = %+v, want active", i, r)
+		}
+	}
+	if got := f.events.count(kindMembershipGranted); got != 2 {
+		t.Fatalf("expected one granted event per active leg, got %d", got)
+	}
+	// The events append in leg order, mirroring the results order.
+	granted := 0
+	for _, ev := range f.events.events {
+		if ev.kind != kindMembershipGranted {
+			continue
+		}
+		r := results[granted]
+		if ev.grant.MembershipID != r.MembershipID || ev.grant.PropertyID != r.PropertyID {
+			t.Errorf("granted event %d = (%s, %s), want leg (%s, %s)",
+				granted, ev.grant.MembershipID, ev.grant.PropertyID, r.MembershipID, r.PropertyID)
+		}
+		if ev.grant.RecipientID != member || ev.grant.ActorID != f.owner {
+			t.Errorf("granted event %d recipient/actor = (%s, %s), want (%s, %s)",
+				granted, ev.grant.RecipientID, ev.grant.ActorID, member, f.owner)
+		}
+		granted++
+	}
+}
+
+// TestParticipantMutation_AddProperties_ActiveGrantPublishesGranted extends the
+// granted event to the «Пригласить в объект» input (issue #829): the new
+// active leg of an existing participant notifies them like any other landing.
+func TestParticipantMutation_AddProperties_ActiveGrantPublishesGranted(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.emails[member] = testMemberEmail
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 5)
+	// The person must already hold a leg in the actor's scope.
+	if _, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1}); err != nil {
+		t.Fatalf("seed invite: %v", err)
+	}
+
+	p2 := uuid.Must(uuid.NewV7())
+	f.addProperty(p2, f.owner, testSecondTitle)
+	f.events.events = nil
+	results, err := f.svc.AddProperties(t.Context(), f.owner, member.String(), domain.RoleViewer,
+		[]uuid.UUID{p2})
+	if err != nil {
+		t.Fatalf("add properties: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantActive {
+		t.Fatalf("results[0] = %+v, want active", results[0])
+	}
+	e := f.events.last(t, kindMembershipGranted).grant
+	if e.MembershipID != results[0].MembershipID || e.PropertyID != p2 ||
+		e.RecipientID != member || e.ActorID != f.owner {
+		t.Errorf("granted event = %+v, want the p2 leg for %s by %s", e, member, f.owner)
+	}
+}
+
+// TestParticipantMutation_Invite_MixedBatchPublishesPerLeg checks the mixed
+// batch (issue #829): the active leg publishes the granted event, the no-slot
+// leg the system pause — each landing speaks its own catalog row.
+func TestParticipantMutation_Invite_MixedBatchPublishesPerLeg(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1, p2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.addProperty(p2, f.owner, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 1) // The first leg fits, the second suspends.
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1, p2})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantActive || results[1].Outcome != ParticipantGrantSuspended {
+		t.Fatalf("outcomes = (%s, %s), want (active, suspended)", results[0].Outcome, results[1].Outcome)
+	}
+	if got := f.events.count(kindMembershipGranted); got != 1 {
+		t.Errorf("expected exactly one granted event, got %d", got)
+	}
+	if got := f.events.count(kindMembershipSuspended); got != 1 {
+		t.Errorf("expected exactly one suspended event, got %d", got)
+	}
+	granted := f.events.last(t, kindMembershipGranted).grant
+	if granted.MembershipID != results[0].MembershipID || granted.PropertyID != p1 {
+		t.Errorf("granted event = (%s, %s), want the active leg (%s, %s)",
+			granted.MembershipID, granted.PropertyID, results[0].MembershipID, p1)
+	}
+}
+
+// TestParticipantMutation_Invite_SuspendedGrantPublishesSystemPause checks the
+// no-slot leg of a batch: the per-property suspended outcome publishes the
+// system «Доступ приостановлен» event — no actor, the recipient and the row's
+// own suspension instant, like AddMember's pause (карта #734, #751).
+func TestParticipantMutation_Invite_SuspendedGrantPublishesSystemPause(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.lookup.add(testMemberEmail, member)
+	f.limiter.set(member, 0)
+
+	results, err := f.svc.Invite(t.Context(), f.owner, testMemberEmail, domain.RoleViewer,
+		[]uuid.UUID{p1})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if results[0].Outcome != ParticipantGrantSuspended {
+		t.Fatalf("results[0] = %+v, want suspended", results[0])
+	}
+	ev := f.events.last(t, kindMembershipSuspended)
+	pause := ev.pause
+	if pause.MembershipID != results[0].MembershipID || pause.PropertyID != p1 {
+		t.Errorf("pause event = %+v, want membership %s on %s", pause, results[0].MembershipID, p1)
+	}
+	if pause.RecipientID != member {
+		t.Errorf("pause recipient = %s, want %s", pause.RecipientID, member)
+	}
+	if pause.ActorID != (uuid.UUID{}) {
+		t.Errorf("pause actor = %s, want the system Nil actor", pause.ActorID)
+	}
+	if pause.SuspendedAt.IsZero() {
+		t.Errorf("pause instant is zero, want the membership row's suspension instant")
+	}
+}
+
+// TestParticipantMutation_Remove_PublishesRevokedForActiveLegsOnly extends the
+// single-property revoke canon to the batch: every removed ACTIVE membership
+// notifies the former member post-commit; a suspended leg publishes nothing —
+// the object was already hidden from them (карта #734, #751, T6 canon).
+func TestParticipantMutation_Remove_PublishesRevokedForActiveLegsOnly(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	pActive, pSuspended := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.addProperty(pActive, f.owner, testFirstTitle)
+	f.addProperty(pSuspended, f.owner, testSecondTitle)
+	member := uuid.Must(uuid.NewV7())
+	f.emails[member] = testMemberEmail
+
+	activeID := uuid.Must(uuid.NewV7())
+	if _, err := f.repo.Create(t.Context(), domain.Membership{
+		ID: activeID, PropertyID: pActive, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: f.owner,
+	}); err != nil {
+		t.Fatalf("seed active leg: %v", err)
+	}
+	suspendedAt := f.clk.now
+	suspendedID := uuid.Must(uuid.NewV7())
+	if _, err := f.repo.CreateWithStatus(t.Context(), domain.Membership{
+		ID: suspendedID, PropertyID: pSuspended, UserID: member,
+		Role: domain.RoleViewer, GrantedBy: f.owner,
+		Status: domain.MemberStatusSuspended, SuspendedAt: &suspendedAt,
+	}); err != nil {
+		t.Fatalf("seed suspended leg: %v", err)
+	}
+
+	if err := f.svc.Remove(t.Context(), f.owner, member.String()); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if got := f.events.count(kindMembershipRevoked); got != 1 {
+		t.Fatalf("membership_revoked events = %d, want exactly 1 (the active leg)", got)
+	}
+	ev := f.events.last(t, kindMembershipRevoked)
+	revoke := ev.revo
+	if revoke.MembershipID != activeID || revoke.PropertyID != pActive {
+		t.Errorf("revoke event = %+v, want the active leg %s on %s", revoke, activeID, pActive)
+	}
+	if revoke.RecipientID != member {
+		t.Errorf("revoke recipient = %s, want %s", revoke.RecipientID, member)
+	}
+	if revoke.ActorID != f.owner {
+		t.Errorf("revoke actor = %s, want %s", revoke.ActorID, f.owner)
+	}
+}
+
+// TestParticipantMutation_HubMutationsOwnerOnly is the D8 role matrix of the
+// hub mutations (issue #1304): a full_access member of a foreign property is
+// not in the manage scope anymore — their batch comes back all
+// skipped_unavailable, and both person-targeted mutations answer the
+// privacy-preserving ErrParticipantNotFound.
+func TestParticipantMutation_HubMutationsOwnerOnly(t *testing.T) {
+	t.Parallel()
+	f := newMutationFixture()
+	p1 := uuid.Must(uuid.NewV7())
+	manager := uuid.Must(uuid.NewV7())
+	person := uuid.Must(uuid.NewV7())
+	f.addProperty(p1, f.owner, testFirstTitle)
+	f.limiter.set(manager, 5)
+
+	// The manager holds an active full_access leg on the foreign property and
+	// owns nothing; the person is the owner's participant there.
+	if _, err := f.access.AddMember(t.Context(), f.owner, p1, manager, domain.RoleFullAccess); err != nil {
+		t.Fatalf("AddMember manager: %v", err)
+	}
+	if _, err := f.access.AddMember(t.Context(), f.owner, p1, person, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember person: %v", err)
+	}
+
+	results, err := f.svc.Invite(t.Context(), manager, testNewUserEmail, domain.RoleViewer, []uuid.UUID{p1})
+	if err != nil {
+		t.Fatalf("Invite by manager: %v", err)
+	}
+	if len(results) != 1 || results[0].Outcome != ParticipantGrantUnavailable {
+		t.Fatalf("Invite by manager: outcomes %+v, want one skipped_unavailable", results)
+	}
+
+	if _, err := f.svc.AddProperties(t.Context(), manager, person.String(), domain.RoleViewer,
+		[]uuid.UUID{p1}); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("AddProperties by manager: expected ErrParticipantNotFound, got %v", err)
+	}
+
+	if err := f.svc.Remove(t.Context(), manager, person.String()); !errors.Is(err, domain.ErrParticipantNotFound) {
+		t.Errorf("Remove by manager: expected ErrParticipantNotFound, got %v", err)
+	}
+}

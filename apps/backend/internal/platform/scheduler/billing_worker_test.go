@@ -13,14 +13,27 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 )
 
+// Distinct advisory-lock keys for the parallel DB-backed tick tests: they
+// share one test database, and leader election would make concurrent ticks
+// skip each other's work (a pre-existing flake surfaced by issue #337 runs).
+const (
+	billingSanitizeTestLockKey int64 = 0x7E59
+	billingUpgradeTestLockKey  int64 = 0x7E60
+	billingHoldTestLockKey     int64 = 0x7E61
+)
+
 type fakeBillingRunner struct {
 	scheduledErr        error
 	renewalErr          error
+	graceRetryErr       error
 	pendingUpgradeErr   error
+	graceReminderErr    error
 	expiredGraceErr     error
 	scheduledCount      int
 	renewalCount        int
+	graceRetryCount     int
 	pendingUpgradeCount int
+	graceReminderCount  int
 	expiredGraceCount   int
 	scheduledStarted    chan struct{}
 	scheduledDelay      <-chan struct{}
@@ -46,12 +59,32 @@ func (s *fakeBillingRunner) ProcessRenewals(context.Context, time.Time) (int, er
 	return s.renewalCount, s.renewalErr
 }
 
+func (s *fakeBillingRunner) ProcessGraceRetries(context.Context, time.Time) (int, error) {
+	return s.graceRetryCount, s.graceRetryErr
+}
+
 func (s *fakeBillingRunner) ProcessExpiredGrace(context.Context, time.Time) (int, error) {
 	return s.expiredGraceCount, s.expiredGraceErr
 }
 
+func (s *fakeBillingRunner) ProcessGraceExpiryReminders(context.Context, time.Time) (int, error) {
+	return s.graceReminderCount, s.graceReminderErr
+}
+
 func (s *fakeBillingRunner) ProcessPendingUpgradePayments(context.Context, time.Time) (int, error) {
 	return s.pendingUpgradeCount, s.pendingUpgradeErr
+}
+
+func (s *fakeBillingRunner) ProcessExpiredPendingPayments(context.Context, time.Time) (int, error) {
+	return 0, nil
+}
+
+func (s *fakeBillingRunner) ProcessExpiredBindingSessions(context.Context, time.Time) (int, error) {
+	return 0, nil
+}
+
+func (s *fakeBillingRunner) ExportStuckPaymentMetrics(context.Context, time.Time) error {
+	return nil
 }
 
 func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
@@ -72,16 +105,17 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
-	sensitive := "token=secret123 card 1234-5678-9012-3456 phone +79991234567"
+	sensitive := testSensitivePayload
 	svc := &fakeBillingRunner{
 		scheduledErr:    errors.New("scheduled changes failed: " + sensitive),
 		renewalErr:      errors.New("renewals failed: " + sensitive),
 		expiredGraceErr: errors.New("expired grace failed: " + sensitive),
 	}
 
-	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w := NewBillingWorker(nil, nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 	w.renewals = svc
 	w.scheduled = svc
+	w.lockKey = billingSanitizeTestLockKey
 
 	if err := w.tick(context.Background()); err == nil {
 		t.Fatal("expected tick to return errors")
@@ -89,9 +123,9 @@ func TestBillingWorker_Tick_SanitizesServiceErrors(t *testing.T) {
 
 	logs := logBuf.String()
 	forbidden := []string{
-		"token=secret123",
-		"1234-5678-9012-3456",
-		"+79991234567",
+		testSecretToken,
+		testCardNumber,
+		testUserPhone,
 	}
 	for _, s := range forbidden {
 		if strings.Contains(logs, s) {
@@ -128,9 +162,10 @@ func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	svc := &fakeBillingRunner{pendingUpgradeCount: 3}
-	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
+	w := NewBillingWorker(nil, nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, logger)
 	w.renewals = svc
 	w.scheduled = svc
+	w.lockKey = billingUpgradeTestLockKey
 
 	if err := w.tick(context.Background()); err != nil {
 		t.Fatalf("tick error: %v", err)
@@ -148,9 +183,45 @@ func TestBillingWorkerTick_CallsProcessPendingUpgradePayments(t *testing.T) {
 func TestBillingWorker_Tick_RequiresPool(t *testing.T) {
 	t.Parallel()
 
-	w := NewBillingWorker(nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	w := NewBillingWorker(nil, nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
 	if err := w.tick(context.Background()); err == nil {
 		t.Fatal("expected tick to error when pool is nil")
+	}
+}
+
+// TestBillingWorker_TickOnce_RunsOnePass proves the admin-triggered tick of
+// the time-travel rig (issue #665): TickOnce runs the same leader-elected
+// pass synchronously — without the pool it fails loudly, and with the
+// database it runs every phase once and answers nil.
+func TestBillingWorker_TickOnce_RunsOnePass(t *testing.T) {
+	t.Parallel()
+
+	// The no-pool wiring fails the tick instead of pretending it ran.
+	rigless := NewBillingWorker(nil, nil, nil, nil, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	if err := rigless.TickOnce(context.Background()); err == nil {
+		t.Fatal("expected TickOnce to error when pool is nil")
+	}
+
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+
+	ctx := context.Background()
+	pool, err := database.NewPool(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("new pool: %v", err)
+	}
+	defer pool.Close()
+
+	svc := &fakeBillingRunner{pendingUpgradeCount: 1}
+	w := NewBillingWorker(nil, nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	w.renewals = svc
+	w.scheduled = svc
+	w.lockKey = billingUpgradeTestLockKey
+
+	if err := w.TickOnce(ctx); err != nil {
+		t.Fatalf("TickOnce() error = %v", err)
 	}
 }
 
@@ -178,9 +249,10 @@ func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 		scheduledDelay:   scheduledDelay,
 	}
 
-	w := NewBillingWorker(nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
+	w := NewBillingWorker(nil, nil, nil, pool, fakeClockForWorker{now: time.Now()}, time.Hour, slog.New(slog.DiscardHandler))
 	w.renewals = svc
 	w.scheduled = svc
+	w.lockKey = billingHoldTestLockKey
 
 	tickDone := make(chan error, 1)
 	go func() {
@@ -200,7 +272,7 @@ func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 	defer testConn.Release()
 
 	var acquired bool
-	if err := testConn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", billingWorkerLockKey).Scan(&acquired); err != nil {
+	if err := testConn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", w.lockKey).Scan(&acquired); err != nil {
 		t.Fatalf("try advisory lock during work: %v", err)
 	}
 	if acquired {
@@ -218,11 +290,15 @@ func TestBillingWorker_Tick_HoldsAdvisoryLockDuringWork(t *testing.T) {
 		t.Fatal("timed out waiting for tick to complete")
 	}
 
-	if err := testConn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", billingWorkerLockKey).Scan(&acquired); err != nil {
+	if err := testConn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", w.lockKey).Scan(&acquired); err != nil {
 		t.Fatalf("try advisory lock after tick: %v", err)
 	}
 	if !acquired {
 		t.Fatal("advisory lock should be released after tick completes")
 	}
-	_, _ = testConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", billingWorkerLockKey)
+	// The unlock returns the advisory lock held only by this test; a failure
+	// would leak it to sibling integration tests sharing the database.
+	if _, err := testConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", w.lockKey); err != nil {
+		t.Errorf("unlock advisory lock after tick: %v", err)
+	}
 }

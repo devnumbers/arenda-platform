@@ -1,12 +1,12 @@
-export { accessKeys } from './keys';
+export { accessKeys } from '@/shared/api/query-keys';
 export {
     usePropertyAccessMembers,
-    useInvitePropertyAccessMember,
+    usePropertyAccessMember,
     useUpdatePropertyAccessMember,
     useUpdatePropertyAccessInvitation,
-    useResendPropertyAccessInvitation,
     useCancelPropertyAccessInvitation,
     useDeletePropertyAccessMember,
-    type InviteMemberInput,
+    useRevokeAllPropertyAccessMembers,
+    type PropertyAccessMemberRef,
     type ChangeMemberRoleInput,
 } from './hooks';

@@ -1,6 +1,9 @@
+// Package pgconv converts between Go domain values (UUIDs, timestamps) and pgx wire types,
+// and shapes SQL-facing strings (ILIKE-pattern escaping via EscapeLikePattern).
 package pgconv
 
 import (
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +28,19 @@ func UUIDSliceToPgtype(ids []uuid.UUID) []pgtype.UUID {
 	out := make([]pgtype.UUID, len(ids))
 	for i, id := range ids {
 		out[i] = UUIDToPgtype(id)
+	}
+	return out
+}
+
+// UUIDSliceFromPgtype converts a slice of pgtype.UUID (a uuid[] column scan)
+// back to uuid.UUID values; nil stays nil.
+func UUIDSliceFromPgtype(ids []pgtype.UUID) []uuid.UUID {
+	if ids == nil {
+		return nil
+	}
+	out := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = UUIDFromPgtype(id)
 	}
 	return out
 }
@@ -138,4 +154,23 @@ func Int8ToPtr(n pgtype.Int8) *int64 {
 		return nil
 	}
 	return new(n.Int64)
+}
+
+// Int4PtrToPgtype converts a *int to pgtype.Int4.
+// A nil pointer produces an invalid Int4; any non-nil pointer produces a valid Int4 holding its value.
+// A value outside the int32 range produces an invalid Int4 — a lossy write must not look like a NULL-free success.
+func Int4PtrToPgtype(n *int) pgtype.Int4 {
+	if n == nil || *n < math.MinInt32 || *n > math.MaxInt32 {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: int32(*n), Valid: true}
+}
+
+// Int4ToPtr converts a pgtype.Int4 to *int.
+// An invalid Int4 returns nil; a valid Int4 returns a pointer to its value.
+func Int4ToPtr(n pgtype.Int4) *int {
+	if !n.Valid {
+		return nil
+	}
+	return new(int(n.Int32))
 }

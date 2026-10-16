@@ -1,16 +1,13 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import {
-  ArrayField,
   Datagrid,
   DateField,
-  ImageField,
   List,
   ReferenceManyField,
   SelectField,
   SelectInput,
   Show,
-  SingleFieldList,
   Tab,
   TabbedShowLayout,
   TextField,
@@ -21,13 +18,10 @@ import {
   ChoiceChipField,
   OwnerLinkField,
   UserReferenceField,
-  occupancyChoices,
   propertyStatusChoices,
   propertyStatusFilterChoices,
   propertyTypeChoices,
 } from './fields';
-import { LeaseDatagrid } from './leases';
-import { OperationDatagrid } from './operations';
 import {
   formatAttributesForCardGrouped,
   isPropertyType,
@@ -48,7 +42,6 @@ export const PropertyList = () => (
       <TextField source="address" sortable={false} />
       <SelectField source="type" choices={propertyTypeChoices} sortable={false} />
       <ChoiceChipField source="status" choices={propertyStatusChoices} />
-      <SelectField source="occupancy" choices={occupancyChoices} sortable={false} />
       <OwnerLinkField source="ownerId" sortable={false} />
     </Datagrid>
   </List>
@@ -127,38 +120,12 @@ export const PropertyShow = () => (
         <TextField source="name" />
         <SelectField source="type" choices={propertyTypeChoices} />
         <SelectField source="status" choices={propertyStatusChoices} />
-        <SelectField source="occupancy" choices={occupancyChoices} />
         <TextField source="address" />
         <TextField source="description" />
-        <ArrayField source="photos">
-          <SingleFieldList linkType={false}>
-            <ImageField source="url" />
-          </SingleFieldList>
-        </ArrayField>
         <PropertyAttributesBlock />
         <DateField source="createdAt" showTime />
         <DateField source="updatedAt" showTime />
         <TextField source="id" />
-      </Tab>
-      <Tab label="Договоры">
-        <ReferenceManyField
-          reference="leases"
-          target="property_id"
-          label={false}
-          sort={{ field: 'updatedAt', order: 'DESC' }}
-        >
-          <LeaseDatagrid />
-        </ReferenceManyField>
-      </Tab>
-      <Tab label="Операции">
-        <ReferenceManyField
-          reference="operations"
-          target="property_id"
-          label={false}
-          sort={{ field: 'operationDate', order: 'DESC' }}
-        >
-          <OperationDatagrid />
-        </ReferenceManyField>
       </Tab>
       <Tab label="Контакты">
         <ReferenceManyField

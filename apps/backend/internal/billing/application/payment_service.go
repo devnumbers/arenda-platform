@@ -5,35 +5,135 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
 
-// PaymentService lists and acts on subscription payments.
+// paymentFinalizerProvider is the narrow provider slice the payment service
+// needs: parsing and acknowledging webhooks, querying the provider-side
+// payment status, refunding a payment, and the provider identity. Declared
+// here, at the consumer, per ADR 0035.
+type paymentFinalizerProvider interface {
+	WebhookParser
+	WebhookResponder
+	PaymentStatusReader
+	PaymentRefunder
+	ProviderNamer
+}
+
+// PaymentService finalizes subscription payments: it processes provider
+// webhooks synchronously (issue #250, ADR 0039), applies parsed provider
+// events of every delivery channel, lists the user's payments, and runs the
+// admin payment operations of issue #254 — the three-phase refund saga, the
+// manual provider sync and the admin listing. The payment itself is started
+// by SubscriptionService.ChangeTariff; this service owns everything that
+// happens after the provider reports an outcome.
 type PaymentService struct {
-	deps     paymentServiceDeps
-	provider PaymentManager
+	txStoreFactory
+	provider paymentFinalizerProvider
+	clock    clock.Clock
+	config   Config
+	log      *slog.Logger
+	// Publisher emits the grace-entered event best-effort when an
+	// asynchronously failed renewal charge moves the subscription into grace
+	// (issue #253); nil keeps the pre-#253 behaviour.
+	publisher EventPublisher
+	// AdminPayments reads the cross-user payment rows behind the admin views
+	// (issue #254); nil keeps the admin read methods answered by an explicit
+	// wiring error.
+	adminPayments AdminPaymentListing
+	// ArchiverSource and slotSource bridge the refund's subscription
+	// downgrade to the properties and access contexts (issue #254); nil until
+	// SetLifecycleBridges wires them (the payment-side refund still applies
+	// without the bridges, only the excess archiving waits).
+	archiverSource ExcessPropertyArchiverSource
+	slotSource     RecipientSlotEnforcerSource
 }
 
-// NewPaymentService creates a PaymentService.
-func NewPaymentService(deps paymentServiceDeps, provider PaymentManager) *PaymentService {
-	return &PaymentService{deps: deps, provider: provider}
+// PaymentServiceConfig carries the non-transactional dependencies of the
+// payment service.
+type PaymentServiceConfig struct {
+	Clock clock.Clock
+	Log   *slog.Logger
+	// Config carries the operational parameters; the grace duration backs the
+	// grace entry of an asynchronously failed renewal charge (issue #252).
+	Config Config
+	// Publisher emits the grace lifecycle events (issue #253); nil keeps the
+	// pre-#253 behaviour.
+	Publisher EventPublisher
+	// AdminPayments reads the cross-user payment rows behind the admin views
+	// (issue #254); nil keeps the admin read methods answered by an explicit
+	// wiring error.
+	AdminPayments AdminPaymentListing
 }
 
-// ListPayments returns all subscription payments for the user with their tariffs.
+// NewPaymentService creates a payment service over the shared factory.
+func NewPaymentService(factory txStoreFactory, provider paymentFinalizerProvider, cfg PaymentServiceConfig) *PaymentService {
+	if cfg.Clock == nil {
+		cfg.Clock = clock.Real{}
+	}
+	if cfg.Log == nil {
+		cfg.Log = slog.Default()
+	}
+	if cfg.Config == (Config{}) {
+		cfg.Config = DefaultConfig()
+	}
+	return &PaymentService{
+		txStoreFactory: factory,
+		provider:       provider,
+		clock:          cfg.Clock,
+		config:         cfg.Config,
+		log:            cfg.Log,
+		publisher:      cfg.Publisher,
+		adminPayments:  cfg.AdminPayments,
+	}
+}
+
+// SetLifecycleBridges wires the cross-context lifecycle bridges the refund
+// finalization calls in its transaction: excess-property archiving
+// (properties context) and recipient-slot enforcement (access context). The
+// composition root calls it with the same bridge sources the workers use —
+// billing is built before them. Without bridges the refund still marks the
+// payment and downgrades the subscription; only the excess properties and
+// suspended memberships wait for the next wired run.
+func (s *PaymentService) SetLifecycleBridges(archiver ExcessPropertyArchiverSource, slots RecipientSlotEnforcerSource) {
+	s.archiverSource = archiver
+	s.slotSource = slots
+}
+
+// WebhookAck returns the fixed success body the provider expects as the
+// acknowledgement of a processed webhook.
+func (s *PaymentService) WebhookAck() []byte {
+	return s.provider.WebhookAck()
+}
+
+// GetPayment returns one subscription payment by its id — the read behind the
+// flows that address a single payment directly (the dev-only local provider
+// confirmation, issue #287). A missing payment answers ErrPaymentNotFound.
+func (s *PaymentService) GetPayment(ctx context.Context, paymentID uuid.UUID) (domain.SubscriptionPayment, error) {
+	payment, err := s.payments.GetByID(ctx, paymentID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.SubscriptionPayment{}, ErrPaymentNotFound
+		}
+		return domain.SubscriptionPayment{}, fmt.Errorf("get payment: %w", err)
+	}
+	return payment, nil
+}
+
+// ListPayments returns the user's subscription payments with their tariffs
+// and charged cards resolved, newest first (GET /subscription/payments,
+// issues #250, #619).
 func (s *PaymentService) ListPayments(ctx context.Context, userID uuid.UUID) ([]SubscriptionPaymentView, error) {
-	payments, err := s.deps.subscriptionPayments.ListByUserID(ctx, userID)
+	payments, err := s.payments.ListByUserIDWithCard(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list payments: %w", err)
 	}
-
-	tariffs, err := s.deps.tariffs.List(ctx)
+	tariffs, err := s.tariffs.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list tariffs: %w", err)
 	}
@@ -43,831 +143,699 @@ func (s *PaymentService) ListPayments(ctx context.Context, userID uuid.UUID) ([]
 	}
 
 	views := make([]SubscriptionPaymentView, 0, len(payments))
-	for _, p := range payments {
-		t, ok := tariffByID[p.TariffID]
+	for _, row := range payments {
+		tariff, ok := tariffByID[row.Payment.TariffID]
 		if !ok {
-			return nil, fmt.Errorf("payment %s references unknown tariff %s", p.ID, p.TariffID)
+			return nil, fmt.Errorf("payment %s references unknown tariff %s", row.Payment.ID, row.Payment.TariffID)
 		}
-		views = append(views, SubscriptionPaymentView{Payment: p, Tariff: t})
+		views = append(views, SubscriptionPaymentView{Payment: row.Payment, Tariff: tariff, CardMask: row.ResolvedCardMask})
 	}
 	return views, nil
 }
 
-// GetPayment returns a single subscription payment for admin view.
-func (s *PaymentService) GetPayment(ctx context.Context, paymentID uuid.UUID) (AdminSubscriptionPaymentView, error) {
-	p, err := s.deps.subscriptionPayments.GetByIDAdmin(ctx, paymentID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return AdminSubscriptionPaymentView{}, ErrPaymentNotFound
-		}
-		return AdminSubscriptionPaymentView{}, fmt.Errorf("get payment: %w", err)
+// HandleWebhook parses, verifies and synchronously applies one provider
+// notification (issue #250). It returns nil only when the notification is
+// fully processed — including the idempotent no-op of a repeated delivery;
+// any error means the caller must answer non-200 so the provider retries.
+func (s *PaymentService) HandleWebhook(ctx context.Context, providerName string, payload []byte) error {
+	if domain.PaymentProvider(providerName) != s.provider.Name() {
+		return fmt.Errorf("%w: got %q, active provider is %q", ErrWebhookProviderMismatch, providerName, s.provider.Name())
 	}
-
-	tariff, err := s.deps.tariffs.GetByID(ctx, p.Payment.TariffID)
+	event, err := s.provider.ParseWebhook(ctx, payload)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return AdminSubscriptionPaymentView{}, ErrTariffNotFound
-		}
-		return AdminSubscriptionPaymentView{}, fmt.Errorf("get payment tariff: %w", err)
+		return fmt.Errorf("%w: parse webhook: %w", ErrWebhookRejected, err)
 	}
-
-	return AdminSubscriptionPaymentView{
-		Payment:   p.Payment,
-		Tariff:    tariff,
-		UserPhone: p.UserPhone,
-	}, nil
+	return s.ApplyProviderEvent(ctx, event)
 }
 
-// ListAllPayments returns all subscription payments for admin view.
-func (s *PaymentService) ListAllPayments(ctx context.Context, filters ListAllPaymentsFilters) ([]AdminSubscriptionPaymentView, int64, error) {
-	if filters.Limit <= 0 {
-		filters.Limit = 20
-	}
-	filters.Limit = min(filters.Limit, 100)
-	filters.Offset = max(filters.Offset, 0)
-
-	if filters.Status != "" && !slices.Contains([]string{
-		string(domain.PaymentStatusPending),
-		string(domain.PaymentStatusSucceeded),
-		string(domain.PaymentStatusFailed),
-		string(domain.PaymentStatusRefunded),
-		string(domain.PaymentStatusPartialRefunded),
-	}, filters.Status) {
-		return nil, 0, fmt.Errorf("%w: invalid status filter", ErrInvalidFilter)
-	}
-
-	// Sort field whitelist (API camelCase names). The SQL layer maps these
-	// fixed values to columns via CASE expressions; user input is never
-	// interpolated into SQL.
-	filters.Sort = strings.TrimSpace(filters.Sort)
-	if filters.Sort != "" {
-		if !slices.Contains([]string{"createdAt", "amountKopecks", "status"}, filters.Sort) {
-			return nil, 0, fmt.Errorf("%w: unsupported sort field %q", ErrInvalidFilter, filters.Sort)
-		}
-		filters.Order = strings.TrimSpace(filters.Order)
-		if filters.Order == "" {
-			filters.Order = "desc"
-		}
-		if filters.Order != "asc" && filters.Order != "desc" {
-			return nil, 0, fmt.Errorf("%w: unsupported sort order %q", ErrInvalidFilter, filters.Order)
-		}
-	}
-
-	payments, total, err := s.deps.subscriptionPayments.ListAll(ctx, filters)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list all payments: %w", err)
-	}
-
-	tariffs, err := s.deps.tariffs.List(ctx)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list tariffs: %w", err)
-	}
-	tariffByID := make(map[uuid.UUID]domain.Tariff, len(tariffs))
-	for _, t := range tariffs {
-		tariffByID[t.ID] = t
-	}
-
-	views := make([]AdminSubscriptionPaymentView, 0, len(payments))
-	for _, p := range payments {
-		t, ok := tariffByID[p.Payment.TariffID]
-		if !ok {
-			return nil, 0, fmt.Errorf("payment %s references unknown tariff %s", p.Payment.ID, p.Payment.TariffID)
-		}
-		views = append(views, AdminSubscriptionPaymentView{
-			Payment:   p.Payment,
-			Tariff:    t,
-			UserPhone: p.UserPhone,
-		})
-	}
-
-	return views, total, nil
-}
-
-// ConfirmFakePayment confirms a previously initialized fake payment and applies its result.
-func (s *PaymentService) ConfirmFakePayment(ctx context.Context, paymentID uuid.UUID) error {
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind subscription payments transaction: %w", err)
-	}
-
-	payment, err := txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment: %w", err)
-	}
-
-	if payment.Status == domain.PaymentStatusSucceeded || payment.Status == domain.PaymentStatusFailed {
-		if payment.Status == domain.PaymentStatusSucceeded {
-			applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-				beginner:              s.deps.beginner,
-				subscriptions:         s.deps.subscriptions,
-				tariffs:               s.deps.tariffs,
-				propertyArchiver:      s.deps.propertyArchiver,
-				recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
-				clock:                 s.deps.clock,
-				log:                   s.deps.log,
-			}, payment)
-		}
-		return nil
-	}
-
-	cp, ok := s.provider.(ConfirmableProvider)
-	if !ok {
-		return ErrProviderNotConfirmable
-	}
-
-	payload, err := cp.ConfirmPayment(ctx, payment.ID.String())
-	if err != nil {
-		return fmt.Errorf("confirm fake payment: %w", err)
-	}
-
-	if err := applyPaymentResult(ctx, paymentResultDeps{
-		subscriptionPayments: s.deps.subscriptionPayments,
-		paymentMethods:       s.deps.paymentMethods,
-		clock:                s.deps.clock,
-		log:                  s.deps.log,
-		provider:             s.provider,
-	}, tx, &payment, payload); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit fake payment confirmation transaction: %w", err)
-	}
-
-	applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-		beginner:              s.deps.beginner,
-		subscriptions:         s.deps.subscriptions,
-		tariffs:               s.deps.tariffs,
-		propertyArchiver:      s.deps.propertyArchiver,
-		recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
-		clock:                 s.deps.clock,
-		log:                   s.deps.log,
-	}, payment)
-	return nil
-}
-
-// RefundPayment cancels/refunds a succeeded or pending subscription payment
-// through the provider and immediately downgrades the subscription to basic.
-// The system always refunds the full payment amount. The provider HTTP call is
-// made outside of any database transaction so a slow provider cannot hold a row
-// lock for an unbounded time.
-//
-// To prevent a double refund under concurrency, the payment is atomically
-// reserved into the internal refunding status in a short first transaction
-// BEFORE the provider is called. A concurrent refund attempt loses the
-// reservation race (BeginRefund returns ErrInvalidPaymentStatus) and never
-// reaches the provider. If the provider call fails or returns a non-refund
-// status, the reservation is reverted to the previous status in a separate
-// short transaction so the payment can be refunded again later. If the provider
-// accepts the refund but has not settled it yet (refunding), the reservation is
-// kept: the ReconcileStaleRefunds watchdog finalizes or reverts it from the
-// provider state.
-//
-// actorID identifies the admin who triggered the refund for the audit trail;
-// uuid.Nil marks a system-initiated call.
-func (s *PaymentService) RefundPayment(ctx context.Context, actorID uuid.UUID, paymentID uuid.UUID) error {
-	// Phase 1 (tx, reserve): load the payment under a row lock, validate that it
-	// can be refunded, and atomically move it to the refunding status. A
-	// concurrent refund that already reserved or finalized the payment loses
-	// this race and BeginRefund returns ErrInvalidPaymentStatus, so the provider
-	// is never called twice for the same payment.
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin refund payment transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind subscription payments transaction: %w", err)
-	}
-
-	payment, err := txSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment for refund: %w", err)
-	}
-
-	if payment.Status != domain.PaymentStatusSucceeded && payment.Status != domain.PaymentStatusPending {
-		return fmt.Errorf("%w: cannot refund payment with status %s", domain.ErrInvalidPaymentStatus, payment.Status)
-	}
-
-	// The system always refunds the full payment amount.
-	refundAmount := payment.AmountKopecks
-
-	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
-		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
-	}
-
-	prevStatus := payment.Status
-	providerPaymentID := *payment.ProviderPaymentID
-	userID := payment.UserID
-	subscriptionID := payment.SubscriptionID
-
-	if err := txSubscriptionPayments.BeginRefund(ctx, payment.ID, s.deps.clock.Now().UTC()); err != nil {
-		return fmt.Errorf("reserve payment for refund: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit refund reservation transaction: %w", err)
-	}
-
-	// Phase 2 (outside tx): call the provider. The database connection is not
-	// held during the unbounded external HTTP request. On failure, or on a
-	// non-refund response, the reservation is reverted in a separate short
-	// transaction. An in-flight refund (refunding) keeps the reservation for the
-	// reconciliation watchdog. A partial-refund response to our full-amount
-	// Cancel is an anomaly: the reservation is kept and the payment is left in
-	// refunding for manual review instead of being finalized as a full refund.
-	cancelRes, err := s.provider.Cancel(ctx, CancelRequest{
-		PaymentID:         paymentID,
-		ProviderPaymentID: providerPaymentID,
-		AmountKopecks:     refundAmount,
-	})
-	if err != nil {
-		s.deps.log.ErrorContext(ctx, "provider cancel failed",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("subscription_id", subscriptionID.String()),
-			slog.String("user_id", userID.String()),
-			slog.Int64("refund_amount_kopecks", refundAmount),
-			slog.String("error", sanitize.Error(err)))
-		s.revertRefundBestEffort(ctx, paymentID, prevStatus)
-		return fmt.Errorf("provider cancel: %w", err)
-	}
-
-	if cancelRes.Status == domain.PaymentStatusRefunding {
-		// The provider accepted the refund but has not settled it yet. Leave the
-		// payment in the refunding status: ReconcileStaleRefunds will finalize or
-		// revert it from the provider state. Reverting here would cancel a refund
-		// that is actually in flight.
-		s.deps.log.InfoContext(ctx, "provider cancel accepted, refund in progress",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("subscription_id", subscriptionID.String()),
-			slog.String("user_id", userID.String()))
-		return nil
-	}
-
-	if cancelRes.Status == domain.PaymentStatusPartialRefunded {
-		// The system always refunds the full amount, so the provider answering
-		// our full-amount Cancel with a partial refund is an anomaly. Warn and
-		// leave the payment in the refunding status for manual review instead
-		// of recording a full refund that did not happen.
-		s.deps.log.WarnContext(ctx, "provider cancel returned partial refund for a full refund request, manual review required",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("subscription_id", subscriptionID.String()),
-			slog.String("user_id", userID.String()),
-			slog.Int64("requested_amount_kopecks", refundAmount),
-			slog.Int64("refunded_amount_kopecks", cancelRes.RefundedAmountKopecks))
-		return nil
-	}
-
-	if cancelRes.Status != domain.PaymentStatusRefunded {
-		s.deps.log.ErrorContext(ctx, "provider cancel returned non-refund status",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("subscription_id", subscriptionID.String()),
-			slog.String("user_id", userID.String()),
-			slog.String("status", string(cancelRes.Status)))
-		s.revertRefundBestEffort(ctx, paymentID, prevStatus)
-		return fmt.Errorf("provider cancel returned non-refund status: %s", cancelRes.Status)
-	}
-
-	// Phase 3 (tx, finalize): reload the payment under lock, confirm it is still
-	// in a refundable state (refunding from our own reservation, or
-	// succeeded/pending for compatibility / re-entry), mark it refunded and
-	// downgrade the subscription.
-	resultTx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin refund result transaction: %w", err)
-	}
-	defer func() { _ = resultTx.Rollback(ctx) }()
-
-	txResultSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(resultTx)
-	if err != nil {
-		return fmt.Errorf("bind subscription payments transaction: %w", err)
-	}
-
-	payment, err = txResultSubscriptionPayments.GetByIDForUpdate(ctx, paymentID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment for refund result: %w", err)
-	}
-
-	if payment.Status != domain.PaymentStatusRefunding &&
-		payment.Status != domain.PaymentStatusSucceeded &&
-		payment.Status != domain.PaymentStatusPending {
-		return fmt.Errorf("%w: payment status changed to %s during refund", domain.ErrInvalidPaymentStatus, payment.Status)
-	}
-
-	if err := txResultSubscriptionPayments.MarkRefunded(ctx, payment.ID, s.deps.clock.Now().UTC()); err != nil {
-		return fmt.Errorf("mark payment refunded: %w", err)
-	}
-
-	if err := applyRefundToSubscription(ctx, refundDeps{
-		subscriptions:         s.deps.subscriptions,
-		tariffs:               s.deps.tariffs,
-		propertyArchiver:      s.deps.propertyArchiver,
-		recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
-	}, resultTx, payment.SubscriptionID); err != nil {
-		return err
-	}
-
-	// Audit only the finalize transaction (v1 decision): the reserve transaction
-	// and the compensation path do not represent a completed refund. If the
-	// REFUNDED webhook finalizes first, the entry is recorded as system instead
-	// of admin — inherent to recording in the finalizing transaction.
-	actor, actorRole := paymentAuditActor(actorID)
-	if err := s.deps.audit.WithTx(resultTx).Record(ctx, auditdomain.Entry{
-		ActorID:    actor,
-		ActorRole:  actorRole,
-		Action:     auditdomain.ActionSubscriptionPaymentRefunded,
-		EntityType: auditdomain.EntitySubscriptionPayment,
-		EntityID:   &paymentID,
-		Context:    map[string]any{"payment_id": paymentID, "amount_kopecks": payment.AmountKopecks},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := resultTx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit refund payment transaction: %w", err)
-	}
-
-	s.deps.log.InfoContext(ctx, "payment refunded",
-		slog.String("payment_id", paymentID.String()),
-		slog.String("subscription_id", subscriptionID.String()),
-		slog.String("user_id", userID.String()),
-		slog.Int64("refund_amount_kopecks", cancelRes.RefundedAmountKopecks))
-
-	return nil
-}
-
-// revertRefundBestEffort rolls back the in-flight refund reservation in a
-// separate short transaction. It is the compensation step used when the
-// provider cancel call fails or returns a non-refund status. No other
-// transaction must be open when it is called. It never returns an error: a
-// failure to revert only leaves the payment in the refunding state and is
-// logged for manual review.
-func (s *PaymentService) revertRefundBestEffort(ctx context.Context, paymentID uuid.UUID, prev domain.PaymentStatus) {
-	now := s.deps.clock.Now().UTC()
-
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		s.deps.log.ErrorContext(ctx, "failed to begin transaction for refund revert",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("error", sanitize.Error(err)))
-		return
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		s.deps.log.ErrorContext(ctx, "failed to bind subscription payments transaction for refund revert",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("error", sanitize.Error(err)))
-		return
-	}
-
-	if err := txSubscriptionPayments.RevertRefund(ctx, paymentID, prev, now); err != nil {
-		s.deps.log.ErrorContext(ctx, "failed to revert refund reservation",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("prev_status", string(prev)),
-			slog.String("error", sanitize.Error(err)))
-		return
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		s.deps.log.ErrorContext(ctx, "failed to commit refund revert transaction",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("error", sanitize.Error(err)))
-	}
-}
-
-// SyncPendingPayment queries the provider for the current status of a single
-// pending subscription payment and finalizes it based on the response.
-//
-// Succeeded payments are marked as such and the subscription renewal/tariff
-// change is applied best-effort afterwards. T-Kassa GetState reports the
-// RebillId of the payment, so a synthetic WebhookPayload carrying it is used:
-// when the AUTHORIZED webhook that normally delivers the card token was lost,
-// the token is recovered here and the payment method is saved and activated,
-// exactly like on the webhook path.
-//
-// Failed payments are marked as failed. If the payment was for the current
-// subscription tariff (a renewal), the subscription is moved to a grace period.
-// Upgrade payments that fail leave the subscription on its current tariff.
-//
-// Payments that are not in pending status cannot be synced and return an
-// invalid-status error.
-//
-// actorID identifies the admin who triggered the sync for the audit trail;
-// uuid.Nil marks a system-initiated call (the reconciliation worker).
-func (s *PaymentService) SyncPendingPayment(ctx context.Context, actorID uuid.UUID, paymentID uuid.UUID) error {
-	payment, err := s.deps.subscriptionPayments.GetByID(ctx, paymentID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment: %w", err)
-	}
-
-	if payment.Status != domain.PaymentStatusPending {
-		return fmt.Errorf("%w: cannot sync payment with status %s", domain.ErrInvalidPaymentStatus, payment.Status)
-	}
-	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
-		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
-	}
-
-	statusResult, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
-	if err != nil {
-		return fmt.Errorf("provider status: %w", err)
-	}
-	status := statusResult.Status
-
-	switch status {
-	case domain.PaymentStatusPending:
-		// Nothing to finalize. The provider.Status contract only returns the
-		// status, so a missing provider payment id cannot be recovered here.
-		return nil
-	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed, domain.PaymentStatusRefunded, domain.PaymentStatusPartialRefunded:
-		return s.finalizeSyncedPayment(ctx, actorID, payment, statusResult)
+// ApplyProviderEvent applies one already-parsed provider notification through
+// the synchronous paths of ADR 0039: a payment notification finalizes the
+// payment with its subscription effects, a method-bound notification completes
+// a card-binding session. HandleWebhook lands here after parsing; the
+// dev-only local confirmation at the adapter/wiring level (issue #287) lands
+// here after the active provider's adapter reports the completed entry — the
+// application stays provider-neutral and knows nothing about which provider
+// produced the event.
+func (s *PaymentService) ApplyProviderEvent(ctx context.Context, event WebhookEvent) error {
+	switch {
+	case event.Payment != nil:
+		return s.ApplyPaymentNotification(ctx, event.Payment)
+	case event.MethodBound != nil:
+		return s.applyMethodBoundNotification(ctx, event.MethodBound)
+	case event.MethodBindingFailed != nil:
+		return s.applyMethodBindingFailedNotification(ctx, event.MethodBindingFailed)
 	default:
-		return fmt.Errorf("unexpected provider status: %s", status)
+		return fmt.Errorf("%w: empty event", ErrWebhookUnsupported)
 	}
 }
 
-func (s *PaymentService) finalizeSyncedPayment(ctx context.Context, actorID uuid.UUID, payment domain.SubscriptionPayment, statusResult PaymentStatusResult) error {
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind subscription payments transaction: %w", err)
-	}
-	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind subscriptions transaction: %w", err)
-	}
-
-	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, payment.ID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment for update: %w", err)
-	}
-
-	if payment.Status != domain.PaymentStatusPending {
-		// A concurrent webhook or another sync already finalized the payment.
-		return nil
-	}
-
-	payload := WebhookPayload{
-		ProviderPaymentID: *payment.ProviderPaymentID,
-		InternalPaymentID: payment.ID,
-		Status:            statusResult.Status,
-		AmountKopecks:     payment.AmountKopecks,
-		RebillID:          statusResult.RebillID,
-	}
-
-	if err := applyPaymentResult(ctx, paymentResultDeps{
-		subscriptionPayments: s.deps.subscriptionPayments,
-		paymentMethods:       s.deps.paymentMethods,
-		clock:                s.deps.clock,
-		log:                  s.deps.log,
-		provider:             s.provider,
-	}, tx, &payment, payload); err != nil {
-		return err
-	}
-
-	switch statusResult.Status {
-	case domain.PaymentStatusFailed:
-		sub, err := txSubscriptions.GetByIDForUpdate(ctx, payment.SubscriptionID)
+// applyMethodBoundNotification applies a completed payment-method binding
+// synchronously (issue #251, ADR 0039): the notification resolves to the
+// session started by AddPaymentMethod by its request key, and one transaction
+// creates (or converges on) the payment method, activates it, links it to the
+// subscription and closes the session. The whole delivery is idempotent: a
+// repeated notification resolves to a no-op. A session past its TTL never
+// creates a card; an unknown request key cannot be fixed by a retry and is
+// answered as processed so the provider stops redelivering.
+func (s *PaymentService) applyMethodBoundNotification(ctx context.Context, n *MethodBoundNotification) error {
+	now := s.clock.Now().UTC()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		session, err := stores.bindings.GetByRequestKeyForUpdate(ctx, s.provider.Name(), n.BindingID)
 		if err != nil {
-			return fmt.Errorf("get subscription for failed payment sync: %w", err)
-		}
-		if sub.TariffID == payment.TariffID {
-			sub.EnterGrace(s.deps.clock.Now().UTC())
-			if err := txSubscriptions.Update(ctx, sub); err != nil {
-				return fmt.Errorf("transition subscription to grace after failed payment sync: %w", err)
+			if errors.Is(err, ErrNotFound) {
+				s.log.WarnContext(ctx, "method-bound webhook for unknown binding session; ignoring",
+					slog.String("binding_id", n.BindingID),
+					slog.String(auditKeyProvider, string(s.provider.Name())))
+				return nil
 			}
+			return fmt.Errorf("get card binding session: %w", err)
 		}
-
-	case domain.PaymentStatusRefunded:
-		// A partial-refund provider status is an anomaly that applyPaymentResult
-		// logs and ignores, so only a full refund downgrades the subscription.
-		if err := applyRefundToSubscription(ctx, refundDeps{
-			subscriptions:         s.deps.subscriptions,
-			tariffs:               s.deps.tariffs,
-			propertyArchiver:      s.deps.propertyArchiver,
-			recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
-		}, tx, payment.SubscriptionID); err != nil {
+		if !session.IsOpen() {
+			// Duplicate delivery of an already-resolved session.
+			return nil
+		}
+		if session.IsExpired(now) {
+			// The binding's lifetime is over: no card may be created from it,
+			// whatever the provider reports now.
+			if err := session.MarkRejected(now); err != nil {
+				return err
+			}
+			if err := stores.bindings.UpdateStatus(ctx, session); err != nil {
+				return fmt.Errorf("reject expired card binding session: %w", err)
+			}
+			s.log.InfoContext(ctx, "expired card binding session rejected by webhook",
+				slog.String("binding_id", n.BindingID),
+				slog.String("user_id", session.UserID.String()))
+			return nil
+		}
+		if n.Method.ChargeToken == "" {
+			// A completed binding without a charge token is a provider defect
+			// no retry can fix; the session stays open and expires by TTL.
+			return fmt.Errorf("%w: binding %s completed without a charge token", ErrWebhookRejected, n.BindingID)
+		}
+		method, err := domain.NewPaymentMethod(session.UserID, session.Provider, n.Method.ChargeToken, now)
+		if err != nil {
 			return err
 		}
-	default:
-		// Succeeded, pending and partial-refunded statuses need no
-		// subscription-side effects: applyPaymentResult already handled them.
-	}
-
-	actor, actorRole := paymentAuditActor(actorID)
-	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    actor,
-		ActorRole:  actorRole,
-		Action:     auditdomain.ActionSubscriptionPaymentSynced,
-		EntityType: auditdomain.EntitySubscriptionPayment,
-		EntityID:   &payment.ID,
-		Context:    map[string]any{"payment_id": payment.ID},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit sync payment transaction: %w", err)
-	}
-
-	if statusResult.Status == domain.PaymentStatusSucceeded {
-		applySubscriptionRenewalAndArchive(ctx, renewalAndArchiveDeps{
-			beginner:              s.deps.beginner,
-			subscriptions:         s.deps.subscriptions,
-			tariffs:               s.deps.tariffs,
-			propertyArchiver:      s.deps.propertyArchiver,
-			recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
-			clock:                 s.deps.clock,
-			log:                   s.deps.log,
-		}, payment)
-	}
-
-	return nil
+		method.ProviderCardID = n.Method.ProviderMethodID
+		method.DisplayMask = n.Method.MaskedPan
+		method.ExpDate = n.Method.ExpDate
+		_, err = applyCompletedCardBinding(ctx, stores, s.log, method, &session, now)
+		return err
+	})
 }
 
-// maxReconcileBatchesPerTick caps how many batches a single reconcile tick
-// processes. Each batch re-reads the same staleness cutoff, so payments that
-// cannot be resolved (provider down or still unsettled) would otherwise keep
-// the tick spinning on provider calls while holding the worker advisory lock.
-// Anything left over is still stale on the next tick.
-const maxReconcileBatchesPerTick = 10
-
-// ReconcilePendingPayments checks all pending subscription payments that have
-// been stuck longer than the staleness threshold with the provider in batches
-// and finalizes them via SyncPendingPayment. Returns the number of payments
-// successfully synced.
-func (s *PaymentService) ReconcilePendingPayments(ctx context.Context, now time.Time) (int, error) {
-	processed := 0
-	createdBefore := now.Add(-pendingPaymentStalenessThreshold).UTC()
-
-	for range maxReconcileBatchesPerTick {
-		payments, err := s.deps.subscriptionPayments.ListPendingPayments(ctx, createdBefore, renewalBatchSize)
+// applyMethodBindingFailedNotification applies a refused payment-method
+// binding synchronously (issue #422, ADR 0039): the delivery itself is valid,
+// so it is a processed outcome — nil error, 200 to the provider — that closes
+// the session without a payment method. The user sees the failure on the next
+// sync and can start a new binding. Idempotent by the session state: a
+// repeated delivery resolves to a no-op, and an unknown request key cannot be
+// fixed by a retry, so it is answered as processed too.
+func (s *PaymentService) applyMethodBindingFailedNotification(ctx context.Context, n *MethodBindingFailedNotification) error {
+	now := s.clock.Now().UTC()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		session, err := stores.bindings.GetByRequestKeyForUpdate(ctx, s.provider.Name(), n.BindingID)
 		if err != nil {
-			return processed, fmt.Errorf("list pending payments: %w", err)
-		}
-		if len(payments) == 0 {
-			break
-		}
-
-		for _, payment := range payments {
-			// uuid.Nil marks the sync as system-initiated in the audit trail.
-			if err := s.SyncPendingPayment(ctx, uuid.Nil, payment.ID); err != nil {
-				s.deps.log.ErrorContext(ctx, "failed to sync pending payment",
-					slog.String("payment_id", payment.ID.String()),
-					slog.String("error", sanitize.Error(err)))
-				continue
+			if errors.Is(err, ErrNotFound) {
+				s.log.WarnContext(ctx, "method-binding-failed webhook for unknown binding session; ignoring",
+					slog.String("binding_id", n.BindingID),
+					slog.String(auditKeyProvider, string(s.provider.Name())))
+				return nil
 			}
-			processed++
+			return fmt.Errorf("get card binding session: %w", err)
 		}
-
-		if len(payments) < renewalBatchSize {
-			break
+		if !session.IsOpen() {
+			// Duplicate delivery of an already-resolved session.
+			return nil
 		}
-	}
-
-	return processed, nil
+		if err := session.MarkRejected(now); err != nil {
+			return err
+		}
+		if err := stores.bindings.UpdateStatus(ctx, session); err != nil {
+			return fmt.Errorf("reject card binding session: %w", err)
+		}
+		s.log.InfoContext(ctx, "card binding session rejected by webhook",
+			slog.String("binding_id", n.BindingID),
+			slog.String("user_id", session.UserID.String()),
+			slog.String("error_code", n.ErrorCode))
+		return nil
+	})
 }
 
-// ReconcileStaleRefunds resolves payments stuck in the refunding state by
-// asking the provider for ground truth: a refunded provider payment finalizes
-// the refund; a still-captured charge reverts the refund reservation. Returns
-// the number of payments checked, including no-op visits to payments the
-// provider has not settled yet.
-func (s *PaymentService) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int, error) {
-	processed := 0
-	updatedBefore := now.Add(-pendingPaymentStalenessThreshold).UTC()
-
-	for range maxReconcileBatchesPerTick {
-		payments, err := s.deps.subscriptionPayments.ListStaleRefundingPayments(ctx, updatedBefore, renewalBatchSize)
-		if err != nil {
-			return processed, fmt.Errorf("list stale refunding payments: %w", err)
-		}
-		if len(payments) == 0 {
-			break
-		}
-
-		for _, payment := range payments {
-			if err := s.syncRefundingPayment(ctx, payment.ID); err != nil {
-				s.deps.log.ErrorContext(ctx, "failed to sync refunding payment",
-					slog.String("payment_id", payment.ID.String()),
-					slog.String("error", sanitize.Error(err)))
-				continue
-			}
-			processed++
-		}
-
-		if len(payments) < renewalBatchSize {
-			break
-		}
-	}
-
-	return processed, nil
-}
-
-// syncRefundingPayment queries the provider for the current status of a single
-// refunding subscription payment and resolves the stuck refund reservation
-// based on the response.
-//
-// A refunded provider payment finalizes the refund exactly like the synchronous
-// refund path: the payment is marked refunded and the subscription is
-// downgraded to basic. A still-captured charge (succeeded) means the provider
-// cancel never reached the provider or never happened, so the reservation is
-// reverted. A partial refund is an anomaly the system never initiates, so it is
-// logged for manual review and left untouched. A failed provider status is
-// ambiguous for a payment we are refunding, so it is warned for manual review
-// and left untouched. Any other status means the provider has not settled yet,
-// so the payment is retried on the next tick.
-func (s *PaymentService) syncRefundingPayment(ctx context.Context, paymentID uuid.UUID) error {
-	payment, err := s.deps.subscriptionPayments.GetByID(ctx, paymentID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment: %w", err)
-	}
-
-	if payment.Status != domain.PaymentStatusRefunding {
-		return fmt.Errorf("%w: cannot sync refund for payment with status %s", domain.ErrInvalidPaymentStatus, payment.Status)
-	}
-	if payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "" {
-		return fmt.Errorf("%w: payment has no provider payment id", domain.ErrInvalidPaymentStatus)
-	}
-
-	statusResult, err := s.provider.Status(ctx, paymentID, *payment.ProviderPaymentID)
-	if err != nil {
-		return fmt.Errorf("provider status: %w", err)
-	}
-
-	switch statusResult.Status {
+// ApplyPaymentNotification applies one payment-status notification. Terminal
+// statuses finalize the payment and apply its subscription effects in a single
+// transaction; a pending status carries no outcome and is at most a chance to
+// backfill a lost provider reference. This is the notification-application
+// method of the workers' PaymentLifecycle port; the webhook flow reaches it
+// through ApplyProviderEvent after parsing.
+func (s *PaymentService) ApplyPaymentNotification(ctx context.Context, n *PaymentNotification) error {
+	switch n.Status {
+	case domain.PaymentStatusPending:
+		return s.applyPendingNotification(ctx, n)
+	case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed:
+		return s.applyFinalNotification(ctx, n)
 	case domain.PaymentStatusRefunded:
-		return s.finalizeStuckRefund(ctx, payment)
-	case domain.PaymentStatusSucceeded:
-		return s.revertStuckRefund(ctx, payment)
-	case domain.PaymentStatusPartialRefunded:
-		// The system always refunds the full amount, so a partial refund is an
-		// anomaly that must be reviewed manually instead of auto-finalized.
-		s.deps.log.WarnContext(ctx, "provider reports partial refund for a stuck refunding payment, manual review required",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("subscription_id", payment.SubscriptionID.String()))
-		return nil
-	case domain.PaymentStatusFailed:
-		// A failed provider status (e.g. GetState reports REVERSED) is ambiguous
-		// for a payment we are refunding: it is unclear whether the refund
-		// happened, so flag it for manual review instead of silently retrying.
-		s.deps.log.WarnContext(ctx, "refunding payment has failed status at provider, manual review required",
-			slog.String("payment_id", payment.ID.String()),
-			slog.String("provider_payment_id", *payment.ProviderPaymentID))
-		return nil
+		return s.applyRefundNotification(ctx, n)
 	default:
-		// The provider payment has not settled yet (pending or an unknown
-		// status); leave the reservation for the next tick.
-		s.deps.log.DebugContext(ctx, "provider status does not resolve stuck refund yet",
-			slog.String("payment_id", paymentID.String()),
-			slog.String("subscription_id", payment.SubscriptionID.String()),
-			slog.String("status", string(statusResult.Status)))
-		return nil
+		return fmt.Errorf("%w: status %q", ErrWebhookUnsupported, n.Status)
 	}
 }
 
-// finalizeStuckRefund completes an in-flight refund after the provider
-// confirmed the payment is refunded: the payment is marked refunded and the
-// subscription is downgraded to basic in the same transaction, mirroring the
-// synchronous refund path.
-func (s *PaymentService) finalizeStuckRefund(ctx context.Context, payment domain.SubscriptionPayment) error {
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind subscription payments transaction: %w", err)
-	}
-
-	payment, err = txSubscriptionPayments.GetByIDForUpdate(ctx, payment.ID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
+// applyPendingNotification backfills the provider reference of a payment whose
+// initiation result was lost — the webhook that arrives before the atomic save
+// commits. There is no outcome to apply.
+func (s *PaymentService) applyPendingNotification(ctx context.Context, n *PaymentNotification) error {
+	return s.runInTx(ctx, func(stores *txStores) error {
+		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("get payment for update: %w", err)
-	}
+		if err := s.checkProviderPaymentID(payment, n); err != nil {
+			return err
+		}
+		if payment.HasProviderReference() || payment.IsFinalized() || n.ProviderPaymentID == "" {
+			return nil
+		}
+		if err := payment.SaveProviderReference(n.ProviderPaymentID, "", s.clock.Now().UTC()); err != nil {
+			return err
+		}
+		if err := stores.payments.Update(ctx, payment); err != nil {
+			return fmt.Errorf("backfill provider reference: %w", err)
+		}
+		return nil
+	})
+}
 
-	if payment.Status != domain.PaymentStatusRefunding {
-		// A concurrent refund or another reconcile already finalized the payment.
+// applyFinalNotification finalizes the payment to the notification's terminal
+// status (succeeded or failed) and applies the subscription effects of a
+// success — atomically, so a mid-flight failure rolls everything back and the
+// provider's retry redelivers the notification (ADR "synchronous payment
+// webhooks"). Repeated deliveries of the same outcome are idempotent no-ops;
+// a succeeded notification for a payment already marked failed is resolved
+// against the provider as the source of truth (ADR 0010) before anything is
+// applied.
+func (s *PaymentService) applyFinalNotification(ctx context.Context, n *PaymentNotification) error {
+	if n.Status == domain.PaymentStatusSucceeded {
+		payment, err := s.payments.GetByID(ctx, n.InternalPaymentID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrPaymentNotFound
+			}
+			return fmt.Errorf("get payment: %w", err)
+		}
+		if payment.Status == domain.PaymentStatusFailed {
+			return s.reconcileOutOfOrderSuccess(ctx, payment, n)
+		}
+	}
+	return s.finalizePayment(ctx, n, false)
+}
+
+// reconcileOutOfOrderSuccess resolves a succeeded notification for a payment
+// already marked failed by asking the provider for its current status — the
+// source of truth (ADR 0010) — before any state is changed. The status query
+// runs outside any transaction, so no row locks are held across the external
+// call. The payment's persisted reference addresses the query; a payment
+// whose initiation crashed before the reference was saved (issue #616: the
+// TTL worker expired it in that window) reconciles through the reference the
+// notification itself carries — the same id the persisted reference would
+// hold. A provider that still reports the payment failed or not yet settled
+// makes the notification a no-op; only a provider-confirmed success is applied.
+func (s *PaymentService) reconcileOutOfOrderSuccess(ctx context.Context, payment domain.SubscriptionPayment, n *PaymentNotification) error {
+	providerPaymentID := payment.ProviderPaymentID
+	if providerPaymentID == nil || *providerPaymentID == "" {
+		if n.ProviderPaymentID == "" {
+			// Without any provider reference there is nothing to reconcile
+			// against; a success we cannot verify is not applied.
+			s.log.WarnContext(ctx, "cannot reconcile failed payment: missing provider reference",
+				slog.String(auditKeyPaymentID, payment.ID.String()))
+			return nil
+		}
+		providerPaymentID = new(n.ProviderPaymentID)
+	}
+	status, err := s.provider.PaymentStatus(ctx, payment.ID, *providerPaymentID)
+	if err != nil {
+		return fmt.Errorf("provider status for out-of-order success: %w", err)
+	}
+	if status.Status != domain.PaymentStatusSucceeded {
+		s.log.InfoContext(ctx, "out-of-order success notification contradicted by provider status; skipping",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
+			slog.String("provider_status", string(status.Status)))
 		return nil
 	}
+	return s.finalizePayment(ctx, n, true)
+}
 
-	if err := txSubscriptionPayments.MarkRefunded(ctx, payment.ID, s.deps.clock.Now().UTC()); err != nil {
-		return fmt.Errorf("mark payment refunded: %w", err)
-	}
+// finalizePayment runs the finalizing transaction: it locks the payment,
+// verifies the notification against the persisted provider reference, captures
+// a missing reference, and moves the payment to the notification's status via
+// the per-status handlers below. The transaction carries the lifecycle
+// bridges: a succeeded payment can lower a tariff limit, and the excess
+// archiving belongs to the same commit (issue #428). AllowReconcile marks
+// callers that verified an out-of-order success against the provider; without
+// it a failed payment is never overwritten by this path. Grace events
+// captured along the way are published strictly after the commit —
+// best-effort (issue #284).
+func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotification, allowReconcile bool) error {
+	grace := newGraceEvents(s.publisher, s.log)
+	tariff := newTariffEvents(s.publisher, s.log)
+	err := grace.run(ctx, s.runLifecycleTx, func(stores *txStores) error {
+		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
+		if err != nil {
+			return err
+		}
+		if err := s.checkProviderPaymentID(payment, n); err != nil {
+			return err
+		}
+		if err := s.captureProviderReference(ctx, stores, &payment, n); err != nil {
+			return err
+		}
 
-	if err := applyRefundToSubscription(ctx, refundDeps{
-		subscriptions:         s.deps.subscriptions,
-		tariffs:               s.deps.tariffs,
-		propertyArchiver:      s.deps.propertyArchiver,
-		recipientSlotEnforcer: s.deps.recipientSlotEnforcer,
-	}, tx, payment.SubscriptionID); err != nil {
+		now := s.clock.Now().UTC()
+		// The card the provider reports for the charge becomes the payment's
+		// history snapshot (issue #619); both finalizing branches persist it
+		// with their own Update.
+		payment.AttachCardMask(n.CardMask, now)
+		switch n.Status {
+		case domain.PaymentStatusFailed:
+			return s.finalizeFailedPayment(ctx, grace, stores, payment, n, now)
+		case domain.PaymentStatusSucceeded:
+			return s.finalizeSucceededPayment(ctx, tariff, stores, payment, now, allowReconcile)
+		default:
+			return fmt.Errorf("%w: status %q", ErrWebhookUnsupported, n.Status)
+		}
+	})
+	if err != nil {
 		return err
 	}
-
-	// Audit the completed refund: this watchdog path finalizes refunds whose
-	// REFUNDED webhook was lost or whose synchronous finalize tx (including
-	// its audit insert) failed, so without this entry a completed refund
-	// leaves no trail. The original admin actor is unknowable here, so the
-	// entry is recorded as system.
-	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorRole:  auditdomain.ActorRoleSystem,
-		Action:     auditdomain.ActionSubscriptionPaymentRefunded,
-		EntityType: auditdomain.EntitySubscriptionPayment,
-		EntityID:   &payment.ID,
-		Context:    map[string]any{"payment_id": payment.ID, "provider": string(s.provider.Name())},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit stuck refund finalization transaction: %w", err)
-	}
-
-	s.deps.log.InfoContext(ctx, "stuck refund finalized from provider state",
-		slog.String("payment_id", payment.ID.String()),
-		slog.String("subscription_id", payment.SubscriptionID.String()))
-
+	// Strictly after the commit, best-effort (карта #734, #752): the tariff
+	// events of the notifications catalog ride the same post-commit seam the
+	// grace events captured along the way were published through.
+	tariff.publishAfterCommit(ctx)
 	return nil
 }
 
-// revertStuckRefund rolls back an in-flight refund reservation after the
-// provider confirmed the charge is still captured. refunding can only be
-// entered from succeeded or pending; since the provider reports the charge as
-// captured, succeeded is the truthful state to restore.
-func (s *PaymentService) revertStuckRefund(ctx context.Context, payment domain.SubscriptionPayment) error {
-	now := s.deps.clock.Now().UTC()
-
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind subscription payments transaction: %w", err)
-	}
-
-	locked, err := txSubscriptionPayments.GetByIDForUpdate(ctx, payment.ID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPaymentNotFound
-		}
-		return fmt.Errorf("get payment for update: %w", err)
-	}
-
-	if locked.Status != domain.PaymentStatusRefunding {
-		// A concurrent refund or another reconcile already finalized the payment.
+// captureProviderReference persists the provider payment id carried by the
+// notification when the payment is still pending and has no reference yet —
+// the reference of the initiation response arrives with the first webhook.
+func (s *PaymentService) captureProviderReference(
+	ctx context.Context, stores *txStores, payment *domain.SubscriptionPayment, n *PaymentNotification,
+) error {
+	if payment.HasProviderReference() || n.ProviderPaymentID == "" || payment.Status != domain.PaymentStatusPending {
 		return nil
 	}
+	if err := payment.SaveProviderReference(n.ProviderPaymentID, "", s.clock.Now().UTC()); err != nil {
+		return err
+	}
+	if err := stores.payments.Update(ctx, *payment); err != nil {
+		return fmt.Errorf("persist provider reference: %w", err)
+	}
+	return nil
+}
 
-	if err := txSubscriptionPayments.RevertRefund(ctx, payment.ID, domain.PaymentStatusSucceeded, now); err != nil {
-		return fmt.Errorf("revert refund reservation: %w", err)
+// finalizeFailedPayment marks a declined payment failed and — for a
+// merchant-initiated renewal charge, which carries the charged method — moves
+// the subscription into grace: the user gets the window to fix the payment
+// method, and the next worker tick does not simply charge a fresh payment
+// forever (ADR 0008). The freshness guard of issue #426 keeps a superseded
+// charge out of grace: only a failure the subscription's current paid period
+// still depends on enters it, so a subscription renewed or upgraded by a
+// newer payment stays active. A customer-initiated payment has no method —
+// its failure leaves the subscription untouched. The grace-entered event is
+// captured by the grace-events module and published strictly after the commit
+// (issue #284).
+func (s *PaymentService) finalizeFailedPayment(
+	ctx context.Context, grace *graceEvents, stores *txStores,
+	payment domain.SubscriptionPayment, n *PaymentNotification, now time.Time,
+) error {
+	if payment.Status != domain.PaymentStatusPending {
+		// Duplicate delivery, or a terminal state that must not be
+		// overridden by a late failure.
+		return nil
+	}
+	if err := payment.MarkFailed(n.ErrorCode, now); err != nil {
+		return err
+	}
+	if err := stores.payments.Update(ctx, payment); err != nil {
+		return fmt.Errorf("mark payment failed: %w", err)
+	}
+	if payment.PaymentMethodID != nil {
+		sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
+		if err != nil {
+			return err
+		}
+		if sub.FailedRenewalIsCurrent(payment.ID, now) {
+			if err := grace.enterGrace(ctx, stores, sub, now, s.config.GraceDuration); err != nil {
+				return err
+			}
+		}
+	}
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorRole:  auditdomain.ActorRoleSystem,
+		Action:     auditdomain.ActionSubscriptionPaymentFailed,
+		EntityType: auditdomain.EntitySubscriptionPayment,
+		EntityID:   &payment.ID,
+		Context:    map[string]any{auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name())},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// finalizeSucceededPayment moves the payment to succeeded and applies the
+// subscription effects of the success through the shared application seam: the
+// tariff change or renewal with its transition-log entry, the tariff-limit
+// enforcement when the applied transition changed the tariff, and the audit
+// record. Every path that finalizes a success — the webhook flow, the
+// reconciliation worker and the renewal worker — lands here (issue #428), so
+// a success applies identically wherever it came from. The persisted-status
+// switch keeps duplicate deliveries idempotent and — without allowReconcile —
+// refuses a success that arrives after the payment was already marked failed,
+// so the provider retries and the verified reconciliation path runs instead.
+// The tariff events of the notifications catalog (карта #734, #752) are
+// captured on the same seam and published strictly after the commit.
+func (s *PaymentService) finalizeSucceededPayment(
+	ctx context.Context, tariff *tariffEvents, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
+) error {
+	skip, err := settlePaymentToSucceeded(ctx, stores, payment, now, allowReconcile)
+	if err != nil || skip {
+		return err
+	}
+	if _, err := applySucceededPayment(ctx, tariff, stores, payment, now); err != nil {
+		return err
+	}
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorRole:  auditdomain.ActorRoleSystem,
+		Action:     auditdomain.ActionSubscriptionPaymentSucceeded,
+		EntityType: auditdomain.EntitySubscriptionPayment,
+		EntityID:   &payment.ID,
+		Context: map[string]any{
+			auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name()),
+			auditKeyAmountKopecks: payment.AmountKopecks,
+		},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// settlePaymentToSucceeded advances the persisted payment to the succeeded
+// status and reports whether the success is a no-op that must not touch the
+// subscription: a duplicate delivery, or a refund (and the internal refunding
+// reservation) — a later, deliberate state a notification does not override.
+func settlePaymentToSucceeded(
+	ctx context.Context, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
+) (skip bool, err error) {
+	switch payment.Status {
+	case domain.PaymentStatusSucceeded:
+		return true, nil // Duplicate delivery.
+	case domain.PaymentStatusFailed:
+		if !allowReconcile {
+			// The payment became failed after the caller's check;
+			// refuse so the provider retries and the verified
+			// reconciliation path runs instead.
+			return false, fmt.Errorf("payment %s turned failed during webhook processing", payment.ID)
+		}
+		if err := payment.ReconcileToSucceeded(now); err != nil {
+			return false, err
+		}
+	case domain.PaymentStatusPending:
+		if err := payment.MarkSucceeded(now); err != nil {
+			return false, err
+		}
+	default:
+		return true, nil
+	}
+	if err := stores.payments.Update(ctx, payment); err != nil {
+		return false, fmt.Errorf("mark payment succeeded: %w", err)
+	}
+	return false, nil
+}
+
+// applySucceededPayment applies the subscription effects of a succeeded
+// payment inside the finalizing transaction: an upgrade switches the tariff at
+// the full price of the new plan with the period counted from the payment
+// moment and auto-renew on; a same-tariff payment is a renewal. The transition
+// log records the applied change with the payment that caused it, and when the
+// applied transition switched the tariff the new plan's limit is enforced in
+// the same transaction (issue #428) — the owner's excess active properties
+// archived and the excess recipient slots suspended; an upgrade to a higher
+// limit archives nothing and instead recovers the recipient's oldest
+// suspended shared memberships FIFO through the access bridge (issue #695);
+// a renewal into a cheaper scheduled target archives
+// exactly like the renewal worker did before the seam was shared. A payment
+// the subscription already reflects is a no-op — the zero transition it
+// returns keeps duplicate deliveries, reconciliations and worker retries
+// idempotent. The freshness guard of issue #428 extends the no-op to a success
+// superseded by a newer applied payment: a late success of an old charge —
+// e.g. a pro payment landing after a newer business payment was applied —
+// must not be applied as a downgrade; the subscription keeps the newer
+// payment's state and the success is recorded on the payment alone. Shared by
+// every path that finalizes a success — the webhook flow, the reconciliation
+// worker and the renewal worker (issues #252, #428).
+//
+// The tariff events of the notifications catalog (карта #734, #752) are
+// captured here — where the payment, the two plans and the post-application
+// validity are all in hand: an actually applied payment is the «Оплата
+// прошла» event (№13), and an application that moved the subscription to a
+// better plan adds the upgrade leg of «Тариф изменён» (№14). The direction
+// is classified with the plan records, not the tariff ids alone; a paid
+// downgrade notifies through №13 alone — №14's downgrade leg belongs to the
+// assignment, not to a payment.
+func applySucceededPayment(
+	ctx context.Context, tariff *tariffEvents, stores *txStores, payment domain.SubscriptionPayment, now time.Time,
+) (domain.Transition, error) {
+	sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
+	if err != nil {
+		return domain.Transition{}, err
+	}
+	if sub.LastAppliedPaymentID != nil && *sub.LastAppliedPaymentID == payment.ID {
+		return domain.Transition{}, nil
+	}
+	if !sub.SucceededPaymentIsCurrent(payment.ID) {
+		return domain.Transition{}, nil
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit stuck refund revert transaction: %w", err)
+	paymentTariff, err := stores.tariffs.GetByID(ctx, payment.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Transition{}, fmt.Errorf("payment %s references missing tariff %s: %w", payment.ID, payment.TariffID, ErrTariffNotFound)
+		}
+		return domain.Transition{}, fmt.Errorf("get payment tariff: %w", err)
+	}
+	// The current plan is loaded before the mutation when the payment would
+	// switch the tariff: the applied change classifies against it, and the
+	// mutation itself consumes it (the seam of issue #428). The upgrade tail
+	// below compares the same two tariffs (issue #695); renewals keep the
+	// tariff and skip the lookup.
+	var currentTariff *domain.Tariff
+	var previousTariff domain.Tariff
+	if sub.TariffID != payment.TariffID {
+		loaded, err := currentSubscriptionTariff(ctx, stores, &sub)
+		if err != nil {
+			return domain.Transition{}, err
+		}
+		currentTariff = loaded
+		previousTariff = *loaded
 	}
 
-	s.deps.log.InfoContext(ctx, "stuck refund reverted, charge still captured at provider",
-		slog.String("payment_id", payment.ID.String()),
-		slog.String("subscription_id", payment.SubscriptionID.String()))
+	// Grace v2 (ADR 0055): an applied payment settles the restoration debt of
+	// the grace window. Only an actually applied payment restores: the no-op
+	// paths above return early.
+	graceRemaining, err := settleGraceDebt(ctx, stores, &sub, paymentTariff)
+	if err != nil {
+		return domain.Transition{}, err
+	}
 
+	applied, err := stores.applyTransition(ctx, &sub,
+		func(s *domain.Subscription) error {
+			// The settled snapshot (or its remainder) commits with the
+			// transition — the aggregate is persisted once, by the seam.
+			s.SetGraceArchive(graceRemaining)
+			if currentTariff == nil {
+				return s.ApplyRenewal(payment.ID, payment.Period, now)
+			}
+			return s.ApplyTariffChange(payment.ID, previousTariff, paymentTariff, payment.Period, now)
+		},
+		transitionSpec{
+			reason:    domain.TransitionReasonPaymentApplied,
+			initiator: domain.InitiatorSystem,
+			paymentID: new(payment.ID),
+		},
+	)
+	if err != nil {
+		return domain.Transition{}, err
+	}
+	if transitionChangedTariff(applied, payment.TariffID) {
+		// The applied payment switched the tariff: the new plan's limit takes
+		// effect with the same commit. The audit trigger names the direction
+		// of the switch, not the phase — an upgrade must not read as a
+		// downgrade (issue #767).
+		trigger := tariffChangeTrigger(previousTariff, paymentTariff)
+		if err := stores.enforceTariffLimit(ctx, payment.UserID, paymentTariff.ActivePropertyLimit, trigger, nil); err != nil {
+			return domain.Transition{}, fmt.Errorf("enforce tariff limit after payment tariff switch: %w", err)
+		}
+		// Recipient upgrade (issue #695): the raised limit re-opens the
+		// recipient's oldest suspended shared memberships FIFO in the same
+		// commit; a lowered limit skips the recovery.
+		if err := recoverRecipientSlotsOnUpgrade(ctx, stores, previousTariff, paymentTariff, payment.UserID); err != nil {
+			return domain.Transition{}, err
+		}
+	}
+	// The catalog events ride the caller's tariff carrier — published
+	// strictly after the transaction commits (#752). A no-op application
+	// (the zero transition) captures nothing.
+	captureTariffEvents(tariff, payment, &paymentTariff, currentTariff, sub, applied)
+	return applied, nil
+}
+
+// settleGraceDebt settles the restoration debt of the grace window (ADR 0055):
+// the properties archived at the grace entry restore under the applied
+// payment's tariff limit, newest-first. The bridge returns what did not fit —
+// the debt remainder that stays on the subscription for the next applied
+// payment (the fall to basic drops it). A bridge failure fails the
+// application, so the provider redelivers and the seam retries.
+func settleGraceDebt(
+	ctx context.Context, stores *txStores, sub *domain.Subscription, appliedTariff domain.Tariff,
+) ([]uuid.UUID, error) {
+	snapshot := sub.GraceArchivedPropertyIDs
+	if len(snapshot) == 0 {
+		return snapshot, nil
+	}
+	remaining, err := stores.restoreGraceArchive(ctx, sub.UserID, snapshot, appliedTariff.ActivePropertyLimit)
+	if err != nil {
+		return nil, fmt.Errorf("restore grace archive after payment: %w", err)
+	}
+	return remaining, nil
+}
+
+// recoverRecipientSlotsOnUpgrade re-opens the recipient's oldest suspended
+// shared memberships FIFO when the applied payment raised the tariff —
+// classified by the shared tariff comparison, the one definition of an
+// upgrade (issue #695). A recovery with no free slot is a no-op.
+func recoverRecipientSlotsOnUpgrade(
+	ctx context.Context, stores *txStores, previous, applied domain.Tariff, userID uuid.UUID,
+) error {
+	if domain.ClassifyTariffChange(previous, applied) != domain.TariffChangeUpgrade {
+		return nil
+	}
+	if err := stores.recoverRecipientSlots(ctx, userID); err != nil {
+		return fmt.Errorf("recover recipient slots after payment upgrade: %w", err)
+	}
+	return nil
+}
+
+// tariffChangeTrigger names the payment-applied enforcement for the audit
+// context: the label follows the direction of the applied tariff switch — a
+// lowered limit keeps the existing renewal_downgrade, a raised one is
+// tariff_upgrade, distinct tariffs that compare equal get the neutral
+// tariff_change. ClassifyTariffChange is the shared definition of the
+// direction (issue #695); labeling an upgrade a downgrade lies to the audit
+// reader (issue #767, found by the #760 walkthrough).
+func tariffChangeTrigger(previous, applied domain.Tariff) string {
+	switch domain.ClassifyTariffChange(previous, applied) {
+	case domain.TariffChangeUpgrade:
+		return triggerTariffUpgrade
+	case domain.TariffChangeDowngrade:
+		return triggerRenewalDowngrade
+	default:
+		return triggerTariffChange
+	}
+}
+
+// captureTariffEvents captures the tariff events of the notifications
+// catalog (карта #734, #752) for an actually applied payment: the
+// «Оплата прошла» event itself and, when the application moved the
+// subscription to a better plan, the upgrade leg of «Тариф изменён» —
+// classified against the plan records, not the tariff ids alone. A nil
+// carrier or the zero transition (the no-op of a duplicate delivery)
+// captures nothing.
+func captureTariffEvents(
+	tariff *tariffEvents,
+	payment domain.SubscriptionPayment,
+	paymentTariff, currentTariff *domain.Tariff,
+	sub domain.Subscription,
+	applied domain.Transition,
+) {
+	if tariff == nil || applied.ID == uuid.Nil {
+		return
+	}
+	until := time.Time{}
+	if sub.ValidUntil != nil {
+		until = *sub.ValidUntil
+	}
+	tariff.succeeded = &PaymentSucceeded{
+		UserID:        payment.UserID,
+		PaymentID:     payment.ID,
+		TariffID:      payment.TariffID,
+		AmountKopecks: payment.AmountKopecks,
+		Period:        payment.Period,
+		ActiveUntil:   until,
+	}
+	if currentTariff != nil && domain.ClassifyTariffChange(*currentTariff, *paymentTariff) == domain.TariffChangeUpgrade {
+		tariff.upgraded = &PlanUpgraded{
+			UserID:        payment.UserID,
+			TransitionID:  applied.ID,
+			TariffID:      payment.TariffID,
+			Period:        payment.Period,
+			AmountKopecks: payment.AmountKopecks,
+			ActiveUntil:   until,
+		}
+	}
+}
+
+// currentSubscriptionTariff loads the plan the subscription is currently on,
+// mapping a missing row to the tariff sentinel.
+func currentSubscriptionTariff(ctx context.Context, stores *txStores, sub *domain.Subscription) (*domain.Tariff, error) {
+	tariff, err := stores.tariffs.GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
+		}
+		return nil, fmt.Errorf("get current tariff: %w", err)
+	}
+	return &tariff, nil
+}
+
+// applyRefundNotification records a full refund reported by the provider and
+// applies the subscription effects of the refund (downgrade to basic with the
+// excess properties archived, issue #254) atomically. Refunds are always
+// full-amount (ADR 0037). The system is the initiator — a refund notification
+// reports a provider-side outcome, not an admin action; the admin-triggered
+// refund that landed first is visible in the transition log by its own entry.
+func (s *PaymentService) applyRefundNotification(ctx context.Context, n *PaymentNotification) error {
+	return s.runLifecycleTx(ctx, func(stores *txStores) error {
+		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
+		if err != nil {
+			return err
+		}
+		if err := s.checkProviderPaymentID(payment, n); err != nil {
+			return err
+		}
+		switch payment.Status {
+		case domain.PaymentStatusRefunded:
+			return nil // Duplicate delivery; the effects were applied with it.
+		case domain.PaymentStatusPending, domain.PaymentStatusSucceeded, domain.PaymentStatusRefunding:
+		default:
+			return nil // A failed charge was never captured; nothing to refund.
+		}
+		if err := s.applyRefundedPayment(ctx, stores, payment, s.clock.Now().UTC(), systemRefundActor()); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+// checkProviderPaymentID rejects a notification whose provider payment id
+// contradicts the reference persisted at initiation: the notification does not
+// belong to this payment, and retrying it will not fix that.
+func (s *PaymentService) checkProviderPaymentID(payment domain.SubscriptionPayment, n *PaymentNotification) error {
+	if !payment.HasProviderReference() || n.ProviderPaymentID == "" {
+		return nil
+	}
+	if *payment.ProviderPaymentID != n.ProviderPaymentID {
+		return fmt.Errorf("%w: payment %s references %q, notification carries %q",
+			ErrWebhookPaymentMismatch, payment.ID, *payment.ProviderPaymentID, n.ProviderPaymentID)
+	}
 	return nil
 }

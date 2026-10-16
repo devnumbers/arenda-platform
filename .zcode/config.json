@@ -1,0 +1,24 @@
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "stdio",
+        "command": "playwright-mcp",
+        "args": [
+          "--isolated",
+          "--output-dir=.playwright-mcp/artifacts"
+        ],
+        "timeoutMs": 180000
+      },
+      "postgres": {
+        "type": "stdio",
+        "command": "postgres-mcp",
+        "args": [
+          "-tc",
+          ".zcode/postgres-mcp.tools.json"
+        ],
+        "timeoutMs": 60000
+      }
+    }
+  }
+}

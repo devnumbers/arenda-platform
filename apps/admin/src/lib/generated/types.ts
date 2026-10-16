@@ -6,6 +6,7 @@ export type PropertyType =
   | 'apartment'
   | 'room'
   | 'apartments'
+  | 'studio'
   | 'house'
   | 'commercial'
   | 'office'

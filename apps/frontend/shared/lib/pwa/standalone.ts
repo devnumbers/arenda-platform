@@ -28,6 +28,6 @@ export type NavigatorWithStandalone = Navigator & {
  */
 export function isStandaloneMode(): boolean {
     if (typeof window === 'undefined') return false;
-    if (window.matchMedia?.('(display-mode: standalone)').matches) return true;
+    if (window.matchMedia('(display-mode: standalone)').matches) return true;
     return (navigator as NavigatorWithStandalone).standalone === true;
 }

@@ -1,20 +1,72 @@
 'use client';
 
 import {
-  useMutation,
+  useQuery,
   useQueryClient,
   type UseMutationResult,
+  type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
-import { authKeys } from '@/features/auth/api/keys';
-import { mapMeResponse } from '@/entities/user/model/mappers';
+import type { ApiError } from '@/shared/api/errors';
+import { authKeys } from '@/shared/api/query-keys';
+import { mapMeResponse } from '@/entities/user';
+import { mapSessionListResponse } from '@/entities/session';
+import type { ActiveSession } from '@/entities/session';
 import type {
   User,
   UserUpdateCommand,
   SendPhoneChangeCodeCommand,
   ChangePhoneCommand,
-} from '@/entities/user/model/types';
+  VerifyCurrentEmailCommand,
+  RequestNewEmailCodeCommand,
+  ChangeEmailCommand,
+  ResendEmailCodeCommand,
+} from '@/entities/user';
+
+/** Активные сессии вызывающего (GET /me/sessions, #728) — экран
+ * «Устройства» (#730). Порядок — по свежей активности (бэк); retry
+ * выключен, как у useMe: 401 угасшей сессии повторами не лечится. */
+export function useSessions(): UseQueryResult<ActiveSession[], ApiError> {
+  return useQuery({
+    queryKey: authKeys.sessions,
+    queryFn: async () => {
+      const res = await apiClient<Parameters<typeof mapSessionListResponse>[0]>(
+        '/me/sessions',
+      );
+      return mapSessionListResponse(res);
+    },
+    retry: false,
+  });
+}
+
+/** Завершение одной чужой сессии (DELETE /me/sessions/{id}, #730);
+ * текущая завершается выходом на хабе, не ревокацией. */
+export function useRevokeSession(): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (sessionId: string) => {
+      await apiClient<void>(`/me/sessions/${sessionId}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: authKeys.sessions });
+    },
+  });
+}
+
+/** «Завершить все другие сессии» (POST /me/sessions/logout-others, #730):
+ * текущая сессия остаётся живой. */
+export function useLogoutOtherSessions(): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      await apiClient<void>('/me/sessions/logout-others', { method: 'POST' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: authKeys.sessions });
+    },
+  });
+}
 
 export function useUpdateMe(): UseMutationResult<
   User,
@@ -22,7 +74,7 @@ export function useUpdateMe(): UseMutationResult<
   UserUpdateCommand
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (data: UserUpdateCommand) => {
       const res = await apiClient<Parameters<typeof mapMeResponse>[0]>('/me', {
         method: 'PATCH',
@@ -32,7 +84,7 @@ export function useUpdateMe(): UseMutationResult<
     },
     onSuccess: (data) => {
       queryClient.setQueryData(authKeys.me, data);
-      queryClient.invalidateQueries({ queryKey: authKeys.all });
+      void queryClient.invalidateQueries({ queryKey: authKeys.all });
     },
   });
 }
@@ -42,7 +94,7 @@ export function useChangePhoneSendCode(): UseMutationResult<
   ApiError,
   SendPhoneChangeCodeCommand
 > {
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ phone }: SendPhoneChangeCodeCommand) => {
       await apiClient<void>('/me/phone/send-code', {
         method: 'POST',
@@ -58,7 +110,7 @@ export function useChangePhone(): UseMutationResult<
   ChangePhoneCommand
 > {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ phone, code }: ChangePhoneCommand) => {
       const res = await apiClient<Parameters<typeof mapMeResponse>[0]>(
         '/me/phone/change',
@@ -70,7 +122,171 @@ export function useChangePhone(): UseMutationResult<
       return mapMeResponse(res);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: authKeys.all });
+      void queryClient.invalidateQueries({ queryKey: authKeys.all });
     },
   });
+}
+
+/** Шаг 1 флоу смены почты (#722): код на текущий адрес. Тела нет — бэк
+ * берёт адрес из сессии (204). */
+export function useEmailChangeSendCode(): UseMutationResult<
+  void,
+  ApiError,
+  void
+> {
+  return useGuardedMutation({
+    mutationFn: async () => {
+      await apiClient<void>('/me/email/send-code', { method: 'POST' });
+    },
+  });
+}
+
+/** Шаг 2 флоу смены email (#721/#722, протокол #1202): код с текущего
+ * адреса — сервер проверяет его, сжигает и выпускает одноразовый грант
+ * (≈10 мин), адреса в запросе ещё нет. 401 неверного кода — inline на шаге. */
+export function useVerifyCurrentEmail(): UseMutationResult<
+  { grant: string },
+  ApiError,
+  VerifyCurrentEmailCommand
+> {
+  return useGuardedMutation({
+    mutationFn: async ({ code }: VerifyCurrentEmailCommand) => {
+      const res = await apiClient<{ grant: string }>('/me/email/verify-current', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      });
+      return res;
+    },
+  });
+}
+
+/** Шаг 3 флоу смены почты (протокол #1202): новый адрес привязывается
+ * к живому гранту из шага 2, бэк отправляет код на новый адрес (204). */
+export function useRequestNewEmailCode(): UseMutationResult<
+  void,
+  ApiError,
+  RequestNewEmailCodeCommand
+> {
+  return useGuardedMutation({
+    mutationFn: async ({ grant, newEmail }: RequestNewEmailCodeCommand) => {
+      await apiClient<void>('/me/email/request-new-email-code', {
+        method: 'POST',
+        body: JSON.stringify({ grant, newEmail }),
+      });
+    },
+  });
+}
+
+/** Финальный шаг флоу смены email: код с нового адреса + грант — почта
+ * меняется, ответ MeResponse обновляет кэш профиля. */
+export function useChangeEmail(): UseMutationResult<
+  User,
+  ApiError,
+  ChangeEmailCommand
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async ({ grant, code }: ChangeEmailCommand) => {
+      const res = await apiClient<Parameters<typeof mapMeResponse>[0]>(
+        '/me/email/change',
+        {
+          method: 'POST',
+          body: JSON.stringify({ grant, code }),
+        },
+      );
+      return mapMeResponse(res);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: authKeys.all });
+    },
+  });
+}
+
+/** Повторная отправка кода на новый адрес по живому гранту (#732/#733):
+ * resend-плитка шага «Подтвердите новую почту». Кэш не трогает — состояние
+ * /me не меняется (204); троттлинг 1 мин и бюджет 5/час — серверно. */
+export function useResendEmailCode(): UseMutationResult<
+  void,
+  ApiError,
+  ResendEmailCodeCommand
+> {
+  return useGuardedMutation({
+    mutationFn: async ({ grant }: ResendEmailCodeCommand) => {
+      await apiClient<void>('/me/email/resend-code', {
+        method: 'POST',
+        body: JSON.stringify({ grant }),
+      });
+    },
+  });
+}
+
+/** Инкремент бастера кэша выдачи фото профиля (см. authKeys.photoBuster) —
+ * общая точка фото-мутаций: одна запись, все читатели перерисовывают src. */
+function bumpMePhotoBuster(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.setQueryData<number>(authKeys.photoBuster(), (version = 0) => version + 1);
+}
+
+/**
+ * Загрузка/замена фото профиля (ADR 0065, тикет #1230): POST /me/photo
+ * multipart-формой с полем `file`; ответ несёт обновлённый MeResponse —
+ * он сразу становится кэшем /me (фото видно на экране аккаунта и хабе без
+ * рефетча). Бастер authKeys.photoBuster инкрементится рядом: путь выдачи
+ * не меняется, без него <img> показал бы прежние байты из кэша браузера
+ * (private, max-age=300). Полной инвалидации authKeys.all не нужно —
+ * ответ и есть свежий /me.
+ */
+export function useUploadMePhoto(): UseMutationResult<User, ApiError, File> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append('file', file);
+      const res = await apiClient<Parameters<typeof mapMeResponse>[0]>('/me/photo', {
+        method: 'POST',
+        body,
+      });
+      return mapMeResponse(res);
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(authKeys.me, user);
+      bumpMePhotoBuster(queryClient);
+    },
+  });
+}
+
+/**
+ * Удаление фото профиля (ADR 0065): 204 без тела — /me патчится локально
+ * (photoUrl без фото); бастер инкрементится, чтобы повторная загрузка в
+ * окно кэша выдачи перечитала байты.
+ */
+export function useDeleteMePhoto(): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      await apiClient<void>('/me/photo', { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      queryClient.setQueryData<User>(authKeys.me, (prev) =>
+        prev === undefined ? prev : { ...prev, photoUrl: null },
+      );
+      bumpMePhotoBuster(queryClient);
+    },
+  });
+}
+
+/**
+ * Текущий бастер кэша выдачи фото профиля (тикет #1230): чтение из кэша
+ * без сети — пишут только фото-мутации (bumpMePhotoBuster), ноль до первой
+ * мутации сессии. Подписка реактивна: аватары перерисовывают src вместе с
+ * любым инкрементом.
+ */
+export function useMePhotoBuster(): number {
+  const { data } = useQuery({
+    queryKey: authKeys.photoBuster(),
+    queryFn: () => 0,
+    enabled: false,
+    initialData: 0,
+    staleTime: Infinity,
+  });
+  return data;
 }

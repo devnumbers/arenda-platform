@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"errors"
-	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -17,7 +16,7 @@ import (
 // This file holds the SlotCoordinator end-to-end scenarios on in-memory ports
 // (issue #158, T4). The pure selection logic is covered by selection_test.go;
 // here we exercise the coordinator wiring the selection to the repository, the
-// owner resolver, the limiter, and the occupancy port.
+// owner resolver, and the limiter.
 //
 // Reused fixtures from sibling test files (same package):
 //   - memRepo (service_integration_test.go): in-memory MembershipRepository;
@@ -27,9 +26,7 @@ import (
 //   - noopTx / noopBeginner (service_integration_test.go): no-op transaction.
 //   - mustUUID (selection_test.go): fixed-UUID helper for readable setup.
 
-// ---------------------------------------------------------------------------
 // In-memory port stubs for the coordinator's remaining dependencies.
-// ---------------------------------------------------------------------------
 
 // fakeRecipientLimiter is an in-memory RecipientLimiter. Limits are per
 // recipient; an absent recipient reads as 0. WithTx returns itself because the
@@ -47,37 +44,11 @@ func (f *fakeRecipientLimiter) set(recipientID uuid.UUID, limit int) {
 }
 
 func (f *fakeRecipientLimiter) ActivePropertyLimit(_ context.Context, recipientID uuid.UUID) (int, error) {
-	return f.limits[recipientID], nil // default 0
+	return f.limits[recipientID], nil // Default 0.
 }
 
 func (f *fakeRecipientLimiter) WithTx(_ transaction.Tx) (RecipientLimiter, error) {
 	return f, nil
-}
-
-// fakeOccupancy is an in-memory OccupancyPort keyed by data owner: each owner
-// maps to the set of property ids that have an open lease.
-type fakeOccupancy struct {
-	byOwner map[uuid.UUID]map[uuid.UUID]bool
-}
-
-func newFakeOccupancy() *fakeOccupancy {
-	return &fakeOccupancy{byOwner: map[uuid.UUID]map[uuid.UUID]bool{}}
-}
-
-// setOpen marks propertyID as having an open lease under ownerID.
-func (f *fakeOccupancy) setOpen(ownerID, propertyID uuid.UUID) {
-	set, ok := f.byOwner[ownerID]
-	if !ok {
-		set = map[uuid.UUID]bool{}
-		f.byOwner[ownerID] = set
-	}
-	set[propertyID] = true
-}
-
-func (f *fakeOccupancy) OccupiedPropertyIDs(_ context.Context, ownerID uuid.UUID) (map[uuid.UUID]bool, error) {
-	out := make(map[uuid.UUID]bool, len(f.byOwner[ownerID]))
-	maps.Copy(out, f.byOwner[ownerID])
-	return out, nil
 }
 
 // fakeOwnedProps is an in-memory OwnedActivePropertiesPort: each "owner" maps to
@@ -106,13 +77,10 @@ func (f *fakeOwnedProps) WithTx(_ transaction.Tx) (OwnedActivePropertiesPort, er
 // Compile-time interface checks for the in-memory stubs.
 var (
 	_ RecipientLimiter          = (*fakeRecipientLimiter)(nil)
-	_ OccupancyPort             = (*fakeOccupancy)(nil)
 	_ OwnedActivePropertiesPort = (*fakeOwnedProps)(nil)
 )
 
-// ---------------------------------------------------------------------------
 // Test scaffolding helpers.
-// ---------------------------------------------------------------------------
 
 // coordinatorFixture bundles the coordinator with its in-memory dependencies so
 // each scenario can set up state and assert against the same handles.
@@ -120,7 +88,6 @@ type coordinatorFixture struct {
 	repo        *memRepo
 	owners      staticResolver
 	limiter     *fakeRecipientLimiter
-	occupancy   *fakeOccupancy
 	ownedProps  *fakeOwnedProps
 	coordinator *SlotCoordinator
 }
@@ -129,31 +96,30 @@ func newCoordinatorFixture() *coordinatorFixture {
 	repo := newMemRepo()
 	owners := staticResolver{}
 	limiter := newFakeRecipientLimiter()
-	occupancy := newFakeOccupancy()
 	ownedProps := newFakeOwnedProps()
 	coordinator := NewSlotCoordinator(
 		repo,
 		owners,
 		limiter,
-		occupancy,
 		ownedProps,
 		nil,
 		auditapp.Noop{},
 		noopBeginner{},
+		nil,
+		nil,
 	)
 	return &coordinatorFixture{
 		repo:        repo,
 		owners:      owners,
 		limiter:     limiter,
-		occupancy:   occupancy,
 		ownedProps:  ownedProps,
 		coordinator: coordinator,
 	}
 }
 
 // linkOwner records in every in-memory port that propertyID belongs to ownerID:
-// the repo owner join and the resolver. (occupancy/owned are keyed by owner at
-// query time, so nothing to record there.)
+// the repo owner join and the resolver. (owned is keyed by owner at query
+// time, so nothing to record there.)
 func (f *coordinatorFixture) linkOwner(ownerID, propertyID uuid.UUID) {
 	f.repo.SetOwner(propertyID, ownerID)
 	f.owners[propertyID] = ownerID
@@ -182,7 +148,9 @@ func (f *coordinatorFixture) addActiveMember(t *testing.T, memberID, propertyID,
 // addSuspendedMember inserts a suspended viewer shared membership with a fixed
 // SuspendedAt/UpdatedAt so FIFO ordering and the "already suspended" invariant
 // are stable across runs.
-func (f *coordinatorFixture) addSuspendedMember(t *testing.T, memberID, propertyID, ownerID, recipientID uuid.UUID, suspendedAt, updatedAt time.Time) {
+func (f *coordinatorFixture) addSuspendedMember(
+	t *testing.T, memberID, propertyID, ownerID, recipientID uuid.UUID, suspendedAt, updatedAt time.Time,
+) {
 	t.Helper()
 	f.linkOwner(ownerID, propertyID)
 	if _, err := f.repo.CreateWithStatus(context.Background(), domain.Membership{
@@ -215,11 +183,30 @@ func (f *coordinatorFixture) assertStatus(t *testing.T, memberID, propertyID uui
 	}
 }
 
-// ---------------------------------------------------------------------------
-// memRepo test helpers: deterministic timestamps.
-// ---------------------------------------------------------------------------
+// assertOneActiveOneSuspended fails the test unless the recipient currently has
+// exactly one active and one suspended membership — the steady state the
+// downgrade/recovery scenarios converge to.
+func (f *coordinatorFixture) assertOneActiveOneSuspended(t *testing.T, recipientID uuid.UUID) {
+	t.Helper()
+	active, err := f.repo.ListActiveByUser(context.Background(), recipientID)
+	if err != nil {
+		t.Fatalf("ListActiveByUser: %v", err)
+	}
+	if len(active) != 1 {
+		t.Errorf("ListActiveByUser = %d, want 1", len(active))
+	}
+	suspended, err := f.repo.ListSuspendedByUser(context.Background(), recipientID)
+	if err != nil {
+		t.Fatalf("ListSuspendedByUser: %v", err)
+	}
+	if len(suspended) != 1 {
+		t.Errorf("ListSuspendedByUser = %d, want 1", len(suspended))
+	}
+}
 
-// setUpdatedAt overwrites the UpdatedAt of a row. memRepo.Create stamps
+// MemRepo test helpers: deterministic timestamps.
+
+// SetUpdatedAt overwrites the UpdatedAt of a row. MemRepo.Create stamps
 // time.Now(), which is fine for service tests but breaks recency comparison in
 // coordinator scenarios. This is a test-only helper, not production code.
 func (r *memRepo) setUpdatedAt(id, propertyID uuid.UUID, at time.Time) {
@@ -231,7 +218,7 @@ func (r *memRepo) setUpdatedAt(id, propertyID uuid.UUID, at time.Time) {
 	}
 }
 
-// setSuspendedAt overwrites SuspendedAt of a row. memRepo.Suspend always
+// SetSuspendedAt overwrites SuspendedAt of a row. MemRepo.Suspend always
 // re-stamps time.Now(); for scenario D ("already-suspended not re-stamped by a
 // repeat downgrade") we need a fixed original timestamp we can compare against.
 func (r *memRepo) setSuspendedAt(id, propertyID uuid.UUID, at time.Time) {
@@ -253,9 +240,7 @@ func (r *memRepo) mustGet(t *testing.T, id, propertyID uuid.UUID) domain.Members
 	return m
 }
 
-// ---------------------------------------------------------------------------
 // Scenarios.
-// ---------------------------------------------------------------------------
 
 // Fixed instants; t1Old is oldest. Using fixed times keeps eviction recency
 // stable across runs.
@@ -263,29 +248,28 @@ var (
 	scenarioBase = time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
 	t1Old        = scenarioBase
 	t2New        = scenarioBase.Add(1 * time.Hour)
-	t3Newer      = scenarioBase.Add(2 * time.Hour)
 )
 
 // Scenario A: EnforceRecipientLimit — downgrade suspends the excess shared
-// membership (the one with the earlier UpdatedAt, neither having an open
-// lease). One is suspended, the other stays active.
+// membership (the one with the earlier UpdatedAt). One is suspended, the
+// other stays active.
 func TestSlotCoordinator_EnforceRecipientLimit_DowngradeSuspendsExcess(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	recipient := uuid.New()
-	m1 := uuid.New()
-	m2 := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	m1 := uuid.Must(uuid.NewV7())
+	m2 := uuid.Must(uuid.NewV7())
 
 	// Recipient holds active shared memberships on both of owner's properties.
-	// m1 is the earlier-updated (recency comparator ranks it "worse", so it is
-	// the eviction candidate when neither has an open lease).
+	// M1 is the earlier-updated (recency comparator ranks it "worse", so it is
+	// the eviction candidate).
 	f.addActiveMember(t, m1, p1, owner, recipient, t1Old)
 	f.addActiveMember(t, m2, p2, owner, recipient, t2New)
-	f.limiter.set(recipient, 1) // limit 1, but two shared → 1 excess
+	f.limiter.set(recipient, 1) // Limit 1, but two shared → 1 excess.
 
 	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, owner, "downgrade"); err != nil {
 		t.Fatalf("EnforceRecipientLimit: %v", err)
@@ -295,12 +279,7 @@ func TestSlotCoordinator_EnforceRecipientLimit_DowngradeSuspendsExcess(t *testin
 	f.assertStatus(t, m1, p1, domain.MemberStatusSuspended, "excess member should be suspended")
 	f.assertStatus(t, m2, p2, domain.MemberStatusActive, "kept member should stay active")
 
-	if got, _ := f.repo.ListActiveByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListActiveByUser = %d, want 1", len(got))
-	}
-	if got, _ := f.repo.ListSuspendedByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListSuspendedByUser = %d, want 1", len(got))
-	}
+	f.assertOneActiveOneSuspended(t, recipient)
 }
 
 // Scenario B: EnforceRecipientLimit — the recipient's own objects appear in the
@@ -310,22 +289,22 @@ func TestSlotCoordinator_EnforceRecipientLimit_OwnObjectsNotTouched(t *testing.T
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	ownProp := uuid.New()
-	sharedProp := uuid.New()
-	recipient := uuid.New()
-	sharedMember := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	ownProp := uuid.Must(uuid.NewV7())
+	sharedProp := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	sharedMember := uuid.Must(uuid.NewV7())
 
 	// Recipient has one own property (registered with ownedProps only — it is
 	// NOT a membership row, the coordinator never sees it in memRepo) and one
 	// shared membership. The own property is the more-recently-updated of the
-	// two (no open lease on either), so it is the "best stays" entry and the
+	// two, so it is the "best stays" entry and the
 	// shared membership is the eviction candidate — which the coordinator
 	// suspends. The own object is never suspended (PropertyArchiver's job).
 	f.linkOwner(owner, sharedProp)
-	f.ownedProps.add(recipient, ownProp, t2New) // own = newer = "stays"
+	f.ownedProps.add(recipient, ownProp, t2New) // Own = newer = "stays".
 	f.addActiveMember(t, sharedMember, sharedProp, owner, recipient, t1Old)
-	f.limiter.set(recipient, 1) // pool size = own(1) + shared(1) = 2 > 1 → 1 excess
+	f.limiter.set(recipient, 1) // Pool size = own(1) + shared(1) = 2 > 1 → 1 excess.
 
 	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, owner, "downgrade"); err != nil {
 		t.Fatalf("EnforceRecipientLimit: %v", err)
@@ -337,35 +316,6 @@ func TestSlotCoordinator_EnforceRecipientLimit_OwnObjectsNotTouched(t *testing.T
 	f.assertStatus(t, sharedMember, sharedProp, domain.MemberStatusSuspended, "excess shared member suspended")
 }
 
-// Scenario C: EnforceRecipientLimit — an open lease protects the membership
-// even when it is the less-recently-updated one. The membership without an open
-// lease is suspended.
-func TestSlotCoordinator_EnforceRecipientLimit_OpenLeaseProtects(t *testing.T) {
-	t.Parallel()
-	f := newCoordinatorFixture()
-
-	owner := uuid.New()
-	pNoLease := uuid.New()   // shared membership, no open lease
-	pOpenLease := uuid.New() // shared membership, open lease present
-	recipient := uuid.New()
-	mNo := uuid.New()
-	mOpen := uuid.New()
-
-	// mNo is the more-recently-updated but has no lease; mOpen is older but has
-	// an open lease. The open lease must win and protect mOpen.
-	f.addActiveMember(t, mNo, pNoLease, owner, recipient, t3Newer)
-	f.addActiveMember(t, mOpen, pOpenLease, owner, recipient, t1Old)
-	f.occupancy.setOpen(owner, pOpenLease) // owner's property pOpenLease has an open lease
-	f.limiter.set(recipient, 1)
-
-	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, owner, "downgrade"); err != nil {
-		t.Fatalf("EnforceRecipientLimit: %v", err)
-	}
-
-	f.assertStatus(t, mNo, pNoLease, domain.MemberStatusSuspended, "no-lease member suspended")
-	f.assertStatus(t, mOpen, pOpenLease, domain.MemberStatusActive, "open-lease member protected")
-}
-
 // Scenario D: EnforceRecipientLimit — a repeat downgrade does not re-evaluate
 // an already-suspended membership (it is not in the active pool), and does not
 // re-stamp its SuspendedAt. A second active membership is suspended if the
@@ -374,19 +324,19 @@ func TestSlotCoordinator_EnforceRecipientLimit_RepeatDowngradeDoesNotRetouchSusp
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	recipient := uuid.New()
-	mAlready := uuid.New()
-	mActive := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mAlready := uuid.Must(uuid.NewV7())
+	mActive := uuid.Must(uuid.NewV7())
 
-	// mAlready is pre-suspended with a fixed timestamp; mActive is still active.
+	// MAlready is pre-suspended with a fixed timestamp; mActive is still active.
 	originalSuspended := t1Old
 	f.addSuspendedMember(t, mAlready, p1, owner, recipient, originalSuspended, t1Old)
 	f.addActiveMember(t, mActive, p2, owner, recipient, t2New)
 	// Limit 0: the active pool (1 shared) already exceeds it, so mActive is
-	// suspended on the repeat call. mAlready is not in the active pool, so its
+	// suspended on the repeat call. MAlready is not in the active pool, so its
 	// SuspendedAt must be untouched.
 	f.limiter.set(recipient, 0)
 
@@ -394,10 +344,10 @@ func TestSlotCoordinator_EnforceRecipientLimit_RepeatDowngradeDoesNotRetouchSusp
 		t.Fatalf("EnforceRecipientLimit: %v", err)
 	}
 
-	// mActive was suspended by this call.
+	// MActive was suspended by this call.
 	f.assertStatus(t, mActive, p2, domain.MemberStatusSuspended, "active member suspended on repeat downgrade")
 
-	// mAlready's SuspendedAt is unchanged: the coordinator skipped it (it was
+	// MAlready's SuspendedAt is unchanged: the coordinator skipped it (it was
 	// not in ListActiveByUser) and never called Suspend on it again.
 	got := f.repo.mustGet(t, mAlready, p1)
 	if got.SuspendedAt == nil || !got.SuspendedAt.Equal(originalSuspended) {
@@ -410,8 +360,8 @@ func TestSlotCoordinator_EnforceRecipientLimit_RepeatDowngradeDoesNotRetouchSusp
 func TestSlotCoordinator_EnforceOnActivation_FreeSlotReturnsFalse(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
-	recipient := uuid.New()
-	f.limiter.set(recipient, 1) // used=0 < limit=1 → free slot
+	recipient := uuid.Must(uuid.NewV7())
+	f.limiter.set(recipient, 1) // Used=0 < limit=1 → free slot.
 
 	got, err := f.coordinator.EnforceOnActivation(context.Background(), noopTx{}, recipient)
 	if err != nil {
@@ -428,10 +378,10 @@ func TestSlotCoordinator_EnforceOnActivation_PoolFullReturnsTrue(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	recipient := uuid.New()
-	ownProp := uuid.New()
+	recipient := uuid.Must(uuid.NewV7())
+	ownProp := uuid.Must(uuid.NewV7())
 	f.ownedProps.add(recipient, ownProp, t1Old)
-	f.limiter.set(recipient, 1) // used=1 >= limit=1 → no free slot
+	f.limiter.set(recipient, 1) // Used=1 >= limit=1 → no free slot.
 
 	got, err := f.coordinator.EnforceOnActivation(context.Background(), noopTx{}, recipient)
 	if err != nil {
@@ -448,31 +398,33 @@ func TestSlotCoordinator_RecoverSuspended_FIFORecoversEarliest(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	recipient := uuid.New()
-	m1 := uuid.New() // suspended earlier
-	m2 := uuid.New() // suspended later
+	owner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	m1 := uuid.Must(uuid.NewV7()) // Suspended earlier.
+	m2 := uuid.Must(uuid.NewV7()) // Suspended later.
 
 	f.addSuspendedMember(t, m1, p1, owner, recipient, t1Old, t1Old)
 	f.addSuspendedMember(t, m2, p2, owner, recipient, t2New, t2New)
-	f.limiter.set(recipient, 1) // used=0, freeSlots=1 → recover 1
+	f.limiter.set(recipient, 1) // Used=0, freeSlots=1 → recover 1.
 
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+	recovered, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient)
+	if err != nil {
 		t.Fatalf("RecoverSuspended: %v", err)
 	}
 
-	// m1 (earliest) reactivated, m2 stays suspended.
+	// M1 (earliest) reactivated, m2 stays suspended.
 	f.assertStatus(t, m1, p1, domain.MemberStatusActive, "earliest suspended should be reactivated (FIFO)")
 	f.assertStatus(t, m2, p2, domain.MemberStatusSuspended, "later suspended should stay suspended")
 
-	if got, _ := f.repo.ListActiveByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListActiveByUser = %d, want 1", len(got))
+	// The reactivated rows come back in FIFO order — the caller collects
+	// their access pairs from them.
+	if len(recovered) != 1 || recovered[0].ID != m1 || recovered[0].PropertyID != p1 {
+		t.Errorf("recovered = %+v, want the earliest membership %s on %s", recovered, m1, p1)
 	}
-	if got, _ := f.repo.ListSuspendedByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListSuspendedByUser = %d, want 1", len(got))
-	}
+
+	f.assertOneActiveOneSuspended(t, recipient)
 }
 
 // Scenario H: RecoverSuspended — no free slot (an active membership already
@@ -481,62 +433,58 @@ func TestSlotCoordinator_RecoverSuspended_NoFreeSlotRecoverNothing(t *testing.T)
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pActive := uuid.New()
-	pSuspended := uuid.New()
-	recipient := uuid.New()
-	mActive := uuid.New()
-	mSuspended := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pActive := uuid.Must(uuid.NewV7())
+	pSuspended := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mActive := uuid.Must(uuid.NewV7())
+	mSuspended := uuid.Must(uuid.NewV7())
 
 	// One active shared membership (occupies the slot) + one suspended.
 	f.addActiveMember(t, mActive, pActive, owner, recipient, t1Old)
 	f.addSuspendedMember(t, mSuspended, pSuspended, owner, recipient, t2New, t2New)
-	f.limiter.set(recipient, 1) // used=1, freeSlots=0
+	f.limiter.set(recipient, 1) // Used=1, freeSlots=0.
 
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+	recovered, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient)
+	if err != nil {
 		t.Fatalf("RecoverSuspended: %v", err)
+	}
+	if len(recovered) != 0 {
+		t.Errorf("recovered = %+v, want none (no free slot)", recovered)
 	}
 
 	f.assertStatus(t, mSuspended, pSuspended, domain.MemberStatusSuspended, "suspended should stay suspended (no free slot)")
 	f.assertStatus(t, mActive, pActive, domain.MemberStatusActive, "active should stay active")
 
-	if got, _ := f.repo.ListActiveByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListActiveByUser = %d, want 1", len(got))
-	}
-	if got, _ := f.repo.ListSuspendedByUser(context.Background(), recipient); len(got) != 1 {
-		t.Errorf("ListSuspendedByUser = %d, want 1", len(got))
-	}
+	f.assertOneActiveOneSuspended(t, recipient)
 }
 
-// Scenario I: RecoverSuspended — tie-break inside a downgrade batch (equal
-// SuspendedAt): the membership whose property has an open lease is recovered
-// first.
-func TestSlotCoordinator_RecoverSuspended_BatchTieBreakOpenLeaseFirst(t *testing.T) {
-	t.Parallel()
-	f := newCoordinatorFixture()
+// enforceRecipientLimitPool is one seeded membership pool of an
+// EnforceRecipientLimit scenario: the active member, its owner and recipient,
+// the recipient's property limit, and the expected outcome.
+type enforceRecipientLimitPool struct {
+	member, property, owner, recipient uuid.UUID
+	activeAt                           time.Time
+	recipientLimit                     int
+	want                               domain.MemberStatus
+	wantMsg                            string
+}
 
-	owner := uuid.New()
-	pNoLease := uuid.New()
-	pOpenLease := uuid.New()
-	recipient := uuid.New()
-	mNo := uuid.New()
-	mOpen := uuid.New()
-
-	// Same SuspendedAt (a downgrade batch). mOpen's property has an open lease,
-	// so the batch tie-break recovers it first. Only one free slot → only one
-	// is recovered.
-	batchSuspended := t1Old
-	f.addSuspendedMember(t, mNo, pNoLease, owner, recipient, batchSuspended, t1Old)
-	f.addSuspendedMember(t, mOpen, pOpenLease, owner, recipient, batchSuspended, t2New)
-	f.occupancy.setOpen(owner, pOpenLease)
-	f.limiter.set(recipient, 1) // used=0, freeSlots=1
-
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
-		t.Fatalf("RecoverSuspended: %v", err)
+// runEnforceRecipientLimit seeds the pools, runs EnforceRecipientLimit for the
+// actor, and asserts every pool's outcome — the shared body of the scenario
+// tests that differ only in the pools they seed.
+func (f *coordinatorFixture) runEnforceRecipientLimit(t *testing.T, actor uuid.UUID, pools []enforceRecipientLimitPool) {
+	t.Helper()
+	for _, p := range pools {
+		f.addActiveMember(t, p.member, p.property, p.owner, p.recipient, p.activeAt)
+		f.limiter.set(p.recipient, p.recipientLimit)
 	}
-
-	f.assertStatus(t, mOpen, pOpenLease, domain.MemberStatusActive, "open-lease suspended should be recovered first")
-	f.assertStatus(t, mNo, pNoLease, domain.MemberStatusSuspended, "no-lease suspended should stay suspended")
+	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, actor, "downgrade"); err != nil {
+		t.Fatalf("EnforceRecipientLimit: %v", err)
+	}
+	for _, p := range pools {
+		f.assertStatus(t, p.member, p.property, p.want, p.wantMsg)
+	}
 }
 
 // Scenario J: EnforceRecipientLimit — multiple recipients of the same owner are
@@ -545,25 +493,22 @@ func TestSlotCoordinator_EnforceRecipientLimit_MultipleRecipients(t *testing.T) 
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	r1 := uuid.New() // limit 0 → suspended
-	r2 := uuid.New() // limit 1 → stays active
-	m1 := uuid.New()
-	m2 := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	r1 := uuid.Must(uuid.NewV7()) // Limit 0 → suspended.
+	r2 := uuid.Must(uuid.NewV7()) // Limit 1 → stays active.
 
-	f.addActiveMember(t, m1, p1, owner, r1, t1Old)
-	f.addActiveMember(t, m2, p2, owner, r2, t2New)
-	f.limiter.set(r1, 0)
-	f.limiter.set(r2, 1)
-
-	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, owner, "downgrade"); err != nil {
-		t.Fatalf("EnforceRecipientLimit: %v", err)
-	}
-
-	f.assertStatus(t, m1, p1, domain.MemberStatusSuspended, "r1 (limit 0) suspended")
-	f.assertStatus(t, m2, p2, domain.MemberStatusActive, "r2 (limit 1) stays active")
+	f.runEnforceRecipientLimit(t, owner, []enforceRecipientLimitPool{
+		{
+			member: uuid.Must(uuid.NewV7()), property: uuid.Must(uuid.NewV7()),
+			owner: owner, recipient: r1, activeAt: t1Old, recipientLimit: 0,
+			want: domain.MemberStatusSuspended, wantMsg: "r1 (limit 0) suspended",
+		},
+		{
+			member: uuid.Must(uuid.NewV7()), property: uuid.Must(uuid.NewV7()),
+			owner: owner, recipient: r2, activeAt: t2New, recipientLimit: 1,
+			want: domain.MemberStatusActive, wantMsg: "r2 (limit 1) stays active",
+		},
+	})
 }
 
 // Scenario N: EnforceRecipientLimit — the argument is the downgrading user
@@ -574,12 +519,12 @@ func TestSlotCoordinator_EnforceRecipientLimit_DowngradingUserAsRecipient(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	foreignOwner := uuid.New()
-	p1 := uuid.New()
-	p2 := uuid.New()
-	downgrading := uuid.New() // the user whose tariff dropped; billing passes his id
-	m1 := uuid.New()
-	m2 := uuid.New()
+	foreignOwner := uuid.Must(uuid.NewV7())
+	p1 := uuid.Must(uuid.NewV7())
+	p2 := uuid.Must(uuid.NewV7())
+	downgrading := uuid.Must(uuid.NewV7()) // The user whose tariff dropped; billing passes his id.
+	m1 := uuid.Must(uuid.NewV7())
+	m2 := uuid.Must(uuid.NewV7())
 
 	// The downgrading user holds active shared memberships on a foreign owner's
 	// properties; m1 is the earlier-updated eviction candidate.
@@ -602,25 +547,25 @@ func TestSlotCoordinator_EnforceRecipientLimit_OwnerAndRecipientInOneCall(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	user := uuid.New()
-	ownProp := uuid.New()
-	foreignOwner := uuid.New()
-	foreignProp := uuid.New()
-	member := uuid.New()   // member of the user's own property
-	mOwn := uuid.New()     // the member's membership on the user's property
-	mForeign := uuid.New() // the user's membership on the foreign property
+	user := uuid.Must(uuid.NewV7())
+	ownProp := uuid.Must(uuid.NewV7())
+	foreignProp := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7()) // Member of the user's own property.
 
-	f.addActiveMember(t, mOwn, ownProp, user, member, t1Old)
-	f.addActiveMember(t, mForeign, foreignProp, foreignOwner, user, t2New)
-	f.limiter.set(member, 0) // the member's pool (1 shared) exceeds → suspended
-	f.limiter.set(user, 0)   // the user's own pool (1 shared) exceeds → suspended
-
-	if err := f.coordinator.EnforceRecipientLimit(context.Background(), noopTx{}, user, "downgrade"); err != nil {
-		t.Fatalf("EnforceRecipientLimit: %v", err)
-	}
-
-	f.assertStatus(t, mOwn, ownProp, domain.MemberStatusSuspended, "member of the user's property suspended")
-	f.assertStatus(t, mForeign, foreignProp, domain.MemberStatusSuspended, "user's own foreign membership suspended")
+	// The member's pool (1 shared) and the user's own pool (1 shared) both
+	// exceed their limits and are suspended in one call.
+	f.runEnforceRecipientLimit(t, user, []enforceRecipientLimitPool{
+		{
+			member: uuid.Must(uuid.NewV7()), property: ownProp,
+			owner: user, recipient: member, activeAt: t1Old, recipientLimit: 0,
+			want: domain.MemberStatusSuspended, wantMsg: "member of the user's property suspended",
+		},
+		{
+			member: uuid.Must(uuid.NewV7()), property: foreignProp,
+			owner: uuid.Must(uuid.NewV7()), recipient: user, activeAt: t2New, recipientLimit: 0,
+			want: domain.MemberStatusSuspended, wantMsg: "user's own foreign membership suspended",
+		},
+	})
 }
 
 // Scenario K: RecoverSuspendedForProperty — archiving a shared object frees a
@@ -630,18 +575,18 @@ func TestSlotCoordinator_RecoverSuspendedForProperty_PerRecipientRecovery(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pArchived := uuid.New() // the object being archived (both recipients hold it)
+	owner := uuid.Must(uuid.NewV7())
+	pArchived := uuid.Must(uuid.NewV7()) // The object being archived (both recipients hold it).
 	// Each recipient also has a suspended membership on another of owner's
 	// properties, which should be recovered once their slot frees.
-	pR1Suspended := uuid.New()
-	pR2Suspended := uuid.New()
-	r1 := uuid.New()
-	r2 := uuid.New()
-	mArchivedR1 := uuid.New()
-	mArchivedR2 := uuid.New()
-	mR1Suspended := uuid.New()
-	mR2Suspended := uuid.New()
+	pR1Suspended := uuid.Must(uuid.NewV7())
+	pR2Suspended := uuid.Must(uuid.NewV7())
+	r1 := uuid.Must(uuid.NewV7())
+	r2 := uuid.Must(uuid.NewV7())
+	mArchivedR1 := uuid.Must(uuid.NewV7())
+	mArchivedR2 := uuid.Must(uuid.NewV7())
+	mR1Suspended := uuid.Must(uuid.NewV7())
+	mR2Suspended := uuid.Must(uuid.NewV7())
 
 	// Active memberships on the archived object (these would be removed by the
 	// properties service in a real archive flow; here they still occupy slots
@@ -659,7 +604,7 @@ func TestSlotCoordinator_RecoverSuspendedForProperty_PerRecipientRecovery(t *tes
 	f.limiter.set(r1, 1)
 	f.limiter.set(r2, 1)
 
-	if err := f.coordinator.RecoverSuspendedForProperty(context.Background(), noopTx{}, pArchived); err != nil {
+	if _, err := f.coordinator.RecoverSuspendedForProperty(context.Background(), noopTx{}, pArchived); err != nil {
 		t.Fatalf("RecoverSuspendedForProperty: %v", err)
 	}
 
@@ -676,17 +621,17 @@ func TestSlotCoordinator_RecoverSuspendedForProperty_PerRecipientRecovery(t *tes
 	if err := f.repo.Delete(context.Background(), mArchivedR2, pArchived); err != nil {
 		t.Fatalf("Delete mArchivedR2: %v", err)
 	}
-	if err := f.coordinator.RecoverSuspendedForProperty(context.Background(), noopTx{}, pArchived); err != nil {
+	if _, err := f.coordinator.RecoverSuspendedForProperty(context.Background(), noopTx{}, pArchived); err != nil {
 		t.Fatalf("RecoverSuspendedForProperty (after free): %v", err)
 	}
 
-	// pArchived still has no remaining memberships (both were deleted), so the
+	// PArchived still has no remaining memberships (both were deleted), so the
 	// per-property loop finds no recipients and does nothing — which is the
 	// correct behavior, but means recovery here is driven by each recipient's
 	// own RecoverSuspended, not the per-property entry point. Exercise that
 	// directly to assert the slot-freed outcome.
 	for _, r := range []uuid.UUID{r1, r2} {
-		if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, r); err != nil {
+		if _, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, r); err != nil {
 			t.Fatalf("RecoverSuspended(%s): %v", r, err)
 		}
 	}
@@ -701,18 +646,18 @@ func TestSlotCoordinator_RecoverAfterPropertyDelete_DropsAndRecovers(t *testing.
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pDeleted := uuid.New()
-	pSuspended := uuid.New()
-	recipient := uuid.New()
-	mDeleted := uuid.New()
-	mSuspended := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pDeleted := uuid.Must(uuid.NewV7())
+	pSuspended := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mDeleted := uuid.Must(uuid.NewV7())
+	mSuspended := uuid.Must(uuid.NewV7())
 
 	f.addActiveMember(t, mDeleted, pDeleted, owner, recipient, t1Old)
 	f.addSuspendedMember(t, mSuspended, pSuspended, owner, recipient, t2New, t2New)
 	f.limiter.set(recipient, 1)
 
-	if err := f.coordinator.RecoverAfterPropertyDelete(context.Background(), noopTx{}, pDeleted); err != nil {
+	if _, err := f.coordinator.RecoverAfterPropertyDelete(context.Background(), noopTx{}, pDeleted); err != nil {
 		t.Fatalf("RecoverAfterPropertyDelete: %v", err)
 	}
 
@@ -730,18 +675,24 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_SuspendsWhenNoSlot(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pUnarchived := uuid.New()
-	pOwn := uuid.New()
-	recipient := uuid.New()
-	mUnarchived := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pUnarchived := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mUnarchived := uuid.Must(uuid.NewV7())
 
 	f.addActiveMember(t, mUnarchived, pUnarchived, owner, recipient, t1Old)
-	f.ownedProps.add(recipient, pOwn, t2New) // own property occupies one slot
-	f.limiter.set(recipient, 1)              // pool=2 > limit=1 → suspend on unarchive
+	f.ownedProps.add(recipient, pOwn, t2New) // Own property occupies one slot.
+	f.limiter.set(recipient, 1)              // Pool=2 > limit=1 → suspend on unarchive.
 
-	if err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived); err != nil {
+	suspended, err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived)
+	if err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+	// The suspended legs ride the return — the caller collects their access
+	// pairs for the realtime dispatch.
+	if len(suspended) != 1 || suspended[0].ID != mUnarchived {
+		t.Errorf("suspended = %v, want the unarchived membership %s", suspended, mUnarchived)
 	}
 
 	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusSuspended, "unarchived member suspended when no free slot")
@@ -755,19 +706,24 @@ func TestSlotCoordinator_EnforceOnUnarchiveForProperty_StaysActiveAtLimit(t *tes
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	owner := uuid.New()
-	pUnarchived := uuid.New()
-	pOther := uuid.New()
-	recipient := uuid.New()
-	mUnarchived := uuid.New()
-	mOther := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
+	pUnarchived := uuid.Must(uuid.NewV7())
+	pOther := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mUnarchived := uuid.Must(uuid.NewV7())
+	mOther := uuid.Must(uuid.NewV7())
 
 	f.addActiveMember(t, mUnarchived, pUnarchived, owner, recipient, t1Old)
 	f.addActiveMember(t, mOther, pOther, owner, recipient, t2New)
-	f.limiter.set(recipient, 2) // pool=2 == limit=2 → fits, stays active
+	f.limiter.set(recipient, 2) // Pool=2 == limit=2 → fits, stays active.
 
-	if err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived); err != nil {
+	suspended, err := f.coordinator.EnforceOnUnarchiveForProperty(context.Background(), noopTx{}, pUnarchived)
+	if err != nil {
 		t.Fatalf("EnforceOnUnarchiveForProperty: %v", err)
+	}
+	// Nothing suspended — nothing returned.
+	if len(suspended) != 0 {
+		t.Errorf("suspended = %v, want none at exactly the limit", suspended)
 	}
 
 	f.assertStatus(t, mUnarchived, pUnarchived, domain.MemberStatusActive, "unarchived member stays active at exactly the limit")
@@ -786,21 +742,21 @@ func TestSlotCoordinator_RecoverSuspended_RecipientFreesOwnSlot(t *testing.T) {
 	t.Parallel()
 	f := newCoordinatorFixture()
 
-	// owner has a property shared with recipient; recipient holds it suspended.
-	owner := uuid.New()
-	pShared := uuid.New()
-	pOwn := uuid.New()
-	recipient := uuid.New()
-	mShared := uuid.New() // suspended shared membership on owner's object
+	// Owner has a property shared with recipient; recipient holds it suspended.
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7()) // Suspended shared membership on owner's object.
 
 	// Recipient's tariff pool was full (limit 1, own property occupying the slot)
 	// so the shared membership was created suspended.
 	f.addSuspendedMember(t, mShared, pShared, owner, recipient, t1Old, t1Old)
-	f.ownedProps.add(recipient, pOwn, t2New) // recipient's own active property
-	f.limiter.set(recipient, 1)              // pool = 1 own, used = 1, freeSlots = 0
+	f.ownedProps.add(recipient, pOwn, t2New) // Recipient's own active property.
+	f.limiter.set(recipient, 1)              // Pool = 1 own, used = 1, freeSlots = 0.
 
 	// Sanity: with the own slot still occupied, recovery does nothing.
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+	if _, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
 		t.Fatalf("RecoverSuspended (slot still full): %v", err)
 	}
 	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "stays suspended while own slot occupied")
@@ -809,8 +765,286 @@ func TestSlotCoordinator_RecoverSuspended_RecipientFreesOwnSlot(t *testing.T) {
 	// used drops to 0 and one slot frees.
 	f.ownedProps.byOwner[recipient] = nil
 
-	if err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
+	if _, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient); err != nil {
 		t.Fatalf("RecoverSuspended (slot freed): %v", err)
 	}
 	f.assertStatus(t, mShared, pShared, domain.MemberStatusActive, "suspended reactivated once own slot freed")
+}
+
+// Scenario P (D13, #1297): EnforceRecipientPoolGrowth — the recipient's own
+// object re-entered the pool (an unarchive of their own object or a billing
+// grace restore). The pool (own newest + shared older) strictly exceeds the
+// limit, so the oldest shared membership is suspended, the own candidate is
+// untouched, and the suspended leg — reloaded with its fresh suspended_at —
+// rides the return for the caller's realtime dispatch.
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_SuspendsExcessShared(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7()) // Foreign owner of the shared object.
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New) // Own just re-entered = newest = stays.
+	f.limiter.set(recipient, 1)              // Pool = own(1) + shared(1) = 2 > 1 → 1 excess.
+
+	suspended, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "oldest shared membership suspended")
+	// The own candidate has no membership row to suspend — untouched by design.
+	if got := f.ownedProps.byOwner[recipient]; len(got) != 1 {
+		t.Errorf("own pool changed: %v, want the re-entered own object left alone", got)
+	}
+
+	// The leg: the reloaded row carries the suspended status and the fresh
+	// suspended_at the FIFO recovery queue orders by.
+	if len(suspended) != 1 || suspended[0].ID != mShared || suspended[0].PropertyID != pShared {
+		t.Fatalf("suspended legs = %+v, want the shared membership %s on %s", suspended, mShared, pShared)
+	}
+	if suspended[0].Status != domain.MemberStatusSuspended {
+		t.Errorf("leg status = %q, want suspended", suspended[0].Status)
+	}
+	if suspended[0].SuspendedAt == nil || !suspended[0].SuspendedAt.After(t2New) {
+		t.Errorf("leg SuspendedAt = %v, want a fresh stamp after the scenario instants", suspended[0].SuspendedAt)
+	}
+}
+
+// Scenario P boundary: a pool exactly at the limit is not over — nothing is
+// suspended and no legs come back (the strict-excess rule).
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_PoolAtLimitSuspendsNothing(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New)
+	f.limiter.set(recipient, 2) // Pool = 2 == limit → fits.
+
+	suspended, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	if len(suspended) != 0 {
+		t.Errorf("suspended legs = %+v, want none at exactly the limit", suspended)
+	}
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusActive, "shared membership stays active at exactly the limit")
+}
+
+// Scenario P boundary: an unlimited tariff (limit < 0) suspends nothing.
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_UnlimitedSuspendsNothing(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, uuid.Must(uuid.NewV7()), t2New)
+	f.limiter.set(recipient, -1) // Unlimited.
+
+	suspended, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "grace_restore")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	if len(suspended) != 0 {
+		t.Errorf("suspended legs = %+v, want none on an unlimited tariff", suspended)
+	}
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusActive, "shared membership stays active on an unlimited tariff")
+}
+
+// Scenario P: an excess of two suspends the two oldest shared memberships (the
+// own candidates stay), both legs returned in eviction order.
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_SuspendsTwoOldest(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pOld := uuid.Must(uuid.NewV7())
+	pMid := uuid.Must(uuid.NewV7())
+	pNew := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mOld := uuid.Must(uuid.NewV7())
+	mMid := uuid.Must(uuid.NewV7())
+	mNew := uuid.Must(uuid.NewV7())
+
+	// Pool of four (3 shared + 1 own), limit 2 → 2 excess: the two oldest
+	// shared (mOld, mMid) go, the newest shared and the own object stay.
+	f.addActiveMember(t, mOld, pOld, owner, recipient, t1Old)
+	f.addActiveMember(t, mMid, pMid, owner, recipient, t1Old.Add(30*time.Minute))
+	f.addActiveMember(t, mNew, pNew, owner, recipient, t2New)
+	f.ownedProps.add(recipient, pOwn, t2New.Add(time.Hour))
+	f.limiter.set(recipient, 2)
+
+	suspended, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive")
+	if err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	if len(suspended) != 2 {
+		t.Fatalf("suspended legs = %d, want 2 (got %+v)", len(suspended), suspended)
+	}
+	gotIDs := []uuid.UUID{suspended[0].ID, suspended[1].ID}
+	wantIDs := []uuid.UUID{mMid, mOld} // Eviction order: worse (older) first.
+	if !slices.Equal(gotIDs, wantIDs) {
+		t.Errorf("suspended legs = %v, want %v (the two oldest shared)", gotIDs, wantIDs)
+	}
+	f.assertStatus(t, mNew, pNew, domain.MemberStatusActive, "newest shared membership stays active")
+}
+
+// Scenario P: a repeat call is a no-op — the already-suspended membership sits
+// outside the active pool, is never re-suspended and keeps its original
+// suspended_at (idempotency).
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_RepeatDoesNotRetouchSuspended(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mShared := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New)
+	f.limiter.set(recipient, 1)
+
+	if _, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive"); err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth (first): %v", err)
+	}
+	first := f.repo.mustGet(t, mShared, pShared)
+	if first.SuspendedAt == nil {
+		t.Fatalf("first call did not suspend the membership")
+	}
+
+	if _, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive"); err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth (repeat): %v", err)
+	}
+	again := f.repo.mustGet(t, mShared, pShared)
+	if again.SuspendedAt == nil || !again.SuspendedAt.Equal(*first.SuspendedAt) {
+		t.Errorf("repeat call re-stamped the suspended membership: SuspendedAt = %v, want %v unchanged", again.SuspendedAt, first.SuspendedAt)
+	}
+}
+
+// Scenario P (accepted side effect, #1300 Q1): the fresh suspended_at of a
+// newly suspended leg puts it at the TAIL of the FIFO recovery queue — when a
+// slot later frees, an older suspended membership recovers first, not the one
+// the growth enforcement just suspended.
+func TestSlotCoordinator_EnforceRecipientPoolGrowth_FreshSuspensionTailsFIFOQueue(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pOlderSuspended := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	mOlder := uuid.Must(uuid.NewV7())  // Suspended long before this scenario.
+	mShared := uuid.Must(uuid.NewV7()) // Active; the growth enforcement suspends it.
+
+	f.addSuspendedMember(t, mOlder, pOlderSuspended, owner, recipient, t1Old, t1Old)
+	f.addActiveMember(t, mShared, pShared, owner, recipient, t2New)
+	f.ownedProps.add(recipient, pOwn, t2New) // Own re-entered → pool = 2 > limit 1.
+	f.limiter.set(recipient, 1)
+
+	if _, err := f.coordinator.EnforceRecipientPoolGrowth(context.Background(), noopTx{}, recipient, "unarchive"); err != nil {
+		t.Fatalf("EnforceRecipientPoolGrowth: %v", err)
+	}
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "excess shared membership suspended")
+
+	// A slot frees (the recipient archives their own object again): the FIFO
+	// recovery must take the OLDER suspended membership, proving the fresh
+	// suspended_at queued the new one at the tail.
+	f.ownedProps.byOwner[recipient] = nil
+	recovered, err := f.coordinator.RecoverSuspended(context.Background(), noopTx{}, recipient)
+	if err != nil {
+		t.Fatalf("RecoverSuspended: %v", err)
+	}
+	if len(recovered) != 1 || recovered[0].ID != mOlder {
+		t.Fatalf("recovered = %+v, want the older suspended membership %s (FIFO head)", recovered, mOlder)
+	}
+	f.assertStatus(t, mOlder, pOlderSuspended, domain.MemberStatusActive, "older suspended membership recovered first")
+	f.assertStatus(t, mShared, pShared, domain.MemberStatusSuspended, "freshly suspended membership waits at the FIFO tail")
+}
+
+// RecipientPoolFull (D13, #1300 Q2): the predicate counts the FULL pool — own
+// active properties plus active shared memberships — so at the limit it
+// reports true (the honest refusal of CreateProperty) even though the own
+// count alone would fit; suspended memberships occupy nothing, and a negative
+// (unlimited) limit is never full — the SelectForEviction convention.
+func TestSlotCoordinator_RecipientPoolFull_CountsOwnAndShared(t *testing.T) {
+	t.Parallel()
+	f := newCoordinatorFixture()
+
+	owner := uuid.Must(uuid.NewV7())
+	pShared := uuid.Must(uuid.NewV7())
+	pOwn := uuid.Must(uuid.NewV7())
+	recipient := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+
+	f.addActiveMember(t, member, pShared, owner, recipient, t1Old)
+	f.ownedProps.add(recipient, pOwn, t2New)
+
+	cases := []struct {
+		name     string
+		limit    int
+		suspend  bool
+		wantFull bool
+	}{
+		{
+			name:     "own+shared at limit is full",
+			limit:    2, // Own(1) + shared(1) = 2 — full though the own count alone fits.
+			wantFull: true,
+		},
+		{
+			name:     "headroom below limit is not full",
+			limit:    3,
+			wantFull: false,
+		},
+		{
+			// The pool is just the own object once the shared row is suspended.
+			name:     "suspended shared occupies no slot",
+			limit:    2,
+			suspend:  true,
+			wantFull: false,
+		},
+		{
+			// A negative limit is the unlimited-tariff convention
+			// (SelectForEviction) — never full.
+			name:     "unlimited limit is never full",
+			limit:    -1,
+			suspend:  true,
+			wantFull: false,
+		},
+	}
+	// Plain sequential loop, no t.Run: the cases share one fixture and mutate
+	// it (limiter + suspend), and the paralleltest linter reads subtest
+	// parallelism into a matrix otherwise — the participant matrix precedent.
+	for _, tc := range cases {
+		if tc.suspend {
+			if err := f.repo.Suspend(context.Background(), member, pShared); err != nil {
+				t.Fatalf("Suspend the shared membership: %v", err)
+			}
+		}
+		f.limiter.set(recipient, tc.limit)
+		full, err := f.coordinator.RecipientPoolFull(context.Background(), noopTx{}, recipient)
+		if err != nil {
+			t.Fatalf("%s: RecipientPoolFull: %v", tc.name, err)
+		}
+		if full != tc.wantFull {
+			t.Errorf("%s: RecipientPoolFull = %v, want %v", tc.name, full, tc.wantFull)
+		}
+	}
 }

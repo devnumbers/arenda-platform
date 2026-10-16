@@ -1,0 +1,1337 @@
+package application
+
+// The use case unit tests over in-memory doubles: the conveyor discipline
+// (the lock → the app checks → the change → the audit → the tick verdict),
+// the contract validations and the 409 vocabulary. The real-SQL properties of
+// the same seams — the store binding, the composite factory, the payments
+// gateway mechanics — are covered by the integration families (testcontainers).
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
+	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// today is the fixed owner's calendar date of the unit suite.
+var today = mustDate("2026-09-04")
+
+func mustDate(s string) time.Time {
+	t, err := time.Parse(time.DateOnly, s)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+func mustID(t *testing.T) uuid.UUID {
+	t.Helper()
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+	return id
+}
+
+// fakeTx and fakeUoW run work "in a transaction" that does nothing.
+type fakeTx struct{}
+
+func (fakeTx) Commit(context.Context) error   { return nil }
+func (fakeTx) Rollback(context.Context) error { return nil }
+
+type fakeUoW struct{}
+
+func (fakeUoW) Do(ctx context.Context, work func(transaction.Tx) error) error {
+	return work(fakeTx{})
+}
+
+// eventAuditRecord and eventHistoryRecord are the journal markers of the
+// audit and the action journal writes.
+const (
+	eventAuditRecord   = "audit.Record"
+	eventHistoryRecord = "history.Record"
+	// Journal markers the terms-edit assertions share with the fakes.
+	eventRentalsUpdate = "rentals.Update"
+	eventPayRunTick    = "pay.RunTick"
+)
+
+// journal records the cross-fake call order.
+type journal struct{ events []string }
+
+func (j *journal) add(event string) { j.events = append(j.events, event) }
+
+type fakeCalendar struct{}
+
+func (fakeCalendar) Today(context.Context, uuid.UUID) (time.Time, error) { return today, nil }
+
+type fakePropertyStore struct {
+	owner       uuid.UUID
+	archived    bool
+	maintenance bool
+}
+
+func (s fakePropertyStore) Get(context.Context, uuid.UUID) (paymentsapp.PropertyRef, error) {
+	return paymentsapp.PropertyRef{OwnerID: s.owner, Archived: s.archived, Maintenance: s.maintenance}, nil
+}
+
+func (s fakePropertyStore) GetForUpdate(context.Context, uuid.UUID) (paymentsapp.PropertyRef, error) {
+	return paymentsapp.PropertyRef{OwnerID: s.owner, Archived: s.archived, Maintenance: s.maintenance}, nil
+}
+
+func (s fakePropertyStore) WithTx(transaction.Tx) (paymentsapp.PropertyStore, error) {
+	return s, nil
+}
+
+type fakePolicy struct{ role sharedpolicy.Role }
+
+func (p fakePolicy) Role(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
+	return sharedpolicy.RoleNone, nil
+}
+
+func (p fakePolicy) RoleForProperty(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error) {
+	return p.role, nil
+}
+
+type fakeAudit struct {
+	journal *journal
+	entries []auditdomain.Entry
+}
+
+func (a *fakeAudit) Record(_ context.Context, entry auditdomain.Entry) error {
+	a.journal.add(eventAuditRecord)
+	a.entries = append(a.entries, entry)
+	return nil
+}
+
+func (a *fakeAudit) WithTx(transaction.Tx) auditapp.Recorder { return a }
+
+// journalingHistory is the shared capturing recorder wired into the
+// cross-fake call journal: every action-journal write marks the conveyor
+// order, the entries themselves stay available on the recorder.
+func journalingHistory(j *journal) *historytest.CapturingRecorder {
+	return &historytest.CapturingRecorder{
+		OnRecord: func(historydomain.Entry) { j.add(eventHistoryRecord) },
+	}
+}
+
+type fakeTenantReader struct{ exists bool }
+
+func (r fakeTenantReader) ValidatedTenantLabel(
+	context.Context, uuid.UUID, uuid.UUID,
+) (label string, ok bool, err error) {
+	if !r.exists {
+		return "", false, nil
+	}
+	return "Иван Tenant", true, nil
+}
+
+type fakeRentalStore struct {
+	journal       *journal
+	rentals       map[uuid.UUID]domain.Rental
+	hasUnfinished bool
+}
+
+func (s *fakeRentalStore) Get(
+	_ context.Context, id, _, _ uuid.UUID,
+) (domain.Rental, error) {
+	r, ok := s.rentals[id]
+	if !ok {
+		return domain.Rental{}, ErrNotFound
+	}
+	return r, nil
+}
+
+func (s *fakeRentalStore) ListByProperty(
+	_ context.Context, _, _ uuid.UUID,
+) ([]domain.Rental, error) {
+	out := make([]domain.Rental, 0, len(s.rentals))
+	for _, r := range s.rentals {
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (s *fakeRentalStore) Create(_ context.Context, r domain.Rental) error {
+	s.journal.add("rentals.Create")
+	s.rentals[r.ID] = r
+	return nil
+}
+
+func (s *fakeRentalStore) Update(_ context.Context, r domain.Rental) error {
+	s.journal.add(eventRentalsUpdate)
+	s.rentals[r.ID] = r
+	return nil
+}
+
+func (s *fakeRentalStore) Complete(
+	_ context.Context, id, _ uuid.UUID, completedDate time.Time,
+	depositReturn *DepositReturn, archived domain.TermsArchive,
+) error {
+	s.journal.add("rentals.Complete")
+	r := s.rentals[id]
+	r.CompletedDate = &completedDate
+	r.TermsArchive = &archived
+	r.PaymentID = nil // The store releases the RESTRICT link with the completion.
+	if depositReturn != nil {
+		amount := depositReturn.AmountKopecks
+		r.DepositReturnKopecks = &amount
+		r.DepositReturnComment = depositReturn.Comment
+	}
+	s.rentals[id] = r
+	return nil
+}
+
+func (s *fakeRentalStore) Delete(_ context.Context, id, _ uuid.UUID) error {
+	s.journal.add("rentals.Delete")
+	delete(s.rentals, id)
+	return nil
+}
+
+func (s *fakeRentalStore) HasUnfinished(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	s.journal.add("rentals.HasUnfinished")
+	return s.hasUnfinished, nil
+}
+
+func (s *fakeRentalStore) WithTx(transaction.Tx) (RentalStore, error) { return s, nil }
+
+type fakeGatewayTx struct {
+	journal   *journal
+	gateway   *fakeGateway
+	createdID uuid.UUID
+}
+
+func (t *fakeGatewayTx) Create(_ context.Context, seed RentPaymentSeed) (uuid.UUID, error) {
+	t.journal.add("pay.Create")
+	t.gateway.createSeed = seed
+	t.createdID = mustIDSeed()
+	return t.createdID, nil
+}
+
+func (t *fakeGatewayTx) Update(
+	_ context.Context, _, _, _, _ uuid.UUID, change RentPaymentChange, _ time.Time,
+) error {
+	t.journal.add("pay.Update")
+	t.gateway.changes = append(t.gateway.changes, change)
+	return nil
+}
+
+func (t *fakeGatewayTx) State(
+	_ context.Context, _, _, _ uuid.UUID,
+) (RentPaymentTerms, error) {
+	t.journal.add("pay.State")
+	t.gateway.stateCalls++
+	return t.gateway.terms, t.gateway.termsErr
+}
+
+func (t *fakeGatewayTx) Delete(_ context.Context, _, paymentID uuid.UUID, _ time.Time) error {
+	t.journal.add("pay.Delete")
+	t.gateway.deleted = true
+	t.gateway.deletedPaymentID = paymentID
+	return nil
+}
+
+func (t *fakeGatewayTx) RunTick(_ context.Context, _ uuid.UUID, _ time.Time) error {
+	t.journal.add(eventPayRunTick)
+	return nil
+}
+
+func mustIDSeed() uuid.UUID {
+	id, err := uuid.NewV7()
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+type fakeGateway struct {
+	journal *journal
+	state   RentPaymentState
+	next    *PlannedOccurrence
+	paid    int
+	overdue int
+	totals  PaymentsTotals
+	stateEr error
+
+	// StateCalls counts the tx-bound State reads (the completion's archive
+	// source); viewStateCalls counts the render-state reads of the view
+	// assembly.
+	stateCalls       int
+	viewStateCalls   int
+	terms            RentPaymentTerms
+	termsErr         error
+	batchedIDs       []uuid.UUID
+	deleted          bool
+	deletedPaymentID uuid.UUID
+
+	// Progress is the batched counters' answer (#845): per payment id, the
+	// same data the per-rental counters fall back to (a payment absent from
+	// the map has no row — the flat fields answer). BatchCalls/singleCalls
+	// pin which seam the list and the single views consult.
+	progress    map[uuid.UUID]ProgressCounts
+	batchCalls  int
+	singleCalls int
+
+	createSeed RentPaymentSeed
+	changes    []RentPaymentChange
+	tx         *fakeGatewayTx
+}
+
+func (g *fakeGateway) WithTx(transaction.Tx) (RentPaymentGatewayTx, error) {
+	g.tx = &fakeGatewayTx{journal: g.journal, gateway: g}
+	return g.tx, nil
+}
+
+func (g *fakeGateway) RentPaymentState(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (RentPaymentState, error) {
+	g.viewStateCalls++
+	return g.state, g.stateEr
+}
+
+func (g *fakeGateway) NextPlannedOccurrence(
+	context.Context, uuid.UUID, uuid.UUID, uuid.UUID, time.Time,
+) (*PlannedOccurrence, error) {
+	return g.next, nil
+}
+
+func (g *fakeGateway) CountPaidOperations(
+	_ context.Context, _, _, paymentID uuid.UUID,
+) (int, error) {
+	g.singleCalls++
+	if c, ok := g.progress[paymentID]; ok {
+		return c.PaidCount, nil
+	}
+	return g.paid, nil
+}
+
+func (g *fakeGateway) CountOverdueOccurrences(
+	_ context.Context, _, _, paymentID uuid.UUID, _ time.Time,
+) (int, error) {
+	g.singleCalls++
+	if c, ok := g.progress[paymentID]; ok {
+		return c.OverdueCount, nil
+	}
+	return g.overdue, nil
+}
+
+// CountProgressByPayments answers the batched read (#845): the map keyed by
+// payment — a payment with no operations is absent, the service defaults
+// its zeros on the lookup. BatchedIDs keeps the ids the service passed —
+// the list skips the deleted payments' nil links.
+func (g *fakeGateway) CountProgressByPayments(
+	_ context.Context, _, _ uuid.UUID, paymentIDs []uuid.UUID, _ time.Time,
+) (map[uuid.UUID]ProgressCounts, error) {
+	g.batchCalls++
+	g.batchedIDs = paymentIDs
+	return g.progress, nil
+}
+
+func (g *fakeGateway) SummarizePaidOperations(
+	context.Context, uuid.UUID, uuid.UUID, time.Time, time.Time, time.Time,
+) (PaymentsTotals, error) {
+	return g.totals, nil
+}
+
+// harness bundles the doubles into a service like the wire does.
+type harness struct {
+	t         *testing.T
+	journal   *journal
+	store     *fakeRentalStore
+	gateway   *fakeGateway
+	audit     *fakeAudit
+	history   *historytest.CapturingRecorder
+	svc       *RentalService
+	owner     uuid.UUID
+	property  uuid.UUID
+	propStore fakePropertyStore
+}
+
+func newHarness(t *testing.T) *harness {
+	t.Helper()
+	return newHarnessWithArchivedProperty(t, false)
+}
+
+// newHarnessWithArchivedProperty is newHarness over an archived property.
+func newHarnessWithArchivedProperty(t *testing.T, archived bool) *harness {
+	t.Helper()
+	return newHarnessWithPropertyFlags(t, archived, false)
+}
+
+// newHarnessWithPropertyFlags is the harness core with the property store's
+// lifecycle flags fixed at construction: the fake is copied into the factory
+// by value, so a post-construction mutation would not reach it.
+func newHarnessWithPropertyFlags(t *testing.T, archived, maintenance bool) *harness {
+	t.Helper()
+	j := &journal{}
+	owner, property := mustID(t), mustID(t)
+	store := &fakeRentalStore{journal: j, rentals: map[uuid.UUID]domain.Rental{}}
+	gateway := &fakeGateway{
+		journal: j,
+		state:   RentPaymentState{AmountKopecks: 5_000_000, PaymentDay: domain.MustPaymentDay(15)},
+		paid:    3,
+	}
+	audit := &fakeAudit{journal: j}
+	propStore := fakePropertyStore{owner: owner, archived: archived, maintenance: maintenance}
+	history := journalingHistory(j)
+	factory := NewTxStoreFactory(store, propStore, gateway, fakeTenantReader{exists: true}, audit, history, fakeUoW{})
+	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
+	return &harness{
+		t: t, journal: j, store: store, gateway: gateway, audit: audit, history: history,
+		svc: svc, owner: owner, property: property, propStore: propStore,
+	}
+}
+
+// createCmd is the canonical valid create fixture.
+func createCmd() CreateRentalCommand {
+	return CreateRentalCommand{
+		AmountKopecks:  5_000_000,
+		PaymentDay:     domain.MustPaymentDay(15),
+		StartDate:      today,
+		PlannedEndDate: new(mustDate("2027-09-01")),
+		Utilities:      domain.UtilitiesIncluded,
+	}
+}
+
+func TestCreateRental_HappyPath(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	view, err := h.svc.CreateRental(t.Context(), h.owner, h.property, createCmd())
+	require.NoError(t, err)
+
+	// The conveyor discipline, in order: the app check under the lock, the
+	// payment first (the rentals row references it), then the rentals row,
+	// the audit, and the tick for the new payment.
+	assert.Equal(t, []string{
+		"rentals.HasUnfinished",
+		"pay.Create",
+		"rentals.Create",
+		eventAuditRecord,
+		eventHistoryRecord,
+		eventPayRunTick,
+	}, h.journal.events)
+
+	seed := h.gateway.createSeed
+	assert.Equal(t, h.owner, seed.OwnerID)
+	assert.Equal(t, 5_000_000, int(seed.AmountKopecks))
+	assert.Equal(t, today, seed.StartDate, "since = start_date, not the wire today")
+	assert.Equal(t, mustDate("2027-09-01"), *seed.PlannedEndDate)
+	assert.False(t, seed.AutoPay)
+	// The rent pipeline always wants the auto-paid notification (#1198): по
+	// подписи макета 1428 — with the toggle off too, so an auto-pay turned
+	// on later by the terms edit notifies as well.
+	assert.True(t, seed.NotifyAutoPaid)
+
+	require.Len(t, h.audit.entries, 1)
+	entry := h.audit.entries[0]
+	assert.Equal(t, auditdomain.ActionRentalCreated, entry.Action)
+	assert.Equal(t, auditdomain.EntityRental, entry.EntityType)
+	require.NotNil(t, entry.EntityID)
+	assert.Equal(t, view.Rental.ID, *entry.EntityID)
+
+	// The view assembles from the payment-backed state (the fake answers
+	// 3 paid months of the day 15).
+	assert.Equal(t, domain.StatusActive, view.Status, "start == today → active, not upcoming")
+	assert.Equal(t, 3, view.Progress.PaidMonths)
+	require.NotNil(t, view.Progress.TotalMonths)
+	assert.Equal(t, 12, *view.Progress.TotalMonths, "day 15 from Sep 2026 to Sep 2027")
+	assert.Equal(t, today, view.Today)
+}
+
+// The read path names the managed payment (#531): the client navigates to the
+// payment screen by rentPayment.paymentId — the identity comes from the
+// rental (1:1), not from the gateway's render state.
+func TestGetRental_ViewCarriesPaymentID(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(nil)
+
+	view, err := h.svc.GetRental(t.Context(), h.owner, h.property, rentalID)
+	require.NoError(t, err)
+	assert.Equal(t, *h.store.rentals[rentalID].PaymentID, view.Payment.PaymentID)
+}
+
+// Прогресс несёт серверный счётчик просрочки Платежа арендной платы (#817):
+// число просроченных вхождений приходит из гейтвея, ноль — null (строки на
+// экране нет). Форма срока на чтение не влияет: бессрочная считается так же,
+// у upcoming просрочек не бывает по построению (вхождения начинаются со
+// старта, а старт не в прошлом).
+func TestGetRental_ProgressCarriesOverdueMonths(t *testing.T) {
+	t.Parallel()
+	term := func(r *domain.Rental) { r.PlannedEndDate = new(mustDate("2027-09-01")) }
+	tests := []struct {
+		name   string
+		count  int
+		mutate func(*domain.Rental)
+		want   *int
+	}{
+		{"zero overdue is null", 0, term, nil},
+		{"one overdue month", 1, term, new(1)},
+		{"two overdue months", 2, term, new(2)},
+		{"open-ended reads the same", 3, nil, new(3)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			h.gateway.overdue = tt.count
+			rentalID := h.seedRental(tt.mutate)
+
+			view, err := h.svc.GetRental(t.Context(), h.owner, h.property, rentalID)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, view.Progress.OverdueMonths)
+		})
+	}
+}
+
+// Список читает оба счётчика прогресса одним батчем (#845): по аренде
+// раньше уходила пара gateway-запросов (paid + overdue), список берёт оба
+// счётчика всех платежей одним GROUP BY. Ответ эквивалентен: у платежа без
+// операций строки в батче нет — нули дефолтятся (просрочка нулевая — null,
+// красной строки на экране нет, #817).
+func TestListRentals_ProgressReadsTheBatchedCounters(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	termed := h.seedRental(func(r *domain.Rental) { r.PlannedEndDate = new(mustDate("2027-09-01")) })
+	openEnded := h.seedRental(nil)
+	// Связь аренда→платёж 1:1 (UNIQUE на payment_id) — у каждой аренды свой
+	// платёж: первый несёт 3 оплаченных и 2 просроченных месяца, у второго
+	// операций нет и строки в батче нет.
+	termedPayment := *h.store.rentals[termed].PaymentID
+	h.gateway.progress = map[uuid.UUID]ProgressCounts{
+		termedPayment: {PaidCount: 3, OverdueCount: 2},
+	}
+
+	views, err := h.svc.ListRentals(t.Context(), h.owner, h.property)
+	require.NoError(t, err)
+	require.Len(t, views, 2)
+
+	// Порядок списка в double не детерминирован — разворачиваем по id.
+	byID := make(map[uuid.UUID]RentalView, len(views))
+	for _, v := range views {
+		byID[v.Rental.ID] = v
+	}
+	termedView, openView := byID[termed], byID[openEnded]
+	assert.Equal(t, 3, termedView.Progress.PaidMonths)
+	require.NotNil(t, termedView.Progress.OverdueMonths)
+	assert.Equal(t, 2, *termedView.Progress.OverdueMonths)
+	assert.Zero(t, openView.Progress.PaidMonths, "a payment without rows defaults its zeros")
+	assert.Nil(t, openView.Progress.OverdueMonths, "zero overdue reads as null (#817)")
+
+	// Суть тикета (#845): весь список берёт счётчики одним батч-запросом —
+	// поарендная пара остаётся путём одиночного чтения.
+	assert.Equal(t, 1, h.gateway.batchCalls)
+	assert.Zero(t, h.gateway.singleCalls)
+}
+
+// Эквивалентность ответа (#845): списочный прогресс аренды равен
+// одиночному чтению той же аренды — батч меняет число запросов, не ответ.
+func TestListRentals_ProgressMatchesTheSingleView(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(func(r *domain.Rental) { r.PlannedEndDate = new(mustDate("2027-09-01")) })
+	h.gateway.progress = map[uuid.UUID]ProgressCounts{
+		*h.store.rentals[rentalID].PaymentID: {PaidCount: 3, OverdueCount: 2},
+	}
+
+	listed, err := h.svc.ListRentals(t.Context(), h.owner, h.property)
+	require.NoError(t, err)
+	single, err := h.svc.GetRental(t.Context(), h.owner, h.property, rentalID)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	assert.Equal(t, single.Progress, listed[0].Progress)
+}
+
+// Пустой список до запроса не доходит (прецедент ListRentalManagedPaymentIDs):
+// батч не зовётся вовсе.
+func TestListRentals_EmptyPropertySkipsTheBatch(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	views, err := h.svc.ListRentals(t.Context(), h.owner, h.property)
+	require.NoError(t, err)
+	assert.Empty(t, views)
+	assert.Zero(t, h.gateway.batchCalls, "an empty list never reaches the query")
+}
+
+func TestCreateRental_TodayStartIsActive(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	cmd := createCmd()
+	cmd.PlannedEndDate = nil
+
+	view, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, domain.StatusActive, view.Status)
+	assert.Nil(t, view.Progress.TotalMonths, "an open-ended rental has no total")
+	assert.Nil(t, view.Progress.MonthsRemaining)
+}
+
+func TestCreateRental_Validation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		mut  func(*CreateRentalCommand)
+	}{
+		{"zero amount", func(c *CreateRentalCommand) { c.AmountKopecks = 0 }},
+		{"over the ceiling", func(c *CreateRentalCommand) { c.AmountKopecks = MaxAmountKopecks + 1 }},
+		{"start in the past", func(c *CreateRentalCommand) { c.StartDate = today.AddDate(0, 0, -1) }},
+		{"planned end at start", func(c *CreateRentalCommand) {
+			c.PlannedEndDate = new(c.StartDate)
+		}},
+		{"unknown utilities", func(c *CreateRentalCommand) { c.Utilities = "квитанция" }},
+		{"negative deposit", func(c *CreateRentalCommand) { c.DepositKopecks = new(int64(-1)) }},
+		{"overlong comment", func(c *CreateRentalCommand) { c.Comment = strings2001() }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			cmd := createCmd()
+			tt.mut(&cmd)
+			_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+			require.ErrorIs(t, err, ErrInvalidInput)
+			assert.Empty(t, h.journal.events, "an invalid command writes nothing")
+		})
+	}
+}
+
+func strings2001() string {
+	s := make([]rune, MaxCommentLength+1)
+	for i := range s {
+		s[i] = 'а'
+	}
+	return string(s)
+}
+
+func TestCreateRental_SecondUnfinishedIs409(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.store.hasUnfinished = true
+
+	_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, createCmd())
+	require.ErrorIs(t, err, ErrPropertyOccupied)
+	assert.Equal(t, []string{"rentals.HasUnfinished"}, h.journal.events,
+		"nothing is created on the occupied property")
+}
+
+func TestCreateRental_UnknownTenantIsInvalid(t *testing.T) {
+	t.Parallel()
+	j := &journal{}
+	owner, property := mustID(t), mustID(t)
+	factory := NewTxStoreFactory(
+		&fakeRentalStore{journal: j, rentals: map[uuid.UUID]domain.Rental{}},
+		fakePropertyStore{owner: owner},
+		&fakeGateway{journal: j},
+		fakeTenantReader{exists: false},
+		&fakeAudit{journal: j},
+		journalingHistory(j),
+		fakeUoW{},
+	)
+	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
+	contact := mustID(t)
+	cmd := createCmd()
+	cmd.ContactID = &contact
+
+	_, err := svc.CreateRental(t.Context(), owner, property, cmd)
+	require.ErrorIs(t, err, ErrInvalidInput)
+}
+
+func TestUpdateRental_PaymentTermsSyncAndTick(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(func(r *domain.Rental) {
+		r.PlannedEndDate = new(mustDate("2027-09-01"))
+	})
+
+	cmd := UpdateRentalCommand{
+		AmountKopecks:  new(int64(6_000_000)),
+		AutoPay:        new(true),
+		PlannedEndDate: &DateUpdate{}, // Явный null = очистить (бессрочная).
+		Comment:        &StringUpdate{Value: new(" нюансы ")},
+	}
+	view, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"pay.Update", eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
+	require.Len(t, h.gateway.changes, 1)
+	change := h.gateway.changes[0]
+	require.NotNil(t, change.AmountKopecks)
+	assert.Equal(t, int64(6_000_000), *change.AmountKopecks)
+	require.NotNil(t, change.AutoPay)
+	assert.True(t, *change.AutoPay)
+	require.NotNil(t, change.PlannedEndDate)
+	assert.Nil(t, change.PlannedEndDate.Value, "the null clears the payment end date")
+
+	// The rentals-side terms write without a tick-worthy change.
+	assert.Equal(t, "нюансы", view.Rental.Comment)
+	assert.Equal(t, auditdomain.ActionRentalUpdated, h.audit.entries[0].Action)
+	require.Contains(t, h.audit.entries[0].Context, "fields")
+}
+
+// The terms edit's reminder leg (#1208): the reminderOffsetDays patch rides
+// the seam into the managed payment like the amount or the auto-pay — the
+// tri-state resolution lives on the transport, the command carries the
+// ReminderOffsetUpdate verbatim, the tick re-runs (the payment changed).
+func TestUpdateRental_ReminderOffsetSyncs(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(nil)
+
+	cmd := UpdateRentalCommand{
+		ReminderOffsetDays: &ReminderOffsetUpdate{Value: new(7)},
+	}
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"pay.Update", eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
+	require.Len(t, h.gateway.changes, 1)
+	change := h.gateway.changes[0]
+	require.NotNil(t, change.ReminderOffsetDays)
+	require.NotNil(t, change.ReminderOffsetDays.Value)
+	assert.Equal(t, 7, *change.ReminderOffsetDays.Value)
+
+	// The audit names the moved field (values never travel, ADR 0061 §4).
+	fields, ok := h.audit.entries[0].Context["fields"].([]string)
+	require.True(t, ok)
+	assert.Contains(t, fields, "reminder_offset_days")
+}
+
+func TestUpdateRental_ReminderOffsetRules(t *testing.T) {
+	t.Parallel()
+	t.Run("value outside the 1/3/7 contract is invalid", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		cmd := UpdateRentalCommand{
+			ReminderOffsetDays: &ReminderOffsetUpdate{Value: new(5)},
+		}
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+		require.ErrorIs(t, err, ErrInvalidInput)
+		assert.NotContains(t, h.journal.events, "pay.Update",
+			"an invalid patch never reaches the seam")
+	})
+	t.Run("explicit null clears the reminders", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		cmd := UpdateRentalCommand{ReminderOffsetDays: &ReminderOffsetUpdate{}}
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+		require.NoError(t, err)
+		require.Len(t, h.gateway.changes, 1)
+		change := h.gateway.changes[0]
+		require.NotNil(t, change.ReminderOffsetDays, "the clear rides the seam")
+		assert.Nil(t, change.ReminderOffsetDays.Value, "the null turns the reminders off")
+	})
+	t.Run("omitted keeps and skips the seam", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, UpdateRentalCommand{})
+		require.NoError(t, err)
+		assert.Empty(t, h.gateway.changes, "a no-op patch syncs nothing")
+		assert.NotContains(t, h.journal.events, eventPayRunTick)
+	})
+}
+
+func TestUpdateRental_NonPaymentFieldsSkipTick(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(nil)
+
+	cmd := UpdateRentalCommand{
+		Utilities:      new(domain.UtilitiesMetersOnly),
+		DepositKopecks: &AmountUpdate{Value: new(int64(30_000_000))},
+	}
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{eventRentalsUpdate, eventAuditRecord, eventHistoryRecord}, h.journal.events,
+		"the tick runs only when the payment changed")
+}
+
+func TestUpdateRental_PlannedEndRules(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		end  time.Time
+		want error
+	}{
+		{"into the past is invalid", today.AddDate(0, 0, -1), ErrInvalidInput},
+		{"at or before start is invalid", seedStart(), ErrInvalidInput},
+		{"strictly forward is fine", mustDate("2027-01-01"), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			rentalID := h.seedRental(nil)
+			cmd := UpdateRentalCommand{PlannedEndDate: &DateUpdate{Value: new(tt.end)}}
+			_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+			if tt.want != nil {
+				assert.ErrorIs(t, err, tt.want)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// The schedule window of the create contract (ticket #1154): a planned end
+// before the rent schedule's first payment-day occurrence leaves the rent
+// zero payments — rejected like any other invalid create.
+func TestCreateRental_PlannedEndCoversTheFirstPayment(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		mut     func(*CreateRentalCommand)
+		wantErr bool
+	}{
+		{
+			// The research case: старт 10-го, день оплаты 25-е, конец 20-го.
+			name: "planned end before the first occurrence",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.MustPaymentDay(25)
+				c.PlannedEndDate = new(mustDate("2026-09-20"))
+			},
+			wantErr: true,
+		},
+		{
+			// The end on the first occurrence itself gives exactly one
+			// payment — the inclusive boundary.
+			name: "planned end on the first occurrence is valid",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.MustPaymentDay(25)
+				c.PlannedEndDate = new(mustDate("2026-09-25"))
+			},
+		},
+		{
+			name: "the last-day marker needs the month's actual end",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.NewLastPaymentDay()
+				c.PlannedEndDate = new(mustDate("2026-09-29"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "the last-day marker covered by the month's end",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.NewLastPaymentDay()
+				c.PlannedEndDate = new(mustDate("2026-09-30"))
+			},
+		},
+		{
+			// 31 normalizes to the last-day marker: September clamps to 30.
+			name: "day 31 from september clamps to the 30th",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.MustPaymentDay(31)
+				c.PlannedEndDate = new(mustDate("2026-09-29"))
+			},
+			wantErr: true,
+		},
+		{
+			// The research case 18 verbatim: the marker's month holds its own
+			// last day — the end on the 31st itself is the boundary.
+			name: "day 31 in a 31-day month reaches its own end",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2027-01-10")
+				c.PaymentDay = domain.MustPaymentDay(31)
+				c.PlannedEndDate = new(mustDate("2027-01-31"))
+			},
+		},
+		{
+			name: "an open-ended rental has no window",
+			mut: func(c *CreateRentalCommand) {
+				c.StartDate = mustDate("2026-09-10")
+				c.PaymentDay = domain.MustPaymentDay(25)
+				c.PlannedEndDate = nil
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			cmd := createCmd()
+			tt.mut(&cmd)
+			_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrInvalidInput)
+				assert.Empty(t, h.journal.events, "an invalid command writes nothing")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// The terms edit validates the merged (payment day, planned end) pair
+// (ticket #1154): the day change re-checks the standing end, the end change
+// reads the stored day when the command carries none, and the extension of
+// an open rental — the same PATCH — is guarded the same way. Completion
+// stays outside the guard: it records a fact, not a plan.
+func TestUpdateRental_TermsWindowGuardsTheMergedPair(t *testing.T) {
+	t.Parallel()
+
+	t.Run("day change re-checks the standing end", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("the standing end covers the new schedule", func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			// Старт 08-15, конец 09-20; смена дня на 5-е → первое вхождение
+			// 09-05, всё ещё внутри срока.
+			rentalID := h.seedRental(func(r *domain.Rental) {
+				r.PlannedEndDate = new(mustDate("2026-09-20"))
+			})
+			day5 := domain.MustPaymentDay(5)
+			_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+				UpdateRentalCommand{PaymentDay: &day5})
+			require.NoError(t, err)
+		})
+
+		t.Run("the standing end is cut short by the day change", func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			// Старт 08-15, конец 09-04 (сегодня — легальная правка конца);
+			// смена дня на 5-е уводит первое вхождение за конец.
+			rentalID := h.seedRental(func(r *domain.Rental) {
+				r.PlannedEndDate = new(today)
+			})
+			day5 := domain.MustPaymentDay(5)
+			_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+				UpdateRentalCommand{PaymentDay: &day5})
+			require.ErrorIs(t, err, ErrInvalidInput)
+			assert.Empty(t, h.journal.events, "an invalid merged pair writes nothing")
+		})
+	})
+
+	t.Run("end change reads the stored day when the command carries none", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		// Будущая аренда: старт 09-10, хранящийся день 25-е → первое
+		// вхождение 09-25.
+		h.gateway.terms = RentPaymentTerms{PaymentDay: domain.MustPaymentDay(25)}
+		rentalID := h.seedRental(func(r *domain.Rental) {
+			r.StartDate = mustDate("2026-09-10")
+			r.PlannedEndDate = new(mustDate("2026-09-30"))
+		})
+
+		// Укорачивание конца внутрь окна (продление с дырой — тот же PATCH).
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+			UpdateRentalCommand{PlannedEndDate: &DateUpdate{Value: new(mustDate("2026-09-20"))}})
+		require.ErrorIs(t, err, ErrInvalidInput)
+		// Единственное обращение к хранилищам — чтение хранящегося дня
+		// внутри guard'а; ни одной записи.
+		assert.Equal(t, []string{"pay.State"}, h.journal.events,
+			"the guard reads the stored day, nothing writes")
+
+		// Конец на первом вхождении — валиден.
+		_, err = h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+			UpdateRentalCommand{PlannedEndDate: &DateUpdate{Value: new(mustDate("2026-09-25"))}})
+		require.NoError(t, err)
+	})
+
+	t.Run("extension of an open rental is guarded the same way", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		h.gateway.terms = RentPaymentTerms{PaymentDay: domain.MustPaymentDay(25)}
+		// Открытая незапущенная аренда: сегодня или старт+1 могут стоять
+		// раньше первого вхождения — конец-продление его закрывать обязан.
+		rentalID := h.seedRental(func(r *domain.Rental) {
+			r.StartDate = mustDate("2026-09-10")
+			r.PlannedEndDate = nil
+		})
+
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+			UpdateRentalCommand{PlannedEndDate: &DateUpdate{Value: new(mustDate("2026-09-20"))}})
+		require.ErrorIs(t, err, ErrInvalidInput)
+	})
+
+	t.Run("unrelated edits skip the guard on a holed legacy rental", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		h.gateway.terms = RentPaymentTerms{PaymentDay: domain.MustPaymentDay(25)}
+		// Хранимая пара с дырой (легаси до фикса): некомментные правки не
+		// обязаны её чинить и не блокируются ею.
+		rentalID := h.seedRental(func(r *domain.Rental) {
+			r.StartDate = mustDate("2026-09-10")
+			r.PlannedEndDate = new(mustDate("2026-09-20"))
+		})
+
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID,
+			UpdateRentalCommand{Comment: &StringUpdate{Value: new(" нюансы ")}})
+		require.NoError(t, err)
+	})
+}
+
+// Завершение раньше первого вхождения — легальный факт (research #1154,
+// раздел 3): ноль операций, платёж удаляется конвейером завершения
+// (keep_overdue, ревизия #1161) — guard завершение не блокирует.
+func TestCompleteRental_BeforeTheFirstOccurrenceIsLegal(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.gateway.terms = RentPaymentTerms{PaymentDay: domain.MustPaymentDay(25)}
+	// Старт 08-15, день оплаты 25-е → первое вхождение 08-25; завершение
+	// 08-20 раньше него.
+	rentalID := h.seedRental(nil)
+
+	_, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, rentalID,
+		CompleteRentalCommand{CompletedDate: mustDate("2026-08-20")})
+	require.NoError(t, err)
+	require.True(t, h.gateway.deleted, "the payment dies with the completion")
+}
+
+func TestUpdateRental_CompletedIs409(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(func(r *domain.Rental) {
+		r.CompletedDate = new(today.AddDate(0, 0, -10))
+	})
+
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, UpdateRentalCommand{})
+	require.ErrorIs(t, err, ErrRentalCompleted)
+	assert.Empty(t, h.journal.events)
+}
+
+func TestCompleteRental(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	// Условия живого платежа на момент завершения — источник архива и
+	// заголовок журнального ряда «Платёж удалён».
+	h.gateway.terms = RentPaymentTerms{
+		AmountKopecks: 5_000_000,
+		PaymentDay:    domain.MustPaymentDay(15),
+		AutoPay:       true,
+		Title:         "Арендная плата",
+	}
+	rentalID := h.seedRental(nil)
+	paymentID := *h.store.rentals[rentalID].PaymentID
+
+	deposit := int64(10_000_000)
+	comment := "вернул частично"
+	completed := today.AddDate(0, 0, -5)
+	view, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, rentalID, CompleteRentalCommand{
+		CompletedDate: completed,
+		DepositReturn: &DepositReturn{AmountKopecks: deposit, Comment: &comment},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"pay.State",
+		"rentals.Complete",
+		"pay.Delete",
+		eventAuditRecord, eventAuditRecord,
+		eventHistoryRecord, eventHistoryRecord,
+	}, h.journal.events,
+		"the completion archives the terms, releases the link, deletes the payment and journals both halves — no tick")
+	require.True(t, h.gateway.deleted, "the payment dies with the completion (keep_overdue, rev #1161)")
+	assert.Equal(t, paymentID, h.gateway.deletedPaymentID)
+
+	// Архив условий: снимок с платежа, ссылка снята (RESTRICT отпущен).
+	require.NotNil(t, view.Rental.TermsArchive)
+	assert.Equal(t, int64(5_000_000), view.Rental.TermsArchive.AmountKopecks)
+	assert.Equal(t, 15, view.Rental.TermsArchive.PaymentDay.Day())
+	assert.True(t, view.Rental.TermsArchive.AutoPay)
+	assert.Nil(t, view.Rental.PaymentID)
+
+	// Два аудита: rental.completed + payment.deleted с keep_overdue.
+	require.Len(t, h.audit.entries, 2)
+	assert.Equal(t, auditdomain.ActionRentalCompleted, h.audit.entries[0].Action)
+	paymentAudit := h.audit.entries[1]
+	assert.Equal(t, auditdomain.ActionPaymentDeleted, paymentAudit.Action)
+	assert.Equal(t, auditdomain.EntityPayment, paymentAudit.EntityType)
+	require.NotNil(t, paymentAudit.EntityID)
+	assert.Equal(t, paymentID, *paymentAudit.EntityID)
+	assert.Equal(t, true, paymentAudit.Context["keep_overdue"])
+
+	// Два ряда журнала: «Аренда завершена» и «Платёж удалён».
+	require.Len(t, h.history.Entries, 2)
+	assert.Equal(t, historydomain.ActionRentalCompleted, h.history.Entries[0].Action)
+	assert.Equal(t, historydomain.ActionPaymentDeleted, h.history.Entries[1].Action)
+
+	assert.Equal(t, domain.StatusCompleted, view.Status)
+	// Вид завершённой собирается из архива — в payments за удалённым
+	// правилом сборка не ходит; идентификатора платежа больше нет.
+	assert.Zero(t, h.gateway.viewStateCalls)
+	assert.Zero(t, h.gateway.singleCalls)
+	assert.Zero(t, view.Payment.PaymentID)
+	assert.Equal(t, int64(5_000_000), view.Payment.AmountKopecks)
+
+	t.Run("second completion is 409", func(t *testing.T) {
+		t.Parallel()
+		_, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, rentalID,
+			CompleteRentalCommand{CompletedDate: today})
+		assert.ErrorIs(t, err, ErrRentalCompleted)
+	})
+}
+
+// Завершённая без платежа (ревизия #1161): вид собирается из Архива условий
+// толерантно — ни один payment-запрос за удалённым правилом не выполняется,
+// срок считается по архивному дню оплаты, идентификатор платежа нулевой.
+func TestGetRental_CompletedWithoutPaymentAssemblesFromArchive(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.gateway.stateEr = errors.New("the payment is gone")
+	rentalID := h.seedRental(func(r *domain.Rental) {
+		r.CompletedDate = new(today.AddDate(0, 0, -1))
+		r.PlannedEndDate = new(mustDate("2027-09-01"))
+		r.TermsArchive = &domain.TermsArchive{
+			AmountKopecks: 5_000_000,
+			PaymentDay:    domain.MustPaymentDay(15),
+			AutoPay:       true,
+		}
+	})
+
+	view, err := h.svc.GetRental(t.Context(), h.owner, h.property, rentalID)
+	require.NoError(t, err)
+	assert.Zero(t, h.gateway.viewStateCalls, "the deleted payment is never read")
+	assert.Zero(t, h.gateway.singleCalls)
+	assert.Zero(t, view.Payment.PaymentID, "the wire's paymentId is null")
+	assert.Equal(t, int64(5_000_000), view.Payment.AmountKopecks)
+	assert.Equal(t, domain.MustPaymentDay(15), view.Payment.PaymentDay)
+	assert.True(t, view.Payment.AutoPay)
+	assert.Nil(t, view.NextPayment)
+	assert.Equal(t, domain.StatusCompleted, view.Status)
+	require.NotNil(t, view.Progress.TotalMonths, "the term math reads the archived day")
+	assert.Equal(t, 13, *view.Progress.TotalMonths, "day 15 from Aug 15 2026 to Sep 2027")
+	assert.Zero(t, view.Progress.PaidMonths, "the paid counter died with the payment")
+	assert.Nil(t, view.Progress.OverdueMonths)
+}
+
+// Список толерантен к завершённым без платежа: батч счётчиков получает
+// только живые идентификаторы, завершённая собирается из архива.
+func TestListRentals_CompletedWithoutPayment(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	running := h.seedRental(nil)
+	completed := h.seedRental(func(r *domain.Rental) {
+		r.CompletedDate = new(today.AddDate(0, 0, -1))
+	})
+	runningPayment := *h.store.rentals[running].PaymentID
+	h.gateway.progress = map[uuid.UUID]ProgressCounts{
+		runningPayment: {PaidCount: 3, OverdueCount: 0},
+	}
+
+	views, err := h.svc.ListRentals(t.Context(), h.owner, h.property)
+	require.NoError(t, err)
+	require.Len(t, views, 2)
+	byID := make(map[uuid.UUID]RentalView, len(views))
+	for _, v := range views {
+		byID[v.Rental.ID] = v
+	}
+	assert.Equal(t, 3, byID[running].Progress.PaidMonths)
+	assert.Equal(t, []uuid.UUID{runningPayment}, h.gateway.batchedIDs,
+		"the nil links never reach the batch")
+	assert.Zero(t, byID[completed].Progress.PaidMonths)
+	assert.Nil(t, byID[completed].Progress.OverdueMonths)
+	assert.Zero(t, byID[completed].Payment.PaymentID)
+}
+
+func TestCompleteRental_Validation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		cmd  CompleteRentalCommand
+		want error
+	}{
+		{"before start", CompleteRentalCommand{CompletedDate: today.AddDate(0, 0, -40)}, ErrInvalidInput},
+		{"in the future", CompleteRentalCommand{CompletedDate: today.AddDate(0, 0, 1)}, ErrInvalidInput},
+		{
+			"zero amount is valid (не вернул)",
+			CompleteRentalCommand{CompletedDate: today, DepositReturn: &DepositReturn{AmountKopecks: 0}},
+			nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			rentalID := h.seedRental(nil)
+			_, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, rentalID, tt.cmd)
+			if tt.want != nil {
+				assert.ErrorIs(t, err, tt.want)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestDeleteRental(t *testing.T) {
+	t.Parallel()
+	t.Run("not started goes with the payment", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(func(r *domain.Rental) { r.StartDate = today.AddDate(0, 0, 3) })
+
+		require.NoError(t, h.svc.DeleteRental(t.Context(), h.owner, h.property, rentalID))
+		assert.Equal(t, []string{"rentals.Delete", "pay.Delete", eventAuditRecord, eventHistoryRecord}, h.journal.events,
+			"the rentals row releases the RESTRICT FK before the payment goes")
+		assert.True(t, h.gateway.deleted)
+	})
+	t.Run("completed loses only the row — the payment died with the completion", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(func(r *domain.Rental) {
+			r.CompletedDate = new(today.AddDate(0, 0, -1))
+		})
+		require.NoError(t, h.svc.DeleteRental(t.Context(), h.owner, h.property, rentalID))
+		assert.Equal(t, []string{"rentals.Delete", eventAuditRecord, eventHistoryRecord}, h.journal.events,
+			"the nil payment link has nothing left to delete")
+		assert.False(t, h.gateway.deleted)
+	})
+	t.Run("started unfinished is 409", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+		err := h.svc.DeleteRental(t.Context(), h.owner, h.property, rentalID)
+		require.ErrorIs(t, err, ErrRentalStarted)
+		assert.Empty(t, h.journal.events)
+	})
+}
+
+func TestRoleMatrix(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.svc.policy = fakePolicy{role: sharedpolicy.RoleViewer}
+	h.svc.writeGate = newCapabilityGate(h.svc.policy, sharedpolicy.CanEdit)
+	h.svc.delGate = newCapabilityGate(h.svc.policy, sharedpolicy.CanEdit)
+
+	t.Run("viewer cannot create", func(t *testing.T) {
+		t.Parallel()
+		_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, createCmd())
+		assert.ErrorIs(t, err, ErrForbidden)
+	})
+	// Deletion and completion ride the edit capability since D9 (#1309):
+	// a viewer still may not, full access does — the matrix below.
+	t.Run("viewer cannot delete", func(t *testing.T) {
+		t.Parallel()
+		err := h.svc.DeleteRental(t.Context(), h.owner, h.property, mustID(t))
+		assert.ErrorIs(t, err, ErrForbidden)
+	})
+	t.Run("viewer cannot complete", func(t *testing.T) {
+		t.Parallel()
+		_, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, mustID(t),
+			CompleteRentalCommand{CompletedDate: today})
+		assert.ErrorIs(t, err, ErrForbidden)
+	})
+	t.Run("full access deletes and completes (D9 #1309)", func(t *testing.T) {
+		t.Parallel()
+		sub := newHarness(t)
+		sub.svc.policy = fakePolicy{role: sharedpolicy.RoleFullAccess}
+		sub.svc.writeGate = newCapabilityGate(sub.svc.policy, sharedpolicy.CanEdit)
+		sub.svc.delGate = newCapabilityGate(sub.svc.policy, sharedpolicy.CanEdit)
+		upcoming := sub.seedRental(func(r *domain.Rental) {
+			r.StartDate = today.AddDate(0, 0, 1)
+		})
+		require.NoError(t, sub.svc.DeleteRental(t.Context(), sub.owner, sub.property, upcoming))
+		active := sub.seedRental(nil)
+		_, err := sub.svc.CompleteRental(t.Context(), sub.owner, sub.property, active,
+			CompleteRentalCommand{CompletedDate: today})
+		require.NoError(t, err)
+	})
+	t.Run("stranger is the privacy 404", func(t *testing.T) {
+		t.Parallel()
+		stranger := fakePolicy{role: sharedpolicy.RoleNone}
+		svc := NewRentalService(
+			NewTxStoreFactory(h.store, h.propStore, h.gateway, fakeTenantReader{exists: true}, h.audit, journalingHistory(h.journal), fakeUoW{}),
+			fakeCalendar{}, stranger,
+		)
+		_, err := svc.GetRental(t.Context(), h.owner, h.property, mustID(t))
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestRentalSummary(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.gateway.totals = PaymentsTotals{IncomeKopecks: 10_000_000, ExpenseKopecks: 3_000_000}
+
+	t.Run("defaults to today for a running rental", func(t *testing.T) {
+		t.Parallel()
+		sub := newHarness(t)
+		sub.gateway.totals = h.gateway.totals
+		rentalID := sub.seedRental(nil)
+		sum, err := sub.svc.RentalSummary(t.Context(), sub.owner, sub.property, rentalID, nil)
+		require.NoError(t, err)
+		assert.Equal(t, today, sum.Until)
+		assert.Equal(t, int64(7_000_000), sum.ProfitKopecks)
+	})
+	t.Run("explicit until", func(t *testing.T) {
+		t.Parallel()
+		sub := newHarness(t)
+		rentalID := sub.seedRental(nil)
+		until := today.AddDate(0, 0, -1)
+		sum, err := sub.svc.RentalSummary(t.Context(), sub.owner, sub.property, rentalID, &until)
+		require.NoError(t, err)
+		assert.Equal(t, until, sum.Until)
+	})
+	t.Run("completed defaults to the completion date", func(t *testing.T) {
+		t.Parallel()
+		sub := newHarness(t)
+		completed := today.AddDate(0, 0, -5)
+		id := sub.seedRental(func(r *domain.Rental) { r.CompletedDate = &completed })
+		sum, err := sub.svc.RentalSummary(t.Context(), sub.owner, sub.property, id, nil)
+		require.NoError(t, err)
+		assert.Equal(t, completed, sum.Until)
+	})
+	t.Run("until before start is invalid", func(t *testing.T) {
+		t.Parallel()
+		sub := newHarness(t)
+		rentalID := sub.seedRental(nil)
+		early := today.AddDate(0, 0, -100)
+		_, err := sub.svc.RentalSummary(t.Context(), sub.owner, sub.property, rentalID, &early)
+		require.ErrorIs(t, err, ErrInvalidInput)
+	})
+}
+
+func seedStart() time.Time { return today.AddDate(0, 0, -20) }
+
+// seedRental stores a rental directly (start 20 days back) and returns its id.
+// The schema CHECK's mirror applies after the mutation: a completed rental
+// carries no payment link, and its terms archive stands in for the deleted
+// payment (ревизия #1161) unless the test provided one.
+func (h *harness) seedRental(mutate func(*domain.Rental)) uuid.UUID {
+	h.t.Helper()
+	id := mustID(h.t)
+	payment := mustID(h.t)
+	r := domain.Rental{
+		ID:         id,
+		OwnerID:    h.owner,
+		PropertyID: h.property,
+		PaymentID:  &payment,
+		StartDate:  seedStart(),
+		Utilities:  domain.UtilitiesIncluded,
+	}
+	if mutate != nil {
+		mutate(&r)
+	}
+	if r.CompletedDate != nil {
+		r.PaymentID = nil
+		if r.TermsArchive == nil {
+			r.TermsArchive = &domain.TermsArchive{
+				AmountKopecks: 5_000_000,
+				PaymentDay:    domain.MustPaymentDay(15),
+			}
+		}
+	}
+	h.store.rentals[id] = r
+	return id
+}

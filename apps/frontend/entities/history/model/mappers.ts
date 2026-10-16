@@ -1,0 +1,74 @@
+/**
+ * DTO → доменные модели слайса «История действий». Контракт GET /history
+ * и /history/filters (#708) snake_case; опциональные поля нормализуются
+ * (actor_id null — запись обезличена). Сегменты рендерятся дословно,
+ * кроме голых подписей дат в хвосте (аудит #876: «(срок …)», период
+ * аренды) — они срезаются, словесные даты остаются.
+ */
+
+import type { components } from '@/shared/api/dto';
+
+import { stripBareDateTails } from './date-tails';
+import type {
+  HistoryEntry,
+  HistoryFilterOptions,
+  HistorySegment,
+} from './types';
+
+type HistoryItemDto = components['schemas']['HistoryItem'];
+type HistoryFiltersDto = components['schemas']['HistoryFiltersResponse'];
+
+function toSegments(dto: HistoryItemDto['segments']): HistorySegment[] {
+  return stripBareDateTails(
+    dto.map((segment) => ({
+      text: segment.text,
+      ...(segment.link ? { link: { kind: segment.link.kind, id: segment.link.id } } : {}),
+    })),
+  );
+}
+
+export function mapHistoryItem(dto: HistoryItemDto): HistoryEntry {
+  return {
+    id: dto.id,
+    propertyId: dto.property_id,
+    propertyName: dto.property_name,
+    actorId: dto.actor_id ?? null,
+    actorName: dto.actor_name,
+    actorFirstName: dto.actor_first_name,
+    actorLastName: dto.actor_last_name,
+    // '' — легаси-форма «фото нет» (бэк до StringPtr-фикса шлёт пустую
+    // строку вопреки nullable-контракту): нормализуем к null, канону заглушек.
+    actorPhotoUrl: dto.actor_photo_url === '' ? null : dto.actor_photo_url,
+    actorRole: dto.actor_role,
+    baseAction: dto.base_action,
+    action: dto.action,
+    segments: toSegments(dto.segments),
+    // Пояснения (D1) — опциональны без дефолта: у строк, записанных до
+    // ввода details, поле на проводе отсутствует, и легаси остаётся
+    // undefined (рендер одним заголовком), а не пустым массивом.
+    ...(dto.details !== undefined ? { details: dto.details } : {}),
+    createdAt: dto.created_at,
+  };
+}
+
+export function mapHistoryFilterOptions(dto: HistoryFiltersDto): HistoryFilterOptions {
+  return {
+    participants: dto.participants.map((participant) => ({
+      id: participant.id,
+      name: participant.name,
+      email: participant.email,
+      firstName: participant.first_name,
+      photoUrl: participant.photo_url ?? null,
+      isOwner: participant.is_owner,
+      role: participant.role,
+      status: participant.status,
+    })),
+    objects: dto.objects.map((object_) => ({
+      id: object_.id,
+      name: object_.name,
+      address: object_.address,
+      photoUrl: object_.photo_url,
+      type: object_.type,
+    })),
+  };
+}

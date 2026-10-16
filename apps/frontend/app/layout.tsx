@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { JSX, ReactNode } from 'react';
-import { Inter, Manrope } from 'next/font/google';
+import { BfcacheGuard } from '@/shared/lib/bfcache/BfcacheGuard';
 import { ErrorReporter } from '@/shared/lib/error-reporting/ErrorReporter';
 import { ScrollToTop } from '@/shared/lib/scroll/ScrollToTop';
 import { I18nProvider } from '@/shared/providers/i18n-provider';
@@ -10,18 +10,19 @@ import splashManifest from '@/shared/lib/pwa/splash-manifest.json';
 import '../shared/styles/tokens.css';
 import './globals.css';
 
-const inter = Inter({
-    variable: '--font-inter',
-    subsets: ['latin', 'cyrillic'],
-    display: 'swap',
-});
-
-const manrope = Manrope({
-    variable: '--font-manrope',
-    subsets: ['latin', 'cyrillic'],
-    weight: ['400', '500', '600', '700', '800'],
-    display: 'swap',
-});
+// Шрифты самохостятся: @font-face и переменные --font-inter/--font-manrope/
+// --font-onest живут в globals.css, файлы — в public/fonts. Прелоуд основных
+// срезов (latin + cyrillic, то же, что preload'ил next/font с
+// subsets: ['latin', 'cyrillic']); latin-ext/cyrillic-ext доедут по
+// unicode-range по мере надобности.
+const fontPreloads = [
+    'inter-latin',
+    'inter-cyrillic',
+    'manrope-latin',
+    'manrope-cyrillic',
+    'onest-latin',
+    'onest-cyrillic',
+] as const;
 
 export const metadata: Metadata = {
     title: 'Рентли',
@@ -56,6 +57,12 @@ export const viewport: Viewport = {
     // below, which makes iOS pick dark status-bar text on the light background.
     themeColor: '#ffffff',
     viewportFit: 'cover',
+    // Светлая схема сайта: мета в SSR-разметке парсится до первого кадра и
+    // действует, даже если CSS ещё не загрузился (color-scheme — свойство
+    // документа, а не стилей); далее дублируется color-scheme: light в
+    // globals.css (:root). Без неё на тёмных системах Chromium/WebKit
+    // рисуют тёмные UA-скроллбар и form-контролы.
+    colorScheme: 'light',
 };
 
 export default function RootLayout({
@@ -64,10 +71,21 @@ export default function RootLayout({
     children: ReactNode;
 }>): JSX.Element {
     return (
-        <html lang="ru" className={`${inter.variable} ${manrope.variable}`}>
+        <html lang="ru">
             <body>
+                {fontPreloads.map((font) => (
+                    <link
+                        key={font}
+                        rel="preload"
+                        href={`/fonts/${font}.woff2`}
+                        as="font"
+                        type="font/woff2"
+                        crossOrigin="anonymous"
+                    />
+                ))}
                 <ErrorReporter />
                 <ScrollToTop />
+                <BfcacheGuard />
                 <I18nProvider locale="ru-RU">
                     <QueryProvider>
                         {children}

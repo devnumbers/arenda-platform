@@ -1,28 +1,51 @@
 "use client";
 
-import {type JSX} from "react";
-import {useRouter} from "next/navigation";
+import {type JSX, useRef, useState} from "react";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
-import {AuthForm} from "@/features/auth/ui/auth-form";
-import {useSendCode, useVerifyCode} from "@/features/auth/api/hooks";
+import {CodeStep, EmailStep, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
+import {isEmailValid} from "@/shared/lib/email";
 import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {safeInternalPath} from "@/shared/lib/safe-internal-path";
-import {useSendCooldown} from "@/features/auth/lib/use-send-cooldown";
-import {useLoginDraft} from "@/features/auth/lib/use-login-draft";
-import {RESEND_TIMEOUT} from "@/features/auth/lib/constants";
+import {useSendCooldown} from "@/features/auth";
+import {useLoginDraft} from "@/features/auth";
+import {RESEND_TIMEOUT} from "@/features/auth";
 import {useStandalone} from "@/shared/lib/hooks/useStandalone";
-import {goBack} from "@/shared/lib/navigation";
-import styles from "./LoginPage.module.css";
+import {hardReplace} from "@/shared/lib/navigation";
 
 export default function LoginPage(): JSX.Element {
-    const router = useRouter();
     const isStandalone = useStandalone();
     const {draft, setDraft, clearDraft} = useLoginDraft();
     const {remainingSeconds: resendTimer, recordSendWithRemainingSeconds} = useSendCooldown();
 
     const sendCode = useSendCode();
     const verifyCode = useVerifyCode();
+
+    // Двойной клик по кнопке отправки (#1099): кнопка диспейблится isPending-ем
+    // только после перерисовки, а второй клик может прийти раньше рендера
+    // (джанк главного потока отдаёт input-событие раньше рендер-таска) — без
+    // синхронного рефа обе отправки уходят POST-ами, и вторая ловит 429
+    // троттлинга бэка (minSendInterval 60с) тостом поверх ушедшего шага.
+    const sendInFlightRef = useRef(false);
+
+    // Единственное горло всех отправок кода (#1099): реф режет второй клик из
+    // окна до перерисовки, isPending догашивает окно между settled и самой
+    // перерисовкой; жизненный цикл рефа (set до mutate, сброс в onSettled)
+    // живёт здесь в одном месте. Один реф на все три обработчика: шаги
+    // телефона/почты и resend не пересекаются — это разные шаги черновика.
+    const startSendOnce = (...[variables, callbacks]: Parameters<typeof sendCode.mutate>): void => {
+        if (sendInFlightRef.current || sendCode.isPending) {
+            return;
+        }
+
+        sendInFlightRef.current = true;
+        sendCode.mutate(variables, {
+            ...callbacks,
+            onSettled: () => {
+                sendInFlightRef.current = false;
+            },
+        });
+    };
 
     const handleSendCodeError = (error: ApiError) => {
         if (error.status === 429 && typeof error.retryAfter === 'number') {
@@ -36,86 +59,124 @@ export default function LoginPage(): JSX.Element {
             return;
         }
 
-        sendCode.mutate(
-            {phone: normalizePhone(formattedPhone)},
-            {
-                onSuccess: (data) => {
-                    if (data.sent) {
-                        recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                        setDraft((prev) => ({...prev, phone: formattedPhone, email: "", step: "code"}));
-                    } else {
-                        setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
-                    }
-                },
-                onError: handleSendCodeError,
+        startSendOnce({phone: normalizePhone(formattedPhone)}, {
+            onSuccess: (data) => {
+                if (data.sent) {
+                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                    setDraft((prev) => ({...prev, phone: formattedPhone, email: "", step: "code"}));
+                } else {
+                    setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
+                }
             },
-        );
+            onError: handleSendCodeError,
+        });
     };
 
     const handleSendEmail = () => {
         const trimmedEmail = draft.email.trim();
-        if (!trimmedEmail || !isPhoneValid(draft.phone)) {
+        if (!isEmailValid(trimmedEmail) || !isPhoneValid(draft.phone)) {
             return;
         }
 
-        sendCode.mutate(
-            {phone: normalizePhone(draft.phone), email: trimmedEmail},
-            {
-                onSuccess: (data) => {
-                    if (!data.sent) {
-                        setDraft((prev) => ({...prev, step: "email"}));
-                        return;
-                    }
-                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                    setDraft((prev) => ({...prev, step: "code"}));
-                },
-                onError: handleSendCodeError,
+        startSendOnce({phone: normalizePhone(draft.phone), email: trimmedEmail}, {
+            onSuccess: (data) => {
+                if (!data.sent) {
+                    setDraft((prev) => ({...prev, step: "email"}));
+                    return;
+                }
+                recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                setDraft((prev) => ({...prev, step: "code"}));
             },
-        );
+            onError: handleSendCodeError,
+        });
     };
 
-    const handleVerifyCode = (code: string) => {
+    const [code, setCode] = useState("");
+    const [verifyError, setVerifyError] = useState<string | null>(null);
+
+    const handleCodeChange = (value: string) => {
+        setCode(value);
+        setVerifyError(null);
+    };
+
+    const handleVerifyCode = (value: string) => {
         const trimmedEmail = draft.email.trim();
-        if (code.length !== 6 || !isPhoneValid(draft.phone)) {
+        if (value.length !== 6 || !isPhoneValid(draft.phone) || verifyCode.isPending) {
             return;
         }
 
+        // Автодетект зоны при регистрации (#451): зона устройства едет с каждой
+        // верификацией, бэк применяет её только при создании аккаунта. Когда
+        // браузер не отдал зону — поле не отправляется.
+        const timezone = deviceTimezone();
+        const base = {phone: normalizePhone(draft.phone), code: value, ...(timezone && {timezone})};
+
         verifyCode.mutate(
-            trimmedEmail
-                ? {phone: normalizePhone(draft.phone), email: trimmedEmail, code}
-                : {phone: normalizePhone(draft.phone), code},
+            trimmedEmail ? {...base, email: trimmedEmail} : base,
             {
                 onSuccess: () => {
-                    const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/dashboard";
-                    router.push(target);
+                    const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/properties";
                     clearDraft();
+                    // Жёсткая навигация auth-границы (#1098, канон Navigation):
+                    // сносит гостевые RSC-остатки и react-query предыдущего
+                    // документа вместо перевозки их в кабинет.
+                    hardReplace(target);
                 },
                 onError: (error) => {
+                    // Неверный код (401) — инлайн в поле по макету 2349:67624
+                    // (resend-канон #733: 401 verify — не тост; текст макета
+                    // «Неверный код», деталь бэка «Неверный телефон, почта или
+                    // код» не встаёт в поле). Блокировка (429 — окно попыток
+                    // 15/30 мин, бан, лимит) — понятный текст бэка тоже инлайн,
+                    // чтобы не исчезал. Остальное — тост сценария.
+                    if (error.status === 401 || error.status === 429) {
+                        setVerifyError(error.status === 401 ? "Неверный код" : error.detail);
+                        return;
+                    }
                     notify.scenarios.auth.loginError({description: error.detail});
                 },
             },
         );
     };
 
-    const handleChangePhone = () => {
+    const handleCodeClear = () => {
+        setCode("");
+        setVerifyError(null);
+    };
+
+    // Стрелка ← — на предыдущий шаг: почта, если она была, иначе телефон
+    // (макеты #765). Черновик кода и ошибка живут только на шаге кода.
+    // Пока верификация в полёте, уход со шага закрыт — иначе её onSuccess
+    // утащил бы пользователя в кабинет с чужого шага.
+    const handleCodeBack = () => {
+        if (verifyCode.isPending) {
+            return;
+        }
+        handleCodeClear();
+        setDraft((prev) => ({...prev, step: prev.email.trim() ? "email" : "phone"}));
+    };
+
+    // Стрелка ← шага почты — на телефон (канон владельца #1101; в макетах
+    // почты 2349:67698/67820 стрелки нет — добавлена словом владельца).
+    // Черновик почты сохраняется: возврат — чаще всего правка телефона,
+    // стирать набранную почту — сюрприз; чужой зарегистрированный номер
+    // смывает её сам (sent:true-ветка handleSendPhone). Пока отправка в
+    // полёте, уход закрыт — иначе её onSuccess утащил бы пользователя на
+    // шаг кода уже с телефона (тот же гард, что у шага кода).
+    const handleEmailBack = () => {
+        if (sendCode.isPending) {
+            return;
+        }
         setDraft((prev) => ({...prev, step: "phone"}));
-    };
-
-    const handleChangeEmail = () => {
-        setDraft((prev) => ({...prev, step: "email"}));
-    };
-
-    const handleClose = () => {
-        goBack(router, "/");
     };
 
     const handleResend = () => {
         const trimmedEmail = draft.email.trim();
-        if (!isPhoneValid(draft.phone)) {
+        if (!isPhoneValid(draft.phone) || verifyCode.isPending) {
             return;
         }
 
-        sendCode.mutate(
+        startSendOnce(
             trimmedEmail
                 ? {phone: normalizePhone(draft.phone), email: trimmedEmail}
                 : {phone: normalizePhone(draft.phone)},
@@ -126,43 +187,65 @@ export default function LoginPage(): JSX.Element {
                         return;
                     }
                     recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                    handleCodeClear();
                 },
                 onError: handleSendCodeError,
             },
         );
     };
 
+    // Крестик — выход на лендинг (#1103, слово владельца): сайт всегда
+    // заменяет адрес на «/» без учёта истории — goBack вернул бы гостя на
+    // кабинетный маршрут (например ?from=/properties), где proxy.ts снова
+    // редиректит на /login?from…: крестик закрывал бы форму и тут же
+    // открывал её заново. В standalone PWA крестика нет вовсе (hideClose).
+    // Жёсткая навигация auth-границы — канон Navigation (#1098).
+    const handleClose = () => {
+        hardReplace("/");
+    };
+
+    // Шаги телефона и почты — редизайн по макетам Рентли (карта #761,
+    // тикеты #763/#764), шаг кода — #765. Все три шага живут на LoginShell.
+    if (draft.step === "phone") {
+        return (
+            <LoginShell onClose={handleClose} hideClose={isStandalone}>
+                <PhoneStep
+                    phone={draft.phone}
+                    onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
+                    onSendPhone={handleSendPhone}
+                    isLoading={sendCode.isPending}
+                    resendTimer={resendTimer}
+                />
+            </LoginShell>
+        );
+    }
+
+    if (draft.step === "email") {
+        return (
+            <LoginShell onClose={handleClose} onBack={handleEmailBack} hideClose={isStandalone}>
+                <EmailStep
+                    email={draft.email}
+                    onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
+                    onSubmit={handleSendEmail}
+                    isLoading={sendCode.isPending}
+                    resendTimer={resendTimer}
+                />
+            </LoginShell>
+        );
+    }
+
     return (
-        <main className={styles.container}>
-            <section className={styles.left} aria-hidden="true">
-                <div className={styles.logo}/>
-            </section>
-            <section className={styles.right}>
-                <div className={styles.formWrapper}>
-                    <AuthForm
-                        step={draft.step}
-                        onStepChange={(step) => setDraft((prev) => ({...prev, step}))}
-                        onSendPhone={handleSendPhone}
-                        onSendEmail={handleSendEmail}
-                        onVerifyCode={handleVerifyCode}
-                        onChangePhone={handleChangePhone}
-                        onChangeEmail={handleChangeEmail}
-                        onResend={handleResend}
-                        onClose={handleClose}
-                        hideClose={isStandalone}
-                        phone={draft.phone}
-                        onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
-                        email={draft.email}
-                        onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}
-                        isSending={sendCode.isPending}
-                        isSendingEmail={sendCode.isPending}
-                        isVerifying={verifyCode.isPending}
-                        isResending={sendCode.isPending}
-                        resendTimer={resendTimer}
-                    />
-                </div>
-            </section>
-            <div className={styles.bgLogo} aria-hidden="true"/>
-        </main>
+        <LoginShell onClose={handleClose} hideClose={isStandalone} onBack={handleCodeBack}>
+            <CodeStep
+                code={code}
+                onCodeChange={handleCodeChange}
+                onVerify={handleVerifyCode}
+                error={verifyError ?? undefined}
+                onClear={handleCodeClear}
+                onResend={handleResend}
+                isResending={sendCode.isPending}
+                resendTimer={resendTimer}
+            />
+        </LoginShell>
     );
 }

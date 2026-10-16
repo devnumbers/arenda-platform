@@ -1,22 +1,21 @@
 /*
- * Рентли cabinet service worker.
+ * Рентли app service worker.
  *
  * Scope: "/" (script lives at /sw.js, so the default scope is the origin root).
  * This means the SW becomes the active controller for the whole origin once
  * registered, including the landing pages. To stay safe, the fetch handler
- * strictly filters by path and only intercepts cabinet navigations — everything
+ * strictly filters by path and only intercepts app navigations — everything
  * else (landing routes, /api, /_next static, fonts, images) is passed through
  * to the network untouched. See docs/research/pwa-manifest-installability.md
  * §4 "Подводные камни scope на общем origin с лендингом".
  *
- * The cabinet route prefixes below mirror
- * `apps/frontend/shared/lib/pwa/cabinet-routes.ts` and the `@frontend path`
- * matcher in the Caddyfile (docs/deployment.md). The unit test
- * `cabinet-routes.test.ts` guards against drift between the TS source and this
- * inline copy.
+ * The app route prefixes below mirror
+ * `apps/frontend/shared/lib/pwa/app-routes.ts` — the TS source of truth.
+ * The unit test `app-routes.test.ts` guards against drift between the TS
+ * source and this inline copy.
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `rentli-offline-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
@@ -78,24 +77,26 @@ function readStandaloneFlag() {
   });
 }
 
-// Cabinet route prefixes — keep in sync with shared/lib/pwa/cabinet-routes.ts.
-const CABINET_ROUTE_PREFIXES = [
+// App route prefixes — keep in sync with shared/lib/pwa/app-routes.ts.
+// Легаси /dashboard снесён (карта #862, тикет #865): start_url манифеста
+// переведён на /properties, старые ссылки уходят в сеть как 404.
+const APP_ROUTE_PREFIXES = [
   '/login',
-  '/dashboard',
   '/properties',
-  '/leases',
-  '/tenants',
-  '/finance',
   '/profile',
   '/subscription',
-  '/support',
   '/ui-kit',
-  '/calendar',
-  '/reminders',
+  '/tasks',
+  '/operations',
+  '/contacts',
+  '/payments',
+  '/participants',
+  '/history',
+  '/notifications',
 ];
 
-function isCabinetPath(pathname) {
-  return CABINET_ROUTE_PREFIXES.some(function (prefix) {
+function isAppPath(pathname) {
+  return APP_ROUTE_PREFIXES.some(function (prefix) {
     return pathname === prefix || pathname.startsWith(prefix + '/');
   });
 }
@@ -145,7 +146,7 @@ self.addEventListener('fetch', function (event) {
     event.respondWith(
       readStandaloneFlag().then(function (isStandalone) {
         if (isStandalone) {
-          return Response.redirect('/dashboard', 302);
+          return Response.redirect('/properties', 302);
         }
         // Not a PWA client — let the request go to the network (landing).
         return fetch(request);
@@ -154,13 +155,13 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // Only intercept navigations to cabinet routes; landing routes and other
+  // Only intercept navigations to app routes; landing routes and other
   // origins go straight to the network.
-  if (url.origin !== self.location.origin || !isCabinetPath(url.pathname)) {
+  if (url.origin !== self.location.origin || !isAppPath(url.pathname)) {
     return;
   }
 
-  // Network-first for cabinet navigations; on network failure (offline), serve
+  // Network-first for app navigations; on network failure (offline), serve
   // the branded offline page from cache.
   event.respondWith(
     fetch(request)
@@ -191,8 +192,8 @@ self.addEventListener('fetch', function (event) {
 // Fallbacks — must mirror DEFAULT_PUSH_TITLE / DEFAULT_PUSH_CLICK_URL in
 // shared/lib/pwa/push-payload.ts.
 var DEFAULT_PUSH_TITLE = 'Рентли';
-var DEFAULT_PUSH_CLICK_URL = '/dashboard';
-var DEFAULT_PUSH_TAG = 'rentli-reminder';
+var DEFAULT_PUSH_CLICK_URL = '/properties';
+var DEFAULT_PUSH_TAG = 'rentli-notification';
 var PUSH_ICON_PATH = '/icons/icon-192.png';
 
 // Inline copy of resolveClickTarget: only same-origin absolute paths are kept,
@@ -250,7 +251,7 @@ self.addEventListener('push', function (event) {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Focus an existing same-origin client that shows the cabinet, or open one.
+// Focus an existing same-origin client that shows the app, or open one.
 // postMessage lets the React app perform client-side navigation when a window
 // is already open on a different cabinet route. Mirrors pickClickTargetClient
 // in shared/lib/pwa/push-payload.ts.

@@ -1,171 +1,122 @@
 'use client';
 
-import type {JSX} from 'react';
+import { useState, type JSX } from 'react';
 import NextLink from 'next/link';
-import {LinkButton} from '@/shared/ui/link-button';
-import {ROUTES} from '@/shared/config/routes';
-import {LeaseInfo} from '@/widgets/lease-card/ui/LeaseInfo';
-import {getDisplayStatus} from '@/features/properties/lib/property-statuses';
-import {AccessRoleBadge} from '@/entities/access/ui/AccessRoleBadge';
-import type {PropertyWithLease} from '../lib/use-property-list-data';
-import {PropertyStatusBadge} from './PropertyStatusBadge';
-import {PropertyThumbnail} from './PropertyThumbnail';
+import { ROUTES } from '@/shared/config/routes';
+import { BoldUser, PinSmall, SmallArrowRight } from '@/shared/assets/icons';
+import type { IsoDate } from '@/shared/lib/calendar';
+import { cardOwnerName } from '../lib/property-owner-name';
+import {
+  archivedPropertyBadge,
+  hasPropertyAttentionDot,
+  propertyBadges,
+  PropertyStatusBadge,
+  type PropertyBadge,
+} from '@/features/properties';
+import { PropertyAvatar, type Property } from '@/entities/property';
 import styles from './PropertyCard.module.css';
 
+/**
+ * Карточка объекта в списке-хабе (Figma 1590:88756 — мобайл, 1603:88972 —
+ * планшет; тикет #586) и в архиве (вариант archived, Figma 1603:92102,
+ * тикет #587): серая карточка radius 24, круг-фото 64 (мобайл ≤560 над
+ * текстом, 561+ — слева вровень), имя 20/24 до трёх строк, адрес со
+ * скрепкой у основного объекта (Icon/S/Pin), красная точка на круге
+ * (резолюция #584), арендный бейдж + «на ремонте», шеврон у правого
+ * верхнего края. Вся карточка — ссылка на объект (оверлей). «Сегодня
+ * владельца» (ADR 0048) нужно только бейджу «Осталось N месяцев» —
+ * остальные бейджи рендерятся, не дожидаясь его.
+ * Под бейджами — ряд владельца ЧУЖОГО объекта (решение владельца по итогам
+ * обхода #756): круг 24 с BoldUser и имя 13/500 — карточка показывает, чей
+ * это объект и кто выдал доступ; на своих карточках ряда нет. Бейдж роли
+ * доступа на карточках больше не рисуется.
+ *
+ * Вариант archived — карточка архива: та же анатомия, но смысловая
+ * начинка архивная — единственный бейдж «В архиве», без точки и скрепки
+ * (макет 1603:92102); ряд владельца чужого архивного объекта — как в
+ * основном списке.
+ */
 export type PropertyCardProps = {
-    readonly property: PropertyWithLease;
+  readonly property: Property;
+  /** «Сегодня владельца» (ADR 0048) — бейдж «Осталось N месяцев». */
+  readonly today?: IsoDate;
+  /** archived — карточка экрана «Архивные объекты» (#587). */
+  readonly variant?: 'list' | 'archived';
+  /** nonInteractive — без оверлея-ссылки: карточка-подвесший (#702)
+   * рендерит обычную анатомию под блюром, тап ведёт в шит причины, а не на
+   * деталь объекта. */
+  readonly nonInteractive?: boolean;
 };
 
-type SingleAction = {
-    readonly kind: 'single';
-    readonly label: string;
-    readonly href: string;
-    readonly variant: 'clear' | 'primary';
-};
+export function PropertyCard({ property, today, variant = 'list', nonInteractive = false }: PropertyCardProps): JSX.Element {
+  const isArchived = variant === 'archived';
+  const isPrimary = !isArchived && property.pinned_at !== null;
+  const badges: readonly PropertyBadge[] = isArchived
+    ? [archivedPropertyBadge]
+    : propertyBadges(property, today);
+  // Ряд владельца (решение по итогам обхода #756): только чужие объекты.
+  const ownerName = cardOwnerName(property);
 
-type DoubleAction = {
-    readonly kind: 'double';
-    readonly primary: { readonly label: string; readonly href: string };
-    readonly secondary: { readonly label: string; readonly href: string };
-};
-
-type PropertyAction = SingleAction | DoubleAction | null;
-
-function getDaysRemaining(endDate: string): number {
-    const end = new Date(endDate).getTime();
-    const now = Date.now();
-    return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
-}
-
-function getPropertyAction(property: PropertyWithLease): PropertyAction {
-    const displayStatus = getDisplayStatus(
-        property.status,
-        property.occupancy,
-        property.activeLease?.status,
-    );
-
-    if (displayStatus === 'maintenance') {
-        return null;
-    }
-
-    if (displayStatus === 'free') {
-        return {
-            kind: 'single',
-            label: 'Сдать',
-            href: `${ROUTES.leaseNew}?propertyId=${property.id}`,
-            variant: 'primary',
-        };
-    }
-
-    const lease = property.activeLease;
-    if (!lease) return null;
-
-    if (displayStatus === 'requires_action') {
-        return {
-            kind: 'double',
-            secondary: {label: 'Продлить', href: ROUTES.lease(lease.id)},
-            primary: {label: 'Завершить', href: ROUTES.lease(lease.id)},
-        };
-    }
-
-    if (!lease.endDate) return null;
-
-    if (displayStatus === 'rented' && getDaysRemaining(lease.endDate) <= 30) {
-        return {
-            kind: 'double',
-            secondary: {label: 'Продлить', href: ROUTES.lease(lease.id)},
-            primary: {label: 'Завершить', href: ROUTES.lease(lease.id)},
-        };
-    }
-
-    return {
-        kind: 'single',
-        label: 'Оплатить',
-        href: `${ROUTES.financeOperations}?property_id=${property.id}`,
-        variant: 'clear',
-    };
-}
-
-export function PropertyCard({property}: PropertyCardProps): JSX.Element {
-    const lease = property.activeLease;
-    const displayStatus = getDisplayStatus(
-        property.status,
-        property.occupancy,
-        property.activeLease?.status,
-        property.overdue_rent_count,
-    );
-    const action = getPropertyAction(property);
-
-    const showLeaseInfo = lease !== null;
-
-    return (
-        <article className={styles.root}>
-            <NextLink
-                href={ROUTES.property(property.id)}
-                className={styles.cardLink}
-                aria-label={`Открыть объект ${property.name}`}
-            />
-            <div className={styles.header}>
-                <div className={styles.meta}>
-                    <h3 className={styles.title}>{property.name}</h3>
-                    {displayStatus && <PropertyStatusBadge status={displayStatus} overdueCount={property.overdue_rent_count}/>}
-                    {property.access && property.access.role !== 'owner' && (
-                        <AccessRoleBadge role={property.access.role}/>
-                    )}
-                </div>
-                <PropertyThumbnail size="small"/>
+  return (
+    <article className={styles.root}>
+      {!nonInteractive && (
+        <NextLink
+          href={ROUTES.property(property.id)}
+          className={styles.cardLink}
+          aria-label={`Открыть объект ${property.name}`}
+        />
+      )}
+      <div className={styles.body}>
+        <PropertyAvatar
+          photoUrl={property.photoUrl}
+          type={property.type}
+          withAttentionDot={!isArchived && hasPropertyAttentionDot(property)}
+        />
+        <div className={styles.info}>
+          <h3 className={styles.title}>{property.name}</h3>
+          <p className={styles.address}>
+            {isPrimary && <PinSmall className={styles.pin} aria-hidden />}
+            <span className={styles.addressText}>{property.address}</span>
+          </p>
+          {badges.length > 0 && (
+            <div className={styles.badges}>
+              {badges.map((badge) => (
+                <PropertyStatusBadge key={badge.key} badge={badge} />
+              ))}
             </div>
+          )}
+          {ownerName !== null && (
+            <ul className={styles.participants} data-testid="property-owner">
+              <li className={styles.participant}>
+                <OwnerChipAvatar photoUrl={property.access?.ownerPhotoUrl} />
+                <span className={styles.participantName}>{ownerName}</span>
+              </li>
+            </ul>
+          )}
+        </div>
+      </div>
+      <SmallArrowRight className={styles.chevron} aria-hidden />
+    </article>
+  );
+}
 
-            {showLeaseInfo && (
-                <LeaseInfo
-                    lease={{
-                        start_date: lease.startDate,
-                        payment_day: lease.paymentDay,
-                        rent_amount_kopecks: lease.rentKopecks,
-                        current_period_overdue: lease.currentPeriodOverdue,
-                        has_overdue: lease.hasOverdue,
-                        overdue_since: lease.overdueSince ?? null,
-                        next_payment_date: lease.nextPaymentDate ?? null,
-                        status: lease.status,
-                        tenant_contact: lease.tenantContact ?? null,
-                    }}
-                />
-            )}
-
-            {action?.kind === 'single' && (
-                <LinkButton
-                    href={action.href}
-                    variant={action.variant}
-                    size="small"
-                    fullWidth
-                    className={styles.actionButton}
-                >
-                    {action.label}
-                </LinkButton>
-            )}
-
-            {action?.kind === 'double' && (
-                <div className={styles.actionRow}>
-                    <LinkButton
-                        href={action.secondary.href}
-                        variant="clear"
-                        size="small"
-                        fullWidth
-                        className={styles.actionButton}
-                    >
-                        {action.secondary.label}
-                    </LinkButton>
-                    <LinkButton
-                        href={action.primary.href}
-                        variant="primary"
-                        size="small"
-                        fullWidth
-                        className={styles.actionButton}
-                    >
-                        {action.primary.label}
-                    </LinkButton>
-                </div>
-            )}
-        </article>
-    );
+/** Аватар владельца в чипе карточки (решение #1286): фото профиля 24,
+ * иначе — и при битом фото (404 стрима) — заглушка BoldUser. */
+function OwnerChipAvatar({ photoUrl }: { readonly photoUrl?: string | null }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
+  return (
+    <span className={styles.participantAvatar} aria-hidden>
+      {showPhoto ? (
+        <img
+          src={photoUrl}
+          alt=""
+          className={styles.participantAvatarImg}
+          onError={() => setPhotoBroken(true)}
+        />
+      ) : (
+        <BoldUser className={styles.participantGlyph} />
+      )}
+    </span>
+  );
 }

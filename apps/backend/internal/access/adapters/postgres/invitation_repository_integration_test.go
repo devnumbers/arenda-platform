@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -15,7 +16,31 @@ import (
 // unset, same convention as member_repository_integration_test.go (whose
 // fixtures this file reuses).
 
+// inviteeEmail is the canonical invitee address of the invitation fixtures.
+const inviteeEmail = "invitee@example.com"
+
+// createInvitationFixture inserts an invitation row and fails the test on any
+// error, returning the created invitation.
+func createInvitationFixture(
+	t *testing.T, ctx context.Context, repo *InvitationRepository,
+	propertyID, invitedBy uuid.UUID, email string, role domain.Role, lastSentAt time.Time,
+) domain.Invitation {
+	t.Helper()
+	id, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("new uuid: %v", err)
+	}
+	created, err := repo.Create(ctx, domain.Invitation{
+		ID: id, PropertyID: propertyID, Email: email, Role: role, InvitedBy: invitedBy, LastSentAt: lastSentAt,
+	})
+	if err != nil {
+		t.Fatalf("create invitation %s: %v", email, err)
+	}
+	return created
+}
+
 func TestInvitationRepository_CreateGetList(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -25,27 +50,14 @@ func TestInvitationRepository_CreateGetList(t *testing.T) {
 	property := createAccessTestProperty(t, ctx, q, owner)
 	repo := NewInvitationRepository(tx)
 
-	invID, err := uuid.NewV7()
-	if err != nil {
-		t.Fatalf("new uuid: %v", err)
-	}
-	created, err := repo.Create(ctx, domain.Invitation{
-		ID:         invID,
-		PropertyID: property,
-		Email:      "invitee@example.com",
-		Role:       domain.RoleViewer,
-		InvitedBy:  owner,
-		LastSentAt: time.Now().UTC(),
-	})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	if created.Role != domain.RoleViewer || created.Email != "invitee@example.com" {
+	created := createInvitationFixture(t, ctx, repo, property, owner, inviteeEmail, domain.RoleViewer, time.Now().UTC())
+	if created.Role != domain.RoleViewer || created.Email != inviteeEmail {
 		t.Errorf("created = %+v", created)
 	}
 	if created.CreatedAt.IsZero() || created.LastSentAt.IsZero() {
 		t.Errorf("timestamps must be set: %+v", created)
 	}
+	invID := created.ID
 
 	// GetByID round-trip.
 	got, err := repo.GetByID(ctx, invID, property)
@@ -57,10 +69,10 @@ func TestInvitationRepository_CreateGetList(t *testing.T) {
 	}
 
 	// Unknown id / other property is not found.
-	if _, err := repo.GetByID(ctx, uuid.New(), property); !errors.Is(err, domain.ErrInvitationNotFound) {
+	if _, err := repo.GetByID(ctx, uuid.Must(uuid.NewV7()), property); !errors.Is(err, domain.ErrInvitationNotFound) {
 		t.Errorf("GetByID unknown: expected ErrInvitationNotFound, got %v", err)
 	}
-	if _, err := repo.GetByID(ctx, invID, uuid.New()); !errors.Is(err, domain.ErrInvitationNotFound) {
+	if _, err := repo.GetByID(ctx, invID, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrInvitationNotFound) {
 		t.Errorf("GetByID other property: expected ErrInvitationNotFound, got %v", err)
 	}
 
@@ -82,6 +94,7 @@ func TestInvitationRepository_CreateGetList(t *testing.T) {
 }
 
 func TestInvitationRepository_UniquePropertyEmail(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -109,7 +122,7 @@ func TestInvitationRepository_UniquePropertyEmail(t *testing.T) {
 		}
 	}
 
-	mustCreate("invitee@example.com")
+	mustCreate(inviteeEmail)
 
 	// A duplicate (property, email) — even in a different casing — violates the
 	// unique index on (property_id, lower(email)).
@@ -126,10 +139,16 @@ func TestInvitationRepository_UniquePropertyEmail(t *testing.T) {
 		LastSentAt: time.Now().UTC(),
 	}); err == nil {
 		t.Error("duplicate (property, lower(email)) insert must fail")
+	} else if !errors.Is(err, domain.ErrInvitationAlreadyExists) {
+		// Гонка exists-check/insert двух параллельных инвайтов (#1122):
+		// без маппинга unique-нарушения домен получает сырую pg-ошибку,
+		// HTTP-слой — 500 вместо skipped_duplicate.
+		t.Errorf("duplicate insert: expected ErrInvitationAlreadyExists, got %v", err)
 	}
 }
 
 func TestInvitationRepository_ListPendingByEmailFIFO(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -215,6 +234,7 @@ func TestInvitationRepository_ListPendingByEmailFIFO(t *testing.T) {
 }
 
 func TestInvitationRepository_UpdateRoleLastSentDelete(t *testing.T) {
+	t.Parallel()
 	pool := setupAccessDB(t)
 	ctx, tx, cleanup := beginAccessTx(t, pool)
 	defer cleanup()
@@ -231,7 +251,7 @@ func TestInvitationRepository_UpdateRoleLastSentDelete(t *testing.T) {
 	if _, err := repo.Create(ctx, domain.Invitation{
 		ID:         invID,
 		PropertyID: property,
-		Email:      "invitee@example.com",
+		Email:      inviteeEmail,
 		Role:       domain.RoleViewer,
 		InvitedBy:  owner,
 		LastSentAt: time.Now().UTC().Add(-48 * time.Hour),

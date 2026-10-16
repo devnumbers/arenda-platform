@@ -1,0 +1,321 @@
+package application
+
+// The mutation conveyor and the shared gate builders of the rentals use
+// cases. Every mutation of the context runs through the same ordering
+// invariants structurally (ADR 0053 §3, the payments discipline): the role
+// gate, the property row lock, the owner's today, the change step, its audit
+// entry and its action journal row (ADR 0061) in the same transaction, and
+// the payments tick after the change when the step's verdict says the
+// payment changed. Reads never tick and never write.
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
+	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+)
+
+// The audit action constants of the context's mutations (ADR 0053 §3). There
+// is no rental.extended — «продление» is a UI scenario of the planned-end
+// edit and audits as rental.updated.
+const (
+	auditActionRentalCreated   = auditdomain.ActionRentalCreated
+	auditActionRentalUpdated   = auditdomain.ActionRentalUpdated
+	auditActionRentalCompleted = auditdomain.ActionRentalCompleted
+	auditActionRentalDeleted   = auditdomain.ActionRentalDeleted
+)
+
+// changeStep is the use-case-specific part of the mutation conveyor. It
+// receives the loaded rental (a zero rental at creation), applies its change
+// inside the open transaction and produces one typed verdict: the changed
+// rental's id (the post-commit re-read target), its explicit audit action and
+// whether the managed payment changed — the in-transaction tick runs only
+// then.
+type changeStep func(
+	ctx context.Context, stores *txStores, scope uuid.UUID, rental domain.Rental, today time.Time,
+) (mutationOutcome, error)
+
+// mutationOutcome is the change step's single verdict channel: everything the
+// caller and the machine need after the transaction — no side channels.
+type mutationOutcome struct {
+	// RentalID is the post-commit re-read target: the response always carries
+	// the persisted view. Deletion states it too; its caller ignores it.
+	RentalID uuid.UUID
+	// Audit records this mutation inside the same transaction (fail-safe,
+	// ADR 0020). Every step states its action explicitly — there is no
+	// derivation from the response.
+	Audit    auditdomain.Action
+	AuditCtx map[string]any
+	// ExtraAudit lists the additional audit rows of a compound mutation (the
+	// completion also records the managed payment's deletion, ревизия #1161):
+	// the step provides the action, the entity, the id and the context; the
+	// conveyor fills the actor and the role like the primary row.
+	ExtraAudit []auditdomain.Entry
+	// History is the action journal row of the mutation (ADR 0061), built by
+	// the step from the row-text catalog and recorded inside the same
+	// transaction (fail-safe like the audit).
+	History *historydomain.Entry
+	// ExtraHistory lists the additional journal rows of a compound mutation
+	// (the payment-deletion row beside the completion's), recorded with the
+	// same actor scoping as History.
+	ExtraHistory []*historydomain.Entry
+	// Tick runs the payments materialization tick for the owner after the
+	// change; only a step that changed the managed payment sets it (ADR 0053
+	// §3). Completion and deletion resolve the plan themselves and set false.
+	Tick bool
+	// Changed states the realtime frames the change produced (карта #714,
+	// #716; ADR 0062): the (entity, object) pairs the step's writes made
+	// dirty — the rental's own view plus the managed payment rule's, stated
+	// explicitly per step like the audit action. The conveyor dispatches
+	// them to the carrier strictly after the commit and piggybacks the
+	// history pair of the journal row the transaction recorded.
+	Changed []realtimedom.Change
+}
+
+// mutationGates bundles the dependencies the conveyor needs beyond the
+// transactional stores: the owner calendar for the day boundary; the role
+// gate arrives per call, already resolved over the caller's policy.
+type mutationGates struct {
+	factory  txStoreFactory
+	calendar paymentsapp.OwnerCalendar
+	// Realtime is the late-bound carrier the frames dispatch through after
+	// the commit (карта #714, #716; ADR 0062); nil keeps the pre-#716
+	// silence.
+	realtime realtimeapp.Publisher
+}
+
+// runRentalMutation is the mutation conveyor shared by every use case of this
+// context. It runs, in one transaction and in this order: the role gate, the
+// property serialization lock (FOR UPDATE — ADR 0053 §3), the owner's today,
+// the load of the target rental (skipped for a zero rentalID), the maintenance
+// guard on the unfinished rental (ticket #1050 — the completed history stays
+// mutable-deletable on a maintenance property), the change step, its audit
+// entry and its action journal row (ADR 0061) in the same transaction, and
+// the payments tick when the step changed the payment.
+// After commit it dispatches the step's realtime frames (ADR 0062 §3,
+// best-effort) and returns the changed rental's id for the re-read.
+func runRentalMutation(
+	g mutationGates,
+	ctx context.Context, actor, propertyID, rentalID uuid.UUID,
+	gate gateFunc,
+	change changeStep,
+) (uuid.UUID, error) {
+	role, err := gate(ctx, actor, propertyID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	var scope uuid.UUID
+	var out mutationOutcome
+	err = g.factory.runInTx(ctx, func(stores *txStores) error {
+		prop, today, err := lockActiveProperty(ctx, stores, g.calendar, propertyID)
+		if err != nil {
+			return err
+		}
+		scope = prop.OwnerID
+		rental := domain.Rental{}
+		if rentalID != uuid.Nil {
+			rental, err = stores.rentals.Get(ctx, rentalID, scope, propertyID)
+			if err != nil {
+				return err
+			}
+		}
+		// The maintenance guard sits after the rental load on purpose: a
+		// zero rental (creation) and a loaded unfinished one are the blocked
+		// world, a completed rental is the history that still deletes (the
+		// lifecycles' ordering mirrors the archived guard — the property
+		// state outranks the rental's).
+		if prop.Maintenance && rental.CompletedDate == nil {
+			return ErrPropertyMaintenance
+		}
+		out, err = change(ctx, stores, scope, rental, today)
+		if err != nil {
+			return err
+		}
+		if err := recordAudit(ctx, stores, actor, role, out.Audit, out.RentalID, out.AuditCtx); err != nil {
+			return err
+		}
+		if err := recordJournal(ctx, stores, propertyID, actor, role, out); err != nil {
+			return err
+		}
+		if !out.Tick {
+			return nil
+		}
+		return stores.pay.RunTick(ctx, scope, today)
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	realtimeapp.Dispatch(ctx, g.realtime, actor, out.Changed, historyAnchor(out, propertyID)...)
+	return out.RentalID, nil
+}
+
+// recordJournal records the mutation's audit trail inside the transaction:
+// the primary audit row, the compound mutation's additional audit rows (the
+// completion's payment deletion, ревизия #1161 — their actor fields fill
+// from the same gate resolution as the primary row; action/entity/id/context
+// travel from the step), then the action journal: the primary row and the
+// compound mutation's additional rows, equally scoped.
+func recordJournal(
+	ctx context.Context, stores *txStores, propertyID, actor uuid.UUID, role sharedpolicy.Role,
+	out mutationOutcome,
+) error {
+	for _, entry := range out.ExtraAudit {
+		entry.ActorID = &actor
+		entry.ActorRole = sharedpolicy.AuditActorRole(role)
+		if err := stores.audit.Record(ctx, entry); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+	}
+	entries := out.ExtraHistory
+	if out.History != nil {
+		entries = append([]*historydomain.Entry{out.History}, entries...)
+	}
+	for _, entry := range entries {
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(role), *entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// historyAnchor is the journal anchor of the transaction's realtime dispatch:
+// the single-anchored journal row hangs on the conveyor's property.
+func historyAnchor(out mutationOutcome, propertyID uuid.UUID) []uuid.UUID {
+	if out.History == nil {
+		return nil
+	}
+	return []uuid.UUID{propertyID}
+}
+
+// lockActiveProperty loads the property with its row locked — the mutation's
+// serialization point shared with the payments context (ADR 0053 §3) —
+// resolves the owner's today and rejects the financial read-only archived
+// state.
+func lockActiveProperty(
+	ctx context.Context, stores *txStores, calendar paymentsapp.OwnerCalendar, propertyID uuid.UUID,
+) (paymentsapp.PropertyRef, time.Time, error) {
+	prop, err := stores.properties.GetForUpdate(ctx, propertyID)
+	if err != nil {
+		return paymentsapp.PropertyRef{}, time.Time{}, err
+	}
+	if prop.Archived {
+		return paymentsapp.PropertyRef{}, time.Time{}, ErrArchivedProperty
+	}
+	today, err := ownerToday(calendar, ctx, prop.OwnerID)
+	if err != nil {
+		return paymentsapp.PropertyRef{}, time.Time{}, err
+	}
+	return prop, today, nil
+}
+
+// ownerToday resolves the data owner's calendar date (ADR 0048), failing
+// loudly when the calendar was never wired — a construction mistake, not a
+// runtime condition.
+func ownerToday(
+	calendar paymentsapp.OwnerCalendar, ctx context.Context, ownerID uuid.UUID,
+) (time.Time, error) {
+	if calendar == nil {
+		return time.Time{}, errors.New("rentals: owner calendar must be configured")
+	}
+	today, err := calendar.Today(ctx, ownerID)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("resolve owner today: %w", err)
+	}
+	return today, nil
+}
+
+// recordAudit writes the mutation's audit entry inside the transaction
+// (fail-safe: an insert error rolls the mutation back, ADR 0020). The role is
+// the one the gate resolved before the transaction opened. Context carries
+// whitelisted keys only — never the comment or the amounts.
+func recordAudit(
+	ctx context.Context, stores *txStores, actor uuid.UUID, role sharedpolicy.Role,
+	action auditdomain.Action, rentalID uuid.UUID, auditCtx map[string]any,
+) error {
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  sharedpolicy.AuditActorRole(role),
+		Action:     action,
+		EntityType: auditdomain.EntityRental,
+		EntityID:   &rentalID,
+		Context:    auditCtx,
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+	return nil
+}
+
+// gateFunc is what the gates produce for the audit trail: the resolved role
+// of an actor on a property.
+type gateFunc = func(context.Context, uuid.UUID, uuid.UUID) (sharedpolicy.Role, error)
+
+// newCapabilityGate returns the ADR 0028 gate closure over the policy and one
+// capability predicate. The decision mapping is the rentals error vocabulary
+// over the shared gate skeleton (policy.GateFor): none/suspended stay
+// privacy-preserving (ErrNotFound — the existence of the data is never
+// revealed), a role without the capability is a straight ErrForbidden. A nil
+// policy keeps the historical owner-only behaviour.
+func newCapabilityGate(policy sharedpolicy.Policy, can func(sharedpolicy.Role) bool) gateFunc {
+	return func(ctx context.Context, actor, propertyID uuid.UUID) (sharedpolicy.Role, error) {
+		if policy == nil {
+			return sharedpolicy.RoleOwner, nil
+		}
+		role, err := policy.RoleForProperty(ctx, actor, propertyID)
+		if err != nil {
+			return "", fmt.Errorf("resolve role: %w", err)
+		}
+		switch sharedpolicy.GateFor(role, can) {
+		case sharedpolicy.GateAllow:
+			return role, nil
+		case sharedpolicy.GateForbidden:
+			return "", ErrForbidden
+		default: // GateNone, GateSuspended.
+			return "", ErrNotFound
+		}
+	}
+}
+
+// resolveReadScope applies the read gate and returns the data owner whose
+// SQL reads filter by (ADR 0028). A role without the view capability maps to
+// ErrNotFound so the existence of any rental data is never revealed.
+func resolveReadScope(
+	ctx context.Context, policy sharedpolicy.Policy, properties paymentsapp.PropertyStore,
+	actor, propertyID uuid.UUID,
+) (uuid.UUID, error) {
+	if policy == nil {
+		prop, err := properties.Get(ctx, propertyID)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		if prop.OwnerID != actor {
+			return uuid.Nil, ErrNotFound
+		}
+		return actor, nil
+	}
+	role, err := policy.RoleForProperty(ctx, actor, propertyID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve role: %w", err)
+	}
+	// Every non-allow outcome hides the data's existence: none and suspended
+	// are the privacy 404, forbidden (unreachable for view today) would mean
+	// the same for reads.
+	if sharedpolicy.GateFor(role, sharedpolicy.CanView) != sharedpolicy.GateAllow {
+		return uuid.Nil, ErrNotFound
+	}
+	prop, err := properties.Get(ctx, propertyID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return prop.OwnerID, nil
+}

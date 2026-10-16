@@ -3,12 +3,14 @@ package application
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
-	domain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -25,43 +27,58 @@ import (
 // transaction, shared memberships are suspended by this coordinator. When a slot
 // frees, the oldest suspended shared memberships are reactivated.
 //
+// The suspension and the recovery leave the context as lifecycle events
+// (карта #734, #751): published in-transaction — the coordinator runs inside
+// the caller's transaction and has no post-commit point of its own, the same
+// shape the lifecycle emails it replaced had (issue #162, T6) — best-effort, a
+// publication failure is logged and never rolls the operation back.
+//
 // See issue #158 (T4) and PRD #153.
 type SlotCoordinator struct {
 	members    MembershipRepository
 	owners     PropertyOwnerResolver
 	limiter    RecipientLimiter
-	occupancy  OccupancyPort
 	ownedProps OwnedActivePropertiesPort
-	lifecycle  *LifecycleMailer
+	events     AccessEventPublisher
 	audit      auditapp.Recorder
 	db         txBeginner
+	clk        clock.Clock
+	logger     *slog.Logger
 }
 
 // NewSlotCoordinator creates a SlotCoordinator. The recorder and limiter are
 // expected to be transaction-aware (the coordinator binds them to the caller's
-// tx per operation). lifecycle is the sharing lifecycle mailer (issue #162,
-// T6); it may be nil to disable the lifecycle emails. The coordinator runs
-// inside the caller's transaction, so its emails are sent in-transaction: a
-// send failure is logged and never rolls the operation back.
+// tx per operation). Events is the lifecycle event publisher (карта #734,
+// #751); it may be nil to disable the publications. The clock stamps the
+// transition instants the publications' dedup keys carry; a nil logger
+// defaults to the standard one.
 func NewSlotCoordinator(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
 	limiter RecipientLimiter,
-	occupancy OccupancyPort,
 	ownedProps OwnedActivePropertiesPort,
-	lifecycle *LifecycleMailer,
+	events AccessEventPublisher,
 	audit auditapp.Recorder,
 	db txBeginner,
+	clk clock.Clock,
+	logger *slog.Logger,
 ) *SlotCoordinator {
+	if clk == nil {
+		clk = clock.Real{}
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &SlotCoordinator{
 		members:    members,
 		owners:     owners,
 		limiter:    limiter,
-		occupancy:  occupancy,
 		ownedProps: ownedProps,
-		lifecycle:  lifecycle,
+		events:     events,
 		audit:      audit,
 		db:         db,
+		clk:        clk,
+		logger:     logger,
 	}
 }
 
@@ -84,7 +101,7 @@ func NewSlotCoordinator(
 // suspends the excess shared memberships. Own objects are skipped here: they
 // are archived by the PropertyArchiver in the same transaction.
 //
-// trigger is a low-cardinality label recorded in the audit context (e.g.
+// Trigger is a low-cardinality label recorded in the audit context (e.g.
 // "downgrade", "grace_expired", "subscription_cancelled").
 func (c *SlotCoordinator) EnforceRecipientLimit(ctx context.Context, tx transaction.Tx, userID uuid.UUID, trigger string) error {
 	txMembers := c.members.WithTx(tx)
@@ -110,15 +127,45 @@ func (c *SlotCoordinator) EnforceRecipientLimit(ctx context.Context, tx transact
 	}
 
 	for recipientID := range recipients {
-		if err := c.enforceRecipient(ctx, tx, txMembers, txLimiter, recipientID, trigger); err != nil {
+		if _, err := c.enforceRecipient(ctx, tx, txMembers, txLimiter, recipientID, trigger); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// enforceRecipient rebuilds the full pool for one recipient and suspends excess
-// shared memberships.
+// EnforceRecipientPoolGrowth enforces the recipient tariff slot invariant after
+// the recipient's pool grew by one of their OWN objects re-entering it — the
+// unarchive of an own object (properties UnarchiveProperty) or the billing
+// grace restore (RestoreGraceArchivedProperties); the owner is never a
+// membership row of their own object, so the per-property entries never visit
+// them as a recipient. The full pool (own active properties + active shared
+// memberships across every owner) is recomputed and a pool strictly over the
+// limit is trimmed by the single eviction rule — the oldest shared memberships
+// are suspended, own candidates are never touched (unlike the billing
+// downgrade path there is no PropertyArchiver here, and the returning own
+// object is exactly what must stay). The suspended memberships are returned so
+// the caller can dispatch their realtime access pairs post-commit (the
+// unarchive path); the background grace restore deliberately drops them.
+// Already-suspended memberships sit outside the active pool, so a repeat call
+// is a no-op — and the fresh suspended_at of a newly suspended leg puts it at
+// the tail of the FIFO recovery queue (accepted side effect, D13: #1297,
+// #1300 Q1).
+func (c *SlotCoordinator) EnforceRecipientPoolGrowth(
+	ctx context.Context, tx transaction.Tx, recipientID uuid.UUID, trigger string,
+) ([]domain.Membership, error) {
+	txMembers := c.members.WithTx(tx)
+
+	txLimiter, err := c.limiter.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind limiter tx: %w", err)
+	}
+	return c.enforceRecipient(ctx, tx, txMembers, txLimiter, recipientID, trigger)
+}
+
+// enforceRecipient rebuilds the full pool for one recipient, suspends the
+// excess shared memberships and returns them — the legs the caller dispatches
+// as realtime access pairs.
 func (c *SlotCoordinator) enforceRecipient(
 	ctx context.Context,
 	tx transaction.Tx,
@@ -126,23 +173,23 @@ func (c *SlotCoordinator) enforceRecipient(
 	txLimiter RecipientLimiter,
 	recipientID uuid.UUID,
 	trigger string,
-) error {
+) ([]domain.Membership, error) {
 	txOwned, err := c.ownedProps.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind owned-props tx: %w", err)
+		return nil, fmt.Errorf("bind owned-props tx: %w", err)
 	}
 	pool, err := c.buildRecipientPool(ctx, txOwned, txMembers, recipientID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	limit, err := txLimiter.ActivePropertyLimit(ctx, recipientID)
 	if err != nil {
-		return fmt.Errorf("recipient limit: %w", err)
+		return nil, fmt.Errorf("recipient limit: %w", err)
 	}
 
+	var suspended []domain.Membership
 	toEvict := SelectForEviction(pool, limit)
-	suspended := make([]uuid.UUID, 0, len(toEvict))
 	for _, cand := range toEvict {
 		// Own objects are auto-archived by PropertyArchiver in the same tx; the
 		// coordinator only suspends shared memberships.
@@ -150,9 +197,15 @@ func (c *SlotCoordinator) enforceRecipient(
 			continue
 		}
 		if err := txMembers.Suspend(ctx, cand.MemberID, cand.PropertyID); err != nil {
-			return fmt.Errorf("suspend membership %s: %w", cand.MemberID, err)
+			return nil, fmt.Errorf("suspend membership %s: %w", cand.MemberID, err)
 		}
-		suspended = append(suspended, cand.PropertyID)
+		// The reloaded row is the leg the caller dispatches: it carries the
+		// suspended status and the fresh suspended_at the FIFO queue orders by.
+		leg, err := txMembers.GetByID(ctx, cand.MemberID, cand.PropertyID)
+		if err != nil {
+			return nil, fmt.Errorf("reload suspended membership %s: %w", cand.MemberID, err)
+		}
+		suspended = append(suspended, leg)
 		propertyID := cand.PropertyID
 		if err := c.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
@@ -160,19 +213,27 @@ func (c *SlotCoordinator) enforceRecipient(
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &cand.MemberID,
 			Context: map[string]any{
-				"trigger":     trigger,
-				"property_id": propertyID,
-				"user_id":     recipientID,
+				auditKeyTrigger:    trigger,
+				auditKeyPropertyID: propertyID,
+				auditKeyUserID:     recipientID,
 			},
 		}); err != nil {
-			return fmt.Errorf("record suspend audit: %w", err)
+			return nil, fmt.Errorf("record suspend audit: %w", err)
 		}
+		// The paused-access notification per suspended membership (карта #734,
+		// #751) — in-transaction, best-effort; the summary email this replaces
+		// had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_suspended", func() error {
+			return c.events.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: cand.MemberID,
+				PropertyID:   propertyID,
+				RecipientID:  recipientID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  c.clk.Now(),
+			})
+		})
 	}
-	// One summary email per recipient lists the memberships suspended by this
-	// call (issue #162, T6); it replaces the per-membership waiting email on
-	// the downgrade path.
-	c.lifecycle.SendDowngradeSummary(ctx, recipientID, suspended)
-	return nil
+	return suspended, nil
 }
 
 // EnforceOnActivation reports whether a new membership for recipientID must be
@@ -181,6 +242,26 @@ func (c *SlotCoordinator) enforceRecipient(
 // recipient's pool is already at or above the limit, so the new grant does not
 // displace an existing active object.
 func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) (bool, error) {
+	return c.poolAtOrAboveLimit(ctx, tx, recipientID)
+}
+
+// RecipientPoolFull reports whether the recipient's tariff pool (own active
+// properties plus active shared memberships across every owner) already
+// occupies every slot — used >= limit. It is the honest-refusal predicate of
+// the properties creation (D13, #1300 Q2): a full pool refuses the new object
+// with ErrLimitExceeded outright instead of silently suspending someone else's
+// active access — creation returns nothing, so there is nothing to displace.
+// The same predicate EnforceOnActivation asks for a new membership grant.
+func (c *SlotCoordinator) RecipientPoolFull(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) (bool, error) {
+	return c.poolAtOrAboveLimit(ctx, tx, recipientID)
+}
+
+// poolAtOrAboveLimit is the shared pre-growth predicate: no free slot exists
+// for anything new (a membership grant must be created suspended; a property
+// creation is refused).
+func (c *SlotCoordinator) poolAtOrAboveLimit(
+	ctx context.Context, tx transaction.Tx, recipientID uuid.UUID,
+) (bool, error) {
 	txMembers := c.members.WithTx(tx)
 
 	txLimiter, err := c.limiter.WithTx(tx)
@@ -191,6 +272,11 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 	if err != nil {
 		return false, fmt.Errorf("recipient limit: %w", err)
 	}
+	// The package convention (SelectForEviction): a negative limit is an
+	// unlimited tariff — the pool is never full, nothing is ever refused.
+	if limit < 0 {
+		return false, nil
+	}
 
 	txOwned, err := c.ownedProps.WithTx(tx)
 	if err != nil {
@@ -200,7 +286,7 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 	if err != nil {
 		return false, err
 	}
-	// used >= limit means there is no free slot for the new membership.
+	// Used >= limit means there is no free slot for what comes next.
 	return used >= limit, nil
 }
 
@@ -208,7 +294,12 @@ func (c *SlotCoordinator) EnforceOnActivation(ctx context.Context, tx transactio
 // properties plus active shared memberships) strictly exceeds the tariff
 // limit. Unlike EnforceOnActivation, the object under evaluation is already
 // part of the pool, so a pool exactly at the limit is not over.
-func (c *SlotCoordinator) poolOverLimit(ctx context.Context, tx transaction.Tx, txMembers MembershipRepository, recipientID uuid.UUID) (bool, error) {
+func (c *SlotCoordinator) poolOverLimit(
+	ctx context.Context,
+	tx transaction.Tx,
+	txMembers MembershipRepository,
+	recipientID uuid.UUID,
+) (bool, error) {
 	txLimiter, err := c.limiter.WithTx(tx)
 	if err != nil {
 		return false, fmt.Errorf("bind limiter tx: %w", err)
@@ -232,90 +323,98 @@ func (c *SlotCoordinator) poolOverLimit(ctx context.Context, tx transaction.Tx, 
 // RecoverSuspended reactivates the oldest suspended memberships of recipientID
 // when a slot has freed up. It is called whenever a recipient slot is released
 // (member revoke, self-exit, owner archive/delete) or expanded (recipient
-// upgrade). Reactivation is FIFO by the suspension moment.
-func (c *SlotCoordinator) RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) error {
+// upgrade). Reactivation is FIFO by the suspension moment. The reactivated
+// rows come back in FIFO order — the caller collects their access pairs for
+// the realtime dispatch (карта #714, #716; ADR 0062).
+func (c *SlotCoordinator) RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) ([]domain.Membership, error) {
 	return c.recoverSuspendedForRecipient(ctx, tx, recipientID)
 }
 
 // recoverSuspendedForRecipient is the shared recovery body, factored out so the
 // per-property variant can reuse it without re-resolving the limiter per
 // recipient.
-func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) error {
+func (c *SlotCoordinator) recoverSuspendedForRecipient(
+	ctx context.Context, tx transaction.Tx, recipientID uuid.UUID,
+) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	suspended, err := txMembers.ListSuspendedByUser(ctx, recipientID)
 	if err != nil {
-		return fmt.Errorf("list suspended memberships: %w", err)
+		return nil, fmt.Errorf("list suspended memberships: %w", err)
 	}
 	if len(suspended) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	txLimiter, err := c.limiter.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind limiter tx: %w", err)
+		return nil, fmt.Errorf("bind limiter tx: %w", err)
 	}
 	limit, err := txLimiter.ActivePropertyLimit(ctx, recipientID)
 	if err != nil {
-		return fmt.Errorf("recipient limit: %w", err)
+		return nil, fmt.Errorf("recipient limit: %w", err)
 	}
 
 	txOwned, err := c.ownedProps.WithTx(tx)
 	if err != nil {
-		return fmt.Errorf("bind owned-props tx: %w", err)
+		return nil, fmt.Errorf("bind owned-props tx: %w", err)
 	}
 
 	used, err := c.usedSlots(ctx, txOwned, txMembers, recipientID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	freeSlots := limit - used
 	if freeSlots <= 0 {
-		return nil
-	}
-
-	// Occupancy for recovery: group suspended memberships' properties by their
-	// data owner, fetch each owner's occupied set once, then merge.
-	occupied, err := collectSharedOccupancy(ctx, suspended, c.owners, c.occupancy)
-	if err != nil {
-		return fmt.Errorf("collect shared occupancy: %w", err)
+		return nil, nil
 	}
 
 	candidates := make([]SlotCandidate, 0, len(suspended))
 	for _, m := range suspended {
 		candidates = append(candidates, SlotCandidate{
-			PropertyID:   m.PropertyID,
-			IsShared:     true,
-			MemberID:     m.ID,
-			RecipientID:  recipientID,
-			HasOpenLease: occupied[m.PropertyID],
-			UpdatedAt:    m.UpdatedAt,
-			SuspendedAt:  deref(m.SuspendedAt),
+			PropertyID:  m.PropertyID,
+			IsShared:    true,
+			MemberID:    m.ID,
+			RecipientID: recipientID,
+			UpdatedAt:   m.UpdatedAt,
+			SuspendedAt: deref(m.SuspendedAt),
 		})
 	}
 
+	var recovered []domain.Membership
 	toRecover := SelectForRecovery(candidates, freeSlots)
 	for _, cand := range toRecover {
-		if _, err := txMembers.Reactivate(ctx, cand.MemberID, cand.PropertyID); err != nil {
-			return fmt.Errorf("reactivate membership %s: %w", cand.MemberID, err)
+		reactivated, err := txMembers.Reactivate(ctx, cand.MemberID, cand.PropertyID)
+		if err != nil {
+			return nil, fmt.Errorf("reactivate membership %s: %w", cand.MemberID, err)
 		}
+		recovered = append(recovered, reactivated)
 		if err := c.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
 			Action:     auditdomain.ActionPropertyMemberReactivated,
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &cand.MemberID,
 			Context: map[string]any{
-				"property_id": cand.PropertyID,
-				"user_id":     recipientID,
+				auditKeyPropertyID: cand.PropertyID,
+				auditKeyUserID:     recipientID,
 			},
 		}); err != nil {
-			return fmt.Errorf("record reactivate audit: %w", err)
+			return nil, fmt.Errorf("record reactivate audit: %w", err)
 		}
-		// The "access restored" email per reactivated membership (issue #162,
-		// T6); a send failure is logged inside the mailer.
-		c.lifecycle.SendAccessRestored(ctx, recipientID, cand.PropertyID)
+		// The restored-access notification per reactivated membership
+		// (карта #734, #751) — in-transaction, best-effort; the lifecycle
+		// email it replaces had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_resumed", func() error {
+			return c.events.PublishMembershipResumed(ctx, MembershipResumed{
+				MembershipID: cand.MemberID,
+				PropertyID:   cand.PropertyID,
+				RecipientID:  recipientID,
+				ActorID:      uuid.Nil,
+				ResumedAt:    c.clk.Now(),
+			})
+		})
 	}
-	return nil
+	return recovered, nil
 }
 
 // RecoverSuspendedForProperty reactivates the oldest suspended memberships of
@@ -324,23 +423,28 @@ func (c *SlotCoordinator) recoverSuspendedForRecipient(ctx context.Context, tx t
 // PropertyService (issue #158, T4): archiving/deleting the object freed one
 // slot for each recipient, so each recipient's suspended queue is recovered
 // FIFO in the same transaction.
-func (c *SlotCoordinator) RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error {
+func (c *SlotCoordinator) RecoverSuspendedForProperty(
+	ctx context.Context, tx transaction.Tx, propertyID uuid.UUID,
+) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	memberships, err := txMembers.ListByProperty(ctx, propertyID)
 	if err != nil {
-		return fmt.Errorf("list memberships by property: %w", err)
+		return nil, fmt.Errorf("list memberships by property: %w", err)
 	}
 	recipients := make(map[uuid.UUID]struct{}, len(memberships))
 	for _, m := range memberships {
 		recipients[m.UserID] = struct{}{}
 	}
+	var recovered []domain.Membership
 	for recipientID := range recipients {
-		if err := c.recoverSuspendedForRecipient(ctx, tx, recipientID); err != nil {
-			return err
+		recoveredForRecipient, err := c.recoverSuspendedForRecipient(ctx, tx, recipientID)
+		if err != nil {
+			return nil, err
 		}
+		recovered = append(recovered, recoveredForRecipient...)
 	}
-	return nil
+	return recovered, nil
 }
 
 // RecoverAfterPropertyDelete recovers the oldest suspended memberships of every
@@ -351,18 +455,20 @@ func (c *SlotCoordinator) RecoverSuspendedForProperty(ctx context.Context, tx tr
 // delete cascade then finds nothing to cascade). Dropping the membership first
 // is what frees the recipient's slot so the FIFO recovery sees it. See issue
 // #158 (T4).
-func (c *SlotCoordinator) RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error {
+func (c *SlotCoordinator) RecoverAfterPropertyDelete(
+	ctx context.Context, tx transaction.Tx, propertyID uuid.UUID,
+) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	memberships, err := txMembers.ListByProperty(ctx, propertyID)
 	if err != nil {
-		return fmt.Errorf("list memberships by property: %w", err)
+		return nil, fmt.Errorf("list memberships by property: %w", err)
 	}
 	// Drop every membership on this property first: the object is going away, so
 	// each recipient's slot is freed. The access context owns these rows.
 	for _, m := range memberships {
 		if err := txMembers.Delete(ctx, m.ID, propertyID); err != nil {
-			return fmt.Errorf("delete membership %s on property delete: %w", m.ID, err)
+			return nil, fmt.Errorf("delete membership %s on property delete: %w", m.ID, err)
 		}
 	}
 	// Now recover each recipient's oldest suspended membership FIFO.
@@ -370,12 +476,15 @@ func (c *SlotCoordinator) RecoverAfterPropertyDelete(ctx context.Context, tx tra
 	for _, m := range memberships {
 		recipients[m.UserID] = struct{}{}
 	}
+	var recovered []domain.Membership
 	for recipientID := range recipients {
-		if err := c.recoverSuspendedForRecipient(ctx, tx, recipientID); err != nil {
-			return err
+		recoveredForRecipient, err := c.recoverSuspendedForRecipient(ctx, tx, recipientID)
+		if err != nil {
+			return nil, err
 		}
+		recovered = append(recovered, recoveredForRecipient...)
 	}
-	return nil
+	return recovered, nil
 }
 
 // EnforceOnUnarchiveForProperty suspends memberships of recipients whose
@@ -385,14 +494,20 @@ func (c *SlotCoordinator) RecoverAfterPropertyDelete(ctx context.Context, tx tra
 // active and therefore counted, so it is suspended only when the pool is
 // strictly over the limit — a pool exactly at the limit still fits and the
 // membership stays active. This is the third source of suspended access after
-// activation without a slot and a billing limit drop (issue #158, T4).
-func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error {
+// activation without a slot and a billing limit drop (issue #158, T4). The
+// memberships it suspended are returned — the caller collects their access
+// pairs for the realtime dispatch the same way the recoveries do (карта
+// #714, #716; ADR 0062 §3).
+func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(
+	ctx context.Context, tx transaction.Tx, propertyID uuid.UUID,
+) ([]domain.Membership, error) {
 	txMembers := c.members.WithTx(tx)
 
 	memberships, err := txMembers.ListByProperty(ctx, propertyID)
 	if err != nil {
-		return fmt.Errorf("list memberships by property: %w", err)
+		return nil, fmt.Errorf("list memberships by property: %w", err)
 	}
+	var suspended []domain.Membership
 	for _, m := range memberships {
 		if m.IsSuspended() {
 			// Already suspended: leave it for FIFO recovery when a slot frees.
@@ -403,76 +518,78 @@ func (c *SlotCoordinator) EnforceOnUnarchiveForProperty(ctx context.Context, tx 
 		// pool strictly exceeds the limit.
 		over, err := c.poolOverLimit(ctx, tx, txMembers, m.UserID)
 		if err != nil {
-			return fmt.Errorf("check recipient slot on unarchive: %w", err)
+			return nil, fmt.Errorf("check recipient slot on unarchive: %w", err)
 		}
 		if !over {
 			continue
 		}
 		if err := txMembers.Suspend(ctx, m.ID, propertyID); err != nil {
-			return fmt.Errorf("suspend membership %s on unarchive: %w", m.ID, err)
+			return nil, fmt.Errorf("suspend membership %s on unarchive: %w", m.ID, err)
 		}
+		suspended = append(suspended, m)
 		if err := c.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
 			ActorRole:  auditdomain.ActorRoleSystem,
 			Action:     auditdomain.ActionPropertyMemberSuspended,
 			EntityType: auditdomain.EntityPropertyMember,
 			EntityID:   &m.ID,
 			Context: map[string]any{
-				"trigger":     "unarchive",
-				"property_id": propertyID,
-				"user_id":     m.UserID,
+				auditKeyTrigger:    "unarchive",
+				auditKeyPropertyID: propertyID,
+				auditKeyUserID:     m.UserID,
 			},
 		}); err != nil {
-			return fmt.Errorf("record suspend audit on unarchive: %w", err)
+			return nil, fmt.Errorf("record suspend audit on unarchive: %w", err)
 		}
-		// The "access waits for a free slot" email on the unarchive path
-		// (issue #162, T6); a send failure is logged inside the mailer.
-		c.lifecycle.SendAccessSuspended(ctx, m.UserID, propertyID)
+		// The paused-access notification on the unarchive path (карта #734,
+		// #751) — in-transaction, best-effort; the lifecycle email it
+		// replaces had the same shape (issue #162, T6).
+		publishAccessEvent(ctx, c.events, c.logger, "membership_suspended", func() error {
+			return c.events.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: m.ID,
+				PropertyID:   propertyID,
+				RecipientID:  m.UserID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  c.clk.Now(),
+			})
+		})
 	}
-	return nil
+	return suspended, nil
 }
 
 // buildRecipientPool assembles the recipient's full tariff pool: own active
 // properties (IsShared=false) plus all active shared memberships (IsShared=true)
-// across every owner, each annotated with whether it has an open lease. The pool
-// is the input to SelectForEviction.
-func (c *SlotCoordinator) buildRecipientPool(ctx context.Context, txOwned OwnedActivePropertiesPort, txMembers MembershipRepository, recipientID uuid.UUID) ([]SlotCandidate, error) {
+// across every owner. The pool is the input to SelectForEviction.
+func (c *SlotCoordinator) buildRecipientPool(
+	ctx context.Context,
+	txOwned OwnedActivePropertiesPort,
+	txMembers MembershipRepository,
+	recipientID uuid.UUID,
+) ([]SlotCandidate, error) {
 	// Own active properties.
 	owned, err := txOwned.ListActiveWithMeta(ctx, recipientID)
 	if err != nil {
 		return nil, fmt.Errorf("list owned active properties: %w", err)
 	}
-	ownOccupied, err := c.occupancy.OccupiedPropertyIDs(ctx, recipientID)
-	if err != nil {
-		return nil, fmt.Errorf("own occupancy: %w", err)
-	}
-
 	// Active shared memberships across all owners.
 	shared, err := txMembers.ListActiveByUser(ctx, recipientID)
 	if err != nil {
 		return nil, fmt.Errorf("list active shared memberships: %w", err)
 	}
-	sharedOccupied, err := collectSharedOccupancy(ctx, shared, c.owners, c.occupancy)
-	if err != nil {
-		return nil, fmt.Errorf("shared occupancy: %w", err)
-	}
-
 	pool := make([]SlotCandidate, 0, len(owned)+len(shared))
 	for _, p := range owned {
 		pool = append(pool, SlotCandidate{
-			PropertyID:   p.ID,
-			IsShared:     false,
-			HasOpenLease: ownOccupied[p.ID],
-			UpdatedAt:    p.UpdatedAt,
+			PropertyID: p.ID,
+			IsShared:   false,
+			UpdatedAt:  p.UpdatedAt,
 		})
 	}
 	for _, m := range shared {
 		pool = append(pool, SlotCandidate{
-			PropertyID:   m.PropertyID,
-			IsShared:     true,
-			MemberID:     m.ID,
-			RecipientID:  recipientID,
-			HasOpenLease: sharedOccupied[m.PropertyID],
-			UpdatedAt:    m.UpdatedAt,
+			PropertyID:  m.PropertyID,
+			IsShared:    true,
+			MemberID:    m.ID,
+			RecipientID: recipientID,
+			UpdatedAt:   m.UpdatedAt,
 		})
 	}
 	return pool, nil
@@ -480,7 +597,12 @@ func (c *SlotCoordinator) buildRecipientPool(ctx context.Context, txOwned OwnedA
 
 // usedSlots returns the number of tariff slots the recipient currently occupies:
 // own active properties plus active shared memberships.
-func (c *SlotCoordinator) usedSlots(ctx context.Context, txOwned OwnedActivePropertiesPort, txMembers MembershipRepository, recipientID uuid.UUID) (int, error) {
+func (c *SlotCoordinator) usedSlots(
+	ctx context.Context,
+	txOwned OwnedActivePropertiesPort,
+	txMembers MembershipRepository,
+	recipientID uuid.UUID,
+) (int, error) {
 	owned, err := txOwned.ListActiveWithMeta(ctx, recipientID)
 	if err != nil {
 		return 0, fmt.Errorf("list owned active properties: %w", err)
@@ -490,45 +612,6 @@ func (c *SlotCoordinator) usedSlots(ctx context.Context, txOwned OwnedActiveProp
 		return 0, fmt.Errorf("list active shared memberships: %w", err)
 	}
 	return len(owned) + len(shared), nil
-}
-
-// collectSharedOccupancy merges the open-lease state for a set of shared
-// memberships. Properties are grouped by their data owner (scope) and each
-// owner's occupied set is fetched once via the occupancy port, then merged into
-// a single property-id -> open-lease map. This avoids one occupancy round-trip
-// per membership when several memberships share a data owner.
-func collectSharedOccupancy(
-	ctx context.Context,
-	members []domain.Membership,
-	owners PropertyOwnerResolver,
-	occupancy OccupancyPort,
-) (map[uuid.UUID]bool, error) {
-	// Group property ids by their data owner.
-	byOwner := make(map[uuid.UUID]map[uuid.UUID]struct{})
-	for _, m := range members {
-		ownerID, err := owners.GetOwnerID(ctx, m.PropertyID)
-		if err != nil {
-			return nil, fmt.Errorf("resolve owner of property %s: %w", m.PropertyID, err)
-		}
-		set, ok := byOwner[ownerID]
-		if !ok {
-			set = make(map[uuid.UUID]struct{})
-			byOwner[ownerID] = set
-		}
-		set[m.PropertyID] = struct{}{}
-	}
-
-	merged := make(map[uuid.UUID]bool, len(members))
-	for ownerID, propSet := range byOwner {
-		occupied, err := occupancy.OccupiedPropertyIDs(ctx, ownerID)
-		if err != nil {
-			return nil, fmt.Errorf("occupancy of owner %s: %w", ownerID, err)
-		}
-		for pid := range propSet {
-			merged[pid] = occupied[pid]
-		}
-	}
-	return merged, nil
 }
 
 // deref returns *t, or the zero time when t is nil. A nil SuspendedAt is not

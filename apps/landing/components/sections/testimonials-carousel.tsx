@@ -1,0 +1,833 @@
+"use client";
+
+import Image, { type StaticImageData } from "next/image";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { TabletStrip } from "@/components/tablet-strip";
+import reviewAvatar1 from "@/assets/sections/review-avatar-1.webp";
+import reviewAvatar2 from "@/assets/sections/review-avatar-2.webp";
+import reviewAvatar3 from "@/assets/sections/review-avatar-3.webp";
+import reviewAvatar4 from "@/assets/sections/review-avatar-4.webp";
+import reviewAvatar5 from "@/assets/sections/review-avatar-5.webp";
+import slide1 from "@/assets/sections/slide-1.webp";
+import slide2 from "@/assets/sections/slide-2.webp";
+import slide3 from "@/assets/sections/slide-3.webp";
+import slide4 from "@/assets/sections/slide-4.webp";
+import slide5 from "@/assets/sections/slide-5.webp";
+
+// Карусель «Опыт пользователей», два вида:
+// — планшет/мобайл (TestimonialsCarousel) — кадры 3005-78161/3008-79240:
+//   5 отзыв-карточек 320×500 (r32, фото на фоне, тёмная стеклянная плашка
+//   снизу: цитата 20/24 Medium + автор — аватар 44, имя 16/20, подпись
+//   14/18 white/70), зазор 12, поле 24; на мобилке (≤480) цитаты
+//   сокращены редакторски (в макете на узлах стоит аннотация «Сократил
+//   текст») — поле quoteShort;
+// — десктоп (TestimonialsDesktop) — кадр 2967:75932: слева отзыв активной
+//   карточки (колонка 472px: цитата 36/40 + аватар 64 + имя 20/24 +
+//   подпись 18/22), справа лента голых фото в контейнере с жёстким
+//   обрезом под 3 слота (978px): активная 338×450 (растёт вправо от
+//   левой линии — origin-left), соседние 300×400 (зазор 20, r40).
+//
+// Механика — точная копия секции «Опыт наших партнёров»
+// pay.yandex.ru/business (решение владельца): управление ТОЛЬКО кликом по
+// видимой карточке на всех ярусах (мышь не тянет, колесо и тач не скроллят
+// ленту); клик по соседней сдвигает на 1, клик через одну и дальше —
+// прыжок сразу на цель одной анимацией; переход 360ms ease-out: входящая
+// едет на место активной, дорастая и проявляясь 0.4→1, бывшая активная
+// растворяется на месте (сжатие до 0.6, прозрачность в ноль — у Яндекса
+// её translateX равен 0 на каждом кадре при любом прыжке), соседние
+// приглушены до 0.4; лента бесконечная (после последней снова первая),
+// текст левой колонки меняется мгновенно, автоплея/стрелок/точек нет.
+//
+// Реализация: нативного скролла нет — карточки absolute, каждый слайд
+// несёт свой transform по кольцевой позиции относительно активного
+// (rel = (i − active + N) mod N): rel 0 — активная, rel N−1 — «стопка»
+// растворённых на месте активной, остальные — очередь справа. Слайд,
+// выходящий из стопки в очередь, переезжает без анимации transform
+// (утилита slide-jump, как loop-перестановка Яндекса) — иначе он
+// перелетал бы весь экран на виду; проявление 0→0.4 при этом остаётся
+// плавным. Все состояния слайда — один div-узел: смена тега (button↔div)
+// пересоздавала бы узел и рвала CSS-transition (поймано приёмкой).
+type Review = {
+  quote: string;
+  quoteShort?: string;
+  name: string;
+  sub: string;
+  avatar: StaticImageData;
+  photo: StaticImageData;
+  alt: string;
+};
+
+const REVIEWS: Review[] = [
+  {
+    quote: "Приложение заменило мне заметки и Excel",
+    name: "Дмитрий",
+    sub: "Сдает квартиру уже второй год",
+    avatar: reviewAvatar1,
+    photo: slide1,
+    alt: "Гостиная квартиры в приложении Рентли",
+  },
+  {
+    quote:
+      "Вижу, сколько заработала и сколько потратила. Наконец понимаю свои расходы",
+    quoteShort: "Вижу, сколько заработала и сколько потратила",
+    name: "Елена",
+    sub: "Сдает квартиру в ипотеку",
+    avatar: reviewAvatar2,
+    photo: slide2,
+    alt: "Кухня в приложении Рентли",
+  },
+  {
+    quote:
+      "Три студии, и я ничего не путаю. Даты, деньги и контакты всегда под рукой",
+    quoteShort: "Три студии, и я ничего не путаю",
+    name: "Анна",
+    sub: "Сдает три студии в Москве",
+    avatar: reviewAvatar3,
+    photo: slide3,
+    alt: "Спальня в приложении Рентли",
+  },
+  {
+    quote:
+      "Четыре арендатора, вижу, кто заплатил, а кто нет. Все договоры и платежи под рукой",
+    quoteShort: "Четыре арендатора, вижу, кто заплатил, а кто нет",
+    name: "Алексей",
+    sub: "Управляет помещениями в новом ЖК",
+    avatar: reviewAvatar4,
+    photo: slide4,
+    alt: "Комната с панорамными окнами в приложении Рентли",
+  },
+  {
+    quote: "Сдаю комнаты. Теперь не путаю, кто платил, а кому пора напомнить",
+    quoteShort: "Сдаю комнаты. Теперь не путаю, кто платил",
+    name: "Марина",
+    sub: "Сдает комнаты в трехкомнатной квартире в Екатеринбурге",
+    avatar: reviewAvatar5,
+    photo: slide5,
+    alt: "Кухня с обеденной зоной в приложении Рентли",
+  },
+];
+
+const COUNT = REVIEWS.length;
+
+// Десктоп плавнее тача (решение владельца): 440ms и мягкий вход/выход —
+// утилиты в globals.css (reduce внутри них, тайминг-функция в arbitrary
+// классах ненадёжна — Tailwind съедает часть значения).
+const DESK_TRANSITION_CLASS = "slide-desk";
+const DESK_JUMP_TRANSITION_CLASS = "slide-jump-desk";
+// Заморозка растворения держится чуть дольше перехода (растворение должно
+// доиграть до конца, невидимая перестановка — после).
+const DESK_FREEZE_MS = 480;
+// Растворение уходящей карточки: сжатие до 0.6 в ноль (у Яндекса ушедший
+// слайд оседает на 0.6 под наезжающим активным).
+const RECESSED_SCALE = 0.6;
+// Приглушение соседей в очереди (у Яндекса 0.4).
+const IDLE_OPACITY = 0.4;
+
+// Хук клик-карусели: активный индекс + кольцевая позиция каждого слайда
+// и флаг прыжка (выход из стопки в очередь). Предыдущий активный хранится
+// рядом с текущим (одним state) — прыжок считается на рендере без ref-ов.
+// frozen — индекс бывшей активной карточки при прыжке дальше соседней:
+// она растворяется НА МЕСТЕ (у Яндекса translateX бывшей активной равен 0
+// на каждом кадре, двигаются только scale и opacity), а по завершении
+// перехода невидимо переставляется за обрез; таймер хранится в ref —
+// мутации только в обработчике клика, не на рендере.
+function useClickCarousel(count: number, freezeMs: number) {
+  const [active, setActiveState] = useState({ index: 0, previous: 0 });
+  const [frozen, setFrozen] = useState<number | null>(null);
+  // Слайды, только что вышедшие из заморозки: их перестановка на конечную
+  // позицию (за обрез) обязана быть мгновенной — с обычным transition они
+  // уползают через видимую зону с растущей прозрачностью (поймано приёмкой
+  // прыжка «через одну»). Массив, не скаляр: перезапись заморозки новым
+  // дальним кликом выпускает прежнюю замороженную, пока таймер первой ещё
+  // идёт (два дальних клика подряд в окне freezeMs).
+  const [thawed, setThawed] = useState<number[]>([]);
+  const frozenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (frozenTimer.current) {
+        clearTimeout(frozenTimer.current);
+      }
+    },
+    [],
+  );
+
+  const setActive = (index: number) => {
+    const k = (index - active.index + count) % count;
+    // Выходящая из заморозки карточка (истёкший таймер, ближний клик или
+    // перезапись дальним) прыгает на своё место покоя без анимации
+    // transform — она стоит в стопке и двигаться должна незаметно.
+    const released = frozen !== null ? [frozen] : [];
+    if (k >= 2) {
+      setFrozen(active.index);
+      setThawed(released);
+      if (frozenTimer.current) {
+        clearTimeout(frozenTimer.current);
+      }
+      frozenTimer.current = setTimeout(() => {
+        setFrozen(null);
+        setThawed([active.index]);
+      }, freezeMs);
+    } else {
+      setFrozen(null);
+      setThawed(released);
+    }
+    setActiveState((prev) => ({ index, previous: prev.index }));
+  };
+
+  const relOf = (index: number, of: number) => (index - of + count) % count;
+  const stateOf = (index: number) => ({
+    rel: relOf(index, active.index),
+    jumping: relOf(index, active.previous) === count - 1 || thawed.includes(index),
+    frozen: index === frozen,
+  });
+
+  return { active: active.index, setActive, stateOf };
+}
+
+function slideStyle(
+  rel: number,
+  step: number,
+  extra: number,
+  activeScale: string,
+  frozen: boolean,
+): React.CSSProperties {
+  // Растворение бывшей активной на месте: позиция покоя заморожена,
+  // сжатие и гашение анимируются обычным transition (translateX не
+  // меняется — карточка не перелетает, см. useClickCarousel).
+  if (frozen) {
+    return {
+      transform: `translateX(0px) scale(${RECESSED_SCALE})`,
+      opacity: 0,
+      zIndex: -1,
+    };
+  }
+  if (rel === 0) {
+    return { transform: `translateX(0px) scale(${activeScale})`, opacity: 1, zIndex: 5 };
+  }
+  if (rel === COUNT - 1) {
+    return {
+      transform: `translateX(0px) scale(${RECESSED_SCALE})`,
+      opacity: 0,
+      zIndex: -1,
+    };
+  }
+  return {
+    transform: `translateX(${rel * step + extra}px) scale(1)`,
+    opacity: IDLE_OPACITY,
+    zIndex: 0,
+  };
+}
+
+// Кликабельная карточка — div с ролью кнопки: тег обязан быть одним во
+// всех состояниях (см. шапку файла), а phrasing-ограничение <button>
+// не пускает внутрь blockquote.
+function onSlideKeydown(
+  setActive: (index: number) => void,
+  index: number,
+): React.KeyboardEventHandler<HTMLDivElement> {
+  return (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setActive(index);
+    }
+  };
+}
+
+// ---- Планшет/мобайл: разводка ярусов ----
+
+// Стеклянная плашка отзыва — общая для обоих тач-ярусов. Разводка цитат
+// внутри: на мобилке (≤480) активна короткая (tab:hidden), на планшете —
+// полная (tab:block).
+function ReviewPlate({ review }: { review: Review }) {
+  return (
+    <div className="glass-plate absolute inset-x-2 bottom-2 flex flex-col gap-4 rounded-[24px] bg-black/[0.24] p-6 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] backdrop-blur-[16px]">
+      {review.quoteShort ? (
+        <>
+          <blockquote className="hidden text-m font-medium leading-6 text-white tab:block">
+            {review.quote}
+          </blockquote>
+          <blockquote className="text-m font-medium leading-6 text-white tab:hidden">
+            {review.quoteShort}
+          </blockquote>
+        </>
+      ) : (
+        <blockquote className="text-m font-medium leading-6 text-white">
+          {review.quote}
+        </blockquote>
+      )}
+      <div className="flex items-center gap-3">
+        {/* eager: нативный lazy Chromium не стартует на паре аватаров
+            очереди/стопки (поймано приёмкой) — вес после оптимизатора
+            ~1-2KB на голову, нечего ленить */}
+        <Image
+          src={review.avatar}
+          alt={review.name}
+          width={44}
+          height={44}
+          loading="eager"
+          className="size-11 rounded-full object-cover"
+        />
+        <div className="flex flex-col gap-0.5">
+          <p className="text-s leading-5 text-white">{review.name}</p>
+          <p className="max-w-[180px] text-xs leading-[18px] text-white/70">
+            {review.sub}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Планшет (481–1199): полоса на движке лент — логика «Для кого сервис» /
+// «Организуйте дела» (решение владельца): полные равные карточки без
+// «активной» и приглушения, движение — drag 1:1 пальцем и
+// трекпад/Shift+Scroll (шаг), мышь не тянет, снап, флик, резинка; тап по
+// карточке ничего не делает.
+function TestimonialsStripCard({ review }: { review: Review }) {
+  return (
+    <figure className="relative h-[500px] w-[320px] shrink-0 overflow-hidden rounded-[32px]">
+      <Image
+        src={review.photo}
+        alt={review.alt}
+        fill
+        sizes="320px"
+        className="object-cover"
+      />
+      <ReviewPlate review={review} />
+    </figure>
+  );
+}
+
+// ≤480 и SSR-снапшот: лента по образцу мобильной версии блока «Опыт
+// наших партнёров» pay.yandex.ru/business (вторая пересъёмка живыми
+// жестами 390 с покадровыми трассами). Геометрия: активная карточка ПО
+// ЦЕНТРУ (scale 1), полосы прошедшей и следующей вплотную с заметным
+// контрастом — у Яндекса активная 330×540 против соседа 299×488 (0.906),
+// у нас сосед scale 0.905; дальние лесенкой за краями (±2 шага, scale
+// 0.81), зеркало симметрично; приглушения нет — все видимые непрозрачны.
+// Ряд живёт в НЕПРЕРЫВНОЙ перспективе: во время свайпа каждая карточка
+// сама едет и масштабируется по своему дробному прогрессу q (позиция
+// q·шаг, масштаб 1 − 0.095·|q|) — активная сжимается по ходу жеста,
+// полоса растёт к единице уже под пальцем, у Яндекса так же (дальние у
+// них едут медленнее ближних — на наших ширинах ≤480 глубже полос не
+// видно, параллакс не воспроизводим). Отпускание — CSS-переход 600ms
+// ease (их доезд ~600ms ease-out), позиции и масштабы доезжают вместе.
+// Кольцо: мгновенная перестановка — ТОЛЬКО между «за краями» позициями
+// ±2 (обе невидимы на любой ширине ≤480); все видимые пути анимируются:
+// полоса уезжает за край, новая выезжает из-за края (баг «картинка слева
+// просто пропадает» был от того, что обе дальние стояли справа и левая
+// полоса телепортировалась прыжком). Управление: свайп 1:1 за пальцем
+// (старт после 5px), снап по порогу 160px или флику 0.5px/ms; медленный
+// недотянутый свайп — отскок (у Яндекса так же); горизонтальное
+// колесо/трекпад — шаг (нативный addEventListener passive:false — React
+// onWheel пассивен, preventDefault кидал ошибку консоли); тап по
+// полоске — шаг (левая назад, правая вперёд); вертикальный тач остаётся
+// скроллом страницы (touch-action: pan-y); лента бесконечная. Переход
+// перебиваем (канон DESIGN.md §3): захват в полёте подхватывает ленту
+// с живой интерполированной позиции, тап по полоске и колесо в полёте
+// перецеливают переход с неё же.
+// Шаг ленты подобран под полоску соседа Яндекса (30px на 390): при
+// scale 0.905 видимая полуширина карточки 144.8, край активной на
+// +160 — шаг 310 = 160 + 144.8 + 5.2 зазора даёт ту же 30px полосу.
+const MOB_STEP = 310;
+// Слой (will-change) на слайдах держится только на время перехода/жеста:
+// постоянные слои — 10 фотокарточек на страницу впустую (5 мобайл + 5
+// десктоп), память на дешёвых телефонах.
+const MOB_LAYER_MS = 620;
+const MOB_DRAG_ACTIVATE_PX = 5;
+// Порог долгого свайпа — половина слайда (longSwipes Яндекса).
+const MOB_LONG_SWIPE_PX = 160;
+// Порог флика по скорости пальца (shortSwipes).
+const MOB_FLICK_V = 0.5;
+
+// Непрерывный кольцевой прогресс слайда index при позиции ленты g:
+// g — активный индекс в покое, дробный во время свайпа (active −
+// dx/шаг). q: 0 — центр, +1 — правая полоса, −1 — левая, ±2 — дальние;
+// период COUNT, диапазон [−COUNT/2, COUNT/2). Функции на уровне модуля:
+// вызовы в рендере — реак-хук react-hooks/refs консервативно запрещает
+// вызовы компонентных функций с ref-доступом.
+function mobQOf(index: number, g: number): number {
+  let q = (((index - g) % COUNT) + COUNT) % COUNT;
+  if (q > COUNT / 2) {
+    q -= COUNT;
+  }
+  return q;
+}
+
+// Масштаб по прогрессу: сосед 0.905 — замер Яндекса (контраст активной
+// и полосы виден глазом), дальние 0.81.
+function mobScaleOf(q: number): number {
+  return 1 - 0.095 * Math.min(Math.abs(q), 2);
+}
+
+const mobTransformOf = (q: number): string =>
+  `translateX(${q * MOB_STEP}px) scale(${mobScaleOf(q)})`;
+
+// Позиция и флаг мгновенной перестановки. Прыжок — только «за левым
+// дальним ↔ за правым дальним» (Δq 4, обе позиции за краями): иначе
+// слайд перелетал бы видимый центр. Всё видимое анимируется.
+function mobStateOf(index: number, activeIndex: number, previous: number) {
+  const q = mobQOf(index, activeIndex);
+  const oldQ = mobQOf(index, previous);
+  const jumping = Math.abs(q - oldQ) > 1.5;
+  return { q, jumping };
+}
+
+function TestimonialsMobileCarousel() {
+  const [active, setActiveState] = useState({ index: 0, previous: 0 });
+  // Мосты для нативного wheel-листенера (React вешает wheel пассивным —
+  // preventDefault внутри onWheel JSX невозможен и кидает ошибку консоли).
+  const activeRef = useRef(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{
+    id: number;
+    startX: number;
+    // g на момент захвата: захват в полёте подхватывает ленту с живой
+    // интерполированной позиции (дробной), а не с реставра покоя.
+    g0: number;
+    lastX: number;
+    lastT: number;
+    v: number;
+    moved: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    activeRef.current = active.index;
+  }, [active.index]);
+
+  // Слой (will-change) на слайдах живёт только на время перехода/жеста:
+  // постоянный will-change держит 5 фотослоёв впустую. Съём таймером с
+  // запасом к 600ms перехода; длинный жест перезаводит таймер на каждом
+  // move. Повторный armLayers без записи стиля, если слой уже навешен.
+  const layerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Только refs внутри — useCallback([]) держит ссылку стабильной для goTo.
+  const armLayers = useCallback(() => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+    for (const el of root.querySelectorAll<HTMLElement>("[data-mob-slide]")) {
+      if (el.style.willChange !== "transform") {
+        el.style.willChange = "transform";
+      }
+    }
+    if (layerTimer.current) {
+      clearTimeout(layerTimer.current);
+    }
+    layerTimer.current = setTimeout(() => {
+      layerTimer.current = null;
+      for (const el of root.querySelectorAll<HTMLElement>("[data-mob-slide]")) {
+        el.style.willChange = "";
+      }
+    }, MOB_LAYER_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (layerTimer.current) {
+        clearTimeout(layerTimer.current);
+      }
+    },
+    [],
+  );
+
+  const goTo = useCallback((index: number) => {
+    armLayers();
+    const next = ((index % COUNT) + COUNT) % COUNT;
+    setActiveState((prev) => ({ index: next, previous: prev.index }));
+  }, [armLayers]);
+  const goToRef = useRef<(index: number) => void>(() => {});
+  useEffect(() => {
+    goToRef.current = goTo;
+  }, [goTo]);
+  // Трекпад/горизонтальное колесо — шаг (пассивный React-листенер не
+  // может preventDefault: гориз. свайп трекпада уводил бы в историю).
+  // В полёте шаг перебивает переход с текущей позиции (канон DESIGN.md §3).
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) {
+      return;
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) < 40) {
+        return;
+      }
+      event.preventDefault();
+      goToRef.current(activeRef.current + (event.deltaX > 0 ? 1 : -1));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, []);
+
+  // Непрерывная перспектива свайпа: каждая карточка получает transform по
+  // своему дробному прогрессу, инлайново мимо React — рендеров во время
+  // жеста нет, а конечные значения приходят с goTo-рендером (новые props
+  // перезаписывают инлайновые мутации). frozen гасит CSS-переход, иначе
+  // инлайновые обновления отставали бы на 600ms ease.
+  const applyG = (g: number, frozen: boolean) => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+    for (const el of root.querySelectorAll<HTMLElement>("[data-mob-slide]")) {
+      const q = mobQOf(Number(el.dataset.mobSlide), g);
+      if (frozen) {
+        el.style.transition = "none";
+      }
+      el.style.transform = mobTransformOf(q);
+    }
+  };
+
+  // Живой (интерполированный переходом) кольцевой прогресс ленты: q_any
+  // слайда читается из его текущего transform — захват в полёте продолжает
+  // с той позиции, где лента сейчас, а не с рестава покоя.
+  const liveG = (): number => {
+    const root = rootRef.current;
+    const index = activeRef.current;
+    const el = root?.querySelector<HTMLElement>(`[data-mob-slide="${index}"]`);
+    if (!el) {
+      return index;
+    }
+    const matrix = new DOMMatrix(getComputedStyle(el).transform);
+    return index - matrix.m41 / MOB_STEP;
+  };
+
+  const onPointerDown = (event: React.PointerEvent) => {
+    if (event.pointerType === "mouse") {
+      return;
+    }
+    armLayers();
+    drag.current = {
+      id: event.pointerId,
+      startX: event.clientX,
+      g0: liveG(),
+      lastX: event.clientX,
+      lastT: event.timeStamp,
+      v: 0,
+      moved: false,
+    };
+  };
+
+  const onPointerMove = (event: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || event.pointerId !== d.id) {
+      return;
+    }
+    armLayers(); // длинный жест переживает таймер слоя — перезаводим
+    const dx = event.clientX - d.startX;
+    if (!d.moved) {
+      if (Math.abs(dx) < MOB_DRAG_ACTIVATE_PX) {
+        return;
+      }
+      d.moved = true;
+      rootRef.current?.setPointerCapture(event.pointerId);
+    }
+    d.v = (event.clientX - d.lastX) / Math.max(1, event.timeStamp - d.lastT);
+    d.lastX = event.clientX;
+    d.lastT = event.timeStamp;
+    // Палец вправо — лента к предыдущей (g убывает), влево — к следующей.
+    applyG(d.g0 - dx / MOB_STEP, true);
+  };
+
+  // Возврат к покою: инлайновый transition:none снимается (возвращается
+  // класс slide-mob), конечные transform'ы ставит goTo-рендер, при
+  // отскоке — здесь (рендера не будет, инлайновые драг-мутации иначе
+  // остались бы).
+  const settle = () => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+    for (const el of root.querySelectorAll<HTMLElement>("[data-mob-slide]")) {
+      el.style.transition = "";
+      el.style.transform = mobTransformOf(
+        mobQOf(Number(el.dataset.mobSlide), activeRef.current),
+      );
+    }
+  };
+
+  const endDrag = (event: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || event.pointerId !== d.id) {
+      return;
+    }
+    drag.current = null;
+    if (!d.moved) {
+      return;
+    }
+    // База решения — ближайшая к живой позиции покой (в полёте она бывает
+    // и не та, с которой стартовал жест); бросок и долгий свайп двигают
+    // на одну от неё.
+    const gNow = d.g0 - (event.clientX - d.startX) / MOB_STEP;
+    let target = Math.round(gNow);
+    const delta = event.clientX - d.startX;
+    if (delta <= -MOB_LONG_SWIPE_PX || d.v <= -MOB_FLICK_V) {
+      target = Math.round(gNow) + 1;
+    } else if (delta >= MOB_LONG_SWIPE_PX || d.v >= MOB_FLICK_V) {
+      target = Math.round(gNow) - 1;
+    }
+    target = ((target % COUNT) + COUNT) % COUNT;
+    // Инлайновые transition:none снимаются до setState: конечные
+    // transform'ы доезжают переходом с той позиции, где палец отпустил.
+    settle();
+    if (target !== activeRef.current) {
+      goTo(target);
+    }
+  };
+
+  return (
+    <div
+      ref={rootRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      className="relative h-[500px] w-full touch-pan-y select-none"
+    >
+      <MobileSlides activeIndex={active.index} previous={active.previous} goTo={goTo} />
+    </div>
+  );
+}
+
+// Рендер слайдов мобильной ленты — отдельный компонент без ref-доступов:
+// react-hooks/refs консервативно запрещает вызовы компонентных функций
+// из рендер-выражений (goTo тянет animTimer.current).
+function MobileSlides({
+  activeIndex,
+  previous,
+  goTo,
+}: {
+  activeIndex: number;
+  previous: number;
+  goTo: (index: number) => void;
+}) {
+  return REVIEWS.map((review, index) => {
+    const { q, jumping } = mobStateOf(index, activeIndex, previous);
+    const transition = jumping ? "slide-jump" : "slide-mob";
+    const className = `absolute left-1/2 top-0 -ml-[160px] h-[500px] w-[320px] overflow-hidden rounded-[32px] ${transition}`;
+    const style: React.CSSProperties = {
+      transform: mobTransformOf(q),
+      zIndex: q === 0 ? 2 : Math.abs(q) === 1 ? 1 : 0,
+    };
+    const slide = (
+      <>
+        <Image
+          src={review.photo}
+          alt={review.alt}
+          fill
+          sizes="320px"
+          className="object-cover"
+        />
+        <ReviewPlate review={review} />
+      </>
+    );
+
+    // Тапабельны обе видимые полоски (у Яндекса slideToClickedSlide по
+    // любому видимому слайду): правая — вперёд, левая — назад.
+    if (Math.abs(q) !== 1) {
+      return (
+        <div
+          key={review.name}
+          data-mob-slide={index}
+          aria-hidden={q !== 0}
+          className={className}
+          style={style}
+        >
+          {slide}
+        </div>
+      );
+    }
+    return (
+      <div
+        key={review.name}
+        data-mob-slide={index}
+        role="button"
+        tabIndex={0}
+        onClick={() => goTo(index)}
+        onKeyDown={onSlideKeydown(() => goTo(index), index)}
+        aria-label={`Показать отзыв — ${review.name}`}
+        className={`${className} cursor-pointer`}
+        style={style}
+      >
+        {slide}
+      </div>
+    );
+  });
+}
+
+export function TestimonialsCarousel() {
+  return (
+    // Полоса планшета во всю ширину окна: карточки — прямые дети дорожки
+    // (движок меряет шаг 332 и стрип по ним), поле 24px и зазор 12 даёт
+    // tablet-strip.module.css; мобилке достаётся своя лента — поля у неё
+    // нет (активная центрируется), обёртке они не нужны (иначе на
+    // мобилке поле удваивается).
+    <TabletStrip
+      stripWidth={1648}
+      activeChildren={REVIEWS.map((review) => (
+        <TestimonialsStripCard key={review.name} review={review} />
+      ))}
+    >
+      <TestimonialsMobileCarousel />
+    </TabletStrip>
+  );
+}
+
+// ---- Десктоп: отзыв слева + лента фото справа ----
+
+// Активная карточка дорастает до 338×450 трансформом от базы 300×400
+// (338/300 и 450/400 — два аргумента scale(), строка покоя ниже
+// округлена до 4 знаков).
+const ACTIVE_SCALE = "1.1267, 1.125";
+// Шаг очереди 320 = малая карточка 300 + зазор 20.
+const DESK_STEP = 320;
+// Добор позиции очереди: активная дорастает до 338 при базе 300 (рост
+// вправо — origin-left), соседи стоят на 38 дальше линии шага — зазор 20
+// сохраняется.
+const DESK_EXTRA = 38;
+
+export function TestimonialsDesktop() {
+  const { active, setActive, stateOf } = useClickCarousel(COUNT, DESK_FREEZE_MS);
+  // Слои — как в моб-канве: навешиваются на переход, снимаются таймером
+  // (чуть длиннее растворения — DESK_FREEZE_MS и так с запасом к 440ms).
+  const stripRef = useRef<HTMLDivElement>(null);
+  const layerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (layerTimer.current) {
+        clearTimeout(layerTimer.current);
+      }
+    },
+    [],
+  );
+  const activate = (index: number) => {
+    const root = stripRef.current;
+    if (root) {
+      for (const el of root.querySelectorAll<HTMLElement>("[data-desk-slide]")) {
+        if (el.style.willChange !== "transform, opacity") {
+          el.style.willChange = "transform, opacity";
+        }
+      }
+      if (layerTimer.current) {
+        clearTimeout(layerTimer.current);
+      }
+      layerTimer.current = setTimeout(() => {
+        layerTimer.current = null;
+        for (const el of root.querySelectorAll<HTMLElement>("[data-desk-slide]")) {
+          el.style.willChange = "";
+        }
+      }, DESK_FREEZE_MS);
+    }
+    setActive(index);
+  };
+  const review = REVIEWS[active];
+  if (!review) {
+    return null;
+  }
+
+  return (
+    <div className="flex gap-14">
+      {/* Отзыв активной карточки меняется мгновенно — как у Яндекса. */}
+      <div className="w-[472px] shrink-0">
+        <blockquote className="text-h3 font-medium leading-10">
+          {review.quote}
+        </blockquote>
+        <div className="mt-8 flex items-center gap-4">
+          <Image
+            src={review.avatar}
+            alt={review.name}
+            width={64}
+            height={64}
+            loading="eager"
+            className="size-16 rounded-[100px] object-cover"
+          />
+          <div className="flex flex-col gap-2">
+            <p className="text-m font-medium leading-6">{review.name}</p>
+            <p className="text-r text-gray-2">{review.sub}</p>
+          </div>
+        </div>
+      </div>
+      {/* Лента — контейнер с жёстким обрезом ровно под 3 слота (активная
+          338 + зазор 20 + две по 300 + зазоры 20 = 978), как у Яндекса
+          (их .swiper-container overflow:hidden шириной 760 при любой
+          ширине окна): видно всегда максимум 3 карточки, правее — пустота
+          до края окна; на узких окнах раньше режет край окна. Высота 450 —
+          высота ряда по макету: активное фото в полный рост 450, соседние
+          400 по центру (top 25 = половина разницы). overflow-clip, не
+          hidden: hidden делает ленту скролл-контейнером — программный
+          scrollIntoView (клик по обрезанной карточке) сдвигает ряд. */}
+      <div ref={stripRef} className="relative h-[450px] w-[978px] shrink-0 overflow-clip">
+        <DesktopSlides stateOf={stateOf} activate={activate} />
+      </div>
+    </div>
+  );
+}
+
+// Слайды десктопной ленты — отдельный компонент без ref-доступов:
+// react-hooks/refs консервативно запрещает вызовы компонентных функций
+// в render-выражениях компонента с ref-доступом (тот же развод, что у
+// MobileSlides выше).
+function DesktopSlides({
+  stateOf,
+  activate,
+}: {
+  stateOf: (index: number) => { rel: number; jumping: boolean; frozen: boolean };
+  activate: (index: number) => void;
+}) {
+  return REVIEWS.map((item, index) => {
+    const { rel, jumping, frozen } = stateOf(index);
+    const transition = jumping
+      ? DESK_JUMP_TRANSITION_CLASS
+      : DESK_TRANSITION_CLASS;
+    const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition}`;
+    const style = slideStyle(rel, DESK_STEP, DESK_EXTRA, ACTIVE_SCALE, frozen);
+    // Кликабельны только видимые позиции — очередь №1 и №2 (№3 за
+    // обрезом; у Яндекса за срезом тоже никто не кликает).
+    const interactive = (rel === 1 || rel === 2) && !frozen;
+    const photo = (
+      <Image
+        src={item.photo}
+        alt={rel === COUNT - 1 ? "" : item.alt}
+        fill
+        sizes="338px"
+        className="object-cover"
+      />
+    );
+
+    if (rel === COUNT - 1 || frozen) {
+      return (
+        <div
+          key={item.name}
+          aria-hidden
+          className={`${className} pointer-events-none`}
+          style={style}
+        >
+          {photo}
+        </div>
+      );
+    }
+    if (interactive) {
+      return (
+        <div
+          key={item.name}
+          data-desk-slide={index}
+          role="button"
+          tabIndex={0}
+          onClick={() => activate(index)}
+          onKeyDown={onSlideKeydown(activate, index)}
+          aria-label={`Показать отзыв — ${item.name}`}
+          className={`${className} cursor-pointer`}
+          style={style}
+        >
+          {photo}
+        </div>
+      );
+    }
+    return (
+      <div key={item.name} className={className} style={style}>
+        {photo}
+      </div>
+    );
+  });
+}

@@ -1,0 +1,58 @@
+meta {
+  name: Create Payment
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "type": "{{paymentType}}",
+    "title": "{{paymentTitle}}",
+    "amountKopecks": {{paymentAmountKopecks}},
+    "recurrence": {{paymentRecurrence}},
+    "paymentForm": "{{paymentPaymentForm}}",
+    "categorySlug": "{{paymentCategorySlug}}"
+  }
+}
+
+script:pre-request {
+  // Requires an authenticated session and a propertyId (run properties/create property first).
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+script:post-response {
+  // Save the created payment id for subsequent payment requests.
+  if (res.body && res.body.id) {
+    bru.setEnvVar("paymentId", res.body.id);
+    bru.setVar("paymentId", res.body.id);
+    console.log("saved paymentId =", res.body.id);
+  }
+}
+
+tests {
+  test("should return 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("should have server-set since date", function() {
+    expect(res.body.since).to.be.a("string");
+  });
+
+  test("should resolve the category view", function() {
+    expect(res.body.category.source).to.equal("default");
+    expect(res.body.category.label).to.be.a("string");
+  });
+}

@@ -1,6 +1,1 @@
-import type {SharedAccessRole} from '../model/types';
-
-export const ACCESS_ROLE_LABELS: Readonly<Record<SharedAccessRole, string>> = {
-    viewer: 'Просмотр',
-    full_access: 'Полный доступ',
-};
+export { ACCESS_ROLE_ICON_NAMES, ACCESS_ROLE_LABELS } from '@/shared/model/access';

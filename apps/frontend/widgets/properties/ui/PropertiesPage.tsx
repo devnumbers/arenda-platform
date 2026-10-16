@@ -1,133 +1,397 @@
 'use client';
 
-import {type JSX, useCallback, useMemo, useState} from 'react';
-import {usePathname, useRouter} from 'next/navigation';
-import {useProperties, usePropertiesWithMeta} from '@/features/properties/api/hooks';
-import {useSubscription} from '@/features/subscription/api/hooks';
-import {PageHeader} from '@/shared/ui/page-header';
+import {type JSX, useLayoutEffect, useRef, useState} from 'react';
+import {useRouter} from 'next/navigation';
+import {
+  useProperties,
+  usePropertiesWithMeta,
+  type SuspendedSharedProperty,
+} from '@/features/properties';
+import {useSubscription} from '@/features/subscription';
+import {Add, Archive, SmallArrowDown, SortingBigSmall, SortingSmallBig} from '@/shared/assets/icons';
+import {cn} from '@/shared/lib/cn';
+import {useUrlParams} from '@/shared/lib/hooks/use-url-params';
+import {
+  Button,
+  HubCollapseAnchor,
+  HubTitle,
+  IconButton,
+  PageContent,
+  PickerMenu,
+  type PickerMenuGroup,
+  SearchPill,
+  TopNav,
+} from '@/shared/ui/design';
 import {ROUTES} from '@/shared/config/routes';
-import {usePropertyListData} from '../lib/use-property-list-data';
-import {applyFiltersAndSort, type PropertiesViewMode} from '../lib/apply-filters';
-import {DEFAULT_PROPERTY_SORT} from '../lib/parse-property-search-params';
-import {formatHiddenSharedFootnote} from '../lib/format-hidden-shared-footnote';
-import {PropertiesToolbar} from './PropertiesToolbar';
-import {PropertyCreateButton} from './PropertyCreateButton';
+import {resolveFreshSuspendedIds} from '../lib/fresh-suspended';
+import {
+  DEFAULT_PROPERTY_SORT,
+  PROPERTY_SORT_PARAMS,
+  SORT_FIELD_CHIP_LABEL,
+  SORT_FIELD_OPTIONS,
+  serializeSortToParams,
+  sortProperties,
+  type PropertySort,
+  type PropertySortDirection,
+  type PropertySortField,
+} from '../lib/property-sort';
 import {PropertyCard} from './PropertyCard';
+import {SuspendedPropertyCard} from './SuspendedPropertyCard';
+import {SuspendedReasonSheet} from './SuspendedReasonSheet';
 import {PropertiesEmptyState} from './PropertiesEmptyState';
 import {PropertiesLoading} from './PropertiesLoading';
 import {PropertiesErrorState} from './PropertiesErrorState';
-import {PropertiesArchiveLink} from './PropertiesArchiveLink';
-import type {PropertyFilters, PropertySort} from '../lib/filter-types';
 import styles from './PropertiesPage.module.css';
 
 export type PropertiesPageProps = {
-    readonly mode?: PropertiesViewMode;
-    readonly initialFilters?: PropertyFilters;
-    readonly initialSort?: PropertySort;
+  readonly initialSort?: PropertySort;
 };
 
-export function PropertiesPage({mode = 'active', initialFilters, initialSort}: PropertiesPageProps): JSX.Element {
-    const {data, isLoading, isFetching, isError, refetch} = usePropertyListData(mode);
-    const {data: activeProperties} = useProperties();
-    // Shares the /properties request with useProperties via the shared
-    // propertyKeys.list prefix; surfaces how many shared objects are hidden
-    // from the recipient by a tariff slot shortage.
-    const metaQuery = usePropertiesWithMeta({enabled: mode === 'active'});
-    const subscriptionQuery = useSubscription();
-    const router = useRouter();
-    const pathname = usePathname();
+/**
+ * Экран-хаб «Объекты» (карта #583; новый первый блок — Figma 3225-77232,
+ * хедер 3229-94554, пустые 3229-94647 / 3235-74057): заголовок хаба с «+»
+ * создания справа, поисковая пилюля (канон, без «+» — создание в шапке),
+ * ряд сортировки (чип PickerMenu + «Архив» → экран архива #587, гейт —
+ * archived_count контракта #1233: архивных нет — кнопки нет), список
+ * карточек, блюр-карточки подвесших общих объектов (#702). Кнопки создания
+ * под списком больше нет (макет 3225-77232): «+» шапки и CTA пустоты.
+ * Компакт-бар — канон хаба: лупа на поиск, заголовок, «+».
+ * Сортировки — резолюция #584 (4 поля × возрастание/убывание, основной
+ * всегда первый), персистентность в URL (?sort=&order=). Фильтров по
+ * типу/статусу в хабе нет; поиск объектов — серверный на отдельной
+ * странице (#601), вход — пилюля. Архивные объекты живут на отдельном
+ * экране /properties/archive (#587); бэк /properties возвращает только
+ * активные (сервис #585).
+ */
+export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element {
+  const {data, isLoading, isFetching, isError, refetch} = useProperties();
+  // Та же запись кэша /properties, что и у useProperties (один ключ — один
+  // запрос): подвесшие общие объекты получателя (suspended_shared —
+  // блюр-карточки suspendedList ниже) и «сегодня владельца» (ADR 0048) для
+  // бейджей аренды.
+  const metaQuery = usePropertiesWithMeta();
+  const subscriptionQuery = useSubscription();
+  const router = useRouter();
+  const {write} = useUrlParams();
 
-    const [filters, setFilters] = useState<PropertyFilters>(initialFilters ?? {types: [], statuses: []});
-    const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
+  const [sort, setSort] = useState<PropertySort>(initialSort ?? DEFAULT_PROPERTY_SORT);
+  const [reasonTarget, setReasonTarget] = useState<SuspendedSharedProperty | null>(null);
 
-    const visible = useMemo(
-        () => (data ? applyFiltersAndSort(data, mode, filters, sort) : []),
-        [data, mode, filters, sort],
+  const visible = sortProperties(data ?? [], sort);
+  const suspendedShared = metaQuery.data?.suspendedShared ?? [];
+  const showSuspended = !isLoading && !isError && suspendedShared.length > 0;
+
+  // Свежая подвеска — blur-in канона C (#880): блюр-карточка, приехавшая
+  // живым перечитыванием (кадр property от действий владельца — автор в
+  // аудитории, ADR 0062 §4), проявляется из блюра. Снапшот id прошлого
+  // рендера: null = доставки ещё не было (холодный вход и фаза загрузки
+  // meta-запроса — первая доставка без анимации), дальше дельта снапшотов
+  // = живое появление; свёртка — resolveFreshSuspendedIds в ../lib/
+  // fresh-suspended. Снапшот — в layout-эффекте: класс freshIn попадает
+  // в первый кадр краски (пассивный эффект вешал бы его после коммита —
+  // карточка рисовала резкий кадр до старта blur-in, канон LiveValue
+  // «переходы до краски»); рендер читает только state.
+  const [freshSuspendedIds, setFreshSuspendedIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const seenSuspendedRef = useRef<ReadonlySet<string> | null>(null);
+  useLayoutEffect(() => {
+    // undefined-доставка (холодный вход /properties без префетча, уход в
+    // refetch) не сеет пустой снапшот и не тратит прежний — null-гард
+    // живёт до первой настоящей доставки.
+    const resolution = resolveFreshSuspendedIds(
+      seenSuspendedRef.current,
+      metaQuery.data?.suspendedShared,
     );
+    seenSuspendedRef.current = resolution.next;
+    if (resolution.fresh.size > 0) {
+      setFreshSuspendedIds(resolution.fresh);
+    }
+  }, [metaQuery.data]);
 
-    const updateUrl = useCallback(
-        (nextFilters: PropertyFilters, nextSort: PropertySort) => {
-            const params = new URLSearchParams();
+  // Запись — канон useUrlParams (#786): экран владеет только sort/order,
+  // чужие параметры адреса переживают смену сортировки, дефолт снимается.
+  const changeSort = (next: PropertySort) => {
+    setSort(next);
+    write(serializeSortToParams(next), {own: PROPERTY_SORT_PARAMS});
+  };
 
-            if (nextFilters.types.length > 0) {
-                params.set('types', nextFilters.types.join(','));
-            }
+  const isEmpty = !isLoading && !isError && visible.length === 0;
+  // Гейт кнопки «Архив» (макет 3229-94647 vs 3235-74057, правило владельца
+  // «архивных нет — кнопки нет»): счётчик архивных едет в том же ответе
+  // /properties (контракт #1233); до доставки и на ошибке счётчик 0 —
+  // кнопки нет.
+  const showArchive = (metaQuery.data?.archivedCount ?? 0) > 0;
+  // Ряд сортировки — тулбар хаба: рендерится вне фазы загрузки и не
+  // подменяется скелетоном (§7, паритет #604). На пустоте живёт только
+  // ради «Архива» (замена решения #1051 «вариант 1А»: счётчик #1233 даёт
+  // точный гейт, запирать вход в архив без архивных больше не нужно) —
+  // без архивных ряда нет вовсе (макет 3235-74057).
+  const showSortRow = !isEmpty || showArchive;
+  // Список — контент данных, живёт вне фаз загрузки и ошибки.
+  const showList = !isLoading && !isError && !isEmpty;
 
-            if (mode !== 'archived' && nextFilters.statuses.length > 0) {
-                params.set('statuses', nextFilters.statuses.join(','));
-            }
+  // 404 подписки хук отдаёт null (#768) — это не pending и не ошибка:
+  // canAdd=false ниже ведёт на смену тарифа, кнопки не висят в disabled.
+  const isActionLoading = subscriptionQuery.isPending || data === undefined;
 
-            if (nextSort !== DEFAULT_PROPERTY_SORT) {
-                params.set('sort', nextSort);
-            }
+  const canAdd = (() => {
+    if (!subscriptionQuery.data || data === undefined) return false;
+    const limit = subscriptionQuery.data.tariff.activePropertyLimit;
+    if (limit < 0) return true;
+    return data.length < limit;
+  })();
 
-            const query = params.toString();
-            router.replace(query ? `${pathname}?${query}` : pathname, {scroll: false});
-        },
-        [mode, pathname, router],
-    );
+  const openCreate = () => {
+    if (isActionLoading) return;
+    router.push(canAdd ? ROUTES.propertyNew : ROUTES.profileTariffChange);
+  };
 
-    const handleChange = useCallback(
-        (nextFilters: PropertyFilters, nextSort: PropertySort) => {
-            setFilters(nextFilters);
-            setSort(nextSort);
-            updateUrl(nextFilters, nextSort);
-        },
-        [updateUrl],
-    );
+  const createLabel = canAdd
+    ? 'Создать объект'
+    : 'Достигнут лимит объектов по тарифу — сменить тариф';
 
-    const isEmpty = !isLoading && !isError && visible.length === 0;
+  // «+» создания: в ряду заголовка хаба (макет 3225-77232) и в правом
+  // слоте компакт-бара (канон сворачивания). На пустоте скрыта —
+  // действие там CTA пустого состояния (макеты 3229-94647/3235-74057).
+  // Два экземпляра узла: у ряда заголовка свой testid — слоты TopNav
+  // рендерят свой узел в трёх местах (крыло, инлайн-компакт, мобайл-клон),
+  // общий testid давал бы строгую неоднозначность в e2e.
+  const createButton = (
+    <IconButton
+      icon={<Add/>}
+      label={createLabel}
+      data-testid="properties-create"
+      disabled={isActionLoading}
+      onClick={openCreate}
+    />
+  );
+  const createButtonCompact = (
+    <IconButton
+      icon={<Add/>}
+      label={createLabel}
+      data-testid="properties-create-compact"
+      disabled={isActionLoading}
+      onClick={openCreate}
+    />
+  );
 
-    const hiddenSharedCount = metaQuery.data?.hiddenSharedCount ?? 0;
-    const showHiddenSharedNote =
-        mode === 'active'
-        && !isLoading
-        && !isError
-        && !metaQuery.isLoading
-        && hiddenSharedCount > 0;
+  // Чистая пустота (пилюля и ряд сортировки спрятаны, подвесших нет):
+  // обёртка отдаёт вертикаль и бока канону EmptyState (pt-14/px-8, анатомия
+  // 3235-74057) — свои px-6/pt-6 на этой ветке съезжали пустоту на 24 вниз
+  // и в бока относительно других хабов (до решения 14.10.2026 обёртка
+  // несла pt-6). С рядом «Архива» или подвесшими обёртка прежняя — их
+  // контент несёт паддинг сам (списки без своих отступов, см.
+  // PropertiesPage.module.css).
+  const bareEmpty = isEmpty && !showSortRow && !showSuspended;
 
-    const isActionLoading = subscriptionQuery.isPending || activeProperties === undefined;
+  const content = (
+    // Ритм первого экрана хаба (макет 3225-77283, решение владельца
+    // 14.10.2026): заголовок → поиск 16 (pt-4), поиск → чипы 24, чипы →
+    // контент 24 — явные отступы вместо gap обёртки: зазор списка к
+    // блюр-карточкам подвесших (#702) остаётся 16 (продолжение списка,
+    // не новый блок), а ветки без пилюли/списка держат свою геометрию.
+    <div className={cn('flex flex-col', !bareEmpty && 'px-6 pt-4')}>
+      {/* Пилюля поиска — канон SearchPill, «+» в хвосте больше нет
+       * (макет 3225-77232: создание в шапке); на подтверждённой пустоте
+       * спрятана (#1004): искать нечего, создание остаётся в CTA пустого
+       * состояния; вне фазы загрузки и на ошибке видна (§7). */}
+      {!isEmpty && (
+        <SearchPill
+          testId="properties-search-pill"
+          label="Найти объект"
+          onOpenSearch={() => router.push(ROUTES.propertySearch)}
+        />
+      )}
 
-    const canAdd = useMemo(() => {
-        if (!subscriptionQuery.data || activeProperties === undefined) return false;
-        const limit = subscriptionQuery.data.tariff.activePropertyLimit;
-        if (limit < 0) return true;
-        return activeProperties.length < limit;
-    }, [subscriptionQuery.data, activeProperties]);
-
-    return (
-        <div className={styles.root}>
-            <PageHeader
-                title={mode === 'archived' ? 'Архивные объекты' : 'Мои объекты'}
-                backHref={mode === 'archived' ? ROUTES.properties : undefined}
-                actions={<PropertyCreateButton canAdd={canAdd} isLoading={isActionLoading}/>}
-            />
-
-            <PropertiesToolbar mode={mode} filters={filters} sort={sort} onChange={handleChange}/>
-
-            {isLoading && <PropertiesLoading/>}
-
-            {!isLoading && isError && <PropertiesErrorState onRetry={refetch} isLoading={isFetching}/>}
-
-            {!isLoading && !isError && isEmpty && <PropertiesEmptyState canAdd={canAdd} isLoading={isActionLoading}/>}
-
-            {!isLoading && !isError && !isEmpty && (
-                <ul className={styles.list}>
-                    {visible.map((property) => (
-                        <li key={property.id}>
-                            <PropertyCard property={property}/>
-                        </li>
-                    ))}
-                </ul>
-            )}
-
-            {showHiddenSharedNote && (
-                <p className={styles.hiddenSharedNote}>
-                    {formatHiddenSharedFootnote(hiddenSharedCount)}
-                </p>
-            )}
-
-            {mode === 'active' && !isLoading && !isError && <PropertiesArchiveLink/>}
+      {showSortRow && (
+        <div className={cn(!isEmpty && 'mt-6')}>
+          <PropertiesSortRow
+            sort={sort}
+            onChange={changeSort}
+            showChip={!isEmpty}
+            showArchive={showArchive}
+            onOpenArchive={() => router.push(ROUTES.propertyArchive)}
+          />
         </div>
-    );
+      )}
+
+      {isLoading && (
+        <div className="mt-6">
+          <PropertiesLoading/>
+        </div>
+      )}
+
+      {!isLoading && isError && (
+        <div className="mt-6">
+          <PropertiesErrorState onRetry={() => void refetch()} isLoading={isFetching}/>
+        </div>
+      )}
+
+      {!isLoading && !isError && isEmpty && (
+        <div className={cn(!bareEmpty && 'mt-4')}>
+          <PropertiesEmptyState canAdd={canAdd} isLoading={isActionLoading} onAdd={openCreate}/>
+        </div>
+      )}
+
+      {showList && (
+        <ul className={cn(styles.list, 'mt-6')} data-testid="properties-list">
+          {visible.map((property) => (
+            <li key={property.id}>
+              <PropertyCard
+                property={property}
+                today={metaQuery.data?.today}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Подвесшие общие объекты (#702): блюр-карточки вместо сноски
+       * hidden_shared_count — после обычных карточек, в серверном
+       * FIFO-порядке; зазор 16 — продолжение списка (тот же зазор, что
+       * между карточками), а не ритм 24 нового блока. */}
+      {showSuspended && (
+        <ul
+          className={cn(styles.suspendedList, showList && 'mt-4')}
+          data-testid="suspended-properties-list"
+        >
+          {suspendedShared.map((placeholder) => (
+            <li key={placeholder.propertyId}>
+              <SuspendedPropertyCard
+                placeholder={placeholder}
+                onReason={setReasonTarget}
+                fresh={freshSuspendedIds.has(placeholder.propertyId)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      {/* Хаб-шапка: «крылья» (лого + профиль) и на мобайле; компакт-бар —
+       * лупа на поиск, «+» справа (канон сворачивания). На пустоте «+»
+       * скрыта в обоих местах. */}
+      <TopNav
+        mobileWings
+        collapse={{
+          title: 'Объекты',
+          search: {href: ROUTES.propertySearch, label: 'Найти объект'},
+          trailing: isEmpty ? undefined : createButtonCompact,
+        }}
+      />
+
+      <PageContent>
+        <HubCollapseAnchor>
+          {/* Строка заголовка h-8 (тикет #865): топ заголовка — ровно 24
+              от хедера (96), как у хабов без кнопки; кнопка 44 переполняет
+              строку симметрично — центрирована против линии заголовка. */}
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Объекты</HubTitle>
+            {!isEmpty && createButton}
+          </div>
+        </HubCollapseAnchor>
+
+        {content}
+      </PageContent>
+
+      <SuspendedReasonSheet placeholder={reasonTarget} onClose={() => setReasonTarget(null)} />
+    </>
+  );
+}
+
+/** Ряд сортировки (3225-77232): чип PickerMenu слева и «Архив» справа
+ * (ведёт на экран архива, #587). «Архив» — гейт archived_count (#1233):
+ * архивных нет — кнопки нет, ряд без неё живёт чипом слева. На
+ * подтверждённой пустоте чип скрыт (канон §7 — сортировать нечего), ряд
+ * остаётся только ради «Архива» и выровнен вправо; без архивных ряда нет
+ * вовсе (3235-74057). Без хуков — вызывается как функция в юнит-тесте
+ * (properties-sort-row.test.ts); роутер живёт на странице. Экспорт —
+ * для юнит-теста, внутрь слайса наружу ряд не уходит. */
+export function PropertiesSortRow({
+  sort,
+  onChange,
+  showChip,
+  showArchive,
+  onOpenArchive,
+}: {
+  readonly sort: PropertySort;
+  readonly onChange: (sort: PropertySort) => void;
+  readonly showChip: boolean;
+  readonly showArchive: boolean;
+  readonly onOpenArchive: () => void;
+}): JSX.Element {
+  return (
+    <div
+      className={`flex items-center ${showChip ? 'justify-between' : 'justify-end'}`}
+      data-testid="properties-sort-row"
+    >
+      {showChip && <PropertiesSortMenu sort={sort} onChange={onChange}/>}
+      {showArchive && (
+        <Button
+          variant="clear"
+          size="small"
+          leadingIcon={<Archive/>}
+          onClick={onOpenArchive}
+        >
+          Архив
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Чип сортировки + пикер (меню на 561+ / шит на мобайле — канон
+ * PickerMenu): поле и направление — два «радио», выбор применяется сразу
+ * (1603:93153 / 1603:91341). Экспорт — для юнит-теста ряда. */
+export function PropertiesSortMenu({
+  sort,
+  onChange,
+}: {
+  readonly sort: PropertySort;
+  readonly onChange: (sort: PropertySort) => void;
+}): JSX.Element {
+  const fieldLabels: Record<PropertySortField, string> = {
+    name: 'По названию',
+    created: 'По дате создания',
+    type: 'По типу объекта',
+    status: 'По статусу',
+  };
+  const directions: ReadonlyArray<{ readonly value: PropertySortDirection; readonly label: string }> = [
+    {value: 'asc', label: 'Возрастание'},
+    {value: 'desc', label: 'Убывание'},
+  ];
+
+  const groups: ReadonlyArray<PickerMenuGroup> = [
+    {
+      options: SORT_FIELD_OPTIONS.map((field) => ({
+        label: fieldLabels[field],
+        selected: sort.field === field,
+        onSelect: () => onChange({...sort, field}),
+      })),
+    },
+    {
+      options: directions.map(({value, label}) => ({
+        label,
+        selected: sort.direction === value,
+        onSelect: () => onChange({...sort, direction: value}),
+      })),
+    },
+  ];
+
+  return (
+    <PickerMenu title="Сортировать" groups={groups}>
+      <Button
+        variant="secondary"
+        size="small"
+        leadingIcon={sort.direction === 'asc' ? <SortingSmallBig/> : <SortingBigSmall/>}
+        trailingIcon={<SmallArrowDown/>}
+      >
+        {SORT_FIELD_CHIP_LABEL[sort.field]}
+      </Button>
+    </PickerMenu>
+  );
 }

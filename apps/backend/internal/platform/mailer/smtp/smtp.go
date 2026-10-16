@@ -1,7 +1,7 @@
+// Package smtp sends mailer messages over SMTP.
 package smtp
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -28,6 +28,10 @@ type Config struct {
 	From     string
 	FromName string
 	Timeout  time.Duration
+	// HeloName is the domain the client greets the relay with (EHLO). Empty
+	// keeps the stdlib default "localhost", which relays may reject at AUTH
+	// with 455 4.4.5 (Yandex does since 2026-10-12).
+	HeloName string
 }
 
 // Sender delivers email messages over SMTP.
@@ -45,42 +49,29 @@ func NewSender(cfg Config) *Sender {
 }
 
 // Send transmits the message to all recipients via SMTP.
-func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
+func (s *Sender) Send(ctx context.Context, msg mailer.Message) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	if len(msg.To) == 0 {
-		return errors.New("no recipients")
-	}
-
-	if msg.TextBody == "" && msg.HTMLBody == "" {
-		return errors.New("empty message body")
-	}
-
-	if msg.Subject == "" {
-		return errors.New("email subject is required")
+	if err := validateMessage(msg); err != nil {
+		return err
 	}
 
 	body := s.buildMessage(msg)
 
-	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
-	dialer := &net.Dialer{Timeout: s.cfg.Timeout}
-
-	var conn net.Conn
-	var err error
-	switch s.cfg.Port {
-	case "465":
-		tlsConfig := &tls.Config{ServerName: s.cfg.Host}
-		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: tlsConfig}
-		conn, err = tlsDialer.DialContext(ctx, "tcp", addr)
-	default:
-		conn, err = dialer.DialContext(ctx, "tcp", addr)
-	}
+	conn, err := s.dial(ctx)
 	if err != nil {
-		return fmt.Errorf("dial smtp server: %w", err)
+		return err
 	}
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		// The client (or Quit) may have closed the connection already —
+		// that is the benign success path; any other close failure is
+		// folded in, never masking the send error.
+		if closeErr := conn.Close(); err == nil && closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			err = fmt.Errorf("close smtp connection: %w", closeErr)
+		}
+	}()
 
 	if err := conn.SetDeadline(time.Now().Add(s.cfg.Timeout)); err != nil {
 		return fmt.Errorf("set smtp deadline: %w", err)
@@ -90,30 +81,90 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	if err != nil {
 		return fmt.Errorf("create smtp client: %w", err)
 	}
-	defer func() { _ = client.Close() }()
+	defer func() {
+		// Quit sends the farewell and closes the connection — the deferred
+		// close then reports ErrClosed, which is the benign success path;
+		// any other close failure is folded in, never masking the send error.
+		if closeErr := client.Close(); err == nil && closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			err = fmt.Errorf("close smtp client: %w", closeErr)
+		}
+	}()
 
+	// Greet with our own domain before Auth's lazy hello falls back to the
+	// stdlib "localhost": relays answer localhost-greeted AUTH with 455 and
+	// drop the connection, which the client reports as EOF.
+	if s.cfg.HeloName != "" {
+		if err := client.Hello(s.cfg.HeloName); err != nil {
+			return fmt.Errorf("smtp hello: %w", err)
+		}
+	}
+
+	if err := s.startTLSAndAuth(client); err != nil {
+		return err
+	}
+	return s.deliver(client, msg.To, body)
+}
+
+// validateMessage rejects messages that cannot be transmitted.
+func validateMessage(msg mailer.Message) error {
+	if len(msg.To) == 0 {
+		return errors.New("no recipients")
+	}
+	if msg.TextBody == "" && msg.HTMLBody == "" {
+		return errors.New("empty message body")
+	}
+	if msg.Subject == "" {
+		return errors.New("email subject is required")
+	}
+	return nil
+}
+
+// dial opens the server connection: implicit TLS on port 465, plain TCP
+// otherwise.
+func (s *Sender) dial(ctx context.Context) (net.Conn, error) {
+	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
+	dialer := &net.Dialer{Timeout: s.cfg.Timeout}
+
+	var conn net.Conn
+	var err error
+	if s.cfg.Port == "465" {
+		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: tlsConfig(s.cfg.Host)}
+		conn, err = tlsDialer.DialContext(ctx, "tcp", addr)
+	} else {
+		conn, err = dialer.DialContext(ctx, "tcp", addr)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("dial smtp server: %w", err)
+	}
+	return conn, nil
+}
+
+// startTLSAndAuth upgrades the connection to TLS on the submission port and
+// authenticates when credentials are configured.
+func (s *Sender) startTLSAndAuth(client *smtp.Client) error {
 	if s.cfg.Port == "587" {
-		tlsConfig := &tls.Config{ServerName: s.cfg.Host}
-		if err := client.StartTLS(tlsConfig); err != nil {
+		if err := client.StartTLS(tlsConfig(s.cfg.Host)); err != nil {
 			return fmt.Errorf("start tls: %w", err)
 		}
 	}
-
-	var auth smtp.Auth
-	if s.cfg.Username != "" && s.cfg.Password != "" {
-		auth = smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
+	if s.cfg.Username == "" || s.cfg.Password == "" {
+		return nil
 	}
-	if auth != nil {
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("smtp auth: %w", err)
-		}
+	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
+	if err := client.Auth(auth); err != nil {
+		return fmt.Errorf("smtp auth: %w", err)
 	}
+	return nil
+}
 
+// deliver runs the SMTP mail transaction: the envelope sender and every
+// recipient, then the message body, then the farewell.
+func (s *Sender) deliver(client *smtp.Client, to []string, body []byte) error {
 	if err := client.Mail(s.cfg.From); err != nil {
 		return fmt.Errorf("smtp mail: %w", err)
 	}
-	for _, to := range msg.To {
-		if err := client.Rcpt(to); err != nil {
+	for _, rcpt := range to {
+		if err := client.Rcpt(rcpt); err != nil {
 			// The recipient address is PII and must not leak into error logs.
 			return fmt.Errorf("smtp rcpt: %w", err)
 		}
@@ -132,12 +183,23 @@ func (s *Sender) Send(ctx context.Context, msg mailer.Message) error {
 	if err := client.Quit(); err != nil {
 		return fmt.Errorf("smtp quit: %w", err)
 	}
-
 	return nil
 }
 
 func encodeHeader(s string) string {
 	return mime.QEncoding.Encode("UTF-8", s)
+}
+
+// tlsConfig is the TLS configuration for both implicit TLS (port 465) and
+// STARTTLS (port 587): the server name for certificate validation and an
+// explicit TLS 1.2 floor (semgrep p/ci missing-ssl-minversion, #318). Go's
+// client-side default floor is TLS 1.2 already; the pin keeps it from silently
+// dropping if that default ever changes.
+func tlsConfig(host string) *tls.Config {
+	return &tls.Config{
+		ServerName: host,
+		MinVersion: tls.VersionTLS12,
+	}
 }
 
 // quoteDisplayName quotes a display name per RFC 5322.
@@ -160,6 +222,15 @@ func messageIDDomain(from, fallback string) string {
 	return fallback
 }
 
+// writeMIMEPart appends one multipart/alternative part to the message.
+// The strings.Builder writes never fail, so no error handling is needed.
+func writeMIMEPart(b *strings.Builder, boundary, contentType, body string) {
+	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("Content-Type: " + contentType + "\r\n")
+	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+	b.WriteString(body + "\r\n\r\n")
+}
+
 func (s *Sender) buildMessage(msg mailer.Message) []byte {
 	boundary := uuid.Must(uuid.NewV7()).String()
 	messageID := fmt.Sprintf("<%s@%s>", uuid.Must(uuid.NewV7()).String(), messageIDDomain(s.cfg.From, s.cfg.Host))
@@ -171,11 +242,11 @@ func (s *Sender) buildMessage(msg mailer.Message) []byte {
 	}
 	encodedName := encodeHeader(fromName)
 	// RFC 5322 requires quoting display names that contain spaces.
-	// mime.QEncoding.Encode returns the raw string for ASCII, so we add quotes
-	// ourselves; RFC 2047 encoded-words must not be wrapped in quotes.
+	// The mime.QEncoding.Encode call returns the raw string for ASCII, so we
+	// add quotes ourselves; RFC 2047 encoded-words must not be wrapped in quotes.
 	fromHeader := fmt.Sprintf("%s <%s>", quoteDisplayName(encodedName), s.cfg.From)
 
-	var buf bytes.Buffer
+	var buf strings.Builder
 	headers := []string{
 		"From: " + fromHeader,
 		"To: " + strings.Join(msg.To, ", "),
@@ -187,25 +258,20 @@ func (s *Sender) buildMessage(msg mailer.Message) []byte {
 		"Reply-To: " + s.cfg.From,
 	}
 	for _, h := range headers {
-		fmt.Fprintf(&buf, "%s\r\n", h)
+		buf.WriteString(h)
+		buf.WriteString("\r\n")
 	}
-	fmt.Fprint(&buf, "\r\n")
+	buf.WriteString("\r\n")
 
 	if msg.TextBody != "" {
-		fmt.Fprintf(&buf, "--%s\r\n", boundary)
-		fmt.Fprintf(&buf, "Content-Type: text/plain; charset=UTF-8\r\n")
-		fmt.Fprintf(&buf, "Content-Transfer-Encoding: 8bit\r\n\r\n")
-		fmt.Fprintf(&buf, "%s\r\n\r\n", msg.TextBody)
+		writeMIMEPart(&buf, boundary, "text/plain; charset=UTF-8", msg.TextBody)
 	}
 
 	if msg.HTMLBody != "" {
-		fmt.Fprintf(&buf, "--%s\r\n", boundary)
-		fmt.Fprintf(&buf, "Content-Type: text/html; charset=UTF-8\r\n")
-		fmt.Fprintf(&buf, "Content-Transfer-Encoding: 8bit\r\n\r\n")
-		fmt.Fprintf(&buf, "%s\r\n\r\n", msg.HTMLBody)
+		writeMIMEPart(&buf, boundary, "text/html; charset=UTF-8", msg.HTMLBody)
 	}
 
-	fmt.Fprintf(&buf, "--%s--\r\n", boundary)
+	buf.WriteString("--" + boundary + "--\r\n")
 
-	return buf.Bytes()
+	return []byte(buf.String())
 }

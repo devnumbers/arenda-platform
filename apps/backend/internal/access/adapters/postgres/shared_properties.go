@@ -25,21 +25,6 @@ func NewSharedProperties(db postgres.DBTX) *SharedProperties {
 	return &SharedProperties{db: db}
 }
 
-// SharedWith returns the distinct property ids where the user is a member.
-// Kept for the leases context (operation reports, issue #157 T3); the
-// properties context consumes MembershipsWith instead.
-func (s *SharedProperties) SharedWith(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := postgres.New(s.db).ListPropertyMembersByUser(ctx, pgconv.UUIDToPgtype(userID))
-	if err != nil {
-		return nil, err
-	}
-	out := make([]uuid.UUID, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, pgconv.UUIDFromPgtype(row.PropertyID))
-	}
-	return out, nil
-}
-
 // MembershipsWith returns the active shared-access memberships of the user
 // (property id + recipient role), implementing the properties application
 // SharedMemberships port (issue T11).

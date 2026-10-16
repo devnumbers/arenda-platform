@@ -1,24 +1,69 @@
+/* Тосты на react-toastify v11 (unstyled) + нативный ReactToastify.css.
+   Библиотечный CSS несёт контейнер, позиции и скрытие прогресс-бара;
+   unstyled сам стилей не несёт. Максимум один тост на экране (решение
+   владельца 13.10): стек (stacked, peek-ступени, --y/--s) не используется,
+   замена — вытесняющий показ (showDisplacingToast), кейфреймы — на каноне
+   §8 DESIGN.md (--dl-ease, --dl-duration-move). Карточки ложатся НА ОДНО
+   МЕСТО (дополнение решения 13.10: «надо чтобы просто в бок уходило и
+   все») — absolute-укладка вместо нативной колонки: заменяющая карточка
+   появляется ровно на месте старой и никуда не едет по вертикали, старая
+   уезжает вбок из-под неё. Специфичность поднята до .toast.Toastify__toast,
+   чтобы не зависеть от порядка в бандле. */
+
+/* Пустые зоны контейнера не ловят клики; сам тост — pointer-events: auto.
+   Канонная ширина сценарного тоста 460 живёт НА КОНТЕЙНЕРЕ, а не на :root:
+   нативный ReactToastify.css определяет тот же var на :root (320), и при
+   совпадающей специфичности порядок CSS-чанков решает — на живой сборке
+   побеждала нативная двойка (замер приёмкой 13.10). Элементная переменная
+   бьёт любое :root-наследование. */
 .container {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: 460px;
+    --toastify-toast-width: 460px;
     pointer-events: none;
 }
 
-.toast {
-    --y: 0px;
-    --s: 1;
+@media (max-width: 767px) {
+    .container {
+        --toastify-toast-width: calc(100vw - 24px);
+        --toastify-toast-right: 12px;
+        --toastify-toast-left: 12px;
+    }
+}
 
-    position: relative;
-    display: flex;
-    align-items: center;
+/* Absolute-укладка, десктоп: контейнер — точка-якорь у правого края
+   (нативная fit-content ширина с абсолютными детьми схлопывается в 0 —
+   невидима и pointer-events: none), каждая карточка прижата к его правому
+   краю. Порядок отрисовки — порядок в DOM: заменяющая карточка позже и
+   накрывает уходящую. */
+.container:global(.Toastify__toast-container--top-right) .toast:global(.Toastify__toast) {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+/* Absolute-укладка, мобайл (top-center): контейнер растягивается в полосу
+   между полями 12 (нативный left:50% + translateX(-50%) снят — transform
+   на контейнере конфликтовал бы с центрированием), карточки центрируются
+   margin-inline: auto без transform — кейфреймы и drag держат transform
+   карточки целиком. */
+@media (max-width: 767px) {
+    .container:global(.Toastify__toast-container--top-center) {
+        left: 12px;
+        right: 12px;
+        width: auto;
+        transform: none;
+    }
+
+    .container:global(.Toastify__toast-container--top-center) .toast:global(.Toastify__toast) {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        margin-inline: auto;
+    }
+}
+
+.toast:global(.Toastify__toast) {
     gap: 12px;
-    width: 100%;
     padding: 12px 16px;
     border-radius: var(--radius-button);
     background: var(--color-white);
@@ -26,15 +71,14 @@
     0 -6px 12px rgba(0, 0, 0, 0.03),
     0 14px 28px rgba(0, 0, 0, 0.08);
     font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height: 0;
+    margin-bottom: 0;
     pointer-events: auto;
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
 }
 
 /* Auto-close countdown runs on the progress bar animation (react-toastify
    closes the toast on its animationend). Keep it invisible but animating. */
-.toast > [class*='Toastify__progress-bar--wrp'] {
+.toast:global(.Toastify__toast) > [class*='Toastify__progress-bar--wrp'] {
     position: absolute;
     bottom: 0;
     left: 0;
@@ -45,7 +89,7 @@
     pointer-events: none;
 }
 
-.toast > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar'] {
+.toast:global(.Toastify__toast) > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar'] {
     position: absolute;
     bottom: 0;
     left: 0;
@@ -54,7 +98,7 @@
     transform-origin: left;
 }
 
-.toast > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar--animated'] {
+.toast:global(.Toastify__toast) > [class*='Toastify__progress-bar--wrp'] > [class*='Toastify__progress-bar--animated'] {
     animation: toast-progress linear 1 forwards;
 }
 
@@ -118,6 +162,28 @@
     align-self: center;
 }
 
+/* Bare variant (тост о новом уведомлении, #747, макет 2343:57307): макет
+   карточки — радиус 24 и тень 0 8px 24px — несёт сам тост. Ширина — 402
+   (макет #778, поля 24 во фрейме 450), мобайл — экран − 48 (поля 24 с обеих
+   сторон). Ширина задаётся СВОЙСТВОМ: она перекрывает нативную
+   `width: var(--toastify-toast-width)` на .Toastify__toast (0-3-0 бьёт
+   0-1-0 библиотеки); канонные тосты сценариев остаются на :root-значении
+   460. */
+.toast:global(.Toastify__toast).notification {
+    width: 402px;
+    gap: 0;
+    padding: 0;
+    border-radius: 24px;
+    background: var(--color-white);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 767px) {
+    .toast:global(.Toastify__toast).notification {
+        width: calc(100vw - 48px);
+    }
+}
+
 .closeButton {
     flex-shrink: 0;
     align-self: center;
@@ -132,11 +198,13 @@
     background-color: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition: background-color var(--dl-duration-fast) var(--dl-ease), color var(--dl-duration-fast) var(--dl-ease);
 }
 
+@media (hover: hover) {
 .closeButton:hover {
     color: var(--color-text);
+}
 }
 
 .closeButton:active {
@@ -165,83 +233,73 @@
     color: var(--color-primary);
 }
 
+/* Канон §8 DESIGN.md: единая кривая --dl-ease, движение — 350ms
+   (--dl-duration-move). Замена тостов — кросс-свап (вытесняющий показ
+   showDisplacingToast): старый уходит exit-анимацией, новый одновременно
+   въезжает; схлопывание высоты уходящего делает react-toastify
+   (collapseDuration 250), поэтому въехавший доезжает вверх без прыжка. */
 .toastEnter {
-    animation-duration: 0.2s;
+    animation-duration: var(--dl-duration-move);
     animation-fill-mode: both;
     animation-name: toast-enter-right;
-    animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+    animation-timing-function: var(--dl-ease);
 }
 
 .toastExit {
-    animation-duration: 0.25s;
+    animation-duration: var(--dl-duration-move);
     animation-fill-mode: both;
     animation-name: toast-exit-right;
-    animation-timing-function: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+    animation-timing-function: var(--dl-ease);
 }
 
 /* Apple-style banner motion (HIG: brief, precise, exit mirrors enter):
-   short travel, single soft deceleration, ~6px overshoot, fade-in early. */
+   single soft deceleration on --dl-ease, fade rides the same move —
+   no overshoot, no stack choreography. */
 @keyframes toast-enter-right {
     from {
         opacity: 0;
-        transform: translate3d(120%, var(--y), 0) scale(var(--s));
-    }
-
-    50% {
-        opacity: 1;
-    }
-
-    75% {
-        transform: translate3d(-6px, var(--y), 0) scale(var(--s));
+        transform: translate3d(120%, 0, 0);
     }
 
     to {
         opacity: 1;
-        transform: translate3d(0, var(--y), 0) scale(var(--s));
+        transform: translate3d(0, 0, 0);
     }
 }
 
 @keyframes toast-exit-right {
     from {
         opacity: 1;
-        transform: translate3d(0, var(--y), 0) scale(var(--s));
+        transform: translate3d(0, 0, 0);
     }
 
     to {
         opacity: 0;
-        transform: translate3d(120%, var(--y), 0) scale(var(--s));
+        transform: translate3d(120%, 0, 0);
     }
 }
 
 @keyframes toast-enter-down {
     from {
         opacity: 0;
-        transform: translate3d(0, calc(-100% - 32px), 0) scale(var(--s));
-    }
-
-    50% {
-        opacity: 1;
-    }
-
-    75% {
-        transform: translate3d(0, calc(var(--y) + 6px), 0) scale(var(--s));
+        transform: translate3d(0, calc(-100% - 32px), 0);
     }
 
     to {
         opacity: 1;
-        transform: translate3d(0, var(--y), 0) scale(var(--s));
+        transform: translate3d(0, 0, 0);
     }
 }
 
 @keyframes toast-exit-up {
     from {
         opacity: 1;
-        transform: translate3d(0, var(--y), 0) scale(var(--s));
+        transform: translate3d(0, 0, 0);
     }
 
     to {
         opacity: 0;
-        transform: translate3d(0, calc(-100% - 32px), 0) scale(var(--s));
+        transform: translate3d(0, calc(-100% - 32px), 0);
     }
 }
 
@@ -265,88 +323,23 @@
     }
 }
 
+/* Канон §8: reduced-motion анимации не отключает, а укорачивает до
+   ~150ms — остаётся кроссфейд без движения. */
 @media (prefers-reduced-motion: reduce) {
     .toastEnter {
-        animation-duration: 0.2s;
+        animation-duration: 150ms;
         animation-name: toast-fade-in;
-        animation-timing-function: ease-out;
+        animation-timing-function: var(--dl-ease);
     }
 
     .toastExit {
-        animation-duration: 0.2s;
+        animation-duration: 150ms;
         animation-name: toast-fade-out;
-        animation-timing-function: ease-out;
+        animation-timing-function: var(--dl-ease);
     }
-}
-
-/* Stacked mode: library JS sets the class, data attributes and --y/--s/--g
-   variables; visuals below replicate ReactToastify.css lines 155-207. */
-.toast[class*='--stacked'] {
-    position: absolute;
-    width: 100%;
-    transform: translate3d(0, var(--y), 0) scale(var(--s));
-    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.toast[data-collapsed] .body,
-.toast[data-collapsed] .closeButton {
-    transition: opacity 0.1s;
-}
-
-.toast[data-collapsed='false'] {
-    overflow: visible;
-}
-
-/* Only the front card shows its content while collapsed. */
-.toast[data-collapsed='true']:not(:last-child) > * {
-    opacity: 0;
-}
-
-/* Gap filler: keeps the hover area continuous between stacked cards. */
-.toast[class*='--stacked']::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: calc(var(--g, 0) * 1px);
-    bottom: 100%;
-}
-
-/* Extended hit area behind the card. */
-.toast[class*='--stacked']::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 100%;
-    transform: scaleY(3);
-    z-index: -1;
-}
-
-.toast[data-pos='bot'][class*='--stacked']::before {
-    transform-origin: top;
-}
-
-.toast[data-pos='top'][class*='--stacked']::before {
-    transform-origin: bottom;
-}
-
-.toast[data-pos='top'] {
-    top: 0;
-}
-
-.toast[data-pos='bot'] {
-    bottom: 0;
 }
 
 @media (max-width: 767px) {
-    .container {
-        left: 12px;
-        right: 12px;
-        width: auto;
-    }
-
     .toastEnter {
         animation-name: toast-enter-down;
     }

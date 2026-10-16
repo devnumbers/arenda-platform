@@ -53,15 +53,15 @@ func TestError_RedactsSensitiveSubstrings(t *testing.T) {
 		},
 		{
 			name:        "phone formatted",
-			input:       "sms failed for +7 (999) 123-45-67: insufficient balance",
+			input:       "login failed for +7 (999) 123-45-67: rate limit exceeded",
 			forbidden:   []string{"+7 (999) 123-45-67", "9991234567"},
-			mustContain: []string{"sms failed for [REDACTED]: insufficient balance"},
+			mustContain: []string{"login failed for [REDACTED]: rate limit exceeded"},
 		},
 		{
 			name:        "phone compact",
-			input:       "sms failed for +79991234567: insufficient balance",
+			input:       "login failed for +79991234567: rate limit exceeded",
 			forbidden:   []string{"+79991234567"},
-			mustContain: []string{"sms failed for [REDACTED]: insufficient balance"},
+			mustContain: []string{"login failed for [REDACTED]: rate limit exceeded"},
 		},
 		{
 			name:        "multiple secrets",

@@ -94,14 +94,13 @@ describe('isPropertyType', () => {
 
 describe('formatAttributeValue — enum', () => {
   it('returns the Russian label for a known enum value', () => {
-    expect(formatAttributeValue(asType('apartment'), 'rooms', 'studio', {})).toBe('Студия');
     expect(formatAttributeValue(asType('apartment'), 'bathroom', 'combined', {})).toBe(
       'Совмещенный',
     );
   });
 
   it('falls back to the raw value when the enum label is missing', () => {
-    expect(formatAttributeValue(asType('apartment'), 'rooms', 'unknown_opt', {})).toBe(
+    expect(formatAttributeValue(asType('apartment'), 'bathroom', 'unknown_opt', {})).toBe(
       'unknown_opt',
     );
   });
@@ -176,7 +175,7 @@ describe('formatAttributeValue — unknown field', () => {
 describe('formatAttributesForCardGrouped', () => {
   it('returns groups with labels for a filled apartment', () => {
     const attrs: PropertyAttributes = {
-      rooms: '2',
+      balcony: 'loggia',
       area_total: 55.5,
       floor: 3,
       floors_total: 9,
@@ -185,14 +184,14 @@ describe('formatAttributesForCardGrouped', () => {
     expect(groups.length).toBeGreaterThan(0);
 
     const firstGroup = groups[0];
-    expect(firstGroup.label).toBe(groupLabels.about_object);
+    expect(firstGroup?.label).toBe(groupLabels.about_object);
 
-    const labels = firstGroup.items.map((i) => i.label);
-    expect(labels).toContain(fieldLabels.rooms);
+    const labels = firstGroup?.items.map((i) => i.label) ?? [];
+    expect(labels).toContain(fieldLabels.balcony);
     expect(labels).toContain(fieldLabels.area_total);
 
-    const roomItem = firstGroup.items.find((i) => i.label === fieldLabels.rooms);
-    expect(roomItem?.value).toBe('2');
+    const balconyItem = firstGroup?.items.find((i) => i.label === fieldLabels.balcony);
+    expect(balconyItem?.value).toBe('Лоджия');
   });
 
   it('hides floors_total item when both floor and floors_total are present', () => {
@@ -211,7 +210,7 @@ describe('formatAttributesForCardGrouped', () => {
   });
 
   it('skips empty/undefined values', () => {
-    const attrs: PropertyAttributes = { rooms: '', area_total: undefined } as unknown as PropertyAttributes;
+    const attrs: PropertyAttributes = { balcony: '', area_total: undefined } as unknown as PropertyAttributes;
     const groups = formatAttributesForCardGrouped(asType('apartment'), attrs);
     expect(groups).toEqual([]);
   });
@@ -219,8 +218,8 @@ describe('formatAttributesForCardGrouped', () => {
   it('uses null group label for types whose fields have group=null (office)', () => {
     const attrs: PropertyAttributes = { area_total: 100 };
     const groups = formatAttributesForCardGrouped(asType('office'), attrs);
-    expect(groups[0].group).toBeNull();
-    expect(groups[0].label).toBeNull();
+    expect(groups[0]?.group).toBeNull();
+    expect(groups[0]?.label).toBeNull();
   });
 });
 
@@ -234,11 +233,11 @@ describe('labels — every AttrKey has a field label', () => {
     expect(keys.length).toBeGreaterThanOrEqual(21);
     for (const key of keys) {
       expect(typeof fieldLabels[key]).toBe('string');
-      expect((fieldLabels[key] as string).length).toBeGreaterThan(0);
+      expect(fieldLabels[key].length).toBeGreaterThan(0);
     }
   });
 
-  it('enumLabels has a Russian mapping for rooms.studio', () => {
-    expect(enumLabels.rooms?.studio).toBe('Студия');
+  it('enumLabels has a Russian mapping for bathroom.combined', () => {
+    expect(enumLabels.bathroom?.combined).toBe('Совмещенный');
   });
 });

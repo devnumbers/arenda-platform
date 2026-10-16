@@ -1,28 +1,21 @@
-.root {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  padding: 0 0 96px;
-}
-
+/* Список-хаб «Объектов» (#586): карточки с зазором 16 (макет 1590:88756).
+ * Горизонтальный отступ контента (24px) и вертикальный ритм первого
+ * экрана (16/24/24, макет 3225-77283) несёт обёртка экрана в
+ * PropertiesPage — списки своих вертикалей не держат. */
 .list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin: 0;
+  gap: 16px;
   padding: 0;
   list-style: none;
 }
 
-.hiddenSharedNote {
-  margin: 0;
-  color: var(--color-text-muted, #6b7280);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-@media (min-width: 768px) {
-  .root {
-    gap: 32px;
-  }
+/* Блюр-карточки подвесших общих объектов (#702) — после обычных карточек,
+ * тот же зазор 16. */
+.suspendedList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
 }

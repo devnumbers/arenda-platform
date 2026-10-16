@@ -1,0 +1,402 @@
+@import "tailwindcss";
+
+/*
+ * Шрифт Onest — те же срезы css2 Google Fonts, что подключает кабинет
+ * (apps/frontend/app/globals.css; Onest v11), поэтому лендинг и кабинет
+ * рендерят текст идентично. Обновление — скачать свежие срезы css2 и
+ * заменить файлы вместе с диапазонами.
+ */
+
+/* cyrillic-ext */
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/onest-cyrillic-ext.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F,
+    U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/onest-cyrillic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/onest-latin-ext.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/onest-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
+ * Дизайн-токены лендинга — 1:1 из Figma (файл «Рентли. Сервис и лендинг»,
+ * ветки переменных: Color/Blue, Black, Light Gray, Gray 2…; текстовые стили
+ * Landing/H1…Landing/XS). Шкала адаптивов уточняется по фреймам секций
+ * (десктоп 2814-728, планшет 2859-3454, мобайл 2826-151222).
+ */
+@theme {
+  --font-sans: "Onest", ui-sans-serif, system-ui, sans-serif;
+
+  /* Брейкпоинты адаптива лендинга — три полосы по фулл-фреймам Figma:
+     десктоп ≥1200 (2814-728, 1536), планшет 481–1199 (2859-3454, 768),
+     мобайл ≤480 (2826-151222, 393); классы tab:* — от 481, desk:* — от 1200. */
+  --breakpoint-tab: 481px;
+  --breakpoint-desk: 1200px;
+
+  /* Кривые моушена лендинга — namespace --ease-* даёт утилиты
+     ease-enter/ease-inout/ease-menu/ease-desk. Значения — существующие
+     замерные, сведение в токены не меняет ни одного из них:
+     enter — въезды Reveal; inout — симметричные подмены (steps/тарифы,
+     «хореография apple.com»); menu — мобильное меню (замер globalnav
+     apple.com); desk — десктопные переходы отзывов («чуток плавнее на
+     ПК», решение владельца). Кривая карусельного движка (0,0,0.58,1)
+     живёт в components/carousel-ease.ts, модальная — в --dl-ease. */
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-menu: cubic-bezier(0.4, 0, 0.6, 1);
+  --ease-desk: cubic-bezier(0.45, 0, 0.2, 1);
+
+  --color-primary: #2b7fff;
+  --color-primary-hover: #2175f5;
+  --color-primary-active: #176beb;
+  --color-primary-disabled: #95bfff;
+  --color-primary-light: #2b7fff1a;
+  --color-ink: #171a1c;
+  --color-gray-2: #6f787c;
+  --color-gray-3: #9fa8ac;
+  --color-surface: #f3f4f6;
+  --color-surface-hover: #e9eaec;
+  --color-surface-active: #dfe0e2;
+  --color-line: #ebebeb;
+
+  /* Типографическая шкала Figma (Landing/*): имена утилит = имена стилей. */
+  --text-h1: 4.5rem; /* 72 */
+  --text-h1--line-height: 4.75rem; /* 76 */
+  --text-h2: 3.5rem; /* 56 */
+  --text-h2--line-height: 3.75rem; /* 60 */
+  --text-h3: 2.25rem; /* 36 */
+  --text-h3--line-height: 2.5rem; /* 40 */
+  --text-h4: 1.75rem; /* 28 */
+  --text-h4--line-height: 2rem; /* 32 */
+  --text-xl: 1.5rem; /* 24 */
+  --text-xl--line-height: 1.75rem; /* 28 */
+  --text-l: 1.375rem; /* 22 */
+  --text-l--line-height: 1.625rem; /* 26 */
+  --text-m: 1.25rem; /* 20 */
+  --text-m--line-height: 1.5rem; /* 24 */
+  --text-r: 1.125rem; /* 18 */
+  --text-r--line-height: 1.375rem; /* 22 */
+  --text-s: 1rem; /* 16 */
+  --text-s--line-height: 1.25rem; /* 20 */
+  --text-xs: 0.875rem; /* 14 */
+  --text-xs--line-height: 1.125rem; /* 18 */
+
+  --shadow-card: 0 8px 24px rgb(0 0 0 / 0.12);
+
+  /* Въезд текста шага секции «Как начать пользоваться» (steps.tsx) —
+     фейд с мягким подъёмом на ease-in-out (хореография apple.com:
+     фото кроссфейдится сразу, текст догоняет). */
+  --animate-steps-text-in: steps-text-in 280ms var(--ease-inout);
+
+  @keyframes steps-text-in {
+    from {
+      opacity: 0;
+      translate: 0 6px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  /* Въезд цены тарифа при смене Год/Месяц (tariff-cards.tsx) — тот же
+     @keyframes, что у текста steps: уход вверх-фейд 180мс, подмена,
+     въезд снизу 280мс. */
+  --animate-tariff-price-in: steps-text-in 280ms var(--ease-inout);
+
+  /* Утилиты дизайн-слоя фронта (apps/frontend shared/styles/tokens.css) —
+     перенесены под ui-компоненты модалки «Задать вопрос» (карта #1010);
+     имена не пересекаются с лендинговой шкалой (content/surface-muted/
+     overlay/error — фронта, surface — лендинга, значения совпадают). */
+  --color-overlay: var(--dl-overlay);
+  --color-content: #171a1c;
+  --color-content-secondary: #6f787c;
+  --color-content-tertiary: #9fa8ac;
+  --color-surface-muted: #f3f4f6;
+  --color-surface-muted-hover: #e9eaec;
+  --color-surface-muted-active: #dfe0e2;
+  --color-surface-danger: #ffe2e2;
+  --color-danger: #fb2c36;
+  --color-error: #ff383c;
+  --color-input-border: #d3d7d9;
+  --radius-button: 16px;
+  --radius-pill: 100px;
+  --radius-card: 24px;
+  --radius-sheet: 40px;
+}
+
+/* Кривая и длительности модалок фронта (резолюция #449, «плавность как у
+   Apple» / HIG Motion) — читаются семантическими классами .dl-*-in/out
+   ниже и hover-тенью полей из перенесённых ui-компонентов. */
+:root {
+  --dl-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --dl-duration-fast: 250ms;
+  --dl-duration-move: 350ms;
+  --dl-duration-card-in: 400ms;
+  --dl-duration-card-out: 220ms;
+  --dl-input-border: #d3d7d9;
+  --dl-overlay: rgba(23, 26, 28, 0.5);
+}
+
+/* Хореография модалок фронта: вход дольше выхода, unmount ждёт animationend
+   (Radix Presence / vaul сами держат компонент смонтированным). */
+@keyframes modal-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-sheet-in   { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes modal-card-in    { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes modal-overlay-out{ from { opacity: 1; } to { opacity: 0; } }
+@keyframes modal-sheet-out  { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes modal-card-out   { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+
+/* Фазы модальных шеллов классами, не arbitrary animate-[...]: длительности
+   берутся из токенов (тюнинг в одном месте), а reduce-ветке ниже не надо
+   бороться с каскадом утилит. forwards на выходах держит последний кадр
+   (opacity 0) до размонтирования — без него панель/фон вспыхивают. */
+@layer components {
+  .dl-overlay-in {
+    animation: modal-overlay-in var(--dl-duration-move) var(--dl-ease);
+  }
+  .dl-overlay-out {
+    animation: modal-overlay-out var(--dl-duration-fast) var(--dl-ease) forwards;
+  }
+  .dl-card-in {
+    animation: modal-card-in var(--dl-duration-card-in) var(--dl-ease);
+  }
+  .dl-card-out {
+    animation: modal-card-out var(--dl-duration-card-out) var(--dl-ease) forwards;
+  }
+  /* Оверлей vaul-шита: состояние ведёт data-state (Radix-фазу closing шит
+     не использует), варианты Tailwind на чужой класс не навесить. */
+  .dl-overlay-vaul[data-state="open"] {
+    animation: modal-overlay-in var(--dl-duration-move) var(--dl-ease);
+  }
+  .dl-overlay-vaul[data-state="closed"] {
+    animation: modal-overlay-out var(--dl-duration-fast) var(--dl-ease) forwards;
+  }
+}
+
+/* Полупрозрачные поверхности для тех, кто просит меньше прозрачности
+   (apple-design §14): стекло становится почти сплошным, блюр снимается —
+   маркерные классы .glass-plate (плашки отзывов) и .glass-card (стекло
+   тарифов/аудитории, skin из components/glass.ts). Unlayered — сильнее
+   утилит Tailwind. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-plate {
+    background: rgba(0, 0, 0, 0.82);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .glass-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  :root {
+    --dl-overlay: rgba(23, 26, 28, 0.8);
+  }
+}
+
+/* Повышенный контраст: стекло — сплошное, обводки колец — плотные. */
+@media (prefers-contrast: more) {
+  .glass-plate {
+    background: rgba(0, 0, 0, 0.82);
+  }
+
+  .glass-ring::before {
+    background: rgba(255, 255, 255, 0.85);
+  }
+}
+
+@layer base {
+  /* Стрипы-«вылезайки» (showcase) не должны расширять канву; clip, не hidden —
+     hidden создаёт скролл-контейнер и ломает sticky-хедер (канон #709). */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  body {
+    @apply bg-white font-sans text-ink antialiased;
+  }
+
+  /* Мобильно-платформенный слой (практики Эмиля Ковальски, mobile-native):
+     серая вспышка на тапе — самый громкий сигнал «это сайт» — она спорит
+     с собственным press-фидбеком кнопок (:active, канон доски 2864-5099);
+     прозрачный tap-highlight возвращает нажатию задуманный отклик. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+    /* Ландшафтный Safari не вправе раздувать шрифты (baseline скилла). */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Тап без задержки двойного нажатия (iOS Safari добивает часть
+     элементов 300мс) и без выделения подписи контрола долгим нажатием.
+     user-select только на контролах: текст контента копируется. */
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Лендинг только светлый: без явного color-scheme тёмная ОС рендерит
+     UA-виджеты (скроллбары, автозаполнение полей) в тёмной теме. */
+  :root {
+    color-scheme: light;
+  }
+}
+
+/* Лок скролла Radix/vaul-оверлеев (react-remove-scroll-bar) ставит body
+   overflow:hidden !important и компенсирует «исчезающий» скроллбар margin'ом
+   и паддингами. На лендинге скроллер — html (overflow-x: clip выше), его
+   скроллбар не исчезает: компенсация только сдвигает страницу. Хуже того,
+   body под hidden становится scroll-контейнером, и sticky-хедер прилипает к
+   верху документа — при открытии модалки из низа страницы он уезжает за
+   верх вьюпорта. clip режет так же, но scroll-контейнера не создаёт (канон
+   #709); колесо/тап фоном по-прежнему гасит сам react-remove-scroll. Вне
+   @layer: important вне слоёв сильнее important внутри слоёв, а специфичный
+   селектор с html побеждает библиотечный независимо от порядка стилей
+   (канон #925 фронта). */
+html body[data-scroll-locked] {
+  overflow: clip !important;
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
+@layer components {
+  /* Конический градиент-обвод стеклянных тарифных карточек (узел Figma
+     2846-153711, stroke fill_f0f18fa9): border-image не умеет скруглённые
+     углы, поэтому кольцо 1px рисует псевдоэлемент с двухслойной маской
+     (content-box внутрь, кольцо наружу). */
+  .glass-ring::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from 103deg at 50% 53%,
+      rgba(156, 156, 156, 0.5) 3%,
+      rgba(156, 156, 156, 0.35) 9%,
+      rgba(255, 255, 255, 0.5) 17%,
+      rgba(255, 255, 255, 0.5) 30%,
+      rgba(156, 156, 156, 0.35) 52%,
+      rgba(249, 249, 249, 1) 58%,
+      rgba(255, 255, 255, 0.5) 80%,
+      rgba(249, 249, 249, 0.5) 91%
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+/* Горизонтальная полоса без скроллбара — карусели аренды и отзывов,
+   планшетные полосы CardTrio/Audience/тарифов: overflow-x-auto,
+   overscroll-x-contain и скрытый скроллбар (Firefox scrollbar-width,
+   WebKit/Blink ::-webkit-scrollbar) одним классом. */
+@utility hide-scrollbar {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Нативная полоса четырёх секций (CardTrio, Audience, тарифы) — живёт
+   только до перехвата движком TabletStrip. Отдельная утилита (а не
+   hide-scrollbar): на десктопе (≥1200) ряд статичен, а overflow-x:auto
+   вычисляет overflow-y:auto (CSS Overflow 3: visible при не-visible
+   соседе) — на загрузке полоса ловит 24px от Reveal-трансформа карточек
+   (трансформированные потомки входят в scrollable overflow) и становится
+   вертикальным скролл-контейнером: свайп уводит секцию, а не страницу
+   (поймано приёмкой 05.10 на «Для кого сервис»). На ≥1200 overflow
+   сбрасывается — ряд влезает, контейнер не нужен вовсе. */
+@utility strip-scroll {
+  @media (min-width: 481px) and (max-width: 1199px) {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    overflow: visible;
+  }
+}
+
+/* Прыжок loop-перестановки в карусели отзывов (testimonials-carousel):
+   слайд, выходящий из «стопки» растворённых в очередь, переезжает без
+   анимации transform — иначе перелетает весь экран на виду; проявление
+   0→0.4 остаётся плавным. Отдельная утилита: arbitrary-класс Tailwind
+   съедает 0ms-длительность transform. */
+@utility slide-jump {
+  transition: transform 0ms linear, opacity 360ms ease-out;
+}
+
+/* Десктопный переход карусели отзывов — плавнее тачевого (решение
+   владельца «чуток плавнее на ПК», канон 1:1 с Яндексом остался на
+   тачах): дольше (440 против 360ms) и с мягким входом и выходом
+   (cubic-bezier(0.45,0,0.2,1)) — у яндексовского ease-out резкий разгон
+   первых ~15% пути читался как рывок на въезде карточки. Утилитой, не
+   arbitrary-классом (см. slide-jump). */
+@utility slide-desk {
+  transition:
+    transform 440ms var(--ease-desk),
+    opacity 440ms var(--ease-desk);
+}
+
+@utility slide-jump-desk {
+  transition: transform 0ms linear, opacity 440ms var(--ease-desk);
+}
+
+/* Мобильный переход карусели отзывов (≤480) — скорость Яндекса
+   (speed 600 их мобильного инстанса «Опыт наших партнёров», easing
+   Swiper = ease). Утилитой по тем же причинам, что slide-jump. */
+@utility slide-mob {
+  transition: transform 600ms ease, opacity 600ms ease;
+}

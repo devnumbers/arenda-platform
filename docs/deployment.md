@@ -1,32 +1,38 @@
 # Deployment
 
 Документ описывает stage/prod деплой: GitHub Actions собирает образы на
-self-hosted runner'е, пушит в GHCR и деплоит на сервер по digest через SSH.
+GitHub-hosted раннерах (ADR 0045; раньше — self-hosted раннер на самом
+сервере, списан), пушит в GHCR и деплоит на сервер по digest через SSH.
 На сервере нет репозитория и сборки — только compose-файлы, env и бэкапы.
 Caddy запущен на хосте и проксирует публичные домены на localhost-порты
-контейнеров. Архитектурное решение — `docs/adr/0024-deploy-pipeline-ghcr-runner.md`.
+контейнеров. Архитектурное решение — `docs/adr/0024-deploy-pipeline-ghcr-runner.md`
+(размещение раннеров — `docs/adr/0045-github-hosted-runners.md`).
 
 ## Поток деплоя
 
 ```
 push в dev (stage) или main (prod)
   → ci.yml (lint, тесты, миграции up/down, сканеры — blocking)
-  → сборка 4 образов (matrix, max-parallel: 2) → trivy → push в GHCR → cosign sign
+  → сборка 4 образов (matrix, параллельно, GitHub-hosted) → trivy → push в GHCR → cosign sign
   → _deploy.yml: cosign verify → рендер env из секрета ENV_FILE (со сверкой
-    ключей против .env.<env>.example) → передача env на сервер через base64
+    ключей против deploy/.env.<env>.example) → передача env на сервер через base64
     в envs ssh-шага → pg_dump-бэкап →
-    миграции → up -d --wait → внешние smoke → точечная чистка старых образов
+    миграции → up -d --wait → Caddy-фрагмент (guard → .prev → mv →
+    validate → reload → smoke, откат фрагмента при провале) →
+    внешние smoke → точечная чистка старых образов
 ```
 
 При падении раскатки или smoke — автоматический откат образов на предыдущие
-(`.previous-images` в deploy-каталоге). БД автоматически НЕ откатывается —
-см. разделы «Миграции» и «Rollback».
+(`.previous-images` в deploy-каталоге); при падении шага Caddy-фрагмента —
+откат самого фрагмента на `rentlee.caddy.prev`. БД автоматически НЕ
+откатывается — см. разделы «Миграции» и «Rollback».
 
 Workflow-файлы: `.github/workflows/{ci,security,_deploy,deploy-stage,deploy-prod}.yml`.
 `security.yml` — это SAST (semgrep) и trivy-fs (ежедневный ночной прогон + non-blocking на PR);
-уязвимости зависимостей закрыты Dependabot (`.github/dependabot.yml`: security
-updates + сгруппированные weekly version updates в ветку `dev`) и govulncheck
-в `ci.yml`.
+уязвимости зависимостей закрывают govulncheck в `ci.yml` и гейт `make npm-audit`
+(high+); Dependabot (security + сгруппированные weekly version updates в ветку
+`dev`) отключён владельцем 29.09.2026 — `.github/dependabot.yml` снесён,
+восстанавливается из git-истории.
 Ручной деплой и откат — `workflow_dispatch` в `deploy-stage.yml` /
 `deploy-prod.yml` с четырьмя digest-inputs.
 
@@ -36,13 +42,23 @@ updates + сгруппированные weekly version updates в ветку `d
   GitHub Environment `stage` (deployment branch policy: только `dev`).
 - `main` branch → prod: `/opt/arenda/prod`, compose project `arenda-prod`,
   GitHub Environment `production` (deployment branch policy: только `main`).
-- Stage backend использует `APP_ENV=dev`, чтобы T-Kassa sandbox был допустим текущей валидацией конфигурации.
+- Stage backend использует `APP_ENV=stage` и `PAYMENT_PROVIDER=fake`: валидация
+  на stage строгая — как в `production`, с явными исключениями для фейкового
+  платёжного провайдера и фейкового email-sender (тестирование без реальных
+  денег). T-Kassa остаётся легальной на stage: sandbox-`T_KASSA_BASE_URL`
+  проходит валидацию. Смена `APP_ENV`/`PAYMENT_PROVIDER` вносится в секрет
+  `ENV_FILE` окружения `stage` вместе с этим example (набор ключей не менялся);
+  обновлять секрет синхронно с деплоем новой версии бэка — старый бэк значение
+  `APP_ENV=stage` не примет.
 - Prod backend использует `APP_ENV=production`.
 - Deploy-каталоги на сервере содержат только `docker-compose.<env>.yml`,
   `.env.<env>` (+ `.prev`), `.previous-images`, `.deploy-run-id`; репозитория
   и git-чекаута на сервере нет.
-- Лендинг (`apps/landing`) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как fallback для `/`.
+- Лендинг (`apps/landing`, Next.js standalone — ADR 0063) слушает `127.0.0.1:13002` в prod и `127.0.0.1:23002` в stage; Caddy отдаёт его как явное исключение на публичном домене (`/`, `/landing/_next/*` — assetPrefix, юрстраницы, `robots.txt`), всё остальное уходит кабинету — см. раздел «Caddy».
 - При каждом деплое backend недоступен 5–15 секунд (один инстанс) — принято.
+- Каждый деплой stage/prod также раскатывает Caddy-фрагмент rentlee
+  (`deploy/caddy/rentlee.caddy` → `/etc/caddy/conf.d/rentlee.caddy`) —
+  см. раздел «Caddy».
 
 ## DNS
 
@@ -59,9 +75,10 @@ updates + сгруппированные weekly version updates в ветку `d
 Одноразовая подготовка нового сервера. Git-чекауты не нужны: deploy-каталоги
 получают compose-файл через scp, а env — через base64 в envs ssh-шага пайплайна.
 
-1. Установить Docker + compose plugin; установить и зарегистрировать
-   self-hosted GitHub Actions runner (labels `self-hosted, linux, x64`) —
-   runner на продовом VPS является принятым риском, компенсации см. в ADR 0024.
+1. Установить Docker + compose plugin. Раннер на сервере не нужен: все джобы
+   (CI, сборка образов, деплой) выполняются на GitHub-hosted раннерах
+   (ADR 0045); сервер принимает только SSH от deploy-пайплайна (ключ-deploy
+   пользователя, host key pinned, fail2ban на хосте).
 2. Создать deploy-пользователя и каталоги:
 
    ```bash
@@ -82,6 +99,27 @@ updates + сгруппированные weekly version updates в ветку `d
    (пустая БД — дамп маленький, это нормально только для самого первого
    запуска), применит миграции и поднимет стек.
 
+## Runner Decommission (runbook)
+
+Одноразовое списание self-hosted раннера с VPS после перехода на
+GitHub-hosted раннеры (ADR 0045). Выполнялось 2026-08-21.
+
+1. В GitHub: Settings → Actions → Runners → выбрать раннер → Remove
+   (если сервис уже мёртв, принудительно). Registration token для CLI-удаления
+   выдаётся там же (New runner → Configure).
+2. На сервере:
+
+   ```bash
+   sudo systemctl stop actions.runner.*.service || true
+   sudo systemctl disable actions.runner.*.service || true
+   cd <каталог-раннера>   # обычно /opt/actions-runner или ~/actions-runner
+   ./config.sh remove --token <registration-token>
+   cd .. && rm -rf <каталог-раннера>
+   ```
+
+3. Проверить, что свободная память хоста выросла (`free -h`) — билды больше
+   не конкурируют с продом.
+
 ## GitHub Environments и секреты
 
 Два environment: `stage` и `production`. Набор секретов одинаковый, значения
@@ -89,7 +127,7 @@ updates + сгруппированные weekly version updates в ветку `d
 
 | Секрет | Где | Назначение | Ротация |
 | --- | --- | --- | --- |
-| `ENV_FILE` | environment | Весь набор переменных окружения одним multiline-значением. Ключи должны точно совпадать с `.env.<env>.example` | При изменении любой переменной; заодно обновить example, иначе deploy упадёт на сверке ключей |
+| `ENV_FILE` | environment | Весь набор переменных окружения одним multiline-значением. Ключи должны точно совпадать с `deploy/.env.<env>.example` | При изменении любой переменной; заодно обновить example, иначе deploy упадёт на сверке ключей |
 | `SSH_PRIVATE_KEY` | environment | Deploy-доступ на сервер (appleboy scp/ssh) | При смене ключа deploy-пользователя |
 | `SSH_HOST` | environment | Хост VPS | При смене сервера |
 | `SSH_USER` | environment | Deploy-пользователь | — |
@@ -103,14 +141,21 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
 
 ## Env: как это работает
 
-- Источник истины по **набору ключей** — `.env.stage.example` /
-  `.env.prod.example` в репозитории. Источник **значений** — секрет
+- Источник истины по **набору ключей** — `deploy/.env.stage.example` /
+  `deploy/.env.prod.example` в репозитории (рядом с `deploy/docker-compose.<env>.yml`,
+  чьи `env_file`-пути разрешаются от каталога compose-файла). Источник **значений** — секрет
   `ENV_FILE` соответствующего GitHub Environment.
 - При деплое runner рендерит `ENV_FILE` в файл, сверяет множество ключей с
   example-файлом (несовпадение = fail, защита от drift'а), дописывает
   `*_IMAGE=...@sha256:...` и `service.version` в `OTEL_RESOURCE_ATTRIBUTES`,
   маскирует значения в логе и копирует файл на сервер (`chmod 600`, прежняя
   версия сохраняется как `.env.<env>.prev`).
+- **Чеклист новой env-переменной** — одно место каждого пункта пропущено =
+  красный деплой в день релиза: (1) чтение в коде; (2) `environment:` в
+  `deploy/docker-compose.<env>.yml`; (3) ключ в `deploy/.env.<env>.example`
+  обоих окружений, если переменная для обоих; (4) значение в секрет
+  `ENV_FILE` GitHub Environment — синхронно с PR (секрет вне репозитория, а
+  гейт сверяет набор ключей только перед деплоем, не в PR).
 - Ручные правки `.env.<env>` на сервере не предполагаются: следующий деплой
   их перезапишет. Изменение env = обновить секрет `ENV_FILE` (+ example при
   изменении набора ключей) и задеплоить.
@@ -133,10 +178,9 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
   Для `AddCard` redirect-поля находятся вне официальной схемы API и исключены из
   подписи токена (prod-инцидент, error 204). Документированный fallback —
   настройка Success/Fail Add Card URL в параметрах терминала.
-- Если `REGRU_S3_PUBLIC_BASE_URL` указывает на `https://cdn.rentlee.ru`
-  (актуально только при `PHOTO_STORAGE_PROVIDER=s3`), этот DNS/публичный URL
-  должен быть настроен до запуска backend; иначе указать рабочий публичный URL
-  REG.RU S3.
+- Приватные фото (ADR 0065) стримят через backend: публичный URL бакета и
+  CDN не нужны, бакет остаётся закрытым по умолчанию. Бакет и ключи Рег.ру —
+  тикет #1222.
 - `PHOTO_STORAGE_PROVIDER=s3` включает REG.RU S3 и требует заполненные
   `REGRU_S3_*` значения. `REGRU_S3_*` также используются пайплайном для
   off-site копии дампов БД (endpoint/bucket/access/secret key).
@@ -150,6 +194,11 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
   (`mailto:smirnowwwivan@mail.ru`). Публичный ключ отдаётся фронту в рантайме
   через `GET /push/vapid-public-key` (BFF-прокси `app/api/[...path]/route.ts`),
   приватный — серверный секрет; никуда кроме `ENV_FILE` не кладётся.
+- Очередь доставки уведомлений (River, ADR 0059) настраивается ключами
+  `NOTIFICATIONS_*` (потолки воркеров очередей, бюджеты ретраев, окно
+  soft-stop, глобальный email-бюджет провайдера) — в `ENV_FILE` обычно не
+  указывается, рабочие дефолты зашиты в конфиг. Схема очереди применяется
+  шагом `migrate` после основных миграций (отдельная цепочка `river_migration`).
 
 ## Миграции и бэкапы
 
@@ -168,14 +217,14 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
   релизами; `CREATE INDEX CONCURRENTLY` на больших таблицах. Авто-rollback
   никогда не делает `migrate down`; `down` прогоняется только в CI на
   эфемерной БД. Контроль — чеклист в `.github/PULL_REQUEST_TEMPLATE.md`.
-- Down-миграция `000086_property_deletion_detach` **необратима после первого
-  реального удаления объекта в режиме detach**: она выполняет `SET NOT NULL`
-  на `property_id` в `leases`, `operations` и `recurring_operations` и упадёт,
-  пока в БД есть отвязанные строки (`property_id IS NULL`). Ручной откат за
-  пределы 000086 возможен только после ручной чистки таких строк
-  (перепривязка или удаление). Стандартный rollback это не ломает:
-  автоматический откат `migrate down` не выполняет никогда, а откат БД —
-  только restore из дампа (см. ниже).
+- Down-миграция `000086_property_deletion_detach` выполняет `SET NOT NULL` на
+  `property_id` в таблицах арендного домена и исторически падала, пока в БД
+  есть отвязанные строки (`property_id IS NULL`). После drop-миграции
+  `000114` (спека #434) откат за 000086 всегда проходит через 000114-down,
+  который восстанавливает эти таблицы пустыми — ручная чистка строк больше не
+  нужна. Стандартный rollback это не ломает: автоматический откат
+  `migrate down` не выполняет никогда, а откат БД — только restore из дампа
+  (см. ниже).
 
 ### Restore из дампа
 
@@ -239,121 +288,149 @@ docker compose --env-file .env.$ENV -f docker-compose.$ENV.yml up -d --wait
 `.env.<env>`-файлы старой схемы держать как fallback, после — удалить вместе
 с git-чекаутом.
 
-## Caddyfile
+## Caddy
 
-```caddyfile
-www.rentlee.ru {
-	redir https://rentlee.ru{uri} permanent
-}
+Caddy работает на хосте как systemd-сервис и проксирует публичные домены на
+localhost-порты контейнеров. Конфигурация — модель import conf.d (карта #649):
 
-rentlee.ru {
-	encode zstd gzip
+- главный файл `/etc/caddy/Caddyfile` сводится к глобальному блоку и
+  `import /etc/caddy/conf.d/*.caddy`;
+- каждый проект — свой файл в `/etc/caddy/conf.d/`; чужие проекты правятся
+  руками на сервере, пайплайн их не трогает;
+- рентли-часть — `/etc/caddy/conf.d/rentlee.caddy`, её источник правды —
+  репозиторий: `deploy/caddy/rentlee.caddy`. Раскатывается пайплайном при
+  каждом деплое stage/prod, руками на сервере не редактировать — правка будет
+  затёрта следующим деплоем.
 
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:18080
-	}
+### Контракт маршрутизации (инверсия фолбэка)
 
-	handle /webhooks/* {
-		reverse_proxy 127.0.0.1:18080
-	}
+Кабинет Next.js — дефолтный catch-all; лендинг — явное исключение:
 
-	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
-	handle @frontend {
-		reverse_proxy 127.0.0.1:13000
-	}
+- `/api/*` → бэкенд через `handle_path` (префикс `/api` снимается);
+- `/webhooks/*` → бэкенд через `handle` (префикс НЕ снимается — T-Kassa шлёт
+  колбэки на полный путь);
+- ассеты лендинга — `/landing/_next/*`: оба приложения — Next.js, и «голый»
+  `/_next/*` принадлежит кабинету, поэтому лендинг собран с
+  `assetPrefix /landing` (env `LANDING_ASSET_PREFIX` в Dockerfile,
+  `apps/landing/next.config.ts`); Caddy снимает `/landing`
+  (`handle` + `uri strip_prefix`) — контейнер ждёт честный `/_next/*`;
+  попытка отдать лендингу весь `/_next/*` (первая редакция ADR 0063)
+  ломала кабинет на stage 30.09: HTML 200, каждый чанк 404;
+- лендинг (`@landing`): `/` (точный), `/privacy`, `/terms`, `/robots.txt`,
+  `/sitemap.xml`, `/fonts/*` (self-hosted Onest), метадата-маршруты Next
+  `/icon.png`, `/opengraph-image`, `/apple-icon.png`, `/favicon.ico`
+  (OG-картинка, apple-touch-icon, favicon — конечные пути, точные) — через
+  `handle`, НЕ `handle_path`: контейнер лендинга (Next standalone, ADR 0063)
+  ждёт полный путь;
+- всё остальное → кабинет (`127.0.0.1:13000` prod / `:23000` stage), включая
+  его `/_next/*`.
 
-	handle {
-		reverse_proxy 127.0.0.1:13002
-	}
-}
+Следствия:
 
-admin.rentlee.ru {
-	encode zstd gzip
+- новый top-level роут фронта работает без правок прокси — включая его
+  `/_next/*`-статику;
+- новый публичный путь лендинга = добавление в матчер `@landing`
+  (`deploy/caddy/rentlee.caddy`) + app-маршрут `app/(site)/<путь>/page.tsx`
+  (страница) либо файл в `apps/landing/public/` (статический ассет) —
+  файл из `public/` маршрутом в Next не становится;
+- `robots.txt` и `sitemap.xml` отдаёт лендинг (`apps/landing/public/`);
+  `Disallow`-список robots.txt зеркалит `APP_ROUTE_PREFIXES` фронта минус
+  `/login`;
+- `/sw.js` уходит фронту catch-all'ом; `Cache-Control: no-store` ставит Next
+  (`headers()` в `next.config.ts`), на `/sw.js` никаких заголовков Caddy не
+  добавлять (ADR 0032); `Content-Type` обязан быть
+  `text/javascript`/`application/javascript`, иначе регистрация SW упадёт
+  (требование спецификации — JS MIME);
+- дедупликация prod/stage-блоков — snippets `(rentlee_site)`, `(rentlee_admin)`
+  и `(rentlee_log)` с позиционными аргументами `{args[0]}` (канон Caddy ≥2.7;
+  на сервере v2.11.4); access-лог — один snippet на все блоки хоста;
+- SSE-стрим (`/api/notifications/stream`, ADR 0060) исключён из `encode`
+  именованным матчером по пути запроса — `@not_sse not path
+  /api/notifications/stream*`: ответные матчеры `encode` не умеют отрицания
+  по значению заголовка (только `status` и `header` с `!`-отсутствием
+  поля), а дефолтный матчер сжатия включает `text/*`, и gzip начал бы
+  буферизовать кадры после 512 байт; `reverse_proxy` сам флешит
+  `text/event-stream` немедленно — `flush_interval` не нужен;
+- `www.rentlee.ru` — permanent redir на канон; admin-блоки — catch-all на
+  админку с тем же `handle_path /api/*`;
+- access-лог — общий `/var/log/caddy/access.log` (JSON, roll 50mb × 5),
+  пишут все блоки хоста, включая чужие; ротацию делает сам Caddy.
 
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:18080
-	}
+### Раскатка фрагмента пайплайном
 
-	handle {
-		reverse_proxy 127.0.0.1:13001
-	}
-}
+Шаг «Deploy Caddy fragment» в `_deploy.yml` (общий для stage и prod), после
+раскатки образов и перед внешним smoke:
 
-dev.rentlee.ru {
-	encode zstd gzip
+1. upload `deploy/caddy/rentlee.caddy` → `/tmp/arenda-caddy-<env>/`;
+2. guard: в `/etc/caddy/Caddyfile` есть `import /etc/caddy/conf.d` — иначе
+   шаг падает громко (защита от «фрагмент уехал, но не импортируется»; до
+   разового расщепления монолита — runbook ниже — деплой останавливается
+   здесь);
+3. install как `/etc/caddy/conf.d/rentlee.caddy.new` (суффикс `.new` не
+   матчит glob `*.caddy` — случайный подхват на лету исключён);
+4. backup текущего фрагмента → `rentlee.caddy.prev`;
+5. атомарный `mv` на место фрагмента;
+6. `caddy validate --config /etc/caddy/Caddyfile` — главный файл с импортами
+   (фрагмент резолвится только через import);
+7. `systemctl reload caddy` — graceful, zero-downtime; при невалидном конфиге
+   работающий инстанс остаётся на старом;
+8. smoke инвертированной маршрутизации: лендинг-исключения = 200, чанк
+   лендинга `/landing/_next/static/*.js` = 200 + immutable, чанк кабинета
+   `/_next/static/*.js` = 200 (поломка 30.09 прошла мимо смоука без этой
+   проверки), кабинет = catch-all (200/307), чужой путь = 404,
+   `/api/healthz` = ok, `/sw.js` = no-store + JS MIME, `robots.txt` =
+   text/plain;
+9. провал validate/reload/smoke → откат: `rentlee.caddy.prev` на место +
+   reload, шаг падает громко (образы при провале смоука откатит штатный
+   «Rollback on failure»).
 
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:28080
-	}
+Sudo: deploy-пользователю нужны passwordless-права на
+`caddy validate --config /etc/caddy/Caddyfile`, `systemctl reload caddy` и
+`install`/`cp`/`mv`/`rm` над файлами `/etc/caddy/conf.d/rentlee.caddy*`
+(точечный sudoers — настроить один раз при расщеплении монолита).
 
-	handle /webhooks/* {
-		reverse_proxy 127.0.0.1:28080
-	}
+Изменение конфига — только через репо: править `deploy/caddy/rentlee.caddy` →
+влить в `dev` (stage) / `main` (prod) → деплой. Ручной сценарий «поправить
+файл на сервере и reload» остаётся аварийным: файл фрагмента —
+`/etc/caddy/conf.d/rentlee.caddy`, проверка и применение —
+`sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`;
+следующая раскатка перезапишет ручную правку.
 
-	@frontend path /login* /dashboard* /properties* /leases* /tenants* /finance* /profile* /subscription* /support* /ui-kit* /calendar* /reminders* /_next/* /fonts/* /images/* /file.svg /globe.svg /next.svg /vercel.svg /window.svg /icon.png /manifest.webmanifest /sw.js /offline.html /icons/* /apple-icon.png
-	handle @frontend {
-		reverse_proxy 127.0.0.1:23000
-	}
+### Разовое расщепление монолита (одноразовый runbook)
 
-	handle {
-		reverse_proxy 127.0.0.1:23002
-	}
-}
+Строго до первого пайплайн-выката фрагмента (иначе guard остановит деплой).
+Поведение-сохраняющее: инверсию делает первый выкат фрагмента, не
+расщепление. Выполняется руками, ад-хок SSH-командами (без скрипта в репо).
 
-admin.dev.rentlee.ru {
-	encode zstd gzip
-
-	handle_path /api/* {
-		reverse_proxy 127.0.0.1:28080
-	}
-
-	handle {
-		reverse_proxy 127.0.0.1:23001
-	}
-}
-```
-
-При добавлении нового top-level роута в Next.js-фронт его нужно добавить в
-`@frontend path` и перечитать Caddy: `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`.
-
-### PWA-ассеты в Caddyfile
-
-PWA-оболочка кабинета (тикет #179) добавляет четыре новых path в `@frontend`:
-
-- `/manifest.webmanifest` — Web App Manifest (`app/manifest.ts`);
-- `/sw.js` — service worker (`public/sw.js`, scope `/`);
-- `/offline.html` — брендированный офлайн-экран, precache'ится SW;
-- `/icons/*` — PWA-иконки 192/512 (`public/icons/`) и iOS splash-изображения (`public/icons/splash/`, тикет #185); glob `/icons/*` уже покрывает оба подкаталога, отдельных правил не требуется.
-
-`/sw.js` должен отдаваться без агрессивного кеширования, иначе браузер не
-подтянет обновление SW (byte-compare update check). Next.js ставит
-`Cache-Control: no-store` через `headers()` в `next.config.ts`; убедиться, что
-Caddy не переписывает этот заголовок на path `/sw.js` (проверить на stage:
-`curl -I https://dev.rentlee.ru/sw.js`). `Content-Type` ответа обязан быть
-`text/javascript`/`application/javascript`, иначе регистрация SW упадёт
-(требование спецификации — JS MIME).
-
-Проверка и применение:
-
-```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
-```
-
+1. Снять монолит: `scp alterix-server:/etc/caddy/Caddyfile ./live`.
+2. Расщепить руками: top-level site-блоки → `conf.d/<домен>.caddy`; пятёрка
+   rentlee-блоков — в `conf.d/rentlee.caddy` в текущем живом виде (протухший
+   whitelist и `log`-блоки переехать как есть).
+3. Доказать эквивалентность: `caddy adapt` старого монолита vs собранного
+   нового (импорты резолвятся), нормализация `jq -S`, дифф пустой — иначе не
+   устанавливать.
+4. Бэкапы: живой файл → `Caddyfile.prev-monolith`; 12 `Caddyfile.bak-*` →
+   tarball `/root/caddy-bak-<дата>.tar.gz` + снос из `/etc/caddy`.
+5. Установить (`install -m 644`), настроить sudoers deploy-пользователя
+   (см. выше), `caddy validate --config /etc/caddy/Caddyfile` серверным
+   бинарём, `systemctl reload caddy`.
+6. Smoke: rentlee (`/login`, `/dashboard`, `/api/healthz`) и 2–3 чужих
+   домена (byron-lounge, inten, kb-3) живы. При провале — откат из
+   `Caddyfile.prev-monolith` + reload.
 ## Smoke Checks
 
 Эти же проверки (плюс сверка `version` в `/api/healthz` с sha коммита)
 выполняет deploy-джоба снаружи; вручную их можно повторить так:
 
 ```bash
-curl -fsS https://dev.rentlee.ru/ | grep -q 'id="root"'
+curl -fsS https://dev.rentlee.ru/ | grep -q 'id="landing-root"'
 curl -fsS https://dev.rentlee.ru/login | grep -qi '<html'
 curl -fsS https://admin.dev.rentlee.ru/ | grep -q 'id="root"'
 test "$(curl -fsS https://admin.dev.rentlee.ru/healthz)" = "ok"
 curl -fsS https://dev.rentlee.ru/api/healthz | grep -q '"status":"ok"'
 test "$(curl -sS -o /tmp/arenda-stage-me.out -w '%{http_code}' https://dev.rentlee.ru/api/me)" = "401"
 
-curl -fsS https://rentlee.ru/ | grep -q 'id="root"'
+curl -fsS https://rentlee.ru/ | grep -q 'id="landing-root"'
 curl -fsS https://rentlee.ru/login | grep -qi '<html'
 curl -fsS https://admin.rentlee.ru/ | grep -q 'id="root"'
 test "$(curl -fsS https://admin.rentlee.ru/healthz)" = "ok"
@@ -368,6 +445,31 @@ esac
 `/api/healthz` подтверждает, что Caddy попал в backend и `/api` был снят
 через `handle_path`. Поле `version` в ответе равно sha задеплоенного коммита
 (при ручном dispatch — `manual`). `/api/me` без cookie должен отвечать `401`.
+
+Контракт инвертированной маршрутизации (после переезда на `conf.d`,
+карта #649) — вручную на любом окружении:
+
+```bash
+# Лендинг — явное исключение.
+curl -fsS https://dev.rentlee.ru/privacy | grep -qi 'Политика конфиденциальности'
+curl -fsS https://dev.rentlee.ru/robots.txt           # text/plain, Disallow-правила
+curl -fsS https://dev.rentlee.ru/sitemap.xml          # xml, три URL
+# Кабинет — catch-all.
+test "$(curl -sS -o /dev/null -w '%{http_code}' https://dev.rentlee.ru/properties)" = "200"
+test "$(curl -sS -o /dev/null -w '%{http_code}' https://dev.rentlee.ru/nosuchpath)" = "404"
+# SW: no-store доходит от Next, Caddy его не перезаписывает (ADR 0032).
+curl -sSI https://dev.rentlee.ru/sw.js | grep -i '^cache-control: no-store'
+```
+
+Пересекающиеся проверки выполняет шаг «Deploy Caddy fragment» после каждой
+раскатки (он дополнительно грейтит `/login`, лендинг-ассеты и 404); их провал
+откатывает фрагмент на `.prev` (см. раздел «Caddy»). Фрагмент один на оба
+окружения: stage-деплой гоняет smoke против `dev.rentlee.ru`, prod-часть
+фрагмента (`rentlee.ru`, admin) реально проверяется смоуком только на
+prod-выкате — там её подстраховывают validate и откат.
+
+Домен в `robots.txt` (`Sitemap:`) и в `sitemap.xml` (`<loc>`) — продовый
+канон `https://rentlee.ru`; stage-зеркало этим файлом не индексируется.
 
 ## Runtime Guards
 
@@ -420,6 +522,27 @@ esac
   Uptrace. Локальный json-file driver и `docker logs` сохраняются.
 - Healthcheck-cron (`tools/healthcheck/healthcheck.sh`) пишет JSON при
   сбое в `/var/log/arenda/healthcheck.log`, откуда Vector забирает запись.
+
+### Метрики гигиены воркеров billing (тикет #433)
+
+Backend экспортирует гейдж `billing.payments.stuck` (OTel, атрибут `kind`)
+— число «висящих в полёте» исходов под сторожем reconciliation-воркера,
+без чувствительных данных:
+
+- `kind=pending` — оплаты без зафиксированного исхода дольше
+  `PendingPaymentStaleness` (5 минут, конфиг billing): потерянный вебхук,
+  незавершённая оплата. Порог алерта: > 0 дольше 1 часа — reconciliation
+  не разрешает зависимости, дежурный смотрит раньше пользователя.
+- `kind=refunding` — возвраты, зависшие в резервировании `refunding` дольше
+  5 минут: возврат в полёте или неопределённый исход. Порог алерта: > 0
+  дольше 1 часа — деньги пользователя в подвешенном состоянии, нужен ручной
+  разбор (неопределённый исход при failed-статусе провайдера).
+
+Оба гейджа пишет фаза `ExportStuckPaymentMetrics` billing-воркера в конце
+каждого тика. Истёкшие сессии привязки карты удаляются фазой
+`ProcessExpiredBindingSessions` того же тика (таблица не растёт неограниченно);
+алерта на чистку нет — сбой фазы виден в логах воркера и росте таблицы
+`card_binding_sessions`.
 
 Решение об observability зафиксировано в
 `docs/adr/0021-centralized-observability-uptrace.md` (superseded —

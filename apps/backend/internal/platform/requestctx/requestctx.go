@@ -1,3 +1,4 @@
+// Package requestctx carries request-scoped diagnostics (request ID, trace ID, client IP) through context.
 package requestctx
 
 import "context"
@@ -18,7 +19,10 @@ func WithRequestID(ctx context.Context, id string) context.Context {
 
 // RequestIDFromContext returns the request ID stored in context, if any.
 func RequestIDFromContext(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDKey{}).(string)
+	id, ok := ctx.Value(requestIDKey{}).(string)
+	if !ok {
+		return ""
+	}
 	return id
 }
 
@@ -32,7 +36,10 @@ func WithTraceID(ctx context.Context, id string) context.Context {
 
 // TraceIDFromContext returns the trace ID stored in context, if any.
 func TraceIDFromContext(ctx context.Context) string {
-	id, _ := ctx.Value(traceIDKey{}).(string)
+	id, ok := ctx.Value(traceIDKey{}).(string)
+	if !ok {
+		return ""
+	}
 	return id
 }
 
@@ -46,6 +53,9 @@ func WithClientIP(ctx context.Context, ip string) context.Context {
 
 // ClientIPFromContext returns the client IP address stored in context, if any.
 func ClientIPFromContext(ctx context.Context) string {
-	ip, _ := ctx.Value(clientIPKey{}).(string)
+	ip, ok := ctx.Value(clientIPKey{}).(string)
+	if !ok {
+		return ""
+	}
 	return ip
 }

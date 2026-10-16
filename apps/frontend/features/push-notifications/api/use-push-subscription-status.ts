@@ -1,128 +1,93 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   isPushSupported,
   readNotificationPermission,
+  subscribeToPermissionChanges,
 } from '../lib/platform';
+import {
+  PENDING_PUSH_STATUS,
+  mergePushStatus,
+  resolveInitialPushStatus,
+  type PushSubscriptionStatus,
+} from '../lib/push-subscription-status';
+import { usePushSubscriptionProbe, pushSubscriptionKeys } from './hooks';
 
-export type PushSubscriptionStatus = {
-  /** The browser cannot receive push at all. */
-  readonly isUnsupported: boolean;
-  /** Notification permission has not been granted. */
-  readonly needsPermission: boolean;
-  /** The user explicitly denied notification permission — the system prompt cannot be re-shown. */
-  readonly permissionDenied: boolean;
-  /** Permission granted but no active subscription on this device. */
-  readonly needsSubscription: boolean;
-  /** Push is supported, permission granted, and an active subscription exists. */
-  readonly isReady: boolean;
-  /** Initial SSR-safe state — no decision yet. */
-  readonly isPending: boolean;
-};
-
-const PENDING: PushSubscriptionStatus = {
-  isUnsupported: false,
-  needsPermission: false,
-  permissionDenied: false,
-  needsSubscription: false,
-  isReady: false,
-  isPending: true,
-};
-
-const UNSUPPORTED: PushSubscriptionStatus = {
-  isUnsupported: true,
-  needsPermission: false,
-  permissionDenied: false,
-  needsSubscription: false,
-  isReady: false,
-  isPending: false,
-};
+export type { PushSubscriptionStatus };
 
 export type PushSubscriptionStatusResult = PushSubscriptionStatus & {
   /**
-   * Re-probe the browser's push capability, permission, and subscription.
-   * The browser does not emit an event when any of these change, so call this
-   * after an explicit user action that may affect the result (e.g. once the
-   * "Разрешить пуши" button has created a subscription) — otherwise the status
-   * stays stale until a page reload.
+   * Re-probe the browser's subscription (permission and support re-read
+   * live through the permissions store). Call after an explicit user action
+   * that may have created or removed a subscription — otherwise the status
+   * stays stale until the next invalidation.
    */
   readonly refresh: () => void;
 };
+
+// Синхронная часть пробы (поддержка + разрешение) — снапшот-хранилище с
+// живыми обновлениями: браузер не уведомляет о смене разрешения через
+// Notification.permission, но permissions.query({name:'notifications'})
+// кидает change при оптине из Site Settings и автоотзыве Chrome (спека
+// #1028 §6, слайс 2 #1038) — useSyncExternalStore перечитывает вердикт без
+// перезагрузки. Подписки на смене разрешения НЕ влечёт автоподписки —
+// осознанное отклонение от рекомендации исследования (дефолт ВЫКЛ).
+// getServerSnapshot держит SSR и гидратацию в нейтральном pending —
+// расхождение сервер/клиент React закрывает пере-рендером без ошибки
+// гидратации (#418).
+const subscribeToPermission = subscribeToPermissionChanges;
+const getSyncPushStatus = (): PushSubscriptionStatus =>
+  resolveInitialPushStatus({
+    supported: isPushSupported(),
+    permission: readNotificationPermission(),
+  });
+const getServerPushStatus = (): PushSubscriptionStatus => PENDING_PUSH_STATUS;
 
 /**
  * Inspect the browser push capability and return a coarse-grained status the
  * notification-settings UI can branch on.
  *
- * `isUnsupported` is resolved eagerly during the first render (it is a
- * synchronous capability check) so the effect never calls `setState` in the
- * unsupported branch — ESLint's `react-hooks/set-state-in-effect` rule fires
- * on unconditional `setState` calls inside effects. The async subscription
- * check lives in `.then` callbacks, which the rule treats as legitimate
- * (state settles after an awaited operation, not synchronously on mount).
+ * The synchronous parts (support, permission) settle through
+ * `useSyncExternalStore` right after hydration and update live on external
+ * permission changes; the settings screen holds its loading archetype until
+ * then — a late card insert shifted the sections (audit #877, CLS 0.15).
+ * The subscription probe is a react-query on the shared
+ * `pushSubscriptionKeys.subscription` key: heal-отписка и авто-подписка
+ * стартового гейта обновляют все потребители (экран настроек, тост-гейт)
+ * одной инвалидацией, без гонки «экран увидел подписку до heal'а».
  */
 export function usePushSubscriptionStatus(): PushSubscriptionStatusResult {
-  // Resolve synchronously on the client first render; on SSR `isPending`
-  // stays true and the caller renders the neutral UI.
-  const getInitial = (): PushSubscriptionStatus => {
-    if (typeof window !== 'undefined' && !isPushSupported()) {
-      return UNSUPPORTED;
-    }
-    return PENDING;
-  };
-  const [status, setStatus] = useState<PushSubscriptionStatus>(getInitial);
+  const syncStatus = useSyncExternalStore(
+    subscribeToPermission,
+    getSyncPushStatus,
+    getServerPushStatus,
+  );
+  // Проба подписки смыслена только при выданном разрешении (как раньше:
+  // не-выданное — синхронная ветка, подписку у браузера не ждём).
+  const probe = usePushSubscriptionProbe({
+    enabled: syncStatus.isPending,
+  });
+  const queryClient = useQueryClient();
 
-  // Re-read the browser push capability/permission/subscription and push the
-  // result into state. Plain function (no useCallback) — React Compiler
-  // memoizes it automatically. `cancelled` is threaded in by the mount effect
-  // so a probe that resolves after unmount does not call setState.
-  const refresh = async (cancelled: () => boolean = () => false): Promise<void> => {
-    if (!isPushSupported()) return;
+  // Ручная мемоизация с комментарием (CODING_STANDARDS, React Compiler):
+  // слияние синхронного вердикта и вердикта подписки — чистая функция,
+  // проверяется модульно (mergePushStatus).
+  const status = useMemo(
+    () => mergePushStatus(syncStatus, probe.data),
+    [syncStatus, probe.data],
+  );
 
-    const permission = readNotificationPermission();
-    if (permission !== 'granted') {
-      if (!cancelled()) {
-        setStatus({
-          isUnsupported: false,
-          needsPermission: true,
-          permissionDenied: permission === 'denied',
-          needsSubscription: false,
-          isReady: false,
-          isPending: false,
+  return useMemo(
+    () => ({
+      ...status,
+      refresh: () => {
+        void queryClient.invalidateQueries({
+          queryKey: pushSubscriptionKeys.subscription,
         });
-      }
-      return;
-    }
-
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription();
-    if (cancelled()) return;
-    setStatus({
-      isUnsupported: false,
-      needsPermission: false,
-      permissionDenied: false,
-      needsSubscription: subscription === null,
-      isReady: subscription !== null,
-      isPending: false,
-    });
-  };
-
-  useEffect(() => {
-    // The synchronous-unsupported case was handled by the initializer; bail
-    // out here so no setState is reached for unsupported browsers.
-    if (status.isUnsupported) return;
-
-    let cancelled = false;
-    // Run once on mount. The async IIFE keeps the setStatus calls behind an
-    // await so ESLint's react-hooks/set-state-in-effect rule does not fire.
-    void (async () => {
-      await refresh(() => cancelled);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return { ...status, refresh: () => void refresh() };
+      },
+    }),
+    [status, queryClient],
+  );
 }

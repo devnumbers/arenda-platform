@@ -4,19 +4,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetPropertyByIDAndOwner :one
-SELECT properties.*,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.*
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2;
 
@@ -34,24 +22,8 @@ WHERE id = $1 AND owner_id = $2;
 -- properties list to load shared properties (whose owner_id differs from the
 -- actor). Read-only; callers must never leak existence to actors without a view
 -- capability (the application maps "no access" to ErrNotFound to preserve
--- object privacy). members_count is the shared-access participant count
--- (membership rows of any status plus pending email invitations, issue #163).
--- overdue_rent_count counts the property's overdue rent operations scoped to
--- the property's data owner so shared properties show the same count to a
--- member as to the owner (issue #157).
-SELECT properties.*,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+-- object privacy).
+SELECT properties.*
 FROM properties
 WHERE properties.id = $1;
 
@@ -61,40 +33,60 @@ WHERE properties.id = $1;
 SELECT * FROM properties WHERE id = $1 FOR UPDATE;
 
 -- name: ListActivePropertiesByOwner :many
-SELECT properties.*,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+-- The main list's base order (ticket #577, the personal-pin cutover #1307):
+-- the unpinned incoming order is updated_at DESC. The pinned-first rule is
+-- per-actor since the cutover — the application overlays the actor's
+-- personal pins (user_property_pins) over the merged list and re-sorts
+-- (PropertyService.pinnedFirst), so the SQL pass stays out of pin ordering.
+SELECT sqlc.embed(properties)
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
 ORDER BY properties.updated_at DESC;
 
 -- name: ListArchivedPropertiesByOwner :many
-SELECT properties.*,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT sqlc.embed(properties)
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
 ORDER BY properties.updated_at DESC;
+
+-- name: SearchVisibleProperties :many
+-- The search endpoint's window (ticket #601): the actor's visible
+-- non-archived properties — own plus actively shared (the merged visibility
+-- of the main list, ADR 0028) — matching the search as a case-insensitive
+-- substring over the name or the address (the store escapes the ILIKE
+-- metacharacters; the trgm indexes of migration 000124 serve both fields).
+--
+-- The walk is keyset over the display name and id (ticket #597's pattern):
+-- the window resumes strictly after the (name, id) the previous page ended
+-- on, so rows created, deleted or renamed between loads never duplicate or
+-- drop. The name sort mirrors the hub's own default (the client orders the
+-- list by name) with the Russian ICU collation matching the contacts book's
+-- letter order (#600); id ties off. A rename moving a row across the window
+-- boundary is inherent to the visible-name sort. The cursor args travel
+-- together; NULL (no cursor) reads from the beginning.
+-- access_role names the actor's role on the row: 'owner' for own
+-- properties, the active membership's role for shared ones (T11) — the
+-- LEFT JOIN row is unique per (property, user) and carries the role only;
+-- the visibility verdict is the function call in the WHERE.
+SELECT p.*,
+       CASE WHEN p.owner_id = sqlc.arg('actor')::uuid
+            THEN 'owner'
+            ELSE pm.role END::text AS access_role
+FROM properties p
+LEFT JOIN property_members pm
+       ON pm.property_id = p.id
+      AND pm.user_id = sqlc.arg('actor')::uuid
+      AND pm.status = 'active'
+WHERE actor_can_read_property(p.id, sqlc.arg('actor')::uuid)
+  AND p.status IN ('active', 'maintenance')
+  AND (p.name ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\'
+       OR p.address ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
+  AND (sqlc.narg('after_name')::text IS NULL
+       OR (p.name COLLATE "ru-RU-x-icu" > sqlc.narg('after_name')::text
+           OR (p.name COLLATE "ru-RU-x-icu" = sqlc.narg('after_name')::text
+               AND p.id > sqlc.narg('after_id')::uuid)))
+ORDER BY p.name COLLATE "ru-RU-x-icu" ASC, p.id ASC
+LIMIT sqlc.arg('page_limit')::int;
 
 -- name: UpdateProperty :one
 UPDATE properties
@@ -103,6 +95,10 @@ WHERE id = $1 AND owner_id = $2
 RETURNING *;
 
 -- name: ArchiveProperty :one
+-- The archive touches no pin state: pins are personal rows — the contract
+-- migration (#1311) dropped the global properties.pinned_at column with its
+-- CHECK, and personal pin rows are never touched here (D16): unarchiving
+-- returns the property with the participants' pins.
 UPDATE properties SET status = 'archived'
 WHERE id = $1 AND owner_id = $2
 RETURNING *;
@@ -115,6 +111,53 @@ RETURNING *;
 -- name: CountActivePropertiesByOwner :one
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND status IN ('active', 'maintenance');
+
+-- name: CountArchivedPropertiesByOwner :one
+-- The «Архив» button gate (issue #1233): the owner's archived rows only —
+-- shared properties contribute nothing, the archive is owner-only.
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND status = 'archived';
+
+-- name: CountPropertiesByOwnerAndType :one
+-- The auto-name serial (ticket #1001): the owner's properties of this type
+-- in every status — archived count too, deleted rows are gone (hard delete).
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND type = $2;
+
+-- name: ActorPin :one
+-- The actor's personal pin on the property (the cutover #1307, D11): no row
+-- — not pinned, the row's pinned_at — pinned since then. The view
+-- capability is resolved by the application before the call.
+SELECT pinned_at FROM user_property_pins
+WHERE user_id = sqlc.arg('actor')::uuid AND property_id = sqlc.arg('id')::uuid;
+
+-- name: InsertActorPin :one
+-- The pin's «строка есть = состояние» write (the cutover #1307, the model
+-- #1299): one atomic statement — a re-pin keeps the original pin time (the
+-- PUT's idempotency, the order among the pinned never shifts), a fresh pin
+-- takes the moment from the application's clock. The conflicting row's time
+-- stands: DO UPDATE writes the same value back purely so RETURNING delivers
+-- the effective pinned_at (DO NOTHING would return no row) — the stored
+-- value never changes.
+INSERT INTO user_property_pins (user_id, property_id, pinned_at)
+VALUES (sqlc.arg('actor')::uuid, sqlc.arg('id')::uuid, sqlc.arg('pinned_at')::timestamptz)
+ON CONFLICT (user_id, property_id)
+DO UPDATE SET pinned_at = user_property_pins.pinned_at
+RETURNING pinned_at;
+
+-- name: DeleteActorPin :exec
+-- The unpin: the personal row goes; unpinning an unpinned property deletes
+-- nothing and succeeds (the PUT's idempotency).
+DELETE FROM user_property_pins
+WHERE user_id = sqlc.arg('actor')::uuid AND property_id = sqlc.arg('id')::uuid;
+
+-- name: ActorPins :many
+-- The actor's personal pins for the listed properties — the list overlay's
+-- batch (the main list and the search carry pinnedAt of the actor over own
+-- and shared rows alike).
+SELECT property_id, pinned_at FROM user_property_pins
+WHERE user_id = sqlc.arg('actor')::uuid
+  AND property_id = ANY(sqlc.arg('property_ids')::uuid[]);
 
 -- name: ListPropertiesAdmin :many
 SELECT p.*, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
@@ -166,3 +209,16 @@ FROM properties;
 -- name: DeleteProperty :exec
 DELETE FROM properties
 WHERE id = $1 AND owner_id = $2;
+
+-- name: SetPropertyPhoto :one
+-- The object photo write (ADR 0065, ticket #1227): the key and the sniffed
+-- content type move together; a NULL key clears the photo — one image per
+-- entity, no gallery. The scope is the property's owner (ADR 0028): the
+-- actor may be the full-access member; existence and the edit capability
+-- (plus the archived-object guard) are proven by the caller under the row
+-- lock.
+UPDATE properties
+SET photo_key = $3,
+    photo_content_type = $4
+WHERE id = $1 AND owner_id = $2
+RETURNING *;

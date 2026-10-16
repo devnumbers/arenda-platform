@@ -29,15 +29,17 @@ var _ PropertyStatusResolver = fakeStatuses{}
 // TestAccessService_ArchivedPropertyRejectsNewMembers verifies that AddMember
 // on an archived property fails with ErrPropertyArchived (issue #163).
 func TestAccessService_ArchivedPropertyRejectsNewMembers(t *testing.T) {
-	owner := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
 	statuses := fakeStatuses{property: true}
-	svc := NewAccessService(repo, resolver, statuses, stubLookup{}, policy, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(repo, resolver, statuses, stubLookup{}, policy, nil, nil,
+		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	if _, err := svc.AddMember(t.Context(), owner, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrPropertyArchived) {
 		t.Fatalf("AddMember on archived: expected ErrPropertyArchived, got %v", err)
@@ -51,15 +53,17 @@ func TestAccessService_ArchivedPropertyRejectsNewMembers(t *testing.T) {
 // that ChangeMemberRole and RevokeMember are not blocked on an archived
 // property (issue #163).
 func TestAccessService_ArchivedPropertyKeepsExistingMembersManageable(t *testing.T) {
-	owner := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
 	statuses := fakeStatuses{}
-	svc := NewAccessService(repo, resolver, statuses, stubLookup{}, policy, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(repo, resolver, statuses, stubLookup{}, policy, nil, nil,
+		newTestFactory(repo, &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	// The member is added while the property is active; the archive happens
 	// afterwards.
@@ -104,25 +108,40 @@ func (f fakeUserLookup) GetByEmail(_ context.Context, _ string) (MemberUser, err
 var _ UserLookup = fakeUserLookup{}
 
 // TestAccessService_DisplayName verifies the public display name used by the
-// sharing banner (issue T11): "Name Surname" when present, otherwise a masked
-// phone — never an email or a raw phone. Lookup failures propagate.
+// sharing banner (issue T11): "Name Surname" when present, otherwise the
+// anonymous label «Пользователь» (карта #1105, аменд #1123: телефон больше не
+// фолбэк) — never an email. ФИО-канон D4 (карта #1324, протокол #1316):
+// пустая часть просто не пишется, имени нет — «Пользователь» независимо от
+// фамилии (голая фамилия не показывается). Lookup failures propagate.
 func TestAccessService_DisplayName(t *testing.T) {
-	namedID := uuid.New()
-	phoneOnlyID := uuid.New()
-	missingID := uuid.New()
+	t.Parallel()
+	namedID := uuid.Must(uuid.NewV7())
+	phoneOnlyID := uuid.Must(uuid.NewV7())
+	missingID := uuid.Must(uuid.NewV7())
+	surnameOnlyID := uuid.Must(uuid.NewV7())
+	nameOnlyID := uuid.Must(uuid.NewV7())
 	name, surname := "Ivan", "Petrov"
 
 	lookup := fakeUserLookup{
-		namedID:     {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789", HasEmail: true},
-		phoneOnlyID: {ID: phoneOnlyID, Phone: "+79123456789"},
+		namedID:       {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789"},
+		phoneOnlyID:   {ID: phoneOnlyID, Phone: "+79123456789"},
+		surnameOnlyID: {ID: surnameOnlyID, Surname: &surname, Phone: "+79123456789"},
+		nameOnlyID:    {ID: nameOnlyID, Name: &name, Phone: "+79123456789"},
 	}
-	svc := NewAccessService(newMemRepo(), staticResolver{}, nil, lookup, nil, nil, nil, noopBeginner{}, auditapp.Noop{}, nil)
+	svc := NewAccessService(newMemRepo(), staticResolver{}, nil, lookup, nil, nil, nil,
+		newTestFactory(newMemRepo(), &memInvitationsRepo{}, auditapp.Noop{}), nil)
 
 	if got, err := svc.DisplayName(t.Context(), namedID); err != nil || got != "Ivan Petrov" {
 		t.Errorf("named user: got %q, %v; want %q, nil", got, err, "Ivan Petrov")
 	}
-	if got, err := svc.DisplayName(t.Context(), phoneOnlyID); err != nil || got != "+7********89" {
-		t.Errorf("phone-only user: got %q, %v; want %q, nil", got, err, "+7********89")
+	if got, err := svc.DisplayName(t.Context(), phoneOnlyID); err != nil || got != "Пользователь" {
+		t.Errorf("phone-only user: got %q, %v; want %q, nil", got, err, "Пользователь")
+	}
+	if got, err := svc.DisplayName(t.Context(), surnameOnlyID); err != nil || got != anonymousDisplayName {
+		t.Errorf("surname-only user: got %q, %v; want %q, nil (D4: голая фамилия не пишется)", got, err, anonymousDisplayName)
+	}
+	if got, err := svc.DisplayName(t.Context(), nameOnlyID); err != nil || got != "Ivan" {
+		t.Errorf("name-only user: got %q, %v; want %q, nil", got, err, "Ivan")
 	}
 	if _, err := svc.DisplayName(t.Context(), missingID); err == nil {
 		t.Errorf("missing user: expected an error, got nil")
@@ -149,6 +168,7 @@ var _ auditapp.Recorder = (*fakeAuditRecorder)(nil)
 // as the owner's own (issue #166 follow-up). Self-exit is the only write a
 // viewer may perform, so it is where ActorRoleViewer enters the journal.
 func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		role domain.Role
@@ -158,15 +178,16 @@ func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
 		{name: "full access", role: domain.RoleFullAccess, want: auditdomain.ActorRoleFullAccess},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			owner := uuid.New()
-			member := uuid.New()
-			property := uuid.New()
+			t.Parallel()
+			owner := uuid.Must(uuid.NewV7())
+			member := uuid.Must(uuid.NewV7())
+			property := uuid.Must(uuid.NewV7())
 
 			repo := newMemRepo()
 			resolver := staticResolver{property: owner}
 			policy := NewMembershipPolicy(resolver, repo)
 			audit := &fakeAuditRecorder{}
-			svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, noopBeginner{}, audit, nil)
+			svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, audit), nil)
 
 			if _, err := svc.AddMember(t.Context(), owner, property, member, tc.role); err != nil {
 				t.Fatalf("AddMember: %v", err)
@@ -191,37 +212,98 @@ func TestAccessService_LeavePropertyAuditActorRole(t *testing.T) {
 	}
 }
 
-// TestAccessService_ManageAuditActorRole verifies that member-management
-// actions performed by a full-access member are attributed with the full
-// role, while the owner's own actions stay attributed as owner (issue #166
-// follow-up).
-func TestAccessService_ManageAuditActorRole(t *testing.T) {
-	owner := uuid.New()
-	full := uuid.New()
-	member := uuid.New()
-	property := uuid.New()
+// TestAccessService_SuspendedLeaveCarriesTheRealRole pins the suspended
+// self-exit attribution in the audit half (issue #859, the journal twin
+// TestHistory_SuspendedLeaveCarriesTheRealRole): the policy resolves a
+// suspended member to the no-capability «suspended» verdict, but the audit
+// row still attributes the leaver to the membership's real role — suspension
+// hides the object, it does not rewrite who held which role.
+func TestAccessService_SuspendedLeaveCarriesTheRealRole(t *testing.T) {
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
 
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	policy := NewMembershipPolicy(resolver, repo)
 	audit := &fakeAuditRecorder{}
-	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, noopBeginner{}, audit, nil)
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, audit), nil)
+
+	if _, err := svc.AddMember(t.Context(), owner, property, member, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if err := repo.Suspend(t.Context(), repo.rows[0].ID, property); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+	audit.entries = nil
+
+	if err := svc.LeaveProperty(t.Context(), member, property); err != nil {
+		t.Fatalf("LeaveProperty: %v", err)
+	}
+	if len(audit.entries) != 1 {
+		t.Fatalf("audit entries: want 1, got %d", len(audit.entries))
+	}
+	entry := audit.entries[0]
+	if entry.Action != auditdomain.ActionPropertyMemberLeft {
+		t.Fatalf("audit action: want %q, got %q", auditdomain.ActionPropertyMemberLeft, entry.Action)
+	}
+	if entry.ActorRole != auditdomain.ActorRoleViewer {
+		t.Errorf("audit actor role: want viewer — the membership's real role, not the owner fallback, got %q", entry.ActorRole)
+	}
+}
+
+// TestAccessService_ManageAuditActorRole verifies the audit attribution of the
+// member-management actions. Since D8 (issue #1304) they are owner-only: every
+// executed action carries the owner role, and a refused full_access attempt
+// writes nothing at all (issue #166 follow-up).
+func TestAccessService_ManageAuditActorRole(t *testing.T) {
+	t.Parallel()
+	owner := uuid.Must(uuid.NewV7())
+	full := uuid.Must(uuid.NewV7())
+	member := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+
+	repo := newMemRepo()
+	resolver := staticResolver{property: owner}
+	policy := NewMembershipPolicy(resolver, repo)
+	audit := &fakeAuditRecorder{}
+	svc := NewAccessService(repo, resolver, nil, stubLookup{}, policy, nil, nil, newTestFactory(repo, &memInvitationsRepo{}, audit), nil)
 
 	// The owner grants full access; this entry must stay owner-attributed.
 	if _, err := svc.AddMember(t.Context(), owner, property, full, domain.RoleFullAccess); err != nil {
 		t.Fatalf("AddMember full: %v", err)
 	}
+	if entry := audit.entries[0]; entry.ActorRole != auditdomain.ActorRoleOwner {
+		t.Errorf("grant entry actor role: want owner, got %q", entry.ActorRole)
+	}
 	audit.entries = nil
 
-	created, err := svc.AddMember(t.Context(), full, property, member, domain.RoleViewer)
+	// The refused full_access attempts write no audit entries.
+	if _, err := svc.AddMember(t.Context(), full, property, member, domain.RoleViewer); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("AddMember by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if _, err := svc.ChangeMemberRole(t.Context(), full, property, uuid.Must(uuid.NewV7()),
+		domain.RoleFullAccess); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("ChangeMemberRole by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if err := svc.RevokeMember(t.Context(), full, property, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("RevokeMember by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if len(audit.entries) != 0 {
+		t.Fatalf("refused attempts must write no audit entries, got %d", len(audit.entries))
+	}
+
+	// The owner's own member-management actions stay owner-attributed.
+	created, err := svc.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
 	if err != nil {
-		t.Fatalf("AddMember by full: %v", err)
+		t.Fatalf("AddMember by owner: %v", err)
 	}
-	if _, err := svc.ChangeMemberRole(t.Context(), full, property, created.ID, domain.RoleFullAccess); err != nil {
-		t.Fatalf("ChangeMemberRole by full: %v", err)
+	if _, err := svc.ChangeMemberRole(t.Context(), owner, property, created.ID, domain.RoleFullAccess); err != nil {
+		t.Fatalf("ChangeMemberRole by owner: %v", err)
 	}
-	if err := svc.RevokeMember(t.Context(), full, property, created.ID); err != nil {
-		t.Fatalf("RevokeMember by full: %v", err)
+	if err := svc.RevokeMember(t.Context(), owner, property, created.ID); err != nil {
+		t.Fatalf("RevokeMember by owner: %v", err)
 	}
 
 	wantActions := []auditdomain.Action{
@@ -237,8 +319,111 @@ func TestAccessService_ManageAuditActorRole(t *testing.T) {
 		if entry.Action != want {
 			t.Errorf("entry %d action: want %q, got %q", i, want, entry.Action)
 		}
-		if entry.ActorRole != auditdomain.ActorRoleFullAccess {
-			t.Errorf("entry %d actor role: want %q, got %q", i, auditdomain.ActorRoleFullAccess, entry.ActorRole)
+		if entry.ActorRole != auditdomain.ActorRoleOwner {
+			t.Errorf("entry %d actor role: want %q, got %q", i, auditdomain.ActorRoleOwner, entry.ActorRole)
 		}
+	}
+}
+
+// TestChangeMemberRoleNoOpStaysSilent checks the role-change notice's edge
+// (карта #828, #830): re-setting the member's current role is a no-op and
+// publishes nothing — the notice is only about a change the holder can
+// actually observe.
+func TestChangeMemberRoleNoOpStaysSilent(t *testing.T) {
+	t.Parallel()
+	f := newEventsFixture()
+	owner, member, property := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	f.linkOwner(owner, property)
+	f.limiter.set(member, 5)
+
+	m, err := f.access.AddMember(t.Context(), owner, property, member, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	// The active landing publishes its granted event; the baseline is taken
+	// after it, so every event past n belongs to ChangeMemberRole alone.
+	n := len(f.events.events)
+	if _, err := f.access.ChangeMemberRole(t.Context(), owner, property, m.ID, domain.RoleViewer); err != nil {
+		t.Fatalf("ChangeMemberRole with the same role: %v", err)
+	}
+	if got := len(f.events.events); got != n {
+		t.Errorf("a same-role no-op publishes nothing, got %d new events", got-n)
+	}
+	if got := f.events.count(kindMembershipRoleChanged); got != 0 {
+		t.Errorf("a same-role no-op publishes no %s event, got %d", kindMembershipRoleChanged, got)
+	}
+}
+
+// TestAccessService_MemberManagementOwnerOnly is the D8 role matrix (issue
+// #1304): every mutating member-management endpoint — member add, member role
+// change, member revoke, invite by email, invitation role change, invitation
+// cancel, invitation resend — refuses a full_access member with the
+// privacy-preserving not-found, exactly like a stranger. Self-leave is not
+// member management and stays with every participant.
+func TestAccessService_MemberManagementOwnerOnly(t *testing.T) {
+	t.Parallel()
+	f := newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	manager := uuid.Must(uuid.NewV7())
+	viewer := uuid.Must(uuid.NewV7())
+	stranger := uuid.Must(uuid.NewV7())
+	property := uuid.Must(uuid.NewV7())
+	f.owners[property] = owner
+	f.repo.SetOwner(property, owner)
+	f.limiter.set(manager, 5)
+
+	// The owner grants full access and seeds the manage targets: a viewer
+	// membership and a pending email invitation.
+	if _, err := f.access.AddMember(t.Context(), owner, property, manager, domain.RoleFullAccess); err != nil {
+		t.Fatalf("AddMember manager: %v", err)
+	}
+	member, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember viewer: %v", err)
+	}
+	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+	if outcome.Invitation == nil {
+		t.Fatalf("InviteByEmail: want a pending invitation, got %+v", outcome)
+	}
+	invitationID := outcome.Invitation.ID
+
+	// Full access is refused everywhere, with the same privacy-preserving
+	// signal a stranger gets.
+	if _, err := f.access.AddMember(t.Context(), manager, property, stranger, domain.RoleViewer); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("AddMember by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if _, err := f.access.ChangeMemberRole(t.Context(), manager, property, member.ID,
+		domain.RoleFullAccess); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("ChangeMemberRole by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if err := f.access.RevokeMember(t.Context(), manager, property, member.ID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("RevokeMember by full: expected ErrMemberNotFound, got %v", err)
+	}
+	_, err = f.svc.InviteByEmail(t.Context(), manager, property, testMemberEmail, domain.RoleViewer)
+	if !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("InviteByEmail by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if _, err := f.svc.ChangeInvitationRole(t.Context(), manager, property, invitationID,
+		domain.RoleFullAccess); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("ChangeInvitationRole by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if err := f.svc.CancelInvitation(t.Context(), manager, property, invitationID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("CancelInvitation by full: expected ErrMemberNotFound, got %v", err)
+	}
+	if err := f.svc.ResendInvitation(t.Context(), manager, property, invitationID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("ResendInvitation by full: expected ErrMemberNotFound, got %v", err)
+	}
+
+	// The owner keeps every mutation (sanity on the same fixture).
+	if _, err := f.access.ChangeMemberRole(t.Context(), owner, property, member.ID, domain.RoleFullAccess); err != nil {
+		t.Errorf("ChangeMemberRole by owner: %v", err)
+	}
+
+	// Self-leave stays with the participants — full_access included.
+	if err := f.access.LeaveProperty(t.Context(), manager, property); err != nil {
+		t.Errorf("LeaveProperty by full: self-exit must stay available, got %v", err)
 	}
 }

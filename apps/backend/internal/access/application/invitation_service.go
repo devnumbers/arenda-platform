@@ -8,10 +8,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
 // InviteOutcome is the result of InviteByEmail: exactly one of the fields is
@@ -28,12 +30,14 @@ type InviteOutcome struct {
 // T5): inviting an unregistered email to shared access, manual resend with a
 // 24h cooldown, role change and silent cancellation of pending invitations,
 // and FIFO activation when the invitee registers. The invite email is the only
-// email sent by this service itself; the lifecycle emails (activation notice to
-// the owner, the "waiting for a slot" email on a suspended activation) go
-// through the LifecycleMailer (issue #162, T6). Persistence and audit share
-// the same transaction; the invitee email is PII and never appears in audit
-// context (ADR 0020).
+// email sent by this service itself; the lifecycle notifications (the
+// activation notice to the inviter, the paused access on a suspended
+// activation) leave the context as events (карта #734, #751). Persistence,
+// the audit entries and the action journal rows (ADR 0061) share the same
+// transaction through the embedded txStoreFactory (ADR 0033); the invitee
+// email is PII and never appears in audit context (ADR 0020).
 type InvitationService struct {
+	txStoreFactory
 	access      *AccessService
 	members     MembershipRepository
 	invitations InvitationRepository
@@ -43,21 +47,23 @@ type InvitationService struct {
 	policy      sharedpolicy.Policy
 	slots       *SlotCoordinator
 	mailer      AccessMailer
-	lifecycle   *LifecycleMailer
+	events      AccessEventPublisher
 	titles      PropertyTitleResolver
-	db          txBeginner
-	audit       auditapp.Recorder
+	emails      UserEmailResolver
 	clock       clock.Clock
 	logger      *slog.Logger
 }
 
-// NewInvitationService creates an InvitationService. access is the membership
+// NewInvitationService creates an InvitationService. Access is the membership
 // service used to delegate instant activation for registered emails; slots may
 // be nil to disable slot enforcement (mirrors NewAccessService); mailer may be
 // nil to skip sending (e.g. in tests that do not exercise the mail path);
-// lifecycle is the sharing lifecycle mailer (issue #162, T6) and may be nil to
-// disable the lifecycle emails. statuses reports the archived flag of a
+// events is the lifecycle event publisher (карта #734, #751) and may be nil to
+// disable the publications; emails may be nil to skip the member-email
+// enrichment of ListMembers. Statuses reports the archived flag of a
 // property (issue #163); it may be nil to skip the archived-property checks.
+// Factory bundles the repositories, the audit and history recorders, and the
+// Unit-of-Work every mutating use case runs through (ADR 0033 γ-factory).
 func NewInvitationService(
 	access *AccessService,
 	members MembershipRepository,
@@ -68,38 +74,35 @@ func NewInvitationService(
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
 	mailer AccessMailer,
-	lifecycle *LifecycleMailer,
+	events AccessEventPublisher,
 	titles PropertyTitleResolver,
-	db txBeginner,
-	audit auditapp.Recorder,
+	factory txStoreFactory,
 	clk clock.Clock,
 	logger *slog.Logger,
+	emails UserEmailResolver,
 ) *InvitationService {
 	if logger == nil {
 		logger = slog.Default()
-	}
-	if audit == nil {
-		audit = auditapp.Noop{}
 	}
 	if clk == nil {
 		clk = clock.Real{}
 	}
 	return &InvitationService{
-		access:      access,
-		members:     members,
-		invitations: invitations,
-		owners:      owners,
-		statuses:    statuses,
-		users:       users,
-		policy:      policy,
-		slots:       slots,
-		mailer:      mailer,
-		lifecycle:   lifecycle,
-		titles:      titles,
-		db:          db,
-		audit:       audit,
-		clock:       clk,
-		logger:      logger,
+		txStoreFactory: factory,
+		access:         access,
+		members:        members,
+		invitations:    invitations,
+		owners:         owners,
+		statuses:       statuses,
+		users:          users,
+		policy:         policy,
+		slots:          slots,
+		mailer:         mailer,
+		events:         events,
+		titles:         titles,
+		emails:         emails,
+		clock:          clk,
+		logger:         logger,
 	}
 }
 
@@ -112,7 +115,12 @@ func NewInvitationService(
 // is ErrCannotAddSelf, and a duplicate pending invitation is
 // ErrInvitationAlreadyExists. An archived property is ErrPropertyArchived for
 // both paths (issue #163).
-func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID uuid.UUID, rawEmail string, role domain.Role) (InviteOutcome, error) {
+func (s *InvitationService) InviteByEmail(
+	ctx context.Context,
+	actor, propertyID uuid.UUID,
+	rawEmail string,
+	role domain.Role,
+) (InviteOutcome, error) {
 	email, err := domain.NormalizeEmail(rawEmail)
 	if err != nil {
 		return InviteOutcome{}, err
@@ -130,19 +138,7 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 	user, err := s.users.GetByEmail(ctx, email)
 	switch {
 	case err == nil:
-		if user.ID == owner {
-			return InviteOutcome{}, domain.ErrCannotAddOwner
-		}
-		if user.ID == actor {
-			return InviteOutcome{}, domain.ErrCannotAddSelf
-		}
-		// Registered invitee: instant activation through the regular member
-		// flow, no invite email (issue #161, T5).
-		m, err := s.access.AddMember(ctx, actor, propertyID, user.ID, role)
-		if err != nil {
-			return InviteOutcome{}, err
-		}
-		return InviteOutcome{Member: &m}, nil
+		return s.inviteRegisteredUser(ctx, actor, propertyID, owner, user, role)
 	case errors.Is(err, domain.ErrUserNotFound):
 		// Unregistered invitee: fall through to the pending invitation path.
 	default:
@@ -162,43 +158,14 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 		LastSentAt: s.clock.Now(),
 	}
 
-	tx, err := s.db.Begin(ctx)
+	created, err := s.createPendingInvitation(ctx, invitation, actor, actorRole)
 	if err != nil {
-		return InviteOutcome{}, fmt.Errorf("begin tx: %w", err)
+		return InviteOutcome{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txInvitations := s.invitations.WithTx(tx)
-	if _, err := txInvitations.GetByPropertyAndEmail(ctx, propertyID, email); err == nil {
-		return InviteOutcome{}, domain.ErrInvitationAlreadyExists
-	} else if !errors.Is(err, domain.ErrInvitationNotFound) {
-		return InviteOutcome{}, fmt.Errorf("check existing invitation: %w", err)
-	}
-
-	created, err := txInvitations.Create(ctx, invitation)
-	if err != nil {
-		return InviteOutcome{}, fmt.Errorf("create invitation: %w", err)
-	}
-
-	// Audit in the same transaction. Only ids and the role are recorded; the
-	// invitee email is PII and must never appear in context (ADR 0020).
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationInvited,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &created.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"role":        string(role),
-		},
-	}); err != nil {
-		return InviteOutcome{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return InviteOutcome{}, fmt.Errorf("commit tx: %w", err)
-	}
+	// The pending row dirties the object's participants view (карта #714,
+	// #716; ADR 0062); its creation journals MemberInvited — the history
+	// pair piggybacks.
+	s.access.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 
 	// The invite email goes out after the commit; a send failure does not roll
 	// back the invitation (a manual resend is available).
@@ -208,6 +175,46 @@ func (s *InvitationService) InviteByEmail(ctx context.Context, actor, propertyID
 			slog.String("error", err.Error()))
 	}
 	return InviteOutcome{Invitation: &created}, nil
+}
+
+// inviteRegisteredUser activates a registered invitee instantly through the
+// regular member flow — no invite email is sent (issue #161, T5). The owner's
+// own email and the actor's own email are rejected exactly as in AddMember.
+func (s *InvitationService) inviteRegisteredUser(
+	ctx context.Context, actor, propertyID, owner uuid.UUID, user MemberUser, role domain.Role,
+) (InviteOutcome, error) {
+	if user.ID == owner {
+		return InviteOutcome{}, domain.ErrCannotAddOwner
+	}
+	if user.ID == actor {
+		return InviteOutcome{}, domain.ErrCannotAddSelf
+	}
+	m, err := s.access.AddMember(ctx, actor, propertyID, user.ID, role)
+	if err != nil {
+		return InviteOutcome{}, err
+	}
+	return InviteOutcome{Member: &m}, nil
+}
+
+// createPendingInvitation stores the invitation and its audit entry in one
+// transaction; a duplicate pending invitation is ErrInvitationAlreadyExists.
+// The row machinery is the shared createInvitationInTx core (the same core
+// the batch grant uses).
+func (s *InvitationService) createPendingInvitation(
+	ctx context.Context, invitation domain.Invitation, actor uuid.UUID, actorRole sharedpolicy.Role,
+) (domain.Invitation, error) {
+	var (
+		created domain.Invitation
+		err     error
+	)
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		created, err = s.access.createInvitationInTx(ctx, stores, invitation, actor, actorRole)
+		return err
+	})
+	if err != nil {
+		return domain.Invitation{}, err
+	}
+	return created, nil
 }
 
 // ResendInvitation manually re-sends the invite email for a pending
@@ -235,77 +242,95 @@ func (s *InvitationService) ResendInvitation(ctx context.Context, actor, propert
 		return fmt.Errorf("send invite email: %w", err)
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	return s.runInTx(ctx, func(stores *txStores) error {
+		if err := stores.invitations.UpdateLastSentAt(ctx, invitationID, propertyID, now); err != nil {
+			return fmt.Errorf("update invitation last_sent_at: %w", err)
+		}
 
-	if err := s.invitations.WithTx(tx).UpdateLastSentAt(ctx, invitationID, propertyID, now); err != nil {
-		return fmt.Errorf("update invitation last_sent_at: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationResent,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &invitation.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberInvitationResent,
+			EntityType: auditdomain.EntityPropertyMemberInvitation,
+			EntityID:   &invitation.ID,
+			Context: map[string]any{
+				auditKeyPropertyID: propertyID,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // ChangeInvitationRole changes the role of a pending invitation. No new email
 // is sent; the role current at registration time is applied on activation.
-func (s *InvitationService) ChangeInvitationRole(ctx context.Context, actor, propertyID, invitationID uuid.UUID, role domain.Role) (domain.Invitation, error) {
+// The change journals in the same transaction over the member.role_changed
+// vocabulary — the pending invitee is named by the invitation's email; a
+// same-role re-set is not a state change and writes no row (ADR 0061 §3).
+func (s *InvitationService) ChangeInvitationRole(
+	ctx context.Context,
+	actor, propertyID, invitationID uuid.UUID,
+	role domain.Role,
+) (domain.Invitation, error) {
 	_, actorRole, err := requireManageAccess(ctx, s.policy, s.owners, actor, propertyID)
 	if err != nil {
 		return domain.Invitation{}, err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Invitation{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var updated domain.Invitation
+	var journaled bool
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		// Confirm the invitation exists and belongs to this property before
+		// updating; a missing row is a not-found outcome rather than a silent no-op.
+		existing, err := stores.invitations.GetByID(ctx, invitationID, propertyID)
+		if err != nil {
+			return err
+		}
+		roleChanged := existing.Role != role
 
-	txInvitations := s.invitations.WithTx(tx)
-	// Confirm the invitation exists and belongs to this property before
-	// updating; a missing row is a not-found outcome rather than a silent no-op.
-	if _, err := txInvitations.GetByID(ctx, invitationID, propertyID); err != nil {
+		updated, err = stores.invitations.UpdateRole(ctx, invitationID, propertyID, role)
+		if err != nil {
+			return fmt.Errorf("update invitation role: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberInvitationRoleChanged,
+			EntityType: auditdomain.EntityPropertyMemberInvitation,
+			EntityID:   &updated.ID,
+			Context: map[string]any{
+				auditKeyPropertyID: propertyID,
+				auditKeyRole:       string(role),
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// The action journal row (ADR 0061): the pending invitee is known by
+		// the invitation's email — the row survives the later acceptance or
+		// cancellation. The invitee has no user id yet, so the row carries no
+		// member link.
+		if roleChanged {
+			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+				sharedpolicy.HistoryActorRole(actorRole),
+				historydomain.MemberRoleChanged(uuid.Nil, existing.Email,
+					sharedpolicy.HistoryActorRole(toSharedRole(existing.Role)),
+					sharedpolicy.HistoryActorRole(toSharedRole(role)))); err != nil {
+				return err
+			}
+			journaled = true
+		}
+		return nil
+	})
+	if err != nil {
 		return domain.Invitation{}, err
 	}
-
-	updated, err := txInvitations.UpdateRole(ctx, invitationID, propertyID, role)
-	if err != nil {
-		return domain.Invitation{}, fmt.Errorf("update invitation role: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationRoleChanged,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &updated.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"role":        string(role),
-		},
-	}); err != nil {
-		return domain.Invitation{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Invitation{}, fmt.Errorf("commit tx: %w", err)
+	// The role change's frame rides the journal anchor; a same-role no-op
+	// journals no row and dispatches nothing — no change, no frame.
+	if journaled {
+		s.access.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 	}
 	return updated, nil
 }
@@ -318,37 +343,42 @@ func (s *InvitationService) CancelInvitation(ctx context.Context, actor, propert
 		return err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		invitation, err := stores.invitations.GetByID(ctx, invitationID, propertyID)
+		if err != nil {
+			return err
+		}
 
-	txInvitations := s.invitations.WithTx(tx)
-	if _, err := txInvitations.GetByID(ctx, invitationID, propertyID); err != nil {
+		if err := stores.invitations.Delete(ctx, invitationID, propertyID); err != nil {
+			return fmt.Errorf("delete invitation: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberInvitationCancelled,
+			EntityType: auditdomain.EntityPropertyMemberInvitation,
+			EntityID:   &invitationID,
+			Context: map[string]any{
+				auditKeyPropertyID: propertyID,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// The action journal row (ADR 0061): the invitee is known by the
+		// invitation's email — the row survives the cancelled invitation.
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(actorRole),
+			historydomain.MemberInvitationCancelled(invitation.Email)); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
-
-	if err := txInvitations.Delete(ctx, invitationID, propertyID); err != nil {
-		return fmt.Errorf("delete invitation: %w", err)
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberInvitationCancelled,
-		EntityType: auditdomain.EntityPropertyMemberInvitation,
-		EntityID:   &invitationID,
-		Context: map[string]any{
-			"property_id": propertyID,
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
+	s.access.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 	return nil
 }
 
@@ -379,8 +409,8 @@ func (s *InvitationService) ActivatePendingInvitations(ctx context.Context, user
 		if err := s.activateInvitation(ctx, userID, invitation); err != nil {
 			s.logger.ErrorContext(ctx, "access: invitation activation failed",
 				slog.String("invitation_id", invitation.ID.String()),
-				slog.String("property_id", invitation.PropertyID.String()),
-				slog.String("user_id", userID.String()),
+				slog.String(auditKeyPropertyID, invitation.PropertyID.String()),
+				slog.String(auditKeyUserID, userID.String()),
 				slog.String("error", err.Error()))
 		}
 	}
@@ -390,80 +420,138 @@ func (s *InvitationService) ActivatePendingInvitations(ctx context.Context, user
 // activateInvitation activates a single pending invitation in its own
 // transaction.
 func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.UUID, invitation domain.Invitation) error {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txMembers := s.members.WithTx(tx)
-	txInvitations := s.invitations.WithTx(tx)
-
-	if _, err := txMembers.GetByPropertyAndUser(ctx, invitation.PropertyID, userID); err == nil {
-		// Already a member on this property (any status): drop the invitation
-		// silently.
-		if err := txInvitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
-			return fmt.Errorf("delete invitation: %w", err)
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit tx: %w", err)
-		}
-		return nil
-	} else if !errors.Is(err, domain.ErrMemberNotFound) {
-		return fmt.Errorf("check existing membership: %w", err)
-	}
-
-	// Enforce the recipient tariff slot invariant (issue #158, T4): without a
-	// free slot the membership is created suspended until one frees up. An
-	// archived property does not occupy a recipient slot (issue #163), so the
-	// slot check is skipped and the membership activates read-only in the
-	// active status — with the archived object excluded from slot accounting it
-	// occupies nothing.
 	suspend := false
+	var created domain.Membership
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		dropped, err := s.dropInvitationIfAlreadyMember(ctx, stores, userID, invitation)
+		if err != nil {
+			return err
+		}
+		if dropped {
+			return nil
+		}
+
+		suspend, err = s.resolveActivationSuspend(ctx, stores.tx, userID, invitation.PropertyID)
+		if err != nil {
+			return err
+		}
+		created, err = s.insertActivationMembership(ctx, stores, userID, invitation, suspend)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	// The lifecycle notifications are the event subscriber's (карта #734,
+	// #751) — the activation becomes the «Приглашение принято» row for the
+	// inviter and, when the access landed suspended, the system
+	// «Доступ приостановлен» row for the new member instead of the
+	// invitation one. Published post-commit, best-effort; the direct
+	// lifecycle emails this replaces are gone.
+	// The transition instant is the membership row's own suspension instant
+	// when the landing is suspended (the same source AddMember's pause uses),
+	// the activation moment otherwise.
+	at := s.clock.Now()
+	if suspend {
+		at = deref(created.SuspendedAt)
+	}
+	publishAccessEvent(ctx, s.events, s.logger, "invitation_activated", func() error {
+		return s.events.PublishInvitationActivated(ctx, InvitationActivated{
+			MembershipID: created.ID,
+			PropertyID:   invitation.PropertyID,
+			InviterID:    invitation.InvitedBy,
+			InviteeID:    userID,
+			Suspended:    suspend,
+			At:           at,
+		})
+	})
+	// The landed activation dirties the object's participants view (карта
+	// #714, #716; ADR 0062); the activation journals no row — the actor is
+	// the registration, not a member manager.
+	s.access.publishRealtime(ctx, userID, accessFrame(invitation.PropertyID))
+	return nil
+}
+
+// dropInvitationIfAlreadyMember drops the invitation silently when the invitee
+// already holds a membership on the property (any status): a duplicate
+// membership must not be created. The dropped result reports that the
+// activation is complete.
+func (s *InvitationService) dropInvitationIfAlreadyMember(
+	ctx context.Context, stores *txStores, userID uuid.UUID, invitation domain.Invitation,
+) (bool, error) {
+	if _, err := stores.members.GetByPropertyAndUser(ctx, invitation.PropertyID, userID); err == nil {
+		if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
+			return false, fmt.Errorf("delete invitation: %w", err)
+		}
+		return true, nil
+	} else if !errors.Is(err, domain.ErrMemberNotFound) {
+		return false, fmt.Errorf("check existing membership: %w", err)
+	}
+	return false, nil
+}
+
+// resolveActivationSuspend decides whether the activated membership must be
+// created suspended: without a free recipient tariff slot it is (issue #158,
+// T4). An archived property occupies no recipient slot (issue #163), so the
+// check is skipped and the membership activates read-only in the active
+// status.
+func (s *InvitationService) resolveActivationSuspend(
+	ctx context.Context, tx transaction.Tx, userID, propertyID uuid.UUID,
+) (bool, error) {
 	archived := false
 	if s.statuses != nil {
-		archived, err = s.statuses.IsArchived(ctx, invitation.PropertyID)
+		var err error
+		archived, err = s.statuses.IsArchived(ctx, propertyID)
 		if err != nil {
-			return fmt.Errorf("check property archived: %w", err)
+			return false, fmt.Errorf("check property archived: %w", err)
 		}
 	}
-	if !archived && s.slots != nil {
-		suspend, err = s.slots.EnforceOnActivation(ctx, tx, userID)
-		if err != nil {
-			return fmt.Errorf("check recipient slot: %w", err)
-		}
+	if archived || s.slots == nil {
+		return false, nil
 	}
+	suspend, err := s.slots.EnforceOnActivation(ctx, tx, userID)
+	if err != nil {
+		return false, fmt.Errorf("check recipient slot: %w", err)
+	}
+	return suspend, nil
+}
 
+// insertActivationMembership creates the activated membership, consumes the
+// invitation and records the audit entry in the same transaction; the created
+// membership travels back for the post-commit event (#751).
+func (s *InvitationService) insertActivationMembership(
+	ctx context.Context, stores *txStores, userID uuid.UUID, invitation domain.Invitation, suspend bool,
+) (domain.Membership, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generate membership id: %w", err)
+		return domain.Membership{}, fmt.Errorf("generate membership id: %w", err)
 	}
 	membership := domain.Membership{
 		ID:         id,
 		PropertyID: invitation.PropertyID,
 		UserID:     userID,
-		Role:       invitation.Role, // the role current at activation time
+		Role:       invitation.Role, // The role current at activation time.
 		GrantedBy:  invitation.InvitedBy,
 	}
 
 	var created domain.Membership
 	if suspend {
 		membership.Status = domain.MemberStatusSuspended
-		created, err = txMembers.CreateWithStatus(ctx, membership)
+		created, err = stores.members.CreateWithStatus(ctx, membership)
 	} else {
-		created, err = txMembers.Create(ctx, membership)
+		created, err = stores.members.Create(ctx, membership)
 	}
 	if err != nil {
-		return fmt.Errorf("create membership: %w", err)
+		return domain.Membership{}, fmt.Errorf("create membership: %w", err)
 	}
 
-	if err := txInvitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
-		return fmt.Errorf("delete invitation: %w", err)
+	if err := stores.invitations.Delete(ctx, invitation.ID, invitation.PropertyID); err != nil {
+		return domain.Membership{}, fmt.Errorf("delete invitation: %w", err)
 	}
 
 	// Audit in the same transaction; the invitee email is PII and must never
 	// appear in context (ADR 0020).
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
 		// System action at registration: actor_id is NULL (ADR 0020); the
 		// activated user is carried in context, not as the actor.
 		ActorRole:  auditdomain.ActorRoleSystem,
@@ -471,57 +559,47 @@ func (s *InvitationService) activateInvitation(ctx context.Context, userID uuid.
 		EntityType: auditdomain.EntityPropertyMemberInvitation,
 		EntityID:   &invitation.ID,
 		Context: map[string]any{
-			"trigger":       "registration",
-			"property_id":   invitation.PropertyID,
-			"user_id":       userID,
-			"membership_id": created.ID,
-			"role":          string(created.Role),
-			"status":        string(created.Status),
+			auditKeyTrigger:    "registration",
+			auditKeyPropertyID: invitation.PropertyID,
+			auditKeyUserID:     userID,
+			"membership_id":    created.ID,
+			auditKeyRole:       string(created.Role),
+			"status":           string(created.Status),
 		},
 	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
+		return domain.Membership{}, fmt.Errorf("record audit: %w", err)
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
-	// Lifecycle emails post-commit (issue #162, T6): the owner is notified
-	// about the activation; a membership created without a free tariff slot
-	// additionally sends the "access waits for a free slot" email to the new
-	// member. Send failures are logged inside the mailer and never fail the
-	// activation.
-	owner, err := s.owners.GetOwnerID(ctx, invitation.PropertyID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "access: owner lookup for invitation activated email failed",
-			slog.String("property_id", invitation.PropertyID.String()),
-			slog.String("error", err.Error()))
-	} else {
-		s.lifecycle.SendInvitationActivated(ctx, owner, invitation.PropertyID, invitation.Email)
-	}
-	if suspend {
-		s.lifecycle.SendAccessSuspended(ctx, userID, invitation.PropertyID)
-	}
-	return nil
+	return created, nil
 }
 
 // ListMembers returns the property participants (owner first, then membership
-// rows) and, for actors with the manage-members capability, the pending email
-// invitations of the property appended after the members. Pending rows expose
-// the invitee email, so they are manager-only; viewers get the plain member
-// list.
+// rows) with the pending email invitations appended after the members. Every
+// reader with the view capability (gated by AccessService.ListMembers) sees
+// the same rows, including member emails and pending invitations (owner
+// decision 2026-09-20, #758 walkthrough: nothing is hidden from viewers).
+// Email resolution degrades to a nil email when the resolver is not wired or
+// a lookup fails — the row stays.
 func (s *InvitationService) ListMembers(ctx context.Context, actor, propertyID uuid.UUID) ([]Member, error) {
 	members, err := s.access.ListMembers(ctx, actor, propertyID)
 	if err != nil {
 		return nil, err
 	}
 
-	role, err := s.policy.RoleForProperty(ctx, actor, propertyID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve role: %w", err)
-	}
-	if !sharedpolicy.CanManageMembers(role) {
-		return members, nil
+	for i := range members {
+		m := &members[i]
+		if m.Pending || m.UserID == uuid.Nil || s.emails == nil {
+			continue
+		}
+		email, err := s.emails.GetEmail(ctx, m.UserID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "access: member email lookup failed",
+				slog.String(auditKeyUserID, m.UserID.String()),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if email != "" {
+			m.Email = &email
+		}
 	}
 
 	invitations, err := s.invitations.ListByProperty(ctx, propertyID)
@@ -542,22 +620,42 @@ func (s *InvitationService) ListMembers(ctx context.Context, actor, propertyID u
 	return members, nil
 }
 
+// GetMember returns one row of the members list by its addressing id (issue
+// #1357): the «Права участника» card reads exactly what ListMembers shows for
+// that row, so the read goes through the list itself — the same CanView gate
+// (a stranger or a suspended member gets ErrMemberNotFound), the same email
+// enrichment, the same pending merge. A member row answers to its membership
+// id and to its user id, the synthesized owner row (no membership id) to the
+// owner's user id, a pending invitation row to its invitation id.
+func (s *InvitationService) GetMember(ctx context.Context, actor, propertyID, memberID uuid.UUID) (Member, error) {
+	members, err := s.ListMembers(ctx, actor, propertyID)
+	if err != nil {
+		return Member{}, err
+	}
+	for _, m := range members {
+		if m.Pending {
+			if m.ID == memberID {
+				return m, nil
+			}
+			continue
+		}
+		// The owner row carries the zero uuid as its membership id, and no
+		// row carries a zero user id — neither may match a zero addressing
+		// id.
+		if (m.ID != uuid.Nil && m.ID == memberID) || (m.UserID != uuid.Nil && m.UserID == memberID) {
+			return m, nil
+		}
+	}
+	return Member{}, domain.ErrMemberNotFound
+}
+
 // sendInviteEmail renders and sends the single invite email. A missing
-// property title degrades to a generic text rather than failing the send.
+// property title degrades to the generic text (an empty title list, the
+// shared resolveInviteTitles) rather than failing the send.
 func (s *InvitationService) sendInviteEmail(ctx context.Context, email string, propertyID uuid.UUID, role domain.Role) error {
 	if s.mailer == nil {
 		return nil
 	}
-	var title string
-	if s.titles != nil {
-		resolved, err := s.titles.GetTitle(ctx, propertyID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "access: property title lookup for invite email failed",
-				slog.String("property_id", propertyID.String()),
-				slog.String("error", err.Error()))
-		} else {
-			title = resolved
-		}
-	}
-	return s.mailer.SendInvite(ctx, email, title, role)
+	titles := resolveInviteTitles(ctx, s.titles, s.logger, []uuid.UUID{propertyID})
+	return s.mailer.SendInvite(ctx, email, titles, role)
 }

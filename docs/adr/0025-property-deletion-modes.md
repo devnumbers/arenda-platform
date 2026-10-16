@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR 0049](./0049-payments-schema-tick-contracts.md): deletion
+is total, the `mode` parameter is gone from the API (completed 2026-09-12,
+issue #629). The detach branch described here was never wired to real
+behavior after the leases/operations domain was dropped (ADR 0046); keeping
+two buttons for identical outcomes misled users, so the two-mode UI was cut
+by the owner's decision.
 
 ## Context
 

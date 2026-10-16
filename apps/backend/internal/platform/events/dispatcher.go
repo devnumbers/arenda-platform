@@ -1,3 +1,4 @@
+// Package events provides the in-process event dispatcher that decouples publishers from subscribers across contexts.
 package events
 
 import (

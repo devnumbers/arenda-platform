@@ -1,10 +1,11 @@
+// Package httpserver is the HTTP composition root: it builds the chi handler that wires every context's
+// endpoints, middleware and routes.
 package httpserver
 
 import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,62 +15,105 @@ import (
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
+	contactshttp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters/http"
+	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
+	historyhttp "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/http"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
-	leaseshttp "github.com/nambers/arenda-planform/apps/backend/internal/leases/adapters/http"
-	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
 	notificationshttp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/http"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	paymentshttp "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/http"
+	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/idempotency"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/sse"
 	popupshttp "github.com/nambers/arenda-planform/apps/backend/internal/popups/adapters/http"
 	popupsapp "github.com/nambers/arenda-planform/apps/backend/internal/popups/application"
 	propertieshttp "github.com/nambers/arenda-planform/apps/backend/internal/properties/adapters/http"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	realtimehttp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/adapters/http"
+	rentalshttp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/http"
+	rentalsapp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
-	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
+	taskshttp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/adapters/http"
+	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
-	Auth                     identityapp.Authenticator
-	PhoneChange              identityapp.PhoneChanger
-	Profile                  identityapp.Profiler
-	Logout                   identityapp.Logout
-	Sessions                 identityapp.SessionService
-	Audit                    auditapp.Recorder
-	MeEnricher               identityhttp.MeEnricher
-	Tariffs                  billingapp.Tariffer
-	Subscriptions            billingapp.Subscriber
-	PaymentMethods           billingapp.PaymentMethodManager
-	Payments                 billingapp.PaymentProcessor
-	Webhooks                 billingapp.WebhookHandler
-	Admin                    *adminapp.AdminService
-	Properties               *propertiesapp.PropertyService
-	PropertyContacts         *propertiesapp.PropertyContactService
-	AddressSuggester         propertiesapp.AddressSuggester
-	Access                   *accessapp.AccessService
-	Invitations              *accessapp.InvitationService
-	Leases                   *leasesapp.LeaseService
-	TenantContacts           *leasesapp.TenantContactService
-	Operations               *leasesapp.OperationService
-	Export                   *leasesapp.ExportService
-	RecurringOperations      *leasesapp.RecurringOperationService
-	Categories               *leasesapp.CategoryService
-	Reminders                *notificationsapp.ReminderService
-	Calendar                 *notificationsapp.CalendarService
-	FreeReminders            *notificationsapp.FreeReminderService
-	NotificationPreferences  *notificationsapp.PreferenceService
-	PushSubscriptions        *notificationsapp.PushSubscriptionService
+	Auth                 identityhttp.Authenticator
+	PhoneChange          identityhttp.PhoneChanger
+	EmailChange          identityhttp.EmailChanger
+	Profile              identityhttp.Profiler
+	ProfilePhotos        identityhttp.ProfilePhotos
+	Logout               identityhttp.Logout
+	Sessions             identityhttp.SessionLister
+	SessionLoader        httpsupport.SessionLoader
+	Audit                auditapp.Recorder
+	MeEnricher           identityhttp.MeEnricher
+	Tariffs              billinghttp.TariffLister
+	AdminTariffs         billinghttp.AdminTariffManager
+	Subscriptions        billinghttp.SubscriptionViewer
+	SubscriptionManagers billinghttp.SubscriptionManager
+	Payments             billinghttp.PaymentManager
+	PaymentMethods       billinghttp.PaymentMethodManager
+	Webhooks             billinghttp.WebhookProcessor
+	AdminPayments        billinghttp.AdminPaymentManager
+	AdminSubscriptions   billinghttp.AdminSubscriptionManager
+	// BillingFakeConfirms serves the local-only fake confirmation endpoints;
+	// non-nil only when the fake provider is active (the billing wiring
+	// constructs it there), so the routes are mounted only in that case —
+	// a production build has no such endpoints at all (issue #287).
+	BillingFakeConfirms *billinghttp.FakeConfirmHandlers
+	// BillingTimeTravel serves the stand-only admin time-shift and tick
+	// endpoints (issue #665); non-nil only when the BILLING_TIME_TRAVEL
+	// railguard is on, so a production build mounts no such routes at all.
+	BillingTimeTravel    *billinghttp.TimeTravelHandlers
+	ReadonlyGate         httpsupport.SubscriptionMutationChecker
+	PaidSectionsGate     httpsupport.PaidSectionsGate
+	Admin                *adminapp.AdminService
+	Properties           *propertiesapp.PropertyService
+	Contacts             *contactsapp.ContactService
+	AddressSuggester     propertiesapp.AddressSuggester
+	PropertyPayments     *paymentsapp.PaymentService
+	PropertyOperations   *paymentsapp.OperationService
+	GlobalPayments       *paymentsapp.GlobalPaymentService
+	PropertyRentals      *rentalsapp.RentalService
+	PropertyTaskRules    *tasksapp.RuleService
+	PropertyTasks        *tasksapp.TaskService
+	Access               *accessapp.AccessService
+	Invitations          *accessapp.InvitationService
+	Participants         accessapp.ParticipantsManager
+	ParticipantMutations accessapp.ParticipantMutations
+	PushSubscriptions    *notificationsapp.PushSubscriptionService
+	// HistoryRead is the action journal's reading service (карта #704,
+	// тикет #708); the feed and the filter options.
+	HistoryRead *historyapp.HistoryReadService
+	// NotificationsFeed is the stored feed's reading service (#743); nil
+	// keeps the feed endpoints answering from the Unimplemented stub.
+	NotificationsFeed *notificationsapp.FeedService
+	// NotificationSettings serves the per-category settings (#743): email on
+	// the account, push on the device; nil answers the Unimplemented stub.
+	NotificationSettings *notificationsapp.SettingsService
+	// NotificationsStreamHub is the shared event stream's hub (карта #734,
+	// #742; ADR 0060). The generated /notifications/stream route serves from
+	// it; nil answers 503 (a build without the stream).
+	NotificationsStreamHub *sse.Hub
+	// RealtimeStreamHub is the realtime entity-events stream's hub (карта
+	// #714, #716; ADR 0062). The generated /realtime/stream route serves
+	// from it; the composition root passes the same hub instance as the
+	// notifications stream — the 8-connections-per-user budget covers both
+	// streams. Nil answers 503 (a build without the stream).
+	RealtimeStreamHub        *sse.Hub
 	VAPIDPublicKey           string
 	Popups                   *popupsapp.PopupService
 	AppBaseURL               string
 	CookieSecure             bool
 	Logger                   *slog.Logger
 	Clock                    clock.Clock
-	TZResolver               sharedtz.OwnerTimezoneResolver
 	LogSuccessfulRequests    bool
 	IPRateLimiter            *httpsupport.RateLimiter
 	EmailSendLimiter         *httpsupport.RateLimiter
@@ -77,10 +121,19 @@ type Deps struct {
 	PhoneChangeSendLimiter   *httpsupport.RateLimiter
 	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
 	ClientErrorsLimiter      *httpsupport.RateLimiter
-	DBPoolStats              func() httpsupport.DBPoolSnapshot
-	DevMode                  bool
-	TrustedProxies           []string
-	AppVersion               string
+	FeedbackLimiter          *httpsupport.RateLimiter
+	// FeedbackMailer sends the public landing feedback emails (карта #1010);
+	// the same smtp/fake sender the identity codes use.
+	FeedbackMailer mailer.Sender
+	// FeedbackEmail is the recipient mailbox; empty answers 503 (not set up).
+	FeedbackEmail string
+	// Idempotency (тикет Т3 карты #1112): серверное хранилище
+	// Idempotency-Key на creation-роутах; nil = семантика выключена
+	// (роуты живут как сгенерированы).
+	Idempotency    *idempotency.Service
+	DBPoolStats    func() httpsupport.DBPoolSnapshot
+	TrustedProxies []string
+	AppVersion     string
 }
 
 const slowRequestThreshold = 500 * time.Millisecond
@@ -100,10 +153,47 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 	}
 }
 
+// noStoreCache keeps session-scoped API responses out of the browser's
+// heuristic HTTP cache (#1330): without validators or explicit freshness
+// Chrome reuses a stale 200 — observed on #1312, a revoked object kept
+// showing in the properties hub after the leave because the SPA refetch was
+// served from cache. Handlers that want caching override the header after
+// the middleware — the private photo endpoints (ADR 0065) set their own
+// private, max-age=300 + ETag.
+func noStoreCache() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// crossOriginProtection is the second CSRF layer beside SameSite=Lax
+// (ADR 0056): non-safe cross-origin browser requests are rejected with 403
+// by the stdlib Fetch-Metadata/Origin check. The bypassed paths are the
+// non-browser endpoints — the T-Kassa payment webhooks and the internal
+// performance diagnostics — which no browser may call anyway.
+func crossOriginProtection() func(http.Handler) http.Handler {
+	protection := http.NewCrossOriginProtection()
+	protection.AddInsecureBypassPattern("POST /webhooks/")
+	protection.AddInsecureBypassPattern("/internal/perf/")
+	// POST /feedback (карта #1010) is called server-to-server by the
+	// landing's proxy — no browser Fetch-Metadata headers; it carries no
+	// cookie auth and is rate limited per IP.
+	protection.AddInsecureBypassPattern("POST /feedback")
+	protection.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Запрос отклонён: кросс-сайтовый запрос"))
+	}))
+	return protection.Handler
+}
+
 // New builds the HTTP handler with routing and middleware wired.
 func New(deps Deps) http.Handler {
 	r := chi.NewRouter()
-	r.Use(otelhttp.NewMiddleware("arenda-api", otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + r.URL.Path })))
+	r.Use(otelhttp.NewMiddleware("arenda-api",
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + r.URL.Path })))
 	r.Use(httpsupport.RequestIDMiddleware)
 	r.Use(httpsupport.RealIPMiddleware(deps.TrustedProxies))
 	r.Use(httpsupport.RequestLoggerWithOptions(deps.Logger, httpsupport.RequestLoggerOptions{
@@ -114,8 +204,10 @@ func New(deps Deps) http.Handler {
 	r.Use(rateLimitMiddleware(deps.IPRateLimiter))
 	r.Use(clientErrorsBodyLimitMiddleware)
 	r.Use(securityHeaders(deps.CookieSecure))
-	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.Sessions, deps.CookieSecure, deps.Clock))
-	r.Use(httpsupport.ReadonlyMiddleware(deps.Subscriptions, deps.Logger, deps.Clock))
+	r.Use(noStoreCache())
+	r.Use(httpsupport.SessionMiddleware(deps.Logger, deps.SessionLoader, deps.CookieSecure, deps.Clock))
+	r.Use(crossOriginProtection())
+	r.Use(httpsupport.ReadonlyMiddleware(deps.ReadonlyGate, deps.Logger))
 
 	r.Get("/healthz", httpsupport.HealthHandler(deps.AppVersion))
 
@@ -126,52 +218,76 @@ func New(deps Deps) http.Handler {
 	authHandlers := identityhttp.NewAuthHandlers(
 		deps.Auth,
 		deps.PhoneChange,
+		deps.EmailChange,
 		deps.Profile,
+		deps.ProfilePhotos,
 		deps.Logout,
+		deps.Sessions,
 		deps.CookieSecure,
 		deps.Logger,
-		deps.EmailSendLimiter,
-		deps.EmailVerifyLimiter,
-		deps.PhoneChangeSendLimiter,
-		deps.PhoneChangeVerifyLimiter,
+		identityhttp.AuthRateLimits{
+			Send:              deps.EmailSendLimiter,
+			Verify:            deps.EmailVerifyLimiter,
+			PhoneChangeSend:   deps.PhoneChangeSendLimiter,
+			PhoneChangeVerify: deps.PhoneChangeVerifyLimiter,
+		},
 		deps.MeEnricher,
-		deps.Audit,
 	)
-	propertyHandlers := propertieshttp.NewPropertyHandlers(deps.Properties, deps.AddressSuggester, deps.TenantContacts, deps.Operations, deps.Leases, deps.Export, deps.PropertyContacts, deps.Logger, deps.Clock, deps.TZResolver)
+	propertyHandlers := propertieshttp.NewPropertyHandlers(
+		deps.Properties,
+		deps.AddressSuggester,
+		deps.Logger,
+		deps.Clock,
+	)
+	contactHandlers := contactshttp.NewContactHandlers(deps.Contacts, deps.Logger)
 	accessMemberHandlers := accesshttp.NewMemberHandlers(deps.Access, deps.Logger)
 	accessInvitationHandlers := accesshttp.NewInvitationHandlers(deps.Invitations, deps.Logger)
-	leaseHandlers := leaseshttp.NewLeaseHandlers(deps.Leases, deps.TenantContacts, deps.Logger, deps.Clock, deps.TZResolver)
-	operationHandlers := leaseshttp.NewOperationHandlers(deps.Operations, deps.Categories, deps.Properties, deps.Logger)
-	recurringOperationHandlers := leaseshttp.NewRecurringOperationHandlers(deps.RecurringOperations, deps.Categories, deps.Logger)
-	categoryHandlers := leaseshttp.NewCategoryHandlers(deps.Categories, deps.Logger)
-	reminderHandlers := notificationshttp.NewReminderHandlers(deps.Reminders, deps.Calendar, deps.Operations, deps.RecurringOperations, deps.Leases, deps.Logger)
-	freeReminderHandlers := notificationshttp.NewFreeReminderHandlers(deps.FreeReminders, deps.Reminders, deps.Properties, deps.Clock, deps.Logger)
-	notificationPreferenceHandlers := notificationshttp.NewNotificationPreferenceHandlers(deps.NotificationPreferences, deps.Logger)
+	accessParticipantHandlers := accesshttp.NewParticipantHandlers(deps.Participants, deps.ParticipantMutations, deps.Logger)
 	pushSubscriptionHandlers := notificationshttp.NewPushSubscriptionHandlers(deps.PushSubscriptions, deps.VAPIDPublicKey, deps.Logger)
+	streamHandlers := notificationshttp.NewStreamHandlers(deps.NotificationsStreamHub, deps.Logger)
+	realtimeStreamHandlers := realtimehttp.NewRealtimeStreamHandlers(deps.RealtimeStreamHub, deps.Logger)
+	notificationPrefsHandlers := notificationshttp.NewNotificationPreferencesHandlers(deps.NotificationSettings, deps.Logger)
+	historyHandlers := historyhttp.NewHistoryHandlers(deps.HistoryRead, deps.Logger)
+	feedHandlers := notificationshttp.NewFeedHandlers(deps.NotificationsFeed, deps.Logger)
 	popupHandlers := popupshttp.NewPopupHandlers(deps.Popups, deps.Logger)
-	subscriptionHandlers := billinghttp.NewSubscriptionHandlers(deps.Tariffs, deps.Subscriptions, deps.PaymentMethods, deps.Payments, deps.Webhooks, deps.Logger, deps.DevMode)
-	financeHandlers := leaseshttp.NewFinanceHandlers(deps.Operations)
+	billingHandlers := billinghttp.NewBillingHandlers(
+		deps.Tariffs, deps.AdminTariffs, deps.Subscriptions, deps.SubscriptionManagers,
+		deps.Payments, deps.PaymentMethods, deps.Webhooks, deps.AdminPayments,
+		deps.AdminSubscriptions, deps.Logger)
+	paymentHandlers := paymentshttp.NewPaymentHandlers(deps.PropertyPayments, deps.Logger)
+	operationHandlers := paymentshttp.NewOperationsHandlers(deps.PropertyOperations, deps.Logger)
+	globalPaymentHandlers := paymentshttp.NewGlobalPaymentHandlers(deps.GlobalPayments, deps.Logger)
+	rentalHandlers := rentalshttp.NewRentalHandlers(deps.PropertyRentals, deps.Logger)
+	taskRuleHandlers := taskshttp.NewRuleHandlers(deps.PropertyTaskRules, deps.Logger)
+	taskHandlers := taskshttp.NewTaskHandlers(deps.PropertyTasks, deps.Logger)
 	adminHandlers := adminhttp.NewAdminHandlers(deps.Admin, deps.Logger)
 	clientErrorsHandlers := httpsupport.NewClientErrorsHandlers(deps.ClientErrorsLimiter)
+	feedbackHandlers := httpsupport.NewFeedbackHandlers(deps.FeedbackMailer, deps.FeedbackEmail, deps.FeedbackLimiter)
 
 	handler := &composedHandler{
-		AuthHandlers:                   authHandlers,
-		PropertyHandlers:               propertyHandlers,
-		MemberHandlers:                 accessMemberHandlers,
-		InvitationHandlers:             accessInvitationHandlers,
-		LeaseHandlers:                  leaseHandlers,
-		OperationHandlers:              operationHandlers,
-		RecurringOperationHandlers:     recurringOperationHandlers,
-		ReminderHandlers:               reminderHandlers,
-		FreeReminderHandlers:           freeReminderHandlers,
-		NotificationPreferenceHandlers: notificationPreferenceHandlers,
-		PushSubscriptionHandlers:       pushSubscriptionHandlers,
-		PopupHandlers:                  popupHandlers,
-		SubscriptionHandlers:           subscriptionHandlers,
-		FinanceHandlers:                financeHandlers,
-		AdminHandlers:                  adminHandlers,
-		CategoryHandlers:               categoryHandlers,
-		ClientErrorsHandlers:           clientErrorsHandlers,
+		AuthHandlers:                    authHandlers,
+		PropertyHandlers:                propertyHandlers,
+		ContactHandlers:                 contactHandlers,
+		MemberHandlers:                  accessMemberHandlers,
+		InvitationHandlers:              accessInvitationHandlers,
+		ParticipantHandlers:             accessParticipantHandlers,
+		PushSubscriptionHandlers:        pushSubscriptionHandlers,
+		StreamHandlers:                  streamHandlers,
+		RealtimeStreamHandlers:          realtimeStreamHandlers,
+		NotificationPreferencesHandlers: notificationPrefsHandlers,
+		HistoryHandlers:                 historyHandlers,
+		FeedHandlers:                    feedHandlers,
+		PopupHandlers:                   popupHandlers,
+		BillingHandlers:                 billingHandlers,
+		PaymentHandlers:                 paymentHandlers,
+		OperationsHandlers:              operationHandlers,
+		GlobalPaymentHandlers:           globalPaymentHandlers,
+		RentalHandlers:                  rentalHandlers,
+		RuleHandlers:                    taskRuleHandlers,
+		TaskHandlers:                    taskHandlers,
+		AdminHandlers:                   adminHandlers,
+		ClientErrorsHandlers:            clientErrorsHandlers,
+		FeedbackHandlers:                feedbackHandlers,
 	}
 
 	// The generated OpenAPI router has no per-route middleware support, so we
@@ -188,29 +304,76 @@ func New(deps Deps) http.Handler {
 		Handler:          handler,
 		ErrorHandlerFunc: httpsupport.OpenAPIErrorHandler,
 	}
+	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/tariffs", wrapper.ListAdminTariffs)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/tariffs", wrapper.CreateAdminTariff)
+	r.With(httpsupport.AdminOnlyMiddleware).Put("/admin/tariffs/{tariffId}", wrapper.UpdateAdminTariff)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments", wrapper.ListAdminSubscriptionPayments)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/subscription/payments/{paymentId}", wrapper.GetAdminSubscriptionPayment)
 	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/refund", wrapper.RefundSubscriptionPayment)
 	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/subscription/payments/{paymentId}/sync", wrapper.SyncSubscriptionPayment)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/service", wrapper.AssignAdminServiceSubscription)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/force-change", wrapper.ForceChangeAdminSubscriptionTariff)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/grace-extension", wrapper.ExtendAdminSubscriptionGrace)
+	r.With(httpsupport.AdminOnlyMiddleware).Post("/admin/users/{id}/subscription/cancel", wrapper.CancelAdminSubscription)
+	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/subscription/transitions", wrapper.ListAdminSubscriptionTransitions)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users", wrapper.ListAdminUsers)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}", wrapper.GetAdminUser)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/properties", wrapper.ListAdminUserProperties)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/leases", wrapper.ListAdminUserLeases)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/tenant-contacts", wrapper.ListAdminUserTenantContacts)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/operations", wrapper.ListAdminUserOperations)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/properties", wrapper.ListAdminProperties)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/properties/{id}", wrapper.GetAdminProperty)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/leases", wrapper.ListAdminLeases)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/leases/{id}", wrapper.GetAdminLease)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/tenant-contacts", wrapper.ListAdminTenantContacts)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/tenant-contacts/{id}", wrapper.GetAdminTenantContact)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/property-contacts", wrapper.ListAdminPropertyContacts)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/operations", wrapper.ListAdminOperations)
-	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/operations/{id}", wrapper.GetAdminOperation)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/stats", wrapper.GetAdminStats)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/audit-logs", wrapper.ListAdminAuditLogs)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/audit-logs/{id}", wrapper.GetAdminAuditLog)
 	r.With(httpsupport.AdminOnlyMiddleware).Get("/admin/users/{id}/audit-logs", wrapper.ListAdminUserAuditLogs)
+
+	// Paid-sections tariff gate (карта #997, ADR 0064): the same override
+	// trick as AdminOnly above — the paid property-access routes re-register
+	// with the tariff middleware over the generated ones, answering 402
+	// tariff_required below a paid tariff. DELETE .../access/members/self is
+	// intentionally left as generated: «Покинуть объект» lives on the property
+	// detail page, outside the paid sections.
+	paidSections := httpsupport.PaidSectionsMiddleware(deps.PaidSectionsGate, deps.Logger)
+	r.With(paidSections).Post("/properties/{propertyId}/access/invitations", wrapper.CreatePropertyAccessInvitation)
+	r.With(paidSections).Delete("/properties/{propertyId}/access/invitations/{invitationId}", wrapper.DeletePropertyAccessInvitation)
+	r.With(paidSections).Patch("/properties/{propertyId}/access/invitations/{invitationId}", wrapper.UpdatePropertyAccessInvitation)
+	r.With(paidSections).Post("/properties/{propertyId}/access/invitations/{invitationId}/resend", wrapper.ResendPropertyAccessInvitation)
+	r.With(paidSections).Get("/properties/{propertyId}/access/members", wrapper.ListPropertyAccessMembers)
+	r.With(paidSections).Get("/properties/{propertyId}/access/members/{memberId}", wrapper.GetPropertyAccessMember)
+	r.With(paidSections).Post("/properties/{propertyId}/access/members", wrapper.CreatePropertyAccessMember)
+	r.With(paidSections).Delete("/properties/{propertyId}/access/members/{memberId}", wrapper.DeletePropertyAccessMember)
+	r.With(paidSections).Patch("/properties/{propertyId}/access/members/{memberId}", wrapper.UpdatePropertyAccessMember)
+
+	// Idempotency-Key на creation-роутах (тикет Т3 карты #1112): тот же
+	// override-приём, что AdminOnly/paidSections выше — повтор с тем же
+	// ключом возвращает сохранённый результат, гонка и чужое тело дают 409.
+	// Это единственные мутирующие без-дедупа эндпоинты (перечень вреда
+	// ресерча #1113); ключ опционален — без заголовка поведение как раньше.
+	if deps.Idempotency != nil {
+		idempotent := idempotency.Middleware(deps.Idempotency, deps.Logger)
+		r.With(idempotent).Post("/properties", wrapper.CreateProperty)
+		r.With(idempotent).Post("/properties/{propertyId}/payments", wrapper.CreatePayment)
+		r.With(idempotent).Post("/properties/{propertyId}/operations", wrapper.CreateOperation)
+		r.With(idempotent).Post("/properties/{propertyId}/tasks/rules", wrapper.CreateTaskRule)
+		r.With(idempotent).Post("/tasks/rules", wrapper.CreateTaskRuleWithoutProperty)
+	}
+
+	// Screen 2 (#999): the global «Участники» section's API surface. The
+	// section page itself opens on basic as the upsell empty state (issue
+	// #1313, ADR 0064 revision) without calling these — the list reads stay
+	// behind the gate, the client fetches only on a paid tariff.
+	r.With(paidSections).Get("/participants", wrapper.ListParticipants)
+	r.With(paidSections).Delete("/participants", wrapper.RevokeAllParticipants)
+	r.With(paidSections).Post("/participants/invite", wrapper.InviteParticipant)
+	r.With(paidSections).Delete("/participants/{participantId}", wrapper.DeleteParticipant)
+	r.With(paidSections).Get("/participants/{participantId}", wrapper.GetParticipant)
+	r.With(paidSections).Post("/participants/{participantId}/properties", wrapper.AddParticipantProperties)
+
+	// Screen 3 (#1000): the «История действий» journal — both read endpoints
+	// of the section; every nested page and the filter sheet serve from
+	// these two.
+	r.With(paidSections).Get("/history", wrapper.GetHistory)
+	r.With(paidSections).Get("/history/filters", wrapper.GetHistoryFilters)
 
 	// T-Kassa redirects the user here after the add-card bank form. Redirect them
 	// back to the frontend payment-methods page with a query flag so the UI can
@@ -218,22 +381,33 @@ func New(deps Deps) http.Handler {
 	r.Get("/subscription/payment-methods/add-card/success", addCardReturnHandler(deps.AppBaseURL, true))
 	r.Get("/subscription/payment-methods/add-card/fail", addCardReturnHandler(deps.AppBaseURL, false))
 
+	// The local-only fake confirmation endpoints (issues #250/#251) live
+	// outside the generated contract: the billing wiring constructs their
+	// handlers only under the fake provider, so a production build mounts no
+	// such routes at all (issue #287). The handler owns the route set — the
+	// auto simulator mode adds the GET bank-return routes, the manual one the
+	// fail endpoint (issue #663).
+	if deps.BillingFakeConfirms != nil {
+		deps.BillingFakeConfirms.MountRoutes(r)
+	}
+
+	// The stand-only time-travel rig (issue #665) mounts its admin endpoints
+	// only when the composition root enabled it — the railguard keeps a
+	// production build free of the routes entirely.
+	if deps.BillingTimeTravel != nil {
+		deps.BillingTimeTravel.MountRoutes(r)
+	}
+
 	return generated
 }
 
 func addCardReturnHandler(baseURL string, success bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		target := baseURL
-		if path, err := url.JoinPath(baseURL, "/profile/tariff/payment-methods"); err == nil {
-			target = path
-		}
-		q := url.Values{}
+		result := httpsupport.AddCardResultFailed
 		if success {
-			q.Set("addCard", "success")
-		} else {
-			q.Set("addCard", "fail")
+			result = httpsupport.AddCardResultSuccess
 		}
-		http.Redirect(w, r, target+"?"+q.Encode(), http.StatusFound)
+		http.Redirect(w, r, httpsupport.AddCardReturnURL(baseURL, result), http.StatusFound)
 	}
 }
 
@@ -250,7 +424,8 @@ func rateLimitMiddleware(limiter *httpsupport.RateLimiter) func(http.Handler) ht
 			}
 			if !limiter.Allow(ip) {
 				w.Header().Set("Retry-After", "60")
-				httpsupport.WriteProblem(w, http.StatusTooManyRequests, httpsupport.Problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
+				httpsupport.WriteProblem(r.Context(), w, http.StatusTooManyRequests,
+					httpsupport.Problem(r.Context(), "Too Many Requests", "Превышен лимит запросов"))
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -274,19 +449,25 @@ func clientErrorsBodyLimitMiddleware(next http.Handler) http.Handler {
 type composedHandler struct {
 	*identityhttp.AuthHandlers
 	*propertieshttp.PropertyHandlers
+	*contactshttp.ContactHandlers
 	*accesshttp.MemberHandlers
 	*accesshttp.InvitationHandlers
-	*leaseshttp.LeaseHandlers
-	*leaseshttp.OperationHandlers
-	*leaseshttp.RecurringOperationHandlers
-	*notificationshttp.ReminderHandlers
-	*notificationshttp.FreeReminderHandlers
-	*notificationshttp.NotificationPreferenceHandlers
+	*accesshttp.ParticipantHandlers
 	*notificationshttp.PushSubscriptionHandlers
+	*notificationshttp.StreamHandlers
+	*realtimehttp.RealtimeStreamHandlers
+	*notificationshttp.NotificationPreferencesHandlers
+	*historyhttp.HistoryHandlers
+	*notificationshttp.FeedHandlers
 	*popupshttp.PopupHandlers
-	*billinghttp.SubscriptionHandlers
-	*leaseshttp.FinanceHandlers
+	*billinghttp.BillingHandlers
+	*paymentshttp.PaymentHandlers
+	*paymentshttp.OperationsHandlers
+	*paymentshttp.GlobalPaymentHandlers
+	*rentalshttp.RentalHandlers
+	*taskshttp.RuleHandlers
+	*taskshttp.TaskHandlers
 	*adminhttp.AdminHandlers
-	*leaseshttp.CategoryHandlers
 	*httpsupport.ClientErrorsHandlers
+	*httpsupport.FeedbackHandlers
 }

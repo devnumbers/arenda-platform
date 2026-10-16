@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR 0058](./0058-notification-feed-and-per-category-settings.md)
+(per-category settings; the per-event-type model and its tables are removed —
+migration `000132`).
+
+Was accepted
 
 ## Context
 
@@ -29,7 +33,8 @@ row means allowed, so no backfill is needed and existing behaviour is
 preserved for all users.
 
 Permissions are bound to the event type, not to the delivery channel: one
-setting governs email today and future channels (SMS and the like) tomorrow.
+setting governs email today and future channels tomorrow. (Superseded by
+ADR 0030: preferences are per event type × channel.)
 
 ### 2. Storage
 

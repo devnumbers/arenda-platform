@@ -15,10 +15,13 @@
 const PUSH_ICON_PATH = '/icons/icon-192.png';
 
 /** Fallback destination when the payload carries no `url`. */
-export const DEFAULT_PUSH_CLICK_URL = '/dashboard';
+export const DEFAULT_PUSH_CLICK_URL = '/properties';
 
 /** Fallback notification title when the payload omits `title`. */
 export const DEFAULT_PUSH_TITLE = 'Рентли';
+
+/** Fallback notification tag — must mirror DEFAULT_PUSH_TAG in `public/sw.js`. */
+export const DEFAULT_PUSH_TAG = 'rentli-notification';
 
 /** Shape of the decoded backend push payload. */
 export type PushPayload = {
@@ -67,7 +70,7 @@ export function parsePushPayload(
     const record = parsed as Record<string, unknown>;
     const title = typeof record.title === 'string' ? record.title : DEFAULT_PUSH_TITLE;
     const body = typeof record.body === 'string' ? record.body : '';
-    const tag = typeof record.tag === 'string' && record.tag.length > 0 ? record.tag : 'rentli-reminder';
+    const tag = typeof record.tag === 'string' && record.tag.length > 0 ? record.tag : DEFAULT_PUSH_TAG;
     const url = resolveClickTarget(record.url);
     const eventType = typeof record.eventType === 'string' ? record.eventType : null;
     return { title, body, tag, url, eventType };
@@ -95,7 +98,7 @@ export function buildShowNotificationOptions(
 /**
  * Resolve a safe click destination from an arbitrary `data.url` value.
  *
- * Only same-origin absolute paths (`/dashboard`, `/properties/123`) are kept.
+ * Only same-origin absolute paths (`/properties`, `/properties/123`) are kept.
  * Anything else — missing value, external URLs, `javascript:` schemes, query/
  * hash-only strings — falls back to {@link DEFAULT_PUSH_CLICK_URL}. This stops
  * a malformed or hostile payload from opening an arbitrary page on tap.

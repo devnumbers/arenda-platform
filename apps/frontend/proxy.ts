@@ -1,7 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { buildCspReportOnlyPolicy, generateCspNonce } from '@/shared/lib/csp';
 import { safeInternalPath } from '@/shared/lib/safe-internal-path';
+import { paidSectionGateRedirect } from '@/shared/lib/paid-sections';
+import { BACKEND_URL } from '@/shared/config/backend-url';
+import type { components } from '@/shared/api/dto';
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8080';
+// CSP шаг 2 — разведка (тикет #406, решение #331): nonce + strict-dynamic
+// в Content-Security-Policy-Report-Only. Флаг ставит только stage-compose
+// (deploy/docker-compose.stage.yml); без переменной поведение прежнее —
+// прод конфигурацию шаг не трогает.
+const CSP_REPORT_ONLY = process.env.CSP_REPORT_ONLY === 'true';
 const SESSION_COOKIE_NAMES = ['__Host-session_id', 'session_id'] as const;
 const ME_TIMEOUT_MS = 5000;
 
@@ -10,9 +19,23 @@ function hasSessionCookie(request: NextRequest): boolean {
 }
 
 type MeResult =
-  | { kind: 'ok'; setCookies: string[] }
+  | { kind: 'ok'; setCookies: string[]; tariffName: components['schemas']['TariffName'] | null }
   | { kind: 'unauthorized'; setCookies: string[] }
   | { kind: 'error' };
+
+/** Имя тарифа подписки из тела /me (карта #997): раньше тело выбрасывалось,
+ * теперь из него читается subscription.tariff.name для гейта платных
+ * разделов. Разобрать не удалось — null (считается базовым тарифом). */
+async function readSubscriptionTariffName(
+  response: Response,
+): Promise<components['schemas']['TariffName'] | null> {
+  try {
+    const payload = (await response.json()) as components['schemas']['MeResponse'] | null;
+    return payload?.subscription?.tariff.name ?? null;
+  } catch {
+    return null;
+  }
+}
 
 async function fetchMe(request: NextRequest): Promise<MeResult> {
   const cookieHeader = request.headers.get('cookie') ?? '';
@@ -29,7 +52,8 @@ async function fetchMe(request: NextRequest): Promise<MeResult> {
 
     const setCookies = response.headers.getSetCookie();
     if (response.ok) {
-      return { kind: 'ok', setCookies };
+      const tariffName = await readSubscriptionTariffName(response);
+      return { kind: 'ok', setCookies, tariffName };
     }
     if (response.status === 401) {
       return { kind: 'unauthorized', setCookies };
@@ -50,27 +74,87 @@ function appendSetCookies(response: NextResponse, setCookies: string[]): NextRes
 }
 
 export async function proxy(request: NextRequest) {
+  // Легаси /dashboard снесён фундаментом карты #862 (тикет #865), слово
+  // владельца 29.09 (#975) — редирект, не 404: старые входы (закладка,
+  // иконка установленной PWA со старым start_url, ?from=/dashboard после
+  // логина) должны заканчиваться на живом экране, дом кабинета —
+  // /properties. 308 перманентный: браузеры и PWA-иконки запомнят.
+  if (
+    request.nextUrl.pathname === '/dashboard' ||
+    request.nextUrl.pathname.startsWith('/dashboard/')
+  ) {
+    return NextResponse.redirect(new URL('/properties', request.url), 308);
+  }
+  // Маршруты хаба «Совместный доступ» снесены разделом-списком (D1 #1313):
+  // /participants/list был списком «Ваших участников» — им /participants и
+  // остался; /participants/properties («Объекты пользователей») снесён без
+  // наследника — чужие объекты живут в общем списке /properties (путь
+  // выхода из чужого доступа — «Покинуть объект» на «Участниках объекта»,
+  // D6). 308 перманентный — канон /dashboard выше.
+  if (request.nextUrl.pathname === '/participants/list') {
+    return NextResponse.redirect(new URL('/participants', request.url), 308);
+  }
+  if (
+    request.nextUrl.pathname === '/participants/properties' ||
+    request.nextUrl.pathname.startsWith('/participants/properties/')
+  ) {
+    return NextResponse.redirect(new URL('/properties', request.url), 308);
+  }
+  // Глобальная страница «Действия участника» /history/participants/{id}
+  // снята (решение владельца 12.10.2026, #1361) — лента по одному
+  // человеку без объекта больше не существует, вход в историю остался
+  // через объектные скоупы («История объекта» #840, пара #841). Старые
+  // входы (закладки, история браузера) ведут на общую ленту — её фолбэк
+  // «Назад» снятой страницы был /history. Ровно два сегмента: живая
+  // пара /history/participants/{p}/properties/{id} длиннее и не
+  // задевается. 308 перманентный — канон /dashboard выше.
+  if (/^\/history\/participants\/[^/]+\/?$/.test(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL('/history', request.url), 308);
+  }
+  // Разведка строгой CSP: nonce на каждый запрос. Заголовок запроса Next
+  // разбирает при SSR и вешает nonce на фреймворк-скрипты и инлайн-стили
+  // (Report-Only он понимает так же, как блокирующий — app-render Next 16);
+  // заголовок ответа браузер не блокирует, только репортит в /api/csp-report.
+  const reportOnlyPolicy = CSP_REPORT_ONLY
+    ? buildCspReportOnlyPolicy(generateCspNonce(), { isDev: process.env.NODE_ENV === 'development' })
+    : null;
+  const forwardHeaders = reportOnlyPolicy
+    ? (() => {
+        const headers = new Headers(request.headers);
+        headers.set('Content-Security-Policy-Report-Only', reportOnlyPolicy);
+        return headers;
+      })()
+    : undefined;
+  const withReportOnlyCsp = (response: NextResponse): NextResponse => {
+    if (reportOnlyPolicy !== null) {
+      response.headers.set('Content-Security-Policy-Report-Only', reportOnlyPolicy);
+    }
+    return response;
+  };
+  const next = () =>
+    withReportOnlyCsp(NextResponse.next(forwardHeaders ? { request: { headers: forwardHeaders } } : undefined));
+
   const redirectToLogin = (setCookies: string[] = []) => {
     const from = request.nextUrl.pathname + request.nextUrl.search;
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('from', from);
-    return appendSetCookies(NextResponse.redirect(loginUrl), setCookies);
+    return appendSetCookies(withReportOnlyCsp(NextResponse.redirect(loginUrl)), setCookies);
   };
 
   if (request.nextUrl.pathname === '/login') {
     if (!hasSessionCookie(request)) {
-      return NextResponse.next();
+      return next();
     }
 
     const me = await fetchMe(request);
     if (me.kind === 'ok') {
-      const target = safeInternalPath(request.nextUrl.searchParams.get('from')) ?? '/dashboard';
-      return appendSetCookies(NextResponse.redirect(new URL(target, request.url)), me.setCookies);
+      const target = safeInternalPath(request.nextUrl.searchParams.get('from')) ?? '/properties';
+      return appendSetCookies(withReportOnlyCsp(NextResponse.redirect(new URL(target, request.url))), me.setCookies);
     }
     if (me.kind === 'unauthorized') {
-      return appendSetCookies(NextResponse.next(), me.setCookies);
+      return appendSetCookies(next(), me.setCookies);
     }
-    return NextResponse.next();
+    return next();
   }
 
   if (!hasSessionCookie(request)) {
@@ -79,23 +163,41 @@ export async function proxy(request: NextRequest) {
 
   const me = await fetchMe(request);
   if (me.kind === 'ok') {
-    return appendSetCookies(NextResponse.next(), me.setCookies);
+    // Гейт платных разделов (карта #997): редирект до отрисовки — кнопки не
+    // прячем, глубокие ссылки, уведомления и закладки покрыты одним местом;
+    // обход мимо UI ловит бекенд-гейт (402 tariff_required).
+    const paidGatePath = paidSectionGateRedirect(request.nextUrl.pathname, me.tariffName);
+    if (paidGatePath !== null) {
+      return appendSetCookies(
+        withReportOnlyCsp(NextResponse.redirect(new URL(paidGatePath, request.url))),
+        me.setCookies,
+      );
+    }
+    return appendSetCookies(next(), me.setCookies);
   }
   if (me.kind === 'unauthorized') {
     return redirectToLogin(me.setCookies);
   }
-  return NextResponse.next();
+  return next();
 }
 
 export const config = {
+  // Все разделы кабинета под /me-гейтом (#887): неавторизованный холодный
+  // вход в любой раздел — редирект на /login?from=…, а не ErrorCard
+  // раздела. dashboard ведёт мимо гейта — легаси-редирект на /properties
+  // выше (слово владельца #975); ui-kit — демо-поверхности за тем же гейтом.
   matcher: [
-    '/dashboard/:path*',
     '/properties/:path*',
-    '/leases/:path*',
-    '/tenants/:path*',
-    '/finance/:path*',
+    '/payments/:path*',
+    '/operations/:path*',
+    '/tasks/:path*',
+    '/contacts/:path*',
+    '/notifications/:path*',
+    '/history/:path*',
+    '/participants/:path*',
     '/profile/:path*',
     '/ui-kit/:path*',
+    '/dashboard/:path*',
     '/login',
   ],
 };

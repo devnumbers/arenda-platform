@@ -1,0 +1,7 @@
+{{.Title}}
+
+{{.Body}}
+{{if .ActionURL}}
+
+Перейти: {{.ActionURL}}
+{{end}}

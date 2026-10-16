@@ -34,6 +34,8 @@
   /* Radius */
   --radius-button: 16px;
   --radius-button-small: 10px;
+  /* Radius/m из Figma — CTA пустых состояний секций (#588). */
+  --radius-m: 12px;
   --radius-input: 16px;
   --radius-round: 100px;
 
@@ -56,4 +58,82 @@
      guard is what prevents the zoom. */
   --font-size-input: 1rem;
   --line-height-input: 1.25rem;
+
+  /* Дизайн-слой новых экранов (ADR 0050): палитра Figma-файла
+     «Рентли. Новые экраны сервиса». Значения намеренно отдельные от
+     легаси-палитры выше (#1e1e1e/#f1f3f6): старые экраны продолжают читать
+     свои переменные, новые — эти; проброс в Tailwind — @theme inline в
+     app/globals.css. */
+  --dl-primary: #2b7fff;
+  --dl-primary-hover: #2175f5;
+  --dl-primary-active: #176beb;
+
+  --dl-text-primary: #171a1c;
+  --dl-text-secondary: #6f787c;
+  --dl-text-tertiary: #9fa8ac;
+
+  --dl-surface: #ffffff;
+  --dl-surface-muted: #f3f4f6;
+  --dl-surface-muted-hover: #e9eaec;
+  --dl-surface-muted-active: #dfe0e2;
+  --dl-surface-danger: #ffe2e2;
+  --dl-surface-info: #eff6ff;
+
+  /* Три красных — намеренно: danger (#FB2C36, текст на розовой кнопке) —
+     интерактивная деструктивная кнопка; error (#FF383C) — текст ошибок
+     валидации и переполненных счётчиков под полем; danger-soft (#FF676E) —
+     предупреждение о последствиях в деструктивных шитах (#629,
+     Figma 1583:56558). */
+  --dl-danger: #fb2c36;
+  --dl-danger-soft: #ff676e;
+  --dl-error: #ff383c;
+
+  /* Зелёный дохода: «+» суммы доходных операций (1332:61665, State=Plus). */
+  --dl-success: #34c771;
+
+  --dl-input-border: #d3d7d9;
+  --dl-overlay: rgba(23, 26, 28, 0.5);
+
+  /* Единое движение (решение 2026-08-26, по HIG Motion / WWDC23): кривая
+     Apple cubic-bezier(0.32, 0.72, 0, 1) — мягкий разгон, длинное
+     послевкусие; 250ms — цвета/фон/обводки, 350ms — движение (трансформы,
+     панели, шаги). Плавающий лейбл поля — 300ms. */
+  --dl-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --dl-duration-fast: 250ms;
+  --dl-duration-move: 350ms;
+
+  /* Длительности модалки (keyframes modal-* в globals.css). Значения —
+     прежние литералы, поднятые в токены (#1349): 400/220 сознательно вне
+     шкалы 250/350 — смена требует фил-чека владельца; reduced-motion
+     укорачивает через media-блок globals.css (класс-хук .modal-surface). */
+  --motion-modal-overlay-in: 350ms;
+  --motion-modal-overlay-out: 250ms;
+  --motion-modal-card-in: 400ms;
+  --motion-modal-card-out: 220ms;
+
+  /* Канон realtime-оживания значения (тикет #880, решение владельца 25.09
+     по прототипу #879): dim → hold на перечитывание → blur-кроссфейд +
+     вспышка. Фазы удлинены сознательно — последовательность «читается
+     глазом, а не мигает»; вспышка — primary на 18% (цвет
+     rgba(43,127,255,0.18)); reduced-motion укорачивает
+     всё до ~150мс-порядка (§8) — JS-фазы ждут то же через
+     REDUCED_TIMINGS (shared/ui/live-value). */
+  --live-dim: 350ms;
+  --live-blur-out: 220ms;
+  --live-blur-in: 380ms;
+  --live-blur-delay: 130ms;
+  --live-flash: 1200ms;
+  /* Цвет вспышки — primary на 18% (литерал демо #879, rgba(43,127,255,0.18)),
+     выводится из токена — смена палитры тянет вспышку за собой. */
+  --live-flash-bg: color-mix(in srgb, var(--dl-primary) 18%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --live-dim: 120ms;
+    --live-blur-out: 80ms;
+    --live-blur-in: 100ms;
+    --live-blur-delay: 30ms;
+    --live-flash: 250ms;
+  }
 }

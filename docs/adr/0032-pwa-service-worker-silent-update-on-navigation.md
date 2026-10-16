@@ -19,7 +19,8 @@ updatefound → registration.installing statechange → state === 'installed'
   → pendingSkipWaiting = true
 
 Триггеры отправки SKIP_WAITING (любой из):
-  - usePathname() сменился (пользователь перешёл на другой экран)
+  - usePathname() сменился (пользователь перешёл на другой экран),
+    КРОМЕ popstate-переходов (см. правку #771 ниже)
   - visibilitychange → document.visibilityState === 'hidden'
   → registration.waiting?.postMessage({ type: 'SKIP_WAITING' })
 
@@ -30,6 +31,8 @@ controllerchange:
 visibilitychange → document.visibilityState === 'visible':
   - needsReloadOnVisible → window.location.reload() (с guard isReloading)
 ```
+
+**Правка #771 (2026-09-21): popstate-навигации активацию откладывают.** Обход «Участников» #759 поймал редкую потерю попапа «Участник приглашен» на хабе: флаг успеха живёт в памяти модуля (#698; web storage запрещён #331) и ставится перед `goBack` — а `goBack` это popstate-навигация, и триггер «сменился маршрут» активировал waiting SW ровно на экране-приёмнике; `controllerchange → reload()` перезагружал страницу в момент, когда пользователь должен увидеть попап, и модульное состояние стиралось. Решение: popstate-переходы (goBack, кнопка/жест «назад») триггером не являются — активация откладывается до следующего push-перехода или скрытия приложения (тихое окно `POPSTATE_QUIET_MS`, предикат `shouldActivateWaitingOnRouteChange` в `shared/lib/pwa/sw-update-timing.ts`, юнит-тесты там же). Активность триггеров для push-переходов и скрытия сохранена; остаточный случай — goBack через replace-фолбэк (`history.length <= 1`, глубокая ссылка в открытой вкладке) остаётся мгновенным, принят.
 
 **Периодическая проверка:** `setInterval(() => registration.update(), 30 * 60 * 1000)` — каждые 30 минут (браузер сам троттлит лишние проверки; по умолчанию без этого браузер проверяет только при навигации + раз в 24ч).
 

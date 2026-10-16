@@ -1,4 +1,4 @@
-const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api';
+const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? '/api';
 const REPORT_ENDPOINT = `${API_PREFIX}/client-errors`;
 const REPORT_APP = 'admin';
 const MAX_REPORTS_PER_MINUTE = 5;

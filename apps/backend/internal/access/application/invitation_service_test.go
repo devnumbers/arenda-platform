@@ -3,13 +3,16 @@ package application
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	realtimetest "github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -19,13 +22,32 @@ import (
 // on in-memory ports — the same seam as service_integration_test.go and
 // slot_coordinator_test.go.
 
-// ---------------------------------------------------------------------------
+// Shared fixture strings across the access application test files: the
+// invitee/new-user email, the participant emails, and the property titles.
+const (
+	testNewUserEmail   = "new@example.com"
+	testMemberEmail    = "member@example.com"
+	testOwnerEmail     = "owner@example.com"
+	testRecipientEmail = "recipient@example.com"
+	testNevskyTitle    = "Квартира на Невском"
+	testApartmentTitle = "Квартира"
+	// The ordered display titles of the two-property fixtures.
+	testOwnTitle     = "Мой"
+	testForeignTitle = "Чужой"
+	testFirstTitle   = "Первая"
+	testSecondTitle  = "Вторая"
+)
+
 // In-memory port stubs for the invitation dependencies.
-// ---------------------------------------------------------------------------
 
 // memInvitationsRepo is an in-memory InvitationRepository.
 type memInvitationsRepo struct {
 	rows []domain.Invitation
+	// The manage-scope predicate for ListForRemovalByEmail (issue #694). The
+	// fixture wires it to the shared membership repo's inManageScope so the
+	// in-memory predicate matches the SQL one (owner-only since D8, issue
+	// #1304; archived included).
+	removalScope func(propertyID, actorID uuid.UUID) bool
 }
 
 func (r *memInvitationsRepo) Create(_ context.Context, inv domain.Invitation) (domain.Invitation, error) {
@@ -84,6 +106,38 @@ func (r *memInvitationsRepo) ListPendingByEmail(_ context.Context, email string)
 	return out, nil
 }
 
+// ListForRemovalByEmail mirrors the SQL removal scope (issue #694): the
+// pending invitations for the email on properties inside the actor's manage
+// scope, oldest first.
+func (r *memInvitationsRepo) ListForRemovalByEmail(_ context.Context, email string, actorID uuid.UUID) ([]domain.Invitation, error) {
+	var out []domain.Invitation
+	for _, e := range r.rows {
+		if strings.EqualFold(e.Email, email) && (r.removalScope == nil || r.removalScope(e.PropertyID, actorID)) {
+			out = append(out, e)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Invitation) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// ListForRemovalByOwner mirrors the SQL owner-wide removal scope (issue
+// #1310): every pending invitation on properties inside the actor's manage
+// scope, oldest first.
+func (r *memInvitationsRepo) ListForRemovalByOwner(_ context.Context, actorID uuid.UUID) ([]domain.Invitation, error) {
+	var out []domain.Invitation
+	for _, e := range r.rows {
+		if r.removalScope == nil || r.removalScope(e.PropertyID, actorID) {
+			out = append(out, e)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Invitation) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
 func (r *memInvitationsRepo) UpdateRole(_ context.Context, id, propertyID uuid.UUID, role domain.Role) (domain.Invitation, error) {
 	for i := range r.rows {
 		if r.rows[i].ID == id && r.rows[i].PropertyID == propertyID {
@@ -119,17 +173,23 @@ func (r *memInvitationsRepo) WithTx(transaction.Tx) InvitationRepository { retur
 // fakeLookup is a configurable UserLookup keyed by normalized email.
 type fakeLookup struct {
 	byEmail map[string]MemberUser
+	// ByID overrides GetByID for seeded ids; the fallback stays the anonymous
+	// «Member» row.
+	byID map[uuid.UUID]MemberUser
 }
 
 func newFakeLookup() *fakeLookup {
-	return &fakeLookup{byEmail: map[string]MemberUser{}}
+	return &fakeLookup{byEmail: map[string]MemberUser{}, byID: map[uuid.UUID]MemberUser{}}
 }
 
 func (f *fakeLookup) add(email string, userID uuid.UUID) {
-	f.byEmail[email] = MemberUser{ID: userID, HasEmail: true}
+	f.byEmail[email] = MemberUser{ID: userID}
 }
 
 func (f *fakeLookup) GetByID(_ context.Context, id uuid.UUID) (MemberUser, error) {
+	if u, ok := f.byID[id]; ok {
+		return u, nil
+	}
 	name := "Member"
 	return MemberUser{ID: id, Name: &name}, nil
 }
@@ -139,6 +199,22 @@ func (f *fakeLookup) GetByEmail(_ context.Context, email string) (MemberUser, er
 		return u, nil
 	}
 	return MemberUser{}, domain.ErrUserNotFound
+}
+
+// fakeEmails is a configurable UserEmailResolver keyed by user id; users
+// missing from the map resolve to the empty string (no email).
+type fakeEmails struct {
+	byUser map[uuid.UUID]string
+}
+
+func newFakeEmails() *fakeEmails {
+	return &fakeEmails{byUser: map[uuid.UUID]string{}}
+}
+
+func (f *fakeEmails) set(userID uuid.UUID, email string) { f.byUser[userID] = email }
+
+func (f *fakeEmails) GetEmail(_ context.Context, id uuid.UUID) (string, error) {
+	return f.byUser[id], nil
 }
 
 // fakeTitles resolves a fixed property title.
@@ -168,39 +244,50 @@ type invitationFixture struct {
 	owners      staticResolver
 	statuses    fakeStatuses
 	lookup      *fakeLookup
+	emails      *fakeEmails
 	mailer      *fakeAccessMailer
 	clk         *fixedClock
 	limiter     *fakeRecipientLimiter
-	access      *AccessService
-	svc         *InvitationService
+	// Realtime is the recording carrier the access service dispatches its
+	// frames through — the realtime seam's test double (карта #714, #716).
+	realtime *realtimetest.RecordingPublisher
+	access   *AccessService
+	svc      *InvitationService
 }
 
 func newInvitationFixture() *invitationFixture {
 	repo := newMemRepo()
-	invitations := &memInvitationsRepo{}
+	invitations := &memInvitationsRepo{removalScope: repo.inManageScope}
 	owners := staticResolver{}
 	statuses := fakeStatuses{}
 	policy := NewMembershipPolicy(owners, repo)
 	lookup := newFakeLookup()
+	emails := newFakeEmails()
 	mailer := &fakeAccessMailer{}
 	clk := &fixedClock{now: time.Now()}
 	limiter := newFakeRecipientLimiter()
-	// The lifecycle mailer is wired with an empty email resolver: existing T5
-	// scenarios never resolve a recipient address, so no lifecycle email is
-	// sent from these paths.
-	lifecycle := NewLifecycleMailer(mailer, fakeEmailResolver{}, fakeTitles("Квартира на Невском"), nil)
-	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOccupancy(), newFakeOwnedProps(), lifecycle, auditapp.Noop{}, noopBeginner{})
-	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, lifecycle, noopBeginner{}, auditapp.Noop{}, nil)
-	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy, coordinator, mailer, lifecycle, fakeTitles("Квартира на Невском"), noopBeginner{}, auditapp.Noop{}, clk, nil)
+	// The lifecycle events are not wired here: the T5 scenarios assert the
+	// invite email only, no event publication is part of them.
+	coordinator := NewSlotCoordinator(repo, owners, limiter, newFakeOwnedProps(),
+		nil, auditapp.Noop{}, noopBeginner{}, nil, nil)
+	realtime := &realtimetest.RecordingPublisher{}
+	access := NewAccessService(repo, owners, statuses, lookup, policy, coordinator, nil,
+		newTestFactory(repo, invitations, auditapp.Noop{}), nil)
+	access.SetRealtimePublisher(realtime)
+	svc := NewInvitationService(access, repo, invitations, owners, statuses, lookup, policy,
+		coordinator, mailer, nil, fakeTitles(testNevskyTitle),
+		newTestFactory(repo, invitations, auditapp.Noop{}), clk, nil, emails)
 	return &invitationFixture{
 		repo:        repo,
 		invitations: invitations,
 		owners:      owners,
 		statuses:    statuses,
 		lookup:      lookup,
+		emails:      emails,
 		mailer:      mailer,
 		clk:         clk,
 		limiter:     limiter,
+		realtime:    realtime,
 		access:      access,
 		svc:         svc,
 	}
@@ -209,21 +296,20 @@ func newInvitationFixture() *invitationFixture {
 // addProperty registers a property with its owner in the resolver and the
 // membership repo owner map.
 func (f *invitationFixture) addProperty(ownerID uuid.UUID) uuid.UUID {
-	propertyID := uuid.New()
+	propertyID := uuid.Must(uuid.NewV7())
 	f.owners[propertyID] = ownerID
 	f.repo.SetOwner(propertyID, ownerID)
 	return propertyID
 }
 
-// ---------------------------------------------------------------------------
 // Invite: registered email → instant activation.
-// ---------------------------------------------------------------------------
 
 func TestInvitationService_InviteRegisteredEmailActivatesInstantly(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
-	invitee := uuid.New()
+	invitee := uuid.Must(uuid.NewV7())
 	f.lookup.add("friend@example.com", invitee)
 	f.limiter.set(invitee, 10)
 
@@ -248,25 +334,29 @@ func TestInvitationService_InviteRegisteredEmailActivatesInstantly(t *testing.T)
 	}
 
 	// Re-inviting an active member is a conflict.
-	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "friend@example.com", domain.RoleViewer); !errors.Is(err, domain.ErrMemberAlreadyExists) {
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "friend@example.com",
+		domain.RoleViewer); !errors.Is(err, domain.ErrMemberAlreadyExists) {
 		t.Errorf("re-invite member: expected ErrMemberAlreadyExists, got %v", err)
 	}
 }
 
 func TestInvitationService_InviteOwnerOrSelfEmailRejected(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
-	f.lookup.add("owner@example.com", owner)
+	f.lookup.add(testOwnerEmail, owner)
 
-	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "owner@example.com", domain.RoleViewer); !errors.Is(err, domain.ErrCannotAddOwner) {
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testOwnerEmail,
+		domain.RoleViewer); !errors.Is(err, domain.ErrCannotAddOwner) {
 		t.Errorf("owner email: expected ErrCannotAddOwner, got %v", err)
 	}
 }
 
 func TestInvitationService_InviteInvalidEmailRejected(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 
 	for _, raw := range []string{"", "not-an-email", "a@b"} {
@@ -276,13 +366,12 @@ func TestInvitationService_InviteInvalidEmailRejected(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Invite: unregistered email → pending invitation + single invite email.
-// ---------------------------------------------------------------------------
 
 func TestInvitationService_InviteUnregisteredCreatesPending(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 
 	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, "New@Example.com", domain.RoleFullAccess)
@@ -293,7 +382,7 @@ func TestInvitationService_InviteUnregisteredCreatesPending(t *testing.T) {
 		t.Fatalf("expected pending invitation, got %+v", outcome)
 	}
 	inv := *outcome.Invitation
-	if inv.Email != "new@example.com" {
+	if inv.Email != testNewUserEmail {
 		t.Errorf("email = %q, want normalized new@example.com", inv.Email)
 	}
 	if inv.Role != domain.RoleFullAccess || inv.InvitedBy != owner {
@@ -302,15 +391,16 @@ func TestInvitationService_InviteUnregisteredCreatesPending(t *testing.T) {
 	if inv.LastSentAt.IsZero() {
 		t.Error("last_sent_at must be set at creation")
 	}
-	if len(f.mailer.sent) != 1 || f.mailer.sent[0].to != "new@example.com" {
+	if len(f.mailer.sent) != 1 || f.mailer.sent[0].to != testNewUserEmail {
 		t.Fatalf("expected exactly one invite email, got %+v", f.mailer.sent)
 	}
-	if f.mailer.sent[0].title != "Квартира на Невском" {
-		t.Errorf("mail title = %q", f.mailer.sent[0].title)
+	if !slices.Equal(f.mailer.sent[0].titles, []string{testNevskyTitle}) {
+		t.Errorf("mail titles = %v", f.mailer.sent[0].titles)
 	}
 
 	// A duplicate pending invite is a conflict and sends no second email.
-	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleViewer); !errors.Is(err, domain.ErrInvitationAlreadyExists) {
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail,
+		domain.RoleViewer); !errors.Is(err, domain.ErrInvitationAlreadyExists) {
 		t.Errorf("duplicate invite: expected ErrInvitationAlreadyExists, got %v", err)
 	}
 	if len(f.mailer.sent) != 1 {
@@ -319,12 +409,13 @@ func TestInvitationService_InviteUnregisteredCreatesPending(t *testing.T) {
 }
 
 func TestInvitationService_InviteMailFailureKeepsInvitation(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 	f.mailer.err = errors.New("smtp down")
 
-	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleViewer)
+	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleViewer)
 	if err != nil {
 		t.Fatalf("mail failure must not fail the invite: %v", err)
 	}
@@ -333,16 +424,15 @@ func TestInvitationService_InviteMailFailureKeepsInvitation(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Resend with the 24h cooldown.
-// ---------------------------------------------------------------------------
 
 func TestInvitationService_ResendCooldown(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 
-	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleViewer)
+	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleViewer)
 	if err != nil {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
@@ -378,21 +468,20 @@ func TestInvitationService_ResendCooldown(t *testing.T) {
 	}
 
 	// Unknown invitation id is not found.
-	if err := f.svc.ResendInvitation(t.Context(), owner, property, uuid.New()); !errors.Is(err, domain.ErrInvitationNotFound) {
+	if err := f.svc.ResendInvitation(t.Context(), owner, property, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrInvitationNotFound) {
 		t.Errorf("unknown invitation: expected ErrInvitationNotFound, got %v", err)
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Role change and cancellation of a pending invitation.
-// ---------------------------------------------------------------------------
 
 func TestInvitationService_ChangeRoleAndCancel(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 
-	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleViewer)
+	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleViewer)
 	if err != nil {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
@@ -420,27 +509,65 @@ func TestInvitationService_ChangeRoleAndCancel(t *testing.T) {
 	}
 
 	// Re-inviting a cancelled email is free.
-	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleViewer); err != nil {
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleViewer); err != nil {
 		t.Errorf("re-invite after cancel: %v", err)
 	}
 
 	// A viewer cannot manage invitations.
-	viewer := uuid.New()
+	viewer := uuid.Must(uuid.NewV7())
 	if _, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
-	if _, err := f.svc.InviteByEmail(t.Context(), viewer, property, "other@example.com", domain.RoleViewer); !errors.Is(err, domain.ErrMemberNotFound) {
+	if _, err := f.svc.InviteByEmail(t.Context(), viewer, property, "other@example.com",
+		domain.RoleViewer); !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Errorf("viewer invite: expected ErrMemberNotFound, got %v", err)
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Activation at registration.
-// ---------------------------------------------------------------------------
+
+// seedInvitation stores a pending invitation fixture with explicit timestamps
+// so the FIFO activation order is deterministic.
+func (f *invitationFixture) seedInvitation(
+	t *testing.T, propertyID uuid.UUID, email string,
+	role domain.Role, invitedBy uuid.UUID, lastSentAt, createdAt time.Time,
+) domain.Invitation {
+	t.Helper()
+	inv, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: propertyID, Email: email,
+		Role: role, InvitedBy: invitedBy, LastSentAt: lastSentAt, CreatedAt: createdAt,
+	})
+	if err != nil {
+		t.Fatalf("create invitation on %s: %v", propertyID, err)
+	}
+	return inv
+}
+
+// assertMembership loads the membership on the property and checks its role,
+// grantor and active status.
+func (f *invitationFixture) assertMembership(t *testing.T, propertyID, userID, grantedBy uuid.UUID, wantRole domain.Role) {
+	t.Helper()
+	m, err := f.repo.GetByPropertyAndUser(t.Context(), propertyID, userID)
+	if err != nil {
+		t.Fatalf("membership on %s: %v", propertyID, err)
+	}
+	if m.Role != wantRole || m.GrantedBy != grantedBy || m.Status != domain.MemberStatusActive {
+		t.Errorf("membership on %s = %+v, want role %s granted by %s active", propertyID, m, wantRole, grantedBy)
+	}
+}
+
+// assertInvitationConsumed checks that an activation consumed the invitation.
+func (f *invitationFixture) assertInvitationConsumed(t *testing.T, invitationID, propertyID uuid.UUID) {
+	t.Helper()
+	if _, err := f.invitations.GetByID(t.Context(), invitationID, propertyID); !errors.Is(err, domain.ErrInvitationNotFound) {
+		t.Errorf("invitation %s must be deleted, got %v", invitationID, err)
+	}
+}
 
 func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	propA := f.addProperty(owner)
 	propB := f.addProperty(owner)
 	other := f.addProperty(owner)
@@ -448,32 +575,18 @@ func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
 	// Two pending invitations on the same email (propA is older), one on
 	// another email.
 	base := time.Now().Add(-time.Hour)
-	invA, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: propA, Email: "new@example.com", Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: base, CreatedAt: base})
-	if err != nil {
-		t.Fatalf("create A: %v", err)
-	}
-	invB, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: propB, Email: "new@example.com", Role: domain.RoleFullAccess, InvitedBy: owner, LastSentAt: base, CreatedAt: base.Add(time.Minute)})
-	if err != nil {
-		t.Fatalf("create B: %v", err)
-	}
-	if _, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: other, Email: "someone-else@example.com", Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: base, CreatedAt: base}); err != nil {
-		t.Fatalf("create other: %v", err)
-	}
+	invA := f.seedInvitation(t, propA, testNewUserEmail, domain.RoleViewer, owner, base, base)
+	invB := f.seedInvitation(t, propB, testNewUserEmail, domain.RoleFullAccess, owner, base, base.Add(time.Minute))
+	f.seedInvitation(t, other, "someone-else@example.com", domain.RoleViewer, owner, base, base)
 
-	user := uuid.New()
+	user := uuid.Must(uuid.NewV7())
 	f.limiter.set(user, 10)
 	if err := f.svc.ActivatePendingInvitations(t.Context(), user, "New@Example.com"); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 
 	// Both invitations activated with their stored roles.
-	mA, err := f.repo.GetByPropertyAndUser(t.Context(), propA, user)
-	if err != nil {
-		t.Fatalf("membership A: %v", err)
-	}
-	if mA.Role != domain.RoleViewer || mA.GrantedBy != owner || mA.Status != domain.MemberStatusActive {
-		t.Errorf("membership A = %+v", mA)
-	}
+	f.assertMembership(t, propA, user, owner, domain.RoleViewer)
 	mB, err := f.repo.GetByPropertyAndUser(t.Context(), propB, user)
 	if err != nil {
 		t.Fatalf("membership B: %v", err)
@@ -483,47 +596,51 @@ func TestInvitationService_ActivatePendingInvitations(t *testing.T) {
 	}
 
 	// Invitations are gone; the other email's invitation is untouched.
-	if _, err := f.invitations.GetByID(t.Context(), invA.ID, propA); !errors.Is(err, domain.ErrInvitationNotFound) {
-		t.Errorf("invitation A must be deleted, got %v", err)
-	}
-	if _, err := f.invitations.GetByID(t.Context(), invB.ID, propB); !errors.Is(err, domain.ErrInvitationNotFound) {
-		t.Errorf("invitation B must be deleted, got %v", err)
-	}
+	f.assertInvitationConsumed(t, invA.ID, propA)
+	f.assertInvitationConsumed(t, invB.ID, propB)
 	remaining, err := f.invitations.ListPendingByEmail(t.Context(), "someone-else@example.com")
 	if err != nil || len(remaining) != 1 {
 		t.Errorf("other email invitation must stay, got %v %v", remaining, err)
 	}
 
 	// A non-matching email activates nothing.
-	if err := f.svc.ActivatePendingInvitations(t.Context(), uuid.New(), "nobody@example.com"); err != nil {
+	if err := f.svc.ActivatePendingInvitations(t.Context(), uuid.Must(uuid.NewV7()), "nobody@example.com"); err != nil {
 		t.Fatalf("activate non-matching: %v", err)
 	}
 	// An empty email is a no-op, not an error.
-	if err := f.svc.ActivatePendingInvitations(t.Context(), uuid.New(), ""); err != nil {
+	if err := f.svc.ActivatePendingInvitations(t.Context(), uuid.Must(uuid.NewV7()), ""); err != nil {
 		t.Fatalf("activate empty email: %v", err)
 	}
 }
 
 func TestInvitationService_ActivationFIFOWhenSlotShort(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	propA := f.addProperty(owner)
 	propB := f.addProperty(owner)
 
 	base := time.Now().Add(-time.Hour)
-	if _, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: propA, Email: "new@example.com", Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: base, CreatedAt: base}); err != nil {
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: propA, Email: testNewUserEmail,
+		Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: base, CreatedAt: base,
+	}); err != nil {
 		t.Fatalf("create A: %v", err)
 	}
-	if _, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: propB, Email: "new@example.com", Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: base, CreatedAt: base.Add(time.Minute)}); err != nil {
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: propB, Email: testNewUserEmail,
+		Role: domain.RoleViewer, InvitedBy: owner,
+		LastSentAt: base, CreatedAt: base.Add(time.Minute),
+	}); err != nil {
 		t.Fatalf("create B: %v", err)
 	}
 
 	// One free slot only: the earlier invitation activates active, the later
 	// one is created suspended (T4 mechanics via the real SlotCoordinator).
-	user := uuid.New()
+	user := uuid.Must(uuid.NewV7())
 	f.limiter.set(user, 1)
 
-	if err := f.svc.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+	if err := f.svc.ActivatePendingInvitations(t.Context(), user, testNewUserEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 
@@ -544,11 +661,12 @@ func TestInvitationService_ActivationFIFOWhenSlotShort(t *testing.T) {
 }
 
 func TestInvitationService_ActivationAppliesCurrentRole(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 
-	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleViewer)
+	outcome, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleViewer)
 	if err != nil {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
@@ -558,8 +676,8 @@ func TestInvitationService_ActivationAppliesCurrentRole(t *testing.T) {
 		t.Fatalf("ChangeInvitationRole: %v", err)
 	}
 
-	user := uuid.New()
-	if err := f.svc.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+	user := uuid.Must(uuid.NewV7())
+	if err := f.svc.ActivatePendingInvitations(t.Context(), user, testNewUserEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 	m, err := f.repo.GetByPropertyAndUser(t.Context(), property, user)
@@ -572,23 +690,30 @@ func TestInvitationService_ActivationAppliesCurrentRole(t *testing.T) {
 }
 
 func TestInvitationService_ActivationSkipsExistingMembership(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 
-	user := uuid.New()
+	user := uuid.Must(uuid.NewV7())
 	// The user is already a (suspended) member of the property; a pending
 	// invitation for the same email must be dropped silently without creating
 	// a duplicate membership.
-	if _, err := f.repo.CreateWithStatus(t.Context(), domain.Membership{ID: uuid.New(), PropertyID: property, UserID: user, Role: domain.RoleViewer, GrantedBy: owner, Status: domain.MemberStatusSuspended}); err != nil {
+	if _, err := f.repo.CreateWithStatus(t.Context(), domain.Membership{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: property, UserID: user,
+		Role: domain.RoleViewer, GrantedBy: owner, Status: domain.MemberStatusSuspended,
+	}); err != nil {
 		t.Fatalf("CreateWithStatus: %v", err)
 	}
-	inv, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: property, Email: "new@example.com", Role: domain.RoleFullAccess, InvitedBy: owner, LastSentAt: time.Now()})
+	inv, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: property, Email: testNewUserEmail,
+		Role: domain.RoleFullAccess, InvitedBy: owner, LastSentAt: time.Now(),
+	})
 	if err != nil {
 		t.Fatalf("create invitation: %v", err)
 	}
 
-	if err := f.svc.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+	if err := f.svc.ActivatePendingInvitations(t.Context(), user, testNewUserEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 	if _, err := f.invitations.GetByID(t.Context(), inv.ID, property); !errors.Is(err, domain.ErrInvitationNotFound) {
@@ -599,24 +724,26 @@ func TestInvitationService_ActivationSkipsExistingMembership(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Member list: pending invitations are manager-only.
-// ---------------------------------------------------------------------------
+// Member list: pending invitations and member emails are visible to every
+// reader with view capability (owner decision 2026-09-20, #758: nothing is
+// hidden from viewers).
 
 func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
-	viewer := uuid.New()
+	viewer := uuid.Must(uuid.NewV7())
 	f.limiter.set(viewer, 10)
+	f.emails.set(owner, testOwnerEmail)
 	if _, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer); err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
-	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleFullAccess); err != nil {
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleFullAccess); err != nil {
 		t.Fatalf("InviteByEmail: %v", err)
 	}
 
-	// The owner (manager) sees owner + member + pending invitation.
+	// The owner sees owner + member + pending invitation.
 	members, err := f.svc.ListMembers(t.Context(), owner, property)
 	if err != nil {
 		t.Fatalf("ListMembers: %v", err)
@@ -625,7 +752,7 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 		t.Fatalf("expected 3 rows, got %+v", members)
 	}
 	pending := members[2]
-	if !pending.Pending || pending.Email == nil || *pending.Email != "new@example.com" {
+	if !pending.Pending || pending.Email == nil || *pending.Email != testNewUserEmail {
 		t.Errorf("pending row = %+v", pending)
 	}
 	if pending.UserID != uuid.Nil || pending.Role != sharedpolicy.RoleFullAccess {
@@ -634,35 +761,240 @@ func TestInvitationService_ListMembersIncludesPendingForManagers(t *testing.T) {
 	if pending.LastSentAt == nil {
 		t.Error("pending row must carry last_sent_at")
 	}
-
-	// A viewer does not see pending invitations (they expose the invitee email).
-	members, err = f.svc.ListMembers(t.Context(), viewer, property)
-	if err != nil {
-		t.Fatalf("viewer ListMembers: %v", err)
-	}
-	for _, m := range members {
-		if m.Pending {
-			t.Errorf("viewer must not see pending invitations, got %+v", members)
-		}
-	}
-	if len(members) != 2 {
-		t.Errorf("viewer rows = %d, want 2 (owner + viewer)", len(members))
+	if email := members[0].Email; email == nil || *email != testOwnerEmail {
+		t.Errorf("owner row email = %v, want %s", email, testOwnerEmail)
 	}
 }
 
-// ---------------------------------------------------------------------------
+func TestInvitationService_ListMembersViewerSeesEmailsAndPending(t *testing.T) {
+	t.Parallel()
+	f := newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	property := f.addProperty(owner)
+	viewer := uuid.Must(uuid.NewV7())
+	f.limiter.set(viewer, 10)
+	f.emails.set(owner, testOwnerEmail)
+	f.emails.set(viewer, "viewer@example.com")
+	if _, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleFullAccess); err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+
+	// A viewer sees the same rows as the owner: registered members with
+	// their emails and the pending invitation (owner decision #758).
+	members, err := f.svc.ListMembers(t.Context(), viewer, property)
+	if err != nil {
+		t.Fatalf("viewer ListMembers: %v", err)
+	}
+	if len(members) != 3 {
+		t.Fatalf("viewer rows = %d, want 3 (owner + viewer + pending)", len(members))
+	}
+	emailByUser := map[uuid.UUID]string{}
+	pendingSeen := false
+	for _, m := range members {
+		if m.Pending {
+			pendingSeen = true
+			if m.Email == nil || *m.Email != testNewUserEmail {
+				t.Errorf("viewer pending row = %+v", m)
+			}
+			continue
+		}
+		if m.Email != nil {
+			emailByUser[m.UserID] = *m.Email
+		}
+	}
+	if !pendingSeen {
+		t.Error("viewer must see the pending invitation")
+	}
+	if emailByUser[owner] != testOwnerEmail || emailByUser[viewer] != "viewer@example.com" {
+		t.Errorf("viewer must see member emails, got %v", emailByUser)
+	}
+}
+
+// Reading one members-list row alone (issue #1357): the «Права участника»
+// card of every row the list shows — the owner by user id, a member by
+// membership id or user id, a pending invitation by invitation id. The
+// contract is the row itself: GetMember returns exactly what ListMembers
+// returns for the same addressing id, through the same gate.
+
+// getMemberFixture seeds owner + viewer member + pending invitation: the
+// same three-row shape the ListMembers tests assert on.
+func getMemberFixture(t *testing.T) (
+	f *invitationFixture, property, viewer, invitationID uuid.UUID, membership domain.Membership,
+) {
+	t.Helper()
+	f = newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	property = f.addProperty(owner)
+	viewer = uuid.Must(uuid.NewV7())
+	f.limiter.set(viewer, 10)
+	f.emails.set(owner, testOwnerEmail)
+	f.emails.set(viewer, testMemberEmail)
+	m, err := f.access.AddMember(t.Context(), owner, property, viewer, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail, domain.RoleFullAccess); err != nil {
+		t.Fatalf("InviteByEmail: %v", err)
+	}
+	invitations, err := f.invitations.ListByProperty(t.Context(), property)
+	if err != nil || len(invitations) != 1 {
+		t.Fatalf("invitation rows = %d (err %v), want 1", len(invitations), err)
+	}
+	return f, property, viewer, invitations[0].ID, m
+}
+
+func TestInvitationService_GetMemberOwnerRowByUserID(t *testing.T) {
+	t.Parallel()
+	f := newInvitationFixture()
+	owner := uuid.Must(uuid.NewV7())
+	property := f.addProperty(owner)
+	f.emails.set(owner, testOwnerEmail)
+
+	// The owner row is addressed by the owner's user id: the synthesized row
+	// carries no membership id. The read returns the list's row itself.
+	list, err := f.svc.ListMembers(t.Context(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	ownerRow, err := f.svc.GetMember(t.Context(), owner, property, owner)
+	if err != nil {
+		t.Fatalf("GetMember owner: %v", err)
+	}
+	if !ownerRow.IsOwner || ownerRow.UserID != owner {
+		t.Errorf("owner row = %+v", ownerRow)
+	}
+	if !reflect.DeepEqual(ownerRow, list[0]) {
+		t.Errorf("owner row must equal the list row: got %+v, want %+v", ownerRow, list[0])
+	}
+}
+
+func TestInvitationService_GetMemberMemberRowByIDAndUserID(t *testing.T) {
+	t.Parallel()
+	f, property, viewer, _, membership := getMemberFixture(t)
+	owner := f.owners[property]
+
+	list, err := f.svc.ListMembers(t.Context(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	byID, err := f.svc.GetMember(t.Context(), owner, property, membership.ID)
+	if err != nil {
+		t.Fatalf("GetMember by membership id: %v", err)
+	}
+	if byID.ID != membership.ID || byID.UserID != viewer || byID.IsOwner {
+		t.Errorf("member row by id = %+v", byID)
+	}
+	if !reflect.DeepEqual(byID, list[1]) {
+		t.Errorf("member row must equal the list row: got %+v, want %+v", byID, list[1])
+	}
+	byUserID, err := f.svc.GetMember(t.Context(), owner, property, viewer)
+	if err != nil {
+		t.Fatalf("GetMember by user id: %v", err)
+	}
+	if !reflect.DeepEqual(byUserID, list[1]) {
+		t.Errorf("member row by user id must equal the list row: got %+v, want %+v", byUserID, list[1])
+	}
+}
+
+func TestInvitationService_GetMemberPendingRowByInvitationID(t *testing.T) {
+	t.Parallel()
+	f, property, _, invitationID, _ := getMemberFixture(t)
+	owner := f.owners[property]
+
+	list, err := f.svc.ListMembers(t.Context(), owner, property)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	// A pending invitation row answers to its invitation id (the «Аккаунт не
+	// создан» card): no user id, the invitee email and last_sent_at filled.
+	pending, err := f.svc.GetMember(t.Context(), owner, property, invitationID)
+	if err != nil {
+		t.Fatalf("GetMember pending: %v", err)
+	}
+	if !pending.Pending || pending.UserID != uuid.Nil || pending.ID != invitationID {
+		t.Errorf("pending row = %+v", pending)
+	}
+	if pending.Email == nil || *pending.Email != testNewUserEmail || pending.LastSentAt == nil {
+		t.Errorf("pending row email/last_sent_at = %+v", pending)
+	}
+	if !reflect.DeepEqual(pending, list[2]) {
+		t.Errorf("pending row must equal the list row: got %+v, want %+v", pending, list[2])
+	}
+}
+
+func TestInvitationService_GetMemberViewerReadsEveryRow(t *testing.T) {
+	t.Parallel()
+	f, property, viewer, invitationID, _ := getMemberFixture(t)
+	owner := f.owners[property]
+
+	// The invited participant opens the rights pages of all list rows,
+	// including their own (решение грю 12.10, эпик #1354).
+	if _, err := f.svc.GetMember(t.Context(), viewer, property, viewer); err != nil {
+		t.Errorf("viewer self row: %v", err)
+	}
+	if _, err := f.svc.GetMember(t.Context(), viewer, property, owner); err != nil {
+		t.Errorf("viewer owner row: %v", err)
+	}
+	if _, err := f.svc.GetMember(t.Context(), viewer, property, invitationID); err != nil {
+		t.Errorf("viewer pending row: %v", err)
+	}
+}
+
+func TestInvitationService_GetMemberPrivacyNotFound(t *testing.T) {
+	t.Parallel()
+	f, property, _, _, membership := getMemberFixture(t)
+	owner := f.owners[property]
+	stranger := uuid.Must(uuid.NewV7())
+
+	// A stranger with no relation to the object gets the privacy-preserving
+	// not-found, for the owner row and any member row alike.
+	if _, err := f.svc.GetMember(t.Context(), stranger, property, owner); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("stranger owner row: expected ErrMemberNotFound, got %v", err)
+	}
+	if _, err := f.svc.GetMember(t.Context(), stranger, property, membership.ID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("stranger member row: expected ErrMemberNotFound, got %v", err)
+	}
+
+	// A suspended member sees nothing (канон #162): their own row included.
+	suspended := uuid.Must(uuid.NewV7())
+	f.limiter.set(suspended, 0)
+	if _, err := f.access.AddMember(t.Context(), owner, property, suspended, domain.RoleViewer); err != nil {
+		t.Fatalf("suspended AddMember: %v", err)
+	}
+	sm, err := f.repo.GetByPropertyAndUser(t.Context(), property, suspended)
+	if err != nil {
+		t.Fatalf("suspended membership: %v", err)
+	}
+	if _, err := f.svc.GetMember(t.Context(), suspended, property, sm.ID); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("suspended reader: expected ErrMemberNotFound, got %v", err)
+	}
+
+	// An authorized reader gets not-found for an id no row carries.
+	if _, err := f.svc.GetMember(t.Context(), owner, property, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("unknown id: expected ErrMemberNotFound, got %v", err)
+	}
+	// The zero uuid addresses nothing: no row carries it.
+	if _, err := f.svc.GetMember(t.Context(), owner, property, uuid.Nil); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("zero uuid: expected ErrMemberNotFound, got %v", err)
+	}
+}
+
 // Archived property: invites are rejected, pending invitations activate
 // read-only without a slot (issue #163).
-// ---------------------------------------------------------------------------
 
 func TestInvitationService_InviteArchivedPropertyRejected(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 	f.statuses[property] = true
 
 	// Unregistered email path.
-	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "new@example.com", domain.RoleViewer); !errors.Is(err, domain.ErrPropertyArchived) {
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, testNewUserEmail,
+		domain.RoleViewer); !errors.Is(err, domain.ErrPropertyArchived) {
 		t.Errorf("unregistered invite to archived: expected ErrPropertyArchived, got %v", err)
 	}
 	if len(f.invitations.rows) != 0 {
@@ -673,10 +1005,11 @@ func TestInvitationService_InviteArchivedPropertyRejected(t *testing.T) {
 	}
 
 	// Registered email path.
-	invitee := uuid.New()
+	invitee := uuid.Must(uuid.NewV7())
 	f.lookup.add("friend@example.com", invitee)
 	f.limiter.set(invitee, 10)
-	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "friend@example.com", domain.RoleViewer); !errors.Is(err, domain.ErrPropertyArchived) {
+	if _, err := f.svc.InviteByEmail(t.Context(), owner, property, "friend@example.com",
+		domain.RoleViewer); !errors.Is(err, domain.ErrPropertyArchived) {
 		t.Errorf("registered invite to archived: expected ErrPropertyArchived, got %v", err)
 	}
 	if len(f.repo.rows) != 0 {
@@ -685,21 +1018,25 @@ func TestInvitationService_InviteArchivedPropertyRejected(t *testing.T) {
 }
 
 func TestInvitationService_ActivationToArchivedPropertySkipsSlotCheck(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 	f.statuses[property] = true
 
-	if _, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: property, Email: "new@example.com", Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now()}); err != nil {
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: property, Email: testNewUserEmail,
+		Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now(),
+	}); err != nil {
 		t.Fatalf("create invitation: %v", err)
 	}
 
 	// Zero free slots: without the archived skip the membership would be
 	// created suspended.
-	user := uuid.New()
+	user := uuid.Must(uuid.NewV7())
 	f.limiter.set(user, 0)
 
-	if err := f.svc.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+	if err := f.svc.ActivatePendingInvitations(t.Context(), user, testNewUserEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 	m, err := f.repo.GetByPropertyAndUser(t.Context(), property, user)
@@ -712,20 +1049,24 @@ func TestInvitationService_ActivationToArchivedPropertySkipsSlotCheck(t *testing
 }
 
 func TestInvitationService_ActivationToActivePropertyWithoutSlotSuspends(t *testing.T) {
+	t.Parallel()
 	f := newInvitationFixture()
-	owner := uuid.New()
+	owner := uuid.Must(uuid.NewV7())
 	property := f.addProperty(owner)
 
-	if _, err := f.invitations.Create(t.Context(), domain.Invitation{ID: uuid.New(), PropertyID: property, Email: "new@example.com", Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now()}); err != nil {
+	if _, err := f.invitations.Create(t.Context(), domain.Invitation{
+		ID: uuid.Must(uuid.NewV7()), PropertyID: property, Email: testNewUserEmail,
+		Role: domain.RoleViewer, InvitedBy: owner, LastSentAt: time.Now(),
+	}); err != nil {
 		t.Fatalf("create invitation: %v", err)
 	}
 
 	// Same setup as the archived case but the property stays active: the
 	// regular T4 slot enforcement applies and the membership is suspended.
-	user := uuid.New()
+	user := uuid.Must(uuid.NewV7())
 	f.limiter.set(user, 0)
 
-	if err := f.svc.ActivatePendingInvitations(t.Context(), user, "new@example.com"); err != nil {
+	if err := f.svc.ActivatePendingInvitations(t.Context(), user, testNewUserEmail); err != nil {
 		t.Fatalf("ActivatePendingInvitations: %v", err)
 	}
 	m, err := f.repo.GetByPropertyAndUser(t.Context(), property, user)

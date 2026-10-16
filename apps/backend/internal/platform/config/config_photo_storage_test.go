@@ -9,10 +9,10 @@ func setRequiredProductionEnv(t *testing.T) {
 	t.Helper()
 
 	setRequiredLocalEnv(t)
-	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_ENV", envProduction)
 	t.Setenv("APP_BASE_URL", "https://rentlee.ru")
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
-	t.Setenv("PAYMENT_PROVIDER", "tkassa")
+	t.Setenv("PAYMENT_PROVIDER", providerTKassa)
 	t.Setenv("T_KASSA_TERMINAL_KEY", "term")
 	t.Setenv("T_KASSA_PASSWORD", "pass")
 	t.Setenv("T_KASSA_BASE_URL", "https://securepay.tinkoff.ru/v2/")
@@ -26,32 +26,32 @@ func clearPhotoStorageEnv(t *testing.T) {
 	t.Setenv("REGRU_S3_BUCKET", "")
 	t.Setenv("REGRU_S3_ACCESS_KEY", "")
 	t.Setenv("REGRU_S3_SECRET_KEY", "")
-	t.Setenv("REGRU_S3_PUBLIC_BASE_URL", "")
 }
 
 func TestPhotoStorageProviderFakeAllowedInProduction(t *testing.T) {
 	setRequiredProductionEnv(t)
 	clearPhotoStorageEnv(t)
-	t.Setenv("PHOTO_STORAGE_PROVIDER", "fake")
+	t.Setenv("PHOTO_STORAGE_PROVIDER", providerFake)
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
-	if cfg.PhotoStorageProvider != "fake" {
+	if cfg.PhotoStorageProvider != providerFake {
 		t.Fatalf("expected photo storage provider fake, got %q", cfg.PhotoStorageProvider)
 	}
 	if cfg.PhotoStorageS3Enabled {
 		t.Fatal("expected S3 photo storage to be disabled")
-	}
-	if cfg.PhotoStoragePublicBaseURL != "https://rentlee.ru/uploads" {
-		t.Fatalf("expected fake public base URL, got %q", cfg.PhotoStoragePublicBaseURL)
 	}
 }
 
 func TestPhotoStorageProviderS3StillRequiredInProductionByDefault(t *testing.T) {
 	setRequiredProductionEnv(t)
 	clearPhotoStorageEnv(t)
+	// Explicit empty provider is the "by default" condition under test: an
+	// unset and an empty PHOTO_STORAGE_PROVIDER both resolve to s3 (config.go
+	// reads it with os.Getenv + TrimSpace), which production requires.
+	t.Setenv("PHOTO_STORAGE_PROVIDER", "")
 
 	_, err := Load()
 	if err == nil {

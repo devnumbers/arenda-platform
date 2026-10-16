@@ -1,9 +1,8 @@
 'use client';
 
 import { type JSX, type ChangeEvent, useCallback } from 'react';
-import { Button } from '@/shared/ui/button';
-import { TextField } from '@/shared/ui/text-field';
-import type { PropertyType, PropertyAttributes } from '@/entities/property/model/types';
+import { Button, TextField } from '@/shared/ui/design';
+import type { PropertyType, PropertyAttributes } from '@/entities/property';
 import {
   fieldsForType,
   groupLabels,
@@ -84,6 +83,9 @@ export function PropertyAttributesFields({
       return (
         <div className={styles.field} key={field.key}>
           <span className={styles.fieldLabel}>{fieldLabels[field.key]}</span>
+          {/* Канонные Button-чипы (легаси снесён, #901): selected
+              подсвечивает Primary — прямая семантика канонного варианта;
+              aria-pressed остаётся на кнопке. */}
           <div className={styles.chips} role="group" aria-label={fieldLabels[field.key]}>
             {field.options.map((option) => {
               const selected = selectedValue === option;
@@ -93,7 +95,6 @@ export function PropertyAttributesFields({
                   type="button"
                   variant={selected ? 'primary' : 'secondary'}
                   size="small"
-                  className={styles.chip}
                   aria-pressed={selected}
                   onClick={() => handleEnumChange(field.key, option, selected)}
                 >
@@ -114,11 +115,10 @@ export function PropertyAttributesFields({
         <div className={styles.field} key={field.key}>
           <div className={styles.labeledInput}>
             <TextField
-              label={fieldLabels[field.key]}
+              title={fieldLabels[field.key]}
               type="number"
               inputMode="decimal"
               step={field.decimals > 0 ? 'any' : '1'}
-              fullWidth
               value={String(value[field.key] ?? '')}
               error={errors?.[field.key]}
               onChange={(e: ChangeEvent<HTMLInputElement>) =>
@@ -136,11 +136,10 @@ export function PropertyAttributesFields({
       return (
         <div className={styles.field} key={field.key}>
           <TextField
-            label={fieldLabels[field.key]}
+            title={fieldLabels[field.key]}
             type="number"
             inputMode="numeric"
             step="1"
-            fullWidth
             value={String(value[field.key] ?? '')}
             error={errors?.[field.key]}
             onChange={(e: ChangeEvent<HTMLInputElement>) =>
@@ -156,8 +155,7 @@ export function PropertyAttributesFields({
     return (
       <div className={styles.field} key={field.key}>
         <TextField
-          label={fieldLabels[field.key]}
-          fullWidth
+          title={fieldLabels[field.key]}
           maxLength={field.maxLen}
           value={String(value[field.key] ?? '')}
           error={errors?.[field.key]}
@@ -173,7 +171,7 @@ export function PropertyAttributesFields({
   // Precompute group headers immutably: a header is shown before a field when
   // the field's group is non-null and differs from the previous field's group.
   const renderedFields = fields.map((field, index) => {
-    const prevGroup = index === 0 ? null : fields[index - 1].group;
+    const prevGroup = index === 0 ? null : (fields[index - 1]?.group ?? null);
     const showHeader = field.group !== null && field.group !== prevGroup;
     return { field, showHeader };
   });

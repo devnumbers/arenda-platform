@@ -1,3 +1,5 @@
+// Package application holds the popup use cases and ports: listing popups still pending for a user and
+// recording that a popup has been seen.
 package application
 
 import (

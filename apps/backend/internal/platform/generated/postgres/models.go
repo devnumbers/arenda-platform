@@ -12,56 +12,81 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type NotificationChannel string
+type NotificationCategory string
 
 const (
-	NotificationChannelEmail NotificationChannel = "email"
-	NotificationChannelPush  NotificationChannel = "push"
+	NotificationCategoryRental             NotificationCategory = "rental"
+	NotificationCategoryPaymentsOperations NotificationCategory = "payments_operations"
+	NotificationCategoryTasks              NotificationCategory = "tasks"
+	NotificationCategorySharedAccess       NotificationCategory = "shared_access"
+	NotificationCategoryTariff             NotificationCategory = "tariff"
+	NotificationCategorySystem             NotificationCategory = "system"
 )
 
-func (e *NotificationChannel) Scan(src interface{}) error {
+func (e *NotificationCategory) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = NotificationChannel(s)
+		*e = NotificationCategory(s)
 	case string:
-		*e = NotificationChannel(s)
+		*e = NotificationCategory(s)
 	default:
-		return fmt.Errorf("unsupported scan type for NotificationChannel: %T", src)
+		return fmt.Errorf("unsupported scan type for NotificationCategory: %T", src)
 	}
 	return nil
 }
 
-type NullNotificationChannel struct {
-	NotificationChannel NotificationChannel `json:"notification_channel"`
-	Valid               bool                `json:"valid"` // Valid is true if NotificationChannel is not NULL
+type NullNotificationCategory struct {
+	NotificationCategory NotificationCategory `json:"notification_category"`
+	Valid                bool                 `json:"valid"` // Valid is true if NotificationCategory is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullNotificationChannel) Scan(value interface{}) error {
+func (ns *NullNotificationCategory) Scan(value interface{}) error {
 	if value == nil {
-		ns.NotificationChannel, ns.Valid = "", false
+		ns.NotificationCategory, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.NotificationChannel.Scan(value)
+	return ns.NotificationCategory.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullNotificationChannel) Value() (driver.Value, error) {
+func (ns NullNotificationCategory) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.NotificationChannel), nil
+	return string(ns.NotificationCategory), nil
 }
 
 type NotificationEventType string
 
 const (
-	NotificationEventTypeOperationDue        NotificationEventType = "operation_due"
-	NotificationEventTypeLeaseExpiring       NotificationEventType = "lease_expiring"
-	NotificationEventTypeLeaseRequiresAction NotificationEventType = "lease_requires_action"
-	NotificationEventTypeOperationOverdue    NotificationEventType = "operation_overdue"
-	NotificationEventTypeFreeReminder        NotificationEventType = "free_reminder"
+	NotificationEventTypeOperationDue                 NotificationEventType = "operation_due"
+	NotificationEventTypeLeaseExpiring                NotificationEventType = "lease_expiring"
+	NotificationEventTypeLeaseRequiresAction          NotificationEventType = "lease_requires_action"
+	NotificationEventTypeOperationOverdue             NotificationEventType = "operation_overdue"
+	NotificationEventTypeFreeReminder                 NotificationEventType = "free_reminder"
+	NotificationEventTypeSubscriptionGrace            NotificationEventType = "subscription_grace"
+	NotificationEventTypeRentalCompleted              NotificationEventType = "rental_completed"
+	NotificationEventTypePaymentDue                   NotificationEventType = "payment_due"
+	NotificationEventTypePaymentOverdue               NotificationEventType = "payment_overdue"
+	NotificationEventTypePaymentReminder              NotificationEventType = "payment_reminder"
+	NotificationEventTypePaymentAutoPaid              NotificationEventType = "payment_auto_paid"
+	NotificationEventTypeTaskOverdue                  NotificationEventType = "task_overdue"
+	NotificationEventTypePropertyInvitation           NotificationEventType = "property_invitation"
+	NotificationEventTypeInvitationAccepted           NotificationEventType = "invitation_accepted"
+	NotificationEventTypeAccessRevoked                NotificationEventType = "access_revoked"
+	NotificationEventTypeAccessPaused                 NotificationEventType = "access_paused"
+	NotificationEventTypeAccessResumed                NotificationEventType = "access_resumed"
+	NotificationEventTypeMemberLeft                   NotificationEventType = "member_left"
+	NotificationEventTypeAccessRoleChanged            NotificationEventType = "access_role_changed"
+	NotificationEventTypeSubscriptionPaymentFailed    NotificationEventType = "subscription_payment_failed"
+	NotificationEventTypeSubscriptionPaymentReminder  NotificationEventType = "subscription_payment_reminder"
+	NotificationEventTypeSubscriptionPaymentSucceeded NotificationEventType = "subscription_payment_succeeded"
+	NotificationEventTypeSubscriptionPlanChanged      NotificationEventType = "subscription_plan_changed"
+	NotificationEventTypeSubscriptionGraceEntered     NotificationEventType = "subscription_grace_entered"
+	NotificationEventTypeSubscriptionGraceExpiring    NotificationEventType = "subscription_grace_expiring"
+	NotificationEventTypeSystemMaintenance            NotificationEventType = "system_maintenance"
 )
 
 func (e *NotificationEventType) Scan(src interface{}) error {
@@ -189,6 +214,24 @@ func (ns NullNotificationTargetType) Value() (driver.Value, error) {
 	return string(ns.NotificationTargetType), nil
 }
 
+type ActionJournal struct {
+	ID         pgtype.UUID        `json:"id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	ActorID    pgtype.UUID        `json:"actor_id"`
+	ActorRole  string             `json:"actor_role"`
+	ActorName  string             `json:"actor_name"`
+	ActorEmail string             `json:"actor_email"`
+	Kind       string             `json:"kind"`
+	Action     string             `json:"action"`
+	BaseAction string             `json:"base_action"`
+	Segments   []byte             `json:"segments"`
+	Searchable string             `json:"searchable"`
+	SearchTsv  interface{}        `json:"search_tsv"`
+	Context    []byte             `json:"context"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	Details    []byte             `json:"details"`
+}
+
 type AuditLog struct {
 	ID         pgtype.UUID        `json:"id"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
@@ -202,31 +245,54 @@ type AuditLog struct {
 	Ip         *netip.Addr        `json:"ip"`
 }
 
-type FreeReminder struct {
-	ID          pgtype.UUID        `json:"id"`
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-	PropertyID  pgtype.UUID        `json:"property_id"`
-	Title       string             `json:"title"`
-	TriggerAt   pgtype.Timestamptz `json:"trigger_at"`
-	Periodicity string             `json:"periodicity"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+type CardBindingSession struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Provider   string             `json:"provider"`
+	RequestKey string             `json:"request_key"`
+	Status     string             `json:"status"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
-type Lease struct {
-	ID                   pgtype.UUID        `json:"id"`
-	OwnerID              pgtype.UUID        `json:"owner_id"`
-	PropertyID           pgtype.UUID        `json:"property_id"`
-	TenantContactID      pgtype.UUID        `json:"tenant_contact_id"`
-	Status               string             `json:"status"`
-	StartDate            pgtype.Date        `json:"start_date"`
-	EndDate              pgtype.Date        `json:"end_date"`
-	RentAmountKopecks    int64              `json:"rent_amount_kopecks"`
-	DepositAmountKopecks int64              `json:"deposit_amount_kopecks"`
-	PaymentDay           int32              `json:"payment_day"`
-	Comment              pgtype.Text        `json:"comment"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+type Contact struct {
+	ID                pgtype.UUID        `json:"id"`
+	OwnerID           pgtype.UUID        `json:"owner_id"`
+	PropertyID        pgtype.UUID        `json:"property_id"`
+	FirstName         string             `json:"first_name"`
+	LastName          pgtype.Text        `json:"last_name"`
+	Patronymic        pgtype.Text        `json:"patronymic"`
+	Role              pgtype.Text        `json:"role"`
+	Phone             pgtype.Text        `json:"phone"`
+	Email             pgtype.Text        `json:"email"`
+	MessengerName     pgtype.Text        `json:"messenger_name"`
+	MessengerUsername pgtype.Text        `json:"messenger_username"`
+	Note              pgtype.Text        `json:"note"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	PhotoKey          pgtype.Text        `json:"photo_key"`
+	PhotoContentType  pgtype.Text        `json:"photo_content_type"`
+}
+
+type EmailChangeGrant struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Email     pgtype.Text        `json:"email"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type IdempotencyKey struct {
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+	Key         string             `json:"key"`
+	Endpoint    string             `json:"endpoint"`
+	RequestHash string             `json:"request_hash"`
+	ContentType pgtype.Text        `json:"content_type"`
+	StatusCode  pgtype.Int4        `json:"status_code"`
+	Response    []byte             `json:"response"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type LoginAttempt struct {
@@ -252,35 +318,86 @@ type LoginCode struct {
 	PhoneEncrypted bool               `json:"phone_encrypted"`
 }
 
-type Operation struct {
-	ID                   pgtype.UUID        `json:"id"`
-	OwnerID              pgtype.UUID        `json:"owner_id"`
-	PropertyID           pgtype.UUID        `json:"property_id"`
-	LeaseID              pgtype.UUID        `json:"lease_id"`
-	RecurringOperationID pgtype.UUID        `json:"recurring_operation_id"`
-	Type                 string             `json:"type"`
-	AmountKopecks        int64              `json:"amount_kopecks"`
-	OperationDate        pgtype.Date        `json:"operation_date"`
-	Comment              pgtype.Text        `json:"comment"`
-	IsException          bool               `json:"is_exception"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
-	Status               string             `json:"status"`
-	Name                 string             `json:"name"`
-	ReminderOffsetDays   pgtype.Int4        `json:"reminder_offset_days"`
-	SourceOperationDate  pgtype.Date        `json:"source_operation_date"`
-	CategoryID           pgtype.UUID        `json:"category_id"`
+type Notification struct {
+	ID           pgtype.UUID           `json:"id"`
+	UserID       pgtype.UUID           `json:"user_id"`
+	Category     NotificationCategory  `json:"category"`
+	EventType    NotificationEventType `json:"event_type"`
+	Title        string                `json:"title"`
+	Body         string                `json:"body"`
+	ContextLabel pgtype.Text           `json:"context_label"`
+	Payload      []byte                `json:"payload"`
+	DedupKey     string                `json:"dedup_key"`
+	ReadAt       pgtype.Timestamptz    `json:"read_at"`
+	DeletedAt    pgtype.Timestamptz    `json:"deleted_at"`
+	CreatedAt    pgtype.Timestamptz    `json:"created_at"`
 }
 
-type OperationCategory struct {
+type NotificationEmailPreference struct {
+	UserID             pgtype.UUID `json:"user_id"`
+	Rental             bool        `json:"rental"`
+	PaymentsOperations bool        `json:"payments_operations"`
+	Tasks              bool        `json:"tasks"`
+	SharedAccess       bool        `json:"shared_access"`
+}
+
+type Operation struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	PaymentID     pgtype.UUID        `json:"payment_id"`
+	Origin        string             `json:"origin"`
+	Date          pgtype.Date        `json:"date"`
+	PaidDate      pgtype.Date        `json:"paid_date"`
+	Status        string             `json:"status"`
+	Type          string             `json:"type"`
+	Title         string             `json:"title"`
+	AmountKopecks int64              `json:"amount_kopecks"`
+	CategoryLabel string             `json:"category_label"`
+	CategorySlug  pgtype.Text        `json:"category_slug"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	PaidSource    pgtype.Text        `json:"paid_source"`
+}
+
+type Payment struct {
+	ID                 pgtype.UUID        `json:"id"`
+	OwnerID            pgtype.UUID        `json:"owner_id"`
+	PropertyID         pgtype.UUID        `json:"property_id"`
+	Type               string             `json:"type"`
+	Title              string             `json:"title"`
+	AmountKopecks      int64              `json:"amount_kopecks"`
+	Recurrence         []byte             `json:"recurrence"`
+	Since              pgtype.Date        `json:"since"`
+	EndDate            pgtype.Date        `json:"end_date"`
+	AutoPay            bool               `json:"auto_pay"`
+	CategorySlug       pgtype.Text        `json:"category_slug"`
+	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
+	TitleIsManual      bool               `json:"title_is_manual"`
+	NotifyAutoPaid     bool               `json:"notify_auto_paid"`
+}
+
+type PaymentCategory struct {
 	ID        pgtype.UUID        `json:"id"`
 	OwnerID   pgtype.UUID        `json:"owner_id"`
-	Type      string             `json:"type"`
 	Name      string             `json:"name"`
-	Code      pgtype.Text        `json:"code"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PaymentChangeLog struct {
+	ID         pgtype.UUID        `json:"id"`
+	PaymentID  pgtype.UUID        `json:"payment_id"`
+	OwnerID    pgtype.UUID        `json:"owner_id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	ActorID    pgtype.UUID        `json:"actor_id"`
+	Action     string             `json:"action"`
+	Changes    []byte             `json:"changes"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	Origin     pgtype.Text        `json:"origin"`
 }
 
 type PaymentMethod struct {
@@ -289,35 +406,37 @@ type PaymentMethod struct {
 	Provider       string             `json:"provider"`
 	ProviderToken  string             `json:"provider_token"`
 	TokenHash      string             `json:"token_hash"`
+	ProviderCardID pgtype.Text        `json:"provider_card_id"`
 	DisplayMask    pgtype.Text        `json:"display_mask"`
+	ExpDate        pgtype.Text        `json:"exp_date"`
 	IsActive       bool               `json:"is_active"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	ProviderCardID pgtype.Text        `json:"provider_card_id"`
-	ExpDate        pgtype.Text        `json:"exp_date"`
+}
+
+type PaymentPause struct {
+	ID        pgtype.UUID        `json:"id"`
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	FromDate  pgtype.Date        `json:"from_date"`
+	ToDate    pgtype.Date        `json:"to_date"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Origin    string             `json:"origin"`
 }
 
 type Property struct {
-	ID          pgtype.UUID        `json:"id"`
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-	Name        string             `json:"name"`
-	Type        string             `json:"type"`
-	Address     string             `json:"address"`
-	Description pgtype.Text        `json:"description"`
-	Status      string             `json:"status"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Attributes  []byte             `json:"attributes"`
-}
-
-type PropertyContact struct {
-	ID         pgtype.UUID        `json:"id"`
-	PropertyID pgtype.UUID        `json:"property_id"`
-	OwnerID    pgtype.UUID        `json:"owner_id"`
-	Name       string             `json:"name"`
-	Phone      string             `json:"phone"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID               pgtype.UUID        `json:"id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Name             string             `json:"name"`
+	Type             string             `json:"type"`
+	Address          string             `json:"address"`
+	Description      pgtype.Text        `json:"description"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Attributes       []byte             `json:"attributes"`
+	PhotoKey         pgtype.Text        `json:"photo_key"`
+	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 }
 
 type PropertyMember struct {
@@ -343,100 +462,59 @@ type PropertyMemberInvitation struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
-type PropertyPhoto struct {
-	ID         pgtype.UUID        `json:"id"`
-	PropertyID pgtype.UUID        `json:"property_id"`
-	Url        string             `json:"url"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-}
-
 type PushSubscription struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	Endpoint       string             `json:"endpoint"`
-	P256dh         string             `json:"p256dh"`
-	Auth           string             `json:"auth"`
-	ExpirationTime pgtype.Timestamptz `json:"expiration_time"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID                         pgtype.UUID        `json:"id"`
+	UserID                     pgtype.UUID        `json:"user_id"`
+	Endpoint                   string             `json:"endpoint"`
+	P256dh                     string             `json:"p256dh"`
+	Auth                       string             `json:"auth"`
+	ExpirationTime             pgtype.Timestamptz `json:"expiration_time"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+	CategoryRental             bool               `json:"category_rental"`
+	CategoryPaymentsOperations bool               `json:"category_payments_operations"`
+	CategoryTasks              bool               `json:"category_tasks"`
+	CategorySharedAccess       bool               `json:"category_shared_access"`
 }
 
-type RecurringOperation struct {
-	ID                 pgtype.UUID        `json:"id"`
-	OwnerID            pgtype.UUID        `json:"owner_id"`
-	PropertyID         pgtype.UUID        `json:"property_id"`
-	LeaseID            pgtype.UUID        `json:"lease_id"`
-	Type               string             `json:"type"`
-	AmountKopecks      int64              `json:"amount_kopecks"`
-	StartDate          pgtype.Date        `json:"start_date"`
-	PaymentDay         int32              `json:"payment_day"`
-	EndDate            pgtype.Date        `json:"end_date"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	Periodicity        string             `json:"periodicity"`
-	Comment            pgtype.Text        `json:"comment"`
-	Status             string             `json:"status"`
-	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
-	Name               string             `json:"name"`
-	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
-	CategoryID         pgtype.UUID        `json:"category_id"`
-}
-
-type Reminder struct {
-	ID                   pgtype.UUID            `json:"id"`
-	OwnerID              pgtype.UUID            `json:"owner_id"`
-	TargetType           NotificationTargetType `json:"target_type"`
-	OperationID          pgtype.UUID            `json:"operation_id"`
-	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
-	LeaseID              pgtype.UUID            `json:"lease_id"`
-	PropertyID           pgtype.UUID            `json:"property_id"`
-	EventType            NotificationEventType  `json:"event_type"`
-	Status               NotificationStatus     `json:"status"`
-	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
-	SentAt               pgtype.Timestamptz     `json:"sent_at"`
-	FailedAttempts       int32                  `json:"failed_attempts"`
-	NextAttemptAt        pgtype.Timestamptz     `json:"next_attempt_at"`
-	MessageTitle         string                 `json:"message_title"`
-	MessageBody          string                 `json:"message_body"`
-	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz     `json:"updated_at"`
-	FreeReminderID       pgtype.UUID            `json:"free_reminder_id"`
-}
-
-type SentEmailReminder struct {
-	ID         pgtype.UUID        `json:"id"`
-	ReminderID pgtype.UUID        `json:"reminder_id"`
-	OwnerID    pgtype.UUID        `json:"owner_id"`
-	Email      string             `json:"email"`
-	Subject    string             `json:"subject"`
-	PlainBody  string             `json:"plain_body"`
-	SentAt     pgtype.Timestamptz `json:"sent_at"`
-}
-
-type SentPushReminder struct {
-	ID          pgtype.UUID        `json:"id"`
-	ReminderID  pgtype.UUID        `json:"reminder_id"`
-	RecipientID pgtype.UUID        `json:"recipient_id"`
-	SentAt      pgtype.Timestamptz `json:"sent_at"`
-}
-
-type SentSmsReminder struct {
-	ID               pgtype.UUID        `json:"id"`
-	ReminderID       pgtype.UUID        `json:"reminder_id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Phone            string             `json:"phone"`
-	Message          string             `json:"message"`
-	ProviderResponse pgtype.Text        `json:"provider_response"`
-	SentAt           pgtype.Timestamptz `json:"sent_at"`
+type Rental struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	PropertyID           pgtype.UUID        `json:"property_id"`
+	PaymentID            pgtype.UUID        `json:"payment_id"`
+	ContactID            pgtype.UUID        `json:"contact_id"`
+	StartDate            pgtype.Date        `json:"start_date"`
+	PlannedEndDate       pgtype.Date        `json:"planned_end_date"`
+	CompletedDate        pgtype.Date        `json:"completed_date"`
+	Utilities            string             `json:"utilities"`
+	DepositKopecks       pgtype.Int8        `json:"deposit_kopecks"`
+	CommissionKopecks    pgtype.Int8        `json:"commission_kopecks"`
+	DepositReturnKopecks pgtype.Int8        `json:"deposit_return_kopecks"`
+	DepositReturnComment pgtype.Text        `json:"deposit_return_comment"`
+	Comment              pgtype.Text        `json:"comment"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	RentAmountKopecks    pgtype.Int8        `json:"rent_amount_kopecks"`
+	RentPaymentDay       pgtype.Int4        `json:"rent_payment_day"`
+	RentAutoPay          pgtype.Bool        `json:"rent_auto_pay"`
 }
 
 type Session struct {
-	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	TokenHash  string             `json:"token_hash"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	TokenHash         string             `json:"token_hash"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt        pgtype.Timestamptz `json:"last_used_at"`
+	RotatedAt         pgtype.Timestamptz `json:"rotated_at"`
+	PreviousTokenHash pgtype.Text        `json:"previous_token_hash"`
+	LastIp            *netip.Addr        `json:"last_ip"`
+	UserAgent         string             `json:"user_agent"`
+	DeviceType        string             `json:"device_type"`
+	Browser           string             `json:"browser"`
+	BrowserMajor      pgtype.Int4        `json:"browser_major"`
+	Os                string             `json:"os"`
+	City              pgtype.Text        `json:"city"`
 }
 
 type SubscriptionPayment struct {
@@ -449,14 +527,30 @@ type SubscriptionPayment struct {
 	AmountKopecks         int64              `json:"amount_kopecks"`
 	Provider              string             `json:"provider"`
 	ProviderPaymentID     pgtype.Text        `json:"provider_payment_id"`
+	PaymentUrl            pgtype.Text        `json:"payment_url"`
 	Status                string             `json:"status"`
+	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
+	ChargeAttempts        int32              `json:"charge_attempts"`
 	ErrorCode             pgtype.Text        `json:"error_code"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
-	PaymentUrl            pgtype.Text        `json:"payment_url"`
 	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
-	RefundedAmountKopecks pgtype.Int8        `json:"refunded_amount_kopecks"`
-	ChargeAttempts        int32              `json:"charge_attempts"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	CardMask              pgtype.Text        `json:"card_mask"`
+}
+
+type SubscriptionTransition struct {
+	ID             pgtype.UUID        `json:"id"`
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
+	FromStatus     pgtype.Text        `json:"from_status"`
+	ToStatus       string             `json:"to_status"`
+	FromTariffID   pgtype.UUID        `json:"from_tariff_id"`
+	ToTariffID     pgtype.UUID        `json:"to_tariff_id"`
+	Reason         string             `json:"reason"`
+	InitiatorType  string             `json:"initiator_type"`
+	InitiatorID    pgtype.UUID        `json:"initiator_id"`
+	PaymentID      pgtype.UUID        `json:"payment_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Tariff struct {
@@ -465,44 +559,65 @@ type Tariff struct {
 	ActivePropertyLimit int32              `json:"active_property_limit"`
 	MonthlyPriceKopecks int64              `json:"monthly_price_kopecks"`
 	YearlyPriceKopecks  int64              `json:"yearly_price_kopecks"`
+	IsActive            bool               `json:"is_active"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
-type TenantContact struct {
-	ID         pgtype.UUID        `json:"id"`
-	OwnerID    pgtype.UUID        `json:"owner_id"`
-	Name       string             `json:"name"`
-	Surname    pgtype.Text        `json:"surname"`
-	Patronymic pgtype.Text        `json:"patronymic"`
-	Phone      pgtype.Text        `json:"phone"`
-	Email      pgtype.Text        `json:"email"`
-	Comment    pgtype.Text        `json:"comment"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+type Task struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	RuleID        pgtype.UUID        `json:"rule_id"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	CompletedDate pgtype.Date        `json:"completed_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TaskRule struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerID       pgtype.UUID        `json:"owner_id"`
+	PropertyID    pgtype.UUID        `json:"property_id"`
+	Title         string             `json:"title"`
+	Comment       pgtype.Text        `json:"comment"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	DueTime       pgtype.Time        `json:"due_time"`
+	Repeat        string             `json:"repeat"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	HistoryBefore pgtype.Date        `json:"history_before"`
+}
+
+type TmpCompletedRentalPayment struct {
+	PaymentID pgtype.UUID `json:"payment_id"`
 }
 
 type User struct {
-	ID              pgtype.UUID        `json:"id"`
-	Phone           string             `json:"phone"`
-	Role            string             `json:"role"`
-	Name            pgtype.Text        `json:"name"`
-	Surname         pgtype.Text        `json:"surname"`
-	Patronymic      pgtype.Text        `json:"patronymic"`
-	Email           pgtype.Text        `json:"email"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	PhoneEncrypted  bool               `json:"phone_encrypted"`
-	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
-	Timezone        string             `json:"timezone"`
+	ID               pgtype.UUID        `json:"id"`
+	Phone            string             `json:"phone"`
+	Role             string             `json:"role"`
+	Name             pgtype.Text        `json:"name"`
+	Surname          pgtype.Text        `json:"surname"`
+	Patronymic       pgtype.Text        `json:"patronymic"`
+	Email            pgtype.Text        `json:"email"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	PhoneEncrypted   bool               `json:"phone_encrypted"`
+	EmailVerifiedAt  pgtype.Timestamptz `json:"email_verified_at"`
+	Timezone         string             `json:"timezone"`
+	PhotoKey         pgtype.Text        `json:"photo_key"`
+	PhotoContentType pgtype.Text        `json:"photo_content_type"`
 }
 
-type UserNotificationChannelPreference struct {
-	UserID    pgtype.UUID           `json:"user_id"`
-	EventType NotificationEventType `json:"event_type"`
-	Channel   NotificationChannel   `json:"channel"`
-	Allowed   bool                  `json:"allowed"`
-	CreatedAt pgtype.Timestamptz    `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz    `json:"updated_at"`
+type UserPaymentFavorite struct {
+	UserID        pgtype.UUID        `json:"user_id"`
+	PaymentID     pgtype.UUID        `json:"payment_id"`
+	FavoriteOrder pgtype.Int8        `json:"favorite_order"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type UserPopupView struct {
@@ -511,20 +626,29 @@ type UserPopupView struct {
 	SeenAt   pgtype.Timestamptz `json:"seen_at"`
 }
 
+type UserPropertyPin struct {
+	UserID     pgtype.UUID        `json:"user_id"`
+	PropertyID pgtype.UUID        `json:"property_id"`
+	PinnedAt   pgtype.Timestamptz `json:"pinned_at"`
+}
+
 type UserSubscription struct {
-	ID                    pgtype.UUID        `json:"id"`
-	UserID                pgtype.UUID        `json:"user_id"`
-	TariffID              pgtype.UUID        `json:"tariff_id"`
-	Source                string             `json:"source"`
-	Status                string             `json:"status"`
-	ValidUntil            pgtype.Timestamptz `json:"valid_until"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
-	AutoRenewEnabled      bool               `json:"auto_renew_enabled"`
-	PendingTariffID       pgtype.UUID        `json:"pending_tariff_id"`
-	PendingChangeAt       pgtype.Timestamptz `json:"pending_change_at"`
-	ActivePaymentMethodID pgtype.UUID        `json:"active_payment_method_id"`
-	PendingPeriod         pgtype.Text        `json:"pending_period"`
-	LastAppliedPaymentID  pgtype.UUID        `json:"last_applied_payment_id"`
-	CurrentPeriod         pgtype.Text        `json:"current_period"`
+	ID                       pgtype.UUID        `json:"id"`
+	UserID                   pgtype.UUID        `json:"user_id"`
+	TariffID                 pgtype.UUID        `json:"tariff_id"`
+	Source                   string             `json:"source"`
+	Status                   string             `json:"status"`
+	ValidUntil               pgtype.Timestamptz `json:"valid_until"`
+	AutoRenewEnabled         bool               `json:"auto_renew_enabled"`
+	PendingTariffID          pgtype.UUID        `json:"pending_tariff_id"`
+	PendingChangeAt          pgtype.Timestamptz `json:"pending_change_at"`
+	PendingPeriod            pgtype.Text        `json:"pending_period"`
+	ActivePaymentMethodID    pgtype.UUID        `json:"active_payment_method_id"`
+	LastAppliedPaymentID     pgtype.UUID        `json:"last_applied_payment_id"`
+	CurrentPeriod            pgtype.Text        `json:"current_period"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	GraceRemindedAt          pgtype.Timestamptz `json:"grace_reminded_at"`
+	GraceArchivedPropertyIds []pgtype.UUID      `json:"grace_archived_property_ids"`
+	KeepPropertyID           pgtype.UUID        `json:"keep_property_id"`
 }

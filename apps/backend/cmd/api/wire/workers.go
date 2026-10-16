@@ -2,85 +2,113 @@ package wire
 
 import (
 	"context"
+	"log/slog"
 	"sync"
-	"time"
 
-	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
+	"github.com/jackc/pgx/v5"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	identityscheduler "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/scheduler"
-	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
-	emailnotifier "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/email"
-	notificationspg "github.com/nambers/arenda-planform/apps/backend/internal/notifications/adapters/postgres"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
-	platformgenerated "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
+	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/scheduler"
+	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
+	"github.com/riverqueue/river"
 )
 
-// Compile-time check that the access member-recipient adapter satisfies the
-// notifications recipient-lister port consumed by the reminder worker (issue
-// #159). The assertion lives in the wiring layer so the access context never
-// imports notifications.
-var _ notificationsapp.PropertyRecipientLister = (*accesspg.MemberRecipientAdapter)(nil)
+// Compile-time checks that the worker phases satisfy the scheduler's
+// consumer-side ports (ADR 0035): the issue #252 billing lifecycle workers,
+// the payments tick sweep of ticket #458 and the tasks tick sweep of ADR
+// 0051. Conformance is checked here, at the wiring site.
+var (
+	_ scheduler.ScheduledChangeProcessor = (*billingapp.Workers)(nil)
+	_ scheduler.RenewalProcessor         = (*billingapp.Workers)(nil)
+	_ scheduler.PaymentReconciler        = (*billingapp.Workers)(nil)
+	_ scheduler.PaymentsTicker           = (*paymentsapp.TickService)(nil)
+	_ scheduler.NotificationsScanRunner  = (*notificationsapp.ScanGroup)(nil)
+)
 
-// Workers bundles the six background workers and exposes Wait (block until they
-// exit). NewWorkers builds the notifier infrastructure (contact resolver, email
-// notifier, notifiers map), the identity data cleaner, the six workers and
-// starts all six goroutines. The goroutine pattern matches the original main.go
-// exactly: a single WaitGroup with Add(6) and six goroutines each calling
-// defer wg.Done().
+// Workers bundles the six background workers and exposes Wait (block until
+// they exit). NewWorkers builds the identity data cleaner, the billing
+// worker, the payment reconciliation worker, the payments tick worker, the
+// tasks tick worker, the notifications scan worker and starts all six
+// goroutines.
 type Workers struct {
 	wg sync.WaitGroup
+	// Billing is the billing worker shell the time-travel rig's admin tick
+	// endpoint triggers (issue #665): the same leader-elected pass the loop
+	// below runs on its interval. Exposed so the HTTP wiring can mount the
+	// tick route only when the rig is enabled.
+	Billing *scheduler.BillingWorker
 }
 
-// NewWorkers builds and starts the six background workers: the identity data
-// cleaner, the notifications reminder worker (with the property member
-// recipient lister for the fan-out, issue #159), the lease reconciliation
-// worker, the billing worker, the payment reconciliation worker and the
-// operation overdue worker. It must be called with the still-active request
-// context so the workers shut down when cancellation propagates.
+// NewWorkers builds and starts the six background workers: the identity
+// data cleaner, the billing worker, the payment reconciliation worker, the
+// payments tick worker, the tasks tick worker and the notifications scan
+// worker (карта #734, #748–#750, #776–#777). A non-nil riverClient adds
+// the delivery queue (карта #734, #740): Start blocks until the client has
+// fully stopped — cancelling the lifecycle context begins the soft stop
+// (SoftStopTimeout), so Workers.Wait also waits for in-flight delivery jobs.
+// It must be called with the still-active request context so the workers
+// shut down when cancellation propagates.
 func NewWorkers(
 	ctx context.Context,
 	p platformDeps,
-	leaseService *leasesapp.LeaseService,
-	operationService *leasesapp.OperationService,
-	reminderRepo *notificationspg.ReminderRepository,
 	sessionRepo *identitypg.SessionRepository,
 	codeRepo *identitypg.LoginCodeRepository,
 	attemptRepo *identitypg.AttemptRepository,
-	emailMailer mailer.Sender,
-	billingRenewals billingapp.RenewalRunner,
-	billingScheduledChanges billingapp.ScheduledChangeRunner,
-	billingPayments billingapp.PaymentProcessor,
-	pushSubRepo *notificationspg.PushSubscriptionRepository,
-	pushSender notificationsapp.PushSender,
+	billingWorkers *billingapp.Workers,
+	paymentsTick *paymentsapp.TickService,
+	tasksTick *tasksapp.TickService,
+	notificationsScan *notificationsapp.ScanGroup,
+	riverClient *river.Client[pgx.Tx],
 ) *Workers {
-	queries := platformgenerated.New(p.DB)
-	contactResolver := notificationspg.NewContactResolver(queries)
-	emailNotifier := emailnotifier.NewNotifier(emailMailer, p.Renderer)
-	notifiers := map[notificationsapp.Channel]notificationsapp.Notifier{
-		notificationsapp.ChannelEmail: emailNotifier,
+	billingWorker := scheduler.NewBillingWorker(
+		billingWorkers, billingWorkers, billingWorkers,
+		p.Pool, p.Clock, p.Cfg.BillingWorkerInterval, p.Logger)
+	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(
+		billingWorkers, p.Pool, p.Clock, p.Cfg.PaymentReconciliationWorkerInterval, p.Logger)
+	paymentsTickWorker := scheduler.NewPaymentsTickWorker(
+		paymentsTick, p.Pool, p.Clock, p.Cfg.PaymentsTickWorkerInterval, p.Logger)
+	tasksTickWorker := scheduler.NewTasksTickWorker(
+		tasksTick.RunZoneTicks, p.Pool, p.Clock, p.Cfg.TasksTickWorkerInterval, p.Logger)
+	// The scan cadence is the ticks' hourly domain decision (ADR 0048 p.3 —
+	// idempotent between the zones' midnights through the dedup key),
+	// deliberately not an operational knob: interval 0 is the shell's hour.
+	notificationsScanWorker := scheduler.NewNotificationsScanWorker(
+		notificationsScan, p.Pool, p.Clock, 0, p.Logger)
+
+	dataCleaner := identityscheduler.NewCleaner(
+		sessionRepo, codeRepo, attemptRepo, p.Clock, p.Cfg.IdentityCleanerInterval, p.Cfg.IdentityCleanerRetention, p.Logger)
+
+	w := &Workers{Billing: billingWorker}
+	goroutines := 6
+	if riverClient != nil {
+		goroutines++
 	}
-	// The membership repository is stateless, so the recipient lister is built
-	// here directly instead of being exported from WireAccess (issue #159).
-	recipientLister := accesspg.NewMemberRecipientAdapter(accesspg.NewMembershipRepository(p.DB))
-	reminderWorker := scheduler.NewReminderWorker(reminderRepo, p.Renderer, notifiers, contactResolver, recipientLister, pushSender, pushSubRepo, p.Beginner, p.Clock, &scheduler.ExponentialBackoff{Base: 1 * time.Minute, Max: 1 * time.Hour, Factor: 2}, 5, 1*time.Minute, 30*time.Second, p.Logger)
-	leaseReconciliationWorker := scheduler.NewLeaseReconciliationWorker(leaseService, p.Clock, 1*time.Hour, 100, p.Logger, p.TZResolver)
-	billingWorker := scheduler.NewBillingWorker(billingRenewals, billingScheduledChanges, p.Pool, p.Clock, p.Cfg.BillingWorkerInterval, p.Logger)
-	paymentReconciliationWorker := scheduler.NewPaymentReconciliationWorker(billingPayments, p.Pool, p.Clock, p.Cfg.PaymentReconciliationWorkerInterval, p.Logger)
-	operationOverdueWorker := scheduler.NewOperationOverdueWorker(operationService, p.Clock, p.Cfg.OverdueOperationWorkerInterval, 100, p.Logger, p.TZResolver)
-
-	dataCleaner := identityscheduler.NewCleaner(sessionRepo, codeRepo, attemptRepo, p.Clock, 1*time.Hour, 7*24*time.Hour, p.Logger)
-
-	w := &Workers{}
-	w.wg.Add(6)
+	w.wg.Add(goroutines)
 	go func() { defer w.wg.Done(); dataCleaner.Run(ctx) }()
-	go func() { defer w.wg.Done(); reminderWorker.Run(ctx) }()
-	go func() { defer w.wg.Done(); leaseReconciliationWorker.Run(ctx) }()
 	go func() { defer w.wg.Done(); billingWorker.Run(ctx) }()
 	go func() { defer w.wg.Done(); paymentReconciliationWorker.Run(ctx) }()
-	go func() { defer w.wg.Done(); operationOverdueWorker.Run(ctx) }()
+	go func() { defer w.wg.Done(); paymentsTickWorker.Run(ctx) }()
+	go func() { defer w.wg.Done(); tasksTickWorker.Run(ctx) }()
+	go func() { defer w.wg.Done(); notificationsScanWorker.Run(ctx) }()
+	if riverClient != nil {
+		go func() {
+			defer w.wg.Done()
+			// Start returns immediately (the client runs in its own
+			// goroutines; the only error it can return is a startup failure
+			// — logged, matching the scheduler loops' log-and-serve
+			// behaviour). Cancelling the lifecycle ctx begins the soft stop
+			// (SoftStopTimeout); Stopped() closes only when it has fully
+			// finished, so Workers.Wait keeps covering in-flight delivery
+			// jobs (research #735 §3).
+			if err := riverClient.Start(ctx); err != nil {
+				p.Logger.ErrorContext(ctx, "delivery queue client stopped with error", slog.String("error", err.Error()))
+			}
+			<-riverClient.Stopped()
+		}()
+	}
 
 	return w
 }

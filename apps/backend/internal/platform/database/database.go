@@ -1,3 +1,4 @@
+// Package database owns the pgx connection pool: lifecycle, runtime tuning, migrations and instrumentation.
 package database
 
 import (
@@ -61,7 +62,8 @@ func NewPoolWithConfig(ctx context.Context, databaseURL string, poolConfig PoolC
 		cfg.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%.0f", poolConfig.StatementTimeout.Seconds()*1000)
 	}
 	if poolConfig.IdleInTransactionSessionTimeout > 0 {
-		cfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = fmt.Sprintf("%.0f", poolConfig.IdleInTransactionSessionTimeout.Seconds()*1000)
+		idleTxTimeoutMs := fmt.Sprintf("%.0f", poolConfig.IdleInTransactionSessionTimeout.Seconds()*1000)
+		cfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = idleTxTimeoutMs
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -75,12 +77,53 @@ func NewPoolWithConfig(ctx context.Context, databaseURL string, poolConfig PoolC
 	return pool, nil
 }
 
-func MigrateUp(databaseURL, migrationsDir string) error {
+func MigrateUp(databaseURL, migrationsDir string) (err error) {
+	m, err := newMigrate(databaseURL, migrationsDir)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// Close returns two halves (source, database); Join drops nils. The
+		// close error is folded in only when migration succeeded, so it
+		// never masks the original failure.
+		if closeErr := errors.Join(m.Close()); err == nil && closeErr != nil {
+			err = fmt.Errorf("close migrate: %w", closeErr)
+		}
+	}()
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migrate up: %w", err)
+	}
+	return nil
+}
+
+// MigrateDownAll rolls the schema back to zero by applying every down
+// migration, newest first. It mirrors the CI "Backend migrations" job contract:
+// the full chain must stay executable in both directions.
+func MigrateDownAll(databaseURL, migrationsDir string) (err error) {
+	m, err := newMigrate(databaseURL, migrationsDir)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// Close returns two halves (source, database); Join drops nils. The
+		// close error is folded in only when migration succeeded, so it
+		// never masks the original failure.
+		if closeErr := errors.Join(m.Close()); err == nil && closeErr != nil {
+			err = fmt.Errorf("close migrate: %w", closeErr)
+		}
+	}()
+	if err := m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migrate down all: %w", err)
+	}
+	return nil
+}
+
+func newMigrate(databaseURL, migrationsDir string) (*migrate.Migrate, error) {
 	absDir, err := filepath.Abs(migrationsDir)
 	if err != nil {
-		return fmt.Errorf("resolve migrations dir: %w", err)
+		return nil, fmt.Errorf("resolve migrations dir: %w", err)
 	}
-	// pgx/v5 driver registers itself as "pgx5", so we rewrite the scheme
+	// The pgx/v5 driver registers itself as "pgx5", so we rewrite the scheme
 	// while keeping the rest of the URL intact.
 	migrateURL := databaseURL
 	if after, ok := strings.CutPrefix(migrateURL, "postgres://"); ok {
@@ -93,11 +136,7 @@ func MigrateUp(databaseURL, migrationsDir string) error {
 		migrateURL,
 	)
 	if err != nil {
-		return fmt.Errorf("create migrate: %w", err)
+		return nil, fmt.Errorf("create migrate: %w", err)
 	}
-	defer func() { _, _ = m.Close() }()
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("migrate up: %w", err)
-	}
-	return nil
+	return m, nil
 }

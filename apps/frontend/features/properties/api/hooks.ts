@@ -1,76 +1,79 @@
 'use client';
 
 import {
-  useMutation,
+  keepPreviousData,
+  useInfiniteQuery,
   useQuery,
   useQueryClient,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
-import { mapPropertyResponse } from '@/entities/property/model/mappers';
-import type { Property } from '@/entities/property/model/types';
-import { propertyKeys } from './keys';
-import { operationKeys } from '@/features/operations/api/keys';
-import { leaseKeys } from '@/features/leases/api/keys';
-import { financeKeys } from '@/features/finance/api/keys';
-import { recurringOperationKeys } from '@/features/recurring-operations/api/keys';
-import type { components, operations } from '@/shared/api/generated';
+import type { ApiError } from '@/shared/api/errors';
+import { mapPropertyResponse } from '@/entities/property';
+import type { Property } from '@/entities/property';
+import { propertyKeys } from '@/shared/api/query-keys';
+import { keysetNextPageParam, type KeysetPage } from '@/shared/lib/keyset';
+import type { components } from '@/shared/api/dto';
 
 type PropertyResponse = components['schemas']['PropertyResponse'];
 type PropertiesResponse = components['schemas']['PropertiesResponse'];
+
+import {
+  propertiesListQueryOptions,
+  propertyDetailQueryOptions,
+  deletePropertyPhoto,
+  uploadPropertyPhoto,
+  type PropertiesListResult,
+} from './queries';
+
+export type {
+  PropertiesListResult,
+  PropertiesListQueryConfig,
+  SuspendedSharedProperty,
+} from './queries';
+type PropertiesSearchResponse = components['schemas']['PropertiesSearchResponse'];
 type PropertyCreateRequest = components['schemas']['PropertyCreateRequest'];
 type PropertyUpdateRequest = components['schemas']['PropertyUpdateRequest'];
-type PropertyPhoto = components['schemas']['PropertyPhoto'];
 type AddressSuggestionsResponse =
   components['schemas']['AddressSuggestionsResponse'];
 type AddressSuggestion = components['schemas']['AddressSuggestion'];
 
-export type DeletePropertyMode =
-  operations['deleteProperty']['parameters']['query']['mode'];
+/** Проекция «только строки» над общим cache entry. Module-level, чтобы
+ * ссылка select была стабильной — react-query кэширует её результат. */
+function selectPropertiesItems(meta: PropertiesListResult): Property[] {
+  return meta.items;
+}
 
 export function useProperties(
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; staleTime?: number } = {},
 ): UseQueryResult<Property[], ApiError> {
   return useQuery({
-    queryKey: propertyKeys.list,
-    queryFn: async () => {
-      const response = await apiClient<PropertiesResponse>('/properties');
-      return response.items.map(mapPropertyResponse);
-    },
+    ...propertiesListQueryOptions(),
+    select: selectPropertiesItems,
     enabled: options.enabled,
+    staleTime: options.staleTime,
   });
 }
 
-export type PropertiesListResult = {
-  readonly items: Property[];
-  readonly hiddenSharedCount: number;
-};
-
-// Same /properties endpoint as useProperties, but also surfaces
-// hidden_shared_count (shared objects hidden from the recipient due to a
-// tariff slot shortage). Use this only where the count is needed — the rest
-// of the app keeps useProperties for the plain list. Shares the
-// propertyKeys.list prefix so mutations invalidate both queries together.
+// Тот же cache entry, что у useProperties (один ключ — один запрос,
+// react-query дедуплицирует параллельных наблюдателей). Поверхности
+// suspended_shared и today нужны не везде — остальное приложение
+// читает useProperties с проекцией на строки.
 export function usePropertiesWithMeta(
   options: { enabled?: boolean } = {},
 ): UseQueryResult<PropertiesListResult, ApiError> {
   return useQuery({
-    queryKey: [...propertyKeys.list, 'meta'],
-    queryFn: async () => {
-      const response = await apiClient<PropertiesResponse>('/properties');
-      return {
-        items: response.items.map(mapPropertyResponse),
-        hiddenSharedCount: response.hidden_shared_count ?? 0,
-      };
-    },
+    ...propertiesListQueryOptions(),
     enabled: options.enabled,
   });
 }
 
 export function useArchivedProperties(
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; staleTime?: number } = {},
 ): UseQueryResult<Property[], ApiError> {
   return useQuery({
     queryKey: [...propertyKeys.list, 'archived'],
@@ -79,6 +82,65 @@ export function useArchivedProperties(
       return response.items.map(mapPropertyResponse);
     },
     enabled: options.enabled,
+    staleTime: options.staleTime,
+  });
+}
+
+/** Порция поиска объектов: контракт #601 — порции по 50. */
+export const PROPERTIES_SEARCH_PAGE_SIZE = 50;
+
+/**
+ * Порция поиска объектов (#601): строки плюс keyset-продолжение — opaque-
+ * курсор следующей порции, null = совпадения исчерпаны.
+ */
+export type PropertiesSearchPageData = KeysetPage<Property>;
+
+/** Общее горло порции GET /properties/search: search — обязательный
+ * регистронезависимый фильтр по названию и адресу (клиентски тримится),
+ * cursor — keyset-продолжение прошлого ответа, undefined читает с начала. */
+async function fetchPropertiesSearchPage(params: {
+  search: string;
+  cursor?: string;
+}): Promise<PropertiesSearchPageData> {
+  const query = new URLSearchParams({ search: params.search });
+  query.set('limit', String(PROPERTIES_SEARCH_PAGE_SIZE));
+  if (params.cursor) {
+    query.set('cursor', params.cursor);
+  }
+  const response = await apiClient<PropertiesSearchResponse>(
+    `/properties/search?${query.toString()}`,
+  );
+  return {
+    items: response.items.map(mapPropertyResponse),
+    nextCursor: response.nextCursor ?? null,
+  };
+}
+
+/**
+ * Поиск объектов (глобальная страница «Объектов», тикет #601): порции по 50
+ * keyset-курсором — pageParam это курсор прошлого ответа, смена queryKey
+ * (новый запрос) начинает свежий обход с пустого курсора — sentinel не
+ * наследует позицию прошлых порций. Склейка порций без дедупа: один
+ * сортировочный ключ (название, id), повторы keyset не порождает —
+ * канон книги контактов (#600). keepPreviousData — прежняя выдача
+ * держится на экране, пока едет запрос с новым ?search= (канон платежей
+ * #609); скелетон — только когда данных нет вовсе. Пустой (после трима)
+ * запрос контракт не проходит (search обязателен) — чтение не
+ * запускается, экран показывает подсказку.
+ */
+export function usePropertiesSearch(
+  search: string,
+): UseInfiniteQueryResult<Property[], ApiError> {
+  return useInfiniteQuery({
+    queryKey: propertyKeys.search(search),
+    queryFn: ({ pageParam }) =>
+      fetchPropertiesSearchPage({ search, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: keysetNextPageParam,
+    select: (data: InfiniteData<PropertiesSearchPageData>) =>
+      data.pages.flatMap((page) => page.items),
+    placeholderData: keepPreviousData,
+    enabled: search.trim() !== '',
   });
 }
 
@@ -86,92 +148,117 @@ export function useProperty(
   id: string,
 ): UseQueryResult<Property, ApiError> {
   return useQuery({
-    queryKey: propertyKeys.detail(id),
-    queryFn: async () => {
-      const response = await apiClient<PropertyResponse>(`/properties/${id}`);
-      return mapPropertyResponse(response);
-    },
+    ...propertyDetailQueryOptions({ id }),
     enabled: Boolean(id),
   });
 }
 
 export function useCreateProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   PropertyCreateRequest
 > {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: PropertyCreateRequest) =>
-      apiClient<PropertyResponse>('/properties', {
+  return useGuardedMutation({
+    mutationFn: async (data: PropertyCreateRequest) => {
+      const response = await apiClient<PropertyResponse>('/properties', {
         method: 'POST',
+        // Идемпотентный ключ (Т3 #1121): один ключ на логическую попытку
+        // создания; повтор с ним вернёт первый результат, не второй объект.
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify(data),
-      }),
+      });
+      return mapPropertyResponse(response);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
     },
   });
 }
 
 export function useUpdateProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   { id: string; data: PropertyUpdateRequest }
 > {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }) =>
-      apiClient<PropertyResponse>(`/properties/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+  return useGuardedMutation({
+    mutationFn: async ({ id, data }) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      ),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
 }
 
 export function useArchiveProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   string
 > {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id) =>
-      apiClient<PropertyResponse>(`/properties/${id}/archive`, {
-        method: 'POST',
-      }),
+  return useGuardedMutation({
+    mutationFn: async (id) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/archive`, {
+          method: 'POST',
+        }),
+      ),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
 }
 
 export function useUnarchiveProperty(): UseMutationResult<
-  PropertyResponse,
+  Property,
   ApiError,
   string
 > {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id) =>
-      apiClient<PropertyResponse>(`/properties/${id}/unarchive`, {
-        method: 'POST',
-      }),
+  return useGuardedMutation({
+    mutationFn: async (id) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/unarchive`, {
+          method: 'POST',
+        }),
+      ),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
+    },
+  });
+}
+
+/**
+ * «Сделать основным / Убрать из основных» (деталь объекта #588): атомарный
+ * PUT pin (канон favorite-toggle, #577) — не read-modify-write PATCH.
+ * Инвалидит список и деталь — порядок карточек держит сервер.
+ */
+export function useSetPropertyPin(): UseMutationResult<
+  Property,
+  ApiError,
+  { id: string; pinned: boolean }
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async ({ id, pinned }) =>
+      mapPropertyResponse(
+        await apiClient<PropertyResponse>(`/properties/${id}/pin`, {
+          method: 'PUT',
+          body: JSON.stringify({ pinned }),
+        }),
+      ),
+    onSuccess: (_, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
 }
@@ -192,75 +279,88 @@ export function useAddressSuggestions(
   });
 }
 
-export function useUploadPropertyPhoto(): UseMutationResult<
-  PropertyPhoto,
-  ApiError,
-  { propertyId: string; file: File }
-> {
-  return useMutation({
-    mutationFn: ({ propertyId, file }) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      return apiClient<PropertyPhoto>(`/properties/${propertyId}/photos`, {
-        method: 'POST',
-        body: formData,
-      });
+export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: string }> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    // Deletion is total (ADR 0049): the property and all its data go together.
+    mutationFn: ({ id }) =>
+      apiClient<void>(`/properties/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (_, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
 }
 
+/**
+ * Загрузка/замена фото объекта (ADR 0065, тикет #1228): ответ несёт
+ * обновлённый объект — он сразу становится детальным кэшем (фото видно
+ * без рефетча), список инвалидается как обычная мутация объекта. Бастер
+ * photoBuster инкрементится рядом: путь выдачи не меняется, без него
+ * <img> показал бы прежние байты из кэша браузера (private, max-age=300).
+ */
+export function useUploadPropertyPhoto(): UseMutationResult<
+  Property,
+  ApiError,
+  { id: string; file: File }
+> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: ({ id, file }) => uploadPropertyPhoto({ id, file }),
+    onSuccess: (property, { id }) => {
+      queryClient.setQueryData(propertyKeys.detail(id), property);
+      bumpPhotoBuster(queryClient, id);
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+    },
+  });
+}
+
+/**
+ * Удаление фото объекта (ADR 0065): 204 без тела — деталь патчится
+ * локально (photoUrl без фото) и инвалидается вместе со списком; бастер
+ * инкрементится, чтобы повторная загрузка в окно кэша выдачи перечитала
+ * байты.
+ */
 export function useDeletePropertyPhoto(): UseMutationResult<
   void,
   ApiError,
-  { propertyId: string; photoId: string }
+  { id: string }
 > {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ propertyId, photoId }) =>
-      apiClient<void>(`/properties/${propertyId}/photos/${photoId}`, {
-        method: 'DELETE',
-      }),
-    onSuccess: (_, { propertyId }) => {
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(propertyId) });
+  return useGuardedMutation({
+    mutationFn: ({ id }) => deletePropertyPhoto({ id }),
+    onSuccess: (_, { id }) => {
+      queryClient.setQueryData<Property>(propertyKeys.detail(id), (prev) =>
+        prev === undefined ? prev : { ...prev, photoUrl: null },
+      );
+      bumpPhotoBuster(queryClient, id);
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
+      void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
 }
 
-export function useDeleteProperty(): UseMutationResult<
-  void,
-  ApiError,
-  { id: string; mode: DeletePropertyMode }
-> {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, mode }) =>
-      apiClient<void>(`/properties/${id}?mode=${mode}`, {
-        method: 'DELETE',
-      }),
-    onSuccess: (_, { id, mode }) => {
-      if (mode === 'cascade') {
-        // Каскад удаляет операции объекта на сервере — вычищаем все их
-        // кэши (списки и detail) по префиксу, чтобы страницы удалённых
-        // операций не рефетчились в 404, а списки не показывали фантомов.
-        queryClient.removeQueries({ queryKey: ['operations'] });
-      } else {
-        // При detach операции выживают с property_id: null — инвалидируем
-        // весь префикс операций (списки и detail), чтобы подтянуть
-        // обновлённые property_id/property_status.
-        queryClient.invalidateQueries({ queryKey: ['operations'] });
-      }
-      queryClient.invalidateQueries({ queryKey: propertyKeys.list });
-      queryClient.removeQueries({ queryKey: propertyKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: leaseKeys.all });
-      queryClient.invalidateQueries({ queryKey: leaseKeys.byProperty(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.infiniteLists() });
-      queryClient.invalidateQueries({ queryKey: operationKeys.byProperty(id) });
-      queryClient.invalidateQueries({ queryKey: operationKeys.summary(id) });
-      queryClient.invalidateQueries({ queryKey: financeKeys.reports() });
-      queryClient.invalidateQueries({ queryKey: recurringOperationKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: recurringOperationKeys.byProperty(id) });
-    },
+/** Инкремент бастера кэша выдачи (см. propertyKeys.photoBuster) — общая
+ * точка фото-мутаций: одна запись, все читатели перерисовывают src. */
+function bumpPhotoBuster(queryClient: ReturnType<typeof useQueryClient>, id: string): void {
+  queryClient.setQueryData<number>(propertyKeys.photoBuster(id), (version = 0) => version + 1);
+}
+
+/**
+ * Текущий бастер кэша выдачи фото объекта (тикет #1228): чтение из кэша
+ * без сети — пишут только фото-мутации (bumpPhotoBuster), ноль до первой
+ * мутации сессии. Подписка реактивна: слот перерисовывает src вместе с
+ * любым инкрементом.
+ */
+export function usePropertyPhotoBuster(id: string): number {
+  const { data } = useQuery({
+    queryKey: propertyKeys.photoBuster(id),
+    queryFn: () => 0,
+    enabled: false,
+    initialData: 0,
+    staleTime: Infinity,
   });
+  return data;
 }

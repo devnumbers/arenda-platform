@@ -1,32 +1,41 @@
 'use client';
 
 import {
-    useMutation,
     useQuery,
     useQueryClient,
+    type QueryClient,
     type UseMutationResult,
     type UseQueryResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
-import { mapPropertyAccessMemberResponse } from '@/entities/access/model/mappers';
-import type { PropertyAccessMember } from '@/entities/access/model/types';
-import type { components } from '@/shared/api/generated';
-import { accessKeys } from './keys';
+import type { ApiError } from '@/shared/api/errors';
+import { mapPropertyAccessMemberResponse } from '@/entities/access';
+import type { AccessMemberStatus } from '@/entities/access';
+import type { PropertyAccessMember } from '@/entities/access';
+import type { components } from '@/shared/api/dto';
+import { accessKeys, participantsKeys } from '@/shared/api/query-keys';
 
 type PropertyAccessMembersResponse =
     components['schemas']['PropertyAccessMembersResponse'];
 type PropertyAccessMemberResponse =
     components['schemas']['PropertyAccessMemberResponse'];
-type PropertyAccessInvitationCreateRequest =
-    components['schemas']['PropertyAccessInvitationCreateRequest'];
 type PropertyAccessMemberUpdateRequest =
     components['schemas']['PropertyAccessMemberUpdateRequest'];
 
-export type InviteMemberInput = {
-    readonly email: string;
-    readonly role: 'full_access' | 'viewer';
-};
+/** Строки участников проецируются в двух видах: списки объекта
+ * GET /properties/{id}/access/members и агрегаты /participants*
+ * (канон invalidateParticipantProjections, features/participants/api/hooks.ts).
+ * Инвалидация обеих семей обязательна у каждой access-мутации — окно
+ * staleTime (#626) иначе отдаёт агрегатам устаревший кэш; всегда
+ * (onSettled) — перечитываются и после частичного сбоя. */
+function invalidateAccessProjections(
+    queryClient: QueryClient,
+    propertyId: string,
+): void {
+    void queryClient.invalidateQueries({ queryKey: accessKeys.list(propertyId) });
+    void queryClient.invalidateQueries({ queryKey: participantsKeys.all });
+}
 
 export type ChangeMemberRoleInput = {
     readonly role: 'full_access' | 'viewer';
@@ -47,27 +56,26 @@ export function usePropertyAccessMembers(
     });
 }
 
-export function useInvitePropertyAccessMember(
+/** Чтение одной строки участников (#1357, экран member-режима прав
+ * #1362): тот же гейт и тот же ответ, что у строки списка — участник
+ * объекта читает любой ряд «Участников объекта» read-only, включая свой
+ * и ряд владельца. Адресация memberId: membership id, invitation id
+ * (pending) или user_id (ряд владельца); 404 — читающий вне скоупа
+ * объекта либо строки нет (приватный 404, без 403). Ключ вложен под
+ * accessKeys.list — access-мутации снимают его префиксом. */
+export function usePropertyAccessMember(
     propertyId: string,
-): UseMutationResult<PropertyAccessMember, ApiError, InviteMemberInput> {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (data: InviteMemberInput) => {
-            const body: PropertyAccessInvitationCreateRequest = {
-                email: data.email,
-                role: data.role,
-            };
+    memberId: string,
+): UseQueryResult<PropertyAccessMember, ApiError> {
+    return useQuery({
+        queryKey: accessKeys.member(propertyId, memberId),
+        queryFn: async () => {
             const response = await apiClient<PropertyAccessMemberResponse>(
-                `/properties/${propertyId}/access/invitations`,
-                { method: 'POST', body: JSON.stringify(body) },
+                `/properties/${propertyId}/access/members/${memberId}`,
             );
             return mapPropertyAccessMemberResponse(response);
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
+        enabled: Boolean(propertyId) && Boolean(memberId),
     });
 }
 
@@ -79,7 +87,7 @@ export function useUpdatePropertyAccessInvitation(
     { invitationId: string } & ChangeMemberRoleInput
 > {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (data) => {
             const body: PropertyAccessMemberUpdateRequest = { role: data.role };
             const response = await apiClient<PropertyAccessMemberResponse>(
@@ -88,30 +96,7 @@ export function useUpdatePropertyAccessInvitation(
             );
             return mapPropertyAccessMemberResponse(response);
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
-    });
-}
-
-export function useResendPropertyAccessInvitation(
-    propertyId: string,
-): UseMutationResult<void, ApiError, string> {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (invitationId: string) => {
-            await apiClient<void>(
-                `/properties/${propertyId}/access/invitations/${invitationId}/resend`,
-                { method: 'POST' },
-            );
-        },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }
 
@@ -119,18 +104,14 @@ export function useCancelPropertyAccessInvitation(
     propertyId: string,
 ): UseMutationResult<void, ApiError, string> {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (invitationId: string) => {
             await apiClient<void>(
                 `/properties/${propertyId}/access/invitations/${invitationId}`,
                 { method: 'DELETE' },
             );
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }
 
@@ -142,7 +123,7 @@ export function useUpdatePropertyAccessMember(
     { memberId: string } & ChangeMemberRoleInput
 > {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (data) => {
             const body: PropertyAccessMemberUpdateRequest = { role: data.role };
             const response = await apiClient<PropertyAccessMemberResponse>(
@@ -151,11 +132,7 @@ export function useUpdatePropertyAccessMember(
             );
             return mapPropertyAccessMemberResponse(response);
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
-        },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }
 
@@ -163,17 +140,70 @@ export function useDeletePropertyAccessMember(
     propertyId: string,
 ): UseMutationResult<void, ApiError, string> {
     const queryClient = useQueryClient();
-    return useMutation({
+    return useGuardedMutation({
         mutationFn: async (memberId: string) => {
             await apiClient<void>(
                 `/properties/${propertyId}/access/members/${memberId}`,
                 { method: 'DELETE' },
             );
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({
-                queryKey: accessKeys.list(propertyId),
-            });
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
+    });
+}
+
+/** Итог «Отозвать доступ всем» на объекте (#700): частичный сбой партии
+ * не должен выглядеть полным успехом — канон useRevokeAllParticipants. */
+export type RevokeAllPropertyAccessMembersResult = {
+    readonly revoked: number;
+    readonly failed: number;
+};
+
+/** Строка списка участников для партийного отзыва: id и жизненный цикл
+ * (active/suspended → DELETE members, pending → DELETE invitations). */
+export type PropertyAccessMemberRef = {
+    readonly id: string;
+    readonly status: AccessMemberStatus;
+};
+
+/** «Отозвать доступ всем» на одном объекте (#700, макет 2035-82619):
+ * DELETE /properties/{id}/access/members|invitations по каждому участнику
+ * ряда — скоуп строго объектный (не /participants/{id}, который снял бы
+ * ноги на всех объектах владельца). Bulk-эндпоинта нет; повторный DELETE
+ * по уже отозванной строке даёт безопасную ошибку, гонка параллельных
+ * запросов не страшна. Инвалидация всегда (onSettled), канон
+ * invalidateAccessProjections: и список объекта, и агрегаты участников
+ * перечитываются после частичного сбоя тоже. */
+export function useRevokeAllPropertyAccessMembers(
+    propertyId: string,
+): UseMutationResult<
+    RevokeAllPropertyAccessMembersResult,
+    ApiError,
+    ReadonlyArray<PropertyAccessMemberRef>
+> {
+    const queryClient = useQueryClient();
+    return useGuardedMutation({
+        mutationFn: async (members) => {
+            const results = await Promise.allSettled(
+                members.map((member) =>
+                    apiClient<void>(
+                        member.status === 'pending'
+                            ? `/properties/${propertyId}/access/invitations/${member.id}`
+                            : `/properties/${propertyId}/access/members/${member.id}`,
+                        { method: 'DELETE' },
+                    ),
+                ),
+            );
+            let revoked = 0;
+            let failed = 0;
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    revoked += 1;
+                } else {
+                    failed += 1;
+                }
+            }
+            return { revoked, failed };
         },
+        onSettled: () => invalidateAccessProjections(queryClient, propertyId),
     });
 }

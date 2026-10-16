@@ -1,13 +1,166 @@
 @import "tailwindcss";
-@import "@heroui/styles";
 
+/* Preflight два: слоёный Tailwind v4 (снос HeroUI #901) и легаси-сброс
+   приложения, живущий в @layer base ниже. Селекторные правила сброса
+   (h1/h2, a, форм-контролы) перенесены в слой: безслойное правило сильнее
+   @layer utilities и молча гасило утилиты. Остаток безслойного сброса в
+   разделе Forms ниже неоднороден: вендорные и IE-исправления на
+   псевдоэлементах и псевдоклассах утилитам недоступны, но пять обычных
+   правил тоже сильнее слоя и глушат утилиты — button,input
+   {overflow:visible}, button,select{text-transform:none},
+   fieldset{padding}, textarea{overflow:auto} и
+   [type=checkbox],[type=radio]{box-sizing;border-box;padding:0}. Они
+   оставлены без слоя сознательно: перенос в @layer base отдал бы
+   overflow/text-transform/padding утилитам и изменил бы вид контролов —
+   канонный Textarea (shared/ui/design/text-area.tsx) рендерит утилиту
+   overflow-hidden, которую безслойный textarea{overflow:auto} побеждает
+   по слою независимо от специфичности. revert-layer-хак не нужен:
+   margin/padding-утилиты на голых <button> работают сами — правила
+   font/margin перенесены в @layer base. */
+
+/* Шрифты приложения самохостятся из public/fonts — компиляция и рантайм не
+   зависят от доступности Google Fonts (next/font/google качал шрифты на каждом
+   холодном dev/build и при недоступности fonts.gstatic.com падал
+   «Can't resolve '@vercel/turbopack-next/internal/font/google/font'»).
+   Срезы latin/latin-ext/cyrillic/cyrillic-ext и unicode-range взяты как есть
+   из выдачи css2 Google Fonts (Inter v20, Manrope v20, Onest v11, Roboto Mono
+   v31 — 500, подпись-таймер resend-плитки #733); обновление — скачать свежие
+   срезы css2 и заменить файлы вместе с диапазонами. Переменные --font-*
+   читают @theme inline ниже и легаси-кабинет (globals.css:600). */
+:root {
+    --font-inter: 'Inter';
+    --font-manrope: 'Manrope';
+    --font-onest: 'Onest';
+    --font-roboto-mono: 'Roboto Mono';
+}
+
+/* cyrillic-ext */
 @font-face {
-    font-family: 'Manrope';
-    src: url('/fonts/manrope-variable.woff2') format('woff2');
+    font-family: 'Inter';
+    src: url('/fonts/inter-cyrillic-ext.woff2') format('woff2');
     font-weight: 100 900;
     font-style: normal;
     font-display: swap;
+    unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
 }
+/* cyrillic */
+@font-face {
+    font-family: 'Inter';
+    src: url('/fonts/inter-cyrillic.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+    font-family: 'Inter';
+    src: url('/fonts/inter-latin-ext.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+    font-family: 'Inter';
+    src: url('/fonts/inter-latin.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+    font-family: 'Manrope';
+    src: url('/fonts/manrope-cyrillic-ext.woff2') format('woff2');
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+    font-family: 'Manrope';
+    src: url('/fonts/manrope-cyrillic.woff2') format('woff2');
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+    font-family: 'Manrope';
+    src: url('/fonts/manrope-latin-ext.woff2') format('woff2');
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+    font-family: 'Manrope';
+    src: url('/fonts/manrope-latin.woff2') format('woff2');
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+    font-family: 'Onest';
+    src: url('/fonts/onest-cyrillic-ext.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+    font-family: 'Onest';
+    src: url('/fonts/onest-cyrillic.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+    font-family: 'Onest';
+    src: url('/fonts/onest-latin-ext.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+    font-family: 'Onest';
+    src: url('/fonts/onest-latin.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic */
+@font-face {
+    font-family: 'Roboto Mono';
+    src: url('/fonts/roboto-mono-cyrillic.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin */
+@font-face {
+    font-family: 'Roboto Mono';
+    src: url('/fonts/roboto-mono-latin.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @font-face {
     font-family: 'Manrope:Medium';
     src: url('/fonts/manrope-variable.woff2') format('woff2');
@@ -44,9 +197,420 @@
     font-display: swap;
 }
 
+/* Ярусы ширины (решение владельца 08.09, #561): мобайл 320–560, планшет
+   561–1023, ПК от 1024. Префиксы Tailwind: tablet: — начало планшетного
+   яруса (закреплённый хедер с крыльями и центральной колонкой 560,
+   компенсация pt-72), desktop: — ПК-хром (сайдбар + плавающие пилюли,
+   TabBar скрыт). Минимум поддержки — 320. Канва модалок (шит ↔ карточка)
+   — отдельная, переключение на 768 через useIsDesktop/литерал min-[768px],
+   к ярусам хрома не привязана. */
 @theme {
-    --breakpoint-tablet: 768px;
-    --breakpoint-desktop: 1201px;
+    --breakpoint-tablet: 561px;
+    --breakpoint-desktop: 1024px;
+    /* Кап колонки контента (канон §1 «единственная колонка 560», тикет
+       #865): единственное место с числом — утилита max-w-column; прежние
+       хардкоды max-w-[560px] (page-content, top-nav, sticky-bottom-bar,
+       пикеры) заменены на неё. */
+    --container-column: 560px;
+    /* Полная ширина ПК-сайдбара (px-12 + колонка 200 + px-12, Figma
+       1675:54050): граница, с которой на ПК ≥1024 начинается белый лист
+       полноэкранных поверхностей — .fullscreen-surface::before (тикет
+       #865). */
+    --sidebar-total: 224px;
+}
+
+/* Дизайн-слой новых экранов (ADR 0050): Tailwind-утилиты поверх токенов
+   shared/styles/tokens.css. `inline` — утилиты ссылаются на var(--dl-*)
+   напрямую, Tailwind не эмитит собственные :root-переменные и не конфликтует
+   с легаси-палитрой tokens.css. `--font-sans` ведёт на Onest (шрифт новых
+   экранов; var(--font-onest) объявлена в :root выше вместе с @font-face);
+   font-sans до сих пор никем не использовался, переопределение безопасно. */
+@theme inline {
+    --font-sans: var(--font-onest), var(--font-manrope), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    /* font-mono — подпись-таймер resend-плитки (#733, Figma 1869-68137):
+       Roboto Mono 500, самохостинг; системный моно — фолбэк. */
+    --font-mono: var(--font-roboto-mono), ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+    --color-primary: var(--dl-primary);
+    --color-primary-hover: var(--dl-primary-hover);
+    --color-primary-active: var(--dl-primary-active);
+
+    --color-content: var(--dl-text-primary);
+    --color-content-secondary: var(--dl-text-secondary);
+    --color-content-tertiary: var(--dl-text-tertiary);
+
+    --color-surface: var(--dl-surface);
+    --color-surface-muted: var(--dl-surface-muted);
+    --color-surface-muted-hover: var(--dl-surface-muted-hover);
+    --color-surface-muted-active: var(--dl-surface-muted-active);
+    --color-surface-danger: var(--dl-surface-danger);
+    --color-surface-info: var(--dl-surface-info);
+
+    --color-danger: var(--dl-danger);
+    --color-danger-soft: var(--dl-danger-soft);
+    --color-error: var(--dl-error);
+    --color-success: var(--dl-success);
+
+    /* Warning-подложка чипов «Превышен лимит объектов» и жёлтой карточки
+       участника: значение из макетов 2036-83108/84861 (#FFB900 @ 10%).
+       Легаси --color-warning-bg из tokens.css (:root) лежит вне @theme,
+       поэтому утилита bg-warning-bg не генерировалась и warning-чипы
+       рисовались прозрачными (вскрылось на приёмке #756). */
+    --color-warning-bg: rgba(255, 185, 0, 0.1);
+
+    --color-overlay: var(--dl-overlay);
+    --color-input-border: var(--dl-input-border);
+
+    /* text-white/bg-white дизайн-слоя: легаси-токен --color-white объявлен
+       только в :root tokens.css, поэтому на чисто дизайн-слойных маршрутах
+       (куда легаси-чанк CSS не грузится) утилита text-white не генерилась
+       и белый текст наследовал цвет родителя (вскрылось на «Тарифе»,
+       #620). Проброс делаем через дизайн-токен поверхности. */
+    --color-white: var(--dl-surface);
+
+    /* Типографика дизайн-слоя (Onest, Figma): R 16/18, M 14/16, S 13/15,
+       H3 20/24 — базовая шкала переопределяется под дизайн-систему;
+       легаси-экраны Tailwind-утилиты шрифта не используют (CSS-модули). */
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: 0.9375rem;
+    --text-sm: 0.875rem;
+    --text-sm--line-height: 1rem;
+    --text-base: 1rem;
+    --text-base--line-height: 1.125rem;
+    --text-lg: 1.25rem;
+    --text-lg--line-height: 1.5rem;
+    /* H1 28/32 — заголовки шагов визарда создания объекта (Figma
+       Mobile/Heading/H1/600, #480). */
+    --text-2xl: 1.75rem;
+    --text-2xl--line-height: 2rem;
+
+    --radius-button: 16px;
+    /* Radius/m из токенов Figma (12px) — CTA пустых состояний секций
+       объекта (#588, решение владельца 11.09), Button radius="m". */
+    --radius-m: 12px;
+    --radius-pill: 100px;
+    --radius-card: 24px;
+    --radius-sheet: 40px;
+
+    /* Единое движение (см. --dl-ease в tokens.css, решение 2026-08-26):
+       переопределение дефолтов делает ВСЕ transition-* утилиты дизайн-слоя
+       наследующими кривую Apple и 250ms без правки компонентов; явная
+       кривая — утилита ease-apple; токен-зависимая длительность — v4-шорткат
+       вида duration-(--dl-duration-move) (именные --duration-* ключи
+       утилит не генерируют). */
+    --default-transition-duration: var(--dl-duration-fast);
+    --default-transition-timing-function: var(--dl-ease);
+    --ease-apple: var(--dl-ease);
+}
+
+/* Адаптивная модалка-шелл (дизайн-слой): узкие экраны — нижний шит
+   (выезд снизу), широкие (≥ tablet) — центрированная модалка
+   (масштаб + проявление). Имена переключаются медиа-запросом. */
+@keyframes modal-overlay-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes modal-sheet-in {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+@keyframes modal-card-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes modal-overlay-out {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes modal-sheet-out {
+    from {
+        transform: translateY(0);
+    }
+
+    to {
+        transform: translateY(100%);
+    }
+}
+
+@keyframes modal-card-out {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+}
+
+/* Однократное проявление одиночного элемента (#1349): кнопка «+» хаба
+   после резолва данных, иллюстрации плейсхолдеров. Fade-семейство канона
+   §8 — reduced-motion не гейтится; целые поверхности по-прежнему не
+   анимируются. Использование: animate-[dl-fade-in_250ms_var(--dl-ease)_both]. */
+@keyframes dl-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* Сворачиваемая секция дизайн-слоя (#499): раскрытие/скрытие по высоте
+   контента — переменную ведёт Radix Collapsible. */
+@keyframes collapsible-down {
+    from {
+        height: 0;
+    }
+
+    to {
+        height: var(--radix-collapsible-content-height);
+    }
+}
+
+@keyframes collapsible-up {
+    from {
+        height: var(--radix-collapsible-content-height);
+    }
+
+    to {
+        height: 0;
+    }
+}
+
+/* Шит «Еще» TabBar (Figma 1721:57140, #560). Motion-модель 2026-09-22 —
+   прерываемые transitions вместо keyframes vaul (research:
+   docs/research/2026-09-22-bottom-sheet-motion-best-practices.md; keyframes
+   не разворачивались из текущей позиции). Модель «одного целого» с баром
+   (решение владельца 22.09.2026): лист z-45 поднимается из-за бара
+   (z-50, над оверлеем z-40 — бар не темнеет и кликабелен в любой фазе).
+   Тайминги — по образцу системных шитов iOS: пружина без отскока
+   (критическое затухание, UISpringTimingParameters dampingRatio 1.0),
+   выезд 440ms на cubic-bezier(0.32,0.72,0,1) — задокументированный
+   «mimic iOS's Sheet», закрытие 330ms (ускоряющийся уход с экрана),
+   затемнение гаснет синхронно листу. Движение листа и оверлея ведёт
+   transition по transform/opacity; data-state=closed разворачивает его
+   из текущей позиции, @starting-style задаёт старт выезда без keyframes.
+   Keyframes-стражи more-sheet-presence-in/-out — без визуального эффекта,
+   нужны только Radix Presence: размонтирование портала ждёт animationend,
+   у закрытия — своё имя анимации, чтобы страж гарантированно стартовал
+   при смене data-state. Во время drag vaul двигает шит inline-стилями
+   (transition:none) — правила ниже их не перебивают; на старте закрытия
+   inline-стили сносит MoreSheet (onClose/onOpenChange), дальше движением
+   управляет эта transition-модель, включая разворот из недо-свайпнутой
+   позиции. */
+/* Keyframes-стражи Presence — на кастомном свойстве: ноль визуального
+   эффекта и, главное, никакой конкуренции с transition по opacity
+   (анимация на том же свойстве глушит transition — оверлей вспыхивал
+   без фейда). Имена in/out разные, чтобы при смене data-state страж
+   гарантированно перезапустился и Presence дождался animationend. */
+@keyframes more-sheet-presence-in {
+    from {
+        --more-sheet-presence: 0;
+    }
+
+    to {
+        --more-sheet-presence: 1;
+    }
+}
+
+@keyframes more-sheet-presence-out {
+    from {
+        --more-sheet-presence: 0;
+    }
+
+    to {
+        --more-sheet-presence: 1;
+    }
+}
+
+/* Специфичность селекторов зеркалит пер-стейт правила vaul
+   ([data-vaul-drawer][data-vaul-snap-points…][data-state…], 0,4,0 —
+   инжектятся рантаймом ПОСЛЕ наших стилей и на ничьей побеждают):
+   класс + те же атрибуты + state дают 0,5,0 — animation-name vaul
+   (slideFromBottom/slideToBottom) гарантированно перебит нашими
+   стражами Presence. */
+.more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'] {
+    animation: more-sheet-presence-in 440ms linear;
+    transform: translateY(0);
+    transition: transform 440ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@starting-style {
+    .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'] {
+        transform: translateY(100%);
+    }
+}
+
+.more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'] {
+    animation: more-sheet-presence-out 330ms linear;
+    transform: translateY(100%);
+    transition: transform 330ms cubic-bezier(0.32, 0, 0.67, 0);
+}
+
+/* Бэкдроп — свой div внутри портала (в non-modal vaul рендерит Overlay
+   как null), data-state ведёт MoreSheet из пропа open; селекторы без
+   vaul-атрибутов — injected-правила vaul на элемент не попадают. */
+.more-sheet-backdrop[data-state='open'] {
+    animation: more-sheet-presence-in 440ms linear;
+    opacity: 1;
+    transition: opacity 440ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@starting-style {
+    .more-sheet-backdrop[data-state='open'] {
+        opacity: 0;
+    }
+}
+
+.more-sheet-backdrop[data-state='closed'] {
+    animation: more-sheet-presence-out 330ms linear;
+    opacity: 0;
+    transition: opacity 330ms cubic-bezier(0.32, 0, 0.67, 0);
+}
+
+/* Компакт-бар хаба (решение владельца 2026-09-09, Figma 1603-93157 →
+   1733-93740): видимость управляется прогрессом прокрутки --hub-collapse
+   (0..1 — пишет HubCollapseAnchor на :root). Только opacity/transform —
+   без reflow; CSS-переходов нет, плавность даёт сам скролл. Класс
+   hub-collapse-on включает pointer-events, когда компакт уже виден. */
+.hub-compact {
+    opacity: var(--hub-collapse, 0);
+    pointer-events: none;
+}
+
+:root.hub-collapse-on .hub-compact {
+    pointer-events: auto;
+}
+
+/* Мобильный клон компакт-бара выезжает сверху вместе с прогрессом. */
+.hub-compact-bar {
+    transform: translateY(calc((1 - var(--hub-collapse, 0)) * -100%));
+}
+
+/* ПК-каркас (макеты 1185-40815/1185-40811, решение владельца 25.09 —
+   доработка тикета #865): колонка контента центрируется во всём вьюпорте
+   на любом ярусе; полноэкранная поверхность (.fullscreen-surface: пикеры,
+   визарды-оверлеи, шит фильтров) кладёт свой БЕЛЫЙ ЛИСТ только правее
+   сайдбара — меню остаётся видимым (решение владельца: пикеры не
+   накрывают боковое меню), а сам диалог занимает весь вьюпорт, поэтому
+   ВСЕ его колонки — и in-flow, и fixed-бары — центрируются по вьюпорту и
+   лежат точно на колонках страниц: открытие пикера не сдвигает контент.
+   Белые полосы баров поверх листа над/под зоной сайдбара (шапка 0..72,
+   низ ниже меню) ложат на пустой белый фон — видимая геометрия не
+   меняется. Граница 1024px в media query дублирует токен
+   --breakpoint-desktop вручную — CSS не читает переменные в условии
+   запроса; при переносе брейкпоинта править оба места. Диалог обязан
+   быть без собственного фона (лист рисует ::before); сам лист лежит
+   на z-index:-1 внутри stacking-контекста поверхности (fixed + z-50) —
+   красится под всеми детьми, какими бы они ни были, но контекст не
+   покидает, поэтому страница за поверхностью по-прежнему накрыта. */
+.fullscreen-surface::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--dl-surface);
+}
+
+@media (min-width: 1024px) {
+    .fullscreen-surface::before {
+        left: var(--sidebar-total);
+    }
+}
+
+/* Хром ПК (.desktop-chrome: сайдбар, пилюли) остаётся кликабельным при
+   открытой полноэкранной поверхности: сама поверхность (z-50) накрывает
+   вьюпорт целиком, и её прозрачные зоны над сайдбаром и в нижних углах
+   перехватывают клики. Пока поверхность в дереве, хром поднимается над
+   ней — «меню видно и кликабельно» (§1) и пилюли не исчезают (решение
+   владельца 25.09, доработка #865). :has() реагирует на DOM сам —
+   монтирование/размонтирование поверхностей не требует провайдеров.
+   Правило неслоёное — бьёт утилиты z-30 из @layer независимо от
+   специфичности. */
+@media (min-width: 1024px) {
+    body:has(.fullscreen-surface) .desktop-chrome {
+        z-index: 60;
+    }
+}
+
+/* Модалка отодвигает фон (канон apple-design §12: модальная задача —
+   скрим + push back, как у iOS sheet presentation; решение владельца
+   14.10): пока открыт любой Modal, оболочка экранов (.screen-shell в
+   ScreenLayout) уходит вглубь — масштаб 0.96, сдвиг вниз 8px, углы 16px.
+   Крючок — .modal-overlay на оверлеях Dialog и vaul-Drawer в modal.tsx;
+   сама модалка рендерится в портале вне оболочки и не масштабируется.
+   Шит «Ещё» (.more-sheet-*) и полноэкранные поверхности
+   (.fullscreen-surface) триггером не являются — их решения о хроме
+   (22.09 — бар над листом; #865 — хром над поверхностью) не трогаются.
+   Закрытие — фон возвращается тем же путём (§7): data-state оверлея
+   гаснет в момент старта анимации выхода. transform на оболочке делает
+   её содержащим блоком fixed-хрома — сайдбар, пилюли и TabBar уходят
+   вглубь вместе с контентом. Radius анимируется вместе с transform;
+   overflow: hidden не анимируется, но при радиусе ~0 на старте клип
+   незаметен. */
+.screen-shell {
+    transition:
+        transform 400ms var(--dl-ease),
+        border-radius 400ms var(--dl-ease);
+}
+
+body:has(.modal-overlay[data-state='open']) .screen-shell {
+    transform: translateY(8px) scale(0.96);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .screen-shell {
+        transition-duration: 150ms;
+    }
+}
+
+/* prefers-reduced-motion: анимацию не выключаем, а укорачиваем до ~150ms,
+   fade сохраняем; drag-жесты не трогаем — это управление, не декор
+   (research §9). */
+@media (prefers-reduced-motion: reduce) {
+    .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'],
+    .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'],
+    .more-sheet-backdrop[data-state='open'],
+    .more-sheet-backdrop[data-state='closed'],
+    /* Модалки design-слоя (класс-хук .modal-surface): keyframes-въезды
+       карточки/оверлея и vaul-переход мобильного шита укорачиваются как у
+       «Еще» — канон §8 «укорачиваем, не отключаем» (#1349). */
+    .modal-surface[data-state='open'],
+    .modal-surface[data-state='closed'] {
+        animation-duration: 150ms;
+        transition-duration: 150ms;
+    }
 }
 
 /* Document
@@ -64,6 +628,11 @@
 html {
     line-height: 1.15; /* 1 */
     -webkit-text-size-adjust: 100%; /* 2 */
+    /* Серая вспышка тапа (iOS Safari/Android Chrome) гасит собственный
+       :active-фидбек компонентов (active:opacity-80) — сброс глобальный
+       (#1349, mobile-native база). Контент-текст вне контролов не тронут:
+       user-select нигде не запрещён. */
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* Sections
@@ -85,20 +654,9 @@ main {
     display: block;
 }
 
-/**
- * Correct the font size and margin on `h1` elements within `section` and
- * `article` contexts in Chrome, Firefox, and Safari.
- */
-
-h1 {
-    font-size: 2em;
-    margin: 0.67em 0;
-}
-
-h1, h2 {
-    font-weight: 400;
-}
-
+/* Группировка h1/h2 из легаси-сброса перенесена в @layer base (см. блок
+   base ниже): безслойные правила перебивали утилиты типографики
+   дизайн-слоя (h1 рендерился 32px/400 вместо text-xl/font-semibold). */
 
 /* Grouping content
    ========================================================================== */
@@ -128,12 +686,12 @@ pre {
    ========================================================================== */
 
 /**
- * Remove the gray background on active links in IE 10.
+ * НЕ возвращать легаси-нормалайз `a { background-color: transparent }`
+ * (ремонт серого фона активных ссылок в IE 10): правило вне @layer и
+ * перебивает bg-утилиты Tailwind на ссылках — бокс строки «Телефон»
+ * экрана «Аккаунт» рендерился белым (#593). В современных браузерах
+ * фон ссылок и так прозрачен по умолчанию.
  */
-
-a {
-    background-color: transparent;
-}
 
 /**
  * 1. Remove the bottom border in Chrome 57-
@@ -208,22 +766,6 @@ img {
 
 /* Forms
    ========================================================================== */
-
-/**
- * 1. Change the font styles in all browsers.
- * 2. Remove the margin in Firefox and Safari.
- */
-
-button,
-input,
-optgroup,
-select,
-textarea {
-    font-family: inherit; /* 1 */
-    font-size: 100%; /* 1 */
-    line-height: 1.15; /* 1 */
-    margin: 0; /* 2 */
-}
 
 /**
  * Show the overflow in IE.
@@ -421,18 +963,70 @@ img {
 /*---------------------------------------------*/
 
 :root {
+    /* Сайт светло-единственный: без явной схемы Chromium/WebKit разрешают
+       схему по теме ОС и на тёмной Windows рисуют чёрный UA-скроллбар и
+       тёмные form-контролы на белых страницах. Дублируется
+       <meta name="color-scheme" content="light"> в app/layout.tsx: мета
+       парсится из SSR-разметки до первого кадра и действует, даже если
+       CSS ещё не загрузился. */
+    color-scheme: light;
+
     --background: #ffffff;
     --foreground: #171717;
 }
 
 html {
     height: 100%;
+    /* Гюттер скроллбара резервируется всегда (тикет #865, «ноль дёрганья»):
+       переход между короткой и длинной страницей больше не двигает
+       центрированную колонку на появлении/исчезновении скроллбара. На
+       overlay-скроллбарах (macOS/iOS) значения не имеет. */
+    scrollbar-gutter: stable;
+}
+
+/* Белый трек корневого скроллбара в цвет сайта. Стандартное свойство
+   (css-scrollbars-1; Chromium 121+, Firefox 64+, Safari 26.2+) требует
+   оба цвета — «только трек» грамматикой не выражается. Легаси
+   ::-webkit-* не используем: стилизация любого его куска переводит
+   Chromium на кастомный рендер (15px, без кнопок), ломает overlay на
+   macOS и всё равно проигрывает не-auto scrollbar-color с 121-го.
+   #999999 — нативный светлый Fluent-thumb (rgba(0,0,0,0.4)), сведённый
+   к сплошному: полупрозрачные значения в Chromium глючат; на белом треке
+   он заметно контрастнее нативной пары (#c1c1c1 на #f1f1f1).
+   Свойство наследуется, но каждому контейнеру со скрытым скроллбаром
+   уже выставлен scrollbar-width: none — не-auto значение приоритетнее
+   webkit-псевдоэлементов, скрытие не откатывается. Safari 18.2–26.1 без
+   scrollbar-color остаётся полностью нативным: overlay-скролл, сквозь
+   который просвечивает белый фон. forced-colors перекрашивает всё
+   обратно в системное без наших @media. Обёртка @supports страховочная —
+   браузер без свойства и так отбросил бы декларацию. */
+@supports (scrollbar-color: auto) {
+    html {
+        scrollbar-color: #999999 #ffffff;
+    }
+}
+
+/* Лок скролла Radix-оверлеев (Dialog, DropdownMenu → react-remove-scroll-bar)
+   компенсирует «исчезающий» скроллбар margin'ом на body и не знает про
+   scrollbar-gutter: stable выше, — на классических скроллбарах (Windows
+   Chrome) это двойная компенсация и прыжок колонки при открытии (#925).
+   Гюттер уже зарезервирован, поэтому компенсация обнуляется; при равной
+   важности (!important с обеих сторон) побеждает более специфичный
+   селектор с html — независимо от порядка стилей.
+   data-scroll-locked — публичный атрибут лока react-remove-scroll-bar. */
+html body[data-scroll-locked] {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
 }
 
 html,
 body {
     max-width: 100vw;
-    overflow-x: hidden;
+    /* clip, а не hidden: hidden делает body scroll-контейнером, и любой
+       position:sticky внутри прилипает к нему, а не к вьюпорту (вскрылось
+       на липких плашках дат ленты «Истории», #709). clip режет горизонталь
+       так же, но scroll-контейнера не создаёт. */
+    overflow-x: clip;
 }
 
 body {
@@ -445,39 +1039,126 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Страница — flex-item body с min-width:auto: без обнуления любой
+   несжимаемый контент (широкий ListRow, input с intrinsic-размером)
+   распирает всё тело и молча обрезается overflow-x вместо сжатия.
+   Ширину дальше контролируют сами страницы (max-width,
+   overflow-стратегии списков/таблиц). */
+body > * {
+    min-width: 0;
+}
+
 @layer base {
     * {
         box-sizing: border-box;
         padding: 0;
         margin: 0;
     }
+
+    /* Легаси-сброс форм-контролов (перенесён из безслойной части: безслойное
+       правило сильнее @layer utilities и после сноса revert-layer-хака #901
+       молча гасило кеглевые и margin-утилиты на голых <button> —
+       text-sm/text-base канонного Button не применялись). Значения сохранены,
+       поэтому контролы без явных стилей выглядят как раньше; утилиты теперь
+       выигрывают по слою. */
+    button,
+    input,
+    optgroup,
+    select,
+    textarea {
+        font-family: inherit;
+        font-size: 100%;
+        line-height: 1.15;
+        margin: 0;
+    }
+
+    /* Курсор-пойнтер активным кнопкам (#1395): Tailwind v4 убрал pointer
+       из префлайта (поведение v3), и голые кнопки без явной утилиты
+       получали браузерный default — «на кнопки нужен курсор, кроме
+       дизейбл» (слово владельца). Правило в base-слое: явные утилиты
+       cursor-* (намеренные cursor-default у read-only строк и погашенных
+       контролов) выигрывают по слою, disabled остаётся без курсора. */
+    button:not(:disabled) {
+        cursor: pointer;
+    }
+
+    /* Легаси-сброс h1/h2 (перенесён из безслойной части: безслойные правила
+       сильнее @layer utilities и молча гасили text-xl/font-semibold на
+       заголовках дизайн-слоя). Утилиты теперь их перебивают. Маржин h1
+       снесён решением владельца (#1402): 0.67em ≈ 19px на кегле 28
+       вспухал зазоры внутри flex-шапок — коллапса маржин во flex нет
+       (страница участника: имя→почта ~27px вместо макетных 8). Отступы
+       заголовков теперь всегда явные. */
+    h1 {
+        font-size: 2em;
+    }
+
+    h1, h2 {
+        font-weight: 400;
+    }
+
+    /* Легаси-сброс ссылок (перенесён из безслойной части: безслойное правило
+       сильнее @layer utilities и гасило text-white на ссылках-кнопках —
+       primary NextLink+buttonVariants рендерились чёрным на синем, #622).
+       Значения сохранены; утилиты цвета на <a> теперь выигрывают. */
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    /* Мобильная нативность (канон mobile-native): серую вспышку тапа
+       iOS/Android глушим глобально — отклик рисуют контролы через
+       :active; контролам — мгновенный click без double-tap-задержки и
+       неселектируемый текст (контрол — не контент). */
+    html {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    button,
+    a,
+    [role='button'] {
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+    }
 }
 
-a {
-    color: inherit;
-    text-decoration: none;
+/* Барабан WheelPicker (решение владельца 2026-10-13 — отмена решения
+   2026-09-04 в части визуального каскада; кегль рядов 20/24 не меняется,
+   цветовое различие выбранного остаётся): ряды дальше от центра окна
+   сжаты и приглушены, как у UIPickerView. Scroll-driven animations —
+   таймлайн привязан к позиции ряда в окне скролла и считается на
+   компоситоре, JS на кадр не нужен; 50% таймлайна — ряд в центре (полная
+   сила), к краям — scale 0.72 / opacity 0.35. Каскад привязан к позиции
+   скролла, а не ко времени, поэтому prefers-reduced-motion его не глушит
+   (канон §8: жесты — управление). Браузеры без scroll-driven animations
+   видят прежние плоские ряды — спокойная деградация. Цвет ряда в тех же
+   кейфреймах — потемнение к центру непрерывное, без ступеньки на границе
+   полосы; React-переключение `dark` (wheel-picker.tsx) остаётся фолбэком
+   для браузеров без SDA. */
+@keyframes wheel-row-cascade {
+    from {
+        scale: 0.72;
+        opacity: 0.35;
+        color: var(--color-content-secondary);
+    }
+
+    50% {
+        scale: 1;
+        opacity: 1;
+        color: var(--color-content);
+    }
+
+    to {
+        scale: 0.72;
+        opacity: 0.35;
+        color: var(--color-content-secondary);
+    }
 }
 
-.stepEnter {
-    opacity: 0;
-    transform: translateX(20px);
-}
-
-.stepEnterActive {
-    opacity: 1;
-    transform: translateX(0);
-    transition: opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.stepExit {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.stepExitActive {
-    opacity: 0;
-    transform: translateX(-20px);
-    transition: opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+@supports (animation-timeline: view()) {
+    .wheel-cascade > li {
+        animation: wheel-row-cascade linear both;
+        animation-timeline: view();
+    }
 }

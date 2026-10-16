@@ -16,7 +16,6 @@ export type AttrFieldList = readonly AttrField[];
 const yearBuiltMax = new Date().getFullYear() + 5;
 
 const apartmentFields: AttrFieldList = [
-  { key: "rooms", kind: 'enum', options: ["studio", "1", "2", "3", "4", "5", "6", "7_plus"], group: "about_object" },
   { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
   { key: "area_living", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
   { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
@@ -31,7 +30,6 @@ const apartmentFields: AttrFieldList = [
 ];
 
 const roomFields: AttrFieldList = [
-  { key: "rooms", kind: 'enum', options: ["2", "3", "4", "5", "6", "7_plus"], group: "about_object" },
   { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
   { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
   { key: "floor", kind: 'integer', min: -3, max: 200, group: "about_object" },
@@ -40,6 +38,20 @@ const roomFields: AttrFieldList = [
   { key: "balcony", kind: 'enum', options: ["none", "balcony", "loggia", "balcony_and_loggia"], group: "about_object" },
   { key: "renovation", kind: 'enum', options: ["cosmetic", "euro", "design", "required"], group: "about_object" },
   { key: "year_built", kind: 'integer', min: 1800, max: yearBuiltMax, group: "about_building" },
+];
+
+const studioFields: AttrFieldList = [
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
+  { key: "area_living", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
+  { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
+  { key: "floor", kind: 'integer', min: -3, max: 200, group: "about_object" },
+  { key: "floors_total", kind: 'integer', min: 1, max: 200, group: "about_object" },
+  { key: "bathroom", kind: 'enum', options: ["combined", "separate", "multiple"], group: "about_object" },
+  { key: "balcony", kind: 'enum', options: ["none", "balcony", "loggia", "balcony_and_loggia"], group: "about_object" },
+  { key: "renovation", kind: 'enum', options: ["cosmetic", "euro", "design", "required"], group: "about_object" },
+  { key: "year_built", kind: 'integer', min: 1800, max: yearBuiltMax, group: "about_building" },
+  { key: "ceiling_height", kind: 'number', unit: "м", min: 2, max: 10, decimals: 2, group: "about_building" },
+  { key: "parking_type", kind: 'enum', options: ["closed", "underground", "open"], group: "about_building" },
 ];
 
 const houseFields: AttrFieldList = [
@@ -92,6 +104,7 @@ export const catalog: Readonly<Record<PropertyType, AttrFieldList>> = {
   "apartment": apartmentFields,
   "room": roomFields,
   "apartments": apartmentFields,
+  "studio": studioFields,
   "house": houseFields,
   "office": officeFields,
   "commercial": officeFields,

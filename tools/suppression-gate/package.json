@@ -1,0 +1,13 @@
+{
+  "name": "suppression-gate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Zero-suppression gate for the TS/JS apps (frontend + admin): eslint-disable comments, @ts-ignore/@ts-expect-error/@ts-nocheck, explicit any in manual code — no whitelist. Invoked by make ts-suppressions.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

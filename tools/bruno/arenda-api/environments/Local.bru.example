@@ -1,5 +1,13 @@
 vars {
   baseUrl: http://localhost:8080
+  paymentType: expense
+  paymentTitle: Арендная плата
+  paymentAmountKopecks: 5000000
+  paymentPaymentForm: transfer
+  paymentCategorySlug: rent
+  paymentRecurrence: {"kind":"monthly","dayOfMonth":10}
+  paymentUpdatedTitle: Арендная плата 2027
+  paymentUpdatedAmountKopecks: 6000000
   code: REPLACE_WITH_CODE_FROM_LOGS
   phone: +79150380663
   propertyName: My Rental Property

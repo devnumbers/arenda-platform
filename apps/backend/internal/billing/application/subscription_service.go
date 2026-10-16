@@ -4,29 +4,97 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
-// SubscriptionService manages the current user's subscription and tariff changes.
+// paymentInitiationProvider is the narrow provider slice the tariff-change
+// payment flow needs: starting a payment and the provider identity payments
+// persist (ADR 0038). Declared here, at the consumer, per ADR 0035.
+type paymentInitiationProvider interface {
+	PaymentInitiator
+	ProviderNamer
+}
+
+// SubscriptionService serves the user's view of and lifecycle control over
+// their own subscription, plus the admin subscription operations of issue
+// #255 (admin_subscription_service.go).
 type SubscriptionService struct {
-	deps     subscriptionServiceDeps
-	provider SubscriptionPaymentProvider
+	txStoreFactory
+	provider paymentInitiationProvider
+	clock    clock.Clock
+	config   Config
+	log      *slog.Logger
+	// ArchiverSource and slotSource bridge the admin operations that lower a
+	// tariff limit to the properties and access contexts (issue #255); nil
+	// until SetLifecycleBridges wires them — the subscription-side change
+	// still applies, only the excess archiving waits.
+	archiverSource ExcessPropertyArchiverSource
+	slotSource     RecipientSlotEnforcerSource
+	// The stand-only time-travel railguard of the service (issue #665): the
+	// second layer behind the BILLING_TIME_TRAVEL route mounting.
+	timeTravelEnabled bool
+	// Publisher emits the tariff events of the notifications catalog
+	// (карта #734, #752); nil keeps the pre-#752 behaviour — the events are
+	// captured but never dispatched.
+	publisher EventPublisher
 }
 
-// NewSubscriptionService creates a SubscriptionService.
-func NewSubscriptionService(deps subscriptionServiceDeps, provider SubscriptionPaymentProvider) *SubscriptionService {
-	return &SubscriptionService{deps: deps, provider: provider}
+// SubscriptionServiceConfig carries the non-transactional dependencies of the
+// subscription service.
+type SubscriptionServiceConfig struct {
+	Clock clock.Clock
+	// Provider starts payments for upgrades and same-tariff grace renewals
+	// (issue #250). The tariff-change flow is the only consumer; nil keeps the
+	// pre-#250 behaviour of ErrPaymentUnavailable for the paid paths.
+	Provider paymentInitiationProvider
+	Config   Config
+	Logger   *slog.Logger
+	// TimeTravelEnabled turns on the admin time-shift rig (issue #665); the
+	// wiring sets it from the platform's BILLING_TIME_TRAVEL flag.
+	TimeTravelEnabled bool
+	// Publisher emits the tariff events of the notifications catalog
+	// (карта #734, #752) — the scheduled downgrade's assignment notifies its
+	// owner; nil keeps the pre-#752 behaviour.
+	Publisher EventPublisher
 }
 
-// GetSubscription returns the current subscription with its tariff and active payment method.
+// NewSubscriptionService creates a subscription service over the shared
+// factory. A nil clock defaults to the real clock, matching the identity
+// module's constructor conventions.
+func NewSubscriptionService(factory txStoreFactory, cfg SubscriptionServiceConfig) *SubscriptionService {
+	if cfg.Clock == nil {
+		cfg.Clock = clock.Real{}
+	}
+	if cfg.Config == (Config{}) {
+		cfg.Config = DefaultConfig()
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+	return &SubscriptionService{
+		txStoreFactory:    factory,
+		provider:          cfg.Provider,
+		clock:             cfg.Clock,
+		config:            cfg.Config,
+		log:               cfg.Logger,
+		timeTravelEnabled: cfg.TimeTravelEnabled,
+		publisher:         cfg.Publisher,
+	}
+}
+
+// GetSubscription assembles the user's subscription view: the subscription
+// aggregate with its tariff, any scheduled (pending) tariff, the active
+// payment method resolved (issue #251), and the live pending payment when one
+// holds the user's tariff decision (issue #616).
 func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.UUID) (SubscriptionView, error) {
-	sub, err := s.deps.subscriptions.GetByUserID(ctx, userID)
+	sub, err := s.subscriptions.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return SubscriptionView{}, ErrSubscriptionNotFound
@@ -34,456 +102,779 @@ func (s *SubscriptionService) GetSubscription(ctx context.Context, userID uuid.U
 		return SubscriptionView{}, fmt.Errorf("get subscription: %w", err)
 	}
 
-	tariff, err := s.deps.tariffs.GetByID(ctx, sub.TariffID)
+	tariff, err := s.tariffs.GetByID(ctx, sub.TariffID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return SubscriptionView{}, ErrTariffNotFound
+			return SubscriptionView{}, fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
 		}
-		return SubscriptionView{}, fmt.Errorf("get subscription tariff: %w", err)
+		return SubscriptionView{}, fmt.Errorf("get tariff: %w", err)
 	}
 
-	view := SubscriptionView{Subscription: sub, Tariff: tariff}
-	view.CurrentPeriod = sub.CurrentPeriod
-
+	view := SubscriptionView{
+		Subscription: sub,
+		Tariff:       tariff,
+	}
 	if sub.PendingTariffID != nil {
-		pending, err := s.deps.tariffs.GetByID(ctx, *sub.PendingTariffID)
+		pending, err := s.tariffs.GetByID(ctx, *sub.PendingTariffID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
-				return SubscriptionView{}, ErrTariffNotFound
+				return SubscriptionView{}, fmt.Errorf(
+					"subscription %s references missing pending tariff %s: %w",
+					sub.ID, *sub.PendingTariffID, ErrTariffNotFound)
 			}
 			return SubscriptionView{}, fmt.Errorf("get pending tariff: %w", err)
 		}
 		view.PendingTariff = &pending
 	}
-
 	if sub.ActivePaymentMethodID != nil {
-		pm, err := s.deps.paymentMethods.GetByID(ctx, *sub.ActivePaymentMethodID)
+		method, err := s.methods.GetByID(ctx, *sub.ActivePaymentMethodID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
-				s.deps.log.WarnContext(ctx, "subscription references missing active payment method",
-					"user_id", userID.String(),
-					"payment_method_id", sub.ActivePaymentMethodID.String())
-				return view, nil
+				return SubscriptionView{}, fmt.Errorf(
+					"subscription %s references missing payment method %s: %w",
+					sub.ID, *sub.ActivePaymentMethodID, ErrPaymentMethodNotFound)
 			}
 			return SubscriptionView{}, fmt.Errorf("get active payment method: %w", err)
 		}
-		view.ActivePaymentMethod = &pm
+		view.ActivePaymentMethod = &method
 	}
-
+	pending, found, err := s.livePendingPayment(ctx, userID)
+	if err != nil {
+		return SubscriptionView{}, err
+	}
+	if found {
+		view.PendingPayment = pending
+	}
 	return view, nil
 }
 
-func (s *SubscriptionService) existingUpgradeResponse(ctx context.Context, payment domain.SubscriptionPayment) ChangeTariffResponse {
-	res := ChangeTariffResponse{PaymentID: payment.ID}
-	if urlProvider, ok := s.provider.(PaymentURLProvider); ok {
-		if url, err := urlProvider.PaymentURL(ctx, payment.ID); err == nil {
-			res.ConfirmURL = url
+// livePendingPayment resolves the user's live pending payment — a pending
+// form payment whose deadline has not run out and whose confirm URL has been
+// persisted (issue #616) — with its tariff resolved. Merchant-initiated
+// charges carry no payer form and are never surfaced; a payment whose URL has
+// not been persisted yet (the crash window between the pending row and the
+// provider answer) has nothing to confirm and is not surfaced either. The
+// found result is false when no pending payment qualifies.
+func (s *SubscriptionService) livePendingPayment(ctx context.Context, userID uuid.UUID) (*PendingPaymentView, bool, error) {
+	pending, err := s.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return nil, false, fmt.Errorf("list pending payments: %w", err)
+	}
+	for i := range pending {
+		p := pending[i]
+		if !p.IsLiveFormPayment(s.clock.Now().UTC()) || !p.HasPaymentURL() {
+			continue
 		}
-		return res
+		tariff, err := s.tariffs.GetByID(ctx, p.TariffID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil, false, fmt.Errorf("pending payment %s references missing tariff %s: %w", p.ID, p.TariffID, ErrTariffNotFound)
+			}
+			return nil, false, fmt.Errorf("get pending payment tariff: %w", err)
+		}
+		return &PendingPaymentView{Payment: p, Tariff: tariff}, true, nil
 	}
-	if payment.PaymentURL != nil && *payment.PaymentURL != "" {
-		res.ConfirmURL = *payment.PaymentURL
-	}
-	return res
+	return nil, false, nil
 }
 
-// ChangeTariff starts an upgrade payment or schedules a downgrade.
-func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResponse, error) {
-	newTariff, err := s.deps.tariffs.GetByName(ctx, req.TariffName)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ChangeTariffResponse{}, ErrTariffNotFound
+// CancelSubscription cancels the user's subscription (issue #249, ADR 0008):
+// the status moves to cancelled, auto-renew switches off immediately, and the
+// paid tariff keeps working until valid_until — data mutations stay allowed
+// for the rest of the period. The state change, its transition-log entry and
+// the audit record land in one transaction. A live pending payment blocks the
+// cancellation (issue #616): the tariff decision is still being paid for.
+// The optional keepPropertyID (issue #617) records the property the owner
+// wants to survive the fall to basic when the cancelled period expires: it
+// must be one of the owner's active properties, and the validation — like the
+// change itself — runs inside the lifecycle transaction over the
+// properties-context bridge. A repeat cancellation of an already-cancelled
+// subscription succeeds as an idempotent no-op (issue #1451): nothing is
+// validated, changed, transition-logged or audited, the stored state — the
+// keep choice and any scheduled change included — stays as it is. Cancelling
+// the free basic tariff is refused with ErrCancelNotAvailable (issue #1467):
+// the request cannot be executed, the subscription stays as it is — the admin
+// cancellation keeps its own judgment and stays outside this guard.
+func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uuid.UUID, keepPropertyID *uuid.UUID) error {
+	return s.runLifecycleTx(ctx, func(stores *txStores) error {
+		sub, err := stores.subscriptionForUpdate(ctx, userID)
+		if err != nil {
+			return err
 		}
-		return ChangeTariffResponse{}, fmt.Errorf("get tariff: %w", err)
-	}
-
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
-	if err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("bind subscriptions transaction: %w", err)
-	}
-	txTariffs, err := s.deps.tariffs.WithTx(tx)
-	if err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("bind tariffs transaction: %w", err)
-	}
-	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("bind subscription payments transaction: %w", err)
-	}
-
-	sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ChangeTariffResponse{}, ErrSubscriptionNotFound
+		if sub.Status == domain.SubscriptionStatusCancelled {
+			return nil
 		}
-		return ChangeTariffResponse{}, fmt.Errorf("get subscription: %w", err)
-	}
-
-	if sub.Source != domain.SubscriptionSourcePaid {
-		return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
-	}
-
-	now := s.deps.clock.Now().UTC()
-
-	// A same-tariff change is normally rejected, but while the subscription is
-	// in grace a same-tariff payment acts as a manual renewal: it goes through
-	// the upgrade-style payment flow and the webhook path applies it via
-	// ApplyRenewal (see flows.go).
-	sameTariffGraceRenewal := false
-	if sub.TariffID == newTariff.ID {
-		switch {
-		case sub.IsInGrace(now):
-			sameTariffGraceRenewal = true
-		case sub.Status == domain.SubscriptionStatusGrace:
-			// The grace period has already expired; the subscription awaits the
-			// worker downgrade to basic and can no longer initiate payments.
-			return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
-		default:
-			return ChangeTariffResponse{}, ErrAlreadyOnTariff
+		// Service subscriptions are assigned and withdrawn by an admin (#255);
+		// the user cannot cancel what they do not pay for.
+		if !sub.IsPaidSource() {
+			return domain.ErrInvalidSubscriptionState
 		}
-	}
+		if err := rejectFreeTariffCancel(ctx, stores, sub); err != nil {
+			return err
+		}
+		if err := rejectLivePendingPayment(ctx, stores, userID, s.clock.Now().UTC()); err != nil {
+			return err
+		}
+		if keepPropertyID != nil {
+			if err := validateKeepPropertyChoice(ctx, stores, userID, *keepPropertyID); err != nil {
+				return err
+			}
+		}
 
-	currentTariff, err := txTariffs.GetByID(ctx, sub.TariffID)
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { return s.Cancel(keepPropertyID) },
+			transitionSpec{
+				reason:      domain.TransitionReasonCancelled,
+				initiator:   domain.InitiatorUser,
+				initiatorID: &userID,
+				auditAction: auditdomain.ActionSubscriptionCancelled,
+				auditContext: func(_ domain.Subscription, _ domain.Transition) map[string]any {
+					if keepPropertyID == nil {
+						return nil
+					}
+					return map[string]any{auditKeyKeepPropertyID: *keepPropertyID}
+				},
+			},
+		); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+// rejectFreeTariffCancel refuses the user's cancellation of the free basic
+// tariff (issue #1467): the request cannot be executed, the subscription
+// stays as it is. The guard lives on the user path only — the admin
+// cancellation keeps its own judgment (#1467).
+func rejectFreeTariffCancel(ctx context.Context, stores *txStores, sub domain.Subscription) error {
+	currentTariff, err := currentTariffOf(ctx, stores, sub)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ChangeTariffResponse{}, ErrTariffNotFound
+		return err
+	}
+	if !currentTariff.IsPaid() {
+		return ErrCancelNotAvailable
+	}
+	return nil
+}
+
+// validateKeepPropertyChoice checks the cancel keep choice (issue #617) over
+// the properties-context bridge: the named property must be one of the
+// owner's active ones.
+func validateKeepPropertyChoice(ctx context.Context, stores *txStores, userID, keepPropertyID uuid.UUID) error {
+	if stores.archiver == nil {
+		// The bridge is wired in every composition root; refusing
+		// loudly beats storing an unvalidated id (issue #617).
+		return errors.New("cancel keep property: properties bridge is not wired")
+	}
+	exists, err := stores.archiver.ActivePropertyExists(ctx, userID, keepPropertyID)
+	if err != nil {
+		return fmt.Errorf("validate keep property: %w", err)
+	}
+	if !exists {
+		return ErrInvalidKeepProperty
+	}
+	return nil
+}
+
+// ResumeSubscription undoes a cancellation without a charge (issue #617): a
+// cancelled subscription inside its already paid period returns to active
+// with auto-renew on and the paid remainder kept. The state change, its
+// transition-log entry (reason "resumed") and the audit record land in one
+// transaction. A live pending payment blocks the resume like every other
+// tariff decision (issue #616): the reactivation payment the user already
+// holds the form for would supersede it. Restoration of an expired period
+// stays on the paid path (issue #429).
+func (s *SubscriptionService) ResumeSubscription(ctx context.Context, userID uuid.UUID) error {
+	return s.runInTx(ctx, func(stores *txStores) error {
+		sub, err := stores.subscriptionForUpdate(ctx, userID)
+		if err != nil {
+			return err
 		}
-		return ChangeTariffResponse{}, fmt.Errorf("get current tariff: %w", err)
+		if err := rejectLivePendingPayment(ctx, stores, userID, s.clock.Now().UTC()); err != nil {
+			return err
+		}
+		now := s.clock.Now().UTC()
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { return s.Resume(now) },
+			transitionSpec{
+				reason:      domain.TransitionReasonResumed,
+				initiator:   domain.InitiatorUser,
+				initiatorID: &userID,
+				auditAction: auditdomain.ActionSubscriptionResumed,
+			},
+		); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+// rejectLivePendingPayment refuses the flow when a live pending payment — a
+// form payment whose deadline has not run out — holds the user's tariff
+// decision (issue #616). Merchant-initiated charges carry no payer form and
+// no user decision, so they do not block.
+func rejectLivePendingPayment(ctx context.Context, stores *txStores, userID uuid.UUID, now time.Time) error {
+	pending, err := stores.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list pending payments: %w", err)
+	}
+	for _, p := range pending {
+		if p.IsLiveFormPayment(now) {
+			return ErrPendingPaymentExists
+		}
+	}
+	return nil
+}
+
+// rejectConflictingPendingPayment blocks a tariff decision that conflicts
+// with the user's live pending payment (issue #616): one pending payment per
+// user. A request for the pending payment's own tariff and period passes
+// through — the payment path returns it as-is.
+func rejectConflictingPendingPayment(
+	ctx context.Context, stores *txStores, userID, tariffID uuid.UUID,
+	period domain.SubscriptionPeriod, now time.Time,
+) error {
+	pending, err := stores.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list pending payments: %w", err)
+	}
+	for _, p := range pending {
+		if !p.IsLiveFormPayment(now) {
+			continue
+		}
+		if p.TariffID == tariffID && p.Period == period {
+			return nil
+		}
+		return ErrPendingPaymentExists
+	}
+	return nil
+}
+
+// ToggleAutoRenew switches automatic renewal on or off (issue #249). Enabling
+// requires a paid validity period — the never-expiring basic tariff has
+// nothing to renew — and is reserved for paid subscriptions: a service
+// subscription runs its fixed term without charges (billing CONTEXT.md).
+func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error {
+	return s.runInTx(ctx, func(stores *txStores) error {
+		sub, err := stores.subscriptionForUpdate(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if enabled && !sub.IsPaidSource() {
+			return domain.ErrInvalidSubscriptionState
+		}
+		if err := sub.SetAutoRenew(enabled); err != nil {
+			return err
+		}
+		if err := stores.subscriptions.Update(ctx, sub); err != nil {
+			return fmt.Errorf("update subscription: %w", err)
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleOwner,
+			Action:     auditdomain.ActionSubscriptionAutoRenewToggled,
+			EntityType: auditdomain.EntitySubscription,
+			EntityID:   &sub.ID,
+			Context:    map[string]any{"enabled": enabled},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+}
+
+// ChangeTariff serves POST /subscription/change (issue #249). A downgrade is
+// scheduled for the end of the paid period and auto-renew is enabled so the
+// new tariff renews on the normal cycle (ADR 0008 §3) — the user plans it
+// from every state that still owns the decision (issue #1451, ADR 0066):
+// active, cancelled inside its paid remainder and a live grace window. A
+// same-tariff request
+// on an active subscription is rejected; upgrades and same-tariff grace
+// renewals go through the payment flow (issue #250): the pending payment is
+// persisted before the provider is called, so a crash between the provider
+// initiation and the save is recoverable on retry. A same-tariff request on a
+// cancelled subscription is its reactivation (issue #429, ADR 0008:
+// restoration goes through paying for a tariff) and shares that payment path.
+// An upgrade on top of a service subscription takes the payment path too
+// (issue #255): the applied payment converts the subscription into a paid one
+// from the new period.
+func (s *SubscriptionService) ChangeTariff(ctx context.Context, userID uuid.UUID, req ChangeTariffRequest) (ChangeTariffResult, error) {
+	// The carrier of the tariff events this planning transaction captures
+	// (карта #734, #752): the scheduled downgrade's assignment notifies the
+	// owner once the transaction commits.
+	tariff := newTariffEvents(s.publisher, s.log)
+	var plan changeTariffPlan
+	if err := s.runInTx(ctx, func(stores *txStores) error {
+		p, err := s.planTariffChange(ctx, tariff, stores, userID, req)
+		if err != nil {
+			return err
+		}
+		plan = p
+		return nil
+	}); err != nil {
+		return ChangeTariffResult{}, err
+	}
+	// Strictly after the commit, best-effort (the grace-events canon): a
+	// publication failure never fails the planned change.
+	tariff.publishAfterCommit(ctx)
+	if !plan.needsPayment {
+		return ChangeTariffResult{}, nil
+	}
+	return s.executePlannedPayment(ctx, plan)
+}
+
+// changeTariffPlan is the state captured by the planning transaction for the
+// payment orchestration that runs after it commits.
+type changeTariffPlan struct {
+	needsPayment    bool
+	paymentPurpose  PaymentPurposeKind
+	paymentTariff   domain.Tariff
+	createdPayment  *domain.SubscriptionPayment
+	existingPayment *domain.SubscriptionPayment
+}
+
+// planTariffChange is the transactional half of ChangeTariff: it loads the
+// requested tariff and the subscription, classifies the change and either
+// schedules the deferred downgrade or plans the payment whose provider
+// initiation runs after commit.
+func (s *SubscriptionService) planTariffChange(
+	ctx context.Context, tariff *tariffEvents, stores *txStores, userID uuid.UUID, req ChangeTariffRequest,
+) (changeTariffPlan, error) {
+	newTariff, err := selectableTariff(ctx, stores, req.TariffName)
+	if err != nil {
+		return changeTariffPlan{}, err
+	}
+
+	sub, err := stores.subscriptionForUpdate(ctx, userID)
+	if err != nil {
+		return changeTariffPlan{}, err
+	}
+
+	now := s.clock.Now().UTC()
+	// One pending payment per user (issue #616): a live pending form payment
+	// locks the tariff decision to what it buys — any other selection is
+	// rejected before it is classified, a request matching the pending
+	// payment's own tariff and period passes through to the dedup below.
+	if err := rejectConflictingPendingPayment(ctx, stores, userID, newTariff.ID, req.Period, now); err != nil {
+		return changeTariffPlan{}, err
+	}
+	// A same-tariff request is a manual payment while the subscription is in
+	// grace (a renewal, issue #250) or cancelled (its reactivation, issue
+	// #429); both share the payment path with upgrades.
+	manualPayment, err := sameTariffManualPayment(sub, newTariff, req.Period, now)
+	if err != nil {
+		return changeTariffPlan{}, err
+	}
+
+	currentTariff, err := currentTariffOf(ctx, stores, sub)
+	if err != nil {
+		return changeTariffPlan{}, err
 	}
 
 	changeType := domain.ClassifyTariffChange(currentTariff, newTariff)
-	if changeType == domain.TariffChangeSame && !sameTariffGraceRenewal {
-		return ChangeTariffResponse{}, ErrInvalidTariffChange
+	needsPayment := manualPayment || changeType == domain.TariffChangeUpgrade
+	if !sub.IsPaidSource() && !needsPayment {
+		// Service subscriptions are assigned and withdrawn by an admin
+		// (#255): the user controls neither their deferred changes nor
+		// their cancellation. The payment path stays open — an upgrade on
+		// top of a service subscription converts it into a paid one.
+		return changeTariffPlan{}, domain.ErrInvalidSubscriptionState
+	}
+	if !needsPayment {
+		return changeTariffPlan{}, scheduleDeferredDowngrade(ctx, tariff, stores, userID, sub, currentTariff, newTariff, req.Period, now)
 	}
 
-	amount := newTariff.MonthlyPriceKopecks
-	if req.Period == domain.PeriodYear {
-		amount = newTariff.YearlyPriceKopecks
+	if err := s.checkPaymentInitiable(sub, now); err != nil {
+		return changeTariffPlan{}, err
 	}
-
-	canInitiate := sub.CanInitiatePayment(now)
-	isRecoveryUpgrade := changeType == domain.TariffChangeUpgrade &&
-		sub.Status == domain.SubscriptionStatusCancelled
-	if !canInitiate && !isRecoveryUpgrade {
-		return ChangeTariffResponse{}, domain.ErrInvalidSubscriptionState
-	}
-
-	if changeType == domain.TariffChangeUpgrade || sameTariffGraceRenewal {
-		// Return an existing pending upgrade payment for the same tariff and
-		// period instead of creating a duplicate. The partial unique index on
-		// pending payments is the durable backstop for races.
-		pending, err := txSubscriptionPayments.ListPendingSubscriptionPaymentsByUserID(ctx, userID)
-		if err != nil {
-			return ChangeTariffResponse{}, fmt.Errorf("list pending subscription payments: %w", err)
-		}
-		for _, p := range pending {
-			if p.TariffID == newTariff.ID && p.Period == req.Period {
-				// If a previous Init succeeded but the process crashed before the
-				// provider reference was persisted, recover it from the provider
-				// before returning. This keeps the retry path idempotent.
-				if p.ProviderPaymentID == nil {
-					_ = tx.Rollback(ctx)
-					return s.recoverUpgradeProviderReference(ctx, p, newTariff, amount, req.Period, userID, now)
-				}
-				return s.existingUpgradeResponse(ctx, p), nil
-			}
-		}
-		return s.changeTariffUpgrade(ctx, tx, userID, sub, newTariff, req.Period, amount)
-	}
-
-	if sub.ValidUntil == nil {
-		return ChangeTariffResponse{}, ErrInvalidTariffChange
-	}
-	// Paid and free downgrades are deferred until the end of the paid period;
-	// the charge happens when the scheduled change is applied by the worker.
-	// See ADR 0008, section 3.
-	if err := sub.ScheduleDowngrade(currentTariff, newTariff, req.Period, *sub.ValidUntil); err != nil {
-		return ChangeTariffResponse{}, err
-	}
-	if err := txSubscriptions.Update(ctx, sub); err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("schedule downgrade: %w", err)
-	}
-	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionSubscriptionTariffChanged,
-		EntityType: auditdomain.EntitySubscription,
-		EntityID:   &sub.ID,
-		Context:    map[string]any{"from_tariff_id": currentTariff.ID, "to_tariff_id": newTariff.ID},
-	}); err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("record audit: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("commit schedule downgrade transaction: %w", err)
-	}
-
-	return ChangeTariffResponse{}, nil
-}
-
-// paymentRedirectTTL bounds how long a user-facing payment form stays
-// payable. After the deadline T-Kassa moves the payment to
-// DEADLINE_EXPIRED and the user retries via the existing recovery flow.
-// See ADR 0010 (tkassa-webhook-source-of-truth) and ADR 0008 (subscription-lifecycle).
-const paymentRedirectTTL = 15 * time.Minute
-
-func (s *SubscriptionService) changeTariffUpgrade(
-	ctx context.Context,
-	tx transaction.Tx,
-	userID uuid.UUID,
-	sub domain.Subscription,
-	newTariff domain.Tariff,
-	period domain.SubscriptionPeriod,
-	amount int64,
-) (ChangeTariffResponse, error) {
-	if amount <= 0 {
-		return ChangeTariffResponse{}, domain.ErrInvalidAmount
-	}
-
-	now := s.deps.clock.Now().UTC()
-	payment, err := domain.NewSubscriptionPayment(
-		userID,
-		sub.ID,
-		newTariff.ID,
-		nil,
-		period,
-		amount,
-		s.provider.Name(),
-		now,
-	)
+	created, existing, err := s.planPayment(ctx, stores, sub, currentTariff, newTariff, req.Period)
 	if err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("create subscription payment: %w", err)
+		return changeTariffPlan{}, err
 	}
-
-	// Persist the pending payment before calling the external provider so the
-	// record survives a crash and the provider has an internal payment id to
-	// reference.
-	txSubscriptionPayments, err := s.deps.subscriptionPayments.WithTx(tx)
-	if err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("bind subscription payments transaction: %w", err)
+	paymentPurpose := PaymentPurposeSubscription
+	if manualPayment {
+		paymentPurpose = PaymentPurposeRenewal
 	}
-	payment, err = txSubscriptionPayments.Create(ctx, payment)
-	if err != nil {
-		if errors.Is(err, ErrAlreadyExists) {
-			// A concurrent request created the pending payment first. Return the
-			// existing one instead of failing.
-			pending, listErr := txSubscriptionPayments.ListPendingSubscriptionPaymentsByUserID(ctx, userID)
-			if listErr != nil {
-				return ChangeTariffResponse{}, fmt.Errorf("list pending subscription payments: %w", listErr)
-			}
-			for _, p := range pending {
-				if p.TariffID == newTariff.ID && p.Period == period {
-					_ = tx.Rollback(ctx)
-					return s.existingUpgradeResponse(ctx, p), nil
-				}
-			}
-		}
-		return ChangeTariffResponse{}, fmt.Errorf("save subscription payment: %w", err)
-	}
-	// The pending payment this transaction commits is the persisted form of the
-	// user's tariff-change decision, so the tariff change is audited here. The
-	// payment itself is audited by the webhook/sync paths that finalize it.
-	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionSubscriptionTariffChanged,
-		EntityType: auditdomain.EntitySubscription,
-		EntityID:   &sub.ID,
-		Context:    map[string]any{"from_tariff_id": sub.TariffID, "to_tariff_id": newTariff.ID},
-	}); err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("record audit: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("commit transaction: %w", err)
-	}
-
-	notification, successURL, failURL := tkassaCallbackURLs(s.deps.callbackBaseURL, payment.ID)
-	initRes, err := s.provider.Init(ctx, InitRequest{
-		PaymentID:              payment.ID,
-		AmountKopecks:          amount,
-		Period:                 period,
-		UserID:                 userID,
-		CustomerKey:            userID.String(),
-		Recurrent:              true,
-		OperationInitiatorType: InitiatorTypeCITCC, // parent payment of the CC/COF chain that obtains the RebillId
-		NotificationURL:        notification,
-		SuccessURL:             successURL,
-		FailURL:                failURL,
-		RedirectDueDate:        now.Add(paymentRedirectTTL),
-		Description:            truncateTkassaDescription(upgradePaymentDescription(newTariff.Name, period)),
-	})
-	if err != nil {
-		markPaymentFailedBestEffort(ctx, markFailedDeps{
-			beginner:             s.deps.beginner,
-			subscriptionPayments: s.deps.subscriptionPayments,
-			log:                  s.deps.log,
-		}, payment.ID, now)
-		return ChangeTariffResponse{}, sanitize.Wrap(err, "init payment")
-	}
-
-	// The provider token is only available after Init succeeds. Persist the
-	// provider reference and any newly created payment method atomically in a
-	// single transaction so a crash cannot leave a pending payment without a
-	// provider reference.
-	payment, err = saveProviderInitResult(ctx, saveProviderInitDeps{
-		beginner:             s.deps.beginner,
-		subscriptionPayments: s.deps.subscriptionPayments,
-		paymentMethods:       s.deps.paymentMethods,
-		provider:             s.provider,
-		log:                  s.deps.log,
-	}, payment, initRes, userID, now)
-	if err != nil {
-		return ChangeTariffResponse{}, err
-	}
-
-	return ChangeTariffResponse{
-		PaymentID:  payment.ID,
-		ConfirmURL: initRes.PaymentURL,
+	return changeTariffPlan{
+		needsPayment:    true,
+		paymentPurpose:  paymentPurpose,
+		paymentTariff:   newTariff,
+		createdPayment:  created,
+		existingPayment: existing,
 	}, nil
 }
 
-// recoverUpgradeProviderReference recovers a provider reference for an existing
-// pending upgrade payment whose provider_payment_id was lost after a crash.
-// It relies on the provider's idempotent Init to reconstruct the reference.
-func (s *SubscriptionService) recoverUpgradeProviderReference(ctx context.Context, payment domain.SubscriptionPayment, newTariff domain.Tariff, amount int64, period domain.SubscriptionPeriod, userID uuid.UUID, now time.Time) (ChangeTariffResponse, error) {
-	notification, successURL, failURL := tkassaCallbackURLs(s.deps.callbackBaseURL, payment.ID)
-	initRes, err := s.provider.Init(ctx, InitRequest{
-		PaymentID:              payment.ID,
-		AmountKopecks:          amount,
-		Period:                 period,
-		UserID:                 userID,
-		CustomerKey:            userID.String(),
-		Recurrent:              true,
-		OperationInitiatorType: InitiatorTypeCITCC, // parent payment of the CC/COF chain that obtains the RebillId
-		NotificationURL:        notification,
-		SuccessURL:             successURL,
-		FailURL:                failURL,
-		RedirectDueDate:        now.Add(paymentRedirectTTL),
-		Description:            truncateTkassaDescription(upgradePaymentDescription(newTariff.Name, period)),
-	})
-	if err != nil {
-		markPaymentFailedBestEffort(ctx, markFailedDeps{
-			beginner:             s.deps.beginner,
-			subscriptionPayments: s.deps.subscriptionPayments,
-			log:                  s.deps.log,
-		}, payment.ID, now)
-		return ChangeTariffResponse{}, sanitize.Wrap(err, "recover provider reference")
-	}
-
-	payment, err = saveProviderInitResult(ctx, saveProviderInitDeps{
-		beginner:             s.deps.beginner,
-		subscriptionPayments: s.deps.subscriptionPayments,
-		paymentMethods:       s.deps.paymentMethods,
-		provider:             s.provider,
-		log:                  s.deps.log,
-	}, payment, initRes, userID, now)
-	if err != nil {
-		return ChangeTariffResponse{}, fmt.Errorf("recover provider reference: %w", err)
-	}
-
-	return ChangeTariffResponse{
-		PaymentID:  payment.ID,
-		ConfirmURL: initRes.PaymentURL,
-	}, nil
-}
-
-// CancelSubscription terminates the paid subscription. The current tariff remains
-// valid until valid_until, after which the worker downgrades the subscription to
-// basic.
-func (s *SubscriptionService) CancelSubscription(ctx context.Context, userID uuid.UUID) error {
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
-	if err != nil {
-		return fmt.Errorf("bind subscriptions transaction: %w", err)
-	}
-
-	sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
+// selectableTariff loads a tariff by name for user selection: a miss and a
+// hidden plan (issue #256) answer alike — subscriptions already on a hidden
+// plan keep renewing, the guard only blocks new selection.
+func selectableTariff(ctx context.Context, stores *txStores, name domain.TariffName) (domain.Tariff, error) {
+	tariff, err := stores.tariffs.GetByName(ctx, name)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return ErrSubscriptionNotFound
+			return domain.Tariff{}, ErrTariffNotFound
 		}
-		return fmt.Errorf("get subscription: %w", err)
+		return domain.Tariff{}, fmt.Errorf("get tariff: %w", err)
 	}
+	if !tariff.IsActive {
+		return domain.Tariff{}, ErrTariffInactive
+	}
+	return tariff, nil
+}
 
-	if sub.Source != domain.SubscriptionSourcePaid {
+// sameTariffManualPayment reports whether a same-tariff request is the manual
+// payment path: a renewal of a subscription currently in its grace window
+// (issue #250) or the reactivation of a cancelled one (issue #429, ADR 0008:
+// restoration goes through paying for a tariff). The expired grace window and
+// the active same-tariff state are rejections. A cancelled subscription with
+// a live paid remainder is refused too (issue #691): paying for its own
+// tariff and period would burn the remainder for the outcome the free resume
+// already delivers — the boundary holds only while the requested period
+// matches the current one; a period switch stays paid (the remainder is lost
+// either way) and an unknown current period cannot match, so it stays paid
+// as well.
+func sameTariffManualPayment(
+	sub domain.Subscription, newTariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time,
+) (bool, error) {
+	if sub.TariffID != newTariff.ID {
+		return false, nil
+	}
+	switch {
+	case sub.IsInGrace(now):
+		return true, nil
+	case sub.Status == domain.SubscriptionStatusCancelled:
+		// Paying for the plan the subscription is already on restores it:
+		// the "already on this tariff" rejection is reserved for active
+		// subscriptions.
+		if sub.ValidUntil != nil && sub.ValidUntil.After(now) &&
+			sub.CurrentPeriod != nil && *sub.CurrentPeriod == period {
+			return false, domain.ErrResumeRequired
+		}
+		return true, nil
+	case sub.Status == domain.SubscriptionStatusGrace:
+		// The grace window has expired; the worker downgrade to basic
+		// is due and no payment can be initiated anymore.
+		return false, domain.ErrInvalidSubscriptionState
+	default:
+		return false, domain.ErrAlreadyOnTariff
+	}
+}
+
+// currentTariffOf loads the tariff the subscription is on, mapping a missing
+// row to the tariff sentinel.
+func currentTariffOf(ctx context.Context, stores *txStores, sub domain.Subscription) (domain.Tariff, error) {
+	tariff, err := stores.tariffs.GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Tariff{}, fmt.Errorf("subscription %s references missing tariff %s: %w", sub.ID, sub.TariffID, ErrTariffNotFound)
+		}
+		return domain.Tariff{}, fmt.Errorf("get current tariff: %w", err)
+	}
+	return tariff, nil
+}
+
+// checkPaymentInitiable guards the payment path: payments start from a live
+// subscription — active, in grace, or cancelled awaiting its restoration
+// payment (ADR 0008: restoration goes through paying for a tariff; the
+// recovery upgrade and the same-tariff reactivation of issue #429) — and a
+// provider must be wired before any payment is planned (no pending row is
+// left behind).
+func (s *SubscriptionService) checkPaymentInitiable(sub domain.Subscription, now time.Time) error {
+	if !sub.CanInitiatePayment(now) {
 		return domain.ErrInvalidSubscriptionState
 	}
-
-	if err := sub.Cancel(); err != nil {
-		return err
-	}
-
-	if err := txSubscriptions.Update(ctx, sub); err != nil {
-		return fmt.Errorf("update subscription: %w", err)
-	}
-
-	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionSubscriptionCancelled,
-		EntityType: auditdomain.EntitySubscription,
-		EntityID:   &sub.ID,
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit cancel subscription transaction: %w", err)
+	if s.provider == nil {
+		// No provider wired (pre-#250 construction): refuse before any
+		// payment is planned, so no pending row is left behind.
+		return ErrPaymentUnavailable
 	}
 	return nil
 }
 
-// ToggleAutoRenew enables or disables automatic subscription renewal.
-func (s *SubscriptionService) ToggleAutoRenew(ctx context.Context, userID uuid.UUID, enabled bool) error {
-	tx, err := s.deps.beginner.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+// scheduleDeferredDowngrade schedules a downgrade for the end of the paid
+// period with auto-renew on, so the new tariff renews on the normal cycle
+// (ADR 0008 §3), recording the transition and its audit entry. The user can
+// plan it from every live state that still owns the decision (issue #1451):
+// an active subscription, a cancelled one inside its paid remainder and a
+// live grace window — the domain owns those guards and rejects an expired
+// grace window itself. The
+// assignment is the «Тариф изменён» event's trigger (карта #734, #752):
+// the owner learns the change was assigned and when it takes effect —
+// the application of the scheduled change at period end stays silent.
+func scheduleDeferredDowngrade(
+	ctx context.Context, tariff *tariffEvents, stores *txStores, userID uuid.UUID, sub domain.Subscription,
+	currentTariff, newTariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time,
+) error {
+	// A deferred change needs a paid period to defer to; the domain
+	// rejects the same condition, but the valid_until read below must not
+	// dereference a nil pointer first.
+	if sub.ValidUntil == nil {
+		return domain.ErrInvalidTariffChange
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	txSubscriptions, err := s.deps.subscriptions.WithTx(tx)
+	applied, err := stores.applyTransition(ctx, &sub,
+		func(s *domain.Subscription) error {
+			return s.ScheduleDowngrade(currentTariff, newTariff, period, *s.ValidUntil, now)
+		},
+		transitionSpec{
+			reason:            domain.TransitionReasonDowngradeScheduled,
+			initiator:         domain.InitiatorUser,
+			initiatorID:       &userID,
+			scheduledTariffID: &newTariff.ID,
+			auditAction:       auditdomain.ActionSubscriptionTariffChanged,
+			auditContext: func(_ domain.Subscription, transition domain.Transition) map[string]any {
+				return map[string]any{auditKeyFromTariffID: *transition.FromTariffID, auditKeyToTariffID: transition.ToTariffID}
+			},
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("bind subscriptions transaction: %w", err)
-	}
-
-	sub, err := txSubscriptions.GetByUserIDForUpdate(ctx, userID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrSubscriptionNotFound
-		}
-		return fmt.Errorf("get subscription: %w", err)
-	}
-
-	if err := sub.SetAutoRenew(enabled); err != nil {
 		return err
 	}
-
-	if err := txSubscriptions.Update(ctx, sub); err != nil {
-		return fmt.Errorf("update subscription: %w", err)
-	}
-
-	if err := s.deps.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  auditdomain.ActorRoleOwner,
-		Action:     auditdomain.ActionSubscriptionAutoRenewToggled,
-		EntityType: auditdomain.EntitySubscription,
-		EntityID:   &sub.ID,
-		Context:    map[string]any{"enabled": enabled},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit toggle auto-renew transaction: %w", err)
+	tariff.downgradeScheduled = &PlanDowngradeScheduled{
+		UserID:       userID,
+		TransitionID: applied.ID,
+		TariffID:     newTariff.ID,
+		Period:       period,
+		EffectiveAt:  *sub.ValidUntil,
 	}
 	return nil
+}
+
+// executePlannedPayment runs the provider initiation planned by the planning
+// transaction. It runs outside it: no row locks are held across the external
+// provider call.
+func (s *SubscriptionService) executePlannedPayment(ctx context.Context, plan changeTariffPlan) (ChangeTariffResult, error) {
+	payment := plan.createdPayment
+	if plan.existingPayment != nil {
+		if plan.existingPayment.HasProviderReference() && plan.existingPayment.HasPaymentURL() {
+			return ChangeTariffResult{PaymentID: plan.existingPayment.ID, ConfirmURL: *plan.existingPayment.PaymentURL}, nil
+		}
+		// A previous initiation crashed before its provider reference was
+		// persisted. Re-run the idempotent provider initiation and save the
+		// reference, keeping the retry path idempotent.
+		payment = plan.existingPayment
+	}
+	return s.initiatePaymentAtProvider(ctx, *payment, plan.paymentTariff, plan.paymentPurpose)
+}
+
+// planPayment is the transactional half of the payment path: it expires the
+// user's dead pending forms of every target (issue #690) so the one-form slot
+// is free, returns an existing live pending payment for the same tariff and
+// period when there is one (no duplicate initiation), or persists a fresh
+// pending payment: the durable record of the user's decision that survives a
+// crash before the provider call, with its form deadline anchored at creation
+// so the same absolute instant is passed to the provider. Concurrency is
+// guarded in two layers: the subscription row lock serializes initiations
+// across different targets, while the pending-payments partial unique indexes
+// durably backstop the races — same-target duplicates violate the
+// (user, tariff, period) index and resolve to the existing payment, a
+// concurrent live form of any target violates the user-level form index and
+// answers the pending-exists conflict.
+func (s *SubscriptionService) planPayment(
+	ctx context.Context,
+	stores *txStores,
+	sub domain.Subscription,
+	currentTariff, newTariff domain.Tariff,
+	period domain.SubscriptionPeriod,
+) (created, existing *domain.SubscriptionPayment, err error) {
+	now := s.clock.Now().UTC()
+	if err := expireDeadPendingForms(ctx, stores, sub.UserID, now); err != nil {
+		return nil, nil, err
+	}
+	if pending := findPendingPayment(stores, ctx, sub.UserID, newTariff.ID, period); pending != nil {
+		return nil, pending, nil
+	}
+
+	amount, err := newTariff.Price(period)
+	if err != nil {
+		return nil, nil, err
+	}
+	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, newTariff.ID, period, amount, s.provider.Name(), now)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := payment.AttachFormDeadline(now.Add(s.config.PaymentFormTTL), now); err != nil {
+		return nil, nil, err
+	}
+	payment, err = stores.payments.Create(ctx, payment)
+	if err != nil {
+		if errors.Is(err, ErrPendingPaymentExists) {
+			// A concurrent initiation's live form holds the user's one-form
+			// slot: the conflict itself is the answer, not a lost race.
+			return nil, nil, ErrPendingPaymentExists
+		}
+		if !errors.Is(err, ErrAlreadyExists) {
+			return nil, nil, fmt.Errorf("save pending payment: %w", err)
+		}
+		// A concurrent request created the pending payment first; return it
+		// instead of failing.
+		if existing := findPendingPayment(stores, ctx, sub.UserID, newTariff.ID, period); existing != nil {
+			return nil, existing, nil
+		}
+		return nil, nil, fmt.Errorf("pending payment lost after unique-race: %w", err)
+	}
+
+	// The pending payment this transaction commits is the persisted form of
+	// the user's tariff-change decision, so the tariff change is audited
+	// here; the payment itself is audited by the flow that finalizes it.
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &sub.UserID,
+		ActorRole:  auditdomain.ActorRoleOwner,
+		Action:     auditdomain.ActionSubscriptionTariffChanged,
+		EntityType: auditdomain.EntitySubscription,
+		EntityID:   &sub.ID,
+		Context:    map[string]any{auditKeyFromTariffID: currentTariff.ID, auditKeyToTariffID: newTariff.ID, auditKeyPaymentID: payment.ID},
+	}); err != nil {
+		return nil, nil, fmt.Errorf("record audit: %w", err)
+	}
+	return &payment, nil, nil
+}
+
+// expireDeadPendingForms fails every pending form payment of the user whose
+// deadline has run out — the server-side expiry is the truth (issue #616) —
+// not just the request's own target, so a dead form of another tariff or
+// period cannot occupy the user's one-form slot at the unique index
+// (issue #690). Form payments carry the deadline; merchant-initiated charges
+// (no deadline) are always live and never swept.
+func expireDeadPendingForms(ctx context.Context, stores *txStores, userID uuid.UUID, now time.Time) error {
+	pending, err := stores.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list pending payments: %w", err)
+	}
+	for i := range pending {
+		p := &pending[i]
+		if p.IsLivePending(now) || p.ExpiresAt == nil {
+			continue
+		}
+		if err := expireDeadPendingPayment(ctx, stores, p, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// expireDeadPendingPayment finalizes a pending payment whose form deadline
+// ran out (issue #616) — the server-side expiry is the truth — inside the
+// caller's transaction. Shared by the user-level sweep and the renewal
+// planner, which both meet dead pendings.
+func expireDeadPendingPayment(
+	ctx context.Context, stores *txStores, payment *domain.SubscriptionPayment, now time.Time,
+) error {
+	if err := payment.MarkExpired(now); err != nil {
+		return err
+	}
+	if err := stores.payments.Update(ctx, *payment); err != nil {
+		return fmt.Errorf("expire dead pending payment: %w", err)
+	}
+	return nil
+}
+
+// findPendingPayment returns the user's pending payment for the given tariff
+// and period, or nil. Both the pre-create deduplication lookup and the
+// unique-race backstop resolve through it.
+func findPendingPayment(
+	stores *txStores, ctx context.Context, userID, tariffID uuid.UUID, period domain.SubscriptionPeriod,
+) *domain.SubscriptionPayment {
+	pending, err := stores.payments.ListPendingByUserID(ctx, userID)
+	if err != nil {
+		return nil // The caller's Create path surfaces real repository errors.
+	}
+	for i := range pending {
+		if pending[i].TariffID == tariffID && pending[i].Period == period {
+			return &pending[i]
+		}
+	}
+	return nil
+}
+
+// initiatePaymentAtProvider initiates the payment at the provider — fresh or
+// as the recovery of a crashed initiation, the provider's idempotent Init
+// with the same internal payment id covers both — and atomically persists
+// the initiation result. The pending row already exists, so a crash at any
+// point leaves a recoverable state.
+func (s *SubscriptionService) initiatePaymentAtProvider(
+	ctx context.Context,
+	payment domain.SubscriptionPayment,
+	tariff domain.Tariff,
+	purpose PaymentPurposeKind,
+) (ChangeTariffResult, error) {
+	initRes, err := s.provider.InitPayment(ctx, s.initPaymentRequest(payment, tariff, purpose))
+	if err != nil {
+		s.markPaymentFailedBestEffort(ctx, payment.ID)
+		return ChangeTariffResult{}, fmt.Errorf("init payment at provider: %w", err)
+	}
+	// The CIT path of the shared reference save (issue #285): the initiation
+	// result carries the payer's form URL, and the answer to the user is the
+	// persisted payment's URL — the saved state, never the raw response.
+	saved, err := saveProviderReference(ctx, s.runInTx, payment.ID, initRes, s.clock.Now().UTC())
+	if err != nil {
+		return ChangeTariffResult{}, err
+	}
+	result := ChangeTariffResult{PaymentID: saved.ID}
+	if saved.HasPaymentURL() {
+		result.ConfirmURL = *saved.PaymentURL
+	}
+	return result, nil
+}
+
+// initPaymentRequest builds the provider-neutral initiation request shared by
+// the fresh-initiation and recovery paths: a customer-initiated payment that
+// saves its method for later merchant-initiated charges. The form deadline is
+// the payment's persisted expires_at (issue #616) — the same absolute instant
+// the user-facing countdown and the TTL worker read — so a recovered
+// initiation keeps the original deadline instead of extending it; payments
+// without a persisted deadline (legacy rows) fall back to the module TTL.
+func (s *SubscriptionService) initPaymentRequest(
+	payment domain.SubscriptionPayment, tariff domain.Tariff, purpose PaymentPurposeKind,
+) InitPaymentRequest {
+	deadline := s.clock.Now().UTC().Add(s.config.PaymentFormTTL)
+	if payment.ExpiresAt != nil {
+		deadline = *payment.ExpiresAt
+	}
+	return InitPaymentRequest{
+		PaymentID:     payment.ID,
+		AmountKopecks: payment.AmountKopecks,
+		Period:        payment.Period,
+		CustomerRef:   payment.UserID.String(),
+		Purpose: PaymentPurpose{
+			Kind:       purpose,
+			TariffName: tariff.Name,
+			Period:     payment.Period,
+		},
+		SaveMethod:   true,
+		Initiator:    InitiatorCustomer,
+		FormDeadline: deadline,
+	}
+}
+
+// markPaymentFailedBestEffort closes a pending payment as failed when the
+// provider refused the initiation, in its own short transaction, with the
+// same audit entry the webhook failure path records. It only logs errors: by
+// the time it runs the initiation has already failed, and a stuck pending
+// row is recoverable by the reconciliation worker (issue #252).
+func (s *SubscriptionService) markPaymentFailedBestEffort(ctx context.Context, paymentID uuid.UUID) {
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		payment, err := stores.paymentForUpdate(ctx, paymentID)
+		if err != nil {
+			return err
+		}
+		if payment.Status != domain.PaymentStatusPending {
+			return nil
+		}
+		if err := payment.MarkFailed(nil, s.clock.Now().UTC()); err != nil {
+			return err
+		}
+		if err := stores.payments.Update(ctx, payment); err != nil {
+			return err
+		}
+		return stores.audit.Record(ctx, auditdomain.Entry{
+			ActorRole:  auditdomain.ActorRoleSystem,
+			Action:     auditdomain.ActionSubscriptionPaymentFailed,
+			EntityType: auditdomain.EntitySubscriptionPayment,
+			EntityID:   &payment.ID,
+			Context:    map[string]any{auditKeyPaymentID: payment.ID, auditKeyProvider: string(s.provider.Name())},
+		})
+	})
+	if err != nil {
+		s.log.ErrorContext(ctx, "failed to mark payment failed after provider init error",
+			slog.String(auditKeyPaymentID, paymentID.String()),
+			slog.String("error", sanitize.Error(err)))
+	}
 }

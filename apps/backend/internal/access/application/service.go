@@ -5,61 +5,143 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
+	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
+	realtimeapp "github.com/nambers/arenda-planform/apps/backend/internal/realtime/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
+
+// Audit and log context keys shared by the access use cases: the same keys
+// appear in audit Entry.Context maps and in slog attribute lists.
+const (
+	auditKeyPropertyID = "property_id"
+	auditKeyRole       = "role"
+	auditKeyTrigger    = "trigger"
+	auditKeyUserID     = "user_id"
+)
+
+// userLabel resolves the row-text label of a participant: the display name
+// (the display canon — «Name Surname», иначе «Пользователь», никогда телефон
+// и email; карта #1105, аменд #1123). Loud on failure: a broken
+// lookup is a database trouble, not a missing label.
+func userLabel(ctx context.Context, users UserLookup, userID uuid.UUID) (string, error) {
+	return lookupLabel(ctx, users, userID, "resolve history member label")
+}
 
 // Member is the application-level projection of a property participant used by
 // ListMembers. The owner is synthesized from properties.owner_id and never
 // stored as a membership row, so it carries IsOwner = true and no membership id.
 // A pending email invitation (issue #161, T5) is projected as a Member with
 // Pending = true, the invitation id in ID, a zero UserID, and Email/LastSentAt
-// filled.
+// filled. Email is resolved for every row: participant emails are visible to
+// all readers of the list (owner decision 2026-09-20, #758 walkthrough).
 type Member struct {
-	ID          uuid.UUID // membership id; invitation id when Pending (zero uuid for the owner)
+	ID          uuid.UUID // Membership id; invitation id when Pending (zero uuid for the owner).
 	UserID      uuid.UUID
-	Role        sharedpolicy.Role // owner | full_access | viewer
+	Role        sharedpolicy.Role // Owner | full_access | viewer.
 	IsOwner     bool
 	DisplayName string
-	HasEmail    bool
-	Status      domain.MemberStatus // active | suspended (always active for the owner; meaningless when Pending)
-	SuspendedAt *time.Time          // when the membership was suspended; nil when active
+	// PhotoURL is the profile photo's streaming path (ADR 0065, решение
+	// #1286): every reader of the list shares the property with every
+	// listed participant; empty — no photo or a pending row.
+	PhotoURL    string
+	Status      domain.MemberStatus // Active | suspended (always active for the owner; meaningless when Pending).
+	SuspendedAt *time.Time          // When the membership was suspended; nil when active.
 	// Pending marks a pending email invitation row: the invitee is not
-	// registered yet, so UserID is zero and Email carries the invitee address
-	// (visible to managers only).
+	// registered yet, so UserID is zero.
 	Pending    bool
-	Email      *string    // invitee email; set only when Pending
-	LastSentAt *time.Time // when the invite email was last sent; set only when Pending
+	Email      *string    // User address; nil when unresolved or the user has none.
+	LastSentAt *time.Time // When the invite email was last sent; set only when Pending.
 }
 
 // AccessService implements the property membership use cases (issue #156, T3):
 // adding, listing, changing roles, revoking and self-exit. Authorization goes
-// through the policy port; persistence and audit share the same transaction.
+// through the policy port; persistence and audit share the same transaction
+// through the embedded txStoreFactory (ADR 0033). The lifecycle notifications
+// leave the context as events (карта #734, #751) on the grace-events canon:
+// captured at the transition, published strictly after the commit,
+// best-effort.
 type AccessService struct {
-	members   MembershipRepository
-	owners    PropertyOwnerResolver
-	statuses  PropertyStatusResolver
-	users     UserLookup
-	policy    sharedpolicy.Policy
-	slots     *SlotCoordinator
-	lifecycle *LifecycleMailer
-	db        txBeginner
-	audit     auditapp.Recorder
-	logger    *slog.Logger
+	txStoreFactory
+	members  MembershipRepository
+	owners   PropertyOwnerResolver
+	statuses PropertyStatusResolver
+	users    UserLookup
+	policy   sharedpolicy.Policy
+	slots    *SlotCoordinator
+	events   AccessEventPublisher
+	logger   *slog.Logger
+	// Realtime is the late-bound carrier the transitions' frames dispatch
+	// through after the commit (карта #714, #716; ADR 0062); nil keeps the
+	// pre-#716 silence. The invitation and participant-mutation services
+	// publish through it too — they run this service's transactional cores.
+	realtime realtimeapp.Publisher
 }
 
-// NewAccessService creates an AccessService. slots is the recipient tariff slot
+// SetRealtimePublisher late-binds the realtime carrier (карта #714, #716;
+// ADR 0062): the frames of the committed transitions dispatch through it —
+// the grace-events canon, best-effort, a broken carrier never fails the
+// transition.
+func (s *AccessService) SetRealtimePublisher(p realtimeapp.Publisher) {
+	s.realtime = p
+}
+
+// publishRealtime hands the committed transition's frames to the realtime
+// carrier (карта #714, #716; ADR 0062) through the shared post-commit tail —
+// strictly after the commit, best-effort, the nil carrier silent.
+func (s *AccessService) publishRealtime(ctx context.Context, actor uuid.UUID, changes []realtimedom.Change, journaledAnchors ...uuid.UUID) {
+	realtimeapp.Dispatch(ctx, s.realtime, actor, changes, journaledAnchors...)
+}
+
+// accessFrame is one transition's pair on one object: every membership or
+// invitation transition dirties the object's participants view. The journal
+// pair piggybacks through the dispatch's journaled anchors.
+func accessFrame(propertyID uuid.UUID) []realtimedom.Change {
+	return []realtimedom.Change{realtimedom.On(realtimedom.EntityAccess, propertyID)}
+}
+
+// removedAccessFrames collects the removal batch's frames: every removed
+// active leg dirties its object's participants view and anchors the history
+// pair of the journal row the removal wrote (ADR 0061 §3) — the per-call
+// dedup of the carrier collapses a batch into one frame per pair (ADR 0062
+// §3). Shared by the single revoke and the bulk participant removal.
+func removedAccessFrames(revoked []domain.Membership) ([]realtimedom.Change, []uuid.UUID) {
+	changed := make([]realtimedom.Change, 0, len(revoked))
+	anchors := make([]uuid.UUID, 0, len(revoked))
+	for _, m := range revoked {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+		anchors = append(anchors, m.PropertyID)
+	}
+	return changed, anchors
+}
+
+// recoveredAccessFrames collects the FIFO-recovered legs' access pairs — each
+// restored access dirties its object's participants view. No journal anchors:
+// the coordinator journals no recovery row (карта #714, #716; ADR 0062).
+func recoveredAccessFrames(recovered []domain.Membership) []realtimedom.Change {
+	changed := make([]realtimedom.Change, 0, len(recovered))
+	for _, m := range recovered {
+		changed = append(changed, realtimedom.On(realtimedom.EntityAccess, m.PropertyID))
+	}
+	return changed
+}
+
+// NewAccessService creates an AccessService. Slots is the recipient tariff slot
 // coordinator (issue #158, T4); it may be nil to disable slot enforcement
-// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). lifecycle is
-// the sharing lifecycle mailer (issue #162, T6); it may be nil to disable the
-// lifecycle emails. statuses reports the archived flag of a property (issue
-// #163); it may be nil to skip the archived-property checks.
+// (pre-T4 behaviour, e.g. in tests that don't exercise the limit). Events is
+// the lifecycle event publisher (карта #734, #751); it may be nil to disable
+// the publications (tests that don't exercise them). Statuses reports the
+// archived flag of a property (issue #163); it may be nil to skip the
+// archived-property checks. Factory bundles the membership repository, the
+// audit and history recorders, and the Unit-of-Work every mutating use case
+// runs through (ADR 0033 γ-factory).
 func NewAccessService(
 	members MembershipRepository,
 	owners PropertyOwnerResolver,
@@ -67,50 +149,34 @@ func NewAccessService(
 	users UserLookup,
 	policy sharedpolicy.Policy,
 	slots *SlotCoordinator,
-	lifecycle *LifecycleMailer,
-	db txBeginner,
-	audit auditapp.Recorder,
+	events AccessEventPublisher,
+	factory txStoreFactory,
 	logger *slog.Logger,
 ) *AccessService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
 	return &AccessService{
-		members:   members,
-		owners:    owners,
-		statuses:  statuses,
-		users:     users,
-		policy:    policy,
-		slots:     slots,
-		lifecycle: lifecycle,
-		db:        db,
-		audit:     audit,
-		logger:    logger,
+		txStoreFactory: factory,
+		members:        members,
+		owners:         owners,
+		statuses:       statuses,
+		users:          users,
+		policy:         policy,
+		slots:          slots,
+		events:         events,
+		logger:         logger,
 	}
 }
 
-// AddMember grants a registered user a role on a property. Any participant with
-// the manage-members capability (owner or full) may add anyone, including
-// another full member — full members are equal in member management. Adding a
-// member to an archived property is rejected (issue #163).
+// AddMember grants a registered user a role on a property. Member management
+// is owner-only since D8 (issue #1304): a full_access member's attempt is
+// refused like a stranger's. Adding a member to an archived property is
+// rejected (issue #163).
 func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID uuid.UUID, role domain.Role) (domain.Membership, error) {
-	owner, actorRole, err := s.requireManage(ctx, actor, propertyID)
+	_, actorRole, err := s.authorizeNewMember(ctx, actor, propertyID, userID)
 	if err != nil {
 		return domain.Membership{}, err
-	}
-	if err := requireNotArchived(ctx, s.statuses, propertyID); err != nil {
-		return domain.Membership{}, err
-	}
-	if userID == owner {
-		return domain.Membership{}, domain.ErrCannotAddOwner
-	}
-	if userID == actor {
-		// A user cannot grant themselves access via the member API; ownership
-		// is the only self-granted access.
-		return domain.Membership{}, domain.ErrCannotAddSelf
 	}
 
 	id, err := uuid.NewV7()
@@ -125,121 +191,364 @@ func (s *AccessService) AddMember(ctx context.Context, actor, propertyID, userID
 		GrantedBy:  actor,
 	}
 
-	tx, err := s.db.Begin(ctx)
+	var created domain.Membership
+	var suspended bool
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		created, suspended, err = s.createMembershipInTx(ctx, stores, actor, membership, actorRole)
+		return err
+	})
 	if err != nil {
-		return domain.Membership{}, fmt.Errorf("begin tx: %w", err)
+		return domain.Membership{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
-	txMembers := s.members.WithTx(tx)
-	if _, err := txMembers.GetByPropertyAndUser(ctx, propertyID, userID); err == nil {
-		return domain.Membership{}, domain.ErrMemberAlreadyExists
+	// The landing state picks the member's row (карта #734, #751, #829): an
+	// active grant speaks the «Приглашение в объект» event (the granter is the
+	// actor); a grant created without a free tariff slot pauses the new
+	// member's access (issue #158, T4) and speaks the system «Доступ
+	// приостановлен» instead. Both are the event subscriber's — published
+	// post-commit, best-effort; the direct lifecycle emails they replaced are
+	// gone.
+	if suspended {
+		publishSuspendedEvents(ctx, s.events, s.logger, []domain.Membership{created})
+	} else {
+		publishGrantedEvents(ctx, s.events, s.logger, actor, []domain.Membership{created})
+	}
+	s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
+	return created, nil
+}
+
+// createInvitationInTx is the transactional core of pending-invitation
+// creation: the duplicate guard, the insert and the audited record. Shared by
+// the single-property invite (InvitationService.InviteByEmail) and the batch
+// grant (ParticipantMutationService.grantInvitation) — the audit context and
+// the PII rule live here, not in the callers. A duplicate is the
+// ErrInvitationAlreadyExists signal; the caller maps it to its own outcome.
+func (s *AccessService) createInvitationInTx(
+	ctx context.Context, stores *txStores, invitation domain.Invitation, actor uuid.UUID, actorRole sharedpolicy.Role,
+) (domain.Invitation, error) {
+	if _, err := stores.invitations.GetByPropertyAndEmail(ctx, invitation.PropertyID, invitation.Email); err == nil {
+		return domain.Invitation{}, domain.ErrInvitationAlreadyExists
+	} else if !errors.Is(err, domain.ErrInvitationNotFound) {
+		return domain.Invitation{}, fmt.Errorf("check existing invitation: %w", err)
+	}
+
+	created, err := stores.invitations.Create(ctx, invitation)
+	if err != nil {
+		return domain.Invitation{}, fmt.Errorf("create invitation: %w", err)
+	}
+
+	// Audit in the same transaction. Only ids and the role are recorded; the
+	// invitee email is PII and must never appear in context (ADR 0020).
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+		Action:     auditdomain.ActionPropertyMemberInvitationInvited,
+		EntityType: auditdomain.EntityPropertyMemberInvitation,
+		EntityID:   &created.ID,
+		Context: map[string]any{
+			auditKeyPropertyID: invitation.PropertyID,
+			auditKeyRole:       string(invitation.Role),
+		},
+	}); err != nil {
+		return domain.Invitation{}, fmt.Errorf("record audit: %w", err)
+	}
+
+	// The action journal row (ADR 0061 §5): an unregistered invitee is known
+	// by the email only — the email is the label snapshot here.
+	entry := historydomain.MemberInvited(invitation.Email)
+	entry.Context[historydomain.CtxKeyRole] = string(invitation.Role)
+	if err := historyapp.RecordScoped(ctx, stores.history, invitation.PropertyID, actor,
+		sharedpolicy.HistoryActorRole(actorRole), entry); err != nil {
+		return domain.Invitation{}, err
+	}
+	return created, nil
+}
+
+// authorizeNewMember applies the AddMember gates: the actor needs the
+// manage-members capability and the property must not be archived (issue #163),
+// and the target user must be neither the property owner nor the actor
+// themselves — ownership is the only self-granted access.
+func (s *AccessService) authorizeNewMember(ctx context.Context, actor, propertyID, userID uuid.UUID) (uuid.UUID, sharedpolicy.Role, error) {
+	owner, actorRole, err := s.requireManage(ctx, actor, propertyID)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	if err := requireNotArchived(ctx, s.statuses, propertyID); err != nil {
+		return uuid.Nil, "", err
+	}
+	if userID == owner {
+		return uuid.Nil, "", domain.ErrCannotAddOwner
+	}
+	if userID == actor {
+		return uuid.Nil, "", domain.ErrCannotAddSelf
+	}
+	return owner, actorRole, nil
+}
+
+// createMembershipInTx performs the transactional core of AddMember: duplicate
+// rejection, the recipient slot decision (issue #158, T4 — without a free slot
+// the membership is created suspended so it does not occupy a slot until one
+// frees up and is recovered FIFO) and the audited insert. The returned flag
+// reports the suspended outcome for the post-commit notification.
+func (s *AccessService) createMembershipInTx(
+	ctx context.Context, stores *txStores, actor uuid.UUID, membership domain.Membership, actorRole sharedpolicy.Role,
+) (created domain.Membership, suspend bool, err error) {
+	if _, err := stores.members.GetByPropertyAndUser(ctx, membership.PropertyID, membership.UserID); err == nil {
+		return domain.Membership{}, false, domain.ErrMemberAlreadyExists
 	} else if !errors.Is(err, domain.ErrMemberNotFound) {
-		return domain.Membership{}, fmt.Errorf("check existing membership: %w", err)
+		return domain.Membership{}, false, fmt.Errorf("check existing membership: %w", err)
 	}
 
-	// Enforce the recipient tariff slot invariant (issue #158, T4): when the
-	// recipient has no free slot, the membership is created suspended so it does
-	// not occupy a slot until one frees up and is recovered FIFO.
-	suspend := false
 	if s.slots != nil {
-		var err2 error
-		suspend, err2 = s.slots.EnforceOnActivation(ctx, tx, userID)
-		if err2 != nil {
-			return domain.Membership{}, fmt.Errorf("check recipient slot: %w", err2)
+		var err error
+		suspend, err = s.slots.EnforceOnActivation(ctx, stores.tx, membership.UserID)
+		if err != nil {
+			return domain.Membership{}, false, fmt.Errorf("check recipient slot: %w", err)
 		}
 	}
 	if suspend {
 		membership.Status = domain.MemberStatusSuspended
-	}
-
-	var created domain.Membership
-	if suspend {
-		created, err = txMembers.CreateWithStatus(ctx, membership)
+		created, err = stores.members.CreateWithStatus(ctx, membership)
 	} else {
-		created, err = txMembers.Create(ctx, membership)
+		created, err = stores.members.Create(ctx, membership)
 	}
 	if err != nil {
-		return domain.Membership{}, fmt.Errorf("create membership: %w", err)
+		return domain.Membership{}, false, fmt.Errorf("create membership: %w", err)
 	}
 
 	// Audit in the same transaction. Only ids and the role are recorded; the
 	// member's email/phone are PII and must never appear in context (ADR 0020).
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
 		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
+		ActorRole:  sharedpolicy.AuditActorRole(actorRole),
 		Action:     auditdomain.ActionPropertyMemberAdded,
 		EntityType: auditdomain.EntityPropertyMember,
 		EntityID:   &created.ID,
 		Context: map[string]any{
-			"property_id": propertyID,
-			"user_id":     userID,
-			"role":        string(role),
-			"status":      string(created.Status),
+			auditKeyPropertyID: membership.PropertyID,
+			auditKeyUserID:     membership.UserID,
+			auditKeyRole:       string(membership.Role),
+			"status":           string(created.Status),
 		},
 	}); err != nil {
-		return domain.Membership{}, fmt.Errorf("record audit: %w", err)
+		return domain.Membership{}, false, fmt.Errorf("record audit: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Membership{}, fmt.Errorf("commit tx: %w", err)
+	// The action journal row (ADR 0061): the member's display name is the
+	// label snapshot — the row survives any later rename or revocation.
+	label, err := userLabel(ctx, s.users, membership.UserID)
+	if err != nil {
+		return domain.Membership{}, false, err
 	}
-
-	// A grant created without a free tariff slot sends the "access waits for a
-	// free slot" email post-commit (issue #162, T6); a send failure is logged
-	// inside the mailer and never fails the add.
-	if suspend {
-		s.lifecycle.SendAccessSuspended(ctx, userID, propertyID)
+	entry := historydomain.MemberAdded(membership.UserID, label)
+	entry.Context[historydomain.CtxKeyRole] = string(membership.Role)
+	if err := historyapp.RecordScoped(ctx, stores.history, membership.PropertyID, actor,
+		sharedpolicy.HistoryActorRole(actorRole), entry); err != nil {
+		return domain.Membership{}, false, err
 	}
-	return created, nil
+	return created, suspend, nil
 }
 
 // ChangeMemberRole changes the role of an existing member. The owner is never a
 // membership row, so it cannot be targeted here; the membership id must belong
 // to the given property.
-func (s *AccessService) ChangeMemberRole(ctx context.Context, actor, propertyID, memberID uuid.UUID, role domain.Role) (domain.Membership, error) {
+func (s *AccessService) ChangeMemberRole(
+	ctx context.Context,
+	actor, propertyID, memberID uuid.UUID,
+	role domain.Role,
+) (domain.Membership, error) {
 	_, actorRole, err := s.requireManage(ctx, actor, propertyID)
 	if err != nil {
 		return domain.Membership{}, err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.Membership{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var updated domain.Membership
+	var wasSuspended bool
+	var roleChanged bool
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		// Confirm the membership exists and belongs to this property before
+		// updating; a missing row is a not-found outcome rather than a silent no-op.
+		existing, err := stores.members.GetByID(ctx, memberID, propertyID)
+		if err != nil {
+			return err
+		}
+		wasSuspended = existing.IsSuspended()
+		roleChanged = existing.Role != role
 
-	txMembers := s.members.WithTx(tx)
-	// Confirm the membership exists and belongs to this property before
-	// updating; a missing row is a not-found outcome rather than a silent no-op.
-	if _, err := txMembers.GetByID(ctx, memberID, propertyID); err != nil {
+		updated, err = stores.members.UpdateRole(ctx, memberID, propertyID, role)
+		if err != nil {
+			return fmt.Errorf("update membership role: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+			Action:     auditdomain.ActionPropertyMemberUpdated,
+			EntityType: auditdomain.EntityPropertyMember,
+			EntityID:   &updated.ID,
+			Context: map[string]any{
+				auditKeyPropertyID: propertyID,
+				auditKeyUserID:     updated.UserID,
+				auditKeyRole:       string(role),
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// The journal records a state change, not an idempotent re-set of the
+		// same role (ADR 0061 §3): a same-role edit writes no row — the gate
+		// the role-change notice below applies to its event too.
+		if roleChanged {
+			label, err := userLabel(ctx, s.users, updated.UserID)
+			if err != nil {
+				return err
+			}
+			if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+				sharedpolicy.HistoryActorRole(actorRole),
+				historydomain.MemberRoleChanged(updated.UserID, label,
+					sharedpolicy.HistoryActorRole(toSharedRole(existing.Role)),
+					sharedpolicy.HistoryActorRole(toSharedRole(role)))); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		return domain.Membership{}, err
 	}
 
-	updated, err := txMembers.UpdateRole(ctx, memberID, propertyID, role)
-	if err != nil {
-		return domain.Membership{}, fmt.Errorf("update membership role: %w", err)
+	// Post-commit notice to the member whose role changed (карта #828, #830)
+	// — best-effort (карта #734, #751). A suspended membership stays silent:
+	// the object was already hidden from its holder (issue #162, T6 canon).
+	// A same-role no-op stays silent too — there is no change for the holder
+	// to learn about. The silence covers the realtime stream as well: no
+	// change dispatches no access frame (the same no-change-no-frame canon as
+	// TestSuspendedRevokePublishesNothing and TestRollbackPublishesNothing in
+	// access_realtime_test.go pin it).
+	if !wasSuspended && roleChanged {
+		publishAccessEvent(ctx, s.events, s.logger, "membership_role_changed", func() error {
+			return s.events.PublishMembershipRoleChanged(ctx, MembershipRoleChanged{
+				MembershipID: updated.ID,
+				PropertyID:   propertyID,
+				RecipientID:  updated.UserID,
+				ActorID:      actor,
+				Role:         role,
+				ChangedAt:    updated.UpdatedAt,
+			})
+		})
 	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberUpdated,
-		EntityType: auditdomain.EntityPropertyMember,
-		EntityID:   &updated.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"user_id":     updated.UserID,
-			"role":        string(role),
-		},
-	}); err != nil {
-		return domain.Membership{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Membership{}, fmt.Errorf("commit tx: %w", err)
+	// The role change's frame rides the journal anchor: the journal row the
+	// change wrote piggybacks its history pair. A same-role no-op dispatches
+	// nothing — no change, no frame (see the silence canon above).
+	if roleChanged {
+		s.publishRealtime(ctx, actor, accessFrame(propertyID), propertyID)
 	}
 	return updated, nil
+}
+
+// removeMembershipInTx is the shared core of deleting one membership row:
+// the delete and the audited record — the audit shape lives here, not in the
+// callers. The caller decides the FIFO recovery of the recipient's suspended
+// accesses (the single revoke recovers immediately, the batch Remove recovers
+// once after all legs) and publishes the post-commit revocation event for the
+// collected active rows (карта #734, #751); a suspended row publishes nothing
+// — the object was already hidden from them (issue #162, T6 canon). The
+// actor role comes from the caller: the single path resolves it in
+// requireManage, the batch in actorRoleOn.
+func removeMembershipInTx(
+	ctx context.Context,
+	stores *txStores,
+	actor uuid.UUID,
+	actorRole sharedpolicy.Role,
+	membership domain.Membership,
+	revokedActive *[]domain.Membership,
+	historyEntry historydomain.Entry,
+) error {
+	if err := stores.members.Delete(ctx, membership.ID, membership.PropertyID); err != nil {
+		return fmt.Errorf("delete membership: %w", err)
+	}
+	if !membership.IsSuspended() && revokedActive != nil {
+		*revokedActive = append(*revokedActive, membership)
+	}
+
+	if err := stores.audit.Record(ctx, auditdomain.Entry{
+		ActorID:    &actor,
+		ActorRole:  sharedpolicy.AuditActorRole(actorRole),
+		Action:     auditdomain.ActionPropertyMemberRemoved,
+		EntityType: auditdomain.EntityPropertyMember,
+		EntityID:   &membership.ID,
+		Context: map[string]any{
+			auditKeyPropertyID: membership.PropertyID,
+			auditKeyUserID:     membership.UserID,
+		},
+	}); err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+
+	// The action journal row (ADR 0061): the caller builds the row — the
+	// single revoke and the bulk participant removal write their own action
+	// ids over the same core.
+	historyEntry.Context[historydomain.CtxKeyUserID] = membership.UserID
+	if err := historyapp.RecordScoped(ctx, stores.history, membership.PropertyID, actor,
+		sharedpolicy.HistoryActorRole(actorRole), historyEntry); err != nil {
+		return err
+	}
+	return nil
+}
+
+// publishGrantedEvents publishes the post-commit «Приглашение в объект»
+// events for active landings (issue #829) — best-effort (карта #734, #751);
+// the granter is the event's actor.
+func publishGrantedEvents(
+	ctx context.Context, publisher AccessEventPublisher, log *slog.Logger, actor uuid.UUID, granted []domain.Membership,
+) {
+	for _, m := range granted {
+		publishAccessEvent(ctx, publisher, log, "membership_granted", func() error {
+			return publisher.PublishMembershipGranted(ctx, MembershipGranted{
+				MembershipID: m.ID,
+				PropertyID:   m.PropertyID,
+				RecipientID:  m.UserID,
+				ActorID:      actor,
+			})
+		})
+	}
+}
+
+// publishSuspendedEvents publishes the post-commit system pause events for
+// suspended grants — best-effort (карта #734, #751); the system suspension
+// has no actor.
+func publishSuspendedEvents(
+	ctx context.Context, publisher AccessEventPublisher, log *slog.Logger, suspended []domain.Membership,
+) {
+	for _, m := range suspended {
+		publishAccessEvent(ctx, publisher, log, "membership_suspended", func() error {
+			return publisher.PublishMembershipSuspended(ctx, MembershipSuspended{
+				MembershipID: m.ID,
+				PropertyID:   m.PropertyID,
+				RecipientID:  m.UserID,
+				ActorID:      uuid.Nil,
+				SuspendedAt:  deref(m.SuspendedAt),
+			})
+		})
+	}
+}
+
+// publishRevokedEvents publishes the post-commit revocation events for the
+// removed active rows — best-effort (карта #734, #751).
+func publishRevokedEvents(
+	ctx context.Context, publisher AccessEventPublisher, log *slog.Logger, actor uuid.UUID, revoked []domain.Membership,
+) {
+	for _, m := range revoked {
+		publishAccessEvent(ctx, publisher, log, "membership_revoked", func() error {
+			return publisher.PublishMembershipRevoked(ctx, MembershipRevoked{
+				MembershipID: m.ID,
+				PropertyID:   m.PropertyID,
+				RecipientID:  m.UserID,
+				ActorID:      actor,
+			})
+		})
+	}
 }
 
 // RevokeMember removes a member's access. The owner cannot be revoked (and is
@@ -250,57 +559,53 @@ func (s *AccessService) RevokeMember(ctx context.Context, actor, propertyID, mem
 		return err
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var membership domain.Membership
+	var revoked []domain.Membership
+	var recovered []domain.Membership
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		membership, err = stores.members.GetByID(ctx, memberID, propertyID)
+		if err != nil {
+			return err
+		}
+		if membership.UserID == owner {
+			return domain.ErrCannotRevokeOwner
+		}
 
-	txMembers := s.members.WithTx(tx)
-	membership, err := txMembers.GetByID(ctx, memberID, propertyID)
+		// The delete goes before the recovery pass: the recovery counts the
+		// recipient's active memberships, and the revoked row must already be
+		// gone for its slot to read as freed (issue #158, T4).
+		label, err := userLabel(ctx, s.users, membership.UserID)
+		if err != nil {
+			return err
+		}
+		if err := removeMembershipInTx(ctx, stores, actor, actorRole, membership, &revoked,
+			historydomain.MemberRemoved(label)); err != nil {
+			return err
+		}
+
+		// Revoking the recipient freed one of their tariff slots: try to recover the
+		// oldest suspended membership FIFO (issue #158, T4).
+		if s.slots != nil {
+			recovered, err = s.slots.RecoverSuspended(ctx, stores.tx, membership.UserID)
+			if err != nil {
+				return fmt.Errorf("recover suspended after revoke: %w", err)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	if membership.UserID == owner {
-		return domain.ErrCannotRevokeOwner
-	}
-
-	if err := txMembers.Delete(ctx, memberID, propertyID); err != nil {
-		return fmt.Errorf("delete membership: %w", err)
-	}
-
-	// Revoking the recipient freed one of their tariff slots: try to recover the
-	// oldest suspended membership FIFO (issue #158, T4).
-	if s.slots != nil {
-		if err := s.slots.RecoverSuspended(ctx, tx, membership.UserID); err != nil {
-			return fmt.Errorf("recover suspended after revoke: %w", err)
-		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(actorRole),
-		Action:     auditdomain.ActionPropertyMemberRemoved,
-		EntityType: auditdomain.EntityPropertyMember,
-		EntityID:   &membership.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-			"user_id":     membership.UserID,
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
-	// Revoking an active membership notifies the former member post-commit
-	// (issue #162, T6); revoking a suspended one is silent (the object was
-	// already hidden from them).
-	if !membership.IsSuspended() {
-		s.lifecycle.SendAccessRevoked(ctx, membership.UserID, propertyID)
-	}
+	publishRevokedEvents(ctx, s.events, s.logger, actor, revoked)
+	// One dispatch for the whole transaction: the pairs dedup per call, a
+	// bulk revoke emits one frame per pair (карта #714, #716). The freed
+	// slot's FIFO recovery dirties each restored object's participants view
+	// in the same dispatch — the coordinator journals no recovery row, so no
+	// history pair piggybacks for it.
+	changed, anchors := removedAccessFrames(revoked)
+	changed = append(changed, recoveredAccessFrames(recovered)...)
+	s.publishRealtime(ctx, actor, changed, anchors...)
 	return nil
 }
 
@@ -312,83 +617,104 @@ func (s *AccessService) LeaveProperty(ctx context.Context, actor, propertyID uui
 	if err != nil {
 		return fmt.Errorf("resolve role: %w", err)
 	}
-	if role == sharedpolicy.RoleNone || role == sharedpolicy.RoleSuspended {
-		// A suspended membership stays indistinguishable from no access here:
-		// the object is hidden from the recipient, so self-exit keeps the
-		// privacy-preserving not-found (T9 lifts the suspension signal only at
-		// the property page entry point).
+	if role == sharedpolicy.RoleNone {
+		// No access stays indistinguishable from no object: self-exit keeps
+		// the privacy-preserving not-found. A suspended membership proceeds —
+		// the recipient sees the blur-card placeholder (ticket #702) and may
+		// leave from its reason sheet (T9 lifted the signal at the property
+		// page; the placeholder list completes the surface).
 		return domain.ErrMemberNotFound
 	}
 	if role == sharedpolicy.RoleOwner {
 		return domain.ErrCannotLeaveOwnProperty
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var membership domain.Membership
+	var recovered []domain.Membership
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		var err error
+		membership, err = stores.members.GetByPropertyAndUser(ctx, propertyID, actor)
+		if err != nil {
+			return err
+		}
 
-	txMembers := s.members.WithTx(tx)
-	membership, err := txMembers.GetByPropertyAndUser(ctx, propertyID, actor)
+		if err := stores.members.Delete(ctx, membership.ID, propertyID); err != nil {
+			return fmt.Errorf("delete membership: %w", err)
+		}
+
+		// Self-exit of an ACTIVE membership freed one of the actor's tariff
+		// slots: try to recover the oldest suspended membership FIFO (issue
+		// #158, T4). A suspended membership holds no slot — leaving it (the
+		// reason sheet's «Покинуть объект», ticket #702) frees nothing, so
+		// the recovery is skipped.
+		if !membership.IsSuspended() && s.slots != nil {
+			recovered, err = s.slots.RecoverSuspended(ctx, stores.tx, actor)
+			if err != nil {
+				return fmt.Errorf("recover suspended after leave: %w", err)
+			}
+		}
+
+		// The audit row carries the same real-role attribution as the
+		// journal row below (issue #859).
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &actor,
+			ActorRole:  sharedpolicy.AuditActorRole(toSharedRole(membership.Role)),
+			Action:     auditdomain.ActionPropertyMemberLeft,
+			EntityType: auditdomain.EntityPropertyMember,
+			EntityID:   &membership.ID,
+			Context: map[string]any{
+				auditKeyPropertyID: propertyID,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+
+		// The action journal row (ADR 0061): the leaver is their own label,
+		// attributed to the membership's real role — the policy's suspended
+		// verdict says the access is hidden, not that the role was the
+		// owner's, so the attribution reads the row the transaction holds.
+		label, err := userLabel(ctx, s.users, actor)
+		if err != nil {
+			return err
+		}
+		if err := historyapp.RecordScoped(ctx, stores.history, propertyID, actor,
+			sharedpolicy.HistoryActorRole(toSharedRole(membership.Role)), historydomain.MemberLeft(label)); err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
 
-	// A suspended membership is already hidden from the recipient (no slot, no
-	// access), so self-exit is not available: the object is invisible to them
-	// (issue #158, T4 AC).
-	if membership.IsSuspended() {
-		return domain.ErrCannotLeaveSuspended
-	}
-
-	if err := txMembers.Delete(ctx, membership.ID, propertyID); err != nil {
-		return fmt.Errorf("delete membership: %w", err)
-	}
-
-	// Self-exit freed one of the actor's tariff slots: try to recover the oldest
-	// suspended membership FIFO (issue #158, T4).
-	if s.slots != nil {
-		if err := s.slots.RecoverSuspended(ctx, tx, actor); err != nil {
-			return fmt.Errorf("recover suspended after leave: %w", err)
-		}
-	}
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &actor,
-		ActorRole:  actorRoleFromPolicyRole(role),
-		Action:     auditdomain.ActionPropertyMemberLeft,
-		EntityType: auditdomain.EntityPropertyMember,
-		EntityID:   &membership.ID,
-		Context: map[string]any{
-			"property_id": propertyID,
-		},
-	}); err != nil {
-		return fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
-	// Self-exit notifies the owner post-commit (issue #162, T6); the leaving
-	// member receives nothing.
+	// Self-exit notifies the owner post-commit (карта #734, #751; the direct
+	// lifecycle email it replaced is gone); the leaving member receives
+	// nothing. A failed owner lookup skips only the owner notification — the
+	// realtime pairs below don't read the owner, and swallowing them with the
+	// lookup would silence the leaver's and the restored legs' screens until
+	// the next stream open (карта #714, #716).
 	owner, err := s.owners.GetOwnerID(ctx, propertyID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "access: owner lookup for member left email failed",
-			slog.String("property_id", propertyID.String()),
-			slog.String("error", err.Error()))
-		return nil
-	}
-	memberName := ""
-	if u, err := s.users.GetByID(ctx, actor); err != nil {
-		s.logger.WarnContext(ctx, "access: member lookup for member left email failed",
-			slog.String("user_id", actor.String()),
+		s.logger.WarnContext(ctx, "access: owner lookup for member left event failed",
+			slog.String(auditKeyPropertyID, propertyID.String()),
 			slog.String("error", err.Error()))
 	} else {
-		memberName = displayName(u)
+		publishAccessEvent(ctx, s.events, s.logger, "member_left", func() error {
+			return s.events.PublishMemberLeft(ctx, MemberLeft{
+				MembershipID: membership.ID,
+				PropertyID:   propertyID,
+				OwnerID:      owner,
+				MemberID:     actor,
+			})
+		})
 	}
-	s.lifecycle.SendMemberLeft(ctx, owner, propertyID, memberName)
+	// The self-exit and the freed slot's FIFO recovery share one dispatch
+	// (карта #714, #716): the exit dirties the object the member left, the
+	// restored legs dirty their own objects — the leaver stays in the
+	// audience at publication (ADR 0062 §4), so the restoration reaches them.
+	frames := accessFrame(propertyID)
+	frames = append(frames, recoveredAccessFrames(recovered)...)
+	s.publishRealtime(ctx, actor, frames, propertyID)
 	return nil
 }
 
@@ -421,7 +747,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 		Role:        sharedpolicy.RoleOwner,
 		IsOwner:     true,
 		DisplayName: displayName(ownerUser),
-		HasEmail:    ownerUser.HasEmail,
+		PhotoURL:    photo.UserPhotoPath(owner, ownerUser.PhotoKey),
 		Status:      domain.MemberStatusActive,
 	})
 
@@ -433,7 +759,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 		u, err := s.users.GetByID(ctx, m.UserID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "access: member user lookup failed",
-				slog.String("user_id", m.UserID.String()),
+				slog.String(auditKeyUserID, m.UserID.String()),
 				slog.String("error", err.Error()))
 			continue
 		}
@@ -443,7 +769,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 			Role:        toSharedRole(m.Role),
 			IsOwner:     false,
 			DisplayName: displayName(u),
-			HasEmail:    u.HasEmail,
+			PhotoURL:    photo.UserPhotoPath(m.UserID, u.PhotoKey),
 			Status:      m.Status,
 			SuspendedAt: m.SuspendedAt,
 		})
@@ -464,7 +790,12 @@ func (s *AccessService) requireManage(ctx context.Context, actor, propertyID uui
 // requireManageAccess is the shared manage-members gate used by both the
 // membership and the invitation services (issue #161, T5). It returns the
 // property owner id (scope) and the actor's resolved role.
-func requireManageAccess(ctx context.Context, policy sharedpolicy.Policy, owners PropertyOwnerResolver, actor, propertyID uuid.UUID) (uuid.UUID, sharedpolicy.Role, error) {
+func requireManageAccess(
+	ctx context.Context,
+	policy sharedpolicy.Policy,
+	owners PropertyOwnerResolver,
+	actor, propertyID uuid.UUID,
+) (uuid.UUID, sharedpolicy.Role, error) {
 	role, err := policy.RoleForProperty(ctx, actor, propertyID)
 	if err != nil {
 		return uuid.UUID{}, "", fmt.Errorf("resolve role: %w", err)
@@ -509,54 +840,59 @@ func toSharedRole(r domain.Role) sharedpolicy.Role {
 	}
 }
 
-// actorRoleFromPolicyRole maps a policy role to the audit actor role so
-// actions of shared-access members are attributed to their real role instead
-// of being masked as the owner's own (issue #166 follow-up). Roles that never
-// reach a Record call through the gates (suspended, none) and any unknown role
-// fall back to the historical owner attribution.
-func actorRoleFromPolicyRole(role sharedpolicy.Role) auditdomain.ActorRole {
-	switch role {
-	case sharedpolicy.RoleFullAccess:
-		return auditdomain.ActorRoleFullAccess
-	case sharedpolicy.RoleViewer:
-		return auditdomain.ActorRoleViewer
-	default:
-		return auditdomain.ActorRoleOwner
-	}
-}
-
 // DisplayName resolves the public display name of a user (issue T11): "Name
-// Surname" when present, otherwise a masked phone — never an email or a raw
-// phone. Used cross-context (the properties sharing banner) via the
+// Surname" when present, otherwise the anonymous label «Пользователь» (карта
+// #1105, аменд #1123: телефон больше не фолбэк) — never a phone, never an
+// email. Used cross-context (the properties sharing banner) via the
 // OwnerDisplayNameResolver port.
 func (s *AccessService) DisplayName(ctx context.Context, userID uuid.UUID) (string, error) {
-	user, err := s.users.GetByID(ctx, userID)
-	if err != nil {
-		return "", fmt.Errorf("lookup user: %w", err)
-	}
-	return displayName(user), nil
+	return lookupLabel(ctx, s.users, userID, "lookup user")
 }
 
+// lookupLabel resolves the user and projects the row-text label through the
+// display canon — the shared lookup plumbing of userLabel and DisplayName.
+// Loud on failure: a broken lookup is a database trouble, wrapped with
+// wrapText.
+func lookupLabel(ctx context.Context, users UserLookup, userID uuid.UUID, wrapText string) (string, error) {
+	u, err := users.GetByID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf(wrapText+": %w", err)
+	}
+	return displayName(u), nil
+}
+
+// anonymousDisplayName is the display-canon fallback for a user with no
+// name (карта #1105, аменд #1123): the anonymous label «Пользователь» —
+// never a phone, never an email.
+const anonymousDisplayName = "Пользователь"
+
+// displayName composes the display name by the ФИО-канон D4 (карта #1324,
+// протокол #1316; поверхности: карточки ленты, чипы шита фильтров,
+// совместный доступ): «Имя Фамилия» — недостающая часть просто не пишется;
+// имени нет — «Пользователь» независимо от фамилии (голая фамилия не
+// показывается, аменд #1317 противоречие №2).
 func displayName(u MemberUser) string {
-	parts := make([]string, 0, 2)
-	if u.Name != nil && *u.Name != "" {
-		parts = append(parts, *u.Name)
+	name := ""
+	if u.Name != nil {
+		name = *u.Name
+	}
+	if name == "" {
+		return anonymousDisplayName
 	}
 	if u.Surname != nil && *u.Surname != "" {
-		parts = append(parts, *u.Surname)
+		return name + " " + *u.Surname
 	}
-	if name := strings.Join(parts, " "); name != "" {
-		return name
-	}
-	// Fall back to a masked phone; never the raw phone or email.
-	return maskPhone(u.Phone)
+	return name
 }
 
-// maskPhone masks all but the country code and last two digits of a phone, so a
-// display name never reveals the full phone or any email (PII).
-func maskPhone(phone string) string {
-	if len(phone) <= 4 {
-		return phone
-	}
-	return phone[:2] + strings.Repeat("*", len(phone)-4) + phone[len(phone)-2:]
+// DisplayNameOf composes the public display name from user fields («Имя
+// Фамилия» by the ФИО-канон D4, otherwise the anonymous label
+// «Пользователь» — never a phone, never an email; карта #1105, аменд
+// #1123). The exported seam for
+// the context's read adapters implementing
+// cross-context ports (ticket #702: the list cards' member names and the
+// suspended placeholders' owner row): the display-name rules live in one
+// place.
+func DisplayNameOf(u MemberUser) string {
+	return displayName(u)
 }

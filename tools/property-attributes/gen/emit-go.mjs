@@ -136,11 +136,13 @@ ${aliasLines.join('\n')}
 function emitFieldsForType() {
   // apartment/apartments share the same map (both = apartmentFields).
   return `// fieldsForType returns the catalog field map for the given property type.
-// All ten property types are covered. Returns nil only for an unknown type.
+// All eleven property types are covered. Returns nil only for an unknown type.
 func fieldsForType(t PropertyType) map[string]fieldDef {
 \tswitch t {
 \tcase PropertyTypeApartment, PropertyTypeApartments:
 \t\treturn apartmentFields
+\tcase PropertyTypeStudio:
+\t\treturn studioFields
 \tcase PropertyTypeRoom:
 \t\treturn roomFields
 \tcase PropertyTypeHouse:
@@ -201,7 +203,7 @@ function emitValidateAttributes() {
   return `// ValidateAttributes validates the given attributes against the catalog for the
 // given property type. Only keys belonging to the catalog of the current type
 // are accepted; unknown keys and null values are rejected. Numeric ranges,
-// enum membership, and cross-field rules are checked. All ten property types
+// enum membership, and cross-field rules are checked. All eleven property types
 // are supported.
 func ValidateAttributes(propType PropertyType, attrs Attributes) ValidationResult {
 \tvar res ValidationResult

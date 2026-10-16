@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -11,14 +10,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/notifications/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
 
 // These integration tests run against a real Postgres via TEST_DATABASE_URL and
-// are skipped when it is unset (same convention as the free-reminder policy
+// are skipped when it is unset (same convention as the reminder policy
 // tests). They cover the acceptance criteria for the push-subscriptions
 // infrastructure (issue #180): upsert idempotency by endpoint, update on
 // re-subscribe, delete (and 404 mapping), and list-by-user.
@@ -29,8 +27,14 @@ func setupPushDB(t *testing.T) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
+	// Same minimal test pool as setupPolicyDB: these tests commit directly
+	// against the shared test database, one statement at a time, so each
+	// parallel fixture needs at most one connection.
+	cfg := database.DefaultPoolConfig()
+	cfg.MinConns = 0
+	cfg.MaxConns = 2
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, databaseURL)
+	pool, err := database.NewPoolWithConfig(ctx, databaseURL, cfg)
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}
@@ -56,6 +60,8 @@ func createPushTestUser(t *testing.T, ctx context.Context, q *genpostgres.Querie
 }
 
 func TestPushSubscriptionRepository_UpsertIdempotentByEndpoint(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)
@@ -113,6 +119,8 @@ func TestPushSubscriptionRepository_UpsertIdempotentByEndpoint(t *testing.T) {
 }
 
 func TestPushSubscriptionRepository_UpsertExpirationTimeNullable(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)
@@ -159,6 +167,8 @@ func TestPushSubscriptionRepository_UpsertExpirationTimeNullable(t *testing.T) {
 }
 
 func TestPushSubscriptionRepository_Delete(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)
@@ -187,13 +197,16 @@ func TestPushSubscriptionRepository_Delete(t *testing.T) {
 		t.Errorf("expected 0 subscriptions after delete, got %d", len(subs))
 	}
 
-	// Deleting again returns ErrNotFound (404 in the API).
-	if err := repo.Delete(ctx, userID, endpoint); !errors.Is(err, application.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound on second delete, got %v", err)
+	// Deleting again is a no-op: DELETE идемпотентен (спека #1028 §5) —
+	// интент «выключено» исполнен, ошибки нет.
+	if err := repo.Delete(ctx, userID, endpoint); err != nil {
+		t.Fatalf("expected idempotent no-op on second delete, got %v", err)
 	}
 }
 
 func TestPushSubscriptionRepository_DeleteScopedByUser(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)
@@ -212,9 +225,10 @@ func TestPushSubscriptionRepository_DeleteScopedByUser(t *testing.T) {
 		t.Fatalf("upsert A: %v", err)
 	}
 
-	// Owner B cannot delete it (scoped query returns 0 rows -> ErrNotFound).
-	if err := repo.Delete(ctx, ownerB, endpoint); !errors.Is(err, application.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound when other user deletes, got %v", err)
+	// Owner B's delete matches 0 rows (scoped query) — и это не ошибка:
+	// чужая подписка чужим DELETE не удаляется, строка остаётся на месте.
+	if err := repo.Delete(ctx, ownerB, endpoint); err != nil {
+		t.Fatalf("expected silent no-op when other user deletes, got %v", err)
 	}
 
 	// It still exists for owner A.
@@ -228,6 +242,8 @@ func TestPushSubscriptionRepository_DeleteScopedByUser(t *testing.T) {
 }
 
 func TestPushSubscriptionRepository_ListByUserOnlyOwn(t *testing.T) {
+	t.Parallel()
+
 	pool := setupPushDB(t)
 	ctx := context.Background()
 	q := genpostgres.New(pool)

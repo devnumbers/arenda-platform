@@ -1,0 +1,13 @@
+{
+  "name": "harness-hooks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Harness-neutral hook scripts (Stop gate, PreToolUse Bash guard) with contract tests. See README.md.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

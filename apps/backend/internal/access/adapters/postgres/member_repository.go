@@ -13,6 +13,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
 
@@ -39,6 +40,18 @@ func (r *MembershipRepository) WithTx(tx transaction.Tx) application.MembershipR
 	return NewMembershipRepository(dbtx)
 }
 
+// mapMembershipUnique translates the partial unique index
+// property_members_active_property_user_uniq (active rows only) into the
+// domain sentinel: the exists-check in the application core races with a
+// parallel grant, so the violation must surface as ErrMemberAlreadyExists —
+// the batch grant answers skipped_duplicate, not a 500 (issue #1122).
+func mapMembershipUnique(err error) error {
+	if pgerr.IsUniqueViolationOnConstraint(err, "property_members_active_property_user_uniq") {
+		return domain.ErrMemberAlreadyExists
+	}
+	return err
+}
+
 // Create inserts a membership record and returns the created membership. The
 // row is created with the default 'active' status.
 func (r *MembershipRepository) Create(ctx context.Context, m domain.Membership) (domain.Membership, error) {
@@ -50,7 +63,7 @@ func (r *MembershipRepository) Create(ctx context.Context, m domain.Membership) 
 		GrantedBy:  pgconv.UUIDToPgtype(m.GrantedBy),
 	})
 	if err != nil {
-		return domain.Membership{}, err
+		return domain.Membership{}, mapMembershipUnique(err)
 	}
 	return membershipFromRow(row), nil
 }
@@ -71,7 +84,7 @@ func (r *MembershipRepository) CreateWithStatus(ctx context.Context, m domain.Me
 		Status:     status.String(),
 	})
 	if err != nil {
-		return domain.Membership{}, err
+		return domain.Membership{}, mapMembershipUnique(err)
 	}
 	return membershipFromRow(row), nil
 }
@@ -254,17 +267,6 @@ func (r *MembershipRepository) CountActiveByUser(ctx context.Context, userID uui
 	return int(count), nil
 }
 
-// CountSuspendedByUser returns the number of suspended memberships held by the
-// user (shared objects hidden from the recipient due to a tariff slot
-// shortage). See issue #158 (T4).
-func (r *MembershipRepository) CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error) {
-	count, err := r.q().CountSuspendedMembersByUser(ctx, pgconv.UUIDToPgtype(userID))
-	if err != nil {
-		return 0, err
-	}
-	return int(count), nil
-}
-
 // ListActiveByPropertyOwner returns the active memberships across all of the
 // owner's properties.
 func (r *MembershipRepository) ListActiveByPropertyOwner(ctx context.Context, ownerID uuid.UUID) ([]domain.Membership, error) {
@@ -291,6 +293,52 @@ func (r *MembershipRepository) ListActiveByUser(ctx context.Context, userID uuid
 	out := make([]domain.Membership, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, membershipFromRow(row))
+	}
+	return out, nil
+}
+
+// ListForRemovalByUser returns the person's memberships (any status, with
+// ids) on the properties the actor manages, archived included — the removal
+// scope of «Отозвать и удалить» (issue #694). The SQL scope is the
+// authorization (issue #693). The role is not part of the removal projection:
+// revoking does not read it.
+func (r *MembershipRepository) ListForRemovalByUser(ctx context.Context, personID, actorID uuid.UUID) ([]domain.Membership, error) {
+	rows, err := r.q().ListParticipantMembershipsForRemoval(ctx, postgres.ListParticipantMembershipsForRemovalParams{
+		PersonID: pgconv.UUIDToPgtype(personID),
+		ActorID:  pgconv.UUIDToPgtype(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Membership, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.Membership{
+			ID:         pgconv.UUIDFromPgtype(row.ID),
+			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+			UserID:     pgconv.UUIDFromPgtype(row.UserID),
+			Status:     domainMemberStatus(row.Status),
+		})
+	}
+	return out, nil
+}
+
+// ListForRemovalByOwner returns every membership (any status, with ids) on
+// the properties the actor owns — the whole removal scope of «Отозвать
+// доступ всем» (issue #1310), archived included like the per-person listing.
+// The SQL scope is the authorization.
+func (r *MembershipRepository) ListForRemovalByOwner(ctx context.Context, actorID uuid.UUID) ([]domain.Membership, error) {
+	rows, err := r.q().ListParticipantMembershipsForRemovalByOwner(ctx, pgconv.UUIDToPgtype(actorID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Membership, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.Membership{
+			ID:         pgconv.UUIDFromPgtype(row.ID),
+			PropertyID: pgconv.UUIDFromPgtype(row.PropertyID),
+			UserID:     pgconv.UUIDFromPgtype(row.UserID),
+			Status:     domainMemberStatus(row.Status),
+		})
 	}
 	return out, nil
 }

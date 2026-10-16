@@ -2,15 +2,16 @@
 
 import {
   useQuery,
-  useMutation,
   useQueryClient,
   type UseQueryResult,
   type UseMutationResult,
 } from '@tanstack/react-query';
+import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
-import { ApiError } from '@/shared/api/errors';
-import type { components } from '@/shared/api/generated';
-import { type TariffName } from '@/entities/user/model/types';
+import { nullOn404 } from '@/shared/api/null-on-404';
+import type { ApiError } from '@/shared/api/errors';
+import type { components } from '@/shared/api/dto';
+import { type TariffName } from '@/entities/user';
 import {
   mapAddPaymentMethodResponse,
   mapChangeTariffResponse,
@@ -18,7 +19,7 @@ import {
   mapSubscriptionPaymentResponse,
   mapSubscriptionResponse,
   mapTariffResponse,
-} from '@/entities/billing/model/mappers';
+} from '@/entities/billing';
 import type {
   AddPaymentMethodResult,
   ChangeTariffResult,
@@ -26,10 +27,11 @@ import type {
   Subscription,
   SubscriptionPayment,
   Tariff,
-} from '@/entities/billing/model/types';
-import { billingKeys } from './keys';
+} from '@/entities/billing';
+import { billingKeys } from '@/shared/api/query-keys';
 
 type AutoRenewRequest = components['schemas']['AutoRenewRequest'];
+type CancelSubscriptionRequest = components['schemas']['CancelSubscriptionRequest'];
 type ChangeTariffRequest = Omit<
   components['schemas']['ChangeTariffRequest'],
   'tariffName'
@@ -39,9 +41,6 @@ type ChangeTariffRequest = Omit<
 type AddPaymentMethodRequest = components['schemas']['AddPaymentMethodRequest'];
 type SubscriptionPaymentsResponse =
   components['schemas']['SubscriptionPaymentsResponse'];
-
-/** Pending-платёж старше этого возраста считается «зависшим» — UI меняет текст. */
-export const PAYMENT_STALE_MS = 15 * 60 * 1000;
 
 const PAYMENT_POLL_INTERVAL_MS = 5000;
 const PAYMENT_POLL_MAX_AGE_MS = 30 * 60 * 1000;
@@ -68,11 +67,13 @@ export function useTariffs(): UseQueryResult<Tariff[], ApiError> {
   });
 }
 
-export function useSubscription(): UseQueryResult<Subscription, ApiError> {
+/** 404 → null — «подписки нет» (#768): отсутствие подписки — состояние
+ * данных, а не ошибка; правило — в nullOn404. */
+export function useSubscription(): UseQueryResult<Subscription | null, ApiError> {
   return useQuery({
     queryKey: billingKeys.subscription,
-    queryFn: () => apiClient<components['schemas']['Subscription']>('/subscription'),
-    select: mapSubscriptionResponse,
+    queryFn: () => nullOn404(() => apiClient<components['schemas']['Subscription']>('/subscription')),
+    select: (data) => (data === null ? null : mapSubscriptionResponse(data)),
   });
 }
 
@@ -83,7 +84,7 @@ export function useToggleAutoRenew(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ enabled }: AutoRenewRequest) => {
       await apiClient<void>('/subscription/auto-renew', {
         method: 'PATCH',
@@ -91,20 +92,40 @@ export function useToggleAutoRenew(): UseMutationResult<
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
 
-export function useCancelSubscription(): UseMutationResult<void, ApiError, void> {
+export function useCancelSubscription(): UseMutationResult<
+  void,
+  ApiError,
+  CancelSubscriptionRequest | void
+> {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async () => {
-      await apiClient<void>('/subscription/cancel', { method: 'POST' });
+  return useGuardedMutation({
+    mutationFn: async (request?: CancelSubscriptionRequest | void) => {
+      await apiClient<void>('/subscription/cancel', {
+        method: 'POST',
+        body: JSON.stringify(request ?? {}),
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+    },
+  });
+}
+
+export function useResumeSubscription(): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+
+  return useGuardedMutation({
+    mutationFn: async () => {
+      await apiClient<void>('/subscription/resume', { method: 'POST' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -116,7 +137,7 @@ export function useChangeTariff(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async ({ tariffName, period }: ChangeTariffRequest) => {
       const response = await apiClient<components['schemas']['ChangeTariffResponse']>(
         '/subscription/change',
@@ -128,7 +149,7 @@ export function useChangeTariff(): UseMutationResult<
       return mapChangeTariffResponse(response);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -149,7 +170,7 @@ export function useAddPaymentMethod(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (body: AddPaymentMethodRequest) => {
       const response = await apiClient<components['schemas']['AddPaymentMethodResponse']>(
         '/subscription/payment-methods',
@@ -161,7 +182,7 @@ export function useAddPaymentMethod(): UseMutationResult<
       return mapAddPaymentMethodResponse(response);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
     },
   });
 }
@@ -173,7 +194,7 @@ export function useActivatePaymentMethod(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (id: string) => {
       await apiClient<void>(
         `/subscription/payment-methods/${encodeURIComponent(id)}/activate`,
@@ -181,8 +202,8 @@ export function useActivatePaymentMethod(): UseMutationResult<
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -194,15 +215,15 @@ export function useSyncPaymentMethods(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: () =>
       apiClient<components['schemas']['PaymentMethodsResponse']>(
         '/subscription/payment-methods/sync',
         { method: 'POST' },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
     },
   });
 }
@@ -214,7 +235,7 @@ export function useDeletePaymentMethod(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useGuardedMutation({
     mutationFn: async (id: string) => {
       await apiClient<void>(
         `/subscription/payment-methods/${encodeURIComponent(id)}`,
@@ -222,8 +243,14 @@ export function useDeletePaymentMethod(): UseMutationResult<
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
-      queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
+      void queryClient.invalidateQueries({ queryKey: billingKeys.subscription });
+    },
+    onError: () => {
+      // Отказ (409 in use — карта успела стать активной) означает, что
+      // локальный список устарел: пересинхронизируем, иначе гард удаления
+      // и радио продолжат показывать ушедшее состояние (#625).
+      void queryClient.invalidateQueries({ queryKey: billingKeys.paymentMethods });
     },
   });
 }
@@ -237,29 +264,6 @@ export function useSubscriptionPayments(): UseQueryResult<
     queryFn: () =>
       apiClient<components['schemas']['SubscriptionPaymentsResponse']>('/subscription/payments'),
     select: (data) => data.items.map(mapSubscriptionPaymentResponse),
-  });
-}
-
-export function usePendingPayment(): UseQueryResult<
-  SubscriptionPayment | undefined,
-  ApiError
-> {
-  return useQuery({
-    queryKey: billingKeys.payments,
-    queryFn: () =>
-      apiClient<components['schemas']['SubscriptionPaymentsResponse']>('/subscription/payments'),
-    select: (data) =>
-      data.items
-        .map(mapSubscriptionPaymentResponse)
-        .filter((payment) => payment.status === 'pending')
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        )[0],
-    refetchInterval: (query) =>
-      hasRecentPendingPayment(query.state.data)
-        ? PAYMENT_POLL_INTERVAL_MS
-        : false,
   });
 }
 

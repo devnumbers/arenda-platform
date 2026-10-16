@@ -2,239 +2,586 @@
 
 import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
-import {useCallback, useMemo, useState} from 'react';
+import React from 'react';
 import {notify} from '@/shared/lib/notifications';
 import {goBack} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
+import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import {
-    type DeletePropertyMode,
-    useArchiveProperty,
-    useDeleteProperty,
-    useProperty,
-    useUnarchiveProperty,
-    useUpdateProperty
-} from '@/features/properties/api/hooks';
-import {useCompleteLease, usePropertyLeases,} from '@/features/leases/api/hooks';
+  propertyTypeLabels,
+  useArchiveProperty,
+  useDeleteProperty,
+  usePropertiesWithMeta,
+  useProperty,
+  useSetPropertyPin,
+  useUnarchiveProperty,
+  useUpdateProperty,
+} from '@/features/properties';
+import { propertyPermissions } from '@/entities/property';
+import { useLeaveProperty } from '@/features/participants';
 import {
-    type OperationsFilters,
-    useOperations,
-    usePropertyOperationsSummary,
-} from '@/features/operations/api/hooks';
-import {useOperationCategories} from '@/features/operation-categories/api';
-import {formatDateForApi} from '@/entities/operation/lib/dates';
-import {ApiError} from '@/shared/api/errors';
-import {findCurrentLease, getPropertyPageStatus,} from '../lib/get-property-page-status';
+  consumeRentalCompleteResume,
+  requestRentalCompleteResume,
+  useDeleteRental,
+  useRentals,
+  rentalActionState,
+  type RentalActionState,
+  type RentalCompleteResumeAction,
+} from '@/features/rentals';
+import {
+  operationsMonthOf,
+  operationsMonthRange,
+  overduePaymentIdsOf,
+  PaymentsAddSheet,
+  usePayments,
+  usePropertyOperationsSummary,
+  usePropertyOverdueOperations,
+} from '@/features/payments';
+import {useContact, useContacts} from '@/features/contacts';
+import {
+  useActiveTasks,
+  useCompleteTask,
+  useUncompleteTask,
+} from '@/features/tasks';
+import {dateToIsoLocal} from '@/shared/lib/calendar';
+import {useSubscription} from '@/features/subscription';
+import {isPaidTariff} from '@/entities/user';
+import type {ApiError} from '@/shared/api/errors';
 import {resolvePropertyDetailError} from '../lib/resolve-property-detail-error';
-import {PropertyDetailHeader} from './PropertyDetailHeader';
-import {PropertyGallery} from './PropertyGallery';
-import {PropertyStatusSection} from './PropertyStatusSection';
-import {PropertyLeaseCard} from './PropertyLeaseCard';
-import {PropertyTenantCard} from './PropertyTenantCard';
-import {PropertyOperationsSection} from './PropertyOperationsSection';
-import {OverdueOperationsBadge} from './OverdueOperationsBadge';
-import {PropertyOperationsActions} from './PropertyOperationsActions';
-import {PropertyOperationsCard} from './PropertyOperationsCard';
-import {PropertyInfoCard} from './PropertyInfoCard';
-import {PropertyAttributesSection} from './PropertyAttributesSection';
-import {PropertyContactsSection} from './PropertyContactsSection';
-import {PropertyRemindersSection} from './PropertyRemindersSection';
-import {PropertyActionMenu} from './PropertyActionMenu';
-import {PropertyBlockedModal} from './PropertyBlockedModal';
-import {PropertyArchiveModal} from './PropertyArchiveModal';
-import {PropertyDeleteModal} from './PropertyDeleteModal';
-import {PropertyEndLeaseModal} from './PropertyEndLeaseModal';
-import {PropertySharingModal} from './PropertySharingModal';
-import {PropertySharedBanner} from './PropertySharedBanner';
-import {PropertySuccessBanner} from './PropertySuccessBanner';
-import {PropertyDetailLoading} from './PropertyDetailLoading';
+import {
+  buildPropertyManageActions,
+  buildPropertyStatusSheetItems,
+  deleteBlockedByRental,
+  guardedStatusAction,
+  isRentalSectionVisible,
+  propertyStatusSubtitle,
+  type GuardedStatusAction,
+  type PropertyDetailActionKey,
+} from '../lib/property-detail-status';
+import {
+  propertySectionImages,
+  resolvePropertyDetailEmptySet,
+  resolvePropertySectionEmpty,
+  type PropertyDetailSectionKey,
+} from '../lib/property-sections';
+import {propertyPaymentGroups} from '../lib/payments-strip';
+import {propertySectionCta} from '../lib/property-section-cta';
+import {operationsSectionTitle} from '../lib/operations-section';
+import {propertyDetailTasks} from '../lib/detail-tasks';
+import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
+import {TopNav, TopNavTitle, PageContent, ConfirmDialog} from '@/shared/ui/design';
+import {PropertyMediaBlock} from './PropertyMediaBlock';
+import {
+  PropertyRentalBlock,
+} from './PropertyRentalBlock';
+import {PropertyPaymentsIconsBlock} from './PropertyPaymentsIconsBlock';
+import {PropertyOperationsBlock} from './PropertyOperationsBlock';
+import {PropertyContactsBlock} from './PropertyContactsBlock';
+import {PropertyTasksBlock} from './PropertyTasksBlock';
+import {PropertyApartmentBlock} from './PropertyApartmentBlock';
+import {
+  PropertySectionCard,
+  PropertySectionEmpty,
+} from './PropertySectionCard';
+import {
+  PropertyManageSection,
+  PropertyStatusSheet,
+} from './PropertyDetailActions';
+import {PropertyDetailKebab} from './PropertyDetailKebab';
+import {PropertyDetailBackButton} from './PropertyDetailBackButton';
+import {PropertyAccessPill} from './PropertyAccessPill';
+import {PropertyArchivedPill} from './PropertyArchivedPill';
+import {propertyHeaderPills} from '../lib/property-header-pills';
+import {PropertyOwnerSection} from './PropertyOwnerSection';
+import {PropertyDetailLoading, PropertySectionEmptySkeleton, PropertyPaymentsStripSkeleton} from './PropertyDetailLoading';
 import {PropertyDetailError} from './PropertyDetailError';
 import {PropertyNotFoundScreen} from './PropertyNotFoundScreen';
 import {PropertySuspendedScreen} from './PropertySuspendedScreen';
-import styles from './PropertyDetailPage.module.css';
 
 function showMutationError(error: ApiError): void {
     notify.scenarios.property.saveError({description: error.detail});
 }
 
-const EXPORT_FILENAME_STAR_PATTERN = /filename\*=UTF-8''([^;]+)/;
-
-function resolveExportFilename(disposition: string): string {
-    const match = EXPORT_FILENAME_STAR_PATTERN.exec(disposition);
-    if (!match) return 'export.xlsx';
-    try {
-        return decodeURIComponent(match[1]);
-    } catch {
-        return 'export.xlsx';
-    }
-}
-
+/**
+ * Детализация объекта — новый каркас карты #583 (тикет #588; Figma
+ * 1554:98469 — приветственные пустые, 1554:100751 — обычные, 1186:44996 —
+ * ПК, 1186:44992 — планшет): шапка «Объект» со стрелкой назад (у любого
+ * тарифа, решение владельца #1240 — звезда-апселл снесена; макет
+ * 3225-77427), кебаб справа (1186:44996); медиа-блок (плейсхолдер-круг —
+ * рендер фото решается на приёмке); секции-карточки с пустыми
+ * состояниями — наполнение в #589; «Управление» — контекстные действия;
+ * шиты смены статуса и подтверждение архивации (1581:55389); тосты
+ * результатов (1581:55564 / 1581:54666 / 1581:55041). «Объект» = кебаб
+ * «Изменить статус» — секция «Управление» дублирует те же действия.
+ * Занятость (срез машины «Действий аренды», #986) приходит из аренд
+ * объекта: Начать ↔ Удалить («Ожидает начала») ↔ Завершить.
+ *
+ * Завершение аренды — единый путь через мастер итогов (#534; решение
+ * владельца 14.10.2026): «Завершить аренду» — из шита статуса,
+ * «Управления» и кнопки блока «Аренда» — открывает мастер
+ * /properties/[id]/rentals/complete (дата, залог, итоги); быстрый шит
+ * #627 (Figma 1583:56380) снесён. Смотрящему мастер честно отказывает
+ * (ADR 0053 §3). Гард удаления (#632) ведёт туда же — удаление объекта
+ * повторяется вручную после завершения.
+ *
+ * Машина «Действий аренды» (#986, карта #984; rentals/CONTEXT.md):
+ * арендная строка поверхностей объекта — срез одного доменного селектора
+ * rentalActionState (features/rentals): аренды нет → «Начать аренду»,
+ * «Ожидает начала» → «Удалить аренду» (канон подтверждения — удаление
+ * завершённой аренды #535; успех без тоста — блок «Аренда» сам перетекает
+ * в пустое), «идёт» → «Завершить аренду». Правка аренды на объекте нет —
+ * только со страницы аренды; страница аренды ест тот же селектор (#987).
+ *
+ * Guard смены статуса (#628; Figma 1583:55882): у объекта с незавершённой
+ * арендой «Объект на ремонте» и «Перевести в архив» открывают шит «Нельзя
+ * изменить статус…». Подтверждение — по машине: у идущей аренды — уход в
+ * мастер итогов с меткой продолжения (rental-complete-resume-session),
+ * выбранный статус применяется автоматически после успешного завершения
+ * (решение владельца 14.10.2026; прежде было составное прямое завершение,
+ * решение 12.09); у «Ожидает начала» «Удалить аренду» сносит аренду
+ * (#985) и тут же применяет статус (решение владельца 30.09 — завершение
+ * будущей аренды не существует). Отказ авто-статуса — тост ошибки,
+ * повтор ручной (гард после завершения не стоит). Без аренды — прежнее
+ * поведение (мутация / архивный конфирм).
+ *
+ * Шит перед пином (#630; Figma 1583:57452): «Сделать основным» из
+ * «Управления» не мутирует сразу — открывает шит-объяснение
+ * «Этот объект будет открываться первым…» с кнопками «Сделать объект
+ * основным» / «Понятно»; «Убрать из основных» остаётся прямым действием
+ * (шита в макетах нет). Только платный тариф — у базового строк пина
+ * нет (canPin), звезда-апселл не тронута.
+ *
+ * Наполнение секций живыми данными (#589; Figma 1185:40820 — активная
+ * аренда, 1581:53905 — срок подошёл к концу, 1193:48779 — без аренды
+ * с платежами, 1193:49273 — нули): «Аренда» — прогресс платежей и
+ * кнопки Продлить/Завершить; «Регулярные платежи» — группы иконок
+ * категорий с точками просрочки; «Операции в <месяц>» — сводка месяца;
+ * «Контакты» — арендатор + контакты объекта; «Задачи» — сводка
+ * (макетом не покрыта — сверить на приёмке); «<Тип>» — характеристики.
+ * Пустые состояния секций — по фактическим данным секции (#588 задавал
+ * каркас), набор копирайта — по числу объектов.
+ */
 export function PropertyDetailPage(): JSX.Element {
     const params = useParams<{ id: string }>();
-    const id = params.id ?? '';
+    const id = params.id;
     const router = useRouter();
 
     const propertyQuery = useProperty(id);
-    const leasesQuery = usePropertyLeases(id);
-    const summaryQuery = usePropertyOperationsSummary(id);
+
+    // Количество активных объектов живёт только в списочном ответе (#584) —
+    // читаем из общего кэша хаба/лендинга ради выбора набора пустых.
+    const listQuery = usePropertiesWithMeta();
+    // Гейт #769: property-scoped запросы секций стартуют только после
+    // успеха детали — на упавшей детали (404 / 403 membership_suspended)
+    // гард deep-link показывается сразу, и зависимые запросы не
+    // простреливают 404-волнами по нечитаемому объекту.
+    const propertyLoaded = propertyQuery.isSuccess;
+    // Текущая (незавершённая) аренда — источник блока «Аренда» (#589) и
+    // арендатора в «Контактах»; точный источник — аренды самого объекта.
+    const rentalsQuery = useRentals(id, { enabled: propertyLoaded });
+    const subscriptionQuery = useSubscription();
+
+    // Данные секций (#589): правила платежей с точками просрочки, сводка
+    // оплаченных операций за текущий месяц (+ all-time — выбор между
+    // сводкой и «Операций еще не было», как на экране операций), контакты
+    // объекта и активные задачи.
+    const today = dateToIsoLocal(new Date());
+    const paymentsQuery = usePayments(id, '', { enabled: propertyLoaded });
+    const overdueQuery = usePropertyOverdueOperations(id, '', { enabled: propertyLoaded });
+    // Сводка секции «Операции в <месяц>» — за текущий календарный месяц
+    // (карта #669: сводка объекта месячная и после дефолта «весь период»
+    // на лентах); границы берутся напрямую из модели месяца. Месяц —
+    // по факту оплаты, в согласии с лентой операций (решение #933/#994).
+    const operationsPeriod = operationsMonthRange(operationsMonthOf(today));
+    const operationsQuery = usePropertyOperationsSummary(id, {
+        status: 'paid',
+        order: 'desc',
+        sort: OPERATIONS_FEED_SORT,
+        dateFrom: operationsPeriod.from,
+        dateTo: operationsPeriod.to,
+    }, { enabled: propertyLoaded });
+    const operationsEverQuery = usePropertyOperationsSummary(id, {
+        status: 'paid',
+        order: 'desc',
+        sort: OPERATIONS_FEED_SORT,
+    }, { enabled: propertyLoaded });
+    const contactsQuery = useContacts(id, '', { enabled: propertyLoaded });
+    const tasksQuery = useActiveTasks(id, { enabled: propertyLoaded });
+    const completeTask = useCompleteTask(id);
+    const uncompleteTask = useUncompleteTask(id);
 
     const updateProperty = useUpdateProperty();
     const archiveProperty = useArchiveProperty();
     const unarchiveProperty = useUnarchiveProperty();
-    const completeLease = useCompleteLease();
+    const setPin = useSetPropertyPin();
     const deleteProperty = useDeleteProperty();
+    const leaveProperty = useLeaveProperty();
 
-    const [blockedOpen, setBlockedOpen] = useState(false);
-    const [endLeaseOpen, setEndLeaseOpen] = useState(false);
-    const [archiveOpen, setArchiveOpen] = useState(false);
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [successBannerOpen, setSuccessBannerOpen] = useState(false);
-    const [sharingOpen, setSharingOpen] = useState(false);
-    const [selectedLeaseId, setSelectedLeaseId] = useState<string>('');
+    const [statusSheetOpen, setStatusSheetOpen] = React.useState(false);
+    // Guard #628: какое статусное действие запросено из-под гарда; null —
+    // шит закрыт. Само действие (ремонт/архив) применяется в
+    // handleGuardConfirm после разводки машины (#986): завершения идущей
+    // аренды или удаления «Ожидает начала». Ветка машины замирает на
+    // момент открытия: после первой мутации композита состояние объекта
+    // уже другое (аренда снесена) — тексты шита и ветку подтверждения
+    // живое состояние перечитывать не должно.
+    const [guardedAction, setGuardedAction] = React.useState<GuardedStatusAction | null>(null);
+    const [guardUpcoming, setGuardUpcoming] = React.useState(false);
+    // Guard удаления #632: тап «Удалить объект» у объекта с незавершённой
+    // арендой не открывает шит удаления — сперва разводка машины (#986):
+    // «Завершить аренду» у идущей, «Удалить аренду» у «Ожидает начала».
+    // Ветка тоже замирает на момент открытия — так же, как у гарда #628.
+    const [deleteGuardOpen, setDeleteGuardOpen] = React.useState(false);
+    const [deleteGuardUpcoming, setDeleteGuardUpcoming] = React.useState(false);
+    // Шит удаления аренды (#986; «Ожидает начала»): канон удаления
+    // завершённой аренды (rental-completed-screen).
+    const [deleteRentalSheetOpen, setDeleteRentalSheetOpen] = React.useState(false);
+    // Шит пина #630: подтверждение перед «Сделать основным».
+    const [pinSheetOpen, setPinSheetOpen] = React.useState(false);
+    const [archiveOpen, setArchiveOpen] = React.useState(false);
+    const [deleteOpen, setDeleteOpen] = React.useState(false);
+    // Канонный шит «Добавить платёж» пустой секции «Регулярные платежи»
+    // (#1066): проверка черновика и выбор типа — как на странице платежей
+    // объекта.
+    const [paymentsSheetOpen, setPaymentsSheetOpen] = React.useState(false);
+    // Шит выхода участника (#703, макет 2235-100370): «Управление» →
+    // «Покинуть объект» — канон-подтверждение #701 и возврат к объектам.
+    const [leaveOpen, setLeaveOpen] = React.useState(false);
 
     const property = propertyQuery.data;
-    const leases = useMemo(() => leasesQuery.data?.items ?? [], [leasesQuery.data]);
+    // Пилюли шапки (#773): «В архиве» у архивного объекта (признак для
+    // любого читателя — чужой архивный живёт только deep-link'ом) и роль
+    // доступа у чужого.
+    const headerPills = propertyHeaderPills(property);
 
-    const pageStatus = useMemo(
-        () => (property ? getPropertyPageStatus(property.status, leases) : 'free'),
-        [property, leases],
+    // Машина «Действий аренды» (#986): нет → Начать, «Ожидает начала» →
+    // Удалить, идёт → Завершить. До загрузки аренд — «нет», как и прежде
+    // (блок «Аренда» показывает скелетон, строкам действий это не вредит).
+    const rentalState: RentalActionState = rentalsQuery.data
+        ? rentalActionState(rentalsQuery.data)
+        : { kind: 'none' };
+    const currentRental = rentalState.kind === 'none' ? undefined : rentalState.rental;
+    // Секция «Аренда» — доработка #1050: на ремонте жива как путь к
+    // завершённой истории (без CTA, ссылка — в «Прошлые аренды»); правило
+    // видимости — доменное, в property-detail-status.
+    const hasCompletedRentals = (rentalsQuery.data ?? []).some(
+        (rental) => rental.status === 'completed',
     );
-    const currentLease = useMemo(() => findCurrentLease(leases), [leases]);
-    const categoriesQuery = useOperationCategories('income');
-    // Collect every rent category id across the actor's own and shared-access
-    // accounts: rent operations of a shared object belong to the owner's rent
-    // category, not the member's own, so a single find() would filter them out.
-    const rentCategoryIds = useMemo(
-        () => categoriesQuery.data
-            ?.filter((category) => category.code === 'rent')
-            .map((category) => category.id) ?? [],
-        [categoriesQuery.data],
+    const rentalSectionVisible = property
+        ? isRentalSectionVisible(property.status, rentalState, hasCompletedRentals)
+        : true;
+    // Сентинел хука удаления: id пуст до загрузки аренд — сам хук
+    // безобиден, вызов мутации гардится в handleDeleteRental.
+    const currentRentalId = currentRental?.id ?? null;
+    const deleteRental = useDeleteRental(id, currentRentalId ?? '');
+
+    const payments = paymentsQuery.data ?? [];
+    // Платежи с накопленной просрочкой — красная точка на иконке
+    // (как на «Платежах объекта»: просрочки приходят порциями).
+    const overduePaymentIds = overduePaymentIdsOf(overdueQuery.data ?? []);
+    const paymentGroups = propertyPaymentGroups(payments, overduePaymentIds, today);
+    const contacts = contactsQuery.data ?? [];
+    const tenant = currentRental?.tenant ?? null;
+    // Фото арендатора — из его карточки отдельным запросом (без арендатора
+    // запрос спит); почему списком книги его не достать — у пропа
+    // tenantPhotoUrl PropertyContactsBlock (#1335).
+    const tenantContactQuery = useContact(tenant?.contactId ?? '');
+    // Арендатор уже показан отдельной строкой с бейджем роли — из книги
+    // его исключаем, чтобы человек не дублировался (макет 1185:40820);
+    // максимум 3 строки блока: арендатор + 2 контакта (решение владельца
+    // 11.09), без арендатора — 3 контакта.
+    const propertyContacts = (
+        tenant ? contacts.filter((contact) => contact.id !== tenant.contactId) : contacts
+    ).slice(0, tenant !== null ? 2 : 3);
+    const detailTasks = tasksQuery.data ? propertyDetailTasks(tasksQuery.data) : [];
+    const tasksToday = tasksQuery.data?.today;
+    const apartmentRows = property
+        ? propertyApartmentSummaryRows(property.type, property.attributes)
+        : [];
+    // «Операций еще не было» — только когда оплаченных операций нет
+    // вовсе (all-time сводка), иначе блок месяца с нулями.
+    const operationsNever =
+        operationsEverQuery.isSuccess &&
+        operationsEverQuery.data.incomeTotalKopecks === 0 &&
+        operationsEverQuery.data.expenseTotalKopecks === 0;
+
+    // Пока список не загружен, считаем объект единственным — приветственный
+    // набор (первый объект); правило переключения наборов — на приёмке.
+    const emptySet = resolvePropertyDetailEmptySet(listQuery.data?.items.length ?? 1);
+
+    // Центральные права объекта (#703): «Управление»/кебаб — ролевой
+    // canMutate (билдеры ветвят архив сами: архивный владелец видит
+    // «Вернуть из архива» и удаление), «Покинуть объект» — canLeave.
+    // canManageMembers — owner-only зеркало политики участников (D8
+    // #1304): у полного доступа пропадают только контролы участников.
+    // Create-CTA пустых секций — шов propertySectionCta (#774): зритель
+    // не видит их вовсе, архив глушит (#773).
+    const permissions = propertyPermissions(
+        propertyQuery.isSuccess ? property : undefined,
     );
-    const payableRentFilters = useMemo<OperationsFilters>(
-        () => ({
-            lease_id: currentLease?.id,
-            category_id: rentCategoryIds.length > 0 ? rentCategoryIds : undefined,
-            status: ['pending', 'overdue'],
-            sort: 'operation_date_asc',
-            limit: 1,
-        }),
-        [currentLease?.id, rentCategoryIds],
-    );
-    const payableRentQuery = useOperations(payableRentFilters, {
-        enabled: Boolean(currentLease?.id) && rentCategoryIds.length > 0,
-    });
-    const isPayRentLoading = Boolean(currentLease) && payableRentQuery.isFetching;
+    const sectionCta = propertySectionCta(permissions);
+    // «Основной объект» — платная возможность: строк пина в «Управлении»
+    // у базового тарифа нет (звезда-апселл в шапке снесена, #1240).
+    const isPaid = subscriptionQuery.data
+        ? isPaidTariff(subscriptionQuery.data.tariff.name)
+        : true;
+    const isPinned = property?.pinned_at != null;
 
-    const overdueFilters = useMemo<Omit<OperationsFilters, 'property_id'>>(
-        () => ({
-            status: ['overdue'],
-            sort: 'operation_date_asc',
-            limit: 3,
-        }),
-        [],
-    );
-    const upcomingFilters = useMemo<Omit<OperationsFilters, 'property_id'>>(
-        () => ({
-            status: ['pending'],
-            from: formatDateForApi(new Date()),
-            sort: 'operation_date_asc',
-            limit: 3,
-        }),
-        [],
-    );
+    const manageActions = property
+        ? buildPropertyManageActions({
+            status: property.status,
+            rentalState,
+            isPinned,
+            canMutate: permissions.canMutate,
+            // Пин — личное состояние по праву просмотра (D11 #1307):
+            // зритель закрепляет объект в своём порядке наравне с другими
+            // ролями, тариф гасит по-прежнему.
+            canPin: isPaid && permissions.canView,
+            canLeave: permissions.canLeave,
+            canLifecycle: permissions.canLifecycle,
+        })
+        : [];
+    const statusSheetItems = property
+        ? buildPropertyStatusSheetItems(property.status, rentalState, permissions.canLifecycle)
+        : [];
 
-    const overdueCount = summaryQuery.data?.overdue_total_count ?? 0;
-
-    const handleToggleMaintenance = useCallback(() => {
-        if (!property) return;
-        if (property.status === 'active') {
-            if (currentLease) {
-                setBlockedOpen(true);
-                return;
-            }
-            updateProperty.mutate(
-                {id, data: {status: 'maintenance'}},
-                {
-                    onSuccess: () => notify.scenarios.property.movedToMaintenance(),
-                    onError: showMutationError,
-                },
-            );
-        } else {
-            updateProperty.mutate(
-                {id, data: {status: 'active'}},
-                {
-                    onSuccess: () => notify.scenarios.property.returnedToWork(),
-                    onError: showMutationError,
-                },
-            );
-        }
-    }, [property, currentLease, id, updateProperty]);
-
-    const handleToggleArchive = useCallback(() => {
-        if (!property) return;
-        if (property.status === 'archived') {
-            unarchiveProperty.mutate(id, {
-                onSuccess: () => notify.scenarios.property.returnedFromArchive(),
-                onError: showMutationError,
-            });
-        } else {
-            if (currentLease) {
-                setBlockedOpen(true);
-                return;
-            }
-            setArchiveOpen(true);
-        }
-    }, [property, currentLease, id, unarchiveProperty]);
-
-    const handleArchive = useCallback(() => {
+    const handleArchive = () => {
         archiveProperty.mutate(id, {
             onSuccess: () => {
                 setArchiveOpen(false);
                 notify.scenarios.property.movedToArchive();
             },
-            onError: (error) => {
-                if (error.status === 409) {
-                    // Устаревший кэш: аренда открыта в другой вкладке.
-                    // Закрываем модалку архивации, обновляем список аренд
-                    // и показываем модалку «нельзя изменить статус».
-                    setArchiveOpen(false);
-                    leasesQuery.refetch();
-                    setBlockedOpen(true);
-                    return;
-                }
-                showMutationError(error);
-            },
-        });
-    }, [archiveProperty, id, leasesQuery]);
-
-    const handleEndLease = useCallback(() => {
-        if (currentLease) {
-            setSelectedLeaseId(currentLease.id);
-            setEndLeaseOpen(true);
-        }
-    }, [currentLease]);
-
-    const confirmEndLease = useCallback(() => {
-        if (!selectedLeaseId) return;
-        completeLease.mutate(selectedLeaseId, {
-            onSuccess: () => {
-                setEndLeaseOpen(false);
-                setSuccessBannerOpen(true);
-            },
             onError: showMutationError,
         });
-    }, [selectedLeaseId, completeLease]);
+    };
 
-    const handleEdit = useCallback(() => {
-        router.push(ROUTES.propertyEdit(id));
-    }, [id, router]);
+    // Продолжение смены статуса после завершения аренды (#628, решение
+    // владельца 14.10.2026): гард уводит в мастер итогов с меткой
+    // продолжения — здесь, после успешного завершения, метку потребляем
+    // одноразово и применяем статус теми же мутациями, что стояли за
+    // гардом (ремонт или архив), с их тостами. Отказ — тост ошибки,
+    // статус повторяется вручную: аренда уже завершена, гард не стоит.
+    //
+    // Чтение — строго раз на монтирование (ref): инстанс страницы,
+    // из-под гарда которого ушёл в мастер, не должен проглотить свежую
+    // метку перерендером подтверждения (эффект применения гоняется на
+    // каждом рендере — объекты мутаций нестабильны, поэтому применение
+    // гвардится ref'ом, а не deps). Незавершённая метка всё равно гаснет
+    // чтением — «назад» из мастера ничего не применяет.
+    const resumeRef = React.useRef<RentalCompleteResumeAction | null>(null);
+    React.useEffect(() => {
+        const resume = consumeRentalCompleteResume(id);
+        if (resume !== null) {
+            resumeRef.current = resume;
+        }
+    }, [id]);
+    React.useEffect(() => {
+        if (!propertyLoaded || resumeRef.current === null) {
+            return;
+        }
+        const resume = resumeRef.current;
+        resumeRef.current = null;
+        if (resume === 'archive') {
+            archiveProperty.mutate(id, {
+                onSuccess: () => notify.scenarios.property.archivedAfterRental(),
+                onError: showMutationError,
+            });
+        } else {
+            updateProperty.mutate(
+                {id, data: {status: 'maintenance'}},
+                {
+                    onSuccess: () => notify.scenarios.property.maintenanceAfterRental(),
+                    onError: showMutationError,
+                },
+            );
+        }
+    }, [propertyLoaded, id, archiveProperty, updateProperty]);
 
-    const handleAccess = useCallback(() => {
-        setSharingOpen(true);
-    }, []);
+    // Удаление аренды «Ожидает начала» (#986, «передумал до старта»):
+    // DELETE уносит аренду вместе с платём (бэк #985 — 204), объект
+    // остаётся. Успех — без тоста: блок «Аренда» сам перетекает в пустое
+    // состояние по инвалидации; отказ — тост канона аренды. 409
+    // (начавшаяся) сюда не доходит — строку рисует только upcoming.
+    const handleDeleteRental = () => {
+        if (currentRentalId === null) {
+            return;
+        }
+        deleteRental.mutate(undefined, {
+            onSuccess: () => setDeleteRentalSheetOpen(false),
+            onError: (error) => notify.scenarios.rentals.deleteError(error),
+        });
+    };
 
-    const handleDelete = useCallback((mode: DeletePropertyMode) => {
+    // Guard #628 — разводка по машине (#986). У «Ожидает начала»
+    // завершения не существует — «Удалить аренду» сносит её (DELETE #985)
+    // и тут же применяет выбранный под гардом статус (решение владельца
+    // 30.09); кнопка в loading на всю цепочку, отказ смены статуса после
+    // успеха удаления — тост ошибки, повтор ручной. У идущей аренды
+    // прямого завершения больше нет (решение владельца 14.10.2026):
+    // подтверждение уводит в мастер итогов (#534) с меткой продолжения —
+    // статус применит страница объекта после успешного завершения
+    // (эффект consume выше).
+    const handleGuardConfirm = () => {
+        if (guardedAction === null) {
+            return;
+        }
+        const action = guardedAction;
+        if (guardUpcoming) {
+            const finishStatus = {
+                onSuccess: () => {
+                    setGuardedAction(null);
+                    if (action === 'archive') {
+                        notify.scenarios.property.archivedAfterRental();
+                    } else {
+                        notify.scenarios.property.maintenanceAfterRental();
+                    }
+                },
+                onError: (error: ApiError) => {
+                    setGuardedAction(null);
+                    showMutationError(error);
+                },
+            };
+            const applyStatus = () => {
+                if (action === 'archive') {
+                    archiveProperty.mutate(id, finishStatus);
+                } else {
+                    updateProperty.mutate(
+                        {id, data: {status: 'maintenance'}},
+                        finishStatus,
+                    );
+                }
+            };
+            deleteRental.mutate(undefined, {
+                onSuccess: applyStatus,
+                onError: (error) => notify.scenarios.rentals.deleteError(error),
+            });
+            return;
+        }
+        // Ветка идущей аренды: в мастер итогов с меткой продолжения.
+        setGuardedAction(null);
+        requestRentalCompleteResume(id, action === 'archive' ? 'archive' : 'maintenance');
+        router.push(ROUTES.propertyRentalComplete(id));
+    };
+
+    // Подтверждение шита пина (#630): исполняет «Сделать основным».
+    // Успех закрывает шит (первенство видно в списке, строка «Управления»
+    // переключится на «Убрать из основных»); отказ — тост ошибки, шит
+    // остаётся открытым, как в #627/#628.
+    const handlePinConfirm = () => {
+        setPin.mutate(
+            {id, pinned: true},
+            {
+                onSuccess: () => setPinSheetOpen(false),
+                onError: showMutationError,
+            },
+        );
+    };
+
+    const handleAction = (key: PropertyDetailActionKey) => {
+        const guarded = guardedStatusAction(key, rentalState);
+        if (guarded !== null) {
+            setGuardUpcoming(rentalState.kind === 'upcoming');
+            setGuardedAction(guarded);
+            return;
+        }
+        // Guard удаления #632: у объекта с незавершённой арендой сперва
+        // разводка машины (#986) — «Завершить аренду» у идущей, «Удалить
+        // аренду» у «Ожидает начала»; шит удаления не открывается.
+        if (deleteBlockedByRental(key, rentalState)) {
+            setDeleteGuardUpcoming(rentalState.kind === 'upcoming');
+            setDeleteGuardOpen(true);
+            return;
+        }
+        // Пин #630 (Figma 1583:57452) исполняется только после
+        // шита-подтверждения; unpin — прямое действие (шита в макетах нет).
+        if (key === 'pin') {
+            setPinSheetOpen(true);
+            return;
+        }
+        switch (key) {
+            case 'about':
+                router.push(ROUTES.propertyAbout(id));
+                break;
+            case 'change-status':
+                setStatusSheetOpen(true);
+                break;
+            case 'edit':
+                router.push(ROUTES.propertyEdit(id));
+                break;
+            case 'unpin':
+                setPin.mutate(
+                    {id, pinned: false},
+                    {onError: showMutationError},
+                );
+                break;
+            case 'start-rental':
+                router.push(ROUTES.propertyRentalNew(id));
+                break;
+            case 'complete-rental':
+                // Единый путь завершения (#534, решение владельца
+                // 14.10.2026): мастер итогов — быстрого шита #627 больше
+                // нет.
+                router.push(ROUTES.propertyRentalComplete(id));
+                break;
+            case 'delete-rental':
+                setDeleteRentalSheetOpen(true);
+                break;
+            case 'start-maintenance':
+                updateProperty.mutate(
+                    {id, data: {status: 'maintenance'}},
+                    {
+                        onSuccess: () => notify.scenarios.property.movedToMaintenance(),
+                        onError: showMutationError,
+                    },
+                );
+                break;
+            case 'finish-maintenance':
+                updateProperty.mutate(
+                    {id, data: {status: 'active'}},
+                    {
+                        onSuccess: () => notify.scenarios.property.maintenanceFinished(),
+                        onError: showMutationError,
+                    },
+                );
+                break;
+            case 'archive':
+                setArchiveOpen(true);
+                break;
+            case 'unarchive':
+                unarchiveProperty.mutate(id, {
+                    onSuccess: () => notify.scenarios.property.returnedFromArchive(),
+                    onError: showMutationError,
+                });
+                break;
+            case 'access':
+                router.push(ROUTES.propertyParticipants(id));
+                break;
+            case 'leave':
+                setLeaveOpen(true);
+                break;
+            case 'delete':
+                setDeleteOpen(true);
+                break;
+        }
+    };
+
+    // Выход участника (#703): подтверждение — канон #701 (2010-132970),
+    // успех — тост и возврат к списку объектов (попап #701 живёт в срезе
+    // участников, чужой слайс-виджет сюда не импортируется).
+    const handleLeave = () => {
+        leaveProperty.mutate(id, {
+            onSuccess: () => {
+                setLeaveOpen(false);
+                notify.scenarios.access.leftProperty();
+                goBack(router, ROUTES.properties);
+            },
+            onError: (error) => notify.scenarios.access.leavePropertyError(error),
+        });
+    };
+
+    const handleDelete = () => {
         deleteProperty.mutate(
-            {id, mode},
+            {id},
             {
                 onSuccess: () => {
                     setDeleteOpen(false);
@@ -242,255 +589,459 @@ export function PropertyDetailPage(): JSX.Element {
                     goBack(router, ROUTES.properties);
                 },
                 onError: (error) => {
-                    if (error.status === 409) {
-                        // Устаревший кэш: аренда открыта в другой вкладке.
-                        // Обновляем список аренд — модалка переключится
-                        // в состояние «нельзя удалить».
-                        leasesQuery.refetch();
-                    }
                     notify.scenarios.property.deleteError({description: error.detail});
                 },
             },
         );
-    }, [deleteProperty, id, router, leasesQuery]);
-
-    const handleExport = useCallback(async (): Promise<void> => {
-        try {
-            const response = await fetch(`/api/properties/${id}/export`);
-            if (!response.ok) {
-                const problem = (await response.json()) as {detail?: string};
-                notify.scenarios.property.exportError(
-                    problem.detail ? {description: problem.detail} : undefined,
-                );
-                return;
-            }
-            const blob = await response.blob();
-            const filename = resolveExportFilename(
-                response.headers.get('Content-Disposition') ?? '',
-            );
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = filename;
-            anchor.click();
-            // Отложенный revoke: в Firefox мгновенный revokeObjectURL после click() может отменить скачивание.
-            setTimeout(() => URL.revokeObjectURL(url), 0);
-        } catch {
-            notify.scenarios.property.exportError();
-        }
-    }, [id]);
-
-    const handlePayRent = useCallback(() => {
-        if (currentLease) {
-            if (payableRentQuery.isFetching) return;
-            const nextRentOperation = payableRentQuery.data?.items[0];
-            router.push(
-                nextRentOperation
-                    ? ROUTES.financeOperation(nextRentOperation.id)
-                    : ROUTES.lease(currentLease.id),
-            );
-            return;
-        }
-
-        router.push(ROUTES.propertyOperations(id));
-    }, [currentLease, id, payableRentQuery.data, payableRentQuery.isFetching, router]);
-
-    const handleBlockedContinue = useCallback(() => {
-        setBlockedOpen(false);
-        handleEndLease();
-    }, [handleEndLease]);
-
-    const handleDeleteEndLease = useCallback(() => {
-        if (!currentLease) return;
-        // Остаёмся в модалке удаления: после инвалидации кэша currentLease
-        // пропадёт, и модалка сама вернётся к выбору режима удаления.
-        const promise = completeLease.mutateAsync(currentLease.id);
-        void notify.scenarios.leases.completed(promise);
-        promise.catch(() => {}); // ошибка уже показана через notify.promise
-    }, [currentLease, completeLease]);
-
-    const hasAnyError =
-        propertyQuery.isError ||
-        leasesQuery.isError ||
-        summaryQuery.isError;
+    };
 
     // Разводим только ошибку основного запроса объекта: 404 (нет объекта
     // или нет доступа) и 403 membership_suspended (лимит тарифа) получают
-    // свои экраны; ошибки дочерних запросов остаются на generic-экране.
+    // свои экраны.
     const propertyErrorKind = propertyQuery.isError
         ? resolvePropertyDetailError(propertyQuery.error)
         : null;
 
-    const isLoading = propertyQuery.isPending || leasesQuery.isPending;
+    const isLoading = propertyQuery.isPending;
+    const status = property?.status;
+
+    const sectionCTAs: Record<PropertyDetailSectionKey, (() => void) | undefined> = {
+        rental: () => router.push(ROUTES.propertyRentalNew(id)),
+        // Вход в создание платежа — через канонный шит с проверкой
+        // черновика (#1066): раньше секция кидала straight в визард,
+        // молча возобновляя черновик.
+        payments: () => setPaymentsSheetOpen(true),
+        operations: undefined,
+        contacts: () => router.push(ROUTES.propertyContactNew(id)),
+        tasks: () => router.push(ROUTES.propertyTaskCreate(id)),
+        about: () => router.push(ROUTES.propertyEdit(id)),
+    };
 
     return (
-        <div className={styles.root}>
-            <PropertyDetailHeader
-                title="Мой объект"
-                actions={
-                    <PropertyActionMenu
-                        status={property?.status}
-                        disabled={isLoading || hasAnyError || !property}
-                        onEdit={handleEdit}
-                        onAccess={handleAccess}
-                        onToggleMaintenance={handleToggleMaintenance}
-                        onToggleArchive={handleToggleArchive}
-                        onExport={handleExport}
-                        onDelete={() => setDeleteOpen(true)}
-                    />
+        <>
+            {/* Анатомия шапки (DESIGN.md §2): «Назад» в leading у любого
+             * тарифа (решение владельца #1240 — звезда-апселл снесена,
+             * макет 3225-77427; прямых заходов режим «деталь = лендинг
+             * таба» больше не создаёт). Кебаб — в trailing. */}
+            <TopNav
+                leading={<PropertyDetailBackButton/>}
+                trailing={
+                    status !== undefined && propertyErrorKind === null ? (
+                        <PropertyDetailKebab
+                            status={status}
+                            canMutate={permissions.canMutate}
+                            canUseSharing={isPaid}
+                            onAction={handleAction}
+                        />
+                    ) : undefined
                 }
+            >
+                <TopNavTitle
+                    title="Объект"
+                    subtitle={property ? propertyStatusSubtitle(property.status) : undefined}
+                />
+            </TopNav>
+
+            <PageContent className="px-6">
+                {isLoading && <PropertyDetailLoading/>}
+
+                {!isLoading && propertyErrorKind === 'not_found' && (
+                    <PropertyNotFoundScreen/>
+                )}
+
+                {!isLoading && propertyErrorKind === 'suspended' && (
+                    <PropertySuspendedScreen/>
+                )}
+
+                {!isLoading && (propertyErrorKind === null || propertyErrorKind === 'generic') &&
+                    (propertyQuery.isError || !property) && (
+                    <PropertyDetailError
+                        onRetry={() => {
+                            void propertyQuery.refetch();
+                        }}
+                        isLoading={propertyQuery.isFetching}
+                    />
+                )}
+
+                {!isLoading && !propertyQuery.isError && property && (
+                    <>
+                        <PropertyMediaBlock name={property.name} address={property.address} photoUrl={property.photoUrl} type={property.type}>
+                            {/* Пилюли шапки (#773): «В архиве» и/или роль
+                             * доступа — ряд под адресом, канон 2200-97365
+                             * и 1603-92103. */}
+                            {headerPills.length > 0 && (
+                                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                                    {headerPills.map((pill) =>
+                                        pill.kind === 'archived' ? (
+                                            <PropertyArchivedPill key="archived"/>
+                                        ) : (
+                                            <PropertyAccessPill key="access" role={pill.role} refreshing={propertyQuery.isFetching}/>
+                                        ),
+                                    )}
+                                </div>
+                            )}
+                        </PropertyMediaBlock>
+
+                        {/* Секция «Аренда» (доработка #1050 по слову владельца):
+                         * на ремонте жива как путь к завершённой истории —
+                         * стандартная, без CTA (создание запрещено беком —
+                         * 409 property_maintenance), ссылка секции — в
+                         * «Прошлые аренды»; без завершённых (и у
+                         * спасательной незавершённой, прямой API) секции
+                         * нет — люк «Завершить ремонт». Видимость —
+                         * доменное правило isRentalSectionVisible.
+                         * Отклонение от Figma 1581:53679 (там CTA) —
+                         * осознанное, решение владельца 02.10. */}
+                        {rentalSectionVisible && (
+                            <PropertySectionCard
+                                title="Аренда"
+                                href={
+                                    property.status === 'maintenance'
+                                        ? ROUTES.propertyRentalPast(id)
+                                        : ROUTES.propertyRental(id)
+                                }
+                                className="mt-20"
+                            >
+                                {rentalsQuery.isPending ? (
+                                    <PropertySectionEmptySkeleton/>
+                                ) : currentRental !== undefined ? (
+                                    <PropertyRentalBlock
+                                        rental={currentRental}
+                                        onExtend={() => router.push(ROUTES.propertyRentalExtend(id))}
+                                        // Единый путь завершения — мастер итогов
+                                        // (#534, решение владельца 14.10.2026);
+                                        // смотрящему мастер честно откажет
+                                        // (writeGate ADR 0053 §3, решение
+                                        // ревью #627).
+                                        onComplete={() => router.push(ROUTES.propertyRentalComplete(id))}
+                                    />
+                                ) : (
+                                    <PropertySectionEmpty
+                                        imageSrc={propertySectionImages.rental}
+                                        copy={resolvePropertySectionEmpty('rental', emptySet, property.status)}
+                                        // На ремонте CTA нет вовсе: создание
+                                        // запрещено беком (409) — кнопка была
+                                        // бы мёртвой (#1050).
+                                        onCta={
+                                            property.status !== 'maintenance' && sectionCta.visible
+                                                ? sectionCTAs.rental
+                                                : undefined
+                                        }
+                                        ctaDisabled={sectionCta.disabled}
+                                    />
+                                )}
+                            </PropertySectionCard>
+                        )}
+
+                        <PropertySectionCard
+                            title="Регулярные платежи"
+                            href={ROUTES.propertyPayments(id)}
+                            className={!rentalSectionVisible ? 'mt-20' : undefined}
+                        >
+                            {paymentsQuery.isPending ? (
+                                <PropertyPaymentsStripSkeleton/>
+                            ) : payments.length > 0 ? (
+                                <PropertyPaymentsIconsBlock groups={paymentGroups}/>
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.payments}
+                                    copy={resolvePropertySectionEmpty('payments', emptySet, property.status)}
+                                    onCta={sectionCta.visible ? sectionCTAs.payments : undefined}
+                                    ctaDisabled={sectionCta.disabled}
+                                />
+                            )}
+                        </PropertySectionCard>
+
+                        <PropertySectionCard
+                            title={operationsSectionTitle(today)}
+                            href={ROUTES.propertyOperations(id)}
+                        >
+                            {operationsNever ? (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.operations}
+                                    copy={resolvePropertySectionEmpty('operations', emptySet, property.status)}
+                                />
+                            ) : (
+                                <PropertyOperationsBlock
+                                    summary={operationsQuery.data}
+                                    isLoading={operationsQuery.isPending}
+                                />
+                            )}
+                        </PropertySectionCard>
+
+                        <PropertySectionCard
+                            title="Контакты"
+                            href={ROUTES.propertyContacts(id)}
+                        >
+                            {contactsQuery.isPending ? (
+                                <PropertySectionEmptySkeleton/>
+                            ) : tenant !== null || propertyContacts.length > 0 ? (
+                                <PropertyContactsBlock
+                                    tenant={tenant}
+                                    tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
+                                    contacts={propertyContacts}
+                                    onOpenContact={(contactId) =>
+                                        router.push(ROUTES.propertyContact(id, contactId))
+                                    }
+                                />
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.contacts}
+                                    copy={resolvePropertySectionEmpty('contacts', emptySet, property.status)}
+                                    onCta={sectionCta.visible ? sectionCTAs.contacts : undefined}
+                                    ctaDisabled={sectionCta.disabled}
+                                />
+                            )}
+                        </PropertySectionCard>
+
+                        <PropertySectionCard
+                            title="Задачи"
+                            href={ROUTES.propertyTasks(id)}
+                        >
+                            {tasksQuery.isPending ? (
+                                <PropertySectionEmptySkeleton/>
+                            ) : detailTasks.length > 0 ? (
+                                <PropertyTasksBlock
+                                    tasks={detailTasks}
+                                    today={tasksToday ?? today}
+                                    canMutate={permissions.canEdit}
+                                    togglingFor={(task) =>
+                                        (completeTask.isPending || uncompleteTask.isPending)
+                                        && (completeTask.variables === task.id
+                                            || uncompleteTask.variables === task.id)
+                                    }
+                                    onToggle={(task) => {
+                                        if (task.status === 'completed') {
+                                            uncompleteTask.mutate(task.id, {
+                                                onError: (error) =>
+                                                    notify.scenarios.tasks.uncompleteError(error),
+                                            });
+                                        } else {
+                                            completeTask.mutate(task.id, {
+                                                onError: (error) =>
+                                                    notify.scenarios.tasks.completeError(error),
+                                            });
+                                        }
+                                    }}
+                                    onOpenFor={(task) => {
+                                        if (!permissions.canEdit || task.status === 'completed'
+                                            || task.ruleId === null) {
+                                            return undefined;
+                                        }
+                                        const ruleId = task.ruleId;
+                                        return () =>
+                                            router.push(ROUTES.propertyTaskEdit(id, ruleId));
+                                    }}
+                                />
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.tasks}
+                                    copy={resolvePropertySectionEmpty('tasks', emptySet, property.status)}
+                                    onCta={sectionCta.visible ? sectionCTAs.tasks : undefined}
+                                    ctaDisabled={sectionCta.disabled}
+                                />
+                            )}
+                        </PropertySectionCard>
+
+                        <PropertySectionCard
+                            title={propertyTypeLabels[property.type]}
+                            href={ROUTES.propertyAbout(id)}
+                        >
+                            {apartmentRows.length > 0 ? (
+                                <PropertyApartmentBlock rows={apartmentRows}/>
+                            ) : (
+                                <PropertySectionEmpty
+                                    imageSrc={propertySectionImages.about}
+                                    copy={resolvePropertySectionEmpty('about', emptySet, property.status)}
+                                    onCta={sectionCta.visible ? sectionCTAs.about : undefined}
+                                    ctaDisabled={sectionCta.disabled}
+                                />
+                            )}
+                        </PropertySectionCard>
+
+                        {permissions.canLeave && property.access?.ownerName !== undefined && (
+                            <PropertyOwnerSection
+                                ownerName={property.access.ownerName}
+                                ownerEmail={property.access.ownerEmail}
+                                ownerPhotoUrl={property.access.ownerPhotoUrl}
+                            />
+                        )}
+
+                        <PropertySectionCard title="Управление">
+                            <PropertyManageSection
+                                items={manageActions}
+                                onAction={handleAction}
+                            />
+                        </PropertySectionCard>
+                    </>
+                )}
+            </PageContent>
+
+            <PropertyStatusSheet
+                open={statusSheetOpen}
+                onOpenChange={setStatusSheetOpen}
+                items={statusSheetItems}
+                onAction={handleAction}
             />
 
-            {property?.access && property.access.role !== 'owner' && (
-                <PropertySharedBanner access={property.access}/>
-            )}
+            {/* Выход участника (#703): канон #701 (2010-132970) — кнопки
+             * в ряд, красное «Покинуть» справа; кнопка в loading на время
+             * мутации. */}
+            <ConfirmDialog
+                open={leaveOpen}
+                onOpenChange={setLeaveOpen}
+                title="Уверены, что хотите покинуть объект?"
+                titleClassName="text-[28px] leading-8"
+                description="Вы потеряете доступ к объекту пользователя. Попросить доступ можно будет снова"
+                descriptionClassName="text-base"
+                confirmLabel="Покинуть"
+                cancelLabel="Отмена"
+                confirmVariant="danger"
+                pending={leaveProperty.isPending}
+                onConfirm={handleLeave}
+            />
 
-            {isLoading && <PropertyDetailLoading/>}
+            <ConfirmDialog
+                open={archiveOpen}
+                onOpenChange={setArchiveOpen}
+                title="Перевести объект в архив?"
+                description="Объектом нельзя будет управлять, он будет доступен только для просмотра. Все данные будут сохранены. Вы сможете вернуть объект в работу в любой момент"
+                confirmLabel="Архивировать"
+                pending={archiveProperty.isPending}
+                onConfirm={handleArchive}
+            />
 
-            {!isLoading && propertyErrorKind === 'not_found' && (
-                <PropertyNotFoundScreen/>
-            )}
-
-            {!isLoading && propertyErrorKind === 'suspended' && (
-                <PropertySuspendedScreen/>
-            )}
-
-            {!isLoading && (propertyErrorKind === null || propertyErrorKind === 'generic') &&
-                (hasAnyError || !property) && (
-                <PropertyDetailError
-                    onRetry={() => {
-                        propertyQuery.refetch();
-                        leasesQuery.refetch();
-                        summaryQuery.refetch();
-                    }}
-                    isLoading={
-                        propertyQuery.isFetching ||
-                        leasesQuery.isFetching ||
-                        summaryQuery.isFetching
+            {/* Guard-шит (#628, Figma 1583:55882): сменить статус объекту
+             * с незавершённой арендой нельзя — подпись макета R/400 16/18.
+             * Подтверждение — по машине (#986): у идущей аренды — уход в
+             * мастер итогов с меткой продолжения, статус применится после
+             * успешного завершения (решение владельца 14.10.2026); у
+             * «Ожидает начала» «Удалить аренду» сносит аренду (#985) и
+             * тут же применяет статус (решение владельца 30.09) — pending
+             * на всю цепочку, закрытие глушится. */}
+            <ConfirmDialog
+                open={guardedAction !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setGuardedAction(null);
                     }
-                />
-            )}
-
-            {!isLoading && !hasAnyError && property && (
-                <>
-                    <PropertyGallery/>
-
-                    <PropertyStatusSection
-                        property={property}
-                        leases={leases}
-                        summary={summaryQuery.data}
-                    />
-
-                    <PropertyLeaseCard
-                        lease={currentLease}
-                        status={pageStatus}
-                        propertyId={id}
-                        onPayRent={handlePayRent}
-                        isPayRentLoading={isPayRentLoading}
-                        onEndLease={handleEndLease}
-                    />
-
-                    <PropertyTenantCard lease={property.activeLease}/>
-
-                    <PropertyOperationsSection
-                        propertyId={id}
-                        title="Просроченные операции"
-                        href={`${ROUTES.financeOperations}?property_id=${id}&status=overdue&period=all`}
-                        emptyText="Просроченных операций нет"
-                        filters={overdueFilters}
-                        badge={overdueCount > 0 ? <OverdueOperationsBadge count={overdueCount}/> : undefined}
-                    />
-
-                    <PropertyOperationsSection
-                        propertyId={id}
-                        title="Запланированные операции"
-                        href={`${ROUTES.financeOperations}?property_id=${id}&status=pending&period=all`}
-                        emptyText="Запланированных операций нет"
-                        filters={upcomingFilters}
-                    />
-
-                    <PropertyOperationsActions
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
-
-                    <PropertyOperationsCard
-                        propertyId={id}
-                        summary={summaryQuery.data}
-                    />
-
-                    <PropertyInfoCard
-                        description={property.description}
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
-
-                    <PropertyAttributesSection
-                        type={property.type}
-                        attributes={property.attributes}
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
-
-                    <PropertyContactsSection
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
-
-                    <PropertyRemindersSection
-                        propertyId={id}
-                        isArchived={property.status === 'archived'}
-                    />
-                </>
-            )}
-
-            <PropertyBlockedModal
-                isOpen={blockedOpen}
-                onClose={() => setBlockedOpen(false)}
-                onContinue={handleBlockedContinue}
+                }}
+                title={guardUpcoming
+                    ? 'Нельзя изменить статус, пока аренда не началась'
+                    : 'Нельзя изменить статус, пока объект арендован'}
+                description={guardUpcoming
+                    ? 'Удалите аренду, чтобы изменить статус объекта'
+                    : 'Завершите аренду, чтобы изменить статус объекта'}
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel={guardUpcoming ? 'Удалить аренду' : 'Завершить аренду'}
+                cancelLabel="Отменить"
+                pending={deleteRental.isPending || updateProperty.isPending || archiveProperty.isPending}
+                onConfirm={handleGuardConfirm}
             />
 
-            <PropertyArchiveModal
-                isOpen={archiveOpen}
-                onClose={() => setArchiveOpen(false)}
-                onArchive={handleArchive}
-                membersCount={property?.members_count ?? 0}
-                isArchiving={archiveProperty.isPending}
+            {/* Guard удаления (#632): «Удалить объект» у объекта с
+             * незавершённой арендой не доходит до шита удаления — сперва
+             * разводка машины (#986): «Завершить аренду» ведёт в мастер
+             * итогов (#534), «Удалить аренду» — шит удаления аренды.
+             * Составного действия нет (удаление необратимо): подтверждение
+             * остаётся за владельцем. Тексты — по образцу гарда статуса. */}
+            <ConfirmDialog
+                open={deleteGuardOpen}
+                onOpenChange={setDeleteGuardOpen}
+                title={deleteGuardUpcoming
+                    ? 'Нельзя удалить объект, пока аренда не началась'
+                    : 'Нельзя удалить объект, пока он арендован'}
+                description={deleteGuardUpcoming
+                    ? 'Удалите аренду, чтобы удалить объект'
+                    : 'Завершите аренду, чтобы удалить объект'}
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel={deleteGuardUpcoming ? 'Удалить аренду' : 'Завершить аренду'}
+                cancelLabel="Отменить"
+                onConfirm={() => {
+                    setDeleteGuardOpen(false);
+                    if (deleteGuardUpcoming) {
+                        setDeleteRentalSheetOpen(true);
+                    } else {
+                        // В мастер итогов (#534): без метки продолжения —
+                        // удаление объекта остаётся ручным повтором после
+                        // завершения (необратимое действие — свежий
+                        // подтверждение за владельцем).
+                        router.push(ROUTES.propertyRentalComplete(id));
+                    }
+                }}
             />
 
-            <PropertyDeleteModal
-                isOpen={deleteOpen}
-                onClose={() => setDeleteOpen(false)}
-                onDelete={handleDelete}
-                onEndLease={handleDeleteEndLease}
-                currentLease={currentLease}
-                membersCount={property?.members_count ?? 0}
-                deletingMode={
-                    deleteProperty.isPending
-                        ? (deleteProperty.variables?.mode ?? null)
-                        : null
-                }
-                isCompletingLease={completeLease.isPending}
+            {/* Шит «Удалить аренду?» (#986; «Ожидает начала»): канон
+             * удаления завершённой аренды (#535) — канон ConfirmDialog,
+             * danger-«Удалить», подпись R/400 16/18. Кнопка в loading на
+             * время мутации; успех — без тоста, блок «Аренда» перетекает
+             * в пустое состояние по инвалидации, объект остаётся. */}
+            <ConfirmDialog
+                open={deleteRentalSheetOpen}
+                onOpenChange={setDeleteRentalSheetOpen}
+                title="Удалить аренду?"
+                description="Аренда и её платеж будут удалены. Операции останутся в истории объекта."
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel="Удалить"
+                cancelLabel="Отмена"
+                confirmVariant="danger"
+                pending={deleteRental.isPending}
+                onConfirm={handleDeleteRental}
             />
 
-            <PropertyEndLeaseModal
-                isOpen={endLeaseOpen}
-                onClose={() => setEndLeaseOpen(false)}
-                onConfirm={confirmEndLease}
+            {/* Шит пина (#630, Figma 1583:57452): объяснение перед
+             * «Сделать основным» — H3-заголовок канона, подпись макета
+             * R/400 16/18, кнопки столбиком: подтверждение сверху,
+             * «Понятно» закрывает без действия. Кнопка в loading на время
+             * мутации, закрытие глушится; отказ — тост, шит остаётся
+             * открытым. Unpin исполняется без шита (в макетах его нет). */}
+            <ConfirmDialog
+                open={pinSheetOpen}
+                onOpenChange={setPinSheetOpen}
+                title="Сделать объект основным"
+                description="Этот объект будет открываться первым при входе в раздел «Объекты»"
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel="Сделать объект основным"
+                cancelLabel="Понятно"
+                stacked
+                pending={setPin.isPending}
+                onConfirm={handlePinConfirm}
             />
 
-            <PropertySharingModal
+            {/* Шит удаления (#629, Figma 1583:56558): канон ConfirmDialog,
+             * кнопки столбиком, подтверждение danger сверху (макет — 16/18
+             * под заголовком H1 28/32). Чекбокс «Удалить все данные» срезан
+             * решением владельца 12.09: удаление тотальное (ADR 0049), бэк
+             * уносит аренды, платежи, операции, задачи и контакты каскадом.
+             * Заметка о участниках не перенесена (там письмо и так уходит).
+             * Кнопка в loading на время мутации, закрытие глушится. */}
+            <ConfirmDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                title="Удалить объект?"
+                titleClassName="text-[28px] leading-8"
+                description="Объект будет удален. Вместо удаления объект можно перевести в архив"
+                descriptionClassName="text-base leading-[18px]"
+                confirmLabel="Удалить"
+                cancelLabel="Отменить"
+                confirmVariant="danger"
+                stacked
+                pending={deleteProperty.isPending}
+                onConfirm={handleDelete}
+            >
+                <p className="text-sm leading-4 text-danger-soft">
+                    Будут удалены данные аренд объекта, все операции объекта, платежи, контакты и задачи, связанные с объектом. Это действие нельзя отменить
+                </p>
+            </ConfirmDialog>
+
+            {/* Шит «Добавить платёж» CTA пустой секции «Регулярные платежи»
+             * (#1066): тот же канонный вход с проверкой черновика, что и
+             * кнопка «Добавить» на странице платежей объекта. */}
+            <PaymentsAddSheet
                 propertyId={id}
-                isOpen={sharingOpen}
-                onClose={() => setSharingOpen(false)}
-                isArchived={property?.status === 'archived'}
+                open={paymentsSheetOpen}
+                onOpenChange={setPaymentsSheetOpen}
             />
-
-            {successBannerOpen && (
-                <PropertySuccessBanner
-                    onOpenLease={() => router.push(ROUTES.lease(selectedLeaseId))}
-                />
-            )}
-        </div>
+        </>
     );
 }

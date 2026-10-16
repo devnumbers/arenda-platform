@@ -3,62 +3,119 @@ package wire
 import (
 	"context"
 	"fmt"
+	"net/url"
 
+	"github.com/google/uuid"
 	identityemail "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/email"
 	identityevents "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/events"
+	identitygeoip "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/geoip"
+	identityhttp "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/http"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
+	identityriverqueue "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/riverqueue"
+	identityuaparse "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/uaparse"
 	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
-	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
 	mailerfake "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/fake"
 	mailersmtp "github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer/smtp"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // Identity holds the identity module's services and event publisher wired by
 // WireIdentity.
 type Identity struct {
-	UserRepo       *identitypg.UserRepository
+	UserRepo *identitypg.UserRepository
+	// PhotoStorage is the process-wide private-photos object storage (ADR
+	// 0065), shared with the properties and contacts services downstream.
+	PhotoStorage   storageshared.PhotoStorage
 	CodeRepo       *identitypg.LoginCodeRepository
 	AttemptRepo    *identitypg.AttemptRepository
 	SessionRepo    *identitypg.SessionRepository
 	SessionService identityapp.SessionService
+	// SessionLoader is the platform-neutral adapter over SessionService that the
+	// HTTP session middleware consumes. It keeps platform/httpsupport free of any
+	// identity/domain import (ADR 0034).
+	SessionLoader  httpsupport.SessionLoader
 	EventPublisher *identityevents.Publisher
 	Authentication *identityapp.AuthenticationService
 	PhoneChange    *identityapp.PhoneChangeService
+	EmailChange    *identityapp.EmailChangeService
 	Profile        *identityapp.ProfileService
 	Logout         *identityapp.LogoutService
+	// Sessions serves the devices list (list/revoke/revoke-others, #728).
+	Sessions *identityapp.SessionsService
+	// ContactQueue schedules the contact-change security letters (решение
+	// #1207) through the shared River client; the client binds late in
+	// main.go, after WireRiverQueue (the grace-events canon).
+	ContactQueue *identityriverqueue.Queue
+	// ContactWorker delivers the contact-change letters — registered on the
+	// shared River client inside WireRiverQueue.
+	ContactWorker *identityriverqueue.ContactChangedWorker
 	// EmailMailer is the configured mailer.Sender (smtp or fake). It is exposed
-	// because the notification reminder worker reuses it to send emails.
+	// because other modules reuse it: the access email sender (invite and
+	// sharing lifecycle emails) and the notifications email notifier (grace
+	// letters).
 	EmailMailer mailer.Sender
 }
 
 // WireIdentity constructs the identity repositories, session service, event
-// publisher, runs the phone-encryption backfill when a key is set, selects the
-// email mailer based on config, and builds the authentication, phone-change,
-// profile and logout services. It takes the event dispatcher (for the publisher)
-// and the reminder service (notifications module) that profile depends on.
+// publisher, selects the email mailer based on config, and builds the
+// authentication, phone-change, email-change, profile and logout services.
+// It takes the event dispatcher (for the publisher) and the shared rate
+// limiters (the email-change send budget).
 func WireIdentity(
 	ctx context.Context,
 	p platformDeps,
 	eventDispatcher *events.InProcessDispatcher,
-	reminderService *notificationsapp.ReminderService,
+	rateLimits *RateLimiters,
 ) (*Identity, error) {
+	// The one private-photos object storage of the process (ADR 0065): the
+	// profile service is its first consumer, properties and contacts reuse
+	// the same instance through the Identity handle.
+	photoStorage, err := WirePhotoStorage(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+
 	userRepo := identitypg.NewUserRepository(p.DB, p.Encryptor)
 	codeRepo := identitypg.NewLoginCodeRepository(p.DB, p.Encryptor)
 	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
 	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
-	sessionService := identityapp.NewSessionService(sessionRepo, p.Encryptor)
+	emailChangeGrantRepo := identitypg.NewEmailChangeGrantRepository(p.DB)
+
+	// The contact-change security letters (решение #1207): the queue seam the
+	// change services enqueue through inside their transactions. The queue's
+	// client binds in main.go after WireRiverQueue — identity builds earlier
+	// than the delivery queue. The delivery worker builds after the mailer
+	// switch below and registers on the same shared River client.
+	contactQueue := identityriverqueue.NewQueue()
+
+	// The single canonical txStoreFactory bundles the four identity
+	// repositories, the audit recorder, and the UoW (ADR 0033 γ-factory). It is
+	// passed to every identity service so adding an Nth repository is a change
+	// here, not in six constructors.
+	factory := identityapp.NewTxStoreFactory(
+		userRepo, codeRepo, attemptRepo, sessionRepo, emailChangeGrantRepo,
+		p.AuditRecorder, contactQueue,
+		p.UoW,
+	)
+
+	// Device enrichment for sessions: the User-Agent parser runs once per
+	// login, the offline GeoIP base answers city lookups (#728). A missing
+	// database (GEOIP_DB_PATH unset — local development) degrades to "no city".
+	sessionService := identityapp.NewSessionService(
+		factory,
+		identityapp.SessionServiceConfig{
+			Hasher: p.Encryptor,
+			Parser: identityuaparse.NewParser(),
+			Geo:    identitygeoip.NewResolver(ctx, p.Cfg.GeoIPDBPath, p.Logger),
+		},
+	)
+	sessionLoader := identityhttp.NewSessionLoader(sessionService)
 
 	eventPublisher := identityevents.NewPublisher(eventDispatcher)
-
-	if p.Cfg.EncryptionKey != "" {
-		if err := BackfillPhoneEncryption(ctx, p.DB, p.Encryptor, p.Logger); err != nil {
-			return nil, fmt.Errorf("backfill phone encryption: %w", err)
-		}
-	} else {
-		p.Logger.WarnContext(ctx, "skipping phone encryption backfill: ENCRYPTION_KEY is empty")
-	}
 
 	var emailMailer mailer.Sender
 	switch p.Cfg.EmailSender {
@@ -71,8 +128,9 @@ func WireIdentity(
 			From:     p.Cfg.SMTPFrom,
 			FromName: p.Cfg.SMTPFromName,
 			Timeout:  p.Cfg.SMTPTimeout,
+			HeloName: baseURLHost(p.Cfg.AppBaseURL),
 		})
-	case "fake":
+	case providerFake:
 		emailMailer = mailerfake.NewFakeSender(p.Logger)
 	default:
 		return nil, fmt.Errorf("unsupported EMAIL_SENDER: %s", p.Cfg.EmailSender)
@@ -80,46 +138,83 @@ func WireIdentity(
 
 	emailSender := identityemail.NewSender(emailMailer, p.Renderer)
 
-	authenticationService := identityapp.NewAuthenticationService(
-		userRepo,
-		codeRepo,
-		attemptRepo,
-		sessionRepo,
-		identityapp.AuthenticationServiceConfig{
+	// The change-letter delivery worker rides the shared River client: it
+	// reloads the user for the timezone and sends through the same mailer the
+	// code letters use (решение #1207).
+	contactWorker := identityriverqueue.NewContactChangedWorker(userRepo, emailMailer, p.Renderer, p.Logger)
+
+	// Login-code issuance/verification is a deep module shared by
+	// AuthenticationService and PhoneChangeService (ADR 0033, step 4). The
+	// anti-flood send limits (#1210) live with the transport limiters
+	// (wire/ratelimits.go) and are consulted by the service on each actual
+	// issuance: per recipient email, per authenticated initiator.
+	loginCodeService := identityapp.NewLoginCodeService(
+		factory,
+		identityapp.LoginCodeServiceConfig{
 			CodeSender: emailSender,
 			Clock:      p.Clock,
-			Publisher:  eventPublisher,
-			DB:         p.Beginner,
-			Logger:     p.Logger,
 			Hasher:     p.Encryptor,
-			Audit:      p.AuditRecorder,
+			Logger:     p.Logger,
+			AllowRecipientSend: func(email identitydomain.Email) bool {
+				return rateLimits.RecipientSendLimiter.Allow(email.String())
+			},
+			AllowInitiatorSend: func(userID uuid.UUID) bool {
+				return rateLimits.InitiatorSendLimiter.Allow(userID.String())
+			},
+		},
+	)
+
+	authenticationService := identityapp.NewAuthenticationService(
+		factory,
+		identityapp.AuthenticationServiceConfig{
+			LoginCodes: loginCodeService,
+			Sessions:   sessionService,
+			Publisher:  eventPublisher,
+			Clock:      p.Clock,
+			Logger:     p.Logger,
 		},
 	)
 
 	phoneChangeService := identityapp.NewPhoneChangeService(
-		userRepo,
-		codeRepo,
-		attemptRepo,
-		sessionRepo,
+		factory,
 		identityapp.PhoneChangeServiceConfig{
-			Sender: emailSender,
-			Clock:  p.Clock,
-			DB:     p.Beginner,
-			Hasher: p.Encryptor,
-			Audit:  p.AuditRecorder,
+			LoginCodes: loginCodeService,
+			Clock:      p.Clock,
+			Logger:     p.Logger,
 		},
 	)
 
-	profileService := identityapp.NewProfileService(
-		userRepo,
-		p.AuditRecorder,
-		p.Beginner,
-		reminderService,
+	// The 5/hour budget lives with the transport limiter (wire/ratelimits.go)
+	// and is consulted by the service on each actual send to a new address.
+	emailChangeService := identityapp.NewEmailChangeService(
+		factory,
+		identityapp.EmailChangeServiceConfig{
+			LoginCodes: loginCodeService,
+			Clock:      p.Clock,
+			Hasher:     p.Encryptor,
+			Logger:     p.Logger,
+			AllowNewAddressSend: func(userID uuid.UUID) bool {
+				return rateLimits.EmailChangeSendLimiter.Allow(userID.String())
+			},
+		},
 	)
 
+	// The shared-property checker gates the foreign profile-photo reads
+	// (ADR 0065, решение #1286): the user repository answers the
+	// symmetric shared-readable-property query.
+	profileService := identityapp.NewProfileService(factory, photoStorage, userRepo, p.Logger)
+
 	logoutService := identityapp.NewLogoutService(
-		sessionRepo,
-		p.Encryptor,
+		factory,
+		identityapp.LogoutServiceConfig{
+			Hasher: p.Encryptor,
+			Logger: p.Logger,
+		},
+	)
+
+	sessionsService := identityapp.NewSessionsService(
+		factory,
+		identityapp.SessionsServiceConfig{Hasher: p.Encryptor, Clock: p.Clock},
 	)
 
 	return &Identity{
@@ -128,11 +223,29 @@ func WireIdentity(
 		AttemptRepo:    attemptRepo,
 		SessionRepo:    sessionRepo,
 		SessionService: sessionService,
+		SessionLoader:  sessionLoader,
 		EventPublisher: eventPublisher,
 		Authentication: authenticationService,
 		PhoneChange:    phoneChangeService,
+		EmailChange:    emailChangeService,
 		Profile:        profileService,
 		Logout:         logoutService,
+		Sessions:       sessionsService,
+		ContactQueue:   contactQueue,
+		ContactWorker:  contactWorker,
 		EmailMailer:    emailMailer,
+		PhotoStorage:   photoStorage,
 	}, nil
+}
+
+// baseURLHost extracts the host (no scheme, no port) from the absolute
+// APP_BASE_URL — the domain the SMTP client greets relays with (smtp.Config
+// HeloName): relays reject "localhost"-greeted AUTH. An unparsable URL
+// degrades to "" and the stdlib default greeting.
+func baseURLHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }

@@ -1,3 +1,4 @@
+// Package policy is the single authorization point mapping an actor and a data owner to a role (ADR 0028).
 package policy
 
 import (
@@ -15,8 +16,9 @@ const (
 	// RoleOwner means the actor is the data owner themselves.
 	RoleOwner Role = "owner"
 	// RoleFullAccess is the role of a property member with full access (issue
-	// #156, T3): all data operations and equal member management, but no
-	// lifecycle control.
+	// #156, T3): all in-object data operations. Since the D8 decision of the
+	// sharing effort (issue #1304) it no longer manages members — inviting,
+	// changing roles and revoking are the owner's prerogative.
 	RoleFullAccess Role = "full_access"
 	// RoleViewer is the role of a property member with view-only access (issue
 	// #156, T3): read-only of all object data, no exceptions.
@@ -35,8 +37,8 @@ const (
 type Policy interface {
 	// Role returns the authorization role of the actor relative to the scope
 	// (the data owner). The role determines which capabilities the actor has
-	// over the scope's owner-wide data (operation categories, tenant contacts
-	// and other account-level entities). For the owner's own data actor ==
+	// over the scope's owner-wide data (account-level entities not scoped to a
+	// single property). For the owner's own data actor ==
 	// scope and the role is RoleOwner; for an actor with property memberships the
 	// role is derived as the strongest role across the scope's properties;
 	// otherwise RoleNone.
@@ -63,14 +65,28 @@ func CanEdit(r Role) bool {
 	return r == RoleOwner || r == RoleFullAccess
 }
 
-// CanManageMembers reports whether the role may manage property members (invite,
-// change role, revoke).
+// CanManageMembers reports whether the role may manage property members
+// (invite, change role, revoke). Owner-only since the D8 decision of the
+// sharing effort (issue #1304): access to an object is managed by one person —
+// its owner. Self-exit is not member management and stays with every
+// participant (CanLeave semantics at the call sites).
 func CanManageMembers(r Role) bool {
-	return r == RoleOwner || r == RoleFullAccess
+	return r == RoleOwner
 }
 
 // CanLifecycle reports whether the role may change the property lifecycle
 // (archive, unarchive, delete). Only the owner may do this.
 func CanLifecycle(r Role) bool {
+	return r == RoleOwner
+}
+
+// CanRebind reports whether the role may move an entity between properties —
+// rebinding a contact card onto another object. Owner-only since the D10
+// decision of the sharing effort (issue #1309): a cross-object move
+// restructures the owner's data graph, and the gate also protects the path
+// from ever appearing for tasks and payment rules (their PATCH commands
+// carry no property field). Clearing a binding is not a rebind — it stays
+// with the entity's own CanEdit gate.
+func CanRebind(r Role) bool {
 	return r == RoleOwner
 }

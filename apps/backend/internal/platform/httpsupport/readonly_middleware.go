@@ -2,15 +2,22 @@ package httpsupport
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
-	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
 )
+
+// SubscriptionMutationChecker is the billing port consumed by the readonly
+// gate: it resolves whether the authenticated user's subscription allows data
+// mutations at the current time. It is declared here, next to its only
+// consumer, per the consumer-side interface rule (ADR 0035); the billing
+// module provides the adapter, and a user without a subscription yet is
+// treated as mutable.
+type SubscriptionMutationChecker interface {
+	CanMutateData(ctx context.Context, userID uuid.UUID) (bool, error)
+}
 
 var mutatingMethods = map[string]struct{}{
 	http.MethodPost:   {},
@@ -33,7 +40,6 @@ var readonlyExemptPrefixes = []string{
 	"/webhooks",
 	"/internal",
 	"/me",
-	"/notification-preferences",
 	"/popups",
 	"/admin",
 	"/client-errors",
@@ -52,7 +58,7 @@ type canMutateDataKey struct{}
 
 // canMutateDataFromContext returns the cached per-request subscription mutation
 // flag, if any middleware or handler has already computed it.
-func canMutateDataFromContext(ctx context.Context) (bool, bool) {
+func canMutateDataFromContext(ctx context.Context) (canMutate, present bool) {
 	v, ok := ctx.Value(canMutateDataKey{}).(bool)
 	return v, ok
 }
@@ -66,10 +72,7 @@ func withCanMutateData(ctx context.Context, canMutate bool) context.Context {
 // ReadonlyMiddleware blocks mutating requests when the authenticated user's
 // subscription does not allow data mutations. Read operations and the recovery
 // paths listed above are always allowed.
-func ReadonlyMiddleware(billing billingapp.Subscriber, logger *slog.Logger, clk clock.Clock) func(http.Handler) http.Handler {
-	if clk == nil {
-		clk = fallbackClock{}
-	}
+func ReadonlyMiddleware(billing SubscriptionMutationChecker, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, ok := mutatingMethods[r.Method]; !ok {
@@ -93,9 +96,9 @@ func ReadonlyMiddleware(billing billingapp.Subscriber, logger *slog.Logger, clk 
 			canMutate, ok := canMutateDataFromContext(r.Context())
 			if !ok {
 				var err error
-				canMutate, err = canMutateData(r.Context(), billing, userID, clk)
+				canMutate, err = billing.CanMutateData(r.Context(), userID)
 				if err != nil {
-					WriteProblem(w, http.StatusInternalServerError, InternalError(r.Context(), err))
+					WriteProblem(r.Context(), w, http.StatusInternalServerError, InternalError(r.Context(), err))
 					return
 				}
 				r = r.WithContext(withCanMutateData(r.Context(), canMutate))
@@ -105,22 +108,12 @@ func ReadonlyMiddleware(billing billingapp.Subscriber, logger *slog.Logger, clk 
 					slog.String("user_id", userID.String()),
 					slog.String("method", r.Method),
 					slog.String("path", path))
-				WriteProblem(w, http.StatusForbidden, Problem(r.Context(), "Subscription blocked", "Подписка заблокирована. Продлите её, чтобы продолжить"))
+				WriteProblem(r.Context(), w, http.StatusForbidden,
+					Problem(r.Context(), "Subscription blocked", "Подписка заблокирована. Продлите её, чтобы продолжить"))
 				return
 			}
 
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func canMutateData(ctx context.Context, billing billingapp.Subscriber, userID uuid.UUID, clk clock.Clock) (bool, error) {
-	view, err := billing.GetSubscription(ctx, userID)
-	if err != nil {
-		if errors.Is(err, billingapp.ErrSubscriptionNotFound) {
-			return true, nil
-		}
-		return false, err
-	}
-	return view.Subscription.CanMutateData(clk.Now().UTC()), nil
 }

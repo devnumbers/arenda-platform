@@ -29,7 +29,7 @@ func RealIPMiddleware(trusted []string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := extractClientIP(r, trustedNets)
 			r.RemoteAddr = ip
-			// extractClientIP may keep the original host:port for direct
+			// The extracted IP may keep the original host:port for direct
 			// connections; the context carries the plain host form.
 			ctxIP := ip
 			if host, _, err := net.SplitHostPort(ip); err == nil {
@@ -68,7 +68,7 @@ func extractClientIP(r *http.Request, trustedNets []*net.IPNet) string {
 	return chosenIP.String()
 }
 
-func parseRemoteAddr(addr string) (net.IP, string) {
+func parseRemoteAddr(addr string) (ip net.IP, port string) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		// Try parsing as a bare IP.

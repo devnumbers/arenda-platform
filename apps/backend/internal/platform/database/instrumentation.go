@@ -22,6 +22,9 @@ import (
 const (
 	defaultSlowAcquireThreshold = 25 * time.Millisecond
 	defaultSlowQueryThreshold   = 50 * time.Millisecond
+	// Fallback db_operation label for SQL whose verb or sqlc query name
+	// cannot be recovered.
+	operationUnknown = "unknown"
 )
 
 type queryExecutor interface {
@@ -59,14 +62,24 @@ func NewInstrumentedPool(pool *pgxpool.Pool, logger *slog.Logger) *InstrumentedP
 
 // InstrumentedTx wraps a pgx transaction with slow query diagnostics.
 type InstrumentedTx struct {
-	tx   transactionExecutor
+	tx transactionExecutor
+	// Raw is the driver transaction behind tx. PgxTxOf hands it to
+	// infrastructure that joins the caller's transaction with driver-level
+	// semantics (river InsertTx); a test-injected non-pgx executor leaves it
+	// nil.
+	raw  pgx.Tx
 	inst dbInstrumenter
 }
 
 // NewInstrumentedTx returns a DBTX-compatible transaction wrapper.
 func NewInstrumentedTx(tx transactionExecutor, logger *slog.Logger) *InstrumentedTx {
+	var raw pgx.Tx
+	if t, ok := tx.(pgx.Tx); ok {
+		raw = t
+	}
 	return &InstrumentedTx{
 		tx:   tx,
+		raw:  raw,
 		inst: newDBInstrumenter(logger),
 	}
 }
@@ -129,9 +142,10 @@ func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...an
 
 	queryStart := time.Now()
 	row := conn.QueryRow(ctx, sql, args...)
-	// instrumentedRow acquires a connection from the pool. Callers must either
-	// Scan the row or Close it to release the connection. A runtime finalizer
-	// provides a best-effort fallback if the row is discarded without Scan/Close.
+	// The instrumentedRow acquires a connection from the pool. Callers must
+	// either Scan the row or Close it to release the connection. A runtime
+	// finalizer provides a best-effort fallback if the row is discarded without
+	// Scan/Close.
 	ir := &instrumentedRow{
 		row:             row,
 		inst:            db.inst,
@@ -146,7 +160,12 @@ func (db *InstrumentedPool) QueryRow(ctx context.Context, sql string, args ...an
 	return ir
 }
 
-func (db *InstrumentedPool) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+func (db *InstrumentedPool) CopyFrom(
+	ctx context.Context,
+	tableName pgx.Identifier,
+	columnNames []string,
+	rowSrc pgx.CopyFromSource,
+) (int64, error) {
 	return db.pool.CopyFrom(ctx, tableName, columnNames, rowSrc)
 }
 
@@ -190,7 +209,12 @@ func (tx *InstrumentedTx) QueryRow(ctx context.Context, sql string, args ...any)
 	}
 }
 
-func (tx *InstrumentedTx) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+func (tx *InstrumentedTx) CopyFrom(
+	ctx context.Context,
+	tableName pgx.Identifier,
+	columnNames []string,
+	rowSrc pgx.CopyFromSource,
+) (int64, error) {
 	return tx.tx.CopyFrom(ctx, tableName, columnNames, rowSrc)
 }
 
@@ -214,7 +238,15 @@ type instrumentedRows struct {
 	closeOnce       sync.Once
 }
 
-func newInstrumentedRows(rows pgx.Rows, inst dbInstrumenter, ctx context.Context, sql string, acquireDuration time.Duration, queryStart time.Time, release func()) *instrumentedRows {
+func newInstrumentedRows(
+	rows pgx.Rows,
+	inst dbInstrumenter,
+	ctx context.Context,
+	sql string,
+	acquireDuration time.Duration,
+	queryStart time.Time,
+	release func(),
+) *instrumentedRows {
 	return &instrumentedRows{
 		rows:            rows,
 		inst:            inst,
@@ -331,16 +363,15 @@ func (i dbInstrumenter) log(ctx context.Context, sql string, acquireDuration, qu
 // logWithIDs is log with the request-scoped correlation IDs already extracted.
 // The rows wrappers use it because pgx.Rows/pgx.Row callbacks have no access to
 // the original query context; they capture the IDs at construction time.
-func (i dbInstrumenter) logWithIDs(ctx context.Context, sql string, acquireDuration, queryDuration time.Duration, err error, requestID, traceID string) {
+func (i dbInstrumenter) logWithIDs(
+	ctx context.Context,
+	sql string,
+	acquireDuration, queryDuration time.Duration,
+	err error,
+	requestID, traceID string,
+) {
 	if !i.shouldLog(acquireDuration, queryDuration, err) {
 		return
-	}
-
-	level := slog.LevelWarn
-	message := "database query slow"
-	if isLoggableQueryError(err) {
-		level = slog.LevelError
-		message = "database query failed"
 	}
 
 	attrs := []slog.Attr{
@@ -360,7 +391,13 @@ func (i dbInstrumenter) logWithIDs(ctx context.Context, sql string, acquireDurat
 		attrs = append(attrs, slog.String("error", sanitize.Error(err)))
 	}
 
-	i.logger.LogAttrs(ctx, level, message, attrs...)
+	// Static messages at the call sites (sloglint static-msg): the error/slow
+	// distinction lives in the level, not in an interpolated message.
+	if isLoggableQueryError(err) {
+		i.logger.LogAttrs(ctx, slog.LevelError, "database query failed", attrs...)
+		return
+	}
+	i.logger.LogAttrs(ctx, slog.LevelWarn, "database query slow", attrs...)
 }
 
 func (i dbInstrumenter) shouldLog(acquireDuration, queryDuration time.Duration, err error) bool {
@@ -375,7 +412,12 @@ func isLoggableQueryError(err error) bool {
 
 func sqlHash(sql string) string {
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(normalizeSQL(sql)))
+	// The hash.Hash contract documents that Write never returns an error; the
+	// value only feeds a log attribute, so a contract violation panics
+	// (must-style, research #321 policy).
+	if _, err := h.Write([]byte(normalizeSQL(sql))); err != nil {
+		panic("database: sql hash write: " + err.Error())
+	}
 	return fmt.Sprintf("%016x", h.Sum64())
 }
 
@@ -386,7 +428,7 @@ func sqlOperation(sql string) string {
 
 	fields := strings.Fields(strings.ToLower(sql))
 	if len(fields) == 0 {
-		return "unknown"
+		return operationUnknown
 	}
 
 	verb := fields[0]
@@ -445,56 +487,84 @@ func sqlcQueryName(sql string) string {
 func sanitizeSQLOperationName(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "unknown"
+		return operationUnknown
 	}
-
-	var b strings.Builder
-	var lastUnderscore bool
-	var prevWasLowerOrDigit bool
-	for _, r := range value {
-		switch {
-		case r >= 'A' && r <= 'Z':
-			if b.Len() > 0 && prevWasLowerOrDigit && !lastUnderscore {
-				b.WriteByte('_')
-			}
-			b.WriteRune(r + ('a' - 'A'))
-			lastUnderscore = false
-			prevWasLowerOrDigit = false
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-			lastUnderscore = false
-			prevWasLowerOrDigit = true
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-			lastUnderscore = false
-			prevWasLowerOrDigit = true
-		case r == '_':
-			if b.Len() > 0 && !lastUnderscore {
-				b.WriteByte('_')
-				lastUnderscore = true
-			}
-			prevWasLowerOrDigit = false
-		default:
-			if b.Len() > 0 && !lastUnderscore {
-				b.WriteByte('_')
-				lastUnderscore = true
-			}
-			prevWasLowerOrDigit = false
-		}
-	}
-
-	result := strings.Trim(b.String(), "_")
+	result := strings.Trim(sanitizeSQLNameRunes(value), "_")
 	if result == "" {
-		return "unknown"
+		return operationUnknown
 	}
 	return result
+}
+
+// sanitizeSQLNameRunes rewrites value's runes into the span-label alphabet:
+// ASCII upper case starts a new word, letters and digits pass through, and
+// every other rune collapses into a single underscore separator.
+func sanitizeSQLNameRunes(value string) string {
+	var b sqlNameBuilder
+	for _, r := range value {
+		b.writeRune(r)
+	}
+	return b.String()
+}
+
+// sqlNameBuilder folds runes into a sanitized name while remembering the
+// separator and letter state, so underscores never double and camel-case word
+// boundaries stay single.
+type sqlNameBuilder struct {
+	b                   strings.Builder
+	lastUnderscore      bool
+	prevWasLowerOrDigit bool
+}
+
+// String returns the name accumulated so far.
+func (s *sqlNameBuilder) String() string {
+	return s.b.String()
+}
+
+func (s *sqlNameBuilder) writeRune(r rune) {
+	switch {
+	case r >= 'A' && r <= 'Z':
+		s.writeWordStart(r + ('a' - 'A'))
+	case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+		s.writeLetterOrDigit(r)
+	default:
+		s.writeSeparator()
+	}
+}
+
+// writeWordStart emits the underscore before a camel-case word boundary (the
+// previous rune was a letter or digit) and then the lower-cased rune.
+func (s *sqlNameBuilder) writeWordStart(lower rune) {
+	if s.b.Len() > 0 && s.prevWasLowerOrDigit && !s.lastUnderscore {
+		s.b.WriteByte('_')
+	}
+	s.b.WriteRune(lower)
+	s.lastUnderscore = false
+	s.prevWasLowerOrDigit = false
+}
+
+// writeLetterOrDigit passes an accepted rune through unchanged.
+func (s *sqlNameBuilder) writeLetterOrDigit(r rune) {
+	s.b.WriteRune(r)
+	s.lastUnderscore = false
+	s.prevWasLowerOrDigit = true
+}
+
+// writeSeparator collapses any non-name rune (including '_') into a single
+// underscore, never leading and never doubling.
+func (s *sqlNameBuilder) writeSeparator() {
+	if s.b.Len() > 0 && !s.lastUnderscore {
+		s.b.WriteByte('_')
+		s.lastUnderscore = true
+	}
+	s.prevWasLowerOrDigit = false
 }
 
 func sanitizeSQLIdent(value string) string {
 	value = strings.Trim(value, `"(),;`)
 	value = strings.TrimPrefix(value, "public.")
 	if value == "" {
-		return "unknown"
+		return operationUnknown
 	}
 
 	var b strings.Builder
@@ -511,7 +581,7 @@ func sanitizeSQLIdent(value string) string {
 		}
 	}
 	if b.Len() == 0 {
-		return "unknown"
+		return operationUnknown
 	}
 	return b.String()
 }

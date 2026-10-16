@@ -1,0 +1,827 @@
+'use client';
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react';
+import Link from 'next/link';
+import { ArrowDown, ArrowLeft, BoldUser, Search } from '@/shared/assets/icons';
+import { cn } from '@/shared/lib/cn';
+import { type HistoryFilterOptions } from '@/entities/history';
+import type { HistoryActorGroup } from '@/features/history';
+import { useMe } from '@/features/auth';
+import { PropertyAvatar, type PropertyType } from '@/entities/property';
+import {
+  acknowledgeFreshFeedEntryIds,
+  groupHistoryByDay,
+  historyFeedScope,
+  historyFeedScopeKey,
+  freshFeedEntryIdsMergedSince,
+  isDefaultHistoryFilters,
+  lastLiveMergeAt,
+  pinnedHistoryFilters,
+  useHistoryFeed,
+  useHistoryFilters,
+  useHistoryFiltersState,
+  type HistoryFilters,
+} from '@/features/history';
+import { dateToIsoLocal } from '@/shared/lib/calendar';
+import { useDebounce } from '@/shared/lib/hooks/useDebounce';
+import {
+  Button,
+  ErrorCard,
+  InfiniteQueryHead,
+  IconButton,
+  MeSuffix,
+  PageContent,
+  SearchField,
+  TopNav,
+  TopNavBackButton,
+  TopNavTitle,
+} from '@/shared/ui/design';
+import { ROUTES } from '@/shared/config/routes';
+import { historyScreenBackHref, historyScreenTitle } from '../lib/screen-chrome';
+import { HistoryRow } from './history-row';
+import { FOLLOW_BOTTOM_PX, decideFeedScroll, distanceToBottom, type FeedEdges } from '../lib/feed-scroll';
+import { historyFeedSkeleton } from './history-states';
+import { HistoryFiltersSheet } from './history-filters-sheet';
+
+/** Задержка дебаунса поиска (мс) — канон поисков (#601). */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** Канонная пауза метки «новое» у читателя на дне (мс) — механика F демо
+ * #879: строки видны сразу, метка гаснет сама (тикет #880). */
+const FRESH_VISIBLE_MS = 2600;
+
+/** Канон строки-ссылки (хаб «Совместный доступ»): подложка hover/active
+ * не меняется, только прозрачность; фокус-ринг с клавиатуры. */
+const HEADER_LINK =
+  'flex min-w-0 items-center gap-2 rounded-m outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary';
+
+/**
+ * Экран «История действий» (карта #704, тикеты #709+#710; макеты
+ * 2157-56876 — лента, 2050-158499 — пустая, 2089-165788 и
+ * 2092-166284/166621/166866 — поиск): мессенджерская лента по всем
+ * доступным объектам — новые снизу, прокрутка вверх догружает старое
+ * (двусторонний keyset #708, head-сентинел). Анатомия по макету
+ * 2157-56876 (правка дизайна, решение владельца 23.09): секция дня
+ * открывается белой плашкой даты с тенью — она прилипает к верхнему краю
+ * при прокрутке, как в мессенджерах, с отступом 24 от хедера (на мобиле
+ * шапка уезжает — safe-area + 24, на планшете/ПК — под закреплённой
+ * шапкой 72+24); шапка объекта — аватар 24 (feed) + название из записи
+ * ленты (живое property_name, читается при чтении), фото и адрес — из
+ * опций /history/filters (без опций название остаётся, без адреса),
+ * кликабельна — с 13.10.2026 ведёт в «Историю объекта» (решение
+ * владельца — амендмент #1361; прежде вела на страницу объекта);
+ * действия актёра — серые карточки (surface-muted, radius m): белый
+ * кружок с пользователем + имя, внутри строки «полоска тона + S-иконка +
+ * текст» (см. HistoryRow). Шапка актёра — ссылка на пару «Действия
+ * участника в объекте» (решение владельца 13.10.2026 — амендмент
+ * #1361: статичные шапки общей ленты заменены; пара известна секцией —
+ * человек кликается в рамках объекта, где он изменения сделал).
+ * Обезличенные записи, actor_id null, не ссылки
+ * нигде. Свой актор
+ * (actor_id = id сессии, useMe) подписан серым суффиксом «(Вы)» — канон
+ * шита фильтров, семантика «как в Telegram» (решение владельца 24.09):
+ * каждый зритель видит метку у себя; на кликабельность метка не влияет.
+ * Роль на экране
+ * не показывается (как в макете) — словарь роли живёт в entity
+ * (ADR 0061). Вход — кебаб «Ваших участников» (#843, решение владельца
+ * 24.09), фолбэк «Назад» — хаб «Совместный доступ» (общий предок
+ * кебабов «Ваших участников» и «Объектов пользователей», #843).
+ *
+ * Пока лента не заполняет вьюпорт, она прижата к нижнему краю — как
+ * свежее сообщение в мессенджере (решение владельца 24.09): при живых
+ * записях PageContent несёт flex-1 + justify-end — узел контента
+ * ScreenLayout уже flex-1 от min-h-screen оболочки, поэтому лента тянется
+ * ровно до нижнего края на всех ярусах (высота шапки и safe-area
+ * учитываются сами, без констант); pending-кадр прижат так же — контент
+ * встаёт на место скелетона без сдвига (#1281, фолбэк Suspense-границы —
+ * HistoryFeedLoading с тем же хромом). Пустые состояния — не сообщения:
+ * «Действий не было» и «Ничего не найдено» живут как раньше.
+ *
+ * Открытие «с конца» (карта #1324, D8): якорь на самые свежие записи
+ * выполняется лейаут-эффектом до пэйнта; страницы истории исключены из
+ * глобального «всегда верх» (реестр якорёных роутов
+ * shared/lib/scroll/anchored-routes.ts — ScrollToTop их не скроллит,
+ * иначе он затирал бы якорь). Всегда открытие на последних действиях —
+ * решение владельца 10.10.2026: реставрации позиции чтения при «Назад»
+ * нет; перечитанное окно (сдвиг обоих краёв, #718) реанкерует на дно.
+ *
+ * Поиск по истории (#710) — иконка в шапке ленты (макет 2157-56876),
+ * шапка меняется на поисковую поверх того же экрана (прецедент «Ваших
+ * участников» #697; серверный поиск — канон #601: дебаунс 300 мс, трим,
+ * пустой ввод после трима запроса не порождает — под полем остаётся
+ * сама лента, макет 2089-165788). Ввод ищет серверно по q (всегда-OR
+ * предикат «как в Telegram» — ресерч #839, тикет #842); смена запроса
+ * держит прежнюю выдачу до ответа
+ * (keepPreviousData в useHistoryFeed). Найденное группируется как лента —
+ * чипы дней сохраняются (макеты 2092-166284/166621); без совпадений —
+ * серая строка «Ничего не найдено» без иллюстрации (макет 2092-166866,
+ * канон «пусто без иллюстрации»); выход — «Назад» возвращает ленту.
+ *
+ * Лента живая (карта #714, тикет #718): кадры history realtime-стрима
+ * догоняют ленту снизу — влитие свежих строк в первую страницу кэша
+ * (useHistoryFeed), окна перечитывание не сдвигает. Прокрутка решается по
+ * границам выдачи
+ * (widgets/history/lib/feed-scroll.ts): свежие строки сами открываются
+ * только у читателя на дне («как в мессенджере»); листающий старое
+ * остаётся на месте без рывков — над кнопкой «Настройки» появляется чип
+ * «Есть новые» в стиле плашек дней, клик — плавный ход к свежим, ручной
+ * доскролл до низа гасит индикатор. На открытии стрима (переподключение,
+ * возврат видимости) лента перечитывается целиком — окно реанкеруется
+ * на самые свежие записи.
+ *
+ * Кнопка «Настройки» стоит на месте по макету (в т.ч. на пустой ленте и
+ * в поиске — 2092-166284): primary по контенту (не на всю ширину, макет
+ * 2184-94734), по центру.
+ *
+ * Фильтры (#711) живут в адресе ленты (?from=&to=&actions=&kinds=&actors=
+ * &objects=, канон §3; применение — push, «назад» возвращает без
+ * фильтров) и открываются шитом «Настройки» (HistoryFiltersSheet) поверх
+ * той же ленты. Группа фильтров, выбранная «в ноль», — пустой результат
+ * без запроса (historyFeedScope → null); активные фильтры с пустой
+ * выдачей показывают «Ничего не найдено» — «Действий не было» остаётся
+ * только у чистой ленты.
+ *
+ * «Действия участника» (#712) — глобальная лента по одному человеку —
+ * снята решением владельца 12.10.2026 (#1361): маршрут
+ * /history/participants/[participantId] удалён, входы (тап по актёру в
+ * общей ленте и кебаб страницы участника) сняты; амендмент 13.10.2026 —
+ * тап по актёру общей ленты вернулся, но ведёт в пару человек+объект.
+ * Пин одного человека живёт только в паре с объектом (#841).
+ *
+ * ## История объекта (#840; макет 3258-76984, карта #1324 тикет #1321)
+ *
+ * Та же лента, прибитая к одному объекту: маршрут
+ * /history/properties/[propertyId] несёт uuid объекта (property_ids =
+ * один, ADR 0061 §7: тот же GET /history), группы адреса действуют
+ * поверх (historyFeedScope с пином propertyId). Объект — предмет
+ * страницы и живёт в шапке: TopNavTitle с сабтайтлом-именем объекта
+ * (серым, с многоточием при переполнении), поиск — иконка справа. Шапки-
+ * карточки объектов над лентой больше нет (макет 3258-76984): внутри дня
+ * сразу карточки актёров, группировка «день → актёр» с плавающей
+ * плашкой даты. Имя — из опций /history/filters, канала шапок ленты
+ * (докстринг useHistoryFilters); опций нет (pending/ошибка/мусорный id)
+ * — сабтайтла нет, лента живёт (канон шита #711). Шапка актёра —
+ * ссылка на пару «Действия участника в объекте» (#841; с 13.10.2026 —
+ * как в общей ленте, решение владельца). Шит: группа «Объекты»
+ * показывает прибитый объект — серым и незабираемым (макет 2184-94176,
+ * решение владельца 24.09; зеркало — пин «Участников» на странице пары
+ * #841);
+ * pinnedHistoryFilters не читает URL-objects, «Применить» его вычищает.
+ * Вход — кебаб «Участников объекта» (макет 1980-139712) и иконка истории
+ * его пустого списка (решение 13.10.2026), шапки объектов общей ленты
+ * (амендмент #1361); фолбэк «Назад» — «Участников объекта».
+ *
+ * ## Действия участника в объекте (#841; макет 3260-77196, вход 2177-59620)
+ *
+ * Та же лента, прибитая к паре человек+объект: маршрут
+ * /history/participants/[participantId]/properties/[propertyId] несёт
+ * uuid юзера (actor_id журнала) и uuid объекта — actor_ids и
+ * property_ids по одному (ADR 0061 §7: тот же GET /history; сервер
+ * AND'ит обе группы — бэк #708 без изменений), группы адреса действуют
+ * поверх пары (historyFeedScope с парой пинов). Композиция по макету
+ * 3260-77196 (D7): имя объекта — в сабтайтле шапки (как у «Истории
+ * объекта»), шапки-карточки объекта над лентой нет; группировка внутри
+ * дней вырождена — сразу карточка актёра без объектных секций, шапка
+ * статична (человек — предмет страницы), имя живое (D5). Шит
+ * «Настройки» — группы
+ * «Участники» и «Объекты» ОБЕ прибиты серым («1/1», незабираемые);
+ * pinnedHistoryFilters
+ * не читает URL-actors/URL-objects, «Применить» их вычищает. Вход —
+ * строка «Действия участника в объекте» на «Правах участника»
+ * (макет 2177-59620; только у зарегистрированных — у pending действий
+ * не бывает: uuid юзера (actor_id журнала) ещё не существует) и шапки
+ * актёров лент — «Истории объекта» (#840) и общей (амендмент #1361,
+ * 13.10.2026); «Назад» живым переходом возвращает к источнику,
+ * фолбэк — «Права участника».
+ */
+export type HistoryFeedScreenProps = {
+  /** «Действия участника в объекте» (#841): uuid юзера, прибивающий
+   * ленту вместе с propertyId (actor_ids = один). Undefined — общая
+   * лента или «История объекта»; самостоятельной страницы «Действия
+   * участника» больше нет (#1361). */
+  readonly participantId?: string;
+  /** История объекта (#840): uuid объекта, прибивающий ленту
+   * (property_ids = один); вместе с participantId — двойной пин #841.
+   * Undefined — общая лента. */
+  readonly propertyId?: string;
+};
+
+export function HistoryFeedScreen({
+  participantId,
+  propertyId,
+}: HistoryFeedScreenProps = {}): JSX.Element {
+  // Личность экрана: страница объекта прибивает объект, страница пары
+  // (#841) — объект и человека; заголовок, фолбэк «Назад» и прибитые
+  // группы шита следуют за предметом; прибитые группы в URL не живут.
+  // Личность экрана одним вычислением (widgets/history/lib/screen-chrome):
+  // заголовок — в TopNavTitle и в шите, фолбэк «Назад» — у кнопки; те же
+  // вычисления у фолбэка Suspense-границы (#1281) — одна точка на оба хрома.
+  const isMemberPage = participantId !== undefined;
+  const isPropertyPage = propertyId !== undefined;
+  const isMemberPropertyPage = isMemberPage && isPropertyPage;
+  const pageTitle = historyScreenTitle(participantId, propertyId);
+  const backHref = historyScreenBackHref(participantId, propertyId);
+  const [searchMode, setSearchMode] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Фильтры (#711) живут в адресе ленты; чтение и запись — через канон
+  // useUrlParams (DESIGN.md §3), применение — push («назад» возвращает
+  // без фильтров). Прибитые группы адреса не читаются: на странице
+  // объекта — «Объекты», на странице пары (#841) — обе группы: и в шит,
+  // и в скоуп идёт нормализованная модель (pinnedHistoryFilters по пинам
+  // ниже), «Применить» заодно вычищает чужой параметр.
+  const { filters: urlFilters, applyFilters } = useHistoryFiltersState();
+  // Пины страницы (HistoryFilterPins): прибитые объект/пара считаются
+  // один раз и для нормализатора фильтров (ниже), и для скоупа.
+  const pins = isMemberPropertyPage
+    ? { actorId: participantId, propertyId }
+    : isPropertyPage
+      ? { propertyId }
+      : undefined;
+  const filters = pinnedHistoryFilters(urlFilters, pins);
+
+  // Открытие поиска сразу делает поле активным (программный фокус —
+  // устоявшийся a11y-паттерн вместо autoFocus).
+  useEffect(() => {
+    if (searchMode) {
+      searchInputRef.current?.focus();
+    }
+  }, [searchMode]);
+
+  // Канон поиска #601: серверный запрос догоняет ввод с дебаунсом, в
+  // запрос идёт трим; пустой трим — не поиск, а лента (запроса нет).
+  // Гард по searchMode закрывает окно дебаунса: «Назад» из поиска
+  // возвращает ленту тем же кадром, не держа 300 мс старый ключ.
+  const debounced = useDebounce(search, SEARCH_DEBOUNCE_MS);
+  const q = debounced.trim();
+  const searching = q.length > 0;
+
+  // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710) + пины
+  // страницы (historyFeedScope: прибитые объект/пара #840/#841
+  // подставляются в скоуп, неприбитые группы адреса действуют поверх).
+  // Группа фильтров, выбранная «в ноль», означает пустой
+  // результат — скоупа нет (null), запрос не делается.
+  const scope = historyFeedScope(filters, pins);
+  // Скоуп запроса ленты одним значением: тот же объект уходит и в решатель
+  // прокрутки (метка live-влития реестра ключуется по скоупу, hooks.ts).
+  // Объект скоупа новый на каждом рендере (фильтры перечитываются из адреса
+  // без мемоизации, use-history-filters.ts) — в эффект прокрутки идёт через
+  // реф, как скоуп подписки в hooks.ts; смена скоупа и смена краёв всегда
+  // в разных коммитах (ключ запроса меняется — данные едут асинхронно).
+  const feedScope = scope === null ? {} : searchMode && searching ? { ...scope, q } : scope;
+  const feedQuery = useHistoryFeed(feedScope, { enabled: scope !== null });
+  const feedScopeRef = useRef(feedScope);
+  useEffect(() => {
+    feedScopeRef.current = feedScope;
+  });
+  // Опции шита: прибитая объектом страница (#840, и пара #841) сужает
+  // запрос своим объектом — участники шита остаются собственником и
+  // соучастниками объекта (D6); глобальная лента читает глобальную
+  // область, где с D14 (#1305) участники — только люди моих объектов.
+  const filtersQuery = useHistoryFilters(isPropertyPage ? [propertyId] : undefined);
+  // Свой актор (решение владельца 24.09): узнаём по id сессии — канон
+  // шита фильтров (#710); серый суффикс «(Вы)» у своей шапки.
+  const meQuery = useMe();
+  const meId = meQuery.data?.id;
+  // Экран истории — паттерн «CTA над TabBar» (решение владельца
+  // 06.10.2026, #1166): нижнее меню остаётся видимым, плавающая кнопка
+  // «Настройки» и чип «Есть новые» поднимаются над ним (офсеты ниже).
+  // Это осознанное отклонение от канона «панель глушит TabBar».
+
+  const entries = feedQuery.data ?? [];
+  // Якорь низа — строго по факту рендера ленты: keepPreviousData
+  // удерживает прежние entries под «в ноль»-фильтрами и ошибкой, а эти
+  // ветки рисуют пустые состояния — без якоря (решение владельца 24.09).
+  const feedRendered = scope !== null && feedQuery.isSuccess && entries.length > 0;
+  // Pending-кадр прижат к низу вместе с лентой — паритет композиций
+  // скелетона и контента (#1281): контент встаёт на место скелетона.
+  const isFeedPending = scope !== null && feedQuery.isPending;
+  const today = dateToIsoLocal(new Date());
+  const days = groupHistoryByDay(entries, today);
+  const options = propertyOptions(filtersQuery.data);
+  // Прибитый объект (#840/#841): имя — из опций /history/filters, канала
+  // шапок ленты; опций нет (pending/ошибка/мусорный id) — сабтайтла нет,
+  // лента живёт (канон шита #711). Имя живёт в сабтайтле шапки на обеих
+  // страницах с пином объекта (макеты 3258-76984, 3260-77196).
+  const pinnedObject = isPropertyPage
+    ? (filtersQuery.data?.objects ?? []).find((object_) => object_.id === propertyId)
+    : undefined;
+
+  // Живая лента (#718): выдача растёт с двух сторон keyset и сдвигается
+  // перечитыванием после разрыва — решение скролла по границам выдачи
+  // (decideFeedScroll): prepend старых держит позицию компенсацией дельты,
+  // append свежих открывается только у читателя на дне, выше появляется
+  // индикатор «Есть новые» (клик — плавный ход к свежим), перечитывание
+  // окна реанкерует на дно. Края выдачи — примитивы в депсах, тело эффекта
+  // читает их (и скоуп — через реф выше) из замыкания того же коммита.
+  // Свежие строки live-влития (#880): row-in 350мс + метка «новое», пока
+  // читатель их не увидит — на дне гаснут по канонной паузе, выше держатся
+  // до доскролла. Реестр влитий — features/history (live-fresh.ts), дельта
+  // читается в эффекте краёв ниже от снимка prev.at.
+  const [freshIds, setFreshIds] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const freshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedScopeKey = historyFeedScopeKey(feedScope);
+  const acknowledgeFresh = useCallback((): void => {
+    if (freshTimerRef.current !== null) {
+      clearTimeout(freshTimerRef.current);
+      freshTimerRef.current = null;
+    }
+    acknowledgeFreshFeedEntryIds(feedScopeKey);
+    setFreshIds((prev) => (prev.size > 0 ? new Set<string>() : prev));
+  }, [feedScopeKey]);
+  // Смена скоупа (фильтры, поиск, пин) — чужой реестр и метки не умеют:
+  // гасим свои целиком через acknowledgeFresh() — разом таймер, реестр и
+  // экранные метки (метки гаснут, когда читатель увидел строки, а строки
+  // чужого скоупа он не видел; ручной таймер+реестр без setFreshIds
+  // оставлял бы чипы «новое» висеть до следующего live-влития). Cleanup
+  // держит замыкание прошлого рендера — гаснет старый скоуп, поэтому в
+  // депсах одна acknowledgeFresh: её личность меняется вместе с ключом
+  // скоупа. Уход с экрана чистит за собой — setFreshIds функциональным
+  // апдейтом после размонтирования no-op.
+  useEffect(() => {
+    return () => {
+      acknowledgeFresh();
+    };
+  }, [acknowledgeFresh]);
+
+  const [hasNewBelow, setHasNewBelow] = useState(false);
+  const entryCount = entries.length;
+  const firstEntryId = entries[0]?.id ?? null;
+  const lastEntryId = entries[entries.length - 1]?.id ?? null;
+  // at — время снимка краёв: live-влитие свежих (метка в реестре, hooks.ts)
+  // позже прошлого снимка значит, что рост этого коммита может включать
+  // свежие снизу — при смене обоих краёв это гонка «fetchNextPage дописал
+  // старые сверху + live-prepend влил свежие снизу», а не перечитывание
+  // окна, и реанкерить читателя старых строк нельзя (feed-scroll.ts).
+  const scroll = useRef<{ edges: FeedEdges | null; height: number; at: number }>({
+    edges: null,
+    height: 0,
+    at: 0,
+  });
+  useLayoutEffect(() => {
+    const edges: FeedEdges = { count: entryCount, firstId: firstEntryId, lastId: lastEntryId };
+    const height = document.documentElement.scrollHeight;
+    const prev = scroll.current;
+    scroll.current = { edges, height, at: Date.now() };
+    const action = decideFeedScroll(
+      {
+        edges: prev.edges,
+        height: prev.height,
+        distanceToOldBottom: prev.height - (window.scrollY + window.innerHeight),
+      },
+      edges,
+      height,
+      { liveMerged: lastLiveMergeAt(feedScopeRef.current) > prev.at },
+    );
+    // Дельта свежих строк этого коммита (#880): влитие между снимками —
+    // строки получают row-in и метку «новое»; у читателя на дне метки
+    // гаснут по канонной паузе, метки выше дна держатся до доскролла —
+    // висящий таймер прошлой волны при indicate-влитии гасится.
+    const justMerged = freshFeedEntryIdsMergedSince(
+      historyFeedScopeKey(feedScopeRef.current),
+      prev.at,
+    );
+    if (justMerged.length > 0) {
+      setFreshIds((prevFresh) => {
+        const next = new Set(prevFresh);
+        for (const id of justMerged) {
+          next.add(id);
+        }
+        return next;
+      });
+      if (action.kind === 'follow' || action.kind === 'anchor') {
+        if (freshTimerRef.current !== null) {
+          clearTimeout(freshTimerRef.current);
+        }
+        freshTimerRef.current = setTimeout(acknowledgeFresh, FRESH_VISIBLE_MS);
+      } else if (action.kind === 'indicate') {
+        // Читатель выше дна — метки держатся до доскролла: гасим висящий
+        // таймер прошлой волны, чтобы он не убил непросмотренные метки.
+        if (freshTimerRef.current !== null) {
+          clearTimeout(freshTimerRef.current);
+          freshTimerRef.current = null;
+        }
+      }
+    }
+    if (action.kind === 'anchor') {
+      // Всегда открытие на последних действиях — решение владельца
+      // 10.10.2026 (#1319): реставрации позиции чтения при «Назад» нет,
+      // любая первая загрузка/сужение выдачи встаёт на дно.
+      window.scrollTo({ top: height });
+      setHasNewBelow(false);
+    } else if (action.kind === 'compensate' || action.kind === 'follow') {
+      if (action.delta > 0) {
+        window.scrollBy({ top: action.delta });
+      }
+      if (action.kind === 'follow') {
+        setHasNewBelow(false);
+      }
+    } else if (action.kind === 'indicate') {
+      setHasNewBelow(true);
+    }
+  }, [entryCount, firstEntryId, lastEntryId, acknowledgeFresh]);
+
+  // Индикатор гаснет и от ручного доскролла до низа — читатель сам дошёл
+  // до свежих записей, «есть новые» больше не новость; метки «новое»
+  // гаснут там же (#880).
+  useEffect(() => {
+    if (!hasNewBelow) {
+      return;
+    }
+    const onScroll = (): void => {
+      if (distanceToBottom() < FOLLOW_BOTTOM_PX) {
+        setHasNewBelow(false);
+        acknowledgeFresh();
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [hasNewBelow, acknowledgeFresh]);
+
+  const scrollToFresh = (): void => {
+    setHasNewBelow(false);
+    acknowledgeFresh();
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  };
+
+  const closeSearch = (): void => {
+    setSearch('');
+    setSearchMode(false);
+  };
+
+  return (
+    <>
+      {searchMode ? (
+        <TopNav
+          variant="search"
+          leading={
+            <IconButton icon={<ArrowLeft />} label="Закрыть поиск" onClick={closeSearch} />
+          }
+        >
+          <SearchField
+            ref={searchInputRef}
+            aria-label="Поиск по истории"
+            placeholder="Поиск действий"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onClear={() => setSearch('')}
+          />
+        </TopNav>
+      ) : (
+        <TopNav
+          leading={<TopNavBackButton fallbackHref={backHref} />}
+          // Лупа — только на загруженной непустой ленте: пустая книга
+          // прячет иконки шапки (§7), pending/error — тоже (прецедент
+          // «Ваших участников» #697), иначе иконка мелькает до ответа.
+          trailing={
+            feedQuery.isSuccess && entries.length > 0 ? (
+              <IconButton
+                icon={<Search className="h-6 w-6" />}
+                label="Поиск по истории"
+                onClick={() => setSearchMode(true)}
+              />
+            ) : undefined
+          }
+        >
+          {/* Объект — предмет страниц с пином объекта (#840/#841): имя
+            * в сабтайтле шапки (макеты 3258-76984, 3260-77196). */}
+          <TopNavTitle
+            title={pageTitle}
+            subtitle={isPropertyPage ? pinnedObject?.name : undefined}
+          />
+        </TopNav>
+      )}
+
+      {/* Якорь низа (решение владельца 24.09): при живых записях лента
+        * прижата к нижнему краю вьюпорта, пока не заполняет его, — как
+        * свежее сообщение в мессенджере. Механизм — flex-1 от узла
+        * контента ScreenLayout (уже flex-1 от min-h-screen), точный низ
+        * на всех ярусах без констант; pending-кадр прижат так же, чтобы
+        * пришедший контент встал на место скелетона без сдвига (#1281);
+        * пустые состояния (ниже) — не «сообщения», без якоря. */}
+      <PageContent
+        className={feedRendered || isFeedPending ? 'flex-1 justify-end px-4' : 'px-4'}
+        aboveTabBarFooter
+      >
+        {scope === null ? (
+          /* Фильтры выбраны «в ноль» — результат пуст по семантике
+            * (запроса нет, #711). */
+          <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
+            Ничего не найдено
+          </p>
+        ) : feedQuery.isPending ? (
+          /* Скелетон — паритет композиции страницы (решение владельца
+            * 24.09; паритет pending/загруженного кадра — #1281): выбор по
+            * скоупу — одна точка с фолбэком Suspense-границы
+            * (historyFeedSkeleton), прибитым страницам — их короткий
+            * скелетон, общий двухгрупповый остаётся только общей ленте
+            * (§7). */
+          historyFeedSkeleton(propertyId)
+        ) : feedQuery.isError ? (
+          <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} className="mt-6" />
+        ) : entries.length === 0 ? (
+          searching || !isDefaultHistoryFilters(filters) ? (
+            /* Без совпадений — серая строка без иллюстрации (макет
+              * 2092-166866; канон «пусто без иллюстрации» #624); активные
+              * фильтры с пустой выдачей — тот же канон (#711: действия
+              * были, но не подходят под фильтр). */
+            <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
+              Ничего не найдено
+            </p>
+          ) : (
+            <div className="flex min-h-[60vh] items-center justify-center">
+              <p className="text-base leading-[18px] text-content-secondary">Действий не было</p>
+            </div>
+          )
+        ) : (
+          <>
+            <InfiniteQueryHead query={feedQuery} />
+            {days.map((day) => (
+              <section key={day.day} className="pb-6">
+                {/* Плашка дня липнет к верхнему краю (макет 2157-56876 —
+                  * sticky, как в мессенджерах) с отступом 24 от хедера:
+                  * на мобиле шапка уезжает — safe-area + 24, на
+                  * планшете/ПК — закреплённая шапка 72 + 24. Зазоры
+                  * плашка↔блоки — по 24 (решение владельца 23.09). */}
+                <div className="sticky top-[calc(env(safe-area-inset-top)_+_24px)] z-20 mb-6 flex justify-center tablet:top-[96px]">
+                  <span className="rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                    {day.label}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-4">
+                  {day.objects.map((object_, objectIndex) => {
+                    const objectOptions = options.get(object_.propertyId);
+                    if (isPropertyPage) {
+                      /* История объекта (#840) и «Действия участника в
+                        * объекте» (#841): объект прибит и живёт в
+                        * сабтайтле шапки — внутри дня сразу карточки
+                        * актёров без объектной секции (макеты 3258-76984,
+                        * 3260-77196). Ссылка с шапки актёра — на странице
+                        * объекта (на пару #841); на странице пары человек
+                        * тоже её предмет, шапки статичны. */
+                      return (
+                        <ActorCards
+                          key={`${object_.propertyId}-${objectIndex}`}
+                          actors={object_.actors}
+                          pinnedActor={isMemberPage}
+                          propertyId={propertyId}
+                          meId={meId}
+                          freshIds={freshIds}
+                        />
+                      );
+                    }
+                    return (
+                      <section
+                        key={`${object_.propertyId}-${objectIndex}`}
+                        className="flex flex-col gap-3"
+                      >
+                        {/* Шапка объекта ведёт в «Историю объекта» —
+                          * амендмент #1361 (решение владельца 13.10.2026):
+                          * прежде ссылалась на страницу объекта. */}
+                        <Link
+                          href={ROUTES.historyProperty(object_.propertyId)}
+                          className={HEADER_LINK}
+                        >
+                          <PropertyHeaderContent
+                            name={object_.propertyName}
+                            photoUrl={objectOptions?.photoUrl ?? ''}
+                            type={objectOptions?.type}
+                            address={objectOptions?.address}
+                          />
+                        </Link>
+                        <ActorCards
+                          actors={object_.actors}
+                          pinnedActor={false}
+                          propertyId={object_.propertyId}
+                          meId={meId}
+                          freshIds={freshIds}
+                        />
+                      </section>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </>
+        )}
+      </PageContent>
+
+      {/* Индикатор «Есть новые» (#718): читатель листает старое, снизу
+        * подъехали свежие записи — чип в стиле плашек дней этого же макета
+        * висит над кнопкой «Настройки» (кнопка 56 + зазор 12); клик —
+        * плавный ход к низу, ручной доскролл гасит его тоже. Обёртка без
+        * pointer-events — строки ленты под зазорами кликабельны.
+        * Ниже ПК (паттерн «CTA над TabBar» #1166) чип живёт над кнопкой,
+        * а кнопка — над видимым футером (72 + паддинг + зазор 12). */}
+      {hasNewBelow && feedRendered && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))_+_68px)] max-desktop:bottom-[calc(72px_+_max(12px,env(safe-area-inset-bottom))_+_80px)] z-40 flex justify-center">
+          <button
+            type="button"
+            onClick={scrollToFresh}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)] outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+          >
+            <ArrowDown className="h-4 w-4" aria-hidden />
+            Есть новые
+          </button>
+        </div>
+      )}
+
+      {/* Шит «Настройки» (#711): primary по контенту (не на всю ширину,
+        * макет 2184-94734), по центру колонки. Контейнер — прозрачная
+        * полоса на весь вьюпорт: pointer-events-none, чтобы она не глушила
+        * клики нижнего хрома по краям (пилюли ПК #876), кликабельна только
+        * сама кнопка. Ниже ПК кнопка плавает над видимым TabBar (паттерн
+        * «CTA над TabBar», решение владельца 06.10.2026 #1166): футер 72 +
+        * паддинг + зазор 12; на ПК TabBar нет — у нижнего края. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-desktop:bottom-[calc(72px_+_max(12px,env(safe-area-inset-bottom))_+_12px)] z-40 flex justify-center">
+        <div className="pointer-events-auto mx-auto flex w-full max-w-column justify-center">
+          <Button type="button" onClick={() => setFiltersOpen(true)}>
+            Настройки
+          </Button>
+        </div>
+      </div>
+
+      {filtersOpen && (
+        <HistoryFiltersSheet
+          applied={filters}
+          optionsQuery={filtersQuery}
+          title={isPropertyPage ? pageTitle : undefined}
+          pinnedParticipantId={participantId}
+          pinnedPropertyId={propertyId}
+          onApply={(draft: HistoryFilters) => {
+            applyFilters(draft);
+            setFiltersOpen(false);
+          }}
+          onClose={() => setFiltersOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/** Карточки актёров одной объектной группы (общие для всех скоупов):
+ * isSelf — актёр = читатель (решение владельца 24.09, по id сессии),
+ * headerHref — ссылка на пару «Действия участника в объекте»
+ * (#841, решение владельца 13.10.2026 — амендмент #1361): в общей ленте
+ * пара известна секцией (propertyId группы), в «Истории объекта» #840 —
+ * страницей; владелец и своя шапка «(Вы)» кликабельны наравне с чужими,
+ * на странице пары шапки статичны — человек её предмет; обезличенные
+ * записи, actor_id null, не ссылки нигде. freshIds — строки
+ * live-влития (#880): row-in + метка «новое». */
+function ActorCards({
+  actors,
+  pinnedActor,
+  propertyId,
+  meId,
+  freshIds,
+}: {
+  readonly actors: readonly HistoryActorGroup[];
+  readonly pinnedActor: boolean;
+  readonly propertyId?: string;
+  readonly meId?: string;
+  readonly freshIds: ReadonlySet<string>;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {actors.map((actor, actorIndex) => (
+        <ActorCard
+          key={`${actor.key}-${actorIndex}`}
+          actor={actor}
+          isSelf={meId !== undefined && actor.actorId === meId}
+          headerHref={
+            !pinnedActor && propertyId !== undefined && actor.actorId !== null
+              ? ROUTES.historyMemberProperty(actor.actorId, propertyId)
+              : null
+          }
+          freshIds={freshIds}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Серая карточка актёра (день → актёр → строки): шапка + строки записей.
+ * isSelf — серый суффикс «(Вы)» в шапке, кликабельность не трогает. */
+function ActorCard({
+  actor,
+  isSelf,
+  headerHref,
+  freshIds,
+}: {
+  readonly actor: HistoryActorGroup;
+  readonly isSelf: boolean;
+  readonly headerHref: string | null;
+  readonly freshIds: ReadonlySet<string>;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-2 rounded-m bg-surface-muted p-3">
+      <ActorHeader name={actor.name} photoUrl={actor.photoUrl} isSelf={isSelf} href={headerHref} />
+      <div className="flex flex-col gap-2">
+        {actor.entries.map((entry) => (
+          <HistoryRow key={entry.id} entry={entry} fresh={freshIds.has(entry.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Заголовок объектной группы ленты: аватар 24 (feed) + название + адрес.
+ * Один контент для кликабельной шапки секции и статичной карточки пина. */
+function PropertyHeaderContent({
+  name,
+  photoUrl,
+  type,
+  address,
+}: {
+  readonly name: string;
+  readonly photoUrl: string;
+  readonly type?: PropertyType;
+  readonly address?: string;
+}): JSX.Element {
+  return (
+    <>
+      <PropertyAvatar photoUrl={photoUrl} type={type} surface="feed" />
+      <span className="min-w-0">
+        <h2 className="truncate text-xs font-medium leading-[15px] text-content">{name}</h2>
+        {address && (
+          <p className="truncate text-xs leading-[15px] text-content-secondary">{address}</p>
+        )}
+      </span>
+    </>
+  );
+}
+
+/** Шапка актёра в карточке: белый кружок-плейсхолдер + имя; с href —
+ * ссылка на страницу участника, без — статичная шапка. Свой актёр
+ * подписан серым суффиксом «(Вы)» — канон шита фильтров (#710). */
+/** Аватар актёра в шапке группы ленты (решение #1286): фото профиля 24,
+ * иначе — и при битом фото (404 стрима) — заглушка BoldUser. Гард '' —
+ * канон UserAvatar: легаси-бэк мог отдать пустую строку вместо null, а
+ * <img src=""> не стреляет onError в WebKit — без него круг без глифа. */
+function ActorFeedAvatar({ photoUrl }: { readonly photoUrl: string | null }): JSX.Element {
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-white',
+        showPhoto && 'overflow-hidden',
+      )}
+    >
+      {showPhoto ? (
+        <img
+          src={photoUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setPhotoBroken(true)}
+        />
+      ) : (
+        <BoldUser className="h-3.5 w-3.5" aria-hidden />
+      )}
+    </span>
+  );
+}
+
+function ActorHeader({
+  name,
+  photoUrl,
+  isSelf,
+  href,
+}: {
+  readonly name: string;
+  readonly photoUrl: string | null;
+  readonly isSelf: boolean;
+  readonly href: string | null;
+}): JSX.Element {
+  const content: ReactNode = (
+    <>
+      <ActorFeedAvatar photoUrl={photoUrl} />
+      <h3 className="min-w-0 truncate text-xs font-medium leading-[15px] text-content">
+        {name}
+        {isSelf && <MeSuffix />}
+      </h3>
+    </>
+  );
+  return href !== null ? (
+    <Link href={href} className={HEADER_LINK}>
+      {content}
+    </Link>
+  ) : (
+    <div className="flex items-center gap-2">{content}</div>
+  );
+}
+
+/** Опции объектов области: id → фото, тип и адрес шапки группы ('' —
+ * плейсхолдер). */
+function propertyOptions(
+  options: HistoryFilterOptions | undefined,
+): Map<string, { photoUrl: string; type: PropertyType; address: string }> {
+  const map = new Map<string, { photoUrl: string; type: PropertyType; address: string }>();
+  for (const object_ of options?.objects ?? []) {
+    map.set(object_.id, { photoUrl: object_.photoUrl, type: object_.type, address: object_.address });
+  }
+  return map;
+}

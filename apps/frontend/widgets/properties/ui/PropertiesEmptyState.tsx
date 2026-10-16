@@ -1,84 +1,55 @@
 'use client';
 
 import type { JSX } from 'react';
-import { Tooltip } from '@heroui/react';
-import { ROUTES } from '@/shared/config/routes';
-import { EmptyState } from '@/shared/ui/empty-state';
-import { HomeAdd } from '@/shared/assets/icons';
-import { Icon } from '@/shared/ui/icon';
-import styles from './PropertiesEmptyState.module.css';
+import { Button, EmptyState } from '@/shared/ui/design';
 
+/**
+ * Пустое состояние хаба «Объектов» (Figma 3229-94647 / 3235-74057,
+ * тикет #1234): иллюстрация, «Объектов нет», серое пояснение и синяя
+ * кнопка «Добавить объект» — Button size="small" radius="m" (44/12),
+ * канон CTA пустых состояний (анатомия 3235-74057). Сценарий
+ * «зарегистрировался и сразу оформил тариф без объекта» видит то же
+ * состояние. При исчерпанном лимите тарифа кнопка гасится с подсказкой
+ * (гейт лимита — как у «+» создания).
+ */
 export type PropertiesEmptyStateProps = {
   readonly canAdd?: boolean;
   readonly isLoading?: boolean;
+  readonly onAdd?: () => void;
 };
 
-export function PropertiesEmptyState({ canAdd, isLoading }: PropertiesEmptyStateProps): JSX.Element {
-  if (isLoading) {
-    return (
-      <EmptyState
-        imageSrc="/images/empty-logo.png"
-        imageAlt="Логотип"
-        title="Здесь будут отображаться ваши объекты"
-        subtitle="Добавьте свою квартиру, студию, помещение или другой объект недвижимости"
-        actionNode={
-          <button
-            type="button"
-            disabled
-            className={styles.actionDisabled}
-            aria-label="Создать объект"
-          >
-            <Icon size="m">
-              <HomeAdd />
-            </Icon>
-            Создать объект
-          </button>
-        }
-      />
-    );
-  }
-
-  if (canAdd === false) {
-    return (
-      <EmptyState
-        imageSrc="/images/empty-logo.png"
-        imageAlt="Логотип"
-        title="Здесь будут отображаться ваши объекты"
-        subtitle="Добавьте свою квартиру, студию, помещение или другой объект недвижимости"
-        actionNode={
-          <Tooltip>
-            <Tooltip.Trigger>
-              <button
-                type="button"
-                disabled
-                className={styles.actionDisabled}
-                aria-label="Создать объект (достигнут лимит)"
-              >
-                <Icon size="m">
-                  <HomeAdd />
-                </Icon>
-                Создать объект
-              </button>
-            </Tooltip.Trigger>
-            <Tooltip.Content>Достигнут лимит объектов по тарифу</Tooltip.Content>
-          </Tooltip>
-        }
-      />
-    );
-  }
+export function PropertiesEmptyState({
+  canAdd,
+  isLoading,
+  onAdd,
+}: PropertiesEmptyStateProps): JSX.Element {
+  const button = (
+    <Button
+      size="small"
+      radius="m"
+      disabled={isLoading === true || canAdd === false}
+      onClick={onAdd}
+      aria-label={canAdd === false ? 'Добавить объект (достигнут лимит)' : 'Добавить объект'}
+    >
+      Добавить объект
+    </Button>
+  );
 
   return (
     <EmptyState
-      imageSrc="/images/empty-logo.png"
-      imageAlt="Логотип"
-      title="Здесь будут отображаться ваши объекты"
-      subtitle="Добавьте свою квартиру, студию, помещение или другой объект недвижимости"
-      actionHref={ROUTES.propertyNew}
-      actionText="Создать объект"
-      actionIcon={
-        <Icon size="m">
-          <HomeAdd />
-        </Icon>
+      imageSrc="/images/properties/properties-empty.png"
+      imageAlt="Объектов нет"
+      title="Объектов нет"
+      description="Добавьте квартиру, дом или помещение, чтобы начать управлять объектом"
+      action={
+        canAdd === false && !isLoading ? (
+          // Подсказка о лимите — нативный title на обёртке (HeroUI Tooltip
+          // снесён, #901): кнопка задизейблена и тап не ловит, подсказку
+          // показывает обёртка; смысл продублирован в aria-label кнопки.
+          <span title="Достигнут лимит объектов по тарифу">{button}</span>
+        ) : (
+          button
+        )
       }
     />
   );

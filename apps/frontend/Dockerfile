@@ -4,7 +4,7 @@ FROM node:24-alpine  AS deps
 
 WORKDIR /app/apps/frontend
 
-COPY apps/frontend/package.json apps/frontend/package-lock.json ./
+COPY apps/frontend/package.json apps/frontend/package-lock.json apps/frontend/.npmrc ./
 RUN npm ci
 
 FROM node:24-alpine  AS build

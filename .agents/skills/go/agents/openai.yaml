@@ -1,0 +1,3 @@
+interface:
+  display_name: "Go"
+  short_description: "This repo's Go rules and primary sources"

@@ -1,0 +1,1519 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+)
+
+// The billing worker phases (issue #252, ADR 0008 lifecycle). The scheduler
+// shells (platform/scheduler) call these under their advisory locks and stay
+// thin: every decision lives here, behind the module's stores and provider
+// port.
+
+// ExcessPropertyArchiver is the properties-context bridge of the billing
+// lifecycle inside the caller's transaction: it archives the owner's active
+// properties beyond a tariff limit — keeping the most recently updated, or
+// the property the owner chose (issue #617) — restores the properties a
+// grace entry archived (ADR 0055) and answers whether a property of the
+// owner is active. Declared here, at the consumer (the worker phases, the
+// payment application seam and the cancel flow), per ADR 0035; the
+// composition root adapts the properties context to it.
+type ExcessPropertyArchiver interface {
+	// ArchiveExcess archives the owner's active properties beyond the limit
+	// and returns their ids in restoration-priority order — the newest
+	// archived property first. When keepPropertyID is set, that property is
+	// kept among the survivors as long as it is one of the owner's active
+	// properties; the remaining survivor slots go to the most recently
+	// updated ones.
+	ArchiveExcess(ctx context.Context, ownerID uuid.UUID, limit int, keepPropertyID *uuid.UUID) ([]uuid.UUID, error)
+	// RestoreGraceArchive unarchives the given owner's properties — the ids
+	// snapshot taken at the grace entry — while the owner's active count
+	// stays under the limit (a negative limit is unlimited); already-active
+	// and missing properties are skipped as settled. Returns the ids it
+	// could not restore — the debt remainder still archived beyond the
+	// limit, in the given order.
+	RestoreGraceArchive(ctx context.Context, ownerID uuid.UUID, ids []uuid.UUID, limit int) ([]uuid.UUID, error)
+	// ActivePropertyExists reports whether the property belongs to the owner
+	// and is active (not archived) — the keep-choice validation of the
+	// cancel flow (issue #617).
+	ActivePropertyExists(ctx context.Context, ownerID, propertyID uuid.UUID) (bool, error)
+}
+
+// ExcessPropertyArchiverSource produces transaction-bound archivers.
+type ExcessPropertyArchiverSource interface {
+	WithTx(tx transaction.Tx) (ExcessPropertyArchiver, error)
+}
+
+// RecipientSlotEnforcer suspends the shared memberships whose recipient's
+// tariff limit is exceeded after a billing limit drop, and recovers the
+// suspended ones FIFO when a slot frees up or the limit expands (a recipient
+// upgrade). Declared here, at the consumer, per ADR 0035.
+type RecipientSlotEnforcer interface {
+	Enforce(ctx context.Context, userID uuid.UUID, trigger string) error
+	// Recover reactivates the recipient's oldest suspended shared memberships
+	// FIFO while free slots remain — the upgrade tail of the success-
+	// application seam (issue #695): a payment that raised the tariff limit
+	// re-opens suspended access in the same commit. (The slot-freed sources —
+	// revoke, self-exit, owner archive/delete — recover inside the access and
+	// properties contexts, not through this port.)
+	Recover(ctx context.Context, userID uuid.UUID) error
+}
+
+// RecipientSlotEnforcerSource produces transaction-bound enforcers.
+type RecipientSlotEnforcerSource interface {
+	WithTx(tx transaction.Tx) (RecipientSlotEnforcer, error)
+}
+
+// renewalProvider is the narrow provider slice the renewal worker needs:
+// starting merchant-initiated payments, charging saved methods, reading the
+// provider-side status, and the provider identity. Declared here, at the
+// consumer, per ADR 0035.
+type renewalProvider interface {
+	PaymentInitiator
+	PaymentCharger
+	PaymentStatusReader
+	ProviderNamer
+}
+
+// PaymentLifecycle is the narrow payment-finalization slice the
+// reconciliation worker phases consume: applying a provider-confirmed payment
+// notification (the same synchronous application the webhook flow ends in)
+// and resolving a payment stuck in the refunding reservation of the refund
+// saga. Declared here, at the consumer (the worker phases), per ADR 0035;
+// PaymentService implements it, and the webhook transport keeps its own
+// public entries on the service — this port is the workers' slice, not the
+// transport's.
+type PaymentLifecycle interface {
+	ApplyPaymentNotification(ctx context.Context, n *PaymentNotification) error
+	ResolveRefundingFromStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) (bool, error)
+}
+
+// Workers drives the subscription lifecycle phases of the billing background
+// workers: deferred tariff changes, renewal charges, lost-webhook
+// reconciliation and the expiry downgrades to basic (issue #252). Every phase
+// batches over the worker listings, re-reads and locks each row inside its own
+// transaction, and stops a batch loop that makes no progress — the next tick
+// retries what failed. The phases stay thin over the phase scheduler (issue
+// #421): every time boundary of a batch — renewal onset, grace phases,
+// reminder lead, staleness — is computed by the scheduler, and the workers
+// hold no clock of their own.
+type Workers struct {
+	txStoreFactory
+	// Payments applies provider-confirmed outcomes and resolves stuck refunds
+	// through the narrow lifecycle port — the same synchronous paths the
+	// webhook flow ends in, without a reference to the whole payment service
+	// (issue #288, ADR 0035).
+	payments PaymentLifecycle
+	provider renewalProvider
+	// Phases computes every time boundary the phases act on — the workers'
+	// single seam for time (issue #421).
+	phases *phaseScheduler
+	config Config
+	log    *slog.Logger
+	// Metrics records the hygiene gauges (ticket #433); nil keeps the phases
+	// running without metrics.
+	metrics *Metrics
+	// Publisher emits the grace lifecycle events best-effort (issue #253);
+	// nil keeps the pre-#253 behaviour of no grace notifications.
+	publisher EventPublisher
+	// ArchiverSource and slotSource bridge the expiry and downgrade phases to
+	// the properties and access contexts; nil until SetLifecycleBridges wires
+	// them (the subscription-side phases still run without the bridges).
+	archiverSource ExcessPropertyArchiverSource
+	slotSource     RecipientSlotEnforcerSource
+}
+
+// WorkersConfig carries the non-transactional dependencies of the workers.
+type WorkersConfig struct {
+	// Provider charges renewals and reads provider-side payment status. Nil
+	// keeps the pre-#252 behaviour: the charge-driven phases answer
+	// ErrPaymentUnavailable instead of charging blindly.
+	Provider renewalProvider
+	// Payments applies provider-confirmed payment outcomes and resolves stuck
+	// refunds — the narrow lifecycle port the reconciliation phases consume
+	// (ADR 0035). Nil is a wiring error; the refund reconciliation phase is
+	// the one that guards it explicitly.
+	Payments PaymentLifecycle
+	// Clock is the time source of the phase scheduler — the workers' only
+	// seam for time (issue #421). Nil defaults to the real clock.
+	Clock clock.Clock
+	// Metrics records the stuck-payment gauges of the hygiene phase (ticket
+	// #433). Nil keeps the phases running without gauges — every Record
+	// method is nil-safe — the shape of local dev and tests; the composition
+	// root builds the instruments from the global OTel MeterProvider the way
+	// it builds the provider metrics.
+	Metrics *Metrics
+	Config  Config
+	Logger  *slog.Logger
+	// Publisher emits the grace lifecycle events (issue #253); nil keeps the
+	// pre-#253 behaviour.
+	Publisher EventPublisher
+}
+
+// NewWorkers creates the billing worker phases over the shared factory. Nil
+// clock, config and logger default to the real clock, DefaultConfig and the
+// default logger, matching the module's constructor conventions; the clock
+// feeds the phase scheduler, which stays the workers' only time source.
+func NewWorkers(factory txStoreFactory, cfg WorkersConfig) *Workers {
+	if cfg.Clock == nil {
+		cfg.Clock = clock.Real{}
+	}
+	if cfg.Config == (Config{}) {
+		cfg.Config = DefaultConfig()
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+	return &Workers{
+		txStoreFactory: factory,
+		payments:       cfg.Payments,
+		provider:       cfg.Provider,
+		phases:         newPhaseScheduler(cfg.Clock, cfg.Config),
+		config:         cfg.Config,
+		log:            cfg.Logger,
+		metrics:        cfg.Metrics,
+		publisher:      cfg.Publisher,
+	}
+}
+
+// Worker-slot audit triggers — the access coordinator records them in its
+// audit context, so they are low-cardinality labels naming the tariff phase
+// behind the enforcement: which phase ran and which way the limit moved.
+const (
+	triggerScheduledDowngrade = "scheduled_downgrade"
+	triggerFreeDowngrade      = "free_downgrade"
+	triggerRenewalDowngrade   = "renewal_downgrade"
+	triggerTariffUpgrade      = "tariff_upgrade"
+	triggerTariffChange       = "tariff_change"
+	triggerGraceExpired       = "grace_expired"
+	triggerGraceEntry         = "grace_entry"
+	triggerNonRenewingExpired = "non_renewing_expired"
+	triggerCancelledExpired   = "cancelled_expired"
+	triggerRefund             = "refund"
+)
+
+// The phases' selections (issue #286) live on the phase scheduler (issue
+// #421): each phase describes its batch once as a value computed by the
+// scheduler, the listing and the under-lock re-check share it, and the
+// predicate behind the values lives once in SQL — a new phase is a new
+// scheduler constructor, never a new port method.
+
+// SetLifecycleBridges wires the cross-context lifecycle bridges the expiry and
+// downgrade phases call in their transactions: excess-property archiving
+// (properties context) and recipient-slot enforcement (access context). The
+// composition root calls it once those modules exist — billing is built before
+// them. Without bridges the phases still apply every subscription change; only
+// the excess properties and suspended memberships wait for the next wired run.
+func (w *Workers) SetLifecycleBridges(archiver ExcessPropertyArchiverSource, slots RecipientSlotEnforcerSource) {
+	w.archiverSource = archiver
+	w.slotSource = slots
+}
+
+// runLifecycleTx runs work like runInTx plus the lifecycle bridges bound to
+// the transaction — the transaction shape of every phase that lowers a tariff
+// limit.
+func (w *Workers) runLifecycleTx(ctx context.Context, work func(*txStores) error) error {
+	return w.runInTxWithBridges(ctx, w.archiverSource, w.slotSource, work)
+}
+
+// ProcessScheduledChanges applies due deferred tariff changes whose target is
+// free: the switch happens in one transaction with no provider call — the
+// tariff changes, validity extends from now, auto-renew stays on and any
+// excess properties are archived (ADR 0008 §3). A paid target is skipped:
+// it is charged at apply time by the renewal phase, which runs right after
+// this one in the same tick. Returns the number of applied changes; skipped
+// paid downgrades are not counted because they stay in the selection until
+// their renewal charge clears them.
+func (w *Workers) ProcessScheduledChanges(ctx context.Context, now time.Time) (int, error) {
+	processed := 0
+	sel := w.phases.pendingChangesDue(now, w.config.WorkerBatchSize)
+	for {
+		subs, err := w.subscriptions.List(ctx, sel)
+		if err != nil {
+			return processed, fmt.Errorf("list subscriptions with pending change: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		applied := 0
+		skipped := 0
+		for _, sub := range subs {
+			didApply, applyErr := w.applyScheduledChange(ctx, sub, now)
+			if applyErr != nil {
+				w.log.ErrorContext(ctx, "apply scheduled change failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", sanitize.Error(applyErr)))
+				continue
+			}
+			if didApply {
+				applied++
+			} else {
+				skipped++
+			}
+		}
+		processed += applied
+		if len(subs) < sel.Limit {
+			break
+		}
+		if applied == 0 {
+			// A full batch with zero applies stays in the selection: failed
+			// items retry next tick, skipped paid downgrades wait for their
+			// renewal charge. Warn only when nothing was skipped, i.e. the
+			// batch made no progress due to failures alone.
+			if skipped == 0 {
+				w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+					slog.String("op", "apply scheduled changes"))
+			}
+			break
+		}
+	}
+	return processed, nil
+}
+
+// applyScheduledChange applies one due deferred change. It returns applied
+// only for the free path; a paid target reports false so the caller leaves it
+// counted as skipped, and a pending change consumed between listing and
+// locking reports true — the row left the selection either way.
+func (w *Workers) applyScheduledChange(ctx context.Context, listed domain.Subscription, now time.Time) (bool, error) {
+	applied := false
+	err := w.runLifecycleTx(ctx, func(stores *txStores) error {
+		sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, w.phases.pendingChangesDue(now, 1))
+		if err != nil {
+			return err
+		}
+		if !inBatch {
+			// The change was consumed, cleared or rescheduled between listing
+			// and locking — the row left the selection either way.
+			applied = true
+			return nil
+		}
+		appliedFree, err := applyFreeScheduledChange(ctx, stores, &sub, now)
+		if err != nil {
+			return err
+		}
+		if !appliedFree {
+			// A paid target is charged at apply time; charging belongs to the
+			// renewal phase running right after this one.
+			return nil
+		}
+		applied = true
+		return nil
+	})
+	return applied, err
+}
+
+// applyFreeScheduledChange applies the due free-target scheduled change to
+// the locked subscription — the one free apply every phase shares (the
+// scheduled-changes phase, the boundary phases of issue #1451): the target
+// tariff switches, the validity extends from now, auto-renew stays on, the
+// transition is logged and the target limit enforced. It reports whether the
+// change was applied; a paid target reports false — its charge at apply time
+// or its fall to basic belongs to the caller.
+func applyFreeScheduledChange(
+	ctx context.Context, stores *txStores, sub *domain.Subscription, now time.Time,
+) (bool, error) {
+	target, err := stores.tariffs.GetByID(ctx, *sub.PendingTariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return false, ErrTariffNotFound
+		}
+		return false, fmt.Errorf("get pending tariff: %w", err)
+	}
+	period := domain.PeriodMonth
+	if sub.PendingPeriod != nil {
+		period = *sub.PendingPeriod
+	}
+	price, err := target.Price(period)
+	if err != nil {
+		return false, err
+	}
+	if price > 0 {
+		return false, nil
+	}
+	transition, err := stores.applyTransition(ctx, sub,
+		func(s *domain.Subscription) error { return s.ApplyScheduledDowngrade(target, period, now) },
+		transitionSpec{
+			reason:    domain.TransitionReasonScheduledChangeApplied,
+			initiator: domain.InitiatorSystem,
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+	if transitionChangedTariff(transition, target.ID) {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, target.ActivePropertyLimit, triggerScheduledDowngrade, nil); err != nil {
+			return false, fmt.Errorf("enforce tariff limit after scheduled downgrade: %w", err)
+		}
+	}
+	return true, nil
+}
+
+// ProcessRenewals drives the expiry of paid periods (ADR 0008): subscriptions
+// with auto-renew on are charged on their active payment method — a failed or
+// impossible charge moves them to grace — while subscriptions with auto-renew
+// off (and cancelled ones whose retained period ended) downgrade to basic with
+// their excess properties archived. Returns the number of subscriptions
+// processed.
+func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("renewal worker requires a payment provider: %w", ErrPaymentUnavailable)
+	}
+	if w.payments == nil {
+		// The success application runs through the lifecycle port (issue
+		// #428); a wiring that forgets it fails loudly instead of panicking
+		// on the first confirmed charge.
+		return 0, fmt.Errorf("renewal worker requires the payment lifecycle: %w", ErrPaymentUnavailable)
+	}
+
+	processed := 0
+	renewSel := w.phases.renewalDue(now, w.config.WorkerBatchSize)
+	n, err := w.processSubscriptionBatch(ctx, now, "renew", renewSel, func(ctx context.Context, sub domain.Subscription, now time.Time) error {
+		return w.renewSubscription(ctx, sub, now, renewSel)
+	})
+	if err != nil {
+		return processed, err
+	}
+	processed += n
+
+	// The boundary-charge leg of issue #1451: cancelled subscriptions whose
+	// due scheduled downgrade targets a paid tariff are charged at apply time
+	// through the same two-transaction renewal shape (ADR 0008 §3) — the
+	// scheduling consented to the charge by enabling auto-renew. A free
+	// target never reaches this leg: the expiry legs below apply it first.
+	dueScheduled := w.phases.scheduledDowngradeChargeDue(now, w.config.WorkerBatchSize)
+	chargeScheduled := func(ctx context.Context, sub domain.Subscription, now time.Time) error {
+		return w.renewSubscription(ctx, sub, now, dueScheduled)
+	}
+	n, err = w.processSubscriptionBatch(ctx, now, "charge scheduled downgrades", dueScheduled, chargeScheduled)
+	if err != nil {
+		return processed, err
+	}
+	processed += n
+
+	basicTariff, err := w.tariffs.GetByName(ctx, domain.TariffBasic)
+	if err != nil {
+		return processed, fmt.Errorf("get basic tariff for non-renewing expiry: %w", err)
+	}
+	// The keep choice is honoured only by an actual fall to basic: a
+	// cancelled leg carrying a due scheduled change never falls (the free
+	// target applies, the paid one is charged), so its keep choice — consumed
+	// by the scheduling — is already gone.
+	expire := func(sel SubscriptionSelection, trigger string, waitForCharge bool) func(context.Context, domain.Subscription, time.Time) error {
+		return func(ctx context.Context, sub domain.Subscription, now time.Time) error {
+			return w.expireSubscription(ctx, sub, basicTariff, trigger, sel, now, waitForCharge)
+		}
+	}
+
+	nonRenewingSel := w.phases.nonRenewingExpired(now, w.config.WorkerBatchSize)
+	expireNonRenewing := expire(nonRenewingSel, triggerNonRenewingExpired, false)
+	n, err = w.processSubscriptionBatch(ctx, now, "expire non-renewing", nonRenewingSel, expireNonRenewing)
+	if err != nil {
+		return processed, err
+	}
+	processed += n
+
+	cancelledSel := w.phases.cancelledExpired(now, w.config.WorkerBatchSize)
+	expireCancelled := expire(cancelledSel, triggerCancelledExpired, true)
+	n, err = w.processSubscriptionBatch(ctx, now, "expire cancelled", cancelledSel, expireCancelled)
+	if err != nil {
+		return processed, err
+	}
+	processed += n
+	return processed, nil
+}
+
+// ProcessGraceRetries drives the dunning minimum of spec #419 (ticket #431):
+// a subscription that entered grace after a failed renewal charge is retried
+// twice on the fixed schedule — +24 h and +72 h from the grace entry — on its
+// active payment method, whatever it is by then (a card switch between
+// retries is picked up at charge time). A retry runs through the same
+// planning and charging half as a renewal: the planning transaction locks the
+// subscription in the dunning selection (so a subscription that left grace —
+// a manual payment, an upgrade, an admin move — is a no-op), resolves the
+// current renewal terms and persists a fresh pending payment (the retry
+// boundary is consumed by any payment since the grace entry), and the charge
+// finalizes through the single success-application seam. A failed retry
+// leaves the subscription in grace — the failure freshness guard sees the
+// open grace window and does not re-enter it — and after the schedule and the
+// window are spent, the expired-grace phase keeps its old behaviour. Returns
+// the number of subscriptions charged.
+func (w *Workers) ProcessGraceRetries(ctx context.Context, now time.Time) (int, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("grace retry worker requires a payment provider: %w", ErrPaymentUnavailable)
+	}
+	if w.payments == nil {
+		return 0, fmt.Errorf("grace retry worker requires the payment lifecycle: %w", ErrPaymentUnavailable)
+	}
+
+	processed := 0
+	sel := w.phases.graceRetryDue(now, w.config.WorkerBatchSize)
+	// A retried row does not always leave the selection this tick — a payment
+	// reused from a crashed run consumes nothing — so the loop tracks the users
+	// it already attempted and stops instead of spinning on them.
+	attempted := make(map[uuid.UUID]bool)
+	for {
+		subs, err := w.subscriptions.List(ctx, sel)
+		if err != nil {
+			return processed, fmt.Errorf("list subscriptions with due grace retry: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		retried := 0
+		for _, sub := range subs {
+			if attempted[sub.UserID] {
+				continue
+			}
+			attempted[sub.UserID] = true
+			if err := w.retryGraceCharge(ctx, sub, now); err != nil {
+				w.log.ErrorContext(ctx, "grace retry failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			retried++
+			processed++
+		}
+		if len(subs) < sel.Limit {
+			break
+		}
+		if retried == 0 {
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "grace retries"))
+			break
+		}
+	}
+	return processed, nil
+}
+
+// retryGraceCharge plans and charges one dunning retry of a grace
+// subscription — the two-transaction shape of renewSubscription over the
+// dunning selection instead of the renewal onset.
+func (w *Workers) retryGraceCharge(ctx context.Context, sub domain.Subscription, now time.Time) error {
+	var plan renewalPlan
+	grace := newGraceEvents(w.publisher, w.log)
+	err := grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
+		var planErr error
+		plan, planErr = w.planRenewal(ctx, grace, stores, sub, now, w.phases.graceRetryDue(now, 1))
+		return planErr
+	})
+	if err != nil || !plan.ready {
+		return err
+	}
+	return w.chargeRenewal(ctx, plan, now)
+}
+
+// processSubscriptionBatch loops a worker selection in batches and processes
+// every row. A full batch with zero progress stays in the selection, so the
+// loop stops and defers to the next tick instead of spinning on the same
+// failing rows.
+func (w *Workers) processSubscriptionBatch(
+	ctx context.Context,
+	now time.Time,
+	op string,
+	sel SubscriptionSelection,
+	process func(context.Context, domain.Subscription, time.Time) error,
+) (int, error) {
+	processed := 0
+	for {
+		subs, err := w.subscriptions.List(ctx, sel)
+		if err != nil {
+			return processed, fmt.Errorf("list subscriptions for %s: %w", op, err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		batchProcessed := 0
+		for _, sub := range subs {
+			if err := process(ctx, sub, now); err != nil {
+				w.log.ErrorContext(ctx, "subscription processing failed",
+					slog.String("op", op),
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			batchProcessed++
+		}
+		processed += batchProcessed
+		if len(subs) < sel.Limit {
+			break
+		}
+		if batchProcessed == 0 {
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", op))
+			break
+		}
+	}
+	return processed, nil
+}
+
+// renewSubscription charges one expired subscription in the two-transaction
+// pattern: the planning transaction locks the subscription, resolves the
+// renewal terms and persists the pending payment (the durable record that
+// survives a crash before the provider call); the provider calls run outside
+// any transaction; a second transaction finalizes the payment and applies its
+// subscription effects. The selection names the batch the lock re-checks —
+// the renewal onset for the renewal phase, the cancelled boundary-charge
+// batch of issue #1451 for its leg.
+func (w *Workers) renewSubscription(ctx context.Context, sub domain.Subscription, now time.Time, sel SubscriptionSelection) error {
+	var plan renewalPlan
+	// The planning transaction runs with the lifecycle bridges: its free-terms
+	// path can lower a tariff limit, and that archiving belongs to the same
+	// commit as the subscription change. Its grace path captures the event,
+	// and the grace-events module publishes it strictly after the commit
+	// (issue #284).
+	grace := newGraceEvents(w.publisher, w.log)
+	err := grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
+		var planErr error
+		plan, planErr = w.planRenewal(ctx, grace, stores, sub, now, sel)
+		return planErr
+	})
+	if err != nil || !plan.ready {
+		return err
+	}
+	return w.chargeRenewal(ctx, plan, now)
+}
+
+// renewalPlan is the outcome of the renewal planning transaction: a pending
+// payment, the method it charges and the tariff terms it renews. A plan that
+// is not ready marks an early exit — nothing is due for a charge (the
+// subscription renewed or changed since listing, its terms are free, or it
+// entered grace through the grace-events module).
+type renewalPlan struct {
+	ready   bool
+	payment domain.SubscriptionPayment
+	method  domain.PaymentMethod
+	tariff  domain.Tariff
+}
+
+// planRenewal runs inside the planning transaction. A plan that comes back
+// not ready is an early exit: the subscription renewed or changed since
+// listing, its terms are free (applied right here), or it entered grace — so
+// no charge is due. The selection names the batch the lock re-checks: the
+// renewal onset for the renewal phase, the dunning schedule for the grace
+// retry phase (ticket #431).
+func (w *Workers) planRenewal(
+	ctx context.Context, grace *graceEvents, stores *txStores, listed domain.Subscription, now time.Time,
+	sel SubscriptionSelection,
+) (renewalPlan, error) {
+	sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, sel)
+	if err != nil {
+		return renewalPlan{}, err
+	}
+	if !inBatch {
+		// Renewed or changed between listing and locking.
+		return renewalPlan{}, nil
+	}
+
+	renewalTariff, period, amount, err := renewalTerms(ctx, stores, sub)
+	if err != nil {
+		return renewalPlan{}, err
+	}
+	if amount <= 0 {
+		// Free terms renew without a charge: the basic tariff's renewal is the
+		// permanent fall to basic; a pending free change applies in place.
+		return renewalPlan{}, w.applyFreeRenewal(ctx, stores, sub, renewalTariff, period, now)
+	}
+
+	method, chargeable, err := w.chargeableMethod(ctx, stores, sub)
+	if err != nil {
+		return renewalPlan{}, err
+	}
+	if !chargeable {
+		// No chargeable method: nothing to charge and nothing failed at the
+		// provider — grace gives the user the window to bind a card. The
+		// grace-events module captures the entry for the post-commit
+		// publication.
+		return renewalPlan{}, grace.enterGrace(ctx, stores, sub, now, w.config.GraceDuration)
+	}
+
+	// Reuse a pending renewal payment from a crashed run instead of initiating
+	// a duplicate; the pending-payments unique index is the durable backstop.
+	pending, err := pendingRenewalPayment(ctx, stores, sub, renewalTariff, period, amount, w.provider.Name(), now)
+	if err != nil {
+		return renewalPlan{}, err
+	}
+	// A recovered pending payment may predate a card switch, or the card
+	// snapshot (issue #619): point it at the method the subscription charges
+	// now, so the record matches the token and the card actually charged.
+	if pending.PaymentMethodID == nil || *pending.PaymentMethodID != method.ID || pending.CardMask == nil {
+		if err := pending.AttachMethodSnapshot(method.ID, method.DisplayMask, now); err != nil {
+			return renewalPlan{}, err
+		}
+		if err := stores.payments.Update(ctx, *pending); err != nil {
+			return renewalPlan{}, fmt.Errorf("update renewal payment method: %w", err)
+		}
+	}
+	return renewalPlan{ready: true, payment: *pending, method: method, tariff: renewalTariff}, nil
+}
+
+// pendingRenewalPayment resolves the charge target of a renewal: a live
+// pending payment for the same tariff and period from a crashed run — or a
+// fresh pending payment persisted as the durable record that survives a crash
+// before the provider call. A pending form payment whose deadline ran out
+// (issue #616) is expired in the same transaction and replaced. The charge
+// method is pointed at the payment by the caller.
+func pendingRenewalPayment(
+	ctx context.Context, stores *txStores, sub domain.Subscription,
+	renewalTariff domain.Tariff, period domain.SubscriptionPeriod,
+	amount int64, provider domain.PaymentProvider, now time.Time,
+) (*domain.SubscriptionPayment, error) {
+	pending := findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
+	if pending != nil && !pending.IsLivePending(now) {
+		// The pending form payment's deadline ran out (issue #616): fail it
+		// and start a fresh charge instead of reusing a dead payment.
+		if err := expireDeadPendingPayment(ctx, stores, pending, now); err != nil {
+			return nil, err
+		}
+		pending = nil
+	}
+	if pending != nil {
+		return pending, nil
+	}
+	payment, err := domain.NewSubscriptionPayment(sub.UserID, sub.ID, renewalTariff.ID, period, amount, provider, now)
+	if err != nil {
+		return nil, err
+	}
+	payment, err = stores.payments.Create(ctx, payment)
+	if err != nil {
+		if !errors.Is(err, ErrAlreadyExists) {
+			return nil, fmt.Errorf("save renewal payment: %w", err)
+		}
+		pending = findPendingPayment(stores, ctx, sub.UserID, renewalTariff.ID, period)
+		if pending == nil {
+			return nil, fmt.Errorf("pending renewal payment lost after unique-race: %w", err)
+		}
+		return pending, nil
+	}
+	return &payment, nil
+}
+
+// renewalTerms resolves what a renewal buys: a due scheduled change renews
+// into its target tariff and period (charged at apply time); otherwise the
+// current tariff for the subscription's current period. The period is
+// subscription state, not payment history — right after a scheduled downgrade
+// the last succeeded payment still references the old tariff's period.
+func renewalTerms(ctx context.Context, stores *txStores, sub domain.Subscription) (domain.Tariff, domain.SubscriptionPeriod, int64, error) {
+	if sub.PendingTariffID != nil && sub.PendingPeriod != nil {
+		target, err := stores.tariffs.GetByID(ctx, *sub.PendingTariffID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return domain.Tariff{}, "", 0, ErrTariffNotFound
+			}
+			return domain.Tariff{}, "", 0, fmt.Errorf("get pending tariff: %w", err)
+		}
+		amount, err := target.Price(*sub.PendingPeriod)
+		if err != nil {
+			return domain.Tariff{}, "", 0, err
+		}
+		return target, *sub.PendingPeriod, amount, nil
+	}
+	current, err := stores.tariffs.GetByID(ctx, sub.TariffID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Tariff{}, "", 0, ErrTariffNotFound
+		}
+		return domain.Tariff{}, "", 0, fmt.Errorf("get current tariff: %w", err)
+	}
+	period := domain.PeriodMonth
+	if sub.CurrentPeriod != nil {
+		period = *sub.CurrentPeriod
+	}
+	amount, err := current.Price(period)
+	if err != nil {
+		return domain.Tariff{}, "", 0, err
+	}
+	return current, period, amount, nil
+}
+
+// applyFreeRenewal completes a renewal whose terms cost nothing, inside the
+// planning transaction (issue #252). The basic tariff's renewal is the
+// permanent fall to basic — validity cleared, auto-renew off, excess
+// properties archived, the shared expiry outcome. A free non-basic target
+// (none is seeded today, the branch keeps the phase total) renews in place or
+// applies a pending free change without a payment.
+//
+// A due scheduled change renews into its free target through the scheduled
+// apply, never through the permanent basic fall — even when the target is
+// basic (issue #1451): the assignment promised the switch, not the end of the
+// paid track. The renewal onset only sees such a row when the
+// scheduled-changes phase left it due this tick (a failed batch, a cancelled
+// row's boundary-charge leg), and the apply must stay correct wherever it
+// runs.
+func (w *Workers) applyFreeRenewal(
+	ctx context.Context, stores *txStores, sub domain.Subscription,
+	tariff domain.Tariff, period domain.SubscriptionPeriod, now time.Time,
+) error {
+	pendingApply := sub.HasPendingChange()
+	reason := domain.TransitionReasonExpired
+	if pendingApply || tariff.Name != domain.TariffBasic {
+		reason = domain.TransitionReasonScheduledChangeApplied
+	}
+	trigger := triggerFreeDowngrade
+	if pendingApply {
+		trigger = triggerScheduledDowngrade
+	}
+	applied, err := stores.applyTransition(ctx, &sub,
+		func(s *domain.Subscription) error {
+			switch {
+			case pendingApply:
+				return s.ApplyScheduledDowngrade(tariff, period, now)
+			case tariff.Name == domain.TariffBasic:
+				s.DowngradeToBasic(tariff.ID)
+				return nil
+			case s.TariffID == tariff.ID:
+				return s.ApplyRenewal(uuid.Nil, period, now)
+			default:
+				current, err := stores.tariffs.GetByID(ctx, s.TariffID)
+				if err != nil {
+					if errors.Is(err, ErrNotFound) {
+						return fmt.Errorf("subscription %s references missing tariff %s: %w", s.ID, s.TariffID, ErrTariffNotFound)
+					}
+					return fmt.Errorf("get current tariff: %w", err)
+				}
+				return s.ApplyTariffChange(uuid.Nil, current, tariff, period, now)
+			}
+		},
+		transitionSpec{
+			reason:    reason,
+			initiator: domain.InitiatorSystem,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if transitionChangedTariff(applied, sub.TariffID) {
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, tariff.ActivePropertyLimit, trigger, nil); err != nil {
+			return fmt.Errorf("enforce tariff limit after free renewal: %w", err)
+		}
+	}
+	return nil
+}
+
+// chargeableMethod resolves the subscription's active payment method as a
+// charge target of the active provider. A missing method — none linked, the
+// row gone — or a method saved by another provider (ADR 0038: a token is only
+// meaningful together with its provider) is as good as absent: no charge is
+// possible until the user binds a card of the active provider.
+func (w *Workers) chargeableMethod(ctx context.Context, stores *txStores, sub domain.Subscription) (domain.PaymentMethod, bool, error) {
+	if sub.ActivePaymentMethodID == nil {
+		return domain.PaymentMethod{}, false, nil
+	}
+	method, err := stores.methods.GetByID(ctx, *sub.ActivePaymentMethodID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.PaymentMethod{}, false, nil
+		}
+		return domain.PaymentMethod{}, false, fmt.Errorf("get active payment method: %w", err)
+	}
+	if method.Provider != w.provider.Name() {
+		return domain.PaymentMethod{}, false, nil
+	}
+	return method, true, nil
+}
+
+// chargeRenewal runs the provider half of a renewal outside any transaction:
+// the idempotent MIT initiation (when the pending payment has no provider
+// reference yet), the pre-charge status check that rules out a double charge,
+// the charge itself, and the finalizing transaction.
+func (w *Workers) chargeRenewal(ctx context.Context, plan renewalPlan, now time.Time) error {
+	payment := plan.payment
+	if !payment.HasProviderReference() {
+		initRes, err := w.provider.InitPayment(ctx, w.mitInitRequest(payment, plan.tariff))
+		if err != nil {
+			// Init refused: nothing was or will be charged for this payment —
+			// the outcome is certain, fail it and enter grace.
+			return w.failRenewalPayment(ctx, payment.ID, providerErrorCode(err), now)
+		}
+		// The MIT path of the shared reference save (issue #285): the
+		// initiation result carries no payer URL; the saved payment is the
+		// charge target the rest of this phase runs on. The reference time is
+		// the scheduler's clock read — the tick snapshot is long spent by the
+		// time the provider answers.
+		payment, err = saveProviderReference(ctx, w.runInTx, payment.ID, initRes, w.phases.now())
+		if err != nil {
+			return err
+		}
+	}
+	if !payment.HasProviderReference() {
+		// A concurrent flow finalized or re-referenced the payment; the
+		// persisted state wins.
+		return nil
+	}
+
+	// A referenced payment may already carry an earlier run's outcome whose
+	// application crashed: the provider's state rules out a second charge.
+	status, err := w.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
+	if err != nil {
+		// The previous outcome may be a success; never charge over an unknown
+		// status. The payment stays pending and a later tick resolves it.
+		w.log.WarnContext(ctx, "provider status unavailable; skipping charge attempt this tick",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return nil
+	}
+	switch status.Status {
+	case domain.PaymentStatusSucceeded:
+		return w.finalizeFromProviderStatus(ctx, payment, status)
+	case domain.PaymentStatusFailed:
+		return w.failRenewalPayment(ctx, payment.ID, errorCodeFromResult(status.ErrorCode), now)
+	default:
+		// Any other provider state (still pending, refunding, refunded) leaves
+		// the charge unresolved — fall through to a fresh charge attempt.
+	}
+
+	charge, err := w.provider.ChargePayment(ctx, ChargeRequest{
+		PaymentID:         payment.ID,
+		ProviderPaymentID: *payment.ProviderPaymentID,
+		AmountKopecks:     payment.AmountKopecks,
+		ChargeToken:       plan.method.ProviderToken,
+	})
+	if err != nil {
+		return w.recoverUncertainCharge(ctx, payment, err, now)
+	}
+	switch charge.Status {
+	case domain.PaymentStatusSucceeded:
+		return w.finalizeFromProviderStatus(ctx, payment, PaymentStatusResult{Status: domain.PaymentStatusSucceeded})
+	case domain.PaymentStatusFailed:
+		return w.failRenewalPayment(ctx, payment.ID, errorCodeFromResult(charge.ErrorCode), now)
+	default:
+		// The provider finalizes asynchronously and delivers the webhook; the
+		// pending payment and the subscription stay as they are.
+		return nil
+	}
+}
+
+// mitInitRequest builds the provider-neutral initiation of a merchant-initiated
+// renewal: no payer form (no deadline) and no save-method — the credentials
+// were saved by the customer-initiated parent payment; the purpose is worded
+// as a renewal.
+func (w *Workers) mitInitRequest(payment domain.SubscriptionPayment, tariff domain.Tariff) InitPaymentRequest {
+	return InitPaymentRequest{
+		PaymentID:     payment.ID,
+		AmountKopecks: payment.AmountKopecks,
+		Period:        payment.Period,
+		CustomerRef:   payment.UserID.String(),
+		Purpose: PaymentPurpose{
+			Kind:       PaymentPurposeRenewal,
+			TariffName: tariff.Name,
+			Period:     payment.Period,
+		},
+		Initiator: InitiatorMerchant,
+	}
+}
+
+// failRenewalPayment finalizes a definitively failed renewal charge and moves
+// the subscription into grace in the same transaction: the pending window for
+// the user to fix the payment method (ADR 0008). Grace v2 (ADR 0055) makes
+// the entry archive excess properties, so the transaction carries the
+// lifecycle bridges — the archiving and the snapshot commit with the grace
+// transition. The freshness guard of issue #426 keeps a superseded charge out
+// of grace: a subscription renewed or upgraded by a newer payment while this
+// charge was in flight stays active, and the failure is recorded on the
+// payment alone. A payment finalized by another flow first is a no-op. The
+// grace-entered event is captured by the grace-events module inside the
+// transaction and published strictly after the commit — best-effort, a
+// publication failure is logged and never fails the finalized payment
+// (issue #284).
+func (w *Workers) failRenewalPayment(ctx context.Context, paymentID uuid.UUID, errorCode *string, now time.Time) error {
+	grace := newGraceEvents(w.publisher, w.log)
+	return grace.run(ctx, w.runLifecycleTx, func(stores *txStores) error {
+		payment, err := stores.paymentForUpdate(ctx, paymentID)
+		if err != nil {
+			return err
+		}
+		if payment.Status != domain.PaymentStatusPending {
+			return nil
+		}
+		if err := payment.MarkFailed(errorCode, now); err != nil {
+			return err
+		}
+		if err := stores.payments.Update(ctx, payment); err != nil {
+			return fmt.Errorf("mark renewal payment failed: %w", err)
+		}
+		sub, err := stores.subscriptionForUpdate(ctx, payment.UserID)
+		if err != nil {
+			return err
+		}
+		if sub.FailedRenewalIsCurrent(payment.ID, now) {
+			if err := grace.enterGrace(ctx, stores, sub, now, w.config.GraceDuration); err != nil {
+				return err
+			}
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorRole:  auditdomain.ActorRoleSystem,
+			Action:     auditdomain.ActionSubscriptionPaymentFailed,
+			EntityType: auditdomain.EntitySubscriptionPayment,
+			EntityID:   &payment.ID,
+			Context:    map[string]any{auditKeyPaymentID: payment.ID, auditKeyProvider: string(w.provider.Name())},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+}
+
+// recoverUncertainCharge resolves a renewal charge whose provider call
+// returned an error: the money state is unknown — the charge may have been
+// captured. The provider's current status is the source of truth (ADR 0010)
+// and is queried outside any transaction. A definitive outcome is applied; an
+// unresolved one counts as a charge attempt and, at the configured limit, the
+// payment fails and the subscription enters grace, so a permanently stuck
+// charge cannot keep an expired subscription active forever.
+func (w *Workers) recoverUncertainCharge(ctx context.Context, payment domain.SubscriptionPayment, cause error, now time.Time) error {
+	switch {
+	case errors.Is(cause, ErrProviderChargeBlocked):
+		w.log.ErrorContext(ctx,
+			"renewal charge blocked by provider: COF/recurring operations are not enabled on the terminal; "+
+				"contact the provider manager to enable them",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
+			slog.String("error", sanitize.Error(cause)))
+	case errors.Is(cause, ErrProviderInvalidOperation):
+		w.log.ErrorContext(ctx,
+			"renewal rejected by provider as an invalid operation: "+
+				"integration misconfiguration; investigate the provider integration",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
+			slog.String("error", sanitize.Error(cause)))
+	}
+
+	if !payment.HasProviderReference() {
+		// The charge never reached a provider payment: nothing can be
+		// captured, the outcome is certain.
+		return w.failRenewalPayment(ctx, payment.ID, providerErrorCode(cause), now)
+	}
+	status, err := w.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
+	if err != nil {
+		// Still unknown: this must not count as a charge attempt — the charge
+		// may already be captured. Leave everything for a later tick.
+		w.log.WarnContext(ctx, "provider status unknown after charge error; leaving subscription active and payment pending",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
+			slog.String("error", sanitize.Error(err)))
+		return nil
+	}
+	switch status.Status {
+	case domain.PaymentStatusSucceeded:
+		return w.finalizeFromProviderStatus(ctx, payment, status)
+	case domain.PaymentStatusFailed:
+		code := errorCodeFromResult(status.ErrorCode)
+		if code == nil {
+			code = providerErrorCode(cause)
+		}
+		return w.failRenewalPayment(ctx, payment.ID, code, now)
+	default:
+		// Pending or unexpected provider state: count the attempt below and
+		// cap it.
+	}
+
+	exceeded := false
+	err = w.runInTx(ctx, func(stores *txStores) error {
+		current, err := stores.paymentForUpdate(ctx, payment.ID)
+		if err != nil {
+			return err
+		}
+		if current.Status != domain.PaymentStatusPending {
+			return nil
+		}
+		current.RecordChargeAttempt()
+		exceeded = current.ChargeAttempts >= w.config.ChargeAttemptLimit
+		if err := stores.payments.Update(ctx, current); err != nil {
+			return fmt.Errorf("record charge attempt: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if exceeded {
+		w.log.ErrorContext(ctx, "renewal charge hit the attempt limit; failing payment and moving subscription to grace",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
+			slog.Int("charge_attempt_limit", w.config.ChargeAttemptLimit))
+		return w.failRenewalPayment(ctx, payment.ID, providerErrorCode(cause), now)
+	}
+	w.log.WarnContext(ctx, "renewal charge unresolved at provider; leaving subscription active and payment pending",
+		slog.String(auditKeyPaymentID, payment.ID.String()),
+		slog.String("provider_status", string(status.Status)))
+	return nil
+}
+
+// ProcessExpiredGrace downgrades subscriptions whose grace window ended to the
+// basic tariff and archives their excess properties — the shared expiry path
+// of ADR 0008. Returns the number of subscriptions processed.
+func (w *Workers) ProcessExpiredGrace(ctx context.Context, now time.Time) (int, error) {
+	basicTariff, err := w.tariffs.GetByName(ctx, domain.TariffBasic)
+	if err != nil {
+		return 0, fmt.Errorf("get basic tariff: %w", err)
+	}
+	graceSel := w.phases.graceExpired(now, w.config.WorkerBatchSize)
+	return w.processSubscriptionBatch(ctx, now, "expire grace", graceSel,
+		func(ctx context.Context, sub domain.Subscription, now time.Time) error {
+			return w.expireSubscription(ctx, sub, basicTariff, triggerGraceExpired, graceSel, now, false)
+		})
+}
+
+// ProcessGraceExpiryReminders dispatches the grace-expiry reminder of every
+// subscription inside its reminder window — the half-open window
+// [valid_until - GraceExpiryReminderBefore, valid_until) — exactly once per
+// grace window (issue #253). The reminder is never sent before the window
+// opens or after the grace ends: the selection bounds both edges, and the
+// processing transaction re-checks them under the subscription lock. Returns
+// the number of subscriptions reminded.
+func (w *Workers) ProcessGraceExpiryReminders(ctx context.Context, now time.Time) (int, error) {
+	processed := 0
+	sel := w.phases.graceReminderWindow(now, w.config.WorkerBatchSize)
+	for {
+		subs, err := w.subscriptions.List(ctx, sel)
+		if err != nil {
+			return processed, fmt.Errorf("list subscriptions in grace reminder window: %w", err)
+		}
+		if len(subs) == 0 {
+			break
+		}
+		reminded := 0
+		for _, sub := range subs {
+			if err := w.remindGraceExpiring(ctx, sub, now); err != nil {
+				w.log.ErrorContext(ctx, "grace expiry reminder failed",
+					slog.String("subscription_id", sub.ID.String()),
+					slog.String("user_id", sub.UserID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			reminded++
+			processed++
+		}
+		if len(subs) < sel.Limit {
+			break
+		}
+		if reminded == 0 {
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "grace expiry reminders"))
+			break
+		}
+	}
+	return processed, nil
+}
+
+// remindGraceExpiring applies one grace-expiry reminder: the transaction locks
+// the subscription, re-checks the reminder window through the selection under
+// the lock, and hands the still-eligible row to the grace-events module, which
+// marks it reminded and publishes the event strictly after the commit,
+// best-effort, once per window (issue #284). An ineligible subscription is a
+// no-op, not an error.
+func (w *Workers) remindGraceExpiring(ctx context.Context, listed domain.Subscription, now time.Time) error {
+	grace := newGraceEvents(w.publisher, w.log)
+	return grace.run(ctx, w.runInTx, func(stores *txStores) error {
+		sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID,
+			w.phases.graceReminderWindow(now, 1))
+		if err != nil {
+			return err
+		}
+		if !inBatch {
+			return nil
+		}
+		return grace.remindWindow(ctx, stores, sub, now)
+	})
+}
+
+// expireSubscription applies the shared expiry path in one transaction: it
+// locks the subscription, re-checks the selection under the lock (the state the
+// listing saw may be gone), downgrades to basic with its transition-log entry,
+// archives the excess properties — keeping the property the owner chose at
+// cancel time, when the falling subscription carries one (issue #617) — and
+// enforces the recipient slots. An out-of-selection subscription is a no-op,
+// not an error.
+//
+// A live pending change outranks the basic fall (issue #1451): a free target
+// applies as the scheduled downgrade — the assigned change replaces the fall.
+// A paid target waits for the boundary-charge leg only on the cancelled leg
+// (waitForCharge) — that leg runs earlier in the same tick and charges the
+// target the scheduling consented to; on the grace and non-renewing legs no
+// charge machinery serves the row, so a paid target converges on the basic
+// fall the way it did before the deferred downgrade reached those states.
+func (w *Workers) expireSubscription(
+	ctx context.Context, listed domain.Subscription, basicTariff domain.Tariff, trigger string,
+	sel SubscriptionSelection, now time.Time, waitForCharge bool,
+) error {
+	return w.runLifecycleTx(ctx, func(stores *txStores) error {
+		sub, inBatch, err := stores.lockInSelection(ctx, listed.UserID, sel)
+		if err != nil {
+			return err
+		}
+		if !inBatch {
+			return nil
+		}
+		if sub.HasPendingChange() {
+			applied, err := applyFreeScheduledChange(ctx, stores, &sub, now)
+			if err != nil {
+				return err
+			}
+			if applied || waitForCharge {
+				// Applied: the scheduled apply replaced the fall. Not applied
+				// with waitForCharge: a paid target the boundary-charge leg of
+				// the renewal phase owns — falling to basic would discard a
+				// plan the boundary charge may still deliver.
+				return nil
+			}
+			// A paid target no charge machinery serves: the plain basic fall
+			// below.
+		}
+		// The keep choice is read before the downgrade consumes it: it names
+		// the property the basic-limit enforcement below must keep alive.
+		keepPropertyID := sub.KeepPropertyID
+		if _, err := stores.applyTransition(ctx, &sub,
+			func(s *domain.Subscription) error { s.DowngradeToBasic(basicTariff.ID); return nil },
+			transitionSpec{
+				reason:    domain.TransitionReasonExpired,
+				initiator: domain.InitiatorSystem,
+			},
+		); err != nil {
+			return err
+		}
+		if err := stores.enforceTariffLimit(ctx, sub.UserID, basicTariff.ActivePropertyLimit, trigger, keepPropertyID); err != nil {
+			return fmt.Errorf("enforce tariff limit after expiry downgrade: %w", err)
+		}
+		return nil
+	})
+}
+
+// ProcessPendingUpgradePayments finalizes stale pending tariff-change payments
+// (upgrades and recovery upgrades of the ChangeTariff flow) whose webhook was
+// lost: the provider's status is the source of truth and its outcome is
+// applied through the same synchronous path the webhook uses. Returns the
+// number of payments checked with the provider.
+func (w *Workers) ProcessPendingUpgradePayments(ctx context.Context, now time.Time) (int, error) {
+	return w.reconcileStalePendingPayments(ctx, "pending upgrade payments",
+		w.phases.stalePendingUpgrades(now, w.config.WorkerBatchSize))
+}
+
+// ProcessExpiredPendingPayments expires still-pending form payments whose
+// deadline ran out (issue #616): the server-side expiry is the truth, so the
+// payment becomes failed and the user's locked tariff choice unlocks. There
+// are no subscription effects — a customer-initiated payment carries no
+// charge method — and no provider call: the provider's own redirect deadline
+// is the same persisted instant, so a success that slipped past the expiry
+// arrives as a late webhook and is reconciled against the provider by the
+// shared out-of-order seam. Every row is re-checked and locked inside its own
+// transaction: a payment resolved between listing and locking is a no-op.
+// Returns the number of payments expired.
+func (w *Workers) ProcessExpiredPendingPayments(ctx context.Context, now time.Time) (int, error) {
+	expired := 0
+	for {
+		payments, err := w.txStoreFactory.payments.ListExpiredPending(ctx, now, w.config.WorkerBatchSize)
+		if err != nil {
+			return expired, fmt.Errorf("list expired pending payments: %w", err)
+		}
+		if len(payments) == 0 {
+			break
+		}
+		batch := 0
+		for _, payment := range payments {
+			if err := w.expirePendingPayment(ctx, payment, now); err != nil {
+				w.log.ErrorContext(ctx, "failed to expire pending payment past its deadline",
+					slog.String(auditKeyPaymentID, payment.ID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			batch++
+		}
+		expired += batch
+		if len(payments) < w.config.WorkerBatchSize {
+			break
+		}
+		if batch == 0 {
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "expire pending payments"))
+			break
+		}
+	}
+	return expired, nil
+}
+
+// expirePendingPayment expires one listed payment inside its own transaction:
+// the row is locked and re-checked, so a payment finalized by another flow
+// between listing and locking is a no-op, not an error. The audit entry
+// matches every other payment failure's shape.
+func (w *Workers) expirePendingPayment(ctx context.Context, listed domain.SubscriptionPayment, now time.Time) error {
+	return w.runInTx(ctx, func(stores *txStores) error {
+		payment, err := stores.paymentForUpdate(ctx, listed.ID)
+		if err != nil {
+			return err
+		}
+		if payment.Status != domain.PaymentStatusPending {
+			// Finalized by another flow between listing and locking: the
+			// persisted state wins.
+			return nil
+		}
+		if payment.IsLivePending(now) {
+			// Its deadline moved back between listing and locking.
+			return nil
+		}
+		if err := payment.MarkExpired(now); err != nil {
+			return err
+		}
+		if err := stores.payments.Update(ctx, payment); err != nil {
+			return fmt.Errorf("mark expired pending payment: %w", err)
+		}
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorRole:  auditdomain.ActorRoleSystem,
+			Action:     auditdomain.ActionSubscriptionPaymentFailed,
+			EntityType: auditdomain.EntitySubscriptionPayment,
+			EntityID:   &payment.ID,
+			Context: map[string]any{
+				auditKeyPaymentID: payment.ID,
+				auditKeyProvider:  string(payment.Provider),
+				auditKeyReason:    domain.PaymentErrorCodeFormExpired,
+			},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+}
+
+// ReconcilePendingPayments pulls the lost webhooks of every stale pending
+// payment with a provider reference (issue #252): the reconciliation worker's
+// backstop beyond the provider's own redeliveries. Returns the number of
+// payments checked with the provider.
+func (w *Workers) ReconcilePendingPayments(ctx context.Context, now time.Time) (int, error) {
+	return w.reconcileStalePendingPayments(ctx, "pending payments",
+		w.phases.stalePending(now, w.config.WorkerBatchSize))
+}
+
+// reconcileStalePendingPayments batches a stale-pending selection and resolves
+// each payment against the provider. A payment the provider has not settled
+// stays pending; a full batch with nothing finalized stays in the selection,
+// so the loop stops and defers to the next tick.
+func (w *Workers) reconcileStalePendingPayments(ctx context.Context, op string, sel PaymentSelection) (int, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("payment reconciliation worker requires a payment provider: %w", ErrPaymentUnavailable)
+	}
+	processed := 0
+	for {
+		payments, err := w.txStoreFactory.payments.List(ctx, sel)
+		if err != nil {
+			return processed, fmt.Errorf("list stale %s: %w", op, err)
+		}
+		if len(payments) == 0 {
+			break
+		}
+		finalized := 0
+		for _, payment := range payments {
+			processed++
+			// The selection guarantees the provider reference: without it
+			// there is nothing to query at the provider.
+			status, statusErr := w.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
+			if statusErr != nil {
+				w.log.WarnContext(ctx, "failed to query provider status for stale payments",
+					slog.String("selection", op),
+					slog.String(auditKeyPaymentID, payment.ID.String()),
+					slog.String("error", sanitize.Error(statusErr)))
+				continue
+			}
+			switch status.Status {
+			case domain.PaymentStatusSucceeded, domain.PaymentStatusFailed:
+				if err := w.finalizeFromProviderStatus(ctx, payment, status); err != nil {
+					w.log.ErrorContext(ctx, "failed to finalize stale payment from provider status",
+						slog.String("selection", op),
+						slog.String(auditKeyPaymentID, payment.ID.String()),
+						slog.String("error", sanitize.Error(err)))
+					continue
+				}
+				finalized++
+			case domain.PaymentStatusPending:
+				// The provider has not settled the payment yet.
+			default:
+				w.log.WarnContext(ctx, "unexpected provider status for stale payment",
+					slog.String("selection", op),
+					slog.String(auditKeyPaymentID, payment.ID.String()),
+					slog.String("provider_status", string(status.Status)))
+			}
+		}
+		if len(payments) < sel.Limit {
+			break
+		}
+		if finalized == 0 {
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", op))
+			break
+		}
+	}
+	return processed, nil
+}
+
+// finalizeFromProviderStatus routes a provider-confirmed outcome through the
+// lifecycle port's notification application (issue #250, ADR 0039): atomic
+// finalization with the subscription effects, idempotent on repeats. Every
+// provider-confirmed success — the stale-payment reconciliation, the renewal
+// charge and its uncertain-charge recovery — lands here, the one seam the
+// webhook flow also ends in, so a success applies identically wherever it
+// came from, tariff-limit enforcement included (issue #428).
+func (w *Workers) finalizeFromProviderStatus(ctx context.Context, payment domain.SubscriptionPayment, status PaymentStatusResult) error {
+	return w.payments.ApplyPaymentNotification(ctx, notificationFromStatus(payment, status))
+}
+
+// ReconcileStaleRefunds resolves payments stuck in the refunding reservation
+// of the refund saga (issue #254): the provider call's outcome was never
+// finalized — an in-flight refund, an unanswered request, a crash between the
+// phases. The provider's status is the source of truth (ADR 0010): a refunded
+// payment finalizes with its subscription effects, a still-captured charge
+// reverts the reservation to the payment's previous status (a pending one
+// re-enters the pending-payment reconciliation), a failed provider status is
+// ambiguous for a refund and stays under manual review, and anything else
+// waits for the next tick. Returns the number of payments checked with the
+// provider.
+func (w *Workers) ReconcileStaleRefunds(ctx context.Context, now time.Time) (int, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("refund reconciliation worker requires a payment provider: %w", ErrPaymentUnavailable)
+	}
+	if w.payments == nil {
+		return 0, fmt.Errorf("refund reconciliation worker requires the payment lifecycle: %w", ErrPaymentUnavailable)
+	}
+
+	processed := 0
+	sel := w.phases.staleRefunding(now, w.config.WorkerBatchSize)
+	for {
+		payments, err := w.txStoreFactory.payments.List(ctx, sel)
+		if err != nil {
+			return processed, fmt.Errorf("list stale refunding payments: %w", err)
+		}
+		if len(payments) == 0 {
+			break
+		}
+		resolved := 0
+		for _, payment := range payments {
+			processed++
+			didResolve, err := w.resolveStaleRefund(ctx, payment)
+			if err != nil {
+				w.log.ErrorContext(ctx, "failed to resolve stale refunding payment",
+					slog.String(auditKeyPaymentID, payment.ID.String()),
+					slog.String("error", sanitize.Error(err)))
+				continue
+			}
+			if didResolve {
+				resolved++
+			}
+		}
+		if len(payments) < sel.Limit {
+			break
+		}
+		if resolved == 0 {
+			// A full batch of unresolved refunds stays in the selection; the
+			// ambiguous ones need manual review, the unsettled ones the
+			// provider's settlement.
+			w.log.WarnContext(ctx, "batch made no progress; deferring to next tick",
+				slog.String("op", "stale refund reconciliation"))
+			break
+		}
+	}
+	return processed, nil
+}
+
+// resolveStaleRefund resolves one stuck refunding payment against the
+// provider. It reports whether the payment actually left the refunding state
+// (finalized or reverted) — the progress signal that keeps the batch loop from
+// spinning on permanently unresolved rows.
+func (w *Workers) resolveStaleRefund(ctx context.Context, payment domain.SubscriptionPayment) (bool, error) {
+	status, err := w.provider.PaymentStatus(ctx, payment.ID, *payment.ProviderPaymentID)
+	if err != nil {
+		return false, fmt.Errorf("provider status: %w", err)
+	}
+	switch status.Status {
+	case domain.PaymentStatusRefunded, domain.PaymentStatusSucceeded:
+		return w.payments.ResolveRefundingFromStatus(ctx, payment, status)
+	case domain.PaymentStatusFailed:
+		// A failed provider status is ambiguous for a payment being refunded:
+		// whether the refund happened before the failure is unknowable from
+		// the status alone, so the payment stays for manual review.
+		w.log.WarnContext(ctx, "refunding payment has a failed status at the provider; manual review required",
+			slog.String(auditKeyPaymentID, payment.ID.String()),
+			slog.String("provider_payment_id", *payment.ProviderPaymentID))
+		return false, nil
+	default:
+		// The provider has not settled the refund yet; retry on the next tick.
+		return false, nil
+	}
+}
+
+// providerCoder is implemented by provider errors that carry their provider's
+// own error code; it is how a code survives into the failed payment row.
+type providerCoder interface {
+	error
+	ProviderErrorCode() string
+}
+
+// providerErrorCode extracts the provider's own error code from a provider
+// error for persistence on a failed payment; nil when the error carries none.
+func providerErrorCode(err error) *string {
+	if coder, ok := errors.AsType[providerCoder](err); ok {
+		if code := coder.ProviderErrorCode(); code != "" {
+			return &code
+		}
+	}
+	return nil
+}
+
+// errorCodeFromResult converts the code reported in a provider result to the
+// nullable form persisted on failed payments.
+func errorCodeFromResult(code string) *string {
+	if code == "" {
+		return nil
+	}
+	return &code
+}
+
+// ProcessExpiredBindingSessions is the hygiene phase of ticket #433: it
+// deletes card-binding sessions past their lifetime in batches, so the table
+// stops growing without bound. Every status is cleaned — an expired session
+// never produces a payment method, and the only later read of an old row (the
+// binding limit's sliding window, ticket #427) is measured on created_at and
+// is long past for a session expired by its TTL. A delete is idempotent, so a
+// crashed or repeated run just re-runs the remaining batches. Returns the
+// number of sessions deleted.
+func (w *Workers) ProcessExpiredBindingSessions(ctx context.Context, now time.Time) (int, error) {
+	deleted := 0
+	// A non-positive configured batch size would trap the drain loop (every
+	// short batch still satisfies n < size at zero), so it floors at one.
+	batch := max(w.config.WorkerBatchSize, 1)
+	for {
+		n, err := w.bindings.DeleteExpired(ctx, w.phases.expiredBindings(now, batch))
+		if err != nil {
+			return deleted, fmt.Errorf("delete expired card binding sessions: %w", err)
+		}
+		deleted += n
+		if n < batch {
+			return deleted, nil
+		}
+	}
+}
+
+// ExportStuckPaymentMetrics records the hygiene gauges of ticket #433: how
+// many payments sit unresolved past the reconciliation staleness (the lost
+// webhook watchdog's own selections) and how many refunds are stuck in the
+// refunding reservation — the "in flight" outcomes a duty engineer watches
+// before users report them. The counts carry no sensitive data; the gauges
+// are no-ops without a configured meter provider.
+func (w *Workers) ExportStuckPaymentMetrics(ctx context.Context, now time.Time) error {
+	pending, err := w.txStoreFactory.payments.Count(ctx, w.phases.stalePending(now, 0))
+	if err != nil {
+		return fmt.Errorf("count stale pending payments: %w", err)
+	}
+	refunding, err := w.txStoreFactory.payments.Count(ctx, w.phases.staleRefunding(now, 0))
+	if err != nil {
+		return fmt.Errorf("count stale refunding payments: %w", err)
+	}
+	w.metrics.RecordStuck(ctx, stuckKindPending, pending)
+	w.metrics.RecordStuck(ctx, stuckKindRefunding, refunding)
+	return nil
+}

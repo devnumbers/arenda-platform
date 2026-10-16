@@ -65,7 +65,26 @@ exist and keeps the behavior identical to the pre-T2 single-owner world.
 The four capability functions already account for all planned roles:
 `CanView` returns true for owner, full_access, viewer; `CanEdit` and
 `CanManageMembers` for owner and full_access; `CanLifecycle`
-(archive/unarchive/delete) only for owner. The T2 policy (`OwnerOnlyPolicy`)
+(archive/unarchive/delete) only for owner. **Ревизия 2026-10-09** (решение D8
+спеки «Совместный доступ» #1302, тикет #1304): `CanManageMembers` становится
+owner-only — участниками управляет один человек, собственник объекта;
+full_access сохраняет все контентные права внутри объекта (`CanEdit`), но
+больше не приглашает, не меняет роли и не отзывает доступ. Правка одной
+функции закрывает все мутирующие эндпоинты участников; зеркалит её SQL
+предикат скоупа `actor_can_manage` (owner-only с миграции 000157) — за ним
+read-скоуп хаба «Ваши участники» и removal-листинги, так что полный доступ
+чужого объекта не видит ни его участников, ни их карточек (privacy-404).
+Самовыход — не member management, остаётся участникам. **Ревизия 2026-10-10**
+(решения D9, D10 той же спеки, тикет #1309): удаления контента — правило
+платежа, аренда — едут правом редактирования (`CanEdit`), полный доступ
+сносит их в чужом объекте без эскалации к собственнику; жизненный цикл самого
+объекта остаётся owner-only (`CanLifecycle`). Новый предикат `CanRebind`
+(owner-only): перепривязка сущности на другой объект — перенос карточки
+контакта — власть собственника; не-собственник получает прямой 403 на любой
+видимый таргет, невидимый остаётся за privacy-404. Путь перепривязки у задач
+и платежных правил не существует — их PATCH-команды поля объекта не несут
+(у задач отсутствие поля гардирует тест-фикстура, #1309). The T2 policy
+(`OwnerOnlyPolicy`)
 returns only `RoleOwner` or `RoleNone` — the member roles (`RoleFullAccess`,
 `RoleViewer`) are defined but not yet returned. T3 will replace the policy
 implementation with one that consults property membership; the capabilities and
@@ -77,8 +96,39 @@ The actor/scope split applies to property-scoped data contexts: properties,
 leases, notifications (reminders, free reminders). Billing (subscriptions,
 payments, payment methods) and popups remain keyed by `userID` — they are
 personal account data, never delegated via property membership (per
-CONTEXT.md: a shared object consumes the recipient's own tariff slot;
+GLOSSARY.md: a shared object consumes the recipient's own tariff slot;
 subscription/payment data is never shared).
+
+### 6. Derived-read canon and the recipient's archive list (ревизия 2026-10-09, D14)
+
+The derived-read canon — «the property's owner OR an active member of a
+non-archived property» — lives in one SQL predicate, `actor_can_read_property`
+(migration 000142, ticket #884; the journal's earlier twin `actor_can_read_history`
+of 000137), and carries the action journal, the global payment and tasks feeds,
+and the global properties listing, each with its own archive slice. The canon
+denies archived properties to members: the feeds hide them, the journal reads
+them for the owner only.
+
+**Ревизия 2026-10-09** (решение D14 спеки «Совместный доступ» #1302, аудит
+#1298, тикет #1305): список архива получателя — сознательный расход с каноном.
+`ListArchivedProperties` подшивает к своему архиву читателя и поделённые с ним
+АРХИВНЫЕ объекты (`appendSharedProperties` по активным членствам,
+`internal/properties/application/service.go`): объект поделили сознательно, его
+присутствие в архиве получателя — не утечка, а продолжение читаемого скоупа.
+Канон фидов при этом не смягчается: ленты, журнал и поиск отдают архивное
+только владельцу, suspended-доступ не читает ничего. Смежная изоляция того же
+решения D14 — глобальный фильтр «Участники» ленты истории: без сужения он
+перечисляет только участников МОИХ объектов читателя (ADR 0061 §7, ревизия
+от того же дня).
+
+**Ревизия 2026-10-13** (пункт владельца 13.10.2026, тикет #1412): глобальная
+лента журнала покидает список канонных поверхностей — без `property_ids` она
+читает только СОБСТВЕННЫЕ объекты читателя (`p.owner_id = actor`, по образцу
+изоляции D14): события поделённых объектов в общую ленту не попадают, их
+история остаётся читаемой в суженной области по канону (ADR 0061 §7, ревизия
+того же дня). Глобальные лента платежей/задач и список объектов остаются на
+каноне — осознанная несимметричность «операции — все объекты, история —
+только свои».
 
 ## Consequences
 
@@ -107,6 +157,6 @@ subscription/payment data is never shared).
   the T2 ticket that introduced the policy port and the actor/scope split.
 - Issue [`#153`](https://github.com/devnumbers/arenda-platform/issues/153) —
   PRD: Property Sharing (the feature this seam prepares for).
-- `CONTEXT.md` entries: "Совместный доступ к объекту", "Участник объекта",
+- `GLOSSARY.md` entries: "Совместный доступ к объекту", "Участник объекта",
   "Полный доступ", "Просмотр" — the sharing roles the policy port will resolve
   in T3.

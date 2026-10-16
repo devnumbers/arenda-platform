@@ -7,6 +7,35 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
+// Имя и адрес стандартной фикстуры объекта, повторённые тест-файлами пакета.
+const (
+	testPropertyName    = "Test"
+	testPropertyAddress = "Addr"
+	// Короткое имя объекта access-тестов (деталь и исходы доступа).
+	testObjName = "Obj"
+	// Имена пары сверхлимитных объектов в тестах биллинг-архива.
+	excessNameA = "Excess A"
+	excessNameB = "Excess B"
+	// Имена объектов слотовых сценариев D13: свой объект получателя и новый
+	// объект создания.
+	testOwnPropertyName = "Своя квартира"
+	testNewPropertyName = "Новая квартира"
+)
+
+// newPropertyTestFactory builds the txStoreFactory for the property service
+// tests: the same collaborators the service receives for its transactional
+// use cases, over the fakeUoW backed by fakePropertyTxBeginner so the
+// in-memory repositories see the *fakePropertyTx their WithTx expects. A nil
+// limiter matches the pre-factory fixtures: runInTx skips unwired optional
+// stores, and the factory defaults a nil audit to Noop (no property service
+// test asserts audit entries).
+func newPropertyTestFactory(
+	repo PropertyRepository,
+	limiter SubscriptionLimiter,
+) txStoreFactory {
+	return NewTxStoreFactory(repo, limiter, nil, nil, fakeUoW{beginner: fakePropertyTxBeginner{}})
+}
+
 // testOwnerPolicy is the policy used by property service tests that pre-date
 // the membership-aware policy. It treats the actor as the owner of every
 // property (RoleOwner) so tests exercising owner-scoped behaviour keep working
@@ -67,7 +96,34 @@ func (f fakeOwnerNames) DisplayName(_ context.Context, userID uuid.UUID) (string
 	return f.names[userID], nil
 }
 
+// fakeOwnerEmails resolves fixed owner account emails, or fails when err is
+// set (Figma 2200-97365, the detail's owner contact row).
+type fakeOwnerEmails struct {
+	emails map[uuid.UUID]string
+	err    error
+}
+
+func (f fakeOwnerEmails) GetEmail(_ context.Context, userID uuid.UUID) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.emails[userID], nil
+}
+
 var (
 	_ SharedMemberships        = fakeSharedMemberships{}
 	_ OwnerDisplayNameResolver = fakeOwnerNames{}
+	_ OwnerEmailResolver       = fakeOwnerEmails{}
 )
+
+// fakeSuspendedShared serves the SuspendedSharedMemberships port with a
+// canned placeholder list (ticket #702).
+type fakeSuspendedShared struct {
+	items []SharedSuspendedMembership
+}
+
+func (f fakeSuspendedShared) SuspendedWith(context.Context, uuid.UUID) ([]SharedSuspendedMembership, error) {
+	return f.items, nil
+}
+
+var _ SuspendedSharedMemberships = fakeSuspendedShared{}

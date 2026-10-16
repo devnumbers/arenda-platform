@@ -1,3 +1,5 @@
+// Package httpsupport holds HTTP cross-cutting support for all contexts: the middleware chain (session,
+// logging, recovery, rate limiting, admin-only, readonly gate), problem mapping and request diagnostics.
 package httpsupport
 
 import (
@@ -8,15 +10,15 @@ import (
 	"net/http"
 
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
-	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
-	identityapp "github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
-	identitydomain "github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
-	leasesapp "github.com/nambers/arenda-planform/apps/backend/internal/leases/application"
+	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
 	notificationsapp "github.com/nambers/arenda-planform/apps/backend/internal/notifications/application"
+	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
+	rentalsapp "github.com/nambers/arenda-planform/apps/backend/internal/rentals/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/sanitize"
+	tasksapp "github.com/nambers/arenda-planform/apps/backend/internal/tasks/application"
 )
 
 // Problem builds an RFC 7807 problem detail with request ID from the context.
@@ -59,118 +61,108 @@ func InternalError(ctx context.Context, err error) openapi.Problem {
 	return Problem(ctx, "Internal Server Error", "Произошла внутренняя ошибка. Попробуйте позже.")
 }
 
+// detailNotFound is the RFC 7807 detail shared by the ErrNotFound mapping of
+// every context.
+const detailNotFound = "Не найдено"
+
+// Shared problem titles of the fixed error mappings: the same RFC 7807 titles
+// recur in every context's table, so they are named once here.
+const (
+	ProblemTitleConflict  = "Conflict"
+	ProblemTitleForbidden = "Forbidden"
+	ProblemTitleNotFound  = "Not found"
+)
+
+// ErrorProblem pairs an application error sentinel with its fixed wire
+// outcome: the status, problem title and detail every occurrence of the error
+// maps to. The shape is shared by every context's HTTP adapter; the tables
+// themselves stay per-context — which errors map where is the context's own
+// knowledge.
+type ErrorProblem struct {
+	Err    error
+	Status int
+	Title  string
+	Detail string
+}
+
+// WriteErrorProblem writes the fixed outcome for err by walking the table
+// with errors.Is (wrapped sentinels keep matching). It returns false when
+// nothing matched, so the caller falls through to its dynamic mappings.
+func WriteErrorProblem(ctx context.Context, w http.ResponseWriter, err error, table []ErrorProblem) bool {
+	for _, m := range table {
+		if errors.Is(err, m.Err) {
+			WriteProblem(ctx, w, m.Status, Problem(ctx, m.Title, m.Detail))
+			return true
+		}
+	}
+	return false
+}
+
+// userFacingDetails maps known domain errors to fixed, non-sensitive messages
+// for RFC 7807 problem details. Entries are checked in order, so the table
+// preserves the previous switch's precedence exactly.
+var userFacingDetails = []struct {
+	err    error
+	detail string
+}{
+	// Properties.
+	{propertiesapp.ErrInvalidInput, "Некорректные данные объекта"},
+	{propertiesapp.ErrInvalidTransition, "Некорректный переход статуса объекта"},
+	{propertiesapp.ErrNotFound, detailNotFound},
+	{propertiesapp.ErrLimitExceeded, "Превышен лимит активных объектов"},
+	{propertiesapp.ErrArchivedProperty, "Нельзя изменить архивный объект"},
+	{propertiesapp.ErrAlreadyArchived, "Объект уже в архиве"},
+	{propertiesapp.ErrNotArchived, "Объект не в архиве"},
+
+	// Billing / subscriptions.
+	{billingdomain.ErrInvalidPeriod, "Период должен быть месяц или год"},
+	{billingdomain.ErrInvalidTariff, "Некорректное название тарифа"},
+	{billingdomain.ErrAlreadyOnTariff, "Вы уже на выбранном тарифе"},
+	{billingdomain.ErrInvalidTariffChange, "Некорректная смена тарифа"},
+	{billingdomain.ErrInvalidSubscriptionState, "Некорректное состояние подписки"},
+	{billingdomain.ErrCannotEnableAutoRenew, "Нельзя включить автопродление без срока действия"},
+	{billingdomain.ErrInvalidAmount, "Некорректная сумма платежа"},
+	{billingdomain.ErrInvalidPayment, "Некорректный платёж"},
+	{billingdomain.ErrInvalidPaymentStatus, "Некорректный статус платежа для этой операции"},
+	{billingdomain.ErrInvalidTerm, "Некорректный срок служебной подписки"},
+	{billingdomain.ErrInvalidGraceExtension, "Некорректное продление льготного периода"},
+	{billingdomain.ErrInvalidTimeShift, "Некорректный сдвиг времени подписки"},
+	{billingdomain.ErrInvalidTariffPricing, "Некорректные цены или лимит тарифа"},
+
+	// Admin.
+	{adminapp.ErrInvalidFilter, "Некорректный параметр фильтра или сортировки"},
+
+	// Notifications (preferences, push subscriptions).
+	{notificationsapp.ErrNotFound, detailNotFound},
+
+	// Payments (payment rules, ADR 0047).
+	{paymentsapp.ErrInvalidInput, "Некорректные данные платежа"},
+
+	// Tasks (task rules and tasks, ADR 0051).
+	{tasksapp.ErrInvalidInput, "Некорректные данные задачи"},
+
+	// Contacts (the contact book, ADR 0054).
+	{contactsapp.ErrInvalidInput, "Некорректные данные контакта"},
+
+	// Rentals (ADR 0053).
+	{rentalsapp.ErrInvalidInput, "Некорректные данные аренды"},
+}
+
 // UserFacingDetail maps known domain errors to fixed, non-sensitive messages
 // suitable for RFC 7807 problem details. The second result is false when err
 // is not a recognized domain error.
 func UserFacingDetail(err error) (string, bool) {
-	switch {
-	// Identity / auth.
-	case errors.Is(err, identityapp.ErrUserBlocked):
-		return "Пользователь временно заблокирован", true
-	case errors.Is(err, identityapp.ErrCodeSentTooRecently):
-		return "Код отправлен слишком недавно", true
-	case errors.Is(err, identityapp.ErrPhoneAlreadyTaken):
-		return "Этот номер телефона уже используется", true
-	case errors.Is(err, identityapp.ErrPhoneUnchanged):
-		return "Новый номер должен отличаться от текущего", true
-	case errors.Is(err, identitydomain.ErrTooManyAttempts):
-		return "Слишком много попыток", true
-	case errors.Is(err, identityapp.ErrEmailDoesNotMatch):
-		return "Некорректные учётные данные", true
-	case errors.Is(err, identityapp.ErrEmailAlreadyTaken):
-		return "Эта почта уже используется", true
-
-	// Properties.
-	case errors.Is(err, propertiesapp.ErrInvalidInput):
-		return "Некорректные данные объекта", true
-	case errors.Is(err, propertiesapp.ErrInvalidTransition):
-		return "Некорректный переход статуса объекта", true
-	case errors.Is(err, propertiesapp.ErrNotFound):
-		return "Не найдено", true
-	case errors.Is(err, propertiesapp.ErrLimitExceeded):
-		return "Превышен лимит активных объектов", true
-	case errors.Is(err, propertiesapp.ErrArchivedProperty):
-		return "Нельзя изменить архивный объект", true
-	case errors.Is(err, propertiesapp.ErrAlreadyArchived):
-		return "Объект уже в архиве", true
-	case errors.Is(err, propertiesapp.ErrNotArchived):
-		return "Объект не в архиве", true
-	case errors.Is(err, propertiesapp.ErrPropertyHasOpenLease):
-		return "У объекта есть открытая аренда", true
-
-	// Leases.
-	case errors.Is(err, leasesapp.ErrInvalidInput):
-		return "Некорректные данные", true
-	case errors.Is(err, leasesapp.ErrInvalidTransition):
-		return "Некорректный переход статуса аренды", true
-	case errors.Is(err, leasesapp.ErrNotFound):
-		return "Не найдено", true
-	case errors.Is(err, leasesapp.ErrPropertyNotAvailable):
-		return "Объект недоступен для аренды", true
-	case errors.Is(err, leasesapp.ErrOpenLeaseExists):
-		return "У объекта уже есть открытая аренда", true
-	case errors.Is(err, leasesapp.ErrAlreadyCompleted):
-		return "Аренда уже завершена", true
-	case errors.Is(err, leasesapp.ErrOperationAlreadyCompleted):
-		return "Операция уже завершена", true
-	case errors.Is(err, leasesapp.ErrRecurringOperationLeaseCreated):
-		return "Серию, созданную договором аренды, нельзя удалить", true
-	case errors.Is(err, leasesapp.ErrArchivedLease):
-		return "Нельзя изменить архивную аренду", true
-	case errors.Is(err, leasesapp.ErrArchivedProperty):
-		return "Объект в архиве", true
-	case errors.Is(err, leasesapp.ErrTenantContactNotFound):
-		return "Арендатор не найден", true
-	case errors.Is(err, leasesapp.ErrDuplicatePhone):
-		return "Арендатор с таким телефоном уже существует", true
-
-	// Billing / subscriptions.
-	case errors.Is(err, billingdomain.ErrInvalidAmount):
-		return "Сумма должна быть больше нуля", true
-	case errors.Is(err, billingdomain.ErrInvalidPeriod):
-		return "Период должен быть месяц или год", true
-	case errors.Is(err, billingdomain.ErrInvalidTariff):
-		return "Некорректное название тарифа", true
-	case errors.Is(err, billingdomain.ErrAlreadyOnTariff):
-		return "Вы уже на выбранном тарифе", true
-	case errors.Is(err, billingdomain.ErrInvalidTariffChange):
-		return "Некорректная смена тарифа", true
-	case errors.Is(err, billingdomain.ErrInvalidSubscriptionState):
-		return "Некорректное состояние подписки", true
-	case errors.Is(err, billingdomain.ErrInvalidPaymentStatus):
-		return "Возврат платежа невозможен в текущем статусе", true
-	case errors.Is(err, billingdomain.ErrCannotEnableAutoRenew):
-		return "Нельзя включить автопродление без срока действия", true
-	case errors.Is(err, billingapp.ErrPaymentMethodInUse):
-		return "Способ оплаты используется", true
-	case errors.Is(err, billingapp.ErrPaymentMethodAlreadyExists):
-		return "Способ оплаты уже добавлен", true
-	case errors.Is(err, billingapp.ErrInvalidFilter):
-		return "Некорректный фильтр", true
-
-	// Admin.
-	case errors.Is(err, adminapp.ErrInvalidFilter):
-		return "Некорректный параметр фильтра или сортировки", true
-
-	// Notifications / reminders.
-	case errors.Is(err, notificationsapp.ErrInvalidReminderDate):
-		return "Некорректная дата напоминания", true
-	case errors.Is(err, notificationsapp.ErrReminderNotPending):
-		return "Напоминание не в статусе ожидания", true
-	case errors.Is(err, notificationsapp.ErrConcurrentUpdate):
-		return "Напоминание изменено одновременно", true
-	case errors.Is(err, notificationsapp.ErrDuplicateSMSReminder):
-		return "SMS-напоминание уже отправлено", true
-	case errors.Is(err, notificationsapp.ErrNotFound):
-		return "Не найдено", true
+	for _, m := range userFacingDetails {
+		if errors.Is(err, m.err) {
+			return m.detail, true
+		}
 	}
-
 	return "", false
 }
 
 // WriteProblem writes an RFC 7807 problem response and records the problem title
 // on the response writer so that the logging middleware can include it.
-func WriteProblem(w http.ResponseWriter, status int, p openapi.Problem) {
+func WriteProblem(ctx context.Context, w http.ResponseWriter, status int, p openapi.Problem) {
 	if setter, ok := w.(problemTitleSetter); ok {
 		setter.SetProblemTitle(p.Title)
 	}
@@ -178,7 +170,7 @@ func WriteProblem(w http.ResponseWriter, status int, p openapi.Problem) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(p); err != nil {
-		slog.Error("failed to encode problem response", slog.String("error", SanitizeError(err))) //nolint:sloglint // WriteProblem has no request context in its signature; last-resort encoder fallback
+		LoggerFromContext(ctx).ErrorContext(ctx, "failed to encode problem response", slog.String("error", SanitizeError(err)))
 	}
 }
 
@@ -197,5 +189,5 @@ func StringPtr(s string) *string {
 
 // OpenAPIErrorHandler converts OpenAPI path/header/param errors into RFC 7807 problems.
 func OpenAPIErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	WriteProblem(w, http.StatusBadRequest, Problem(r.Context(), "Bad request", "Некорректный параметр запроса"))
+	WriteProblem(r.Context(), w, http.StatusBadRequest, Problem(r.Context(), "Bad request", "Некорректный параметр запроса"))
 }

@@ -32,20 +32,23 @@ func NewMemberHandlers(svc *accessapp.AccessService, logger *slog.Logger) *Membe
 func (h *MemberHandlers) CreatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyAccessMemberCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "access: decode create member request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	role, err := domain.ParseRole(string(body.Role))
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 		return
 	}
 
@@ -61,23 +64,31 @@ func (h *MemberHandlers) CreatePropertyAccessMember(w http.ResponseWriter, r *ht
 // includes pending email invitations for managers (issue #161, T5).
 
 // UpdatePropertyAccessMember implements PATCH /properties/{propertyId}/access/members/{memberId}.
-func (h *MemberHandlers) UpdatePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId, memberID openapi_types.UUID) {
+func (h *MemberHandlers) UpdatePropertyAccessMember(
+	w http.ResponseWriter,
+	r *http.Request,
+	propertyID openapi.PropertyId,
+	memberID openapi_types.UUID,
+) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyAccessMemberUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "access: decode update member request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	role, err := domain.ParseRole(string(body.Role))
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 		return
 	}
 
@@ -90,10 +101,16 @@ func (h *MemberHandlers) UpdatePropertyAccessMember(w http.ResponseWriter, r *ht
 }
 
 // DeletePropertyAccessMember implements DELETE /properties/{propertyId}/access/members/{memberId}.
-func (h *MemberHandlers) DeletePropertyAccessMember(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId, memberID openapi_types.UUID) {
+func (h *MemberHandlers) DeletePropertyAccessMember(
+	w http.ResponseWriter,
+	r *http.Request,
+	propertyID openapi.PropertyId,
+	memberID openapi_types.UUID,
+) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -108,7 +125,8 @@ func (h *MemberHandlers) DeletePropertyAccessMember(w http.ResponseWriter, r *ht
 func (h *MemberHandlers) LeaveProperty(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -123,29 +141,36 @@ func (h *MemberHandlers) handleError(w http.ResponseWriter, r *http.Request, err
 	switch {
 	case errors.Is(err, domain.ErrMemberNotFound):
 		// Privacy: not-found covers both "object does not exist" and "no access".
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
 	case errors.Is(err, domain.ErrMemberAlreadyExists):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже является участником"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже является участником"))
 	case errors.Is(err, domain.ErrPropertyArchived):
 		// Same 409 shape as the properties ErrArchivedProperty mapping (issue #163).
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Нельзя добавить участника в архивный объект"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "Нельзя добавить участника в архивный объект"))
 	case errors.Is(err, domain.ErrCannotAddOwner):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить владельца объекта"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить владельца объекта"))
 	case errors.Is(err, domain.ErrCannotAddSelf):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить себя участником"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить себя участником"))
 	case errors.Is(err, domain.ErrCannotRevokeOwner):
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Нельзя отозвать доступ владельца"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Нельзя отозвать доступ владельца"))
 	case errors.Is(err, domain.ErrCannotLeaveOwnProperty):
-		httpsupport.WriteProblem(w, http.StatusForbidden, httpsupport.Problem(r.Context(), "Forbidden", "Владелец не может покинуть свой объект"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusForbidden,
+			httpsupport.Problem(r.Context(), "Forbidden", "Владелец не может покинуть свой объект"))
 	case errors.Is(err, domain.ErrInvalidRole):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 	default:
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }
 
 // membershipResponse maps a domain.Membership to a response DTO. The display
-// name and email flag are not available from a membership row alone; the owner
+// name and email are not available from a membership row alone; the owner
 // list path uses memberResponse instead.
 func (h *MemberHandlers) membershipResponse(m domain.Membership, isOwner bool) openapi.PropertyAccessMemberResponse {
 	id := m.ID
@@ -162,20 +187,20 @@ func (h *MemberHandlers) membershipResponse(m domain.Membership, isOwner bool) o
 
 // memberResponse maps an application-level participant projection (owner,
 // member or pending invitation) to the shared member response shape. It is
-// used by the participant list on InvitationHandlers.
+// used by the participant list on InvitationHandlers. Every row carries the
+// user's email when it resolved (owner decision 2026-09-20, #758).
 func memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
 	resp := openapi.PropertyAccessMemberResponse{
 		Role:    openapi.PropertyAccessMemberRole(string(m.Role)),
 		IsOwner: m.IsOwner,
 	}
+	if m.Email != nil {
+		email := openapi_types.Email(*m.Email)
+		resp.Email = &email
+	}
 	if m.Pending {
-		// Pending invitation row (issue #161, T5): no user yet, the invitee
-		// email is shown to managers only (the service filters the rows).
+		// Pending invitation row (issue #161, T5): no user yet.
 		resp.Status = openapi.PropertyAccessMemberResponseStatusPending
-		if m.Email != nil {
-			email := openapi_types.Email(*m.Email)
-			resp.Email = &email
-		}
 		resp.LastSentAt = m.LastSentAt
 		id := m.ID
 		resp.Id = &id
@@ -186,10 +211,13 @@ func memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
 	resp.Status = openapi.PropertyAccessMemberResponseStatus(m.Status.String())
 	resp.SuspendedAt = m.SuspendedAt
 	if m.DisplayName != "" {
-		resp.DisplayName = &m.DisplayName
+		displayName := m.DisplayName
+		resp.DisplayName = &displayName
 	}
-	hasEmail := m.HasEmail
-	resp.HasEmail = &hasEmail
+	if m.PhotoURL != "" {
+		photoURL := m.PhotoURL
+		resp.PhotoUrl = &photoURL
+	}
 	if !m.IsOwner {
 		id := m.ID
 		resp.Id = &id

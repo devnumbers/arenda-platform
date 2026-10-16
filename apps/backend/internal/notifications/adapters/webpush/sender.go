@@ -37,6 +37,12 @@ const maxResponseRead = 1 << 10
 // is still delivered, it just loses its collapse/replace semantics.
 const maxTopicLen = 32
 
+// Urgency header values (RFC 8030 §5.3); shared with the sender tests.
+const (
+	urgencyHigh   = "high"
+	urgencyNormal = "normal"
+)
+
 // Sender implements application.PushSender with a stdlib-only Web Push adapter:
 // it encrypts the payload (RFC 8291), signs a per-origin VAPID JWT (RFC 8292),
 // and POSTs to the push service endpoint (RFC 8030), mapping the response code
@@ -53,8 +59,8 @@ type Sender struct {
 // client. The keys are base64url-encoded: publicKey is the 65-byte uncompressed
 // P-256 key, privateKey is the 32-byte scalar. Returns an error if the keys are
 // inconsistent (the public key must match the one derived from the private key).
-// metrics records push delivery outcomes (sent/gone/rate_limited/failed); nil
-// is safe (recording becomes a no-op).
+// The metrics parameter records push delivery outcomes
+// (sent/gone/rate_limited/failed); nil is safe (recording becomes a no-op).
 func NewSender(subject, publicKey, privateKey string, metrics *Metrics, logger *slog.Logger) (*Sender, error) {
 	signer, err := newVAPIDSigner(subject, publicKey, privateKey)
 	if err != nil {
@@ -114,7 +120,15 @@ func (s *Sender) Send(ctx context.Context, sub domain.PushSubscription, payload 
 		}
 		return fmt.Errorf("webpush: post to push service: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		// The response status is already mapped, so a close failure cannot
+		// fail the dispatch — but it does break connection reuse, which is
+		// worth a warning.
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			s.logger.WarnContext(ctx, "webpush: close response body",
+				"error", sanitize.Error(closeErr))
+		}
+	}()
 
 	return s.mapResponse(ctx, resp)
 }
@@ -150,23 +164,26 @@ func (s *Sender) mapResponse(ctx context.Context, resp *http.Response) error {
 		return application.ErrRateLimited
 	default:
 		s.metrics.RecordDispatch(ctx, outcomeFailed)
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseRead))
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseRead))
+		if readErr != nil {
+			return fmt.Errorf("webpush: push service returned status %d (response body read failed: %w)",
+				resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("webpush: push service returned status %d: %s",
 			resp.StatusCode, sanitize.String(string(body)))
 	}
 }
 
-// urgencyForEventType maps the reminder event type to a Web Push Urgency header
-// value (RFC 8030 §5.3). Overdue and requires-action events are time-critical
-// (the user is already late) and get "high" so the device wakes immediately;
-// upcoming reminders and free reminders get "normal" to save battery (research
-// #174 §4).
+// urgencyForEventType maps the notification event type to a Web Push Urgency
+// header value (RFC 8030 §5.3). The grace events are time-critical (the
+// subscription window is closing) and get "high" so the device wakes
+// immediately; anything else gets "normal" to save battery (research #174 §4).
 func urgencyForEventType(eventType domain.EventType) string {
 	switch eventType {
-	case domain.EventOperationOverdue, domain.EventLeaseRequiresAction:
-		return "high"
+	case domain.EventSubscriptionGraceEntered, domain.EventSubscriptionGraceExpiring:
+		return urgencyHigh
 	default:
-		return "normal"
+		return urgencyNormal
 	}
 }
 

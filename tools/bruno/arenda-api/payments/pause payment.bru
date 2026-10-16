@@ -1,0 +1,30 @@
+meta {
+  name: Pause Payment
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/properties/{{propertyId}}/payments/{{paymentId}}/pause
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const sessionId = bru.getEnvVar("session_id") || bru.getVar("session_id");
+  if (sessionId) {
+    req.setHeader("Cookie", `session_id=${sessionId}`);
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should open an endless pause interval", function() {
+    const pauses = res.body.pauses || [];
+    const active = pauses.find(p => p.toDate === null);
+    expect(active).to.be.an("object");
+  });
+}

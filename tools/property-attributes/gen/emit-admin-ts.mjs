@@ -35,6 +35,7 @@ export type PropertyType =
   | 'apartment'
   | 'room'
   | 'apartments'
+  | 'studio'
   | 'house'
   | 'commercial'
   | 'office'
@@ -291,7 +292,7 @@ export function formatAttributesForCardGrouped(
       });
     }
 
-    groups[groups.length - 1].items.push({
+    groups[groups.length - 1]?.items.push({
       label: fieldLabels[field.key],
       value: formatAttributeValue(type, field.key, raw, attrs),
     });

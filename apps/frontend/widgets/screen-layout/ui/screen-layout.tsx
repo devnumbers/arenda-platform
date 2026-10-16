@@ -1,0 +1,89 @@
+'use client';
+
+import { useRef, type JSX, type ReactNode } from 'react';
+import { useUnreadNotificationsCount } from '@/features/notifications';
+import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
+import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
+import { PullToRefresh } from '@/shared/ui/pull-to-refresh';
+import {
+  DesktopNavPills,
+  DesktopSidebar,
+  TabBar,
+  TabBarVisibilityProvider,
+} from '@/shared/ui/design';
+import { RealtimeStreamProvider } from '@/features/realtime';
+import { HubPrefetchProvider } from './hub-prefetch-provider';
+import { NotificationStreamGate } from './notification-stream-gate';
+import { PushPermissionGate } from './push-permission-gate';
+import { TopNavUserProvider } from './top-nav-user-provider';
+
+/** Оболочка новых экранов (#460) — единственная оболочка приложения
+ * (карта #556: старый кабинет снесён в #568): хром собирают сами экраны
+ * своим TopNav — он же единый хедер (Figma 1185:40818–19): мобайл (560 и
+ * уже) — полоса в потоке страницы во всю ширину; планшет и ПК (от 561) —
+ * закреплён над прокруткой, центральная часть — колонка max-560, по краям
+ * лого и кнопка профиля; высоту 72 компенсирует `tablet:pt-[72px]` (хедер
+ * закреплён от 561). На ПК (от 1024, решение владельца 08.09 #561) хром
+ * дополняет десктопная навигация (Figma 1603:89079): сайдбар из 6 разделов
+ * слева под хедером (DesktopSidebar) и плавающие пилюли
+ * «Уведомления»/«Поддержка» по нижним углам (DesktopNavPills) — оба
+ * компонента сами скрыты до ПК. Снизу — TabBar (футер, мобайл и планшет
+ * 1023 и уже): экраны со StickyBottomBar глушат его сами через
+ * TabBarVisibilityProvider/useTabBarSuppression — вместе с ним глушатся
+ * и пилюли. TopNavUserProvider прокидывает имя собственника в «крыло»
+ * профиля (граница shared/feature). Здесь же живёт PWA-инфраструктура
+ * приложения (ADR 0031/0032): регистрация и тихое обновление service
+ * worker, pull-to-refresh (ADR 0031 — ref делится с узлом контента:
+ * жест двигает transform'ом именно его; сайдбар, пилюли и TabBar
+ * `position: fixed` и остаются на месте) и PushPermissionGate — невидимый
+ * стартовый гейт пушей: heal-проверка правды подписки при загрузке и
+ * авто-промпт новому юзеру (слайс 2 #1038); системный промпт из него
+ * поднимает только авто-промпт, и только пока разрешение `default`.
+ */
+/** Число непрочитанных для бейджей навигации (#747): тот же react-query
+ * запрос, что у чипа ленты — SSE и refetch-on-focus обновляют кэш один
+ * раз, все потребители перерисовываются. null — счёт ещё не приходил
+ * (скелет: бейджи молчат). */
+function useNavigationBadge(): number | null {
+  const query = useUnreadNotificationsCount();
+  return query.data ?? null;
+}
+
+export function ScreenLayout({ children }: { readonly children: ReactNode }): JSX.Element {
+  // PullToRefresh drives `transform` on the content node during the gesture,
+  // so the layout shares its ref with the component.
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Подпись и адрес пункта «Объекты» — из нав-модели (решение владельца
+  // #1240: direct-переход «Объект» снесён вместе с правилом #984).
+  const notificationsBadge = useNavigationBadge();
+
+  return (
+    <TabBarVisibilityProvider>
+      <HubPrefetchProvider>
+        <TopNavUserProvider>
+          {/* screen-shell — крючок push-back фона: при открытом Modal
+              оболочка отодвигается вглубь (globals.css, body:has(
+              .modal-overlay[data-state='open']); канон apple-design §12,
+              решение владельца 14.10). transform на оболочке делает её
+              содержащим блоком для fixed-хрома — сайдбар, пилюли и TabBar
+              уходят вглубь вместе с контентом; порталы (модалки, шиты,
+              тосты) вне оболочки и не масштабируются. */}
+          <div className="screen-shell flex min-h-screen flex-col tablet:pt-[72px]">
+            <DesktopSidebar />
+            <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
+              {children}
+            </div>
+            <DesktopNavPills notificationsBadge={notificationsBadge ?? 0} />
+            <TabBar notificationsUnread={(notificationsBadge ?? 0) > 0} />
+            <ServiceWorkerRegister />
+            <ServiceWorkerUpdater />
+            <PullToRefresh contentRef={contentRef} />
+            <PushPermissionGate />
+            <NotificationStreamGate />
+            <RealtimeStreamProvider />
+          </div>
+        </TopNavUserProvider>
+      </HubPrefetchProvider>
+    </TabBarVisibilityProvider>
+  );
+}

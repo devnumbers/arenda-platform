@@ -37,7 +37,8 @@ func NewInvitationHandlers(svc *accessapp.InvitationService, logger *slog.Logger
 func (h *InvitationHandlers) ListPropertyAccessMembers(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -53,24 +54,52 @@ func (h *InvitationHandlers) ListPropertyAccessMembers(w http.ResponseWriter, r 
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.PropertyAccessMembersResponse{Items: items})
 }
 
+// GetPropertyAccessMember implements GET /properties/{propertyId}/access/members/{memberId}
+// (issue #1357): one row of the list read alone — the member card of every
+// row the reader may see, pending invitation rows included; a stranger or a
+// suspended member gets the privacy-preserving 404 from the service gate.
+func (h *InvitationHandlers) GetPropertyAccessMember(
+	w http.ResponseWriter,
+	r *http.Request,
+	propertyID openapi.PropertyId,
+	memberID openapi_types.UUID,
+) {
+	actor, ok := httpsupport.UserIDFromContext(r.Context())
+	if !ok {
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		return
+	}
+
+	member, err := h.svc.GetMember(r.Context(), actor, propertyID, memberID)
+	if err != nil {
+		h.handleError(w, r, err)
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, memberResponse(member))
+}
+
 // CreatePropertyAccessInvitation implements POST /properties/{propertyId}/access/invitations.
 func (h *InvitationHandlers) CreatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyAccessInvitationCreateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "access: decode create invitation request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	role, err := domain.ParseRole(string(body.Role))
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 		return
 	}
 
@@ -89,23 +118,31 @@ func (h *InvitationHandlers) CreatePropertyAccessInvitation(w http.ResponseWrite
 }
 
 // UpdatePropertyAccessInvitation implements PATCH /properties/{propertyId}/access/invitations/{invitationId}.
-func (h *InvitationHandlers) UpdatePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId, invitationID openapi_types.UUID) {
+func (h *InvitationHandlers) UpdatePropertyAccessInvitation(
+	w http.ResponseWriter,
+	r *http.Request,
+	propertyID openapi.PropertyId,
+	invitationID openapi_types.UUID,
+) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
 	var body openapi.PropertyAccessMemberUpdateRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.ErrorContext(r.Context(), "access: decode update invitation request", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
 		return
 	}
 
 	role, err := domain.ParseRole(string(body.Role))
 	if err != nil {
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 		return
 	}
 
@@ -118,10 +155,16 @@ func (h *InvitationHandlers) UpdatePropertyAccessInvitation(w http.ResponseWrite
 }
 
 // DeletePropertyAccessInvitation implements DELETE /properties/{propertyId}/access/invitations/{invitationId}.
-func (h *InvitationHandlers) DeletePropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId, invitationID openapi_types.UUID) {
+func (h *InvitationHandlers) DeletePropertyAccessInvitation(
+	w http.ResponseWriter,
+	r *http.Request,
+	propertyID openapi.PropertyId,
+	invitationID openapi_types.UUID,
+) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -133,10 +176,16 @@ func (h *InvitationHandlers) DeletePropertyAccessInvitation(w http.ResponseWrite
 }
 
 // ResendPropertyAccessInvitation implements POST /properties/{propertyId}/access/invitations/{invitationId}/resend.
-func (h *InvitationHandlers) ResendPropertyAccessInvitation(w http.ResponseWriter, r *http.Request, propertyID openapi.PropertyId, invitationID openapi_types.UUID) {
+func (h *InvitationHandlers) ResendPropertyAccessInvitation(
+	w http.ResponseWriter,
+	r *http.Request,
+	propertyID openapi.PropertyId,
+	invitationID openapi_types.UUID,
+) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
-		httpsupport.WriteProblem(w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
+			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
 
@@ -151,28 +200,33 @@ func (h *InvitationHandlers) handleError(w http.ResponseWriter, r *http.Request,
 	switch {
 	case errors.Is(err, domain.ErrMemberNotFound):
 		// Privacy: not-found covers both "object does not exist" and "no access".
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
 	case errors.Is(err, domain.ErrInvitationNotFound):
-		httpsupport.WriteProblem(w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Приглашение не найдено"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound, httpsupport.Problem(r.Context(), "Not found", "Приглашение не найдено"))
 	case errors.Is(err, domain.ErrMemberAlreadyExists):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже является участником"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже является участником"))
 	case errors.Is(err, domain.ErrInvitationAlreadyExists):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже приглашён"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Пользователь уже приглашён"))
 	case errors.Is(err, domain.ErrPropertyArchived):
 		// Same 409 shape as the properties ErrArchivedProperty mapping (issue #163).
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", "Нельзя добавить участника в архивный объект"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
+			httpsupport.Problem(r.Context(), "Conflict", "Нельзя добавить участника в архивный объект"))
 	case errors.Is(err, domain.ErrCannotAddOwner):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить владельца объекта"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить владельца объекта"))
 	case errors.Is(err, domain.ErrCannotAddSelf):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить себя участником"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Нельзя добавить себя участником"))
 	case errors.Is(err, domain.ErrInvalidEmail):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректный email"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректный email"))
 	case errors.Is(err, domain.ErrInvalidRole):
-		httpsupport.WriteProblem(w, http.StatusBadRequest, httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
+			httpsupport.Problem(r.Context(), "Bad request", "Некорректная роль участника"))
 	case errors.Is(err, domain.ErrInvitationResendCooldown):
-		httpsupport.WriteProblem(w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", resendCooldownDetail(err)))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict, httpsupport.Problem(r.Context(), "Conflict", resendCooldownDetail(err)))
 	default:
-		httpsupport.WriteProblem(w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
+		httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 	}
 }
 

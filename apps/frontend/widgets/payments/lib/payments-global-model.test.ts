@@ -1,0 +1,171 @@
+import { describe, expect, it } from 'vitest';
+import type { GlobalPaymentObject } from '@/entities/payment';
+import {
+  globalFavoritePayments,
+  globalOverduePayments,
+  globalPaymentObjectHasOverdue,
+  nearestDateLine,
+  overdueDaysLine,
+  overdueOperationsCountLabel,
+  paymentHubAddTarget,
+  paymentHubSectionHasAllCard,
+  paymentsCountLabel,
+} from './payments-global-model';
+import { makeGlobalPayment as item } from './global-payment-fixtures';
+
+describe('paymentHubSectionHasAllCard — замыкающая карточка секции хаба (#1339)', () => {
+  it.each([
+    [1, false],
+    [2, false],
+    [3, true],
+    [4, true],
+  ])('%i карточки в секции — замыкание %s', (cards, shows) => {
+    expect(paymentHubSectionHasAllCard(cards)).toBe(shows);
+  });
+});
+
+describe('globalFavoritePayments', () => {
+  it('оставляет только избранные', () => {
+    const favorite = item({ id: 'f', isFavorite: true });
+    const plain = item({ id: 'p' });
+
+    expect(globalFavoritePayments([favorite, plain])).toStrictEqual([favorite]);
+  });
+
+  it('сортирует по favoriteOrder, правила без позиции — в конец (№576)', () => {
+    const unordered = item({ id: 'new', isFavorite: true, favoriteOrder: null });
+    const second = item({ id: 'second', isFavorite: true, favoriteOrder: 2 });
+    const first = item({ id: 'first', isFavorite: true, favoriteOrder: 1 });
+
+    const result = globalFavoritePayments([unordered, second, first]);
+
+    expect(result.map((row) => row.id)).toEqual(['first', 'second', 'new']);
+  });
+});
+
+describe('globalOverduePayments', () => {
+  it('оставляет правила с накопленной просрочкой', () => {
+    const overdue = item({ id: 'overdue', overdueOperationCount: 2, overdueDays: 3 });
+    const fresh = item({ id: 'fresh' });
+
+    expect(globalOverduePayments([overdue, fresh])).toStrictEqual([overdue]);
+  });
+
+  it('сортирует по возрасту просрочки — старейшие первыми (решение владельца 09.09)', () => {
+    const freshOverdue = item({ id: 'fresh-overdue', overdueOperationCount: 1, overdueDays: 2 });
+    const oldest = item({ id: 'oldest', overdueOperationCount: 5, overdueDays: 60 });
+    const middle = item({ id: 'middle', overdueOperationCount: 3, overdueDays: 5 });
+
+    const result = globalOverduePayments([freshOverdue, oldest, middle]);
+
+    expect(result.map((row) => row.id)).toStrictEqual(['oldest', 'middle', 'fresh-overdue']);
+  });
+});
+
+describe('counters labels', () => {
+  it.each([
+    [1, '1 платёж'],
+    [2, '2 платежа'],
+    [17, '17 платежей'],
+    [21, '21 платёж'],
+  ])('paymentsCountLabel(%i) — «%s»', (count, label) => {
+    expect(paymentsCountLabel(count)).toBe(label);
+  });
+
+  it.each([
+    [1, '1 просроченный'],
+    [3, '3 просроченных'],
+    [7, '7 просроченных'],
+    [21, '21 просроченный'],
+  ])('overdueOperationsCountLabel(%i) — «%s»', (count, label) => {
+    expect(overdueOperationsCountLabel(count)).toBe(label);
+  });
+});
+
+describe('nearestDateLine — дата «Ближайший» без статуса', () => {
+  it('рисует дату графика', () => {
+    expect(nearestDateLine(item({ nearestDate: '2026-08-17' }))).toBe('17 августа');
+  });
+
+  it('вне текущего года год в дате — «Ближайший» бывает и в январе (правило владельца 13.10)', () => {
+    expect(nearestDateLine(item({ nearestDate: '2027-01-10' }))).toBe('10 января, 2027');
+  });
+
+  it('нет следующего вхождения (пауза/завершён) — строки нет', () => {
+    expect(nearestDateLine(item({ nearestDate: null }))).toBeUndefined();
+  });
+
+  it('отображаемая завершённость фида — «Полностью оплачен» вместо даты (#1341)', () => {
+    expect(nearestDateLine(item({ nearestDate: null, isCompleted: true }))).toBe('Полностью оплачен');
+  });
+});
+
+describe('overdueDaysLine', () => {
+  it('возраст старейшей просрочки — «N дней»', () => {
+    expect(overdueDaysLine(item({ overdueDays: 2 }))).toBe('2 дня');
+  });
+
+  it('без просрочки строки нет', () => {
+    expect(overdueDaysLine(item({ overdueDays: null }))).toBeUndefined();
+  });
+});
+
+describe('globalPaymentObjectHasOverdue', () => {
+  const object = (overrides: Partial<GlobalPaymentObject>): GlobalPaymentObject => ({
+    propertyId: 'property-1',
+    name: 'Моя квартира',
+    address: 'Новатарова, 8',
+    type: 'apartment',
+    pinnedAt: null,
+    photoUrl: null,
+    autoPayRules: [],
+    otherRules: [],
+    ...overrides,
+  });
+
+  it('просрочка в любой стопке красит точкой', () => {
+    expect(
+      globalPaymentObjectHasOverdue(
+        object({ autoPayRules: [{ paymentId: 'p', hasOverdue: false }], otherRules: [{ paymentId: 'q', hasOverdue: true }] }),
+      ),
+    ).toBe(true);
+  });
+
+  it('без просрочек точки нет', () => {
+    expect(
+      globalPaymentObjectHasOverdue(
+        object({ autoPayRules: [{ paymentId: 'p', hasOverdue: false }] }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('paymentHubSectionHasAllCard — замыкающая карточка секции хаба (#1339)', () => {
+  it.each([
+    [1, false],
+    [2, false],
+    [3, true],
+    [4, true],
+  ])('%i карточки в секции — замыкание %s', (cards, shows) => {
+    expect(paymentHubSectionHasAllCard(cards)).toBe(shows);
+  });
+});
+
+describe('paymentHubAddTarget — цель «+» создания платежа (макет 3226-75059)', () => {
+  it('нет редактируемых объектов — «+» не рисуется', () => {
+    expect(paymentHubAddTarget([])).toBeNull();
+  });
+
+  it('единственный редактируемый объект — шит единого входа его объекта', () => {
+    expect(paymentHubAddTarget(['p1'])).toStrictEqual({
+      kind: 'sheet',
+      propertyId: 'p1',
+    });
+  });
+
+  it('несколько редактируемых — страница «Объекты» (выбор объекта)', () => {
+    expect(paymentHubAddTarget(['p1', 'p2', 'p3'])).toStrictEqual({
+      kind: 'objects',
+    });
+  });
+});

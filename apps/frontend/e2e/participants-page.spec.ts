@@ -1,0 +1,588 @@
+import type { Page } from '@playwright/test';
+import {
+  captureScreen,
+  expect,
+  execE2eSql,
+  openCabinetWithSeededSession,
+  openCabinetWithSessionToken,
+  screenHeader,
+  seededMemberSessionToken,
+  test,
+} from './fixtures';
+
+// Страница участника и её подэкраны (карта #692, тикет #698): блок
+// «аватар — имя — почта — чип агрегата», «Доступные объекты» с бейджами
+// ролей, экран «Права участника» (сегмент роли, отзыв из объекта) и
+// «Пригласить в объект» (мультичек, POST /participants/{id}/properties).
+// Сид: владелец «Квартиры на Ленина» (33333333-…) с двумя участниками —
+// Мария Петрова (full_access, 12111111-…21) и Сергей Сидоров (viewer,
+// 13111111-…31), оба active на квартире; гараж (44444444-…) свободен.
+// Разрушающие тесты восстанавливают сид через execE2eSql (workers=1).
+
+const MARIA_ID = '12111111-1111-4111-8111-111111111121';
+const SERGEY_ID = '13111111-1111-4111-8111-111111111131';
+// Свободный сид-юзер (без подписки, лимит исчерпан) для suspended/slot-
+// сценариев приглашений — у Марии и Сергея подписки pro для гейтов #997.
+const LIMITED_ID = '14111111-1111-4111-8111-111111111141';
+const APARTMENT_ID = '33333333-3333-4333-8333-333333333333';
+const GARAGE_ID = '44444444-4444-4444-8444-444444444444';
+
+test('страница участника: шапка, чип агрегата, ряды объектов с бейджами ролей, кебаб', async ({ page, seededUser }, testInfo) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${MARIA_ID}`);
+
+  const header = screenHeader(page);
+
+  // exact+first: в переходный момент в шапке встречается дубль-спан.
+  await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
+
+  // Блок участника: имя, почта; у partial-агрегата бейджа нет — статусы
+  // «частично/все объекты» ушли с экранов (D3 #1313).
+  await expect(page.getByRole('heading', { name: 'Мария Петрова' })).toBeVisible();
+  await expect(page.getByText('e2e-member@example.com')).toBeVisible();
+  await expect(page.getByText(/Доступно \d+/)).toHaveCount(0);
+  await expect(page.getByText('Доступ ко всем объектам')).toHaveCount(0);
+
+  await expect(page.getByText('Доступные объекты')).toBeVisible();
+  const apartmentRow = page.getByRole('button', { name: /Квартира на Ленина/ });
+  await expect(apartmentRow).toBeVisible();
+  await expect(apartmentRow.getByText('Управление')).toBeVisible();
+
+  // Кебаб шапки: приглашение и отзыв (макет 2008-48318); пункта
+  // «Действия участника» больше нет (#1361 — глобальная лента по одному
+  // человеку снята).
+  await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Пригласить в объект' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await captureScreen(page, testInfo, 'participant-page');
+});
+
+test('безымянный участник: «Пользователь» — заголовок шапки, почта подзаголовком (карта #1105, аменд #1123); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+  // Тот же канон карты #1105, что и в ряду списка: display_name
+  // безымянного собирает бекенд (#1106) — «Пользователь» (аменд #1123:
+  // телефон больше не фолбэк). Телефон сидится плейнтекстом при
+  // phone_encrypted = false. Идентификаторы
+  // свои (не из participants-list.spec.ts): утечка строки одного теста
+  // не должна подменять данные другого (ON CONFLICT (id) DO NOTHING).
+  const NAMELESS_ID = '16111111-1111-4111-8111-111111111162';
+  const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999962';
+  const NAMELESS_PHONE = '+79137654322';
+  const NAMELESS_EMAIL = 'e2e-nameless-page@example.com';
+  await execE2eSql(
+    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+      `ON CONFLICT (id) DO NOTHING; ` +
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+      `VALUES ('${NAMELESS_MEMBER_ID}', '${APARTMENT_ID}', '${NAMELESS_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+      `ON CONFLICT (property_id, user_id) WHERE status = 'active' DO NOTHING`,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/participants/${NAMELESS_ID}`);
+
+    // Шапка (2008-81468): имени нет — «Пользователь» H1, почта
+    // подзаголовком (не прячется); у partial-агрегата бейджа нет (D3
+    // #1313).
+    await expect(page.getByRole('heading', { name: 'Пользователь' })).toBeVisible();
+    await expect(page.getByText(NAMELESS_EMAIL)).toBeVisible();
+    await expect(page.getByText(/Доступно \d+/)).toHaveCount(0);
+    await expect(page.getByText(NAMELESS_PHONE)).toHaveCount(0);
+    await expect(page.getByText(/\*{3}/)).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'participant-page-nameless');
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '${NAMELESS_MEMBER_ID}'; ` +
+        `DELETE FROM users WHERE id = '${NAMELESS_ID}'`,
+    );
+  }
+});
+
+test('deep-link на отозванного/чужого участника — «Участник не найден»', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  // Существующий пользователь, но вне сцопа читающего — приватный 404.
+  await page.goto('/participants/00000000-0000-4000-8000-000000000000');
+
+  const header = screenHeader(page);
+
+  await expect(page.getByText('Участник не найден')).toBeVisible();
+  // Кебаб не показывается без данных (§7), назад в шапке жив.
+  await expect(header.getByRole('button', { name: 'Еще — действия с участником' })).toHaveCount(0);
+  await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
+});
+
+test('права участника: смена роли сегментом, попап «Права изменены»; сид восстанавливается', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${MARIA_ID}`);
+  const header = screenHeader(page);
+
+  await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
+  await expect(header.getByText('Права участника')).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Управление' })).toBeChecked();
+
+  // Карточка объекта — ссылка на объект и у владельца (амендмент
+  // владельца 13.10.2026, общий с member-режимом #1362; без шеврона).
+  const objectCard = page.getByRole('link', { name: /Квартира на Ленина/ });
+  await expect(objectCard).toBeVisible();
+  await expect(objectCard).toHaveAttribute('href', `/properties/${APARTMENT_ID}`);
+
+  try {
+    await page.getByRole('radio', { name: 'Просмотр' }).click();
+
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Бейдж на странице участника перечитан (инвалидация агрегатов).
+    await header.getByRole('button', { name: 'Назад' }).click();
+    await expect(
+      page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Просмотр'),
+    ).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `UPDATE property_members SET role = 'full_access' WHERE id = '99999999-9999-4999-8999-999999999931'`,
+    );
+  }
+  await page.reload();
+  await expect(
+    page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Управление'),
+  ).toBeVisible();
+});
+
+/** CDP-задержка сети: полёт мутации удлиняется — погашенное состояние
+ * переключателя роли наблюдаемо (канон double-submit-guard; route-задержка
+ * ненадёжна — грабля #1113). Возвращает функцию снятия эмуляции. */
+async function holdNetworkLatency(page: Page, latencyMs: number): Promise<() => Promise<void>> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: latencyMs,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  });
+  return async () => {
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    });
+  };
+}
+
+test('переключатель роли: курсор-пойнтер на кнопках, клип тени капсулы (#1395); в полёте мутации курсор default, сид восстанавливается', async ({ page, seededUser }) => {
+  test.setTimeout(120_000);
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${MARIA_ID}`);
+
+  await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
+  await expect(page.getByRole('radio', { name: 'Управление' })).toBeChecked();
+
+  // Курсор переключателю задаёт глобальное base-правило
+  // button:not(:disabled) (#1395): сам сегмент локального cursor-класса
+  // не несёт, поэтому снятие base-правила валит этот ассерт — радио и есть
+  // канарейка глобальности.
+  const manage = page.getByRole('radio', { name: 'Управление' });
+  const view = page.getByRole('radio', { name: 'Просмотр' });
+  await expect(manage).toHaveCSS('cursor', 'pointer');
+  await expect(view).toHaveCSS('cursor', 'pointer');
+
+  // Тень активной пилюли не выходит за капсулу: «Clip content» макета
+  // 3298-75577, тот же CSS-аналог, что на тарифах лендинга (#1010).
+  await expect(
+    page.getByRole('radiogroup', { name: 'Роль участника на объекте' }),
+  ).toHaveCSS('overflow', 'clip');
+
+  // Погашенный сегмент в полёте мутации — курсор остаётся default:
+  // base-правило с оговоркой :not(:disabled) (слово владельца).
+  const releaseLatency = await holdNetworkLatency(page, 2000);
+  try {
+    await view.click();
+    await expect(view).toBeDisabled();
+    await expect(view).toHaveCSS('cursor', 'default');
+  } finally {
+    await releaseLatency();
+  }
+
+  await expect(
+    page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  try {
+    // Сид восстанавливается — тот же член ряда, что в сценарии смены роли.
+    await execE2eSql(
+      `UPDATE property_members SET role = 'full_access' WHERE id = '99999999-9999-4999-8999-999999999931'`,
+    );
+  } finally {
+    await page.reload();
+  }
+  await expect(manage).toBeChecked();
+});
+
+test('страница участника: отступы шапки по макету 2036-84861, h1 без легаси-маржина (#1402)', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${LIMITED_ID}`);
+
+  const h1 = page.getByRole('heading', { name: 'Анна Лимитова' });
+
+  // Легаси-маржин h1 (0.67em ≈ 18.76px на кегле 28) снесён глобально
+  // (#1402, слово владельца): без этого base-правила ассерт красный.
+  await expect(h1).toHaveCSS('margin-top', '0px');
+  await expect(h1).toHaveCSS('margin-bottom', '0px');
+
+  // Геометрия шапки: аватар / имя+почта / (чип) с зазорами 24 и 8 внутри
+  // блока; контент страницы разнесён на 48 (2036-84861). Канарейка
+  // глобальности маржина — сам h1: локального margin-класса он не несёт.
+  // Ассерт 48 жив, пока сида Анны partial (бейджа и notice в шапке нет —
+  // при дрейфе сида между почтой и секцией встанут чип+карточка).
+  const avatar = page.locator('.h-24.rounded-pill').first();
+  const email = page.getByText('e2e-limited@example.com');
+  const section = page.getByRole('heading', { name: 'Доступные объекты' });
+  const [avatarBox, h1Box, emailBox, sectionBox] = await Promise.all([
+    avatar.boundingBox(),
+    h1.boundingBox(),
+    email.boundingBox(),
+    section.boundingBox(),
+  ]);
+  if (!avatarBox || !h1Box || !emailBox || !sectionBox) {
+    throw new Error('боксы шапки не измерились');
+  }
+  expect(Math.round(h1Box.y - avatarBox.y - avatarBox.height)).toBe(24);
+  expect(Math.round(emailBox.y - h1Box.y - h1Box.height)).toBe(8);
+  expect(Math.round(sectionBox.y - emailBox.y - emailBox.height)).toBe(48);
+});
+
+test('пригласить в объект: мультичек гаража, шит роли, «Доступ выдан»; сид восстанавливается', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  // Приглашаем Анну (без подписки — тарифный слот превышен, сценарий
+  // suspended-гранта); у Марии и Сергея подписки pro для гейтов #997.
+  await page.goto(`/participants/${LIMITED_ID}`);
+
+  const header = screenHeader(page);
+
+  await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+  await page.getByRole('menuitem', { name: 'Пригласить в объект' }).click();
+
+  await expect(header.getByText('Пригласить в объект')).toBeVisible();
+
+  // Квартира уже выдана — в списке гараж и студия; «Все объекты» unchecked.
+  const garageRow = page.getByRole('checkbox', { name: /Гараж на Садовой/ });
+  await expect(garageRow).toBeVisible();
+  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toHaveCount(0);
+  const allRow = page.getByRole('checkbox', { name: /Все объекты/ });
+  await expect(allRow).toHaveAttribute('aria-checked', 'false');
+
+  // Tri-state (2010-131721): выбран один из двух — «Все объекты» mixed.
+  await garageRow.click();
+  await expect(allRow).toHaveAttribute('aria-checked', 'mixed');
+
+  const inviteButton = page.getByRole('button', { name: 'Пригласить' }).filter({ hasText: 'Пригласить' });
+  await expect(inviteButton).toBeEnabled();
+  await inviteButton.click();
+
+  // Шит роли (макет 2010-131724): сегмент + кнопка «Пригласить».
+  const sheet = page.getByRole('dialog');
+  await sheet.getByRole('radio', { name: 'Управление' }).click();
+  try {
+    await sheet.getByRole('button', { name: 'Пригласить' }).click();
+
+    // Попап «Доступ выдан» (2010-131859) на странице участника; грант
+    // пришёл suspended — у сид-получателя нет подписки, тарифный слот
+    // превышен (второй объект). Статус и пояснение — на уровне участника
+    // (макет 2036-84861, правка приёмки #756): чип в шапке + жёлтая
+    // карточка; ноги несут бейджи ролей.
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Доступ выдан' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Превышен лимит объектов').first()).toBeVisible();
+    await expect(page.getByTestId('participant-limit-notice')).toBeVisible();
+    await expect(
+      page
+        .getByTestId('participant-limit-notice')
+        .getByText('Пользователь пока не может пользоваться вашим объектом'),
+    ).toBeVisible();
+    await expect(page.getByTestId('participant-limit-notice').getByText(/Попросите его освободить слот/)).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /Гараж на Садовой/ }).getByText('Управление'),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /Квартира на Ленина/ }).getByText('Управление')).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE property_id = '${GARAGE_ID}' AND user_id = '${LIMITED_ID}'`,
+    );
+  }
+  await page.reload();
+  // Сид восстановлен (нога гаража удалена) — агрегат снова partial, бейджа
+  // лимита нет (D3 #1313: у partial бейджа нет).
+  await expect(page.getByText('Превышен лимит объектов')).toHaveCount(0);
+});
+
+test('отзыв из объекта: подтверждение, попап успеха, ряд исчезает; сид восстанавливается', async ({ page, seededUser }) => {
+  // Нога на гараже — временная, создаётся и убирается этим тестом.
+  await execE2eSql(
+    `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+      `VALUES ('99999999-9999-4999-8999-999999999933', '${GARAGE_ID}', '${SERGEY_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+      `ON CONFLICT (id) DO NOTHING`,
+  );
+
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto(`/participants/${SERGEY_ID}`);
+
+  await page.getByRole('button', { name: /Гараж на Садовой/ }).click();
+  await expect(screenHeader(page).getByText('Права участника')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Отозвать доступ к объекту' }).click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Уверены, что хотите отозвать доступ?')).toBeVisible();
+  try {
+    await dialog.getByRole('button', { name: 'Отозвать' }).click();
+
+    // Попап (2008-83135) на странице участника; нога на гараже исчезла.
+    await expect(
+      page.getByRole('dialog').locator('p', {
+        hasText: 'У участника больше нет доступа к объекту',
+      }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: /Гараж на Садовой/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '99999999-9999-4999-8999-999999999933'`,
+    );
+  }
+});
+
+test('кебаб «Отозвать доступ к объектам»: подтверждение, попап «Участник удален» на списке; сид восстанавливается', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  // Путь пользователя: раздел «Участники» → ряд Сергея (нужна история —
+  // успех возврата по канону goBack ведёт именно на раздел).
+  await page.goto('/participants');
+
+  const header = screenHeader(page);
+
+  await page.getByRole('button', { name: /Сергей Сидоров/ }).click();
+  // Данные экрана сели до меню (заголовок шапки не матчим: у хаба-раздела
+  // он рендерится дважды — inline и mobile-клон компакт-бара, strict
+  // violation на substring «Участник»; возврат проверяет heading ниже).
+  await expect(page.getByRole('heading', { name: 'Сергей Сидоров' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
+
+  // Radix-меню под нагрузкой полного прогона может не открыться с первого
+  // клика — повторяем до появления пункта, затем выбираем его.
+  await expect(async () => {
+    await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
+  }).toPass({ timeout: 10_000 });
+  await page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' }).click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(
+    dialog.getByText('Отозвать у пользователя доступ ко всем вашим объектам?'),
+  ).toBeVisible();
+  try {
+    await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
+
+    // Возврат в раздел «Участники» с попапом «Участник удален»
+    // (2008-83716); URL с якорем конца строки отличает раздел от
+    // страницы участника (заголовок хаба не проверяем: открытая модалка
+    // прячет фон из a11y-дерева — aria-modal).
+    await expect(page).toHaveURL(/\/participants$/);
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Участник удален' }),
+    ).toBeVisible();
+    // Модалка скрывает фон от a11y-дерева — список проверяем после закрытия.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
+  } finally {
+    await execE2eSql(
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+        `VALUES ('99999999-9999-4999-8999-999999999932', '${APARTMENT_ID}', '${SERGEY_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +
+        `ON CONFLICT (id) DO NOTHING`,
+    );
+  }
+  await page.reload();
+  await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
+});
+
+test('pending-участник: deep-link по почте, бейдж «Аккаунт не создан», смена роли приглашения; сид восстанавливается', async ({ page, seededUser }) => {
+  // Pending-приглашение на гараж (гейт тикета: состояния pending на тех же
+  // экранах; права уходят в PATCH/DELETE /access/invitations/{id}).
+  await execE2eSql(
+    `INSERT INTO property_member_invitations (id, property_id, email, role, invited_by, last_sent_at) ` +
+      `VALUES ('88888888-8888-4888-8888-888888888881', '${GARAGE_ID}', 'e2e-pending@example.com', 'viewer', '11111111-1111-4111-8111-111111111111', now()) ` +
+      `ON CONFLICT (id) DO NOTHING`,
+  );
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    // Идентификатор pending-участника — почта (контракт #693).
+    await page.goto('/participants/e2e-pending%40example.com');
+
+    const header = screenHeader(page);
+
+    await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
+    // Имени нет — почта титул (контракт: «the email is the label»); бейдж
+    // в шапке — «Аккаунт не создан» (D3 #1313: у pending-агрегата ровно
+    // этот статус). У pending-ноги гаража свой чип «Приглашён» (ассерт
+    // ниже) — он-role бейдж, не статусный.
+    await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
+    await expect(page.getByText('Аккаунт не создан')).toBeVisible();
+
+    // Чип шапки pending-участника: титул → 24 + 6 внутреннего паддинга
+    // инстанса бейджа (#1402, 2036-84861).
+    const h1Box = await page.getByRole('heading', { name: 'e2e-pending@example.com' }).boundingBox();
+    const chipBox = await page.getByText('Аккаунт не создан').boundingBox();
+    if (!h1Box || !chipBox) {
+      throw new Error('боксы титула и чипа не измерились');
+    }
+    expect(Math.round(chipBox.y - h1Box.y - h1Box.height)).toBe(30);
+
+    const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
+    await expect(garageRow.getByText('Приглашён')).toBeVisible();
+
+    await garageRow.click();
+    await expect(header.getByText('Права участника')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
+
+    await page.getByRole('radio', { name: 'Управление' }).click();
+    await expect(
+      page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Серверная правда: роль приглашения реально сменилась.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE id = '88888888-8888-4888-8888-888888888881' AND role = 'full_access'`,
+      ),
+    ).toBe('1');
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_member_invitations WHERE id = '88888888-8888-4888-8888-888888888881'`,
+    );
+  }
+});
+
+// D7 #1314 (макет 3298-75576): «Права участника» для приглашённого без
+// аккаунта. Сид — собственное pending-приглашение на квартиру (id не из
+// других спек: утечка строки одного теста не подменяет данные другого).
+const PENDING_RIGHTS_INVITE_ID = '99999999-9999-4999-8999-999999999973';
+const PENDING_RIGHTS_EMAIL = 'e2e-pending-rights@example.com';
+
+function seedPendingRightsInvitation(role: 'viewer' | 'full_access'): Promise<string> {
+  return execE2eSql(
+    `INSERT INTO property_member_invitations (id, property_id, email, role, invited_by, last_sent_at) ` +
+      `VALUES ('${PENDING_RIGHTS_INVITE_ID}', '${APARTMENT_ID}', '${PENDING_RIGHTS_EMAIL}', '${role}', '11111111-1111-4111-8111-111111111111', now()) ` +
+      `ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, property_id = EXCLUDED.property_id, email = EXCLUDED.email`,
+  );
+}
+
+test('права участника без аккаунта (D7): карточка, инфо-блок, сегмент, «Отозвать доступ»; скриншот', async ({ page, seededUser }, testInfo) => {
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    // Вход — из страницы участника: pending-нога «Приглашён» → права.
+    await page.goto('/participants/e2e-pending-rights%40example.com');
+    const legRow = page.getByRole('button', { name: /Квартира на Ленина/ });
+    await expect(legRow.getByText('Приглашён')).toBeVisible();
+    await legRow.click();
+
+    const header = screenHeader(page);
+    await expect(header.getByText('Права участника')).toBeVisible();
+
+    // Карточка участника (3298-75576): анонимный титул #1105, почта,
+    // бейдж «Аккаунт не создан»; контекста объекта на экране нет.
+    const card = page.getByTestId('participant-rights-card');
+    await expect(card.getByText('Пользователь', { exact: true })).toBeVisible();
+    await expect(card.getByText(PENDING_RIGHTS_EMAIL)).toBeVisible();
+    await expect(card.getByText('Аккаунт не создан')).toBeVisible();
+    await expect(page.getByText('Квартира на Ленина')).toHaveCount(0);
+
+    // Инфо-блок: кто это и что будет после создания аккаунта.
+    const notice = page.getByTestId('participant-pending-notice');
+    await expect(notice.getByText('Пользователь еще не создал аккаунт')).toBeVisible();
+    await expect(
+      notice.getByText('После создания аккаунта он сможет пользоваться вашим объектом'),
+    ).toBeVisible();
+
+    // Сегмент роли и красная строка отзыва; строки «Действия участника
+    // в объекте» у pending нет — журнал адресуется uuid юзера (actor_id),
+    // которого у приглашённого ещё не существует.
+    await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
+    await expect(page.getByTestId('participant-rights-revoke')).toBeVisible();
+    await expect(page.getByText('Действия участника')).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'participant-rights-pending');
+  } finally {
+    await execE2eSql(`DELETE FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`);
+  }
+});
+
+test('отзыв pending-приглашения с D7-экрана: подтверждение, попап, приглашение снято; сид восстанавливается', async ({ page, seededUser }) => {
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/participants/e2e-pending-rights%40example.com');
+    await page.getByRole('button', { name: /Квартира на Ленина/ }).click();
+    await expect(screenHeader(page).getByText('Права участника')).toBeVisible();
+
+    await page.getByTestId('participant-rights-revoke').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Уверены, что хотите отозвать доступ?')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Отозвать' }).click();
+
+    // Попап (2008-83135) на странице участника; единственная нога снята —
+    // агрегат честно отвечает «Участник не найден» (приватный 404 #693).
+    await expect(
+      page.getByRole('dialog').locator('p', {
+        hasText: 'У участника больше нет доступа к объекту',
+      }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Участник не найден')).toBeVisible();
+
+    // Серверная правда: приглашение отменено.
+    expect(
+      await execE2eSql(
+        `SELECT count(*) FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`,
+      ),
+    ).toBe('0');
+  } finally {
+    await seedPendingRightsInvitation('viewer');
+  }
+  await page.reload();
+  await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
+});
+
+test('D7 owner-only: manage-участник по deep-link видит «Участник не найден» — мутаций нет', async ({ page }) => {
+  // Мария (full_access на чужой квартире) открывает D7-экран напрямую:
+  // агрегат GET /participants/{id} — owner-скоуп (D5 #1304), не-собственнику
+  // приватный 404; зрителя проверяет та же ветка (404 не зависит от роли).
+  // #1362 открыл участнику страницы прав по member-маршруту
+  // /properties/{id}/participants/{memberId} (контракт чтения строки
+  // #1357, спек participant-rights-member.spec.ts) — агрегатный маршрут
+  // владельческого экрана остаётся owner-only, этот лок стоит.
+  await seedPendingRightsInvitation('viewer');
+  try {
+    await openCabinetWithSessionToken(page, seededMemberSessionToken());
+    await page.goto(`/participants/e2e-pending-rights%40example.com/properties/${APARTMENT_ID}`);
+
+    await expect(page.getByText('Участник не найден')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Просмотр' })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: 'Управление' })).toHaveCount(0);
+    await expect(page.getByTestId('participant-rights-revoke')).toHaveCount(0);
+    // Назад в шапке жив (§7).
+    await expect(screenHeader(page).getByRole('button', { name: 'Назад' })).toBeVisible();
+  } finally {
+    await execE2eSql(`DELETE FROM property_member_invitations WHERE id = '${PENDING_RIGHTS_INVITE_ID}'`);
+  }
+});

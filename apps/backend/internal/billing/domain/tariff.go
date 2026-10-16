@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -34,12 +36,82 @@ const (
 // an unlimited number of properties.
 const UnlimitedPropertyLimit = -1
 
+// MaxTariffPriceKopecks is the sanity ceiling for one billing period's price
+// (100 000 ₽): a price above it is an admin slip, never a plan — the point is
+// to keep a typo from reaching InitPayment, not to pin business pricing. The
+// schema's CHECK constraints mirror the same bound (issue #425).
+const MaxTariffPriceKopecks int64 = 10_000_000
+
+// Tariff is a subscription plan. IsActive=false hides the plan from users
+// (listing) without breaking foreign keys that still reference it (issue #245).
 type Tariff struct {
 	ID                  uuid.UUID
 	Name                TariffName
 	ActivePropertyLimit int
 	MonthlyPriceKopecks int64
 	YearlyPriceKopecks  int64
+	IsActive            bool
+}
+
+// NewTariff builds a new plan with a minted id, validating the name and the
+// pricing fields (issue #256). It is the only way the admin create flow
+// produces a Tariff, so an unvalidated plan never reaches persistence.
+func NewTariff(name TariffName, activePropertyLimit int, monthlyPriceKopecks, yearlyPriceKopecks int64, isActive bool) (Tariff, error) {
+	if _, err := ParseTariffName(string(name)); err != nil {
+		return Tariff{}, fmt.Errorf("%w: %q", ErrInvalidTariff, name)
+	}
+	tariff := Tariff{
+		ID:                  uuid.Must(uuid.NewV7()),
+		Name:                name,
+		ActivePropertyLimit: activePropertyLimit,
+		MonthlyPriceKopecks: monthlyPriceKopecks,
+		YearlyPriceKopecks:  yearlyPriceKopecks,
+		IsActive:            isActive,
+	}
+	if err := tariff.Validate(); err != nil {
+		return Tariff{}, err
+	}
+	return tariff, nil
+}
+
+// Validate checks the admin-editable tariff invariants (issue #256, #425):
+// prices are non-negative kopecks within the sanity ceiling, and the property
+// limit is UnlimitedPropertyLimit (-1) or a non-negative count. The schema's
+// CHECK constraints mirror these rules durably; this is the application-side
+// gate.
+func (t Tariff) Validate() error {
+	if t.MonthlyPriceKopecks < 0 || t.YearlyPriceKopecks < 0 {
+		return fmt.Errorf("%w: prices must be non-negative kopecks", ErrInvalidTariffPricing)
+	}
+	if t.MonthlyPriceKopecks > MaxTariffPriceKopecks || t.YearlyPriceKopecks > MaxTariffPriceKopecks {
+		return fmt.Errorf("%w: prices must not exceed %d kopecks", ErrInvalidTariffPricing, MaxTariffPriceKopecks)
+	}
+	if t.ActivePropertyLimit < UnlimitedPropertyLimit {
+		return fmt.Errorf("%w: active property limit must be %d (unlimited) or greater", ErrInvalidTariffPricing, UnlimitedPropertyLimit)
+	}
+	return nil
+}
+
+// Price returns the tariff's price for one billing period in kopecks. The
+// period selects the price field; an unknown period is an error rather than a
+// silent monthly fallback, so no caller can charge the wrong amount (issue
+// #283).
+func (t Tariff) Price(period SubscriptionPeriod) (int64, error) {
+	switch period {
+	case PeriodMonth:
+		return t.MonthlyPriceKopecks, nil
+	case PeriodYear:
+		return t.YearlyPriceKopecks, nil
+	default:
+		return 0, fmt.Errorf("%w: %q", ErrInvalidPeriod, period)
+	}
+}
+
+// IsPaid reports whether the tariff grants the platform's paid sections
+// (карта #997): every plan except the free basic one does. The polarity is
+// "not basic" so a future paid plan in the name enum is covered by default.
+func (t Tariff) IsPaid() bool {
+	return t.Name != TariffBasic
 }
 
 // ClassifyTariffChange compares current and next tariffs and returns the

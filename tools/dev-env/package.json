@@ -1,0 +1,13 @@
+{
+  "name": "dev-env",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Worktree slot registry and port formula for parallel dev checkouts (docs/agents/parallel-dev.md). Backs make worktree-new and the slot wiring of the Makefile's local-infra / e2e targets.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

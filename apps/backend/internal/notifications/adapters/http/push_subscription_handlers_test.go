@@ -24,6 +24,9 @@ type fakePushRepo struct {
 	subs []domain.PushSubscription
 }
 
+// testP256dh is the shared P-256dh fixture of the push handler tests.
+const testP256dh = "p256dh-val"
+
 func (r *fakePushRepo) Upsert(_ context.Context, sub domain.PushSubscription) (domain.PushSubscription, error) {
 	for i, s := range r.subs {
 		if s.Endpoint == sub.Endpoint {
@@ -39,6 +42,8 @@ func (r *fakePushRepo) Upsert(_ context.Context, sub domain.PushSubscription) (d
 	return sub, nil
 }
 
+// Delete mirrors the DELETE query's execrows semantics (спека #1028 §5):
+// removing an absent subscription is fine — no not-found outcome.
 func (r *fakePushRepo) Delete(_ context.Context, userID uuid.UUID, endpoint string) error {
 	for i, s := range r.subs {
 		if s.Endpoint == endpoint && s.UserID == userID {
@@ -46,7 +51,7 @@ func (r *fakePushRepo) Delete(_ context.Context, userID uuid.UUID, endpoint stri
 			return nil
 		}
 	}
-	return notificationsapp.ErrNotFound
+	return nil
 }
 
 func (r *fakePushRepo) ListByUser(_ context.Context, userID uuid.UUID) ([]domain.PushSubscription, error) {
@@ -57,6 +62,27 @@ func (r *fakePushRepo) ListByUser(_ context.Context, userID uuid.UUID) ([]domain
 		}
 	}
 	return out, nil
+}
+
+func (r *fakePushRepo) GetByEndpoint(_ context.Context, userID uuid.UUID, endpoint string) (domain.PushSubscription, error) {
+	for _, s := range r.subs {
+		if s.Endpoint == endpoint && s.UserID == userID {
+			return s, nil
+		}
+	}
+	return domain.PushSubscription{}, notificationsapp.ErrNotFound
+}
+
+func (r *fakePushRepo) UpdatePreferences(
+	_ context.Context, userID uuid.UUID, endpoint string, prefs domain.CategoryPrefs,
+) (bool, error) {
+	for i, s := range r.subs {
+		if s.Endpoint == endpoint && s.UserID == userID {
+			r.subs[i].Categories = prefs
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // pushFakeClock is a deterministic clock.Clock for push handler tests.
@@ -79,12 +105,16 @@ func newPushJSONRequest(t *testing.T, method, target string, userID *uuid.UUID, 
 	if userID != nil {
 		ctx = httpsupport.WithUserID(ctx, *userID)
 	}
-	return httptest.NewRequestWithContext(ctx, method, target, bytes.NewReader(raw))
+	req := httptest.NewRequestWithContext(ctx, method, target, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	return req
 }
 
 func TestGetVapidPublicKey_ReturnsKey(t *testing.T) {
+	t.Parallel()
+
 	h, _ := newPushTestHandlers("BPubKeyXXX")
-	uid := uuid.New()
+	uid := uuid.Must(uuid.NewV7())
 	w := httptest.NewRecorder()
 	r := newPushJSONRequest(t, http.MethodGet, "/push/vapid-public-key", &uid, nil)
 
@@ -97,8 +127,10 @@ func TestGetVapidPublicKey_ReturnsKey(t *testing.T) {
 }
 
 func TestGetVapidPublicKey_EmptyReturnsServiceUnavailable(t *testing.T) {
+	t.Parallel()
+
 	h, _ := newPushTestHandlers("")
-	uid := uuid.New()
+	uid := uuid.Must(uuid.NewV7())
 	w := httptest.NewRecorder()
 	r := newPushJSONRequest(t, http.MethodGet, "/push/vapid-public-key", &uid, nil)
 
@@ -108,11 +140,13 @@ func TestGetVapidPublicKey_EmptyReturnsServiceUnavailable(t *testing.T) {
 }
 
 func TestCreatePushSubscription_StoresAndReturns201(t *testing.T) {
+	t.Parallel()
+
 	h, repo := newPushTestHandlers("BPubKeyXXX")
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	body := openapi.PushSubscriptionCreateRequest{
 		Endpoint: "https://fcm.googleapis.com/fcm/send/abc",
-		P256dh:   "p256dh-val",
+		P256dh:   testP256dh,
 		Auth:     "auth-val",
 	}
 
@@ -130,19 +164,21 @@ func TestCreatePushSubscription_StoresAndReturns201(t *testing.T) {
 }
 
 func TestCreatePushSubscription_IdempotentUpsertByEndpoint(t *testing.T) {
+	t.Parallel()
+
 	h, repo := newPushTestHandlers("BPubKeyXXX")
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	endpoint := "https://fcm.googleapis.com/fcm/send/idem"
 
 	w1 := httptest.NewRecorder()
 	h.CreatePushSubscription(w1, newPushJSONRequest(t, http.MethodPost, "/push/subscriptions", &userID, openapi.PushSubscriptionCreateRequest{
-		Endpoint: endpoint, P256dh: "p256dh-val", Auth: "auth-1",
+		Endpoint: endpoint, P256dh: testP256dh, Auth: "auth-1",
 	}))
 	require.Equal(t, http.StatusCreated, w1.Code)
 
 	w2 := httptest.NewRecorder()
 	h.CreatePushSubscription(w2, newPushJSONRequest(t, http.MethodPost, "/push/subscriptions", &userID, openapi.PushSubscriptionCreateRequest{
-		Endpoint: endpoint, P256dh: "p256dh-val", Auth: "auth-2",
+		Endpoint: endpoint, P256dh: testP256dh, Auth: "auth-2",
 	}))
 	require.Equal(t, http.StatusCreated, w2.Code)
 
@@ -151,11 +187,13 @@ func TestCreatePushSubscription_IdempotentUpsertByEndpoint(t *testing.T) {
 }
 
 func TestCreatePushSubscription_InvalidReturns400(t *testing.T) {
+	t.Parallel()
+
 	h, _ := newPushTestHandlers("BPubKeyXXX")
-	uid := uuid.New()
+	uid := uuid.Must(uuid.NewV7())
 	body := openapi.PushSubscriptionCreateRequest{
 		Endpoint: "not-a-url",
-		P256dh:   "p256dh-val",
+		P256dh:   testP256dh,
 		Auth:     "auth-val",
 	}
 
@@ -167,10 +205,12 @@ func TestCreatePushSubscription_InvalidReturns400(t *testing.T) {
 }
 
 func TestDeletePushSubscription_Returns204(t *testing.T) {
+	t.Parallel()
+
 	h, repo := newPushTestHandlers("BPubKeyXXX")
-	userID := uuid.New()
+	userID := uuid.Must(uuid.NewV7())
 	endpoint := "https://fcm.googleapis.com/fcm/send/del"
-	repo.subs = []domain.PushSubscription{{ID: uuid.New(), UserID: userID, Endpoint: endpoint, P256dh: "k", Auth: "a"}}
+	repo.subs = []domain.PushSubscription{{ID: uuid.Must(uuid.NewV7()), UserID: userID, Endpoint: endpoint, P256dh: "k", Auth: "a"}}
 
 	body := openapi.PushSubscriptionDeleteRequest{Endpoint: endpoint}
 	w := httptest.NewRecorder()
@@ -181,19 +221,29 @@ func TestDeletePushSubscription_Returns204(t *testing.T) {
 	require.Empty(t, repo.subs)
 }
 
-func TestDeletePushSubscription_MissingReturns404(t *testing.T) {
+// DELETE is idempotent (спека #1028 §5): the «выключено» intent is fulfilled
+// whether the row existed or not — 204 in both cases, no 404 for the front
+// to distinguish.
+func TestDeletePushSubscription_MissingIsIdempotent204(t *testing.T) {
+	t.Parallel()
+
 	h, _ := newPushTestHandlers("BPubKeyXXX")
-	uid := uuid.New()
-	body := openapi.PushSubscriptionDeleteRequest{Endpoint: "https://fcm.googleapis.com/fcm/send/missing"}
+	uid := uuid.Must(uuid.NewV7())
+	endpoint := "https://fcm.googleapis.com/fcm/send/missing"
+	body := openapi.PushSubscriptionDeleteRequest{Endpoint: endpoint}
 
-	w := httptest.NewRecorder()
-	r := newPushJSONRequest(t, http.MethodDelete, "/push/subscriptions", &uid, body)
+	w1 := httptest.NewRecorder()
+	h.DeletePushSubscription(w1, newPushJSONRequest(t, http.MethodDelete, "/push/subscriptions", &uid, body))
+	assert.Equal(t, http.StatusNoContent, w1.Code, "absent subscription: still 204")
 
-	h.DeletePushSubscription(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	w2 := httptest.NewRecorder()
+	h.DeletePushSubscription(w2, newPushJSONRequest(t, http.MethodDelete, "/push/subscriptions", &uid, body))
+	assert.Equal(t, http.StatusNoContent, w2.Code, "repeat delete: still 204")
 }
 
 func TestCreatePushSubscription_Unauthorized(t *testing.T) {
+	t.Parallel()
+
 	h, _ := newPushTestHandlers("BPubKeyXXX")
 	body := openapi.PushSubscriptionCreateRequest{
 		Endpoint: "https://fcm.googleapis.com/fcm/send/x",

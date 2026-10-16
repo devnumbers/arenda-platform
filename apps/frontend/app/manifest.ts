@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 /**
- * Web App Manifest for the cabinet PWA.
+ * Web App Manifest for the app PWA.
  *
  * Served at `/manifest.webmanifest`; `<link rel="manifest">` is added by Next.js
  * automatically. Decisions are documented in issue #179 and the research note
@@ -9,6 +9,9 @@ import type { MetadataRoute } from 'next';
  *
  * `id` and `start_url` MUST NOT change after publication — changing them breaks
  * recognition of already-installed apps (web.dev, Web app manifest).
+ * start_url historically pointed at легаси /dashboard; маршрут снесён
+ * (карта #862, тикет #865), дом кабинета — /properties. Публикации не было
+ * (пуш = деплой stage не делался), поэтому смена безопасна.
  */
 export default function manifest(): MetadataRoute.Manifest {
     return {
@@ -17,7 +20,7 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: 'Рентли',
         description: 'Управление арендной недвижимостью',
         lang: 'ru',
-        start_url: '/dashboard',
+        start_url: '/properties',
         scope: '/',
         display: 'standalone',
         // White so the macOS PWA title-bar strip behind the traffic-light
@@ -41,8 +44,11 @@ export default function manifest(): MetadataRoute.Manifest {
             },
             {
                 // Android Adaptive Icons — opaque square, content in the 80%
-                // safe zone. Generated from the glass master; see
-                // scripts/generate-icons.mjs.
+                // safe zone. The icon set is assembled via
+                // RealFaviconGenerator; the maskable entry is an opaque
+                // square built from the square master source-square.svg
+                // (RFG output web-app-manifest-512x512.png). Current process
+                // and file mapping — assets/icons/README.md.
                 src: '/icons/icon-maskable-512.png',
                 sizes: '512x512',
                 type: 'image/png',

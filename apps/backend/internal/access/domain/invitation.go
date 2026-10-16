@@ -17,7 +17,7 @@ import (
 type Invitation struct {
 	ID         uuid.UUID
 	PropertyID uuid.UUID
-	Email      string // normalized (lowercase, trimmed); PII — never in audit context (ADR 0020)
+	Email      string // Normalized (lowercase, trimmed); PII — never in audit context (ADR 0020).
 	Role       Role
 	InvitedBy  uuid.UUID
 	LastSentAt time.Time

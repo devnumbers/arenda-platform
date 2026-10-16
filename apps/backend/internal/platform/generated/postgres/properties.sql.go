@@ -11,10 +11,69 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const actorPin = `-- name: ActorPin :one
+SELECT pinned_at FROM user_property_pins
+WHERE user_id = $1::uuid AND property_id = $2::uuid
+`
+
+type ActorPinParams struct {
+	Actor pgtype.UUID `json:"actor"`
+	ID    pgtype.UUID `json:"id"`
+}
+
+// The actor's personal pin on the property (the cutover #1307, D11): no row
+// — not pinned, the row's pinned_at — pinned since then. The view
+// capability is resolved by the application before the call.
+func (q *Queries) ActorPin(ctx context.Context, arg ActorPinParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, actorPin, arg.Actor, arg.ID)
+	var pinned_at pgtype.Timestamptz
+	err := row.Scan(&pinned_at)
+	return pinned_at, err
+}
+
+const actorPins = `-- name: ActorPins :many
+SELECT property_id, pinned_at FROM user_property_pins
+WHERE user_id = $1::uuid
+  AND property_id = ANY($2::uuid[])
+`
+
+type ActorPinsParams struct {
+	Actor       pgtype.UUID   `json:"actor"`
+	PropertyIds []pgtype.UUID `json:"property_ids"`
+}
+
+type ActorPinsRow struct {
+	PropertyID pgtype.UUID        `json:"property_id"`
+	PinnedAt   pgtype.Timestamptz `json:"pinned_at"`
+}
+
+// The actor's personal pins for the listed properties — the list overlay's
+// batch (the main list and the search carry pinnedAt of the actor over own
+// and shared rows alike).
+func (q *Queries) ActorPins(ctx context.Context, arg ActorPinsParams) ([]ActorPinsRow, error) {
+	rows, err := q.db.Query(ctx, actorPins, arg.Actor, arg.PropertyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActorPinsRow{}
+	for rows.Next() {
+		var i ActorPinsRow
+		if err := rows.Scan(&i.PropertyID, &i.PinnedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const archiveProperty = `-- name: ArchiveProperty :one
 UPDATE properties SET status = 'archived'
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type ArchivePropertyParams struct {
@@ -22,6 +81,10 @@ type ArchivePropertyParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
+// The archive touches no pin state: pins are personal rows — the contract
+// migration (#1311) dropped the global properties.pinned_at column with its
+// CHECK, and personal pin rows are never touched here (D16): unarchiving
+// returns the property with the participants' pins.
 func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams) (Property, error) {
 	row := q.db.QueryRow(ctx, archiveProperty, arg.ID, arg.OwnerID)
 	var i Property
@@ -36,6 +99,8 @@ func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
@@ -59,6 +124,20 @@ WHERE owner_id = $1 AND status IN ('active', 'maintenance')
 
 func (q *Queries) CountActivePropertiesByOwnerAdmin(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countActivePropertiesByOwnerAdmin, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countArchivedPropertiesByOwner = `-- name: CountArchivedPropertiesByOwner :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND status = 'archived'
+`
+
+// The «Архив» button gate (issue #1233): the owner's archived rows only —
+// shared properties contribute nothing, the archive is owner-only.
+func (q *Queries) CountArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countArchivedPropertiesByOwner, ownerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -96,10 +175,29 @@ func (q *Queries) CountPropertiesAdmin(ctx context.Context, arg CountPropertiesA
 	return count, err
 }
 
+const countPropertiesByOwnerAndType = `-- name: CountPropertiesByOwnerAndType :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND type = $2
+`
+
+type CountPropertiesByOwnerAndTypeParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Type    string      `json:"type"`
+}
+
+// The auto-name serial (ticket #1001): the owner's properties of this type
+// in every status — archived count too, deleted rows are gone (hard delete).
+func (q *Queries) CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPropertiesByOwnerAndType, arg.OwnerID, arg.Type)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProperty = `-- name: CreateProperty :one
 INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type CreatePropertyParams struct {
@@ -136,8 +234,27 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
+}
+
+const deleteActorPin = `-- name: DeleteActorPin :exec
+DELETE FROM user_property_pins
+WHERE user_id = $1::uuid AND property_id = $2::uuid
+`
+
+type DeleteActorPinParams struct {
+	Actor pgtype.UUID `json:"actor"`
+	ID    pgtype.UUID `json:"id"`
+}
+
+// The unpin: the personal row goes; unpinning an unpinned property deletes
+// nothing and succeeds (the PUT's idempotency).
+func (q *Queries) DeleteActorPin(ctx context.Context, arg DeleteActorPinParams) error {
+	_, err := q.db.Exec(ctx, deleteActorPin, arg.Actor, arg.ID)
+	return err
 }
 
 const deleteProperty = `-- name: DeleteProperty :exec
@@ -176,51 +293,20 @@ func (q *Queries) GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesSta
 }
 
 const getPropertyByID = `-- name: GetPropertyByID :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
 FROM properties
 WHERE properties.id = $1
 `
-
-type GetPropertyByIDRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Name             string             `json:"name"`
-	Type             string             `json:"type"`
-	Address          string             `json:"address"`
-	Description      pgtype.Text        `json:"description"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	Attributes       []byte             `json:"attributes"`
-	OverdueRentCount int64              `json:"overdue_rent_count"`
-	MembersCount     int64              `json:"members_count"`
-}
 
 // Unscoped lookup by id. Used by the policy/access layer (T3, issue #156) to
 // resolve the data owner for authorization before applying a scope, and by the
 // properties list to load shared properties (whose owner_id differs from the
 // actor). Read-only; callers must never leak existence to actors without a view
 // capability (the application maps "no access" to ErrNotFound to preserve
-// object privacy). members_count is the shared-access participant count
-// (membership rows of any status plus pending email invitations, issue #163).
-// overdue_rent_count counts the property's overdue rent operations scoped to
-// the property's data owner so shared properties show the same count to a
-// member as to the owner (issue #157).
-func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPropertyByIDRow, error) {
+// object privacy).
+func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property, error) {
 	row := q.db.QueryRow(ctx, getPropertyByID, id)
-	var i GetPropertyByIDRow
+	var i Property
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -232,14 +318,14 @@ func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (GetPrope
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.OverdueRentCount,
-		&i.MembersCount,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const getPropertyByIDAdmin = `-- name: GetPropertyByIDAdmin :one
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE p.id = $1
@@ -256,6 +342,8 @@ type GetPropertyByIDAdminRow struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	Attributes          []byte             `json:"attributes"`
+	PhotoKey            pgtype.Text        `json:"photo_key"`
+	PhotoContentType    pgtype.Text        `json:"photo_content_type"`
 	OwnerPhone          string             `json:"owner_phone"`
 	OwnerPhoneEncrypted bool               `json:"owner_phone_encrypted"`
 }
@@ -274,6 +362,8 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 		&i.OwnerPhone,
 		&i.OwnerPhoneEncrypted,
 	)
@@ -281,19 +371,7 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 }
 
 const getPropertyByIDAndOwner = `-- name: GetPropertyByIDAndOwner :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2
 `
@@ -303,24 +381,9 @@ type GetPropertyByIDAndOwnerParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
-type GetPropertyByIDAndOwnerRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Name             string             `json:"name"`
-	Type             string             `json:"type"`
-	Address          string             `json:"address"`
-	Description      pgtype.Text        `json:"description"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	Attributes       []byte             `json:"attributes"`
-	OverdueRentCount int64              `json:"overdue_rent_count"`
-	MembersCount     int64              `json:"members_count"`
-}
-
-func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (GetPropertyByIDAndOwnerRow, error) {
+func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyByIDAndOwnerParams) (Property, error) {
 	row := q.db.QueryRow(ctx, getPropertyByIDAndOwner, arg.ID, arg.OwnerID)
-	var i GetPropertyByIDAndOwnerRow
+	var i Property
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
@@ -332,14 +395,14 @@ func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyBy
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
-		&i.OverdueRentCount,
-		&i.MembersCount,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const getPropertyByIDAndOwnerForUpdate = `-- name: GetPropertyByIDAndOwnerForUpdate :one
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes FROM properties WHERE id = $1 AND owner_id = $2
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type FROM properties WHERE id = $1 AND owner_id = $2
 FOR UPDATE
 `
 
@@ -362,12 +425,14 @@ func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetP
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
 
 const getPropertyByIDForUpdate = `-- name: GetPropertyByIDForUpdate :one
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes FROM properties WHERE id = $1 FOR UPDATE
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type FROM properties WHERE id = $1 FOR UPDATE
 `
 
 // Unscoped pessimistic-lock lookup by id, for write paths that resolve access
@@ -386,6 +451,8 @@ func (q *Queries) GetPropertyByIDForUpdate(ctx context.Context, id pgtype.UUID) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
@@ -407,40 +474,50 @@ func (q *Queries) GetPropertyStatusByOwner(ctx context.Context, arg GetPropertyS
 	return status, err
 }
 
+const insertActorPin = `-- name: InsertActorPin :one
+INSERT INTO user_property_pins (user_id, property_id, pinned_at)
+VALUES ($1::uuid, $2::uuid, $3::timestamptz)
+ON CONFLICT (user_id, property_id)
+DO UPDATE SET pinned_at = user_property_pins.pinned_at
+RETURNING pinned_at
+`
+
+type InsertActorPinParams struct {
+	Actor    pgtype.UUID        `json:"actor"`
+	ID       pgtype.UUID        `json:"id"`
+	PinnedAt pgtype.Timestamptz `json:"pinned_at"`
+}
+
+// The pin's «строка есть = состояние» write (the cutover #1307, the model
+// #1299): one atomic statement — a re-pin keeps the original pin time (the
+// PUT's idempotency, the order among the pinned never shifts), a fresh pin
+// takes the moment from the application's clock. The conflicting row's time
+// stands: DO UPDATE writes the same value back purely so RETURNING delivers
+// the effective pinned_at (DO NOTHING would return no row) — the stored
+// value never changes.
+func (q *Queries) InsertActorPin(ctx context.Context, arg InsertActorPinParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, insertActorPin, arg.Actor, arg.ID, arg.PinnedAt)
+	var pinned_at pgtype.Timestamptz
+	err := row.Scan(&pinned_at)
+	return pinned_at, err
+}
+
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
 ORDER BY properties.updated_at DESC
 `
 
 type ListActivePropertiesByOwnerRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Name             string             `json:"name"`
-	Type             string             `json:"type"`
-	Address          string             `json:"address"`
-	Description      pgtype.Text        `json:"description"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	Attributes       []byte             `json:"attributes"`
-	OverdueRentCount int64              `json:"overdue_rent_count"`
-	MembersCount     int64              `json:"members_count"`
+	Property Property `json:"property"`
 }
 
+// The main list's base order (ticket #577, the personal-pin cutover #1307):
+// the unpinned incoming order is updated_at DESC. The pinned-first rule is
+// per-actor since the cutover — the application overlays the actor's
+// personal pins (user_property_pins) over the merged list and re-sorts
+// (PropertyService.pinnedFirst), so the SQL pass stays out of pin ordering.
 func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListActivePropertiesByOwnerRow, error) {
 	rows, err := q.db.Query(ctx, listActivePropertiesByOwner, ownerID)
 	if err != nil {
@@ -451,18 +528,18 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 	for rows.Next() {
 		var i ListActivePropertiesByOwnerRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OwnerID,
-			&i.Name,
-			&i.Type,
-			&i.Address,
-			&i.Description,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Attributes,
-			&i.OverdueRentCount,
-			&i.MembersCount,
+			&i.Property.ID,
+			&i.Property.OwnerID,
+			&i.Property.Name,
+			&i.Property.Type,
+			&i.Property.Address,
+			&i.Property.Description,
+			&i.Property.Status,
+			&i.Property.CreatedAt,
+			&i.Property.UpdatedAt,
+			&i.Property.Attributes,
+			&i.Property.PhotoKey,
+			&i.Property.PhotoContentType,
 		); err != nil {
 			return nil, err
 		}
@@ -475,37 +552,14 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 }
 
 const listArchivedPropertiesByOwner = `-- name: ListArchivedPropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes,
-       (SELECT COUNT(*) FROM operations o
-         JOIN operation_categories cat ON cat.id = o.category_id
-         WHERE o.property_id = properties.id
-           AND o.owner_id = properties.owner_id
-           AND o.status = 'overdue'
-           AND o.type = 'income'
-           AND cat.code = 'rent'
-           AND o.deleted_at IS NULL) AS overdue_rent_count,
-       ((SELECT COUNT(*) FROM property_members pm
-         WHERE pm.property_id = properties.id) +
-       (SELECT COUNT(*) FROM property_member_invitations pmi
-         WHERE pmi.property_id = properties.id))::bigint AS members_count
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
 ORDER BY properties.updated_at DESC
 `
 
 type ListArchivedPropertiesByOwnerRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Name             string             `json:"name"`
-	Type             string             `json:"type"`
-	Address          string             `json:"address"`
-	Description      pgtype.Text        `json:"description"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	Attributes       []byte             `json:"attributes"`
-	OverdueRentCount int64              `json:"overdue_rent_count"`
-	MembersCount     int64              `json:"members_count"`
+	Property Property `json:"property"`
 }
 
 func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgtype.UUID) ([]ListArchivedPropertiesByOwnerRow, error) {
@@ -518,18 +572,18 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 	for rows.Next() {
 		var i ListArchivedPropertiesByOwnerRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OwnerID,
-			&i.Name,
-			&i.Type,
-			&i.Address,
-			&i.Description,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Attributes,
-			&i.OverdueRentCount,
-			&i.MembersCount,
+			&i.Property.ID,
+			&i.Property.OwnerID,
+			&i.Property.Name,
+			&i.Property.Type,
+			&i.Property.Address,
+			&i.Property.Description,
+			&i.Property.Status,
+			&i.Property.CreatedAt,
+			&i.Property.UpdatedAt,
+			&i.Property.Attributes,
+			&i.Property.PhotoKey,
+			&i.Property.PhotoContentType,
 		); err != nil {
 			return nil, err
 		}
@@ -542,7 +596,7 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 }
 
 const listPropertiesAdmin = `-- name: ListPropertiesAdmin :many
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE ($1::uuid IS NULL OR p.owner_id = $1::uuid)
@@ -583,6 +637,8 @@ type ListPropertiesAdminRow struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	Attributes          []byte             `json:"attributes"`
+	PhotoKey            pgtype.Text        `json:"photo_key"`
+	PhotoContentType    pgtype.Text        `json:"photo_content_type"`
 	OwnerPhone          string             `json:"owner_phone"`
 	OwnerPhoneEncrypted bool               `json:"owner_phone_encrypted"`
 }
@@ -615,6 +671,8 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Attributes,
+			&i.PhotoKey,
+			&i.PhotoContentType,
 			&i.OwnerPhone,
 			&i.OwnerPhoneEncrypted,
 		); err != nil {
@@ -628,10 +686,160 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 	return items, nil
 }
 
+const searchVisibleProperties = `-- name: SearchVisibleProperties :many
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type,
+       CASE WHEN p.owner_id = $1::uuid
+            THEN 'owner'
+            ELSE pm.role END::text AS access_role
+FROM properties p
+LEFT JOIN property_members pm
+       ON pm.property_id = p.id
+      AND pm.user_id = $1::uuid
+      AND pm.status = 'active'
+WHERE actor_can_read_property(p.id, $1::uuid)
+  AND p.status IN ('active', 'maintenance')
+  AND (p.name ILIKE '%' || $2::text || '%' ESCAPE '\'
+       OR p.address ILIKE '%' || $2::text || '%' ESCAPE '\')
+  AND ($3::text IS NULL
+       OR (p.name COLLATE "ru-RU-x-icu" > $3::text
+           OR (p.name COLLATE "ru-RU-x-icu" = $3::text
+               AND p.id > $4::uuid)))
+ORDER BY p.name COLLATE "ru-RU-x-icu" ASC, p.id ASC
+LIMIT $5::int
+`
+
+type SearchVisiblePropertiesParams struct {
+	Actor     pgtype.UUID `json:"actor"`
+	Search    string      `json:"search"`
+	AfterName pgtype.Text `json:"after_name"`
+	AfterID   pgtype.UUID `json:"after_id"`
+	PageLimit int32       `json:"page_limit"`
+}
+
+type SearchVisiblePropertiesRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Name             string             `json:"name"`
+	Type             string             `json:"type"`
+	Address          string             `json:"address"`
+	Description      pgtype.Text        `json:"description"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Attributes       []byte             `json:"attributes"`
+	PhotoKey         pgtype.Text        `json:"photo_key"`
+	PhotoContentType pgtype.Text        `json:"photo_content_type"`
+	AccessRole       string             `json:"access_role"`
+}
+
+// The search endpoint's window (ticket #601): the actor's visible
+// non-archived properties — own plus actively shared (the merged visibility
+// of the main list, ADR 0028) — matching the search as a case-insensitive
+// substring over the name or the address (the store escapes the ILIKE
+// metacharacters; the trgm indexes of migration 000124 serve both fields).
+//
+// The walk is keyset over the display name and id (ticket #597's pattern):
+// the window resumes strictly after the (name, id) the previous page ended
+// on, so rows created, deleted or renamed between loads never duplicate or
+// drop. The name sort mirrors the hub's own default (the client orders the
+// list by name) with the Russian ICU collation matching the contacts book's
+// letter order (#600); id ties off. A rename moving a row across the window
+// boundary is inherent to the visible-name sort. The cursor args travel
+// together; NULL (no cursor) reads from the beginning.
+// access_role names the actor's role on the row: 'owner' for own
+// properties, the active membership's role for shared ones (T11) — the
+// LEFT JOIN row is unique per (property, user) and carries the role only;
+// the visibility verdict is the function call in the WHERE.
+func (q *Queries) SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error) {
+	rows, err := q.db.Query(ctx, searchVisibleProperties,
+		arg.Actor,
+		arg.Search,
+		arg.AfterName,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchVisiblePropertiesRow{}
+	for rows.Next() {
+		var i SearchVisiblePropertiesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Type,
+			&i.Address,
+			&i.Description,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Attributes,
+			&i.PhotoKey,
+			&i.PhotoContentType,
+			&i.AccessRole,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setPropertyPhoto = `-- name: SetPropertyPhoto :one
+UPDATE properties
+SET photo_key = $3,
+    photo_content_type = $4
+WHERE id = $1 AND owner_id = $2
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
+`
+
+type SetPropertyPhotoParams struct {
+	ID               pgtype.UUID `json:"id"`
+	OwnerID          pgtype.UUID `json:"owner_id"`
+	PhotoKey         pgtype.Text `json:"photo_key"`
+	PhotoContentType pgtype.Text `json:"photo_content_type"`
+}
+
+// The object photo write (ADR 0065, ticket #1227): the key and the sniffed
+// content type move together; a NULL key clears the photo — one image per
+// entity, no gallery. The scope is the property's owner (ADR 0028): the
+// actor may be the full-access member; existence and the edit capability
+// (plus the archived-object guard) are proven by the caller under the row
+// lock.
+func (q *Queries) SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoParams) (Property, error) {
+	row := q.db.QueryRow(ctx, setPropertyPhoto,
+		arg.ID,
+		arg.OwnerID,
+		arg.PhotoKey,
+		arg.PhotoContentType,
+	)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Type,
+		&i.Address,
+		&i.Description,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Attributes,
+		&i.PhotoKey,
+		&i.PhotoContentType,
+	)
+	return i, err
+}
+
 const unarchiveProperty = `-- name: UnarchiveProperty :one
 UPDATE properties SET status = 'active'
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type UnarchivePropertyParams struct {
@@ -653,6 +861,8 @@ func (q *Queries) UnarchiveProperty(ctx context.Context, arg UnarchivePropertyPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }
@@ -661,7 +871,7 @@ const updateProperty = `-- name: UpdateProperty :one
 UPDATE properties
 SET name = $3, type = $4, address = $5, description = $6, attributes = $7, status = $8
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
 `
 
 type UpdatePropertyParams struct {
@@ -698,6 +908,8 @@ func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Attributes,
+		&i.PhotoKey,
+		&i.PhotoContentType,
 	)
 	return i, err
 }

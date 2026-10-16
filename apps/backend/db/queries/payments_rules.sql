@@ -1,0 +1,187 @@
+-- Payments context queries: payment rule CRUD and pause/resume (ADR 0049 §4;
+-- tickets #457, #461). Reads and writes are scoped by the data owner (ADR
+-- 0028: SQL filters by scope, the policy port has already resolved the
+-- actor's role); the nested path payment→property is enforced in the WHERE
+-- clause. The materialization tick lives in payments_tick.sql, operations in
+-- payments_operations.sql. The favorite star is a personal state (the
+-- cutover #1308, D12): it lives in user_payment_favorites — the global
+-- payments.is_favorite/favorite_order columns went with the contract
+-- migration #1311; the actor's rows overlay the actor-facing reads, the
+-- star writes are this file's insert/delete pair.
+
+-- name: GetPaymentByID :one
+-- One rule by id within the owner's scope on the given property, with the
+-- user category's current name resolved for the CategoryView.
+SELECT pay.id,
+       pay.owner_id,
+       pay.property_id,
+       pay.type,
+       pay.title,
+       pay.amount_kopecks,
+       pay.recurrence,
+       pay.since,
+       pay.end_date,
+       pay.auto_pay,
+       pay.notify_auto_paid,
+       pay.reminder_offset_days,
+       pay.category_slug,
+       pay.user_category_id,
+       pay.title_is_manual,
+       pay.created_at,
+       pay.updated_at,
+       pc.name AS user_category_name
+FROM payments pay
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE pay.id = $1 AND pay.owner_id = $2 AND pay.property_id = $3;
+
+-- name: ListPaymentsByProperty :many
+-- The property's rules in creation order (stable for the list response).
+-- search ('' = no filter) is a case-insensitive substring match on the title;
+-- the application layer escapes the ILIKE metacharacters (ESCAPE '\').
+SELECT pay.id,
+       pay.owner_id,
+       pay.property_id,
+       pay.type,
+       pay.title,
+       pay.amount_kopecks,
+       pay.recurrence,
+       pay.since,
+       pay.end_date,
+       pay.auto_pay,
+       pay.notify_auto_paid,
+       pay.reminder_offset_days,
+       pay.category_slug,
+       pay.user_category_id,
+       pay.title_is_manual,
+       pay.created_at,
+       pay.updated_at,
+       pc.name AS user_category_name
+FROM payments pay
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE pay.owner_id = $1 AND pay.property_id = $2
+  AND (sqlc.arg('search')::text = ''
+       OR pay.title ILIKE '%' || sqlc.arg('search')::text || '%' ESCAPE '\')
+ORDER BY pay.created_at, pay.id;
+
+-- name: InsertPayment :exec
+-- ids and since are app-side (UUIDv7, the owner's today); recurrence is the
+-- domain-validated jsonb; the category arrives as a default-catalog slug in
+-- this slice (user_category_id stays NULL). reminder_offset_days is the
+-- nullable reminder lead time (карта #822; NULL = напоминаний нет);
+-- notify_auto_paid — гейт события «Автоплатёж исполнен» (#1189, дефолт новых
+-- false, макет 3214-72739).
+INSERT INTO payments (
+    id, owner_id, property_id, type, title, amount_kopecks, recurrence,
+    since, end_date, auto_pay, notify_auto_paid, reminder_offset_days, category_slug
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+
+-- name: UpdatePayment :exec
+-- Partial PATCH is resolved by the application layer; the statement always
+-- writes the full editable set (since is never among it — server-set,
+-- prototype decision №17). The favorite star is a personal state (the
+-- cutover #1308) with its own insert/delete pair.
+UPDATE payments
+SET type = $3,
+    title = $4,
+    amount_kopecks = $5,
+    recurrence = $6,
+    end_date = $7,
+    auto_pay = $8,
+    notify_auto_paid = $9,
+    reminder_offset_days = $10,
+    category_slug = $11,
+    title_is_manual = $12
+WHERE id = $1 AND owner_id = $2;
+
+-- name: DeletePayment :execrows
+-- Hard delete of the rule. Pauses cascade; operations keep their snapshots
+-- with payment_id set to NULL by the FK — the "платёж удалён" mark is
+-- origin='payment' AND payment_id IS NULL (ticket #446). Planned operations
+-- are removed by the caller per keep_overdue before this runs.
+DELETE FROM payments WHERE id = $1 AND owner_id = $2;
+
+-- name: InsertPaymentFavorite :exec
+-- The personal favorite star (PUT favorite, the cutover #1308, D12): one
+-- row of the actor's user_payment_favorites — «строка есть = состояние».
+-- The atomic insert (no read-modify-write): a re-star keeps the stored row
+-- (the order position among the actor's favorites never shifts), a fresh
+-- star takes a NULL position — the new-favorite-at-the-end rule (ticket
+-- #576). created_at is the row's bookkeeping stamp (the schema default,
+-- nothing reads it today). Existence is already proven inside the same
+-- transaction under the property lock.
+INSERT INTO user_payment_favorites (user_id, payment_id, favorite_order)
+VALUES ($1, $2, NULL)
+ON CONFLICT (user_id, payment_id) DO NOTHING;
+
+-- name: DeletePaymentFavorite :exec
+-- Unfavoriting (the cutover #1308): the actor's row goes — the order
+-- position leaves with it, a re-star lands at the end (a fresh NULL row).
+-- An absent row deletes nothing and succeeds.
+DELETE FROM user_payment_favorites
+WHERE user_id = $1 AND payment_id = $2;
+
+-- name: PaymentFavoriteIDs :many
+-- The subset of the listed rules the actor has starred — the personal-state
+-- overlay of the actor-facing reads (the property pin's ActorPins
+-- precedent): the rule rows carry no favorite column (frozen, #1308), the
+-- actor's rows travel beside them and the application layer folds them in.
+SELECT payment_id
+FROM user_payment_favorites
+WHERE user_id = $1
+  AND payment_id = ANY(string_to_array(sqlc.arg('payment_ids')::text, ',')::uuid[]);
+
+-- name: InsertPaymentPause :exec
+-- The open-ended pause [from, ∞): exactly one may exist per rule — the
+-- partial unique index (to_date IS NULL) makes a double pause a constraint
+-- violation even past the application check. Origin distinguishes the
+-- owner's manual pause from the archive bridge's system one (тикет #1342).
+INSERT INTO payment_pauses (id, payment_id, from_date, to_date, origin)
+VALUES ($1, $2, $3, NULL, $4);
+
+-- name: CloseActivePaymentPause :execrows
+-- Resume: close the open interval with today's date (the resume day is
+-- already outside the pause, [from, to)). The owner's resume closes any
+-- open pause — manual or system: while the property is archived the
+-- conveyor refuses the mutation, so an open auto_archive pause here means
+-- the property is active again and the bridge has already closed its own.
+UPDATE payment_pauses SET to_date = $2
+WHERE payment_id = $1 AND to_date IS NULL;
+
+-- name: CloseAutoArchivePaymentPause :execrows
+-- The archive bridge's reverse leg (тикет #1342): the property returned
+-- from the archive — close only the system auto_archive pause; the owner's
+-- manual pauses stay open. Same [from, to) semantics as the manual resume.
+UPDATE payment_pauses SET to_date = $2
+WHERE payment_id = $1 AND to_date IS NULL AND origin = 'auto_archive';
+
+-- name: DeletePaymentPlannedFrom :execrows
+-- Deletion of the rule's planned operations from a date on (today): future
+-- planned always goes with the rule.
+DELETE FROM operations
+WHERE payment_id = $1 AND status = 'planned' AND date >= $2;
+
+-- name: DeletePaymentFuturePlanned :execrows
+-- The edit invalidation of the future planned (date > today, strictly): the
+-- mutation deletes it and the in-transaction tick stands it again with fresh
+-- snapshots (spec: "правка пересоздаёт будущее planned"). Today's occurrence
+-- is not future — its snapshot is frozen.
+DELETE FROM operations
+WHERE payment_id = $1 AND status = 'planned' AND date > $2;
+
+-- name: DeletePaymentPlannedBefore :execrows
+-- keep_overdue=false: the overdue planned (the accumulated debt) goes too.
+-- Paid operations are never touched.
+DELETE FROM operations
+WHERE payment_id = $1 AND status = 'planned' AND date < $2;
+
+-- name: GetPropertyForPayment :one
+-- The read side of the payments property port: the data owner of a property
+-- (the SQL scope, ADR 0028) and its lifecycle state for the read gates.
+SELECT id, owner_id, status FROM properties WHERE id = $1;
+
+-- name: GetPropertyForPaymentMutation :one
+-- The mutation's serialization point (ADR 0049 §3): the property row is
+-- locked FOR UPDATE before the rule is read or written, so mutation-vs-tick,
+-- mutation-vs-mutation and archive-vs-mutation serialize on one point.
+SELECT id, owner_id, status FROM properties WHERE id = $1 FOR UPDATE;

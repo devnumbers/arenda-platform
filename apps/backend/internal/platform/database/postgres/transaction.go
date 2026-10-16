@@ -1,3 +1,5 @@
+// Package postgres implements the transaction port over pgx: the Beginner and the Unit-of-Work behind every
+// context's runInTx (ADR 0033).
 package postgres
 
 import (

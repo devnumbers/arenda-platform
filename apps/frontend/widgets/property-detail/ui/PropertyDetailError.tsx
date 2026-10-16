@@ -1,7 +1,7 @@
 'use client';
 
 import type { JSX } from 'react';
-import { Button } from '@/shared/ui/button';
+import { Button } from '@/shared/ui/design';
 import styles from './PropertyDetailError.module.css';
 
 export type PropertyDetailErrorProps = {
@@ -18,8 +18,6 @@ export function PropertyDetailError({
       <h2 className={styles.title}>Не удалось загрузить объект</h2>
       <p className={styles.subtitle}>Проверьте соединение и попробуйте снова</p>
       <Button
-        variant="primary"
-        size="medium"
         loading={isLoading}
         onClick={onRetry}
         type="button"

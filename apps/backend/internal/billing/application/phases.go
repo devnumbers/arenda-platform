@@ -1,0 +1,197 @@
+package application
+
+import (
+	"time"
+
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+)
+
+// phaseScheduler computes the time phases of the billing workers (issue #421):
+// the renewal onset, the grace phases, the notification lead window and the
+// reconciliation staleness windows. It is the workers' single seam for time:
+// built on the injected clock, it holds no path to the system clock, so every
+// phase boundary is testable on deterministic time (phases_test.go), and the
+// dunning retry schedule of spec #419 (+24/+72 h inside grace) extends this
+// component instead of the workers.
+//
+// One worker tick owns one time snapshot: the scheduling shell reads it once
+// and the phases thread it through their listing and the under-lock re-check,
+// so a row cannot drift across a boundary between being listed and being
+// locked. The selection methods therefore take the tick snapshot explicitly;
+// the injected clock serves the scheduler's own reads (now) outside a tick —
+// the seam the dunning phases will plan by.
+type phaseScheduler struct {
+	clock  clock.Clock
+	config Config
+}
+
+// newPhaseScheduler builds the scheduler over the injected clock. A nil clock
+// defaults to the real clock, matching the module's constructor conventions;
+// NewWorkers passes its configured clock through.
+func newPhaseScheduler(clk clock.Clock, cfg Config) *phaseScheduler {
+	if clk == nil {
+		clk = clock.Real{}
+	}
+	return &phaseScheduler{clock: clk, config: cfg}
+}
+
+// now is the scheduler's clock read — the only time source the workers reach
+// outside the tick snapshot handed to them.
+func (s *phaseScheduler) now() time.Time {
+	return s.clock.Now().UTC()
+}
+
+// The phases' selections (issue #286): each phase describes its batch once as
+// values, next to the phase itself. The listing and the under-lock re-check
+// share the constructor, and the predicate behind the values lives once in
+// SQL — a new phase is a new constructor, never a new port method.
+
+// renewalDue is the renewal-charge batch: active auto-renewing subscriptions
+// whose paid period has ended (issue #252).
+func (s *phaseScheduler) renewalDue(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusActive,
+		AutoRenewEnabled: new(true),
+		ValidUntilBefore: new(now),
+		Limit:            limit,
+	}
+}
+
+// graceExpired is the downgrade-to-basic batch: grace subscriptions whose
+// grace window has ended (issue #252).
+func (s *phaseScheduler) graceExpired(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntilBefore: new(now),
+		Limit:            limit,
+	}
+}
+
+// graceReminderWindow is the grace-expiry reminder batch: grace subscriptions
+// inside the half-open window [valid_until - lead, valid_until) whose window
+// was not reminded yet (issue #253); the lead comes from the config.
+func (s *phaseScheduler) graceReminderWindow(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusGrace,
+		ValidUntilAfter:  new(now),
+		ValidUntilBefore: new(now.Add(s.config.GraceExpiryReminderBefore)),
+		Unreminded:       true,
+		Limit:            limit,
+	}
+}
+
+// nonRenewingExpired is the expiry batch of active subscriptions with
+// auto-renew off whose retained period has ended (issue #252).
+func (s *phaseScheduler) nonRenewingExpired(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusActive,
+		AutoRenewEnabled: new(false),
+		ValidUntilBefore: new(now),
+		Limit:            limit,
+	}
+}
+
+// cancelledExpired is the expiry batch of cancelled subscriptions whose
+// retained period has ended (issue #252).
+func (s *phaseScheduler) cancelledExpired(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusCancelled,
+		ValidUntilBefore: new(now),
+		Limit:            limit,
+	}
+}
+
+// pendingChangesDue is the batch of active subscriptions with a deferred
+// tariff change that is due (issue #252).
+func (s *phaseScheduler) pendingChangesDue(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusActive,
+		PendingChangeDue: new(now),
+		Limit:            limit,
+	}
+}
+
+// scheduledDowngradeChargeDue is the boundary-charge batch of issue #1451:
+// cancelled subscriptions carrying a due deferred change. The change was
+// planned from the cancelled state (issue #1451) with auto-renew on, so a
+// paid target is charged at apply time by the renewal machinery (ADR 0008
+// §3) — the free targets never reach this batch, the boundary phases apply
+// them before it runs. The pending-due bound implies the paid remainder has
+// ended (pending_change_at >= valid_until is a schema CHECK), so no validity
+// bound is needed; the auto-renew flag is not a condition — a pending change
+// on a cancelled row exists only where the scheduling enabled it.
+func (s *phaseScheduler) scheduledDowngradeChargeDue(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusCancelled,
+		PendingChangeDue: new(now),
+		Limit:            limit,
+	}
+}
+
+// The dunning retry schedule of spec #419 (ticket #431): two planned
+// auto-retries of the failed renewal charge inside the grace window, +24 h and
+// +72 h from the grace entry. Product constants, not config — no new settings
+// (spec decision); the values are mirrored in the grace_retry_due bound of
+// ListSubscriptionsBySelection.
+const (
+	graceRetryFirstAfter  = 24 * time.Hour
+	graceRetrySecondAfter = 72 * time.Hour
+)
+
+// graceRetryDue is the dunning batch (ticket #431): grace subscriptions whose
+// next scheduled retry is due — anchored at the latest grace entry, consumed
+// by any payment created since it (a prior retry or a manual one) — with the
+// window still open, auto-renew on and an active method linked (without one
+// there is nothing to charge; the phase re-picks the row once the user binds
+// a card).
+func (s *phaseScheduler) graceRetryDue(now time.Time, limit int) SubscriptionSelection {
+	return SubscriptionSelection{
+		Status:           domain.SubscriptionStatusGrace,
+		AutoRenewEnabled: new(true),
+		ValidUntilAfter:  new(now),
+		GraceRetryDue:    new(now),
+		Limit:            limit,
+	}
+}
+
+// expiredBindings is the hygiene batch (ticket #433): card-binding sessions
+// whose lifetime has ended, whatever their status — the cleanup phase deletes
+// them so the table stops growing without bound. The cutoff is the tick's
+// now: an expired session never produces a payment method, and the binding
+// limit's sliding window (created_at-based, 1 h) is long past for a session
+// expired by its 24 h TTL, so deleting at expiry weakens nothing.
+func (s *phaseScheduler) expiredBindings(now time.Time, limit int) CardBindingSelection {
+	return CardBindingSelection{
+		ExpiredBefore: now,
+		Limit:         limit,
+	}
+}
+
+// stalePending is the lost-webhook batch: pending payments with a provider
+// reference unresolved past the configured staleness (issue #252).
+func (s *phaseScheduler) stalePending(now time.Time, limit int) PaymentSelection {
+	return PaymentSelection{
+		Status:        domain.PaymentStatusPending,
+		CreatedBefore: new(now.Add(-s.config.PendingPaymentStaleness)),
+		Limit:         limit,
+	}
+}
+
+// stalePendingUpgrades narrows the lost-webhook batch to the tariff-change
+// payments of the ChangeTariff flow (issue #252).
+func (s *phaseScheduler) stalePendingUpgrades(now time.Time, limit int) PaymentSelection {
+	sel := s.stalePending(now, limit)
+	sel.TariffChangeOnly = true
+	return sel
+}
+
+// staleRefunding is the lost-outcome batch: payments stuck in the refunding
+// reservation past the configured staleness (issue #254).
+func (s *phaseScheduler) staleRefunding(now time.Time, limit int) PaymentSelection {
+	return PaymentSelection{
+		Status:        domain.PaymentStatusRefunding,
+		UpdatedBefore: new(now.Add(-s.config.PendingPaymentStaleness)),
+		Limit:         limit,
+	}
+}

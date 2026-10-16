@@ -28,7 +28,7 @@ A newly created operation starts as `pending`. The owner completes an operation 
 
 An operation created with a past operation date — manually, by a recurring operation, or by lease rent generation — starts as `unconfirmed` instead of being silently completed. Such an operation is completed through the same explicit action as `pending`/`overdue` and is excluded from the overdue transition: only `pending` operations may become `overdue`, so a backdated operation never appears as overdue.
 
-A background worker scans `pending` operations whose date has passed and transitions them to `overdue`. This transition happens once per operation. When an operation becomes `overdue`, a reminder is created and delivered through the existing reminders subsystem, which handles retry, audit, and SMS notification.
+A background worker scans `pending` operations whose date has passed and transitions them to `overdue`. This transition happens once per operation. When an operation becomes `overdue`, a reminder is created and delivered through the existing reminders subsystem, which handles retry, audit, and email/push notification.
 
 ## Consequences
 

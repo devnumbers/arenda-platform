@@ -52,22 +52,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/logout-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["logoutAll"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/me": {
         parameters: {
             query?: never;
@@ -82,6 +66,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateMe"];
+        trace?: never;
+    };
+    "/me/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMePhoto"];
+        put?: never;
+        post: operations["uploadMePhoto"];
+        delete: operations["deleteMePhoto"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{userId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUserPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/me/phone/send-code": {
@@ -111,6 +127,134 @@ export interface paths {
         put?: never;
         post: operations["changePhone"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/send-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["sendEmailChangeCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/verify-current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verifyCurrentEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/request-new-email-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["requestNewEmailCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/resend-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resendEmailCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email/change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions/logout-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["logoutOtherSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeSession"];
         options?: never;
         head?: never;
         patch?: never;
@@ -148,6 +292,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/properties/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the actor's visible properties (the «Объекты» search)
+         * @description The hub's visible slice narrowed by the search query (ticket #601): a case-insensitive substring over the property's name and address. The slice is the main list's — the actor's own properties plus the ones shared with an active membership (ADR 0028), archived excluded. The list runs in pages of 50 the search screen's infinite scroll walks; the window is keyset pagination over (name, id) (ticket #597's pattern) — the hub's own default order, so rows shifting between loads never duplicate or drop, the previous page's nextCursor comes back as cursor. A rename can move a row across a window boundary — inherent to the visible-name sort (the contacts book, #600).
+         */
+        get: operations["searchProperties"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dadata/suggestions/address": {
         parameters: {
             query?: never;
@@ -174,7 +338,7 @@ export interface paths {
         get: operations["getProperty"];
         put?: never;
         post?: never;
-        /** @description Deletes the property in the given mode. Both modes are rejected with 409 while the property has an open lease. */
+        /** @description Deletes the property together with all its data: rentals, payments, operations, tasks and attached contacts. Irreversible. Blocked while the property has an unfinished rental — complete it first. */
         delete: operations["deleteProperty"];
         options?: never;
         head?: never;
@@ -213,116 +377,707 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/properties/{id}/leases": {
+    "/properties/{propertyId}/photo": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["listPropertyLeases"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{id}/operations/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getPropertyOperationsSummary"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{id}/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["exportPropertyData"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{propertyId}/photos": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
+        get: operations["getPropertyPhoto"];
         put?: never;
         post: operations["uploadPropertyPhoto"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{propertyId}/photos/{photoId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
         delete: operations["deletePropertyPhoto"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/contacts": {
+    "/contacts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["listPropertyContacts"];
+        get: operations["listContacts"];
         put?: never;
-        post: operations["createPropertyContact"];
+        post: operations["createContact"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/contacts/{contactId}": {
+    "/contacts/{contactId}/photo": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getPropertyContact"];
+        get: operations["getContactPhoto"];
         put?: never;
-        post?: never;
-        delete: operations["deletePropertyContact"];
+        post: operations["uploadContactPhoto"];
+        delete: operations["deleteContactPhoto"];
         options?: never;
         head?: never;
-        patch: operations["updatePropertyContact"];
+        patch?: never;
+        trace?: never;
+    };
+    "/contacts/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getContact"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteContact"];
+        options?: never;
+        head?: never;
+        patch: operations["updateContact"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPayments"];
+        put?: never;
+        post: operations["createPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPayment"];
+        put?: never;
+        post?: never;
+        delete: operations["deletePayment"];
+        options?: never;
+        head?: never;
+        patch: operations["updatePayment"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pausePayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumePayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Завершение платежа (тикет #1377, ревизия #1340; ревизия 2 — #1426): завершение удаляет правило из БД — хранимого завершённого состояния не существует. Гейт доступности один — арендный (ревизия 2 сняла дату окончания, «всё оплачено» и открытую паузу: завершение доступно как удаление, до endDate и с непогашенными плановыми). Все неоплаченные плановые сносятся без вопросов; оплаченные операции остаются в истории объекта (payment_id NULL по FK, origin 'payment'); звезда читателя падает вместе с правилом; журнал правок каскадится. Повторное завершение — приватный 404: правила больше нет. */
+        post: operations["completePayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPaymentOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/favorite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setPaymentFavorite"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/payments/{paymentId}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница истории изменений платежа (двусторонний keyset, канон #597)
+         * @description Журнал правок правила (ADR 0065, тикет #1188) — экран «История
+         *     платежа», режим «изменения»: одна строка на действие пользователя.
+         *     Правка условий — строка action=updated с дифом полей старое→новое
+         *     (словарь мутационного аудита, порядок строк словарный); пауза и
+         *     возобновление — строки paused/resumed с пустым changes. Создание и
+         *     удаление строк не пишут (удаление каскадит журнал за правилом);
+         *     записей об оплатах и раннем/позднем попадании нет — факт виден на
+         *     странице операции. Арендный шов пишет в тот же журнал: правка
+         *     условий аренды (сумма, день оплаты, автоплатёж, окончание) отражается
+         *     в истории управляемого платежа.
+         *
+         *     Значения дифа типизированы и никогда не строки-с-форматированием:
+         *     копейки — число; регулярность — канонический JSON-объект Recurrence
+         *     (множественная месячная форма «каждый месяц, 1, 10, 15 числа» едет
+         *     структурой {kind: monthly, daysOfMonth: [1, 10, 15]}); даты —
+         *     «YYYY-MM-DD» или null; направление и название — строки; автоплатёж —
+         *     булево; напоминание — 1/3/7 или null; категория — ссылка со снапшотом
+         *     лейбла на момент правки ({slug, label} или {userCategoryId, label}) —
+         *     чип читаем после переименования или удаления пользовательской
+         *     категории. Текст чипов собирает фронт (recurrenceLabel,
+         *     formatMoneyKopecks, каталог категорий).
+         *
+         *     Курсор двусторонний: before_cursor продолжает журнал в старую сторону,
+         *     after_cursor запрашивает записи моложе уже загруженных (prepend
+         *     новых); передавать оба сразу — 400. Строки страницы всегда идут по
+         *     (created_at, id) DESC; появившиеся между загрузками записи не
+         *     дублируются и не теряются. Доступ производный (ADR 0028): чужое,
+         *     приостановленное или невидимое — приватный 404, неизвестный платёж —
+         *     тоже.
+         */
+        get: operations["listPaymentChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Sets or clears the actor's personal pin on the property (ticket #577, the personal cutover #1307): «строка есть = состояние» — a re-pin keeps the original pin time, an unpin deletes the row. Any reader may pin (the view right); no access and a suspended membership are the privacy 404, an archived property is the 409. The personal state writes no history row and publishes no realtime frame. */
+        put: operations["setPropertyPin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPropertyOperations"];
+        put?: never;
+        /**
+         * Create a manual operation (the one-off paid fact)
+         * @description The manual one-off income/expense fact on the property (ticket #569). It is born paid on the client-chosen date (backdating, ticket #1392): date = paidDate = the chosen calendar date, or today in the property owner's timezone when the date is absent (ADR 0048); no originating rule behind it (paymentId null). A future date by the owner's calendar is the 400 «Дата операции не может быть в будущем»; the past carries no lower bound. The category travels as the default-catalog slug and freezes as the snapshot with its label. Full Access and above may create; on an archived property the mutation is the conflict.
+         */
+        post: operations["createOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/operations/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["summarizePropertyOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/operations/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getOperation"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an operation (the cancelled tombstone)
+         * @description A planned (the overdue debt) or paid operation gets the cancelled tombstone: paid_date is cleared with the payment fact, the debt and the history entry disappear, and the row keeps its (payment_id, date) key so the tick never re-materializes the occurrence. Only the nearest future planned and the projections are not deletable — the schedule is ruled at the payment level.
+         */
+        delete: operations["deleteOperation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/operations/{operationId}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["payOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible tasks (the global «Задачи» screen)
+         * @description The global read side of the tasks context (ADR 0052, ticket #521). Without a property filter the response is the actor's visible merged feed: their own tasks — bound and property-less — plus the bound tasks of the properties they can view (ADR 0028; a sharing member never sees the feed owner's property-less tasks). The tasks of archived properties are not in the feed — non-archived properties plus the property-less cut only (карта #518, решение 9). The property filters select one slice: propertyId — the tasks of the listed properties (one id keeps the one-property slice semantics, several — the picker's multi-select, ticket #547), every listed id resolved through its view gate (one invisible id is the privacy 404 of the whole request); withoutProperty — the property-less slice of the actor's own book. The two filters combine freely — the union is the feed filter's «Общие задачи» + objects (решение владельца 2026-09-07); the property-less rows stay the reader's own book (ADR 0052). Every item's status is computed against its data owner's current moment (a merged page may span owners); today is the reading actor's current date — the day boundary for the «Сегодня»/«Завтра» sections (the data owner's on the single-id branch). The flat order is by due date — the property screen's section-contiguous backbone; the screen sorts rows inside the sections client-side (по дате создания / по названию, like the property screen). Reads never tick.
+         */
+        get: operations["listTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * «Удалить все выполненные» — clear the actor's book-wide completed journal
+         * @description The book-wide twin of the property journal clear (ticket #536): every completed task of the actor's own book is removed forever — the bound rows and the property-less ones (ADR 0052) in the same query, the deleted-rule journals and the live rules' completed rows alike. Each live rule losing rows gets its history horizon raised to max(deleted due)+1, so the cleared occurrences never materialize again (ADR 0051 as amended 2026-10-01). The archived properties' journals stay frozen (ADR 0025), and the shared-to properties' journals are other owners' books — the clear is owner-scope (ADR 0028). No rule data changes — the tick is a no-op.
+         */
+        delete: operations["deleteCompletedTasksWithoutProperty"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a task rule without a property (the owner's own book)
+         * @description The property-less slice of the tasks context (ADR 0052): the rule lives in the actor's own book — there is no property to resolve a role on, the actor is the data owner and the only actor who can create here. The first materialization happens in the same call: the undated task of an undated rule, every occurrence due today, and the single future one — today in the owner's timezone. The due date must be today or later in the owner's timezone — backdated rules are rejected.
+         */
+        post: operations["createTaskRuleWithoutProperty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Load a task rule of the property-less slice (the edit screen)
+         * @description Owner-only (ADR 0052): a foreign actor — including a member of any shared property — gets the privacy 404. A rule bound to a property is invisible on this path: the slices never mix.
+         */
+        get: operations["getTaskRuleWithoutProperty"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a property-less task rule (hard)
+         * @description Every uncompleted task of the rule is physically removed; the completed journal stays with its snapshots (ruleId set to null). Owner-only (ADR 0052).
+         */
+        delete: operations["deleteTaskRuleWithoutProperty"];
+        options?: never;
+        head?: never;
+        /**
+         * Partial task rule update on the property-less slice
+         * @description The same PATCH semantics as the property path: omitted fields stay unchanged; comment, dueDate and dueTime are tri-state (null clears). The edit invalidates the not-yet-due uncompleted tasks — the tick stands the single future again with fresh snapshots; already due and completed tasks keep their frozen snapshots. A newly set due date must be today or later in the owner's timezone.
+         */
+        patch: operations["updateTaskRuleWithoutProperty"];
+        trace?: never;
+    };
+    "/tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Выполнить» a property-less task
+         * @description The completion fact is stamped with today in the owner's timezone; a repeated completion is a 409. The rule's schedule is not touched. Owner-only (ADR 0052); a task bound to a property is invisible on this path.
+         */
+        post: operations["completeTaskWithoutProperty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}/uncomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Отменить выполнение» a property-less task
+         * @description The completion fact is cleared and the task returns to the active ones; the rule's schedule is untouched. Possible only while the rule lives — a journal row of a deleted rule is a 409. Owner-only (ADR 0052); a task bound to a property is invisible on this path.
+         */
+        post: operations["uncompleteTaskWithoutProperty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible paid operations (the global «Операции» screen)
+         * @description The global read side of the operations context (ticket #540). The response is the actor's visible merged feed: the paid operations of their own properties plus those of the properties they can view (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule). The feed is paid-only: planned and overdue occurrences are the property screens' vocabulary, cancelled operations do not exist for reads. The operations of archived properties are not in the feed unless includeArchived lifts the cut (#549). The propertyIds filter narrows the feed to the listed properties, each resolved through its view gate — an unknown or non-visible id is the privacy 404. Every row carries propertyName, the bound property's display name. The period, search, type and category vocabulary is the property listing's; the window is keyset pagination over the listing's sort key and id (ticket #597): rows shifting between loads never duplicate or drop — pass the previous page's nextCursor back as cursor (the cursor is bound to the sort it was issued under). Reads never tick.
+         */
+        get: operations["listOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarize the actor's visible paid operations (the global «Операции» screen)
+         * @description The global twin of the property operations summary (ticket #540) over the same visible merged feed as GET /operations: paid operations of the actor's own properties plus the properties they can view, the archived ones excluded. The propertyIds filter and the period narrow the whole scope — totals and the category breakdown alike; the type filter narrows only the categories array, the totals always report both directions; the category filter narrows the whole scope too — the totals and the breakdown alike, the card mirroring the filtered list (решение владельца 01.10). Search is the listing's predicate — the summary of the searched scope stays consistent with its list. The period reads the listing's date key (see sort).
+         */
+        get: operations["summarizeOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible payment rules (the global «Платежи» screen)
+         * @description The global read side of the payment rules (ticket #575). The response is the actor's visible merged feed: every rule of their own properties plus the rules of the properties they can view with an active membership (ADR 0028; an actor-scoped cross-property read — the visibility predicate lives in the store's SQL, the tasks global feed's rule, ticket #521). The rules of archived properties are not in the feed. Every row carries the bound property's display name, the nearest schedule date («Ближайший»: the earliest stored planned operation on or after the owner's today, else the rule's projection — a bare schedule order, no view status) and the overdue aggregates: the count of the rule's overdue operations and the age of the oldest one in days, both computed against the property owner's today (ADR 0048) and carried in today so the client renders «Сегодня»/«Завтра» without knowing the owner's timezone. favoriteCount counts the favorite rules of the whole visible scope and overdueOperationsCount sums the overdue operations across it — the «Все избранные (N)» and «Все просроченные (N)» cards of the main screen; neither depends on a search. dueOperationsCount and dueNearestDays carry the «На оплату» card (ticket #1346) — the reminder window over the reminder rules without auto-pay; the section's list itself is GET /payments/due. Reads never tick.
+         */
+        get: operations["listGlobalPayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/due": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible «На оплату» rows (the section page)
+         * @description The «На оплату» section's read (ticket #1346): one row per (rule, operation) pair standing in the reminder window — unpaid planned operations with D−N ≤ today ≤ D (today the property owner's calendar, ADR 0048) on the rules with an enabled reminder (reminder_offset_days 1/3/7) and NO auto-pay (the owner's decision — the reminder may fire for auto-pay rules, the section does not contain them). The rules of archived properties are not in the section; completed rules are cut (the feed's inherited gate); overdue operations (D < today) are not here — they live in «Все просроченные». An open pause keeps no window operations (the tick removed the future planned, occurrences inside a pause are not generated), so a paused rule contributes nothing. The rows arrive in the buckets' fixed order (daysLeft asc), «Сначала новые» inside one (dueDate desc, the operation's id the tiebreak); the bucket labels are the client's rendering of daysLeft — the server builds no labels. The whole window comes back in one read (the section is small by construction) — no pagination; dueOperationsCount repeats the rows' count, the same figure GET /payments's counters carry. The section is read-only: paying lives on the property endpoints. Reads never tick, no realtime frames (D18) — the clients re-read.
+         */
+        get: operations["listPaymentDue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the actor's visible payment rules (the global «Платежи» search)
+         * @description The global feed narrowed by the search query (ticket #575): a case-insensitive substring over the rule title and the category — the default catalog label of the rule's slug or the user category's current name. The row composition is GET /payments's, the counters are not part of the search contract. matchedCategories lists the distinct categories of the matched rules — the search screen's category chips — one row per category (ticket #602), the largest match count first. An empty query degenerates to the unfiltered feed with every category of the scope. The list runs in pages of 50 the search category of the scope. The list runs in pages of 50 the search screen's infinite scroll walks (map #573 rework); the window is keyset pagination over (created_at, id) (ticket #597) — the feed's own order, stable under renames and creations: rows shifting between loads never duplicate or drop, the previous page's nextCursor comes back as cursor. Under the category/type chip filter the page narrows to the chip's rules while matchedCategories always describe the whole matched scope — the chips never shrink (the operations' canon).
+         */
+        get: operations["searchGlobalPayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/objects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actor's visible properties with their payment stacks (the global «Объекты» screen)
+         * @description The object cut of the global payments read (ticket #575): the actor's visible non-archived properties — own plus shared with an active membership — each with its rules grouped into the two stack groups, the auto-pay group first, then the rest, every key carrying the group's rule id and its overdue flag (the red dot; the property owner's today, ADR 0048). The search query filters the objects by a case-insensitive substring over the name or the address; the stacks always carry the object's every rule whatever the query matched. An object without rules yields empty groups. Reads never tick.
+         */
+        get: operations["listGlobalPaymentObjects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/favorites/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the manual order of the actor's favorite payment rules
+         * @description The favorites edit mode's «Сохранить» (map #573, ticket #576; the personal cutover #1308): the request lists the actor's favorite rules in their new order and the server rebuilds the positions in one transaction — dense 1-based positions in the list order. The favorites are personal (D12): the star and the order are the acting user's own working set, one user's save never moves another user's rows. The save is a full replacement within the actor's set: favorites outside the list lose their positions and fall to the end of the reading order, so an empty list resets the actor's whole order (a favorite on an archived property keeps its position — unarchiving returns the rule with its order intact). Every listed id must be a rule the actor has starred on a property visible to them (own plus active-membership properties, archived excluded): any degenerate id — unknown, foreign, invisible, archived or simply not starred by this actor — is the privacy-preserving 404, a duplicate id is a 400. The right to order the personal set is the favorite star's, the view capability (D12 — a viewer orders their favorites on par with Full Access and Owner). A rule without a position — a fresh favorite, its favoriteOrder is null — sorts last (new-favorite-at-the-end), and PUT favorite maintains that invariant atomically: unfavoriting removes the actor's row (the position with it), re-favoriting lands at the end. The manual order is the favorites screens' sort key (the feed's own order is unchanged); a pure order write — nothing ticks, and no realtime frame is published (D18, personal state).
+         */
+        put: operations["saveGlobalPaymentFavoritesOrder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the property's tasks (active ones or the completed journal) */
+        get: operations["listPropertyTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a task rule (creating a task is creating a rule)
+         * @description The first materialization happens in the same call: the undated task of an undated rule, every occurrence due today, and the single future one. The due date must be today or later in the property owner's timezone — backdated rules are rejected.
+         */
+        post: operations["createTaskRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTaskRule"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete the task rule (hard; not covered by the v1 UI)
+         * @description Every uncompleted task of the rule — planned, overdue, today's and the single future — is physically removed; the completed journal stays with its snapshots (ruleId set to null). There is no keep_overdue analogue: у задач нет долга.
+         */
+        delete: operations["deleteTaskRule"];
+        options?: never;
+        head?: never;
+        /**
+         * Partial task rule update
+         * @description Omitted fields stay unchanged; comment, dueDate and dueTime are tri-state (null clears). The edit invalidates the not-yet-due uncompleted tasks (the undated and strictly future ones) — the tick stands the single future again with fresh snapshots; already due and completed tasks keep their frozen snapshots. A newly set due date must be today or later.
+         */
+        patch: operations["updateTaskRule"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * «Удалить все выполненные» — clear the completed journal
+         * @description Removes every completed task of the property forever — the deleted-rule journal and the live rules' completed rows alike; rules and active tasks are untouched. Each live rule losing rows gets its history horizon raised to max(deleted due)+1, so the cleared occurrences never materialize again (ADR 0051 as amended 2026-10-01).
+         */
+        delete: operations["deleteCompletedTasks"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Выполнить» the task
+         * @description The completion fact is stamped with today in the property owner's timezone; a repeated completion is a 409. The rule's schedule is not touched.
+         */
+        post: operations["completeTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/tasks/{taskId}/uncomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Отменить выполнение» the task
+         * @description The completion fact is cleared and the task returns to the active ones; the rule's schedule is untouched. Possible only while the rule lives — a journal row of a deleted rule is a 409.
+         */
+        post: operations["uncompleteTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/properties/{propertyId}/access/members": {
@@ -350,7 +1105,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * One property participant row (the member card)
+         * @description The same row the members list returns, read alone: the display data, the per-object role and the lifecycle status, the email included on every row the reader may see (owner decision 2026-09-20, #758). Every reader of the list reads it — the owner and the participants; a suspended membership or a stranger gets the privacy-preserving 404 (ADR 0028, D5/D7 #1304). A pending invitation row answers to its invitation id, so the «Аккаунт не создан» card reads like any other.
+         */
+        get: operations["getPropertyAccessMember"];
         put?: never;
         post?: never;
         /** Revoke a member's access */
@@ -373,22 +1132,6 @@ export interface paths {
         post?: never;
         /** Self-exit from a shared property */
         delete: operations["leaveProperty"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/properties/{propertyId}/free-reminders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listPropertyFreeReminders"];
-        put?: never;
-        post: operations["createFreeReminder"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -449,71 +1192,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/free-reminders/upcoming": {
+    "/participants": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["listUpcomingFreeReminders"];
+        /**
+         * List the owner's participants (aggregate over all properties)
+         * @description The «Ваши участники» list (issue #693): one aggregate row per person — a registered user or a pending email — across every non-archived property the reading actor owns (owner-only scope since D8, issue #1304: the section shows only the people the actor invited to their own objects). The actor themself never appears. A person's identifier (id) is the registered user's uuid, or the invitee email for a pending row.
+         */
+        get: operations["listParticipants"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Revoke shared access from every participant of the actor's properties
+         * @description The global «Отозвать доступ всем» action of the «Участники» section (issue #1310): one call removes every membership and cancels every pending invitation across all properties the reading actor owns — archived ones included — with a per-row audit entry and journal record, the revocation notification per removed active membership and FIFO recovery of each affected recipient's suspended accesses. No lifecycle emails are sent; legs on other owners' properties stay untouched. Idempotent: an owner with nothing left in scope succeeds as a no-op. An actor owning no property is refused: a participant of foreign objects with 403, a stranger with a privacy-preserving 404.
+         */
+        delete: operations["revokeAllParticipants"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listOperationsByProperty"];
-        put?: never;
-        post: operations["createOperation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listOperations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/operations/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getOperation"];
-        put?: never;
-        post?: never;
-        delete: operations["deleteOperation"];
-        options?: never;
-        head?: never;
-        patch: operations["updateOperation"];
-        trace?: never;
-    };
-    "/operations/{id}/complete": {
+    "/participants/invite": {
         parameters: {
             query?: never;
             header?: never;
@@ -522,14 +1225,18 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["completeOperation"];
+        /**
+         * Invite a person to several objects with one role
+         * @description The multi-object invitation of the «Совместный доступ» hub (issue #694). One email and one role against a list of property ids — a snapshot of the objects chosen at invite time; objects added later are not shared automatically. A registered email gets instant memberships (each property individually slot-checked, so a batch can mix active and suspended results); an unregistered email gets one pending invitation per property and exactly one invite email listing the objects. Every requested property id comes back with its per-property outcome. Requesting the actor's own email is a bad request.
+         */
+        post: operations["inviteParticipant"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/operations/{id}/mark-incomplete": {
+    "/participants/{participantId}/properties": {
         parameters: {
             query?: never;
             header?: never;
@@ -538,14 +1245,189 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["markOperationIncomplete"];
+        /**
+         * Grant an existing participant access to more objects
+         * @description The «Пригласить в объект» action on the participant page (issue #694): adds the chosen properties to an existing person's aggregate with one role. The identifier resolves like everywhere else on the participant API — a registered user's uuid, or an invitee email (which may already have resolved to a registered user). Registered targets get memberships (per-property slot checks apply), pending-email targets get invitations and one invite email listing the newly granted objects. Every requested property id comes back with its per-property outcome.
+         */
+        post: operations["addParticipantProperties"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/operations/{id}/move": {
+    "/participants/{participantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One participant's aggregate (the participant page)
+         * @description The same aggregate the list returns for one person: display data, the aggregate status and every access leg with its per-object role and lifecycle status (issue #693). A uuid resolves a registered user, an email resolves a pending invitee (and after the registration resolves to the same user's aggregate). Everything outside the reading actor's scope — including a person whose access was fully revoked — is a privacy-preserving 404 (the deep-link policy of the participant page).
+         */
+        get: operations["getParticipant"];
+        put?: never;
+        post?: never;
+        /**
+         * Revoke and remove a participant from all of the actor's objects
+         * @description The «Отозвать и удалить» action on the participant page (issue #694): removes every membership and pending invitation the person holds on the properties the reading actor manages (owner or active full_access member) — including archived ones — in one transaction, with an audit entry per removed row and FIFO recovery of the person's suspended accesses when active slots were freed. No lifecycle emails are sent. Legs on other owners' properties stay untouched. A person with nothing in the actor's scope is a privacy-preserving 404.
+         */
+        delete: operations["deleteParticipant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница ленты «История действий» (двусторонний keyset, канон #597)
+         * @description Лента журнала действий по объектам, доступным читателю (ADR 0061 §7,
+         *     карта #704, тикет #708): объекты, где читатель — владелец (включая
+         *     архивные — история переживает архив), и объекты с его активным
+         *     участием full_access/viewer (архив участнику ленту не раскрывает —
+         *     канон невидимости архива, #163). Приостановленное участие (suspended)
+         *     ленту не пускает; чужие объекты невидимы — их строк в ответе нет.
+         *
+         *     Один эндпоинт обслуживает все экраны карты #704: общая лента,
+         *     история объекта (property_ids = один id) и «Действия участника в
+         *     объекте» (actor_ids и property_ids = по одному, сервер AND'ит их —
+         *     #841; одиночный пин человека — экран «Действия участника» — снят
+         *     на фронте, #1361, actor_ids = один id остаётся валидным фильтром
+         *     пары). Живые ноги
+         *     актёра (карта #1324, D5): actor_first_name/actor_last_name читаются
+         *     из профиля на выдаче — карточка актёра показывает сегодняшние
+         *     имя/фамилию; снимки actor_name/actor_email остаются строкой журнала,
+         *     сборку отображаемого имени и фолбэк на снимок (actor_id = null)
+         *     делает фронт. Серые пояснения details (D1) записаны при действии и
+         *     рендерятся дословно; у строк до их ввода поле отсутствует.
+         *     Группировка «дата → объект → актёр» — работа экрана; счётчика
+         *     «найдено N» нет (решение #706).
+         *
+         *     Курсор двусторонний: before_cursor продолжает ленту в старую сторону
+         *     (бесконечный скролл вверх), after_cursor запрашивает записи моложе
+         *     уже загруженных (prepend новых, канон InfiniteQueryTail); передавать
+         *     оба сразу — 400. Строки страницы всегда идут по (created_at, id)
+         *     DESC. Появившиеся и удалённые между загрузками записи не дублируются
+         *     и не теряются — курсор возобновляется строго после ключа.
+         *
+         *     Поиск q ищет по конкатенации текста строки и снапшотов актёра
+         *     (имя + почта) — колонке searchable, материализованной при записи:
+         *     «как в Telegram» — по началу слова (префикс), по фрагменту внутри
+         *     слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE на
+         *     сервере (ресерч #839, тикет #842). Суммы в поиске не участвуют
+         *     (их в тексте нет, ADR 0061 §5).
+         */
+        get: operations["getHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Опции шита фильтров «Истории действий»
+         * @description Опции фильтров ленты (ADR 0061 §7). Область «Участников» двух родов
+         *     (изоляция D14, спека #1302, тикет #1305): без property_ids
+         *     (глобальная лента) — только участники МОИХ объектов читателя,
+         *     включая его архивные (владельческая нога канона 000142); получателю
+         *     shared-доступа владелец и соучастники чужого объекта в глобальном
+         *     фильтре не раскрыты. С property_ids (история одного объекта) —
+         *     собственник и участники запрошенной области ∪ все актёры,
+         *     встречающиеся в её журнале (отозванные и вышедшие остаются
+         *     фильтруемыми — их записи переживают отзыв; D6 — без изменений).
+         *     «Объекты» — объекты области чтения с названием, адресом
+         *     и фото-аватаром (первое по времени фото, #582); та же дисциплина
+         *     privacy-404, что у ленты: один невидимый или неизвестный id —
+         *     404 всего запроса.
+         *     Статус участника (карта #1324, D6): status = current | removed
+         *     вычисляется на лету — current, если у пользователя есть живая нога
+         *     в области (владелец или членство, приостановленное тоже живо),
+         *     removed, если остались только строки журнала (ревок или выход);
+         *     повторное добавление живит автоматически. Секцию «Удалённые» экран
+         *     рисует только при непустой группе. Счётчики N/M групп чекбоксов
+         *     клиент считает сам; сами группы
+         *     (4 основных действия, 7 видов) — статический словарь экрана
+         *     (ADR 0061 §4).
+         */
+        get: operations["getHistoryFilters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница ленты уведомлений (keyset, канон #597)
+         * @description Хранимая лента пользователя, newest-first keyset-пагинация (карта
+         *     #734, решение #737, #743). Удалённые строки не появляются. Курсор —
+         *     непрозрачный blob из next_cursor предыдущей страницы; страницы
+         *     читаются строго после последней строки, новые строки между загрузками
+         *     не дублируются и не теряются. limit 1..100, по умолчанию 50.
+         */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        /**
+         * Удалить все уведомления
+         * @description Мягкое удаление всех строк ленты пользователя (решение #737):
+         *     строки остаются с deleted_at, лента и счётчик непрочитанных их
+         *     перестают видеть. Подтверждение — на стороне клиента.
+         */
+        delete: operations["deleteAllNotifications"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Счётчик непрочитанных
+         * @description Число непрочитанных неудалённых строк пользователя (решение #737).
+         *     Снижается кликом, открытием страницы и «Прочитать все»; пуш и email
+         *     на читаемость не влияют.
+         */
+        get: operations["getUnreadNotificationCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/read-all": {
         parameters: {
             query?: never;
             header?: never;
@@ -554,94 +1436,43 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["moveOperation"];
+        /** Прочитать все */
+        post: operations["markAllNotificationsRead"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/operation-categories": {
+    "/notifications/{notificationId}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["listOperationCategories"];
-        put?: never;
-        post: operations["createOperationCategory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/finance/report": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getFinanceReport"];
+        /**
+         * Страница уведомления с живыми действиями
+         * @description Одна строка ленты с payload для отрисовки карточек (объект,
+         *     приглашающий) и действиями, вычисленными при чтении по живому
+         *     состоянию сущностей и правам читателя (решение #737): состояние
+         *     ушло или сущность удалена — кнопок нет; роль «Просмотр» не получает
+         *     кнопок-мутаций. Чужая или удалённая строка — 404.
+         */
+        get: operations["getNotification"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Удалить уведомление
+         * @description Мягкое удаление одной строки; удаление непрочитанного снижает счётчик.
+         */
+        delete: operations["deleteNotification"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/properties/{propertyId}/recurring-operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listRecurringOperationsByProperty"];
-        put?: never;
-        post: operations["createRecurringOperation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/recurring-operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listRecurringOperations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/recurring-operations/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getRecurringOperation"];
-        put?: never;
-        post?: never;
-        delete: operations["deleteRecurringOperation"];
-        options?: never;
-        head?: never;
-        patch: operations["updateRecurringOperation"];
-        trace?: never;
-    };
-    "/recurring-operations/{id}/pause": {
+    "/notifications/{notificationId}/read": {
         parameters: {
             query?: never;
             header?: never;
@@ -650,203 +1481,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["pauseRecurringOperation"];
+        /**
+         * Прочитать уведомление
+         * @description Идемпотентно — повторный вызов не меняет состояние.
+         */
+        post: operations["markNotificationRead"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/recurring-operations/{id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["resumeRecurringOperation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/leases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listLeases"];
-        put?: never;
-        post: operations["createLease"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/leases/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getLease"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch: operations["updateLease"];
-        trace?: never;
-    };
-    "/leases/{id}/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["completeLease"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/leases/{leaseId}/reminders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listLeaseReminders"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenant-contacts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listTenantContacts"];
-        put?: never;
-        post: operations["createTenantContact"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenant-contacts/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getTenantContact"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch: operations["updateTenantContact"];
-        trace?: never;
-    };
-    "/reminders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listReminders"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/reminders/calendar": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listCalendarReminders"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/reminders/{reminderId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["deleteReminder"];
-        options?: never;
-        head?: never;
-        patch: operations["updateReminder"];
-        trace?: never;
-    };
-    "/free-reminders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listFreeReminders"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/free-reminders/{freeReminderId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getFreeReminder"];
-        put?: never;
-        post?: never;
-        delete: operations["deleteFreeReminder"];
-        options?: never;
-        head?: never;
-        patch: operations["updateFreeReminder"];
         trace?: never;
     };
     "/notification-preferences": {
@@ -856,8 +1499,85 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Матрица email-настроек аккаунта
+         * @description Email — на аккаунте: одна конфигурация на все устройства (решение
+         *     #738, ADR 0058). Четыре настраиваемые категории; нет строки —
+         *     всё включено. Тариф и Системные всегда включены и в настройках
+         *     не показываются.
+         */
         get: operations["getNotificationPreferences"];
-        put: operations["updateNotificationPreferences"];
+        /** Заменить матрицу email-настроек аккаунта */
+        put: operations["putNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Живой стрим событий пользователя (SSE)
+         * @description Общий пользовательский Server-Sent Events стрим (карта #734, #742;
+         *     ADR 0060). Авторизация — cookie-сессия тем же SessionMiddleware;
+         *     без актора хендлер отвечает 401 problem+json до старта стрима.
+         *     Формат кадров — WHATWG SSE: retry-подсказка и стартовое событие
+         *     connected на старте, id — монотонная последовательность (курсор
+         *     Last-Event-ID; replay в v1 не реализован), event — стабильное грубое
+         *     имя (notification.created, notification.unread_count; новые
+         *     имена — аддитивно), data — JSON-конверт {v, occurredAt, payload}.
+         *     Heartbeat-комментарий каждые 25 с, соединение закрывается через час
+         *     (пере-аутентификация при переподключении). Кадры best-effort:
+         *     состояние клиент дочитывает через обычные эндпоинты. События
+         *     изменений сущностей (карта #714) в этот стрим не входят: они едут
+         *     отдельным стримом /realtime/stream — ADR 0062 superseded зарисовку
+         *     §5 ADR 0060; контракт этого стрима заморожен.
+         */
+        get: operations["streamNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/realtime/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Живой стрим изменений сущностей (SSE)
+         * @description Второй пользовательский Server-Sent Events стрим — кадры инвалидации
+         *     карты #714 (тикет #716; ADR 0062) поверх транспорта ADR 0060
+         *     (heartbeat 25 с, TTL час, тот же хаб и бюджет 8 соединений на
+         *     пользователя, что и у /notifications/stream). Авторизация —
+         *     cookie-сессия тем же SessionMiddleware; без актора хендлер отвечает
+         *     401 problem+json до старта стрима. Единственное имя события —
+         *     entity.changed, data — JSON-конверт {v, occurredAt, payload} с грубым
+         *     payload {propertyId, entity}: имени из словаря (payments, operations,
+         *     tasks, contacts, rentals, property, access, history) и объекта (null
+         *     для внеобъектных правок книжки владельца). Данных сущности кадр не
+         *     несёт — клиент перечитывает состояние через API. Аудитория кадра —
+         *     производный доступ на чтение объекта на момент публикации (ADR 0028),
+         *     включая автора; кадр с propertyId=null (внеобъектные правки книжки
+         *     владельца) доставляется только автору; отзыв или приостановка доступа
+         *     посреди стрима просто прекращают кадры, соединение не закрывается.
+         *     Replay в v1 нет — при каждом открытии и переподключении
+         *     клиент перечитывает живое состояние.
+         */
+        get: operations["streamRealtime"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -892,6 +1612,37 @@ export interface paths {
         put?: never;
         post: operations["createPushSubscription"];
         delete: operations["deletePushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/push/subscriptions/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Настройки пушей устройства
+         * @description Пуш — на устройстве (решение #738): мастер-тумблер «Получать
+         *     пуш-уведомления» и четыре категорийных флага на подписке браузера.
+         *     Устройство идентифицируется endpoint URL — естественным ключом и
+         *     секретом подписки (RFC 8030 §8.3). Чужой/неизвестный endpoint — 404.
+         */
+        get: operations["getPushSubscriptionPreferences"];
+        /**
+         * Заменить настройки пушей устройства
+         * @description Замена категорий устройства (спека #1028 §5): категорийные флаги
+         *     двигаются, подписка и её ключи остаются. Не upsert — неизвестный
+         *     устройству endpoint строгий 404 (в нормальном флоу недостижим:
+         *     мастер-состояние — само существование подписки, выключение
+         *     выполняет DELETE /push/subscriptions).
+         */
+        put: operations["putPushSubscriptionPreferences"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -993,6 +1744,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/subscription/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/subscription/change": {
         parameters: {
             query?: never;
@@ -1083,6 +1850,51 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["syncPaymentMethods"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdminTariffs"];
+        put?: never;
+        /**
+         * @description Creates a tariff plan (issue #256). The name comes from the closed
+         *     TariffName vocabulary the frozen user contract pins; a name that
+         *     already exists answers 409.
+         */
+        post: operations["createAdminTariff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tariffs/{tariffId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * @description Updates a tariff's prices, active-property limit and activity
+         *     (issue #256). Hiding (isActive=false) removes the plan from the
+         *     user-facing listing and blocks new selection; existing subscriptions,
+         *     renewals and the payment history keep referencing it. Paid periods
+         *     already granted are not repriced — the next renewal charges the
+         *     updated price.
+         */
+        put: operations["updateAdminTariff"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1201,54 +2013,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/users/{id}/leases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminUserLeases"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/users/{id}/tenant-contacts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminUserTenantContacts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/users/{id}/operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminUserOperations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/admin/properties": {
         parameters: {
             query?: never;
@@ -1281,70 +2045,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/leases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminLeases"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/leases/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminLease"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/tenant-contacts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminTenantContacts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/tenant-contacts/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminTenantContact"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/admin/property-contacts": {
         parameters: {
             query?: never;
@@ -1353,38 +2053,6 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listAdminPropertyContacts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/operations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminOperations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/operations/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminOperation"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1457,7 +2125,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/internal/fake-subscription-payment/{id}/confirm": {
+    "/admin/users/{id}/subscription/service": {
         parameters: {
             query?: never;
             header?: never;
@@ -1466,7 +2134,100 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["confirmFakeSubscriptionPayment"];
+        /**
+         * @description Assigns a service subscription (issue #255): the tariff runs for a fixed
+         *     term without payment, auto-renew off; at the end of the term the
+         *     subscription falls to the basic tariff through the common expiry path.
+         *     The assignment overwrites the current subscription — a paid remainder
+         *     does not stack. An upgrade on top of the service subscription later
+         *     converts it back to paid from the new period.
+         */
+        post: operations["assignAdminServiceSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/subscription/force-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Force-changes the subscription tariff (issue #255): the new tariff
+         *     applies immediately without payment for the chosen period from now.
+         *     The subscription keeps its source (a paid subscription stays paid, a
+         *     service one stays service); excess properties beyond the new tariff
+         *     limit are archived. Used to repair subscription state during incidents.
+         */
+        post: operations["forceChangeAdminSubscriptionTariff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/subscription/grace-extension": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Extends the grace window manually (issue #255): gives the user extra
+         *     days to fix their payment method. Only a subscription in grace can be
+         *     extended; an already-expired window that the worker has not downgraded
+         *     yet extends from now.
+         */
+        post: operations["extendAdminSubscriptionGrace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/subscription/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Cancels the subscription on the user's behalf (issue #255): the same
+         *     semantics as the user's own cancellation — the tariff keeps working
+         *     until valid_until, auto-renew switches off immediately. Paid
+         *     subscriptions only; a service subscription is withdrawn by
+         *     reassignment, not cancellation.
+         */
+        post: operations["cancelAdminSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/subscription/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The subscription transition log of one user's subscription (issue #255): every status and tariff change with its reason, initiator (user/admin/system) and the payment that caused it, newest first. */
+        get: operations["listAdminSubscriptionTransitions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1489,6 +2250,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Public landing feedback form (карта #1010): a question from the «Задать вопрос» modal forwarded by the landing's server-side proxy. Rate limited per IP; the message is emailed to the configured FEEDBACK_EMAIL recipient. */
+        post: operations["sendFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/payment/{provider}": {
         parameters: {
             query?: never;
@@ -1499,6 +2277,72 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["handlePaymentWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/rentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRentals"];
+        put?: never;
+        post: operations["createRental"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/rentals/{rentalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getRental"];
+        put?: never;
+        post?: never;
+        /** @description Deletes the rental together with its managed rent payment (the rental row goes first, releasing the payment FK). Only a not-started («передумал до старта» — all planned occurrences are future and go cleanly) or a completed rental deletes; a started unfinished rental answers 409 — it only goes through completion. Overdue operations survive the payment as the property's debt. */
+        delete: operations["deleteRental"];
+        options?: never;
+        head?: never;
+        patch: operations["updateRental"];
+        trace?: never;
+    };
+    "/properties/{propertyId}/rentals/{rentalId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Completes the rental: records the completion date (start ≤ date ≤ today in the owner's timezone — «По плану» is the UI's substitution) and deletes the managed rent payment in the same transaction — the planned operations from the completion date on are torn down, the overdue ones survive the payment as the property's debt and the paid ones stay in its history (their payment_id is unlinked by the FK, origin unchanged). The completed rental keeps an immutable archive of the terms for its view and answers with rentPayment.paymentId = null. The optional deposit return is a record, not an operation. Completing a future rental is impossible by design — a start date in the future leaves the valid window empty (400). */
+        post: operations["completeRental"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/properties/{propertyId}/rentals/{rentalId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getRentalSummary"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1523,6 +2367,8 @@ export interface components {
             phone: string;
             email?: string;
             code: string;
+            /** @description Browser-detected IANA timezone of the registering device (Intl.DateTimeFormat().resolvedOptions().timeZone). Applied only when this request creates a new user; an absent or invalid value keeps the Europe/Moscow default. Ignored for existing users — the manual choice in the profile picker is never overwritten. */
+            timezone?: string;
         };
         MeResponse: {
             /** Format: uuid */
@@ -1536,14 +2382,42 @@ export interface components {
             email?: string | null;
             /** @description IANA timezone identifier, e.g. Europe/Moscow. */
             timezone?: string | null;
+            /** @description The profile photo's same-origin streaming path (ADR 0065): /api/me/photo, served with the session cookie; null when the profile has no photo. Only the owner reads it. */
+            photoUrl?: string | null;
             subscription?: components["schemas"]["Subscription"];
+        };
+        SessionListResponse: {
+            sessions: components["schemas"]["ActiveSession"][];
+        };
+        ActiveSession: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Device class captured from the User-Agent at session creation.
+             * @enum {string}
+             */
+            deviceType: "computer" | "phone" | "tablet" | "tv" | "unknown";
+            /** @description Browser name, e.g. Chrome or YaBrowser; empty when unparsed. */
+            browser: string;
+            /** @description Browser major version; null when unknown. */
+            browserMajor?: number | null;
+            /** @description Operating system name; empty when unparsed. */
+            os: string;
+            /** @description GeoIP-resolved city for the last IP in the ru locale; null when unknown. */
+            city: string | null;
+            /** @description Client IP of the most recent request. */
+            lastIp: string | null;
+            /** Format: date-time */
+            lastSeenAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description True when the session belongs to the caller's own cookie. */
+            current: boolean;
         };
         UserUpdateRequest: {
             name?: string | null;
             surname?: string | null;
             patronymic?: string | null;
-            /** @description Email is stored in lowercase. */
-            email?: string | null;
             /** @description IANA timezone identifier, e.g. Europe/Moscow. */
             timezone?: string | null;
         };
@@ -1557,15 +2431,54 @@ export interface components {
             /** @example 123456 */
             code: string;
         };
+        VerifyCurrentEmailRequest: {
+            /**
+             * @description The code sent to the current email.
+             * @example 123456
+             */
+            code: string;
+        };
+        RequestNewEmailCodeRequest: {
+            /** @description The still-live grant token returned by /me/email/verify-current; the address binds to it and the code is issued for the new address. */
+            grant: string;
+            /** @description The new address; stored in lowercase. */
+            newEmail: string;
+        };
+        EmailChangeGrantResponse: {
+            /** @description One-time grant token proving the current email was verified by code. Present it at /me/email/request-new-email-code to bind the new address, then at /me/email/change together with the code delivered to it; it expires in about 10 minutes. */
+            grant: string;
+        };
+        ResendEmailCodeRequest: {
+            /** @description The still-live grant token bound to the pending new email; the code is re-issued for the address it binds. */
+            grant: string;
+        };
+        ChangeEmailRequest: {
+            /**
+             * @description The code sent to the new email.
+             * @example 123456
+             */
+            code: string;
+            /** @description The grant token returned by /me/email/verify-current. */
+            grant: string;
+        };
         Tariff: {
             name: components["schemas"]["TariffName"];
             activePropertyLimit: number;
+            /** Format: int64 */
             monthlyPriceKopecks: number;
+            /** Format: int64 */
             yearlyPriceKopecks: number;
         };
         Subscription: {
             tariff: components["schemas"]["Tariff"];
             status: components["schemas"]["SubscriptionStatus"];
+            /**
+             * @description paid — the owner pays for the tariff (or runs the free basic plan);
+             *     service — an admin assigned the tariff for a fixed term without
+             *     payment (issue #255).
+             * @enum {string}
+             */
+            source: "paid" | "service";
             /** Format: date-time */
             validUntil?: string | null;
             autoRenewEnabled: boolean;
@@ -1575,28 +2488,64 @@ export interface components {
             pendingChangeAt?: string | null;
             pendingPeriod?: components["schemas"]["AdminSubscriptionPaymentPeriod"];
             activePaymentMethod?: components["schemas"]["PaymentMethod"];
+            /** @description The user's live pending payment (issue #616) — present only while an unpaid payment form holds the tariff decision. Its expiry is the server-side truth: past expiresAt the payment turns failed and the tariff choice unlocks. */
+            pendingPayment?: components["schemas"]["SubscriptionPendingPayment"];
         };
         PaymentMethod: {
             /** Format: uuid */
             id: string;
             provider: string;
             displayMask: string;
+            cardSystem: components["schemas"]["CardSystem"];
+            /** @description Card expiry in the provider's display format (MMYY); null when unknown. */
+            expDate?: string | null;
             isActive: boolean;
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description The live pending subscription payment (issue #616): one per user, with the confirm URL and the absolute expiry instant the countdown anchors to. The TTL itself is a backend constant and does not surface here. */
+        SubscriptionPendingPayment: {
+            tariffName: components["schemas"]["TariffName"];
+            period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+            /** Format: int64 */
+            amountKopecks: number;
+            confirmUrl: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /** @description One subscription charge (issue #619): one list row is one payment — a refunded payment keeps its own row with the refunded status and the same positive amount. The sign and the status label are a UI convention the frontend renders on top of the status; amounts in the contract are always positive kopecks. */
         SubscriptionPayment: {
             /** Format: uuid */
             id: string;
             tariff: components["schemas"]["Tariff"];
             period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+            /** Format: int64 */
             amountKopecks: number;
             status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
             paymentUrl?: string | null;
+            /**
+             * Format: date-time
+             * @description The payment form's absolute deadline (issue #680): the same instant the provider got as its redirect deadline, so the client closes the return-to-payment link by server truth instead of duplicating the form TTL. Null on merchant-initiated charges — they carry no payer form.
+             */
+            expiresAt?: string | null;
+            paymentMethod?: components["schemas"]["SubscriptionPaymentCard"];
+            /** Format: date-time */
+            succeededAt?: string | null;
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description The card a payment was charged with (issue #619): a snapshot taken at creation or finalization of the payment, so the history survives payment-method deletion. Null for payments the provider reported no card for. */
+        SubscriptionPaymentCard: {
+            /** @description Masked card number, e.g. "4300********1234". */
+            displayMask: string;
+            cardSystem: components["schemas"]["CardSystem"];
+        };
+        /**
+         * @description Card system derived by the backend from the BIN prefix of the masked number (2 — Mir, 4 — Visa, 5 — Mastercard); unknown for old or unrecognized cards.
+         * @enum {string}
+         */
+        CardSystem: "mir" | "visa" | "mastercard" | "unknown";
         ChangeTariffRequest: {
             tariffName: components["schemas"]["TariffName"];
             period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
@@ -1608,6 +2557,19 @@ export interface components {
         };
         AutoRenewRequest: {
             enabled: boolean;
+        };
+        CancelSubscriptionRequest: {
+            /**
+             * Format: uuid
+             * @description The property the owner chooses to keep when the cancelled
+             *     subscription later expires and the basic tariff's property limit
+             *     is applied: the chosen property survives, the excess ones are
+             *     archived. Must be one of the owner's active properties, otherwise
+             *     the cancellation answers 409 `invalid_keep_property`. Omitted
+             *     when there is no choice to make (0 or 1 active properties) — the
+             *     most recently updated property survives.
+             */
+            keepPropertyId?: string;
         };
         AddPaymentMethodRequest: {
             /**
@@ -1623,6 +2585,57 @@ export interface components {
         TariffsResponse: {
             items: components["schemas"]["Tariff"][];
         };
+        AdminTariff: {
+            /** Format: uuid */
+            id: string;
+            name: components["schemas"]["TariffName"];
+            /** @description Hidden tariffs (false) stay referable by foreign keys but are not offered to users. */
+            isActive: boolean;
+            /** @description Maximum number of active properties; -1 means unlimited. */
+            activePropertyLimit: number;
+            /** Format: int64 */
+            monthlyPriceKopecks: number;
+            /** Format: int64 */
+            yearlyPriceKopecks: number;
+        };
+        AdminTariffsResponse: {
+            items: components["schemas"]["AdminTariff"][];
+        };
+        AdminCreateTariffRequest: {
+            name: components["schemas"]["TariffName"];
+            /** @description Maximum number of active properties; -1 means unlimited. */
+            activePropertyLimit: number;
+            /**
+             * Format: int64
+             * @description Monthly price in kopecks.
+             */
+            monthlyPriceKopecks: number;
+            /**
+             * Format: int64
+             * @description Yearly price in kopecks.
+             */
+            yearlyPriceKopecks: number;
+        };
+        AdminUpdateTariffRequest: {
+            /** @description Maximum number of active properties; -1 means unlimited. */
+            activePropertyLimit: number;
+            /**
+             * Format: int64
+             * @description Monthly price in kopecks.
+             */
+            monthlyPriceKopecks: number;
+            /**
+             * Format: int64
+             * @description Yearly price in kopecks.
+             */
+            yearlyPriceKopecks: number;
+            /**
+             * @description false hides the plan: it disappears from the user-facing listing
+             *     and cannot be newly selected, while existing subscriptions,
+             *     renewals and payment history keep referencing it.
+             */
+            isActive: boolean;
+        };
         PaymentMethodsResponse: {
             items: components["schemas"]["PaymentMethod"][];
         };
@@ -1634,12 +2647,14 @@ export interface components {
             id: string;
             tariff: components["schemas"]["Tariff"];
             period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+            /** Format: int64 */
             amountKopecks: number;
             status: components["schemas"]["SubscriptionPaymentStatus"];
             provider: string;
             /** Format: uuid */
             userId: string;
             userPhone: string;
+            /** Format: int64 */
             refundedAmountKopecks?: number | null;
             /** Format: date-time */
             succeededAt?: string | null;
@@ -1652,6 +2667,66 @@ export interface components {
         };
         AdminSubscriptionPaymentsResponse: {
             items: components["schemas"]["AdminSubscriptionPayment"][];
+            total: number;
+        };
+        AdminAssignServiceSubscriptionRequest: {
+            tariffName: components["schemas"]["TariffName"];
+            /**
+             * @description The fixed term of the service subscription: month or year counts
+             *     from the assignment moment; date runs until the end of untilDate
+             *     (UTC, inclusive).
+             * @enum {string}
+             */
+            termType: "month" | "year" | "date";
+            /**
+             * Format: date
+             * @description Required when termType is date; must be today or later.
+             */
+            untilDate?: string;
+        };
+        AdminForceChangeTariffRequest: {
+            tariffName: components["schemas"]["TariffName"];
+            period: components["schemas"]["AdminSubscriptionPaymentPeriod"];
+        };
+        AdminExtendGraceRequest: {
+            /** @description The extra days added to the current grace window. */
+            days: number;
+        };
+        AdminSubscriptionTransition: {
+            /** Format: uuid */
+            id: string;
+            fromStatus?: components["schemas"]["SubscriptionStatus"] | null;
+            toStatus: components["schemas"]["SubscriptionStatus"];
+            /** Format: uuid */
+            fromTariffId?: string | null;
+            /** Format: uuid */
+            toTariffId: string;
+            fromTariffName?: string | null;
+            toTariffName: string;
+            /**
+             * @description Why the transition happened: registered, cancelled, resumed,
+             *     downgrade_scheduled, payment_applied, grace_entered,
+             *     grace_extended, scheduled_change_applied, expired, refunded,
+             *     service_assigned, forced_change.
+             */
+            reason: string;
+            /** @enum {string} */
+            initiator: "user" | "admin" | "system";
+            /**
+             * Format: uuid
+             * @description The user or admin actor id; absent for the system.
+             */
+            initiatorId?: string | null;
+            /**
+             * Format: uuid
+             * @description The payment that caused the transition, when there was one.
+             */
+            paymentId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminSubscriptionTransitionsResponse: {
+            items: components["schemas"]["AdminSubscriptionTransition"][];
             total: number;
         };
         AdminUser: {
@@ -1673,9 +2748,6 @@ export interface components {
         AdminUserStats: {
             activePropertiesCount: number;
             archivedPropertiesCount: number;
-            leasesCount: number;
-            tenantContactsCount: number;
-            operationsCount: number;
         };
         AdminUserResponse: {
             user: components["schemas"]["AdminUser"];
@@ -1698,9 +2770,8 @@ export interface components {
             description?: string | null;
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
-            /** @enum {string} */
-            occupancy: "free" | "occupied";
-            photos?: components["schemas"]["PropertyPhoto"][] | null;
+            /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo; null when the object has no photo. */
+            photoUrl?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1708,54 +2779,6 @@ export interface components {
         };
         AdminPropertiesResponse: {
             items: components["schemas"]["AdminProperty"][];
-            total: number;
-        };
-        AdminLease: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            ownerId: string;
-            /** Format: uuid */
-            propertyId?: string | null;
-            propertyName?: string | null;
-            tenantContact?: components["schemas"]["AdminTenantContact"] | null;
-            status: components["schemas"]["LeaseStatus"];
-            /** Format: date */
-            startDate: string;
-            /** Format: date */
-            endDate?: string | null;
-            rentAmountKopecks: number;
-            depositAmountKopecks: number;
-            paymentDay: number;
-            comment?: string | null;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        AdminLeasesResponse: {
-            items: components["schemas"]["AdminLease"][];
-            total: number;
-        };
-        AdminTenantContact: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            ownerId: string;
-            ownerPhone: string;
-            name: string;
-            surname?: string | null;
-            patronymic?: string | null;
-            phone?: string | null;
-            email?: string | null;
-            comment?: string | null;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        AdminTenantContactsResponse: {
-            items: components["schemas"]["AdminTenantContact"][];
             total: number;
         };
         AdminPropertyContact: {
@@ -1774,51 +2797,8 @@ export interface components {
             items: components["schemas"]["AdminPropertyContact"][];
             total: number;
         };
-        AdminOperation: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            ownerId: string;
-            /** Format: uuid */
-            propertyId?: string | null;
-            propertyName?: string | null;
-            /** Format: uuid */
-            leaseId?: string | null;
-            /** Format: uuid */
-            recurringOperationId?: string | null;
-            type: components["schemas"]["OperationType"];
-            /** Format: uuid */
-            categoryId: string;
-            categoryName: string;
-            name: string;
-            amountKopecks: number;
-            /** Format: date */
-            operationDate: string;
-            status: components["schemas"]["OperationStatus"];
-            comment?: string | null;
-            isException: boolean;
-            /** @enum {integer|null} */
-            reminderOffsetDays?: 1 | 3 | 7 | null;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        AdminOperationsResponse: {
-            items: components["schemas"]["AdminOperation"][];
-            total: number;
-        };
         AdminPropertyResponse: {
             property: components["schemas"]["AdminProperty"];
-        };
-        AdminLeaseResponse: {
-            lease: components["schemas"]["AdminLease"];
-        };
-        AdminTenantContactResponse: {
-            contact: components["schemas"]["AdminTenantContact"];
-        };
-        AdminOperationResponse: {
-            operation: components["schemas"]["AdminOperation"];
         };
         AdminAuditLog: {
             /** Format: uuid */
@@ -1873,8 +2853,6 @@ export interface components {
             subscriptionsActive: number;
             propertiesActive: number;
             propertiesArchived: number;
-            leasesTotal: number;
-            operationsTotal: number;
             /** Format: int64 */
             paymentsSucceededTotalKopecksLast30d: number;
             paymentsFailedCountLast30d: number;
@@ -1911,13 +2889,15 @@ export interface components {
             [key: string]: unknown;
         };
         PropertyCreateRequest: {
-            name: string;
+            /** @description Optional. Omit (or send empty) to let the server generate the name from the property type — «Моя квартира», «Мой гараж 2» (ticket #1001). The serial is the object's position among the owner's properties of the type (archived included, deleted gone); the first property of the type carries no serial (ticket #1078). */
+            name?: string;
             type: components["schemas"]["PropertyType"];
             address: string;
             description?: string;
             attributes?: components["schemas"]["PropertyAttributes"];
         };
         PropertyUpdateRequest: {
+            /** @description Omit to leave the name unchanged. An empty string clears the name and regenerates it from the property type — «Моя квартира» (ticket #1001): the first property of the type carries no serial, from the second the serial is appended (ticket #1078). */
             name?: string;
             type?: components["schemas"]["PropertyType"];
             address?: string;
@@ -1932,8 +2912,12 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "full_access" | "viewer";
-            /** @description Owner display name ("Name Surname" or masked phone, never email). Present only in the detail response when the actor is not the owner. */
+            /** @description Owner display name ("Name Surname" or «Пользователь», never a phone or an email — карта #1105, аменд #1123). Present when the actor is not the owner: in the detail response and on the list rows (main and archive) — the shared card shows whose object it is. Own rows carry none. */
             owner_name?: string;
+            /** @description Owner's account email for the detail's owner contact row — a deliberate exposure on this surface (Figma 2200-97365), the same posture as SuspendedShared.owner_email. Present in the detail response only when the actor is not the owner; empty when the owner has no email or the resolution failed. */
+            owner_email?: string;
+            /** @description The owner's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/users/{userId}/photo — readable while the reader shares a readable property with the owner. Null when the owner has no photo or the resolution failed; present in the detail response and on the shared list rows. */
+            owner_photo_url?: string | null;
         };
         PropertyResponse: {
             /** Format: uuid */
@@ -1944,177 +2928,654 @@ export interface components {
             description?: string;
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
-            /** @enum {string} */
-            occupancy: "free" | "occupied";
             access?: components["schemas"]["PropertyAccessContext"];
-            photos?: components["schemas"]["PropertyPhoto"][];
-            active_lease: components["schemas"]["LeaseResponse"] | null;
-            overdue_rent_count: number;
-            /** @description Shared-access participants of the property: membership rows (any status, owner excluded — the owner is never a membership row) plus pending email invitations. */
-            members_count: number;
+            /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo, served with the session cookie; null when the object has no photo. */
+            photo_url?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /**
+             * Format: date-time
+             * @description The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The lists order the pinned first, among themselves by this time — the actor's own order, never another participant's. The pin is a personal state: any reader may pin (the view right), and it survives archiving. The domain language calls the concept «основной объект / primary property» (резолюция #584); the contract keeps the pin name.
+             */
+            pinned_at: string | null;
+            occupancy?: components["schemas"]["PropertyOccupancy"];
+            /** @description The payments half of the card's red dot (резолюция #584): the property holds at least one overdue planned operation — a stored planned row dated before the data owner's today (ADR 0048), the same predicate the payments listings report as the overdue view status. Red dot = needs_attention occupancy OR this flag. Populated by the list endpoints only (ticket #585); omitted elsewhere. */
+            has_overdue_operations?: boolean;
         };
-        PropertyPhoto: {
+        /** @description Занятость объекта (property occupancy, резолюция #584, ticket #585): the property's computed state from its single unfinished rental against the data owner's today (ADR 0048) — the canon for the «По статусу» grouping, the card's rental badges and the red dot. The property lifecycle status (active/maintenance) is a different concept: a rental property under maintenance stays in its rental group. Populated by the list endpoints only; omitted on the write and detail responses. */
+        PropertyOccupancy: {
+            /**
+             * @description The unfinished rental's status in the rentals vocabulary (rentals/CONTEXT.md): upcoming — the start has not come yet («Аренда с DD.MM» badge); active — the rental runs; needs_attention — the planned end has passed and the rental is not completed (the «Аренда завершена» badge, a red dot reason); none — no unfinished rental (an explicitly completed rental is history and reports none).
+             * @enum {string}
+             */
+            status: "upcoming" | "active" | "needs_attention" | "none";
+            /**
+             * Format: date
+             * @description The unfinished rental's start date; null without one.
+             */
+            start_date?: string | null;
+            /**
+             * Format: date
+             * @description The unfinished rental's planned end date («Осталось N месяцев» — the client counts the full months from today); null for an open-ended rental or without one.
+             */
+            planned_end_date?: string | null;
+        };
+        /** @description The create payload of a contact card (ADR 0054). Only the first name is required; the phone travels in any accepted Russian spelling and is stored normalized to +7XXXXXXXXXX. A card with a propertyId lands in the property owner's book (the edit gate applies); without one it is created «без объекта» in the actor's own book. */
+        ContactCreateRequest: {
+            /** Format: uuid */
+            propertyId?: string | null;
+            firstName: string;
+            lastName?: string;
+            patronymic?: string;
+            /** @description What the person is to the property — «сантехник», «консьерж». Free text, never an access role. */
+            role?: string;
+            phone?: string;
+            email?: string;
+            /** @description The messenger's name — any service, one pair per contact. */
+            messengerName?: string;
+            messengerUsername?: string;
+            note?: string;
+        };
+        /** @description The partial-update payload of a contact card: an omitted field keeps the stored value, and a text field clears by sending an empty string. The propertyId is tri-state — omitted keeps the current binding, null clears it («без объекта»), a uuid moves the card onto that property (the target's edit gate applies). */
+        ContactUpdateRequest: {
+            /** Format: uuid */
+            propertyId?: string | null;
+            firstName?: string;
+            lastName?: string;
+            patronymic?: string;
+            role?: string;
+            phone?: string;
+            email?: string;
+            messengerName?: string;
+            messengerUsername?: string;
+            note?: string;
+        };
+        /** @description One card of the owner's contact book (ADR 0054): a person useful for a property — not a service user. propertyId null means «без объекта». Deleting the property deletes its bound cards (FK CASCADE, ADR 0054 §2 as amended 2026-10-02); null-bound cards survive in the owner's book. */
+        ContactResponse: {
             /** Format: uuid */
             id: string;
-            /** Format: uri */
-            url: string;
-        };
-        PropertyPhotosResponse: {
-            items: components["schemas"]["PropertyPhoto"][];
-        };
-        PropertyLeasesResponse: {
-            items: components["schemas"]["LeaseResponse"][];
-        };
-        PropertyOperationsSummaryResponse: {
-            monthly_profit_kopecks: number;
-            all_time_profit_kopecks: number;
-            all_time_income_kopecks: number;
-            all_time_expense_kopecks: number;
-            overdue_rent_count: number;
-            overdue_total_count: number;
-            /** Format: date */
-            next_payment_date?: string | null;
-        };
-        LeaseCreateRequest: {
             /** Format: uuid */
-            property_id: string;
-            /** Format: uuid */
-            tenant_contact_id?: string;
-            /** Format: date */
-            start_date: string;
-            /** Format: date */
-            end_date?: string;
-            rent_amount_kopecks: number;
-            /** @default 0 */
-            deposit_amount_kopecks: number;
-            payment_day: number;
-            comment?: string;
+            propertyId?: string | null;
+            /** @description The display name of the bound property; null for an unbound card. A list projection only — the card read resolves the property by its id. */
+            propertyName?: string | null;
+            /** @description The card photo's same-origin streaming path (ADR 0065): /api/contacts/{id}/photo, served with the session cookie; null when the card has no photo. */
+            photoUrl?: string | null;
+            firstName: string;
+            lastName: string;
+            patronymic: string;
+            role: string;
+            phone: string;
+            email: string;
+            messengerName: string;
+            messengerUsername: string;
+            note: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
-        LeaseUpdateRequest: {
-            /** Format: uuid */
-            tenant_contact_id?: string;
+        ContactsResponse: {
+            items: components["schemas"]["ContactResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #600): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
+        };
+        /** @description The schedule anchor of a payment rule, discriminated by kind. The anchor lives in the recurrence itself; the lower bound of generation is the rule's server-set since date. Weekdays are 0=Sunday..6=Saturday. Day 31 clamps to the month's last day; Feb 29 clamps in non-leap years — the schedule never drifts. */
+        Recurrence: components["schemas"]["RecurrenceDaily"] | components["schemas"]["RecurrenceWeekly"] | components["schemas"]["RecurrenceMonthly"] | components["schemas"]["RecurrenceYearly"];
+        RecurrenceDaily: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "daily";
+        };
+        RecurrenceWeekly: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "weekly";
+            weekdays: number[];
+        };
+        /** @description Хотя бы одно из daysOfMonth и lastDay обязательно (проверяется доменом). День 1..30 в коротких месяцах зажимается на последний день месяца без сдвига расписания. */
+        RecurrenceMonthly: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "monthly";
+            daysOfMonth?: number[];
+            /** @description Дополнительно срабатывать в последний день месяца (в коротких месяцах — в его фактический последний день). */
+            lastDay?: boolean;
+        };
+        RecurrenceYearly: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "yearly";
+            month: number;
+            day: number;
+        };
+        /** @description A payment rule on a property. The since date is server-set (today in the property owner's timezone) and never accepted from the client; backdated occurrences are not generated. */
+        PaymentCreateRequest: {
+            /** @enum {string} */
+            type: "income" | "expense";
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            recurrence: components["schemas"]["Recurrence"];
+            /** @description Slug of the default category catalog (user categories arrive in a later slice). */
+            categorySlug: string;
+            /**
+             * Format: date
+             * @description Окончание правила. Не раньше первого вхождения графика (recurrence от since): иначе правило не создало бы ни одной операции — 400 «Дата окончания не может быть раньше первого платежа» (тикет #1154). Конец на самом первом вхождении валиден.
+             */
+            endDate?: string | null;
             /** @default false */
-            clear_tenant_contact: boolean;
-            /** Format: date */
-            start_date?: string;
-            /** Format: date */
-            end_date?: string;
-            rent_amount_kopecks?: number;
-            deposit_amount_kopecks?: number;
-            payment_day?: number;
-            comment?: string;
+            autoPay: boolean;
+            /**
+             * @description Присылать ли событие «Автоплатёж исполнен» по правилу (#1189). Дефолт для новых — false («Не уведомлять», макет 3214-72739); явный null равен false.
+             * @default false
+             */
+            notifyAutoPaid: boolean | null;
+            /**
+             * @description За сколько дней предупреждать о вхождении («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет (выбор опционален). Напоминание живёт независимо от autoPay. У правила с autoPay=true присланный оффсет при создании форсируется в null (решение владельца по гриллингу #1186: автоплатёжная форма reminder-пикер не показывает).
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
         };
-        LeaseResponse: {
+        /** @description Partial payment update: an omitted field is left unchanged. endDate is tri-state — omitted keeps it, null clears it (open-ended), a date sets it. The since date is not editable. */
+        PaymentUpdateRequest: {
+            /** @enum {string} */
+            type?: "income" | "expense";
+            title?: string;
+            /** Format: int64 */
+            amountKopecks?: number;
+            recurrence?: components["schemas"]["Recurrence"];
+            categorySlug?: string;
+            /**
+             * Format: date
+             * @description Tri-state: omitted keeps the value, null clears it (open-ended), a date sets it. Окно графика (тикет #1154): слитое правило — после применения патча — не может остаться с концом раньше первого вхождения (смена recurrence при стоящей дате перепроверяет её): 400 «Дата окончания не может быть раньше первого платежа». Правки, не трогающие расписание и конец, окно не перепроверяют.
+             */
+            endDate?: string | null;
+            autoPay?: boolean;
+            /** @description Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps the current value, null turns the «Автоплатёж исполнен» event off, true/false sets it. */
+            notifyAutoPaid?: boolean | null;
+            /**
+             * @description Tri-state lead time of the payment reminder («Напоминание о платеже»): omitted keeps the current value, null turns reminders off, 1/3/7 sets the lead time.
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
+        };
+        /** @description The payment's category reference resolved by the server: a default catalog slug (label from the code catalog; a slug removed from the catalog falls back to the label «Прочее») or a user category. Icon and color are frontend catalog metadata keyed by slug. */
+        CategoryView: {
+            /** @enum {string} */
+            source: "default" | "custom";
+            slug?: string;
+            /** Format: uuid */
+            id?: string;
+            label: string;
+        };
+        /** @description One pause interval [fromDate, toDate); a null toDate is the active open-ended pause. */
+        PauseIntervalView: {
+            /** Format: date */
+            fromDate: string;
+            /** Format: date */
+            toDate?: string | null;
+        };
+        PaymentResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** @enum {string} */
+            type: "income" | "expense";
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            recurrence: components["schemas"]["Recurrence"];
+            /** Format: date */
+            since: string;
+            /** Format: date */
+            endDate?: string | null;
+            autoPay: boolean;
+            /** @description The per-payment gate of the «Автоплатёж исполнен» event (#1189): false — правило автоплатежа гасится молча. Дефолт новых правил — false (макет 3214-72739); существующим автоплатежам проставлен true миграцией (без поведенческого регресса, #1186). */
+            notifyAutoPaid: boolean;
+            category: components["schemas"]["CategoryView"];
+            /**
+             * @description The payment reminder's lead time in days (карта #822); null — напоминаний нет. Живёт независимо от autoPay.
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
+            /** @description The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12) — returned in the reads and the lists; another user's star never lands in this actor's read. */
+            isFavorite: boolean;
+            /** @description Server-computed settlement view of the rule (CONTEXT.md, «Завершённый платёж»): no planned operations — overdue included — and no occurrence beyond the last materialized date of any status. Never stored, never written by the client; derived on every read like the operation's overdue. The feed's display-safe flag («Полностью оплачен») lives on the global feed row. */
+            isCompleted: boolean;
+            /**
+             * Format: date
+             * @description «Следующая дата оплаты» (ticket #991, CONTEXT.md): the earliest stored planned operation on or after the owner's today (ADR 0048), else the rule's projection. Null when the schedule has no next occurrence — an open pause or a settled rule. The object payments list resolves it on every row; the single-rule reads do not compute it and always carry null.
+             */
+            nearestDate: string | null;
+            /** @description The rule is the rental's managed rent payment (ADR 0053, ticket #818): a rental row references it, any rental state — a completed rental is final and its payment is final with it. The rental is the source of truth for the amount, the payment day, the auto-pay and the planned end, so the rule mutations (pause, resume, patch, delete) answer 409; the payment facts («Оплатить») and the favorite star stay open. The reads carry the flag so the client hides the mutation actions instead of learning the 409 live. */
+            isRentalManaged: boolean;
+            /** @description The managing rental is completed («Завершена» — финал: чтение, Итоги, Удаление; ticket #1158). The payment screen's «Изменить аренду» lives only while the rental is unfinished — the read-side state of the #818 gate: the mutation gate stays state-blind (any rental row finalizes its payment), this flag carries the rental state machine onto the payment surfaces so every surface shows the same action set. */
+            isRentalCompleted: boolean;
+            pauses: components["schemas"]["PauseIntervalView"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PaymentsResponse: {
+            items: components["schemas"]["PaymentResponse"][];
+        };
+        /** @description Страница истории изменений платежа (двусторонний keyset, ADR 0065). */
+        PaymentChangesResponse: {
+            items: components["schemas"]["PaymentChangeItem"][];
+            /**
+             * @description Непрозрачный курсор страницы СТАРШЕ (в before_cursor следующего
+             *     запроса): продолжение журнала в прошлое. Отсутствует на пустой
+             *     или неполной странице — дальше старше ничего нет.
+             */
+            next_cursor?: string;
+            /**
+             * @description Непрозрачный курсор страницы МОЛОЖЕ (в after_cursor следующего
+             *     запроса): prepend записей, появившихся после загрузки видимых.
+             *     Отсутствует только на пустой странице.
+             */
+            prev_cursor?: string;
+        };
+        /**
+         * @description Одна строка журнала — снимок действия при записи (ADR 0065): кто и
+         *     какое действие совершил над правилом и какие поля двинулись. Чип
+         *     экрана строится из action и changes; переименования и удаления
+         *     пользовательской категории строку не меняют — лейбл-снапшот уже в
+         *     значении.
+         */
+        PaymentChangeItem: {
             /** Format: uuid */
             id: string;
             /**
              * Format: uuid
-             * @description Null when the property was deleted in detach mode.
+             * @description Кто совершил действие (пишут только пользователи).
              */
-            property_id?: string | null;
+            actor_id: string;
+            action: components["schemas"]["PaymentChangeAction"];
+            /**
+             * @description Диф полей старое→новое в словарном порядке; у paused/resumed —
+             *     пустой массив (состояние и есть содержимое строки).
+             */
+            changes: components["schemas"]["PaymentFieldChange"][];
+            /**
+             * @description Отметка происхождения системной строки (тикет #1342): null или
+             *     отсутствие — ручное действие пользователя (все строки до тикета);
+             *     auto_archive — системные пауза/снятие архивного моста: объект
+             *     ушёл в архив или вернулся из него.
+             * @enum {string|null}
+             */
+            origin?: "auto_archive" | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /**
+         * @description Род действия строки журнала (ADR 0065 §4): правка условий, пауза, возобновление. Завершения среди них нет — правило удалено, журнал каскадит вместе с ним (тикет #1377).
+         * @enum {string}
+         */
+        PaymentChangeAction: "updated" | "paused" | "resumed";
+        /**
+         * @description Один уехавший поле дифа: старое→новое значение. Значения типизированы
+         *     по словарю поля (ADR 0065 §2) — никогда строки-с-форматированием:
+         *     amount_kopecks — число копеек; recurrence — канонический JSON-объект
+         *     Recurrence (как в payments.recurrence); end_date — «YYYY-MM-DD» или
+         *     null; type/title — строки; auto_pay — булево; reminder_offset_days —
+         *     1/3/7 или null; category_slug — {slug, label} или {userCategoryId,
+         *     label} — ссылка со снапшотом лейбла на момент правки (канон
+         *     category_label операций, ADR 0049 §1).
+         */
+        PaymentFieldChange: {
+            field: components["schemas"]["PaymentChangeField"];
+            /** @description Прежнее значение поля — типизировано по словарю (см. описание схемы). */
+            old: unknown;
+            /** @description Новое значение поля — типизировано по словарю (см. описание схемы). */
+            new: unknown;
+        };
+        /**
+         * @description Словарь полей дифа — тот же словарь, что у мутационного аудита
+         *     контекста; порядок строк дифа в ответе — словарный.
+         * @enum {string}
+         */
+        PaymentChangeField: "type" | "title" | "amount_kopecks" | "recurrence" | "category_slug" | "end_date" | "auto_pay" | "reminder_offset_days";
+        /** @description One payment rule of the actor's visible merged feed (ticket #575) — the global «Платежи» card's data: the rule, its property label, the nearest schedule date and the overdue aggregates. */
+        PaymentGlobalItem: {
             /** Format: uuid */
-            owner_id: string;
-            tenant_contact: components["schemas"]["TenantContactResponse"] | null;
-            status: components["schemas"]["LeaseStatus"];
-            /** Format: date */
-            start_date: string;
-            /** Format: date */
-            end_date?: string | null;
-            rent_amount_kopecks: number;
-            deposit_amount_kopecks: number;
-            payment_day: number;
-            /** @description Deprecated. Kept for backward compatibility; true when the lease has any overdue rent operation. The frontend no longer relies on it. */
-            current_period_overdue: boolean;
-            /** @description True when the lease has at least one overdue rent operation of any period. */
-            has_overdue: boolean;
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** @description The display name of the bound property — the global screen's row label. */
+            propertyName: string;
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /** @enum {string} */
+            type: "income" | "expense";
+            category: components["schemas"]["CategoryView"];
+            autoPay: boolean;
+            /** @description The reading actor's personal favorite star (PUT favorite; the personal cutover #1308, D12). */
+            isFavorite: boolean;
+            /** @description The rule's position in the reading actor's personal favorite order (ticket #576; the personal cutover #1308, D12): the 1-based position the favorites edit mode's save assigned. Null when the actor has never placed the rule in their saved order — the favorites screens sort by favoriteOrder with nulls last (the new-favorite-at-the-end rule); the feed's own order is unchanged. */
+            favoriteOrder: number | null;
             /**
              * Format: date
-             * @description Earliest overdue rent operation date of any period.
+             * @description The property owner's calendar date (ADR 0048) the row's schedule math ran against — the client renders «Сегодня»/«Завтра» against it instead of knowing the owner's timezone.
              */
-            overdue_since?: string | null;
+            today: string;
             /**
              * Format: date
-             * @description Nearest pending rent operation date on or after as_of.
+             * @description «Ближайший»: the earliest stored planned operation on or after today, else the rule's projection — a bare schedule order without a view status. Null when the schedule has no next occurrence (an open pause or a settled rule).
              */
-            next_payment_date?: string | null;
+            nearestDate: string | null;
+            /** @description The row's display-complete flag (ticket #1341) — the hub card's «Полностью оплачен»: the computed settlement completeness (CONTEXT.md, «Завершённый платёж») with the open-pause exception resolved server-side. The raw computed flag answers «завершён» behind an open pause's cut cursor (the glossary's exception), and the feed row carries no pauses for the client to repeat the resolution the payment screen does by the end date — the flag ships pause-free. The stored-completed rules are hidden from the feed entirely; the payment detail read carries the raw flag (PaymentResponse.isCompleted). */
+            isCompleted: boolean;
+            /** @description The rule's overdue operations (planned with the date before today); 0 when the rule has none. */
+            overdueOperationCount: number;
+            /** @description The age of the oldest overdue operation in days (today minus its date, at least 1) — the «N дней» line; null when the rule has no overdue operations. */
+            overdueDays: number | null;
+            /**
+             * Format: uuid
+             * @description The oldest overdue operation's id (the same operation the overdueDays age speaks of) — the overdue card's link target on the global main screen (ticket #578); null when the rule has no overdue operations.
+             */
+            oldestOverdueOperationId: string | null;
+        };
+        /** @description The global «Платежи» feed (ticket #575) with the main screen's counters. Money is integer kopecks (ADR 0008). */
+        PaymentsGlobalResponse: {
+            items: components["schemas"]["PaymentGlobalItem"][];
+            /** @description The reading actor's favorite rules across the whole visible scope — the «Все избранные (N)» card; never narrowed by a search (the personal cutover #1308, D12). */
+            favoriteCount: number;
+            /** @description The overdue operations summed across the whole visible scope — the «Все просроченные (N)» card; never narrowed by a search. */
+            overdueOperationsCount: number;
+            /** @description The «На оплату» operations across the whole visible scope (ticket #1346) — the reminder-window (D−N ≤ today ≤ D) planned operations of the rules with a reminder and no auto-pay — the «На оплату (N)» card; never narrowed by a search. Overdue operations are not counted here (the «Все просроченные» card's own number). */
+            dueOperationsCount: number;
+            /** @description The smallest days-left (dueDate − today, ADR 0048) among the «На оплату» operations (ticket #1346) — the card's label source: «Сегодня» (0), «Завтра» (1), «Через N дней» (2..7). Null when the window is empty. */
+            dueNearestDays: number | null;
+        };
+        /** @description One «На оплату» row (ticket #1346): the (rule, operation) pair standing in the reminder window — the section page's card data. The bucket is the client's rendering of daysLeft (the server builds no labels): 0 → «Сегодня», 1 → «Завтра», 2..3 → «Через 3 дня», 4..7 → «Через 7 дней»; the rows arrive in the buckets' fixed order, «Сначала новые» inside one. */
+        PaymentDueItem: {
+            /**
+             * Format: uuid
+             * @description The payment rule's id — the card's link target (the payment screen), not the operation's own page.
+             */
+            paymentId: string;
+            /**
+             * Format: uuid
+             * @description The window operation's id — the row's identity (a rule can carry two window rows: today's and the next future one).
+             */
+            operationId: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** @description The display name of the bound property — the section card's object label. */
+            propertyName: string;
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /** @enum {string} */
+            type: "income" | "expense";
+            category: components["schemas"]["CategoryView"];
+            /**
+             * Format: date
+             * @description The property owner's calendar date (ADR 0048) the window math ran against.
+             */
+            today: string;
+            /**
+             * Format: date
+             * @description The window operation's date (D) — the card's deadline display.
+             */
+            dueDate: string;
+            /** @description dueDate − today (0..7 by the window's construction) — the bucket key and the hub card's «Через N дней» source. */
+            daysLeft: number;
+            /**
+             * @description The rule's reminder lead time (1/3/7) — the window's own N.
+             * @enum {integer}
+             */
+            reminderOffsetDays: 1 | 3 | 7;
+        };
+        /** @description The «На оплату» section (ticket #1346): the whole window in one read — the section is small by construction (the materialization keeps at most two window operations per rule, the reminder is armed on a fraction of the rules). dueOperationsCount repeats the rows' count — the same figure the feed's counters carry. */
+        PaymentsDueResponse: {
+            items: components["schemas"]["PaymentDueItem"][];
+            /** @description The window operations' count — the rows' own. */
+            dueOperationsCount: number;
+        };
+        /** @description The favorites edit mode's save request (ticket #576): the actor's visible favorite rules in their new order — the complete list as the edit screen shows it. */
+        PaymentsFavoriteOrderUpdate: {
+            /** @description The favorite rules in their new order; the server assigns dense 1-based positions in this order (ticket #576). */
+            paymentIds: string[];
+        };
+        /** @description The global payment rules search (ticket #575): the matched rows plus the matched-category chips and the whole scope's match count. */
+        PaymentsSearchGlobalResponse: {
+            items: components["schemas"]["PaymentGlobalItem"][];
+            matchedCategories: components["schemas"]["CategoryView"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
+            /**
+             * Format: int64
+             * @description The whole scope's match count under the query and the chip filter (ticket #599) — «найдено N»: the same predicate as the rows, independent of the window, identical on every walked page.
+             */
+            total: number;
+        };
+        /** @description One key of a property's stack (ticket #575): the rule behind it and its overdue flag — the red dot. */
+        PaymentObjectKey: {
+            /** Format: uuid */
+            paymentId: string;
+            hasOverdue: boolean;
+        };
+        /** @description One visible property with its payment stacks (ticket #575): the keys grouped into the auto-pay group and the rest. */
+        PaymentObjectItem: {
+            /** Format: uuid */
+            propertyId: string;
+            name: string;
+            address: string;
+            type: components["schemas"]["PropertyType"];
+            /**
+             * Format: date-time
+             * @description The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The cards order the pinned first — the actor's own order, never another participant's.
+             */
+            pinnedAt: string | null;
+            /** @description The card avatar's photo — the object's first (oldest) photo (ticket #582); with the private photos (ADR 0065) one image per object, streamed by the backend; null when the object has no photo. */
+            photoUrl: string | null;
+            /** @description The «Автоплатежи» group — the object's auto-pay rules. */
+            autoPayRules: components["schemas"]["PaymentObjectKey"][];
+            /** @description The «Платежи» group — the object's non-auto-pay rules. */
+            otherRules: components["schemas"]["PaymentObjectKey"][];
+        };
+        /** @description The global «Объекты» screen of the payments map (ticket #575). */
+        PaymentObjectsGlobalResponse: {
+            items: components["schemas"]["PaymentObjectItem"][];
+        };
+        /** @description The favorite toggle body of PUT favorite (an atomic UPDATE on the server — never a read-modify-write PATCH). */
+        FavoriteUpdateRequest: {
+            favorite: boolean;
+        };
+        /** @description The pin toggle body of PUT pin (ticket #577, the favorite toggle's canon): an atomic UPDATE on the server — never a read-modify-write PATCH. Pinning an already-pinned object keeps its original pin time (the PUT's idempotency — the order among the pinned never shifts). */
+        PinnedUpdateRequest: {
+            pinned: boolean;
+        };
+        /** @description The body of the manual operation creation (ticket #569). The fact is born paid on the client-chosen calendar date; when the date is absent it is the property owner's today (ADR 0048) — backwards compatible. No payment form exists behind a manual fact. */
+        CreateOperationRequest: {
+            /** @enum {string} */
+            type: "income" | "expense";
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /** @description Slug of the default category catalog; frozen as the operation's snapshot. */
+            categorySlug: string;
+            /**
+             * Format: date
+             * @description The client-chosen calendar date of the fact (backdating, ticket #1392): RFC 3339 full-date, no time and no timezone — the calendar-day semantics, not a moment. It lands in both the planned date and the paid date (the fact is born paid). Absent means the property owner's today (ADR 0048). A date after the owner's today is rejected with 400 «Дата операции не может быть в будущем»; there is no lower bound — the past is unlimited.
+             */
+            date?: string;
+        };
+        /** @description One operation of the Payments context: a payment occurrence or a manual fact. status carries overdue as a server-computed view status (planned with the date already past in the property owner's timezone). */
+        OperationResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** @description The display name of the bound property — the global screen's row label (list projection only, filled on the global listing; null elsewhere — the property screen resolves the property by its id). */
+            propertyName?: string | null;
+            /**
+             * Format: uuid
+             * @description The originating rule; null marks it deleted or the fact manual.
+             */
+            paymentId: string | null;
+            /**
+             * @description Where the operation came from: a rule occurrence (payment) or a one-off manual fact (manual). A rule occurrence keeps payment after its rule is deleted — with paymentId null that pair marks the deleted-rule tail (ticket #1371): the operation page shows the same detail rows as before the deletion.
+             * @enum {string}
+             */
+            origin: "manual" | "payment";
+            /** Format: date */
+            date: string;
+            /** Format: date */
+            paidDate: string | null;
+            /** @enum {string} */
+            status: "planned" | "paid" | "overdue";
+            /** @enum {string} */
+            type: "income" | "expense";
+            title: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /** @description Category label snapshot frozen at materialization time. */
+            categoryLabel: string;
+            /** @description Default-catalog slug snapshot for icon rendering; null when absent. */
+            categorySlug: string | null;
+            /**
+             * Format: date-time
+             * @description Момент последнего касания строки. Оплаченная строка после оплаты не меняется, так что у факта это момент оплаты: история платежа ставит его в ленту по реальному времени и читает порядок оплат внутри одного дня (#1195). В ответах создания и оплаты — момент самого действия.
+             */
+            updatedAt: string;
+        };
+        OperationsResponse: {
+            items: components["schemas"]["OperationResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #597): pass it back as the cursor query parameter to fetch the next page. null — the feed is exhausted. */
+            nextCursor: string | null;
+            /**
+             * Format: int64
+             * @description The whole scope's paid count under the query's filters (ticket #599) — «найдено N»: the same predicate as the rows, independent of the window, identical on every walked page. The global feed's field (GET /operations): the property-scoped listings sharing this schema omit it.
+             */
+            total?: number;
+        };
+        /** @description One category's total over the summarized scope. Rows without a category snapshot never appear here — their amounts still count in the totals. */
+        OperationsSummaryCategory: {
+            categorySlug: string;
+            categoryLabel: string;
+            /** @enum {string} */
+            type: "income" | "expense";
+            /** Format: int64 */
+            totalKopecks: number;
+        };
+        /** @description The operations summary behind the «Операции объекта» screens: the period totals by direction and the per-category breakdown. Money is integer kopecks (ADR 0008). */
+        OperationsSummaryResponse: {
+            /** Format: int64 */
+            incomeTotalKopecks: number;
+            /** Format: int64 */
+            expenseTotalKopecks: number;
+            categories: components["schemas"]["OperationsSummaryCategory"][];
+        };
+        /**
+         * @description How often the rule produces tasks. Parameters (weekday sets, day-of-month lists) do not exist in v1 — the anchor date alone drives the schedule: weekly keeps the anchor's weekday, monthly/yearly clamp to the month's length (the 31st → 28/29, February 29 → 28).
+         * @enum {string}
+         */
+        TaskRepeat: "once" | "daily" | "weekly" | "monthly" | "yearly";
+        /** @description Wall-clock time HH:MM at minute precision; seconds never enter the system. */
+        TaskTime: string;
+        /** @description The task rule create payload. The date is optional — an undated rule (only once) produces a single dateless task («Без срока») that materializes immediately; the time requires the date; a repeat other than once requires the date. */
+        TaskRuleCreateRequest: {
+            title: string;
+            comment?: string;
+            /** Format: date */
+            dueDate?: string;
+            dueTime?: components["schemas"]["TaskTime"];
+            repeat: components["schemas"]["TaskRepeat"];
+        };
+        /** @description Partial rule update: an omitted field is left unchanged; comment, dueDate and dueTime are tri-state — null clears them. */
+        TaskRuleUpdateRequest: {
+            title?: string;
             comment?: string | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
+            /** Format: date */
+            dueDate?: string | null;
+            dueTime?: components["schemas"]["TaskTime"] | null;
+            repeat?: components["schemas"]["TaskRepeat"];
         };
-        LeasesResponse: {
-            items: components["schemas"]["LeaseResponse"][];
-        };
-        TenantContactCreateRequest: {
-            name: string;
-            surname?: string;
-            patronymic?: string;
-            phone?: string;
-            email?: string;
-            comment?: string;
+        /** @description One task rule: the setting that produces tasks. It is never itself completed, overdue or undated — those are states of its tasks. propertyId null marks the property-less slice (ADR 0052): the rule lives in the owner's own book. */
+        TaskRuleResponse: {
+            /** Format: uuid */
+            id: string;
             /**
              * Format: uuid
-             * @description Optional property context. When set, the contact is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the contact is created in the actor's own account.
+             * @description The bound property; null = the rule without a property (ADR 0052).
              */
-            property_id?: string | null;
-        };
-        TenantContactUpdateRequest: {
-            name?: string;
-            surname?: string;
-            patronymic?: string;
-            phone?: string;
-            email?: string;
-            comment?: string;
-        };
-        TenantContactResponse: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            owner_id: string;
-            name: string;
-            surname: string | null;
-            patronymic: string | null;
-            phone: string | null;
-            email: string | null;
+            propertyId: string | null;
+            title: string;
             comment: string | null;
-            is_active: boolean;
-            active_lease: components["schemas"]["LeaseResponse"] | null;
-            last_lease: components["schemas"]["LeaseResponse"] | null;
+            /**
+             * Format: date
+             * @description The rule's anchor — the first occurrence date; null = undated (once only).
+             */
+            dueDate: string | null;
+            /** @description Wall-clock time HH:MM at minute precision; null = the date only. */
+            dueTime: string | null;
+            repeat: components["schemas"]["TaskRepeat"];
             /** Format: date-time */
-            created_at: string;
+            createdAt: string;
             /** Format: date-time */
-            updated_at: string;
+            updatedAt: string;
         };
-        TenantContactsResponse: {
-            items: components["schemas"]["TenantContactResponse"][];
-        };
-        PropertyContactCreateRequest: {
-            name: string;
-            phone: string;
-        };
-        PropertyContactUpdateRequest: {
-            name?: string;
-            phone?: string;
-        };
-        PropertyContactResponse: {
+        /** @description One task — a rule occurrence and the unit that gets completed by hand. title/comment/dueDate/dueTime are snapshots taken at materialization; status is the server-computed view bucket (active, overdue — from the due minute inclusive, or from the end of the day for a date-only task; undated; completed). */
+        TaskResponse: {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
-            property_id: string;
-            name: string;
-            phone: string;
+            /**
+             * Format: uuid
+             * @description The bound property, snapshotted at materialization; null = the task without a property (ADR 0052).
+             */
+            propertyId: string | null;
+            /** @description The display name of the bound property — the global screen's row label (list projection only, filled on the global listing; null elsewhere — the property screen resolves the property by its id). */
+            propertyName?: string | null;
+            /**
+             * Format: uuid
+             * @description The producing rule; null marks it deleted (the journal row is read-only).
+             */
+            ruleId: string | null;
+            /** Format: date */
+            dueDate: string | null;
+            /** @description Snapshot of the rule's due time; null = the date only. */
+            dueTime: string | null;
+            title: string;
+            comment: string | null;
+            /** @description The producing rule's repeat as of the read — the screen's ↻ mark. Read through the live rule, not snapshotted: null once the rule is deleted (the journal row keeps its content snapshots, not the rule's settings). */
+            repeat: components["schemas"]["TaskRepeat"] | null;
+            /**
+             * Format: date
+             * @description The completion fact; it may differ from the due date.
+             */
+            completedDate: string | null;
+            /** @enum {string} */
+            status: "active" | "overdue" | "undated" | "completed";
             /** Format: date-time */
-            created_at: string;
+            createdAt: string;
             /** Format: date-time */
-            updated_at: string;
+            updatedAt: string;
         };
-        PropertyContactsResponse: {
-            items: components["schemas"]["PropertyContactResponse"][];
+        /** @description One tasks page: the items of the requested bucket, its total count (the «Выполненные N» counter) and the data owner's today — the day boundary for the «Сегодня»/«Завтра» sections. */
+        TasksResponse: {
+            items: components["schemas"]["TaskResponse"][];
+            /** @description The total count of the same bucket (not the page). */
+            total: number;
+            /**
+             * Format: date
+             * @description The data owner's current date (ADR 0048).
+             */
+            today: string;
         };
         /**
          * @description The participant's role on a property. `owner` is the object owner (synthesized, never stored as a membership); `full_access` and `viewer` are granted memberships.
@@ -2134,14 +3595,15 @@ export interface components {
             user_id: string | null;
             /**
              * Format: email
-             * @description Invitee email; filled only on pending invitation rows, null for registered participants.
+             * @description The participant's email address. Filled on every row the reader may see — registered participants and pending invitations alike (owner decision 2026-09-20, #758: nothing is hidden from viewers); null when the address did not resolve.
              */
             email?: string | null;
             role: components["schemas"]["PropertyAccessMemberRole"];
             is_owner: boolean;
-            /** @description Participant display name (name and surname, or a masked phone). Never the raw phone or email. */
+            /** @description Participant display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123). Never a phone, never an email. */
             display_name?: string;
-            has_email?: boolean;
+            /** @description The participant's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/users/{userId}/photo — every reader of the list shares this property with every listed participant. Null for a pending row, the synthesized owner without a photo, or a user without a photo; a suspended member's path answers 404 (suspended access sees nothing) and the client falls back to the placeholder. */
+            photo_url?: string | null;
             /**
              * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
              * @enum {string}
@@ -2179,368 +3641,146 @@ export interface components {
             /** @enum {string} */
             role: "full_access" | "viewer";
         };
+        ParticipantsResponse: {
+            items: components["schemas"]["ParticipantResponse"][];
+        };
+        ParticipantResponse: {
+            /** @description The stable person identifier to address this aggregate by: the registered user's uuid, or the invitee email for a pending row. */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Registered user id; null for a pending email row.
+             */
+            user_id?: string | null;
+            /**
+             * Format: email
+             * @description The invitee email of a pending row; for a registered user, their email resolved for display (null when the user has none).
+             */
+            email?: string | null;
+            /** @description The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row (the email is the label). */
+            display_name?: string | null;
+            /** @description The registered user's profile photo same-origin streaming path (ADR 0065; решение владельца #1286): /api/users/{userId}/photo, readable while the reader shares a readable property with the user; a revoked access answers 404 and the client falls back to the placeholder. Null for a pending row or a user without a photo. */
+            photo_url?: string | null;
+            /**
+             * @description The aggregate badge (issue #693): "all_properties" — active access to every property in the reading scope; "partial" — active access to accessible_properties_count of them; "limit_exceeded" — at least one suspended membership (the recipient's tariff limit was hit). Display copy: «Доступ ко всем объектам» / «Доступно N объектов» / «Превышен лимит объектов».
+             * @enum {string}
+             */
+            aggregate_status: "all_properties" | "partial" | "limit_exceeded";
+            /** @description The number of properties with active access. */
+            accessible_properties_count: number;
+            /** @description The person's access legs on the reading scope's properties. */
+            properties: components["schemas"]["ParticipantPropertyResponse"][];
+        };
+        ParticipantPropertyResponse: {
+            /** Format: uuid */
+            property_id: string;
+            title: string;
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+            /**
+             * @description The access lifecycle on this property: "active"/"suspended" memberships, "pending" email invitation.
+             * @enum {string}
+             */
+            status: "active" | "suspended" | "pending";
+            type: components["schemas"]["PropertyType"];
+            /** @description The property photo's same-origin streaming path (ADR 0065), live at read; null when the property has no photo. The leg row is self-sufficient — the client needs no /properties join for the avatar (остаток #1244 п.3, решение #1286). */
+            photo_url: string | null;
+        };
         PropertyAccessMemberUpdateRequest: {
             /** @enum {string} */
             role: "full_access" | "viewer";
         };
+        ParticipantInviteRequest: {
+            /**
+             * Format: email
+             * @description Invitee email. A registered email activates memberships instantly; an unregistered email becomes pending invitations plus one invite email listing the objects. The actor's own email is rejected.
+             */
+            email: string;
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+            /** @description The objects to grant access to — a snapshot chosen at invite time. Duplicate ids collapse to the first occurrence. */
+            property_ids: string[];
+        };
+        ParticipantPropertiesAddRequest: {
+            /** @enum {string} */
+            role: "full_access" | "viewer";
+            /** @description The objects to add to the participant's existing access — a snapshot chosen at grant time. Duplicate ids collapse to the first occurrence. */
+            property_ids: string[];
+        };
+        /**
+         * @description The per-property result of a participant grant. "active"/"suspended" — a membership was created (the recipient's tariff slot was free / exhausted); "pending" — an invitation was stored and the invite email will be sent; "skipped_duplicate" — the person already holds access or a pending invitation on the property; "skipped_archived" — the property is archived (granting new access is forbidden);  "skipped_owner" — the target is the property's owner themself; "skipped_unavailable" — the property is not in the reading actor's manage scope (unknown, foreign, or otherwise unmanageable).
+         * @enum {string}
+         */
+        ParticipantGrantOutcome: "active" | "suspended" | "pending" | "skipped_duplicate" | "skipped_archived" | "skipped_owner" | "skipped_unavailable";
+        ParticipantGrantResult: {
+            /** Format: uuid */
+            property_id: string;
+            outcome: components["schemas"]["ParticipantGrantOutcome"];
+            /**
+             * Format: uuid
+             * @description The created membership id; set only for active/suspended.
+             */
+            membership_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The created invitation id; set only for pending.
+             */
+            invitation_id?: string | null;
+        };
+        ParticipantGrantResultsResponse: {
+            items: components["schemas"]["ParticipantGrantResult"][];
+        };
         PropertiesResponse: {
             items: components["schemas"]["PropertyResponse"][];
             /**
-             * @description Number of shared properties hidden from the recipient due to a tariff slot shortage (suspended memberships). Zero for owners and when the recipient is within their limit.
-             * @default 0
+             * Format: date
+             * @description The reading actor's calendar date (ADR 0048) — the «today» the client counts the «Осталось N месяцев» rental badge against (ticket #586; the tasks feed's today rule, #521).
              */
-            hidden_shared_count: number;
+            today: string;
+            /** @description The data owner's archived property count (issue #1233): the properties hub gates the «Архив» entry on it — no archived rows, no button. The actor's own archived rows only; shared properties contribute nothing. */
+            archived_count: number;
+            /** @description The reading actor's suspended shared memberships, FIFO order (ticket #702): shared objects hidden from them by a tariff slot shortage, returned as blur-card placeholders («Объект недоступен») instead of the hidden_shared_count footnote they replace. Empty for owners and recipients within their limit. */
+            suspended_shared?: components["schemas"]["SuspendedSharedProperty"][];
+        };
+        /** @description A suspended shared membership of the reading actor (ticket #702): the blur-card of an object temporarily unavailable because the actor's tariff limit is exceeded. The card renders for real under the blur (Figma 2213-99113) — the payload carries the object's own title and address plus the owner contact the reason sheet renders (Figma 2229-100002). */
+        SuspendedSharedProperty: {
+            /** Format: uuid */
+            property_id: string;
+            /**
+             * @description The recipient's role on the suspended access.
+             * @enum {string}
+             */
+            access_role: "full_access" | "viewer";
+            /** @description The object's title — the blurred card renders it. */
+            name: string;
+            /** @description The object's address — the blurred card renders it. */
+            address: string;
+            /** @description The owner's public display name («Имя Фамилия» or the anonymous label «Пользователь» — карта #1105, аменд #1123). */
+            owner_name: string;
+            /** @description The owner's account email for the reason sheet's contact row — a deliberate exposure for this surface (Figma 2229-100002): the recipient needs the contact to resolve the suspension with the owner. Empty when the owner has no email. */
+            owner_email: string;
+        };
+        /** @description The properties search page (ticket #601): the matched cards in the keyset window's order. */
+        PropertiesSearchResponse: {
+            items: components["schemas"]["PropertyResponse"][];
+            /** @description The opaque continuation cursor of the keyset window (ticket #601): pass it back as the cursor query parameter to fetch the next page. null — the matches are exhausted. */
+            nextCursor: string | null;
         };
         /** @enum {string} */
-        PropertyType: "apartment" | "room" | "apartments" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
+        PropertyType: "apartment" | "room" | "apartments" | "studio" | "house" | "commercial" | "office" | "warehouse" | "garage" | "parking" | "land";
         /** @enum {string} */
         PropertyStatus: "active" | "maintenance" | "archived";
         /** @enum {string} */
-        LeaseStatus: "awaiting_start" | "active" | "requires_action" | "completed" | "archived";
-        /** @enum {string} */
         SubscriptionStatus: "active" | "grace" | "cancelled";
-        /** @enum {string} */
-        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "partial_refunded" | "refunding";
+        /**
+         * @description Lifecycle states of a subscription payment. Refunds are full-amount only (ADR 0037): the legacy partial_refunded is not part of the vocabulary, refunding is the internal reservation shown to the user as pending.
+         * @enum {string}
+         */
+        SubscriptionPaymentStatus: "pending" | "succeeded" | "failed" | "refunded" | "refunding";
         /** @enum {string} */
         AdminSubscriptionPaymentPeriod: "month" | "year";
         /** @enum {string} */
         TariffName: "basic" | "pro" | "business";
-        /** @enum {string} */
-        OperationType: "income" | "expense";
-        OperationCategory: {
-            /** Format: uuid */
-            id: string;
-            type: components["schemas"]["OperationType"];
-            name: string;
-            code?: string | null;
-            /** Format: date-time */
-            created_at: string;
-        };
-        OperationCategoryCreateRequest: {
-            type: components["schemas"]["OperationType"];
-            name: string;
-            /**
-             * Format: uuid
-             * @description Optional property context. When set, the category is created in the account of the property's data owner and requires the edit capability on that property (shared access); a viewer gets 403 and an actor without access gets 404. When absent, the category is created in the actor's own account.
-             */
-            property_id?: string | null;
-        };
-        /** @enum {string} */
-        OperationStatus: "pending" | "overdue" | "paid" | "received" | "unconfirmed";
-        /**
-         * @default operation_date_desc
-         * @enum {string}
-         */
-        OperationListSort: "operation_date_desc" | "operation_date_asc";
-        OperationCreateRequest: {
-            type: components["schemas"]["OperationType"];
-            /** Format: uuid */
-            category_id: string;
-            name: string;
-            amount_kopecks: number;
-            /** Format: date */
-            operation_date: string;
-            comment?: string;
-            /** Format: uuid */
-            lease_id?: string;
-            /**
-             * @description 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before the operation date.
-             * @enum {integer|null}
-             */
-            reminder_offset_days?: 0 | 1 | 3 | 7 | null;
-        };
-        OperationMoveRequest: {
-            /**
-             * Format: uuid
-             * @description Target property. Must belong to the same owner as the operation's current property.
-             */
-            property_id: string;
-        };
-        OperationUpdateRequest: {
-            type?: components["schemas"]["OperationType"];
-            /** Format: uuid */
-            category_id?: string;
-            name?: string;
-            amount_kopecks?: number;
-            /** Format: date */
-            operation_date?: string;
-            comment?: string;
-            /** Format: uuid */
-            lease_id?: string;
-            /**
-             * @description 0 clears any existing reminder; 1/3/7 reschedules the reminder.
-             * @enum {integer|null}
-             */
-            reminder_offset_days?: 0 | 1 | 3 | 7 | null;
-        };
-        OperationResponse: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            owner_id: string;
-            /**
-             * Format: uuid
-             * @description Null when the property was deleted in detach mode.
-             */
-            property_id?: string | null;
-            property_status?: components["schemas"]["PropertyStatus"];
-            /** Format: uuid */
-            lease_id?: string | null;
-            /** Format: uuid */
-            recurring_operation_id?: string | null;
-            type: components["schemas"]["OperationType"];
-            /** Format: uuid */
-            category_id: string;
-            category_name: string;
-            name: string;
-            amount_kopecks: number;
-            /** Format: date */
-            operation_date: string;
-            status: components["schemas"]["OperationStatus"];
-            comment?: string | null;
-            is_exception: boolean;
-            /** @enum {integer|null} */
-            reminder_offset_days?: 1 | 3 | 7 | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        OperationsResponse: {
-            items: components["schemas"]["OperationResponse"][];
-            limit: number;
-            offset: number;
-            has_more: boolean;
-            next_offset?: number | null;
-        };
-        RecurringOperationCreateRequest: {
-            type: components["schemas"]["OperationType"];
-            /** Format: uuid */
-            category_id: string;
-            name: string;
-            amount_kopecks: number;
-            /** Format: date */
-            start_date: string;
-            payment_day?: number;
-            /** Format: date */
-            end_date?: string;
-            comment?: string;
-            /** @enum {string} */
-            periodicity?: "monthly" | "yearly";
-            /**
-             * @description 0 means no reminder; 1/3/7 schedule an SMS reminder that many days before each generated operation.
-             * @enum {integer|null}
-             */
-            reminder_offset_days?: 0 | 1 | 3 | 7 | null;
-        };
-        RecurringOperationUpdateRequest: {
-            type?: components["schemas"]["OperationType"];
-            /** Format: uuid */
-            category_id?: string;
-            name?: string;
-            amount_kopecks?: number;
-            /** Format: date */
-            start_date?: string;
-            payment_day?: number;
-            /** Format: date */
-            end_date?: string;
-            comment?: string;
-            /** @enum {string} */
-            periodicity?: "monthly" | "yearly";
-            /** Format: date */
-            apply_from_date?: string;
-            /**
-             * @description 0 clears any existing reminders; 1/3/7 reschedules reminders for future generated operations.
-             * @enum {integer|null}
-             */
-            reminder_offset_days?: 0 | 1 | 3 | 7 | null;
-        };
-        RecurringOperationResponse: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            owner_id: string;
-            /**
-             * Format: uuid
-             * @description Null when the property was deleted in detach mode.
-             */
-            property_id?: string | null;
-            /** Format: uuid */
-            lease_id?: string | null;
-            type: components["schemas"]["OperationType"];
-            /** Format: uuid */
-            category_id: string;
-            category_name: string;
-            name: string;
-            amount_kopecks: number;
-            /** Format: date */
-            start_date: string;
-            payment_day: number;
-            /** Format: date */
-            end_date?: string | null;
-            /** @enum {string} */
-            periodicity: "monthly" | "yearly";
-            /** @enum {string} */
-            status: "active" | "paused";
-            comment?: string | null;
-            /** @enum {integer|null} */
-            reminder_offset_days?: 1 | 3 | 7 | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        RecurringOperationsResponse: {
-            items: components["schemas"]["RecurringOperationResponse"][];
-        };
-        ReminderResponse: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            owner_id: string;
-            /** @enum {string} */
-            target_type: "operation" | "recurring_operation" | "lease" | "free";
-            /** Format: uuid */
-            operation_id?: string | null;
-            /** Format: uuid */
-            recurring_operation_id?: string | null;
-            /** Format: uuid */
-            lease_id?: string | null;
-            /** Format: uuid */
-            free_reminder_id?: string | null;
-            /** Format: uuid */
-            property_id?: string | null;
-            /** @enum {string} */
-            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder";
-            /** @enum {string} */
-            status: "pending" | "sent" | "failed" | "cancelled" | "skipped";
-            /** Format: date-time */
-            scheduled_at: string;
-            /** Format: date-time */
-            sent_at?: string | null;
-            failed_attempts: number;
-            /** Format: date-time */
-            next_attempt_at?: string | null;
-            message_title: string;
-            message_body: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        CalendarRemindersResponse: {
-            items: components["schemas"]["CalendarReminderItem"][];
-        };
-        /** @description One calendar entry — a free, operation, or system reminder projected into the requested date range. Free reminders are expanded from their template on read (independent of materialization horizon) and carry no status; operation/lease reminders come from the reminders table with a status. Orphan reminders (property deleted in detach mode) have property_id = null and has_property = false. */
-        CalendarReminderItem: {
-            /**
-             * Format: uuid
-             * @description For free reminders — the free_reminder template id (same id repeats for each occurrence of a periodic reminder). For operation/system — the concrete reminder row id.
-             */
-            id: string;
-            /** @enum {string} */
-            type: "free" | "operation" | "system";
-            /** Format: date-time */
-            scheduled_at: string;
-            title: string;
-            /** Format: uuid */
-            property_id?: string | null;
-            /** @description Resolved property name; null means "Без объекта" (orphan). */
-            property_name?: string | null;
-            has_property: boolean;
-            /**
-             * @description Present only for operation/system; null for free.
-             * @enum {string|null}
-             */
-            status?: "pending" | "sent" | null;
-            /** @enum {string|null} */
-            event_type?: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder" | null;
-            /** Format: uuid */
-            operation_id?: string | null;
-            /** Format: uuid */
-            lease_id?: string | null;
-            /** Format: uuid */
-            free_reminder_id?: string | null;
-            /**
-             * @description Present only for free reminders.
-             * @enum {string|null}
-             */
-            periodicity?: "once" | "daily" | "weekly" | "monthly" | "yearly" | null;
-        };
-        ReminderCreateRequest: {
-            /** Format: date */
-            reminder_date: string;
-        };
-        ReminderUpdateRequest: {
-            /** Format: date */
-            reminder_date: string;
-        };
-        RemindersResponse: {
-            items: components["schemas"]["ReminderResponse"][];
-        };
-        FreeReminderResponse: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            owner_id: string;
-            /** Format: uuid */
-            property_id: string;
-            title: string;
-            /** Format: date-time */
-            trigger_at: string;
-            /** @enum {string} */
-            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        FreeReminderCreateRequest: {
-            title: string;
-            /** Format: date-time */
-            trigger_at: string;
-            /** @enum {string} */
-            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
-        };
-        FreeReminderUpdateRequest: {
-            title?: string;
-            /** Format: date-time */
-            trigger_at?: string;
-            /** @enum {string} */
-            periodicity?: "once" | "daily" | "weekly" | "monthly" | "yearly";
-        };
-        FreeRemindersResponse: {
-            items: components["schemas"]["FreeReminderResponse"][];
-        };
-        /** @description A single nearest upcoming occurrence of a periodic (or one-shot) free reminder. Unlike FreeReminderResponse (a template), this represents one projected fire time — trigger_at is the instant of this occurrence. */
-        UpcomingFreeReminderResponse: {
-            /** Format: uuid */
-            free_reminder_id: string;
-            title: string;
-            /** Format: uuid */
-            property_id: string;
-            /** Format: date-time */
-            trigger_at: string;
-            /** @enum {string} */
-            periodicity: "once" | "daily" | "weekly" | "monthly" | "yearly";
-        };
-        UpcomingFreeRemindersResponse: {
-            items: components["schemas"]["UpcomingFreeReminderResponse"][];
-        };
-        NotificationPreference: {
-            /** @enum {string} */
-            event_type: "operation_due" | "operation_overdue" | "lease_expiring" | "lease_requires_action" | "free_reminder";
-            /** @description Permission to deliver this event type over email. */
-            email_allowed: boolean;
-            /** @description Permission to deliver this event type over Web Push. */
-            push_allowed: boolean;
-        };
-        NotificationPreferencesResponse: {
-            preferences: components["schemas"]["NotificationPreference"][];
-        };
-        NotificationPreferencesUpdateRequest: {
-            preferences: components["schemas"]["NotificationPreference"][];
-        };
         VapidPublicKeyResponse: {
             /** @description The application server's VAPID P-256 public key, base64url without padding (RFC 8292). Pass this to `pushManager.subscribe({ applicationServerKey })`. */
             public_key: string;
@@ -2557,6 +3797,7 @@ export interface components {
              * @description Optional subscription expiration instant reported by the browser (RFC 8030).
              */
             expiration_time?: string | null;
+            categories?: components["schemas"]["NotificationCategoryPreferences"];
         };
         PushSubscriptionDeleteRequest: {
             /** @description The push endpoint URL to unregister (same value sent on subscribe). */
@@ -2566,55 +3807,305 @@ export interface components {
             /** Format: uuid */
             id: string;
             endpoint: string;
+            categories: components["schemas"]["NotificationCategoryPreferences"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
         };
-        PendingPopupsResponse: {
-            popups: string[];
+        PushPreferencesRequest: {
+            /** @description Push endpoint URL устройства (тот же, что при подписке). */
+            endpoint: string;
+            categories: components["schemas"]["NotificationCategoryPreferences"];
         };
-        FinanceReportResponse: {
-            period: components["schemas"]["FinanceReportPeriod"];
-            totals: components["schemas"]["FinanceReportTotals"];
-            by_property: components["schemas"]["FinanceReportPropertyRow"][];
-            by_category: components["schemas"]["FinanceReportCategoryRow"][];
-            by_month: components["schemas"]["FinanceReportMonthRow"][];
+        /** @description Состояние устройства (спека #1028): категорийные флаги подписки; сам факт 200 = подписка есть = мастер-тумблер устройства включён («строка есть = включено»), 404 = выключено. */
+        PushPreferencesResponse: {
+            endpoint: string;
+            categories: components["schemas"]["NotificationCategoryPreferences"];
         };
-        FinanceReportPeriod: {
-            /** Format: date */
-            from: string;
-            /** Format: date */
-            to: string;
+        /** @description Флаги четырёх настраиваемых категорий одного канала (решение #738) — email держит копию на аккаунте, push — на устройстве. Тариф и Системные всегда включены и здесь не хранятся. */
+        NotificationCategoryPreferences: {
+            rental: boolean;
+            payments_operations: boolean;
+            tasks: boolean;
+            shared_access: boolean;
         };
-        FinanceReportTotals: {
-            income_kopecks: number;
-            expense_kopecks: number;
-            profit_kopecks: number;
+        NotificationPreferencesRequest: {
+            email: components["schemas"]["NotificationCategoryPreferences"];
         };
-        FinanceReportPropertyRow: {
+        NotificationPreferencesResponse: {
+            email: components["schemas"]["NotificationCategoryPreferences"];
+        };
+        /** @description Строка ленты одного получателя (решение #737): снимок текста, payload-ссылки, личные флаги. */
+        NotificationItem: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Тип события каталога v1 (решение #737).
+             * @example payment_due
+             */
+            event_type: string;
+            /**
+             * @description Категория уведомлений (группа настроек и иконка).
+             * @example payments_operations
+             */
+            category: string;
+            title: string;
+            body: string;
+            /** @description Строка над заголовком — имя объекта/тарифа или «Системные уведомления». */
+            context_label?: string | null;
+            /**
+             * Format: date-time
+             * @description Момент события, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
+             */
+            created_at: string;
+            /** Format: date-time */
+            read_at?: string | null;
+            /**
+             * @description Тот же free-form payload, что несёт NotificationDetailResponse
+             *     (решение #737, контракт #743): ленте он нужен ради снимков
+             *     карточек без хода на страницу — фото и глиф объекта в строке
+             *     ленты берутся из payload.property (#1275). Отсутствует у строк
+             *     без payload-снимков.
+             */
+            payload?: Record<string, never>;
+        };
+        NotificationDetailResponse: {
+            /** Format: uuid */
+            id: string;
+            event_type: string;
+            category: string;
+            title: string;
+            body: string;
+            context_label?: string | null;
+            /**
+             * @description Payload-ссылки и снимки имён (решение #737): property {id, name,
+             *     address}, actor {id, name, email}, rental_id, payment_id, payment_date,
+             *     payment_category, task_id, task_rule_id, membership_id, tariff {slug,
+             *     period, amount_kopecks, active_until}. address и email — снимки
+             *     карточек (решение владельца 19.09.2026, #745): строка карточки,
+             *     которой нет в снимке, просто не рендерится. payment_id — id правила,
+             *     payment_date — дата операции (решение #737: payment = правило +
+             *     дата операции, #749). task_rule_id — правило задачи: экран задачи —
+             *     экран её правила, переход ведёт по нему (#750). События доступа
+             *     (#751) несут membership_id — сущность перехода, переживающую
+             *     снесённое приглашение.
+             *     payment_category — снимок категории правила платёжных событий
+             *     (решение владельца 14.10.2026): {source: "default", slug} для
+             *     дефолтного каталога или {source: "custom", name} для
+             *     пользовательской; иконка и цвет — метаданные фронтенд-каталога по
+             *     слагу и в ответе не ездят. Нет у строк, опубликованных до снимка.
+             *     Все поля опциональны; суммы — BIGINT копейки.
+             */
+            payload: Record<string, never>;
+            /** @description Действия, доступные этому читателю сейчас (вычислены при чтении, решение #737). */
+            actions: components["schemas"]["NotificationAction"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            read_at?: string | null;
+        };
+        /**
+         * @description Кнопка-переход на экран сущности, никогда не мутация (решение #737).
+         * @enum {string}
+         */
+        NotificationAction: "rental_extend" | "rental_complete" | "open_payment" | "open_task" | "open_property" | "open_property_members" | "open_tariffs" | "open_payment_methods";
+        NotificationsPageResponse: {
+            items: components["schemas"]["NotificationItem"][];
+            /** @description Непрозрачный курсор следующей страницы; отсутствует в конце ленты. */
+            next_cursor?: string;
+        };
+        /** @description Страница ленты «История действий» (двусторонний keyset, ADR 0061 §7). */
+        HistoryPageResponse: {
+            items: components["schemas"]["HistoryItem"][];
+            /**
+             * @description Непрозрачный курсор страницы СТАРШЕ (в before_cursor следующего
+             *     запроса): продолжение ленты в прошлое. Отсутствует на пустой или
+             *     неполной странице — дальше старше ничего нет.
+             */
+            next_cursor?: string;
+            /**
+             * @description Непрозрачный курсор страницы МОЛОЖЕ (в after_cursor следующего
+             *     запроса): prepend записей, появившихся после загрузки видимых.
+             *     Отсутствует только на пустой странице.
+             */
+            prev_cursor?: string;
+        };
+        /**
+         * @description Одна строка ленты — снимок действия при записи (ADR 0061 §3–§6).
+         *     Переименования и удаления сущность-строку не меняют; у удалённой
+         *     сущности сегмент остаётся без ссылки. Отдельного эндпоинта деталей
+         *     нет — payload строки полон, «детали» = существующие страницы сущностей
+         *     по ссылкам сегментов (тикет #713).
+         */
+        HistoryItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            property_id: string;
+            /** @description Название объекта для шапки группы ленты (снимок живого названия — читается при чтении). */
+            property_name: string;
             /**
              * Format: uuid
-             * @description Null groups operations whose property was deleted in detach mode.
+             * @description Актёр действия; null — пользователь удалён (запись обезличена,
+             *     снимки при этом остаются). Под фильтр actor_ids такие записи не
+             *     попадают.
              */
-            property_id?: string | null;
-            income_kopecks: number;
-            expense_kopecks: number;
-            profit_kopecks: number;
+            actor_id?: string | null;
+            /** @description Снимок отображаемого имени актёра на момент действия. */
+            actor_name: string;
+            /** @description Снимок почты актёра (видна всем участникам, решение 2026-09-20); '' — почты не было. */
+            actor_email: string;
+            /**
+             * @description Живое имя актёра при чтении (карта #1324, протокол D5, паттерн
+             *     ADR 0065): читается из профиля на выдаче, снимком не является;
+             *     '' — имени нет или запись обезличена. Сборку отображаемого имени
+             *     («Имя Фамилия» / «(Вы)» / «Пользователь», фолбэк на снимок
+             *     actor_name при actor_id = null) делает фронт — сервер отдаёт
+             *     части.
+             */
+            actor_first_name: string;
+            /** @description Живая фамилия актёра при чтении (D5); '' — фамилии нет или запись обезличена. */
+            actor_last_name: string;
+            /** @description Аватар актёра — same-origin путь стриминга фото профиля (ADR 0065, решение #1286), живой на чтение; null — у актёра нет фото или запись обезличена. Чтение эндпоинта регулируется связью по общему объекту: у отозванного участника путь отвечает 404, строка откатывается на заглушку. */
+            actor_photo_url: string | null;
+            /**
+             * @description Роль актёра на объекте в момент действия (снимок, ADR 0061 §4).
+             * @enum {string}
+             */
+            actor_role: "owner" | "full_access" | "viewer";
+            /**
+             * @description Вид действия — группа чекбоксов фильтра и маршрутизатор ссылок сегментов.
+             * @enum {string}
+             */
+            kind: "property" | "rental" | "payment" | "operation" | "contact" | "task" | "member";
+            /**
+             * @description Стабильный точечный id действия (ADR 0061 §4), например property.renamed, operation.paid.
+             * @example operation.paid
+             */
+            action: string;
+            /**
+             * @description Основное действие — группа фильтра, иконка и цвет строки.
+             * @enum {string}
+             */
+            base_action: "added" | "changed" | "completed" | "deleted";
+            /**
+             * @description Текст строки, собранный сервером при записи (ADR 0061 §6): экран
+             *     рендерит фрагменты дословно, склеивая в одно предложение, и
+             *     оборачивает связанные; дословность — про строки после стрипа,
+             *     у записанных до него экран при маппинге срезает легаси голые
+             *     хвосты дат (аудит #876). Актёра в тексте нет — он поле записи.
+             */
+            segments: components["schemas"]["HistorySegment"][];
+            /**
+             * @description Серые строки-пояснения нового шаблона (карта #1324, протокол D1,
+             *     решение #1317 §2): собраны сервером при записи, рендерятся
+             *     дословно под заголовком, ссылок не несут; в поиске участвуют
+             *     (searchable покрывает заголовок + пояснения + актёра у новых
+             *     строк). Поле отсутствует у строк, записанных до ввода пояснений,
+             *     и у действий без диффов, — такие строки рендерятся одним
+             *     заголовком (осознанное решение владельца).
+             */
+            details?: string[];
+            /**
+             * @description Структурные дополнения действия (ADR 0061 §5): суммы — BIGINT
+             *     копейки, даты, old/new значения; ключи зависят от действия.
+             *     Текстом строки не является и в поиске не участвует.
+             */
+            context: Record<string, never>;
+            /**
+             * Format: date-time
+             * @description Момент действия, UTC instant; группировка «Сегодня/Вчера» — дело экрана.
+             */
+            created_at: string;
         };
-        FinanceReportCategoryRow: {
-            type: components["schemas"]["OperationType"];
+        /**
+         * @description Один фрагмент текста строки; видимое предложение — точная склейка
+         *     текстов; дословность — про строки после стрипа, у записанных до
+         *     него экран при маппинге срезает легаси голые хвосты дат (аудит #876).
+         */
+        HistorySegment: {
+            text: string;
+            link?: components["schemas"]["HistorySegmentLink"];
+        };
+        /**
+         * @description Ссылка фрагмента на страницу сущности (синие переходы, тикет #713);
+         *     отсутствует у несвязанных фрагментов и у строк удалённых сущностей.
+         */
+        HistorySegmentLink: {
+            /** @enum {string} */
+            kind: "property" | "rental" | "payment" | "operation" | "contact" | "task" | "member";
             /** Format: uuid */
-            category_id: string;
-            category_name: string;
-            total_kopecks: number;
+            id: string;
         };
-        FinanceReportMonthRow: {
-            /** Format: date */
-            month: string;
-            income_kopecks: number;
-            expense_kopecks: number;
-            profit_kopecks: number;
+        /** @description Опции шита фильтров «Истории действий» в области чтения (ADR 0061 §7). */
+        HistoryFiltersResponse: {
+            /**
+             * @description Владелец и текущие участники области ∪ все актёры журнала области
+             *     (отозванные остаются фильтруемыми). Именованные пользователи — по
+             *     алфавиту имени, затем фамилии; безымянные (name — полный
+             *     телефон) — в конце списка: сортировка по исходным колонкам, а не
+             *     по отображаемому имени.
+             */
+            participants: components["schemas"]["HistoryParticipant"][];
+            /** @description Объекты области с фото-аватаром; отсортированы по названию. */
+            objects: components["schemas"]["HistoryObject"][];
+        };
+        /**
+         * @description Участник-вариант фильтра. name — канон отображаемого имени платформы
+         *     («Имя Фамилия», иначе «Пользователь» — карта #1105, аменд #1123); email — текущая
+         *     почта пользователя; first_name — имя без фамилии для строки «(Вы)»;
+         *     is_owner — замок владельца объектов (макет 2067-163528); role —
+         *     иконка роли строки (макет 2184-94261): максимальный доступ в области,
+         *     живое членство сильнее снимка журнала отозванного участника;
+         *     status — секция шита фильтров «Текущие»/«Удалённые» (карта #1324,
+         *     протокол D6).
+         */
+        HistoryParticipant: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description Текущая почта; '' — почты нет. */
+            email: string;
+            /** @description Имя без фамилии; '' — имени нет (тогда name — «Пользователь»). */
+            first_name: string;
+            /** @description Пользователь владеет хотя бы одним объектом области чтения. */
+            is_owner: boolean;
+            /** @description Аватар участника — same-origin путь стриминга фото профиля (ADR 0065, решение #1286), живой на чтение; null — фото нет. Отозванный участник остаётся опцией фильтра: его путь отвечает 404, строка откатывается на заглушку. */
+            photo_url: string | null;
+            /**
+             * @description Максимальная роль в области чтения (owner совпадает с is_owner по построению).
+             * @enum {string}
+             */
+            role: "owner" | "full_access" | "viewer";
+            /**
+             * @description Секция шита фильтров (D6, решение #1317 §5), вычисляется на лету
+             *     без новой таблицы: current — у пользователя есть живая нога в
+             *     области (владелец или членство, приостановленное членство тоже
+             *     живо); removed — остались только строки журнала (ревок или
+             *     выход). Повторное добавление живит участника автоматически;
+             *     при сужении области одним объектом участник, живущий только в
+             *     другом объекте, честно removed в истории этого.
+             * @enum {string}
+             */
+            status: "current" | "removed";
+        };
+        /** @description Объект-вариант фильтра с фото-аватаром карточки (первое по времени фото, #582). */
+        HistoryObject: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            address: string;
+            /** @description URL первого по времени фото; '' — фото нет. */
+            photo_url: string;
+            type: components["schemas"]["PropertyType"];
+        };
+        UnreadCountResponse: {
+            /** Format: int64 */
+            count: number;
+        };
+        PendingPopupsResponse: {
+            popups: string[];
         };
         ClientErrorReport: {
             /**
@@ -2628,6 +4119,184 @@ export interface components {
             stack?: string;
             /** @description Page URL where the error occurred */
             url?: string;
+        };
+        FeedbackRequest: {
+            /** @description Reply address of the sender */
+            email: string;
+            /** @description Feedback question text */
+            message: string;
+        };
+        /** @description День оплаты аренды: число месяца 1–31 или строка "last" — «последний день месяца». «31-е число» и "last" — одно поведение: в коротком месяце прижимается к последнему дню (ADR 0053 §4). */
+        RentalPaymentDay: number | "last";
+        /** @description Создание аренды (= атомарное создание её Платежа арендной платы). Начало — сегодня или позже по TZ собственника (задним числом аренда не создаётся); плановое окончание — строго позже начала. */
+        RentalCreateRequest: {
+            /** Format: int64 */
+            amountKopecks: number;
+            paymentDay: components["schemas"]["RentalPaymentDay"];
+            /** Format: date */
+            startDate: string;
+            /**
+             * Format: date
+             * @description Null/omitted — бессрочная аренда. Не раньше первого вхождения платежа аренды (monthly по дню оплаты от старта, тикет #1154): такой срок держал бы ноль платежей.
+             */
+            plannedEndDate?: string | null;
+            /** @enum {string} */
+            utilities: "included" | "meters_only" | "full_receipt";
+            /** Format: int64 */
+            depositKopecks?: number | null;
+            /** Format: int64 */
+            commissionKopecks?: number | null;
+            /**
+             * Format: uuid
+             * @description Арендатор — контакт из книги владельца скоупа.
+             */
+            contactId?: string | null;
+            comment?: string;
+            autoPay: boolean;
+            /**
+             * @description За сколько дней предупреждать о платеже арендной платы («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет. Аренда ставит его вместе с автоплатежом; дефолт выбора на экране — «Не напоминать», null едет в команду явно (#1198, решение владельца 07.10).
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
+        };
+        /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment, reminderOffsetDays) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж, напоминание и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
+        RentalUpdateRequest: {
+            /** Format: int64 */
+            amountKopecks?: number;
+            paymentDay?: components["schemas"]["RentalPaymentDay"];
+            autoPay?: boolean;
+            /**
+             * @description Tri-state лид-тайм напоминания о платеже арендной платы («Напоминание о платеже», карта #822): omitted keeps the current value, null turns reminders off («Не напоминать»), 1/3/7 sets the lead time. Синхронно правит Платёж арендной платы; смена пишется и в его журнал изменений (#1208).
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
+            /**
+             * Format: date
+             * @description Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала). Окно графика (тикет #1154): слитая пара «день оплаты + плановое окончание» целиком — смена дня перепроверяет стоящее окончание, смена окончания сверяется с хранящимся днём; раньше первого вхождения дня оплаты — 400.
+             */
+            plannedEndDate?: string | null;
+            /** @enum {string} */
+            utilities?: "included" | "meters_only" | "full_receipt";
+            /** Format: int64 */
+            depositKopecks?: number | null;
+            /** Format: int64 */
+            commissionKopecks?: number | null;
+            /**
+             * Format: uuid
+             * @description Явный null — «Контакта нет».
+             */
+            contactId?: string | null;
+            comment?: string | null;
+        };
+        /** @description Завершение аренды: фактическая дата (начало ≤ дата ≤ сегодня; «По плану» подставляет клиент) и опциональный возврат залога. */
+        RentalCompleteRequest: {
+            /** Format: date */
+            completedDate: string;
+            depositReturn?: {
+                /**
+                 * Format: int64
+                 * @description 0 валиден — «не вернул».
+                 */
+                amountKopecks: number;
+                /** @description Только при сумме. */
+                comment?: string;
+            };
+        };
+        /** @description Встроенный арендатор — поля карточки контакта. После удаления контакта — null без пометки: UI пишет «Контакта нет» (решение #528). */
+        TenantView: {
+            /** Format: uuid */
+            contactId: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+        };
+        /** @description Единственное будущее planned-вхождение Платежа арендной платы. */
+        RentalNextPayment: {
+            /**
+             * Format: uuid
+             * @description Цель существующего «Оплатить платёж» — POST /properties/{propertyId}/operations/{operationId}/pay.
+             */
+            operationId: string;
+            /** Format: date */
+            date: string;
+            /** Format: int64 */
+            amountKopecks: number;
+            /** @description date − today по TZ собственника. */
+            daysUntil: number;
+        };
+        /** @description Прогресс «Оплачено N из M месяцев» (ADR 0053 §2): paidMonths — число paid-операций Платежа; totalMonths и monthsRemaining — только у срочной аренды (null у бессрочной). overdueMonths — серверная просрочка Платежа арендной платы (#817): число planned-вхождений раньше «сегодня» собственника (платёжные месяцы, не календарные); null — просрочки нет. */
+        RentalProgress: {
+            paidMonths: number;
+            totalMonths: number | null;
+            monthsRemaining: number | null;
+            overdueMonths: number | null;
+        };
+        /** @description Состояние Платежа арендной платы: рендер читается из платежа — дня оплаты на аренде нет (решение №5). paymentId — переход на экран платежа с детализации аренды (#531): платеж не ищется слагом категории, на объекте бывают и другие платежи rent. Ревизия #1161: у завершённой аренды платёж удалён — paymentId null, а сумма и день оплаты приходят из Архива условий на аренде; nextPayment всегда null. */
+        RentalPaymentView: {
+            /**
+             * Format: uuid
+             * @description Управляемый арендой Платёж — связь 1:1 (ADR 0053 §1); null у завершённой аренды — платёж удалён при Завершении (ревизия #1161).
+             */
+            paymentId: string | null;
+            /** Format: int64 */
+            amountKopecks: number;
+            paymentDay: components["schemas"]["RentalPaymentDay"];
+            autoPay: boolean;
+            /**
+             * @description Lead time of the managed payment's reminder (карта #822); null — напоминаний нет.
+             * @enum {integer|null}
+             */
+            reminderOffsetDays?: 1 | 3 | 7 | null;
+            /** @description Null, когда будущего вхождения нет (после планового окончания, у завершённой). */
+            nextPayment?: components["schemas"]["RentalNextPayment"];
+        };
+        /** @description Аренда с вычисляемым сервером состоянием: статус, прогресс, будущее плановое вхождение и today — клиент пояса не знает (ADR 0053 §2). */
+        RentalResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            /** @enum {string} */
+            status: "upcoming" | "active" | "needs_attention" | "completed";
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            plannedEndDate?: string | null;
+            /** Format: date */
+            completedDate: string | null;
+            /** @enum {string} */
+            utilities: "included" | "meters_only" | "full_receipt";
+            /** Format: int64 */
+            depositKopecks: number | null;
+            /** Format: int64 */
+            commissionKopecks: number | null;
+            /** Format: int64 */
+            depositReturnKopecks: number | null;
+            depositReturnComment: string | null;
+            tenant?: components["schemas"]["TenantView"];
+            comment: string;
+            rentPayment: components["schemas"]["RentalPaymentView"];
+            progress: components["schemas"]["RentalProgress"];
+            /** Format: date */
+            today: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RentalsResponse: {
+            items: components["schemas"]["RentalResponse"][];
+        };
+        /** @description Итоги аренды (решение №13): все paid-операции объекта — любого платежа и ручные — с датой вхождения в периоде [startDate, until]; период — по дате вхождения. Прибыль = доходы − расходы, может быть отрицательной. */
+        RentalSummaryResponse: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            until: string;
+            /** Format: int64 */
+            incomeKopecks: number;
+            /** Format: int64 */
+            expenseKopecks: number;
+            /** Format: int64 */
+            profitKopecks: number;
         };
     };
     responses: {
@@ -2705,6 +4374,15 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
+        /** @description Conflict. `pending_payment_exists` — a live pending payment holds the user's tariff decision (issue #616): the tariff change, the cancellation and the resume stay locked until the payment resolves or expires. `invalid_keep_property` — the cancellation's keepPropertyId is not one of the owner's active properties (issue #617). `cancel_not_available` — the cancellation was requested on the free basic tariff: there is nothing to cancel, the subscription stays as it is (issue #1467); the admin cancellation is not guarded by this code. `resume_not_available` — the resume endpoint was called on a subscription that is not cancelled or whose paid period has already expired: restoration of an expired period goes through paying for a tariff (issue #617); a cancelled free tariff answers with the same code and the free-subscription detail (issue #1467). `resume_required` — the tariff change asked a cancelled subscription with a live paid remainder to pay for the tariff and period it is already on: the paid remainder is kept only through the free resume (issue #691). */
+        SubscriptionConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Access to the property is suspended because the recipient's tariff active-property limit is exceeded */
         MembershipSuspended: {
             headers: {
@@ -2735,6 +4413,78 @@ export interface components {
     };
     parameters: {
         PropertyId: string;
+        /** @description Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter. */
+        PaymentsSearchQuery: string;
+        /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
+        PaymentsCategoryFilter: string;
+        /** @description The rules list's direction filter (map #573 rework): narrows the matched rules to income or expense. The category chips carry no direction (ticket #602), so nothing on the search screen sends it today. Missing — no filter. It never narrows matchedCategories. */
+        PaymentsTypeFilter: "income" | "expense";
+        PaymentsLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        PaymentsCursor: string;
+        /** @description The case-insensitive substring the matches run over — the property's name or its address (ticket #601). Leading and trailing whitespace never takes part in the match. */
+        PropertiesSearchQuery: string;
+        PropertiesSearchLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (name, id), ticket #597's pattern). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        PropertiesSearchCursor: string;
+        /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение ленты в прошлое, скролл вверх): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — лента читается с самых новых записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+        HistoryBeforeCursor: string;
+        /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+        HistoryAfterCursor: string;
+        /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение журнала в прошлое): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — журнал читается с самых свежих записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+        PaymentChangesBeforeCursor: string;
+        /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+        PaymentChangesAfterCursor: string;
+        /** @description Размер страницы (канон #597): 1..100, по умолчанию 50. */
+        PaymentChangesLimit: number;
+        /** @description Размер страницы (канон #597: 50 по умолчанию, 100 потолок). */
+        HistoryLimit: number;
+        /** @description Включительная нижняя граница периода по created_at — календарная дата в 00:00:00 UTC (канон фильтра периода админ-аудита). */
+        HistoryDateFrom: string;
+        /** @description Включительная верхняя граница периода по created_at — матчингется как дата + 24ч без включения самой границы (канон фильтра периода админ-аудита). */
+        HistoryDateTo: string;
+        /** @description Фильтр по основным действиям — через запятую, одно или несколько из словаря (ADR 0061 §4). Неизвестное значение — 400. */
+        HistoryBaseActions: string;
+        /** @description Фильтр по видам действий — через запятую, одно или несколько из семи групп словаря (ADR 0061 §4). Неизвестное значение — 400. */
+        HistoryKinds: string;
+        /** @description Фильтр по актёрам — uuid через запятую; один id — экран «Действия участника». Записи с обезличенным актёром (пользователь удалён) под фильтр по актёру не попадают никогда. Некорректный uuid — 400. */
+        HistoryActorIds: string;
+        /** @description Фильтр по объектам — uuid через запятую; один id — история объекта. Каждый перечисленный объект должен быть видим читателю (один невидимый или неизвестный id — privacy-404 всего запроса, канон ленты задач #547); архивные объекты владельца строки отдают, у участника архивные объекты ничего не добавляют. Некорректный uuid — 400. */
+        HistoryPropertyIds: string;
+        /** @description Поисковая строка по журналу области чтения: ищет по тексту строки и снапшотам актёра (имя, почта) — «как в Telegram»: по началу слова (префикс), по фрагменту внутри слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE (ресерч #839, тикет #842). Пробелы по краям не участвуют; пустая строка — фильтра нет. Серверный бэкстоп: ввод 400 байт и больше — 400 (255 символа кириллицы потолок схемы превышают; практические поисковые вводы на порядок короче). */
+        HistoryQuery: string;
+        /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
+        OperationsStatusFilter: "planned" | "paid" | "overdue";
+        /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+        OperationsDateFrom: string;
+        /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+        OperationsDateTo: string;
+        /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+        OperationsSort: "date" | "paid_date";
+        /** @description Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first). */
+        OperationsOrder: "asc" | "desc";
+        OperationsLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #597) — the global feed's window; the property listings keep the offset vocabulary. The cursor is bound to the sort it was issued under — echoing it with a different sort is a 400. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
+        OperationsCursor: string;
+        OperationsOffset: number;
+        /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
+        ContactsLimit: number;
+        /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #600). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+        ContactsCursor: string;
+        TasksLimit: number;
+        TasksOffset: number;
+        /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+        TitleSearch: string;
+        /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+        OperationsSearch: string;
+        /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+        OperationsTypeFilter: "income" | "expense";
+        /** @description Lift the archive cut (#549): operations of archived properties rejoin the feed or the summary under the same visibility predicate. A missing value or false keeps the archive excluded (the #540 contract default). */
+        OperationsIncludeArchived: boolean;
+        /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+        OperationsCategoriesFilter: string;
+        /** @description Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed. */
+        OperationsPropertyIdsFilter: string;
     };
     requestBodies: never;
     headers: never;
@@ -2809,7 +4559,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Logged out */
+            /** @description Logged out. Deliberately without Clear-Site-Data: Chrome blocks delivering the response until the origin HTTP-cache purge finishes (11–14 s on real profiles, slow-logout diagnosis 2026-10-06), and the HTTP cache holds no user data anyway. */
             204: {
                 headers: {
                     "Set-Cookie"?: string;
@@ -2818,27 +4568,6 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
-        };
-    };
-    logoutAll: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description All sessions logged out */
-            204: {
-                headers: {
-                    "Set-Cookie"?: string;
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            500: components["responses"]["InternalServerError"];
         };
     };
     getMe: {
@@ -2889,6 +4618,121 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
+        };
+    };
+    getMePhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. Only the owner reads it; showing the avatar to other users is a separate decision outside this contract. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description The client's ETag still matches the current photo. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    uploadMePhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The photo replaced (one image per profile, ADR 0065): the previous object is removed best-effort, the response carries the updated profile with the new photoUrl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteMePhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getUserPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile photo bytes, streamed by the backend (ADR 0065; решение владельца #1286 — то самое «показ участникам» из ADR 0065): читает сам пользователь и каждый, с кем их связывает хотя бы один объект, читаемый обеими сторонами (ADR 0028, derived read, симметрично). Нет связи или нет фото — один и тот же 404: существование фото не раскрывается. Cookie-auth, Cache-Control private, ETag — хеш ключа: совпавший If-None-Match отвечает 304 без чтения хранилища. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description The client's ETag still matches the current photo. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     sendPhoneChangeCode: {
@@ -2944,6 +4788,206 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    sendEmailChangeCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code sent to the current email */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    verifyCurrentEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyCurrentEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Current email verified; the one-time grant is issued with no address bound yet */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeGrantResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    requestNewEmailCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestNewEmailCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description The new email is bound to the grant; the code is sent to it */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    resendEmailCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendEmailCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Code re-sent to the pending new email */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    changeEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Email changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active sessions of the current user, most recent activity first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    logoutOtherSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every other session of the user is terminated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    revokeSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session is terminated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -3016,6 +5060,34 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    searchProperties: {
+        parameters: {
+            query: {
+                /** @description The case-insensitive substring the matches run over — the property's name or its address (ticket #601). Leading and trailing whitespace never takes part in the match. */
+                search: components["parameters"]["PropertiesSearchQuery"];
+                limit?: components["parameters"]["PropertiesSearchLimit"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (name, id), ticket #597's pattern). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["PropertiesSearchCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matched properties; nextCursor carries the next page's continuation (null — the matches are exhausted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertiesSearchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     getAddressSuggestions: {
         parameters: {
             query: {
@@ -3068,10 +5140,7 @@ export interface operations {
     };
     deleteProperty: {
         parameters: {
-            query: {
-                /** @description Deletion mode. `cascade` deletes the property together with its leases, recurring operations and operations. `detach` deletes only the property: its leases, recurring operations and operations are kept with `property_id` set to null, and its recurring operations are paused. */
-                mode: "cascade" | "detach";
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
@@ -3087,19 +5156,10 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
-            /** @description The property has an open lease and cannot be deleted */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
+            409: components["responses"]["Conflict"];
         };
     };
     updateProperty: {
@@ -3182,75 +5242,34 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    listPropertyLeases: {
+    getPropertyPhoto: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: string;
+                propertyId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Property leases */
+            /** @description The property photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyLeasesResponse"];
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    getPropertyOperationsSummary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Property operations summary */
-            200: {
+            /** @description The client's ETag still matches the current photo. */
+            304: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["PropertyOperationsSummaryResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    exportPropertyData: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Property data export workbook */
-            200: {
-                headers: {
-                    /** @description Attachment header with the xlsx filename */
-                    "Content-Disposition"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
-                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
@@ -3274,17 +5293,18 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Photo uploaded */
-            201: {
+            /** @description The photo replaced (one image per entity, ADR 0065): the previous object is removed best-effort, the response carries the updated property with the new photo_url. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyPhoto"];
+                    "application/json": components["schemas"]["PropertyResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
@@ -3295,7 +5315,6 @@ export interface operations {
             header?: never;
             path: {
                 propertyId: string;
-                photoId: string;
             };
             cookie?: never;
         };
@@ -3310,102 +5329,152 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
-    listPropertyContacts: {
+    listContacts: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
+            query?: {
+                /** @description Filter by the bound property. A missing value lists the actor's visible book: their own cards plus the property-bound cards of the properties they can view (ADR 0028 — for a shared member that is the bound cards of the shared properties plus their own unbound ones); a property-bound listing resolves through the view gate of that property (ADR 0028) and reads the cards bound to it. */
+                property_id?: string;
+                /** @description Case-insensitive substring search over the name fields, phone, email, messenger username and role. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: string;
+                /** @description The sort key: `name` — the contact's display name (default); `property` — the bound property's name with the unbound cards first in both directions («Общие контакты»), contact name order inside; `created` — the card's creation moment (ticket #847 — the «свежие контакты сверху» promise server-side: descending leads with the freshest cards whatever the book's size; the default order is asc, so a bare sort=created lists oldest-first — the freshness promise needs an explicit order=desc, as the tenant picker sends). The name/property keys use the Russian collation to match the client's letter grouping. */
+                sort?: "name" | "property" | "created";
+                /** @description The sort direction: ascending (default) or descending. */
+                order?: "asc" | "desc";
+                /** @description The page size of the keyset window (ticket #600). A missing value means the default page; an out-of-range value is a 400. */
+                limit?: components["parameters"]["ContactsLimit"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #600). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["ContactsCursor"];
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Property contacts list */
+            /** @description Contacts page. The window is keyset pagination over the listing's own sort key and id (ticket #600): the page always resumes strictly after the cursor's key, so cards created or deleted between loads never duplicate or drop. The name/property sort keys are mutable (display name, property binding): a rename or rebind of a card the walk has already passed can move it across the window boundary; the created key is immutable, so a walked card never moves. The cursor is bound to the sort/order it was issued under — echoing it with a different sort is a 400. nextCursor is null once the matches are exhausted. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyContactsResponse"];
+                    "application/json": components["schemas"]["ContactsResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
-    createPropertyContact: {
+    createContact: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                propertyId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PropertyContactCreateRequest"];
+                "application/json": components["schemas"]["ContactCreateRequest"];
             };
         };
         responses: {
-            /** @description Property contact created */
+            /** @description Contact created */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyContactResponse"];
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
         };
     };
-    getPropertyContact: {
+    getContactPhoto: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                propertyId: string;
                 contactId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Property contact */
+            /** @description The contact card photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. Access follows the card (ADR 0054): a bound card is readable by the property's viewers, an unbound one by the book owner only. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyContactResponse"];
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
                 };
+            };
+            /** @description The client's ETag still matches the current photo. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };
-    deletePropertyContact: {
+    uploadContactPhoto: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                propertyId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The photo replaced (one image per card, ADR 0065): the previous object is removed best-effort, the response carries the updated card with the new photoUrl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteContactPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
                 contactId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Property contact deleted */
+            /** @description Photo deleted */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -3414,39 +5483,1272 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
         };
     };
-    updatePropertyContact: {
+    getContact: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                propertyId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contact */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contact deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
                 contactId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PropertyContactUpdateRequest"];
+                "application/json": components["schemas"]["ContactUpdateRequest"];
             };
         };
         responses: {
-            /** @description Property contact updated */
+            /** @description Contact updated */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PropertyContactResponse"];
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listPayments: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring search by title. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["TitleSearch"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payments list; every row carries the rule's next payment date (ticket #991) — null when the schedule has no next occurrence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Payment created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deletePayment: {
+        parameters: {
+            query?: {
+                /** @description Keep overdue planned operations as debt (true) or delete them together with the payment (false). Future planned operations are always deleted. */
+                keep_overdue?: boolean;
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updatePayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Payment updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    pausePayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment paused */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    resumePayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    completePayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rule completed — the rule row is deleted (the paid operations keep their history with paymentId null) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPaymentOperations: {
+        parameters: {
+            query?: {
+                /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
+                status?: components["parameters"]["OperationsStatusFilter"];
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
+                /** @description Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first). */
+                order?: components["parameters"]["OperationsOrder"];
+                limit?: components["parameters"]["OperationsLimit"];
+                offset?: components["parameters"]["OperationsOffset"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment operations list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setPaymentFavorite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FavoriteUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Payment favorite state set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPaymentChanges: {
+        parameters: {
+            query?: {
+                /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение журнала в прошлое): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — журнал читается с самых свежих записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+                before_cursor?: components["parameters"]["PaymentChangesBeforeCursor"];
+                /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+                after_cursor?: components["parameters"]["PaymentChangesAfterCursor"];
+                /** @description Размер страницы (канон #597): 1..100, по умолчанию 50. */
+                limit?: components["parameters"]["PaymentChangesLimit"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница истории изменений платежа */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentChangesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setPropertyPin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinnedUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Property pin state set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPropertyOperations: {
+        parameters: {
+            query?: {
+                /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
+                status?: components["parameters"]["OperationsStatusFilter"];
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
+                /** @description Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first). */
+                order?: components["parameters"]["OperationsOrder"];
+                limit?: components["parameters"]["OperationsLimit"];
+                offset?: components["parameters"]["OperationsOffset"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
+                /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+                type?: components["parameters"]["OperationsTypeFilter"];
+                /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+                category?: components["parameters"]["OperationsCategoriesFilter"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Property operations list (overdue included with status=overdue) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Operation created (born paid; date = paidDate = the chosen date, or the owner's today when absent) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            /** @description Bad request — a malformed body or a date after the property owner's today («Дата операции не может быть в будущем») */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    summarizePropertyOperations: {
+        parameters: {
+            query?: {
+                /** @description Filter by the operation's view status. overdue is not stored anywhere — the server computes it against today in the property owner's timezone (planned with the date already past), so clients never need the owner's timezone. */
+                status?: components["parameters"]["OperationsStatusFilter"];
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
+                /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+                type?: components["parameters"]["OperationsTypeFilter"];
+                /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+                category?: components["parameters"]["OperationsCategoriesFilter"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Period totals of the property's operations by direction plus the per-category breakdown. The totals always report both directions — the summary cards read them together. The category filter narrows the whole scope — the totals and the categories array alike, the card mirroring the filtered list (решение владельца 01.10) — while the type filter narrows only the categories array. Categories with no operations in scope are absent; the array is ordered by total, largest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSummaryResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operation details (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operation cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    payOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operation paid now (planned → paid, paidDate = today in the owner's timezone; the schedule does not shift) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                /** @description Filter by bound properties — a comma-separated list of one or more property UUIDs (the picker's multi-select, ticket #547). A single id keeps the one-property slice of ticket #521: resolved through the property's view gate (a stranger gets the privacy 404), today is the data owner's. Several ids select the tasks of those properties in one merged page — every listed id must be visible to the reader (one invisible id is a privacy 404 of the whole request), today is the reader's, and archived properties contribute nothing (карта #518, решение 9). Combining it with withoutProperty is the union filter's «Общие задачи» + objects (решение владельца 2026-09-07); a malformed UUID in the list is a 400. */
+                propertyId?: string;
+                /** @description The property-less slice of the actor's own book («без объекта», ADR 0052). Combining it with propertyId unions the two cuts — the property-less rows stay the reader's own book (решение владельца 2026-09-07). */
+                withoutProperty?: boolean;
+                /** @description The bucket selector: false (default) — the active tasks (the screen's Просроченные/Сегодня/даты/Без даты sections), true — the completed journal. total always counts the same bucket. */
+                completed?: boolean;
+                limit?: components["parameters"]["TasksLimit"];
+                offset?: components["parameters"]["TasksOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tasks page. status is the server-computed view bucket (active, overdue, undated, completed); propertyName is the bound property's display name for the global row — null on the property-less slice. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasksResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteCompletedTasksWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Completed journal cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createTaskRuleWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task rule created (propertyId is null) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getTaskRuleWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task rule (propertyId is null) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTaskRuleWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task rule deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTaskRuleWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRuleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task rule updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    completeTaskWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task completed (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    uncompleteTaskWithoutProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task reopened (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listOperations: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed. */
+                propertyIds?: components["parameters"]["OperationsPropertyIdsFilter"];
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
+                /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+                type?: components["parameters"]["OperationsTypeFilter"];
+                /** @description Lift the archive cut (#549): operations of archived properties rejoin the feed or the summary under the same visibility predicate. A missing value or false keeps the archive excluded (the #540 contract default). */
+                includeArchived?: components["parameters"]["OperationsIncludeArchived"];
+                /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+                category?: components["parameters"]["OperationsCategoriesFilter"];
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
+                /** @description Sort direction over the listing's date key (see sort); asc (oldest first) or desc (default, newest first). */
+                order?: components["parameters"]["OperationsOrder"];
+                limit?: components["parameters"]["OperationsLimit"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over the listing's sort key and id, ticket #597) — the global feed's window; the property listings keep the offset vocabulary. The cursor is bound to the sort it was issued under — echoing it with a different sort is a 400. A missing or empty value starts the feed from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["OperationsCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paid operations page. status is always paid (the feed's only view status); propertyName is the bound property's display name; nextCursor carries the next page's continuation (null — the feed is exhausted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    summarizeOperations: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated property ids (the global «Объект» multi-select); operations of any other property are filtered out. Each id is resolved through its view gate (ADR 0028) — an unknown or non-visible id is the privacy 404; an archived property narrows the feed to an empty page (the feed never carries archived rows). A missing or empty value disables the filter — the merged feed. */
+                propertyIds?: components["parameters"]["OperationsPropertyIdsFilter"];
+                /** @description Inclusive lower bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_from?: components["parameters"]["OperationsDateFrom"];
+                /** @description Inclusive upper bound of the period on the listing's date key (see sort; the planned operation date by default, the paid_date payment fact under sort=paid_date). */
+                date_to?: components["parameters"]["OperationsDateTo"];
+                /** @description Which operation date the listing reads (ticket #992): date — the planned operation date, the schedule attribute the payment history, the overdue split and the projection live on (the contract default); paid_date — the actual payment fact date the operational feeds read. The period bounds (date_from/date_to) and the summaries follow the same date. A planned row carries no payment fact and sorts last in both directions under paid_date; on the global feed — paid facts only — the keyset cursor walks the same date and is bound to the sort it was issued under. */
+                sort?: components["parameters"]["OperationsSort"];
+                /** @description Case-insensitive substring search over the operation title and the operation's category snapshot. A query made only of digits and amount separators (spaces, commas, points, dashes) additionally matches the amount: its digits are searched inside the amount's decimal digits (kopecks), so 2500 finds 2 500,00 ₽ and 2500,50 finds 2 500,50 ₽, while a query holding any letter never matches amounts. A missing or empty value disables the filter; LIKE metacharacters in the value are literals. */
+                search?: components["parameters"]["OperationsSearch"];
+                /** @description Filter by the operation direction: the payment's type snapshot every operation carries. A missing value disables the filter. */
+                type?: components["parameters"]["OperationsTypeFilter"];
+                /** @description Lift the archive cut (#549): operations of archived properties rejoin the feed or the summary under the same visibility predicate. A missing value or false keeps the archive excluded (the #540 contract default). */
+                includeArchived?: components["parameters"]["OperationsIncludeArchived"];
+                /** @description Comma-separated category slugs (the chips multi-select); operations of any other category are filtered out. A missing or empty value disables the filter; whitespace around slugs is ignored. */
+                category?: components["parameters"]["OperationsCategoriesFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Period totals of the visible paid operations by direction plus the per-category breakdown. The totals always report both directions — the summary cards read them together — while the type and category filters narrow only the categories array. Categories with no operations in scope are absent; the array is ordered by total, largest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSummaryResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listGlobalPayments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The visible rules feed with the main screen's counters. Paused or settled rules travel with a null nearestDate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentsGlobalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listPaymentDue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The visible window rows in the buckets' fixed order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentsDueResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    searchGlobalPayments: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter. */
+                search?: components["parameters"]["PaymentsSearchQuery"];
+                /** @description The search screen's chip filter (map #573 rework): the selected chip's category — the default catalog's slug or the user category's id — narrowing the matched rules to that category. Empty or missing — no filter. It never narrows matchedCategories. */
+                category?: components["parameters"]["PaymentsCategoryFilter"];
+                /** @description The rules list's direction filter (map #573 rework): narrows the matched rules to income or expense. The category chips carry no direction (ticket #602), so nothing on the search screen sends it today. Missing — no filter. It never narrows matchedCategories. */
+                type?: components["parameters"]["PaymentsTypeFilter"];
+                limit?: components["parameters"]["PaymentsLimit"];
+                /** @description The opaque continuation cursor from the previous page's nextCursor (keyset pagination over (created_at, id), ticket #597). A missing or empty value starts the list from the beginning; a malformed value is a 400. */
+                cursor?: components["parameters"]["PaymentsCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matched rules with their matched-category chips; nextCursor carries the next page's continuation (null — the matches are exhausted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentsSearchGlobalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listGlobalPaymentObjects: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring search. On /payments/search it runs over the rule title and the category (the default catalog label of the rule's slug or the user category's name); on /payments/objects it runs over the property name and address. Empty or missing — no filter. */
+                search?: components["parameters"]["PaymentsSearchQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The visible properties with their rule stacks. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentObjectsGlobalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    saveGlobalPaymentFavoritesOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentsFavoriteOrderUpdate"];
+            };
+        };
+        responses: {
+            /** @description The order is saved. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listPropertyTasks: {
+        parameters: {
+            query?: {
+                /** @description The bucket selector: false (default) — the active tasks (the screen's Просроченные/Сегодня/даты/Без даты sections), true — the completed journal (the collapsible «Выполненные» section). total always counts the same bucket. */
+                completed?: boolean;
+                limit?: components["parameters"]["TasksLimit"];
+                offset?: components["parameters"]["TasksOffset"];
+            };
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tasks page. status is the server-computed view bucket (active, overdue, undated, completed) — the client never needs the owner's timezone; today is the data owner's current date for the «Сегодня»/«Завтра» sections. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasksResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createTaskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task rule created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getTaskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTaskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task rule deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTaskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRuleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task rule updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRuleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteCompletedTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Completed journal cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    completeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task completed (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    uncompleteTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task reopened (status is the server-computed view) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
@@ -3504,6 +6806,32 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getPropertyAccessMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                /** @description The row's addressing id from the members list: a membership id, a pending invitation id, or a user id — the synthesized owner row carries no membership id and is addressed by the owner's user id, a member row answers to its user id as well. */
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member row (the fields of the list row) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAccessMemberResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     deletePropertyAccessMember: {
@@ -3581,62 +6909,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listPropertyFreeReminders: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Up to limit upcoming free reminders for the property */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreeRemindersResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createFreeReminder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FreeReminderCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Free reminder created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreeReminderResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3759,319 +7031,49 @@ export interface operations {
             };
         };
     };
-    listUpcomingFreeReminders: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Up to limit nearest upcoming free reminder occurrences for the property */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UpcomingFreeRemindersResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listOperationsByProperty: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["OperationStatus"][];
-                type?: components["schemas"]["OperationType"][];
-                category_id?: string[];
-                from?: string;
-                to?: string;
-                sort?: components["schemas"]["OperationListSort"];
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Operations list for property */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationsResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createOperation: {
+    listParticipants: {
         parameters: {
             query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OperationCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Operation created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listOperations: {
-        parameters: {
-            query?: {
-                type?: components["schemas"]["OperationType"][];
-                status?: components["schemas"]["OperationStatus"][];
-                category_id?: string[];
-                property_id?: string;
-                from?: string;
-                to?: string;
-                recurring_operation_id?: string;
-                lease_id?: string;
-                exclude_archived_properties?: boolean;
-                sort?: components["schemas"]["OperationListSort"];
-                limit?: number;
-                offset?: number;
-            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Operations list */
+            /** @description The owner's participants sorted by display name, pending emails last */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OperationsResponse"];
+                    "application/json": components["schemas"]["ParticipantsResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
         };
     };
-    getOperation: {
+    revokeAllParticipants: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Operation details */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Operation deleted */
+            /** @description The actor's sharing is closed — every leg revoked, or nothing left to revoke (the idempotent no-op). */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OperationUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Operation updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    completeOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description Operation completed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    markOperationIncomplete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description Operation marked incomplete */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    moveOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OperationMoveRequest"];
-            };
-        };
-        responses: {
-            /** @description Operation moved to another property of the same owner */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
-    listOperationCategories: {
-        parameters: {
-            query?: {
-                type?: components["schemas"]["OperationType"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationCategory"][];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    createOperationCategory: {
+    inviteParticipant: {
         parameters: {
             query?: never;
             header?: never;
@@ -4080,160 +7082,91 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["OperationCategoryCreateRequest"];
+                "application/json": components["schemas"]["ParticipantInviteRequest"];
             };
         };
         responses: {
-            /** @description Created */
-            201: {
+            /** @description The per-property grant results, one item per requested id in request order (duplicate ids collapse to the first occurrence). */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OperationCategory"];
+                    "application/json": components["schemas"]["ParticipantGrantResultsResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
         };
     };
-    getFinanceReport: {
-        parameters: {
-            query?: {
-                from?: string;
-                to?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Finance report */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FinanceReportResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    listRecurringOperationsByProperty: {
+    addParticipantProperties: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                propertyId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recurring operations list for property */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecurringOperationsResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createRecurringOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                propertyId: string;
+                /** @description A registered user's uuid or an invitee email. */
+                participantId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RecurringOperationCreateRequest"];
+                "application/json": components["schemas"]["ParticipantPropertiesAddRequest"];
             };
         };
         responses: {
-            /** @description Recurring operation created */
-            201: {
+            /** @description The per-property grant results, one item per requested id in request order (duplicate ids collapse to the first occurrence). */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecurringOperationResponse"];
+                    "application/json": components["schemas"]["ParticipantGrantResultsResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
         };
     };
-    listRecurringOperations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recurring operations list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecurringOperationsResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    getRecurringOperation: {
+    getParticipant: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: string;
+                /** @description A registered user's uuid or a pending invitee email. */
+                participantId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Recurring operation details */
+            /** @description The participant's aggregate */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecurringOperationResponse"];
+                    "application/json": components["schemas"]["ParticipantResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };
-    deleteRecurringOperation: {
+    deleteParticipant: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: string;
+                /** @description A registered user's uuid or an invitee email. */
+                participantId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Recurring operation deleted */
+            /** @description The person was removed from the actor's properties */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -4242,349 +7175,86 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
         };
     };
-    updateRecurringOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RecurringOperationUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Recurring operation updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecurringOperationResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    pauseRecurringOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recurring operation paused */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecurringOperationResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    resumeRecurringOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recurring operation resumed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecurringOperationResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listLeases: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Leases list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeasesResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    createLease: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LeaseCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Lease created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeaseResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-        };
-    };
-    getLease: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Lease details */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeaseResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateLease: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LeaseUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Lease updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeaseResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    completeLease: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Lease completed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeaseResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listLeaseReminders: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                leaseId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Reminders */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemindersResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listTenantContacts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tenant contacts list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantContactsResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    createTenantContact: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantContactCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Tenant contact created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantContactResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getTenantContact: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tenant contact details */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantContactResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateTenantContact: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantContactUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Tenant contact updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantContactResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listReminders: {
+    getHistory: {
         parameters: {
             query?: {
+                /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение ленты в прошлое, скролл вверх): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — лента читается с самых новых записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+                before_cursor?: components["parameters"]["HistoryBeforeCursor"];
+                /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+                after_cursor?: components["parameters"]["HistoryAfterCursor"];
+                /** @description Размер страницы (канон #597: 50 по умолчанию, 100 потолок). */
+                limit?: components["parameters"]["HistoryLimit"];
+                /** @description Включительная нижняя граница периода по created_at — календарная дата в 00:00:00 UTC (канон фильтра периода админ-аудита). */
+                date_from?: components["parameters"]["HistoryDateFrom"];
+                /** @description Включительная верхняя граница периода по created_at — матчингется как дата + 24ч без включения самой границы (канон фильтра периода админ-аудита). */
+                date_to?: components["parameters"]["HistoryDateTo"];
+                /** @description Фильтр по основным действиям — через запятую, одно или несколько из словаря (ADR 0061 §4). Неизвестное значение — 400. */
+                actions?: components["parameters"]["HistoryBaseActions"];
+                /** @description Фильтр по видам действий — через запятую, одно или несколько из семи групп словаря (ADR 0061 §4). Неизвестное значение — 400. */
+                kinds?: components["parameters"]["HistoryKinds"];
+                /** @description Фильтр по актёрам — uuid через запятую; один id — экран «Действия участника». Записи с обезличенным актёром (пользователь удалён) под фильтр по актёру не попадают никогда. Некорректный uuid — 400. */
+                actor_ids?: components["parameters"]["HistoryActorIds"];
+                /** @description Фильтр по объектам — uuid через запятую; один id — история объекта. Каждый перечисленный объект должен быть видим читателю (один невидимый или неизвестный id — privacy-404 всего запроса, канон ленты задач #547); архивные объекты владельца строки отдают, у участника архивные объекты ничего не добавляют. Некорректный uuid — 400. */
+                property_ids?: components["parameters"]["HistoryPropertyIds"];
+                /** @description Поисковая строка по журналу области чтения: ищет по тексту строки и снапшотам актёра (имя, почта) — «как в Telegram»: по началу слова (префикс), по фрагменту внутри слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE (ресерч #839, тикет #842). Пробелы по краям не участвуют; пустая строка — фильтра нет. Серверный бэкстоп: ввод 400 байт и больше — 400 (255 символа кириллицы потолок схемы превышают; практические поисковые вводы на порядок короче). */
+                q?: components["parameters"]["HistoryQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница ленты */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryPageResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getHistoryFilters: {
+        parameters: {
+            query?: {
+                /** @description Фильтр по объектам — uuid через запятую; один id — история объекта. Каждый перечисленный объект должен быть видим читателю (один невидимый или неизвестный id — privacy-404 всего запроса, канон ленты задач #547); архивные объекты владельца строки отдают, у участника архивные объекты ничего не добавляют. Некорректный uuid — 400. */
+                property_ids?: components["parameters"]["HistoryPropertyIds"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Опции фильтров области */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryFiltersResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listNotifications: {
+        parameters: {
+            query?: {
+                /** @description Только непрочитанные строки. */
+                unread?: boolean;
                 limit?: number;
-                offset?: number;
+                /** @description Непрозрачный курсор продолжения (next_cursor прошлой страницы). */
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -4592,55 +7262,29 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Reminders */
+            /** @description Страница ленты */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RemindersResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    listCalendarReminders: {
-        parameters: {
-            query: {
-                from: string;
-                to: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Calendar reminders in range */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CalendarRemindersResponse"];
+                    "application/json": components["schemas"]["NotificationsPageResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
-    deleteReminder: {
+    deleteAllNotifications: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                reminderId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Reminder cancelled */
+            /** @description Все строки скрыты */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -4648,101 +7292,39 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
         };
     };
-    updateReminder: {
+    getUnreadNotificationCount: {
         parameters: {
             query?: never;
-            header?: never;
-            path: {
-                reminderId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReminderUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Reminder updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReminderResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listFreeReminders: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Free reminders list */
+            /** @description Значение счётчика */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FreeRemindersResponse"];
+                    "application/json": components["schemas"]["UnreadCountResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
         };
     };
-    getFreeReminder: {
+    markAllNotificationsRead: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                freeReminderId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Free reminder */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreeReminderResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteFreeReminder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                freeReminderId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Free reminder deleted */
+            /** @description Все непрочитанные строки помечены прочитанными */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -4750,37 +7332,72 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
         };
     };
-    updateFreeReminder: {
+    getNotification: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                freeReminderId: string;
+                notificationId: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FreeReminderUpdateRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Free reminder updated */
+            /** @description Уведомление с действиями */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FreeReminderResponse"];
+                    "application/json": components["schemas"]["NotificationDetailResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    deleteNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Строка скрыта (идемпотентно) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    markNotificationRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Строка прочитана */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     getNotificationPreferences: {
@@ -4792,7 +7409,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Notification preferences for every reminder event type */
+            /** @description Текущая матрица */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4804,7 +7421,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
-    updateNotificationPreferences: {
+    putNotificationPreferences: {
         parameters: {
             query?: never;
             header?: never;
@@ -4813,11 +7430,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NotificationPreferencesUpdateRequest"];
+                "application/json": components["schemas"]["NotificationPreferencesRequest"];
             };
         };
         responses: {
-            /** @description Notification preferences updated */
+            /** @description Сохранённая матрица */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4828,6 +7445,66 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    streamNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Поток событий в формате text/event-stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Стрим недоступен (хаб не сконфигурирован) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    streamRealtime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Поток событий в формате text/event-stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Стрим недоступен (хаб не сконфигурирован) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getVapidPublicKey: {
@@ -4890,12 +7567,67 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Push subscription deleted */
+            /**
+             * @description Подписка удалена. Идемпотентно (спека #1028 §5): 204 и при
+             *     отсутствии строки — интент «выключено» исполнен в обоих случаях,
+             *     404 фронту различать не требуется.
+             */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getPushSubscriptionPreferences: {
+        parameters: {
+            query: {
+                endpoint: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Текущее состояние устройства */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushPreferencesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putPushSubscriptionPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Сохранённое состояние устройства */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushPreferencesResponse"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
@@ -5024,7 +7756,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CancelSubscriptionRequest"];
+            };
+        };
         responses: {
             /** @description Subscription cancelled */
             204: {
@@ -5035,7 +7771,29 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["SubscriptionConflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    resumeSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancellation undone without a charge: the subscription is active again inside its already paid period, auto-renew is enabled and the paid remainder is kept */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SubscriptionConflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5064,7 +7822,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["SubscriptionConflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5137,6 +7895,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5209,6 +7968,97 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    listAdminTariffs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All tariffs, including hidden ones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTariffsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    createAdminTariff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateTariffRequest"];
+            };
+        };
+        responses: {
+            /** @description The created tariff */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTariff"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A tariff with this name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    updateAdminTariff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tariffId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUpdateTariffRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated tariff */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTariff"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     listAdminSubscriptionPayments: {
         parameters: {
             query?: {
@@ -5216,6 +8066,8 @@ export interface operations {
                 status?: components["schemas"]["SubscriptionPaymentStatus"];
                 /** @description Exact match on the user's phone number. */
                 user_phone?: string;
+                /** @description Filters payments by the payer's current subscription status (issue #254). */
+                subscription_status?: components["schemas"]["SubscriptionStatus"];
                 /** @description Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending. */
                 sort?: string;
                 /** @description Sort direction: asc or desc (default desc). */
@@ -5418,112 +8270,6 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    listAdminUserLeases: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-                /** @description Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending. */
-                sort?: string;
-                /** @description Sort direction: asc or desc (default desc). */
-                order?: "asc" | "desc";
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin user leases list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminLeasesResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    listAdminUserTenantContacts: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-                /** @description Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending. */
-                sort?: string;
-                /** @description Sort direction: asc or desc (default desc). */
-                order?: "asc" | "desc";
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin user tenant contacts list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminTenantContactsResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    listAdminUserOperations: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-                status?: components["schemas"]["OperationStatus"];
-                type?: components["schemas"]["OperationType"];
-                property_id?: string;
-                lease_id?: string;
-                /** @description Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending. */
-                sort?: string;
-                /** @description Sort direction: asc or desc (default desc). */
-                order?: "asc" | "desc";
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin user operations list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminOperationsResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
     listAdminProperties: {
         parameters: {
             query?: {
@@ -5586,129 +8332,6 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    listAdminLeases: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-                /** @description Filter by the stored lease status. */
-                status?: components["schemas"]["LeaseStatus"];
-                property_id?: string;
-                owner_id?: string;
-                /** @description Sort field (camelCase). Allowed: startDate, updatedAt, status, rentAmountKopecks. Defaults to updatedAt descending. */
-                sort?: string;
-                /** @description Sort direction: asc or desc (default desc). */
-                order?: "asc" | "desc";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin leases list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminLeasesResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    getAdminLease: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin lease details */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminLeaseResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    listAdminTenantContacts: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-                /** @description Case-insensitive substring search by name, surname and phone. */
-                q?: string;
-                owner_id?: string;
-                /** @description Sort field (camelCase). Allowed: name, updatedAt. Defaults to updatedAt descending. */
-                sort?: string;
-                /** @description Sort direction: asc or desc (default desc). */
-                order?: "asc" | "desc";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin tenant contacts list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminTenantContactsResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    getAdminTenantContact: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin tenant contact details */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminTenantContactResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
     listAdminPropertyContacts: {
         parameters: {
             query?: {
@@ -5735,71 +8358,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    listAdminOperations: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-                status?: components["schemas"]["OperationStatus"];
-                type?: components["schemas"]["OperationType"];
-                property_id?: string;
-                lease_id?: string;
-                owner_id?: string;
-                /** @description Case-insensitive substring search by operation name and comment. */
-                q?: string;
-                /** @description Sort field (camelCase). Allowed: operationDate, amountKopecks, status. Defaults to operationDate descending. */
-                sort?: string;
-                /** @description Sort direction: asc or desc (default desc). */
-                order?: "asc" | "desc";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin operations list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminOperationsResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    getAdminOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Admin operation details */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminOperationResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5935,7 +8493,97 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    confirmFakeSubscriptionPayment: {
+    assignAdminServiceSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminAssignServiceSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Service subscription assigned */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    forceChangeAdminSubscriptionTariff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminForceChangeTariffRequest"];
+            };
+        };
+        responses: {
+            /** @description Tariff force-changed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    extendAdminSubscriptionGrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminExtendGraceRequest"];
+            };
+        };
+        responses: {
+            /** @description Grace window extended */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    cancelAdminSubscription: {
         parameters: {
             query?: never;
             header?: never;
@@ -5946,19 +8594,44 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Payment confirmed */
+            /** @description Subscription cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAdminSubscriptionTransitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription transition log */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AdminSubscriptionTransitionsResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     reportClientError: {
@@ -5983,6 +8656,39 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    sendFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Feedback accepted and queued for delivery */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooManyRequests"];
+            /** @description Feedback is not configured (no recipient email) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     handlePaymentWebhook: {
@@ -6014,6 +8720,244 @@ export interface operations {
                     "text/plain": string;
                 };
             };
+        };
+    };
+    listRentals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rentals list (unfinished first, then completed by completion date) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Rental created (with its managed rent payment) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Conflict: the property already has an unfinished rental, is archived, or is under maintenance. The maintenance guard answers code `property_maintenance` (ticket #1050) — every rental mutation of an unfinished rental stays blocked until the maintenance ends («Завершить ремонт» is the way back); the reads stay open. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rental */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rental deleted (with its managed rent payment) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The rental has already started — finish it instead. On a property under maintenance the guard answers code `property_maintenance` (ticket #1050) for an unfinished rental's deletion; a completed rental (the history) deletes as before. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Rental updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Conflict: the rental is completed, the property is archived, or the property is under maintenance — the maintenance guard answers code `property_maintenance` (ticket #1050) for every mutation of an unfinished rental, terms edits included (продление rides the same PATCH). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    completeRental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentalCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Rental completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalResponse"];
+                };
+            };
+            /** @description The completion date is before the start or in the future */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The rental is already completed. On a property under maintenance the guard answers code `property_maintenance` (ticket #1050) — completing an unfinished rental is a mutation of it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getRentalSummary: {
+        parameters: {
+            query?: {
+                /** @description Period end (inclusive). Defaults to the completion date for a completed rental, otherwise today in the owner's timezone; the completion master previews with the chosen date before completing. */
+                until?: string;
+            };
+            header?: never;
+            path: {
+                propertyId: components["parameters"]["PropertyId"];
+                rentalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The property's paid-operations totals over the rental period */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RentalSummaryResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

@@ -2,6 +2,10 @@
 
 import {type JSX, useEffect, useState} from 'react';
 import {type CloseButtonProps, cssTransition, ToastContainer,} from 'react-toastify/unstyled';
+// Нативный CSS библиотеки: контейнер, позиции, скрытие прогресс-бара.
+// unstyled сам стилей не несёт.
+import 'react-toastify/dist/ReactToastify.css';
+import {Cancel} from '@/shared/assets/icons';
 import styles from './ToastProvider.module.css';
 
 const MOBILE_MEDIA_QUERY = '(max-width: 767px)';
@@ -37,20 +41,21 @@ export function CloseToastButton({
                 closeToast(true);
             }}
         >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path
-                    d="M15.2437 3.57611C15.5692 3.25068 16.0967 3.25067 16.4221 3.57611C16.7475 3.90155 16.7475 4.42908 16.4221 4.75449L11.1772 9.99863L16.4213 15.2428C16.7467 15.5682 16.7467 16.0957 16.4213 16.4212C16.0959 16.7466 15.5684 16.7465 15.2429 16.4212L9.99879 11.177L4.75628 16.4203C4.43087 16.7457 3.90334 16.7457 3.5779 16.4203C3.25246 16.0949 3.25246 15.5674 3.5779 15.242L8.82041 9.99863L3.57708 4.7553C3.25165 4.42987 3.25165 3.90235 3.57708 3.57692C3.90252 3.2515 4.43003 3.25149 4.75547 3.57692L9.99879 8.82025L15.2437 3.57611Z"
-                    fill="currentColor"/>
-            </svg>
+            <Cancel width={20} height={20} aria-hidden />
         </button>
     );
 }
 
 const ToastTransition = cssTransition({
-    enter: styles.toastEnter,
-    exit: styles.toastExit,
+    enter: styles.toastEnter ?? '',
+    exit: styles.toastExit ?? '',
     collapseDuration: 250,
 });
+
+/** Канон автоухода тостов — 5с у всех (решение владельца 28.09, аудит
+ * #876, как в iOS): единый источник для контейнера и всех вызывающих;
+ * hover и потеря фокуса ставят таймер на паузу. */
+export const TOAST_AUTO_CLOSE_MS = 5000;
 
 export function ToastProvider(): JSX.Element {
     const isMobile = useIsMobile();
@@ -58,12 +63,17 @@ export function ToastProvider(): JSX.Element {
     return (
         <ToastContainer
             position={isMobile ? 'top-center' : 'top-right'}
-            stacked
+            /* Максимум один тост на экране (решение владельца 13.10): новый
+               показ вытесняет видимый (showDisplacingToast), стек и нативная
+               очередь лишних не используются — без limit их просто нет.
+               limit={1} вместо этого не годится: v11 держит тост в счётчике
+               показанных до конца exit+collapse, и новый тост ждал бы в
+               очереди ~600мс — замена шла бы «ступенькой», не кросс-свапом. */
             hideProgressBar
             closeOnClick={false}
             pauseOnHover
             pauseOnFocusLoss
-            autoClose={false}
+            autoClose={TOAST_AUTO_CLOSE_MS}
             draggable
             draggableDirection={isMobile ? 'y' : 'x'}
             draggablePercent={40}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
 // ActorRole identifies who performed the action.
@@ -29,15 +30,35 @@ const (
 type Action string
 
 const (
-	ActionAuthRegistered   Action = "auth.registered"
-	ActionAuthLogin        Action = "auth.login"
-	ActionAuthLoginFailed  Action = "auth.login_failed"
-	ActionAuthLogout       Action = "auth.logout"
-	ActionAuthLogoutAll    Action = "auth.logout_all"
-	ActionAuthPhoneChanged Action = "auth.phone_changed"
-	ActionProfileUpdated   Action = "profile.updated"
-
-	ActionNotificationPreferencesUpdated Action = "notification_preferences.updated"
+	ActionAuthRegistered  Action = "auth.registered"
+	ActionAuthLogin       Action = "auth.login"
+	ActionAuthLoginFailed Action = "auth.login_failed"
+	ActionAuthLogout      Action = "auth.logout"
+	// ActionAuthSessionRevoked records a user terminating one of their own
+	// sessions from the devices list (map #724, ticket #728). The context
+	// carries the revoked session's UUID — an identifier, never a token.
+	ActionAuthSessionRevoked Action = "auth.session_revoked"
+	// ActionAuthOtherSessionsRevoked records the user terminating every
+	// session except the current one; the context carries the removed count.
+	ActionAuthOtherSessionsRevoked Action = "auth.other_sessions_revoked"
+	ActionAuthPhoneChanged         Action = "auth.phone_changed"
+	// ActionAuthPhoneChangeFailed records a failed phone-change verification
+	// attempt, mirroring ActionAuthLoginFailed for the login flow. Closes the
+	// audit gap where phone-change failures left no trail while the success
+	// path was fully audited.
+	ActionAuthPhoneChangeFailed Action = "auth.phone_change_failed"
+	// ActionAuthEmailChanged records a successful email change (issue #721).
+	// The email is the login-code delivery channel, not the login itself, so
+	// sessions are intentionally left untouched.
+	ActionAuthEmailChanged Action = "auth.email_changed"
+	// ActionAuthEmailChangeFailed records a failed email-change verification
+	// attempt, mirroring ActionAuthPhoneChangeFailed (issue #721).
+	ActionAuthEmailChangeFailed Action = "auth.email_change_failed"
+	ActionProfileUpdated        Action = "profile.updated"
+	// ActionProfilePhotoAdded/Deleted record the profile photo writes
+	// (ADR 0065, ticket #1227): in-tx fail-safe, ids only.
+	ActionProfilePhotoAdded   Action = "profile.photo_added"
+	ActionProfilePhotoDeleted Action = "profile.photo_deleted"
 
 	ActionPropertyCreated        Action = "property.created"
 	ActionPropertyUpdated        Action = "property.updated"
@@ -110,9 +131,78 @@ const (
 
 	ActionOperationCategoryCreated Action = "operation_category.created"
 
+	// ActionPaymentCreated and its neighbours below record the Payments
+	// context user mutations (ADR 0049 §5, ticket #457): in-tx fail-safe; the
+	// bulk tick never writes audit (the extended ADR 0020 gap). The old
+	// recurring_operation.* vocabulary above belongs to the removed finance
+	// context; payment.* is the Payments context of ADR 0047.
+	ActionPaymentCreated   Action = "payment.created"
+	ActionPaymentUpdated   Action = "payment.updated"
+	ActionPaymentDeleted   Action = "payment.deleted"
+	ActionPaymentPaused    Action = "payment.paused"
+	ActionPaymentResumed   Action = "payment.resumed"
+	ActionPaymentCompleted Action = "payment.completed"
+	// ActionOperationPaid records the manual «Оплатить сейчас» of an
+	// operation (ticket #461): planned → paid with paid_date = today in the
+	// owner's timezone. The auto-pay day payment is tick bulk, never audited
+	// (the extended ADR 0020 gap); it has no action here.
+	ActionOperationPaid Action = "operation.paid"
+
+	// ActionTaskRuleCreated and its neighbours record the Tasks context user
+	// mutations (ADR 0051, tickets #496/#498): in-tx fail-safe; the bulk tick
+	// never writes audit (the extended ADR 0020 gap). Rule deletion is hard —
+	// the completed journal survives with snapshots (resolution #496).
+	ActionTaskRuleCreated Action = "task_rule.created"
+	ActionTaskRuleUpdated Action = "task_rule.updated"
+	ActionTaskRuleDeleted Action = "task_rule.deleted"
+	// ActionTaskCompleted and ActionTaskUncompleted record the manual
+	// completion toggle: completed_date = today in the owner's timezone, and
+	// its revert — possible only while the rule lives (resolution #496).
+	ActionTaskCompleted   Action = "task.completed"
+	ActionTaskUncompleted Action = "task.uncompleted"
+	// ActionTaskCompletedCleared records «Удалить все выполненные»
+	// (resolution #497): the completed tasks of the property's deleted rules
+	// removed forever; Context carries the removed count, never titles.
+	ActionTaskCompletedCleared Action = "task.completed_cleared"
+
+	// ActionContactCreated and its neighbours record the Contacts context
+	// user mutations (ADR 0054, ticket #506): in-tx fail-safe. The context
+	// never carries the contact's PII (names, phone, email) — ids and field
+	// names only. The property_contact.* vocabulary above belongs to the
+	// demolished ADR 0026 surface and stays for the historical audit rows.
+	ActionContactCreated Action = "contact.created"
+	ActionContactUpdated Action = "contact.updated"
+	ActionContactDeleted Action = "contact.deleted"
+	// ActionContactPhotoAdded/Deleted record the card photo writes (ADR
+	// 0065, ticket #1227): in-tx fail-safe, ids only.
+	ActionContactPhotoAdded   Action = "contact.photo_added"
+	ActionContactPhotoDeleted Action = "contact.photo_deleted"
+
+	// ActionRentalCreated and its neighbours record the Rentals context user
+	// mutations (ADR 0053 §3, ticket #529): in-tx fail-safe. There is no
+	// rental.extended — «продление» is a UI scenario of the planned-end edit
+	// (rental.updated). The sync of the managed payment is audited by the
+	// rental action, not twice as payment.*.
+	ActionRentalCreated   Action = "rental.created"
+	ActionRentalUpdated   Action = "rental.updated"
+	ActionRentalCompleted Action = "rental.completed"
+	ActionRentalDeleted   Action = "rental.deleted"
+
 	ActionSubscriptionTariffChanged    Action = "subscription.tariff_changed"
 	ActionSubscriptionCancelled        Action = "subscription.cancelled"
+	ActionSubscriptionResumed          Action = "subscription.resumed"
 	ActionSubscriptionAutoRenewToggled Action = "subscription.auto_renew_toggled"
+	// ActionSubscriptionServiceAssigned and its neighbours below are the
+	// admin subscription operations of issue #255: service assignment, force
+	// tariff change and grace extension. The admin cancel on the user's
+	// behalf reuses ActionSubscriptionCancelled with the admin actor.
+	ActionSubscriptionServiceAssigned Action = "subscription.service_assigned"
+	ActionSubscriptionTariffForced    Action = "subscription.tariff_forced"
+	ActionSubscriptionGraceExtended   Action = "subscription.grace_extended"
+	// ActionSubscriptionTimeShifted is the stand-only time-travel shift of
+	// the subscription lifecycle (issue #665): the rig moves the temporal
+	// boundaries for the acceptance scenarios and audits every move.
+	ActionSubscriptionTimeShifted Action = "subscription.time_shifted"
 
 	ActionPaymentMethodAdded     Action = "payment_method.added"
 	ActionPaymentMethodActivated Action = "payment_method.activated"
@@ -122,15 +212,26 @@ const (
 	ActionSubscriptionPaymentFailed    Action = "subscription_payment.failed"
 	ActionSubscriptionPaymentRefunded  Action = "subscription_payment.refunded"
 	ActionSubscriptionPaymentSynced    Action = "subscription_payment.synced"
+
+	// ActionTariffCreated and ActionTariffUpdated are the admin tariff
+	// management operations (issue #256): creating a plan and editing its
+	// prices, property limit or activity (hiding included). Context carries
+	// the resulting field values, never user data.
+	ActionTariffCreated Action = "tariff.created"
+	ActionTariffUpdated Action = "tariff.updated"
 )
 
 // EntityType identifies the kind of entity the action targets.
 type EntityType string
 
 const (
-	EntityUser            EntityType = "user"
-	EntityProperty        EntityType = "property"
-	EntityPropertyPhoto   EntityType = "property_photo"
+	EntityUser          EntityType = "user"
+	EntityProperty      EntityType = "property"
+	EntityPropertyPhoto EntityType = "property_photo"
+	// EntityProfilePhoto and EntityContactPhoto are the single-photo slots
+	// of the profile and the contact card (ADR 0065, ticket #1227).
+	EntityProfilePhoto    EntityType = "profile_photo"
+	EntityContactPhoto    EntityType = "contact_photo"
 	EntityPropertyContact EntityType = "property_contact"
 	EntityPropertyMember  EntityType = "property_member"
 	// EntityPropertyMemberInvitation is a pending email invitation to shared
@@ -141,21 +242,58 @@ const (
 	EntityOperation                EntityType = "operation"
 	EntityRecurringOperation       EntityType = "recurring_operation"
 	EntityOperationCategory        EntityType = "operation_category"
-	EntitySubscription             EntityType = "subscription"
-	EntityPaymentMethod            EntityType = "payment_method"
-	EntitySubscriptionPayment      EntityType = "subscription_payment"
+	// EntityPayment is a payment rule of the Payments context (ADR 0047):
+	// the rule itself, not its materialized operations.
+	EntityPayment EntityType = "payment"
+	// EntityTaskRule is a task rule of the Tasks context (ADR 0051); the
+	// EntityTask covers both its materialized occurrences and the completed
+	// journal (the journal clear has no single entity id — Context.count).
+	EntityTaskRule EntityType = "task_rule"
+	EntityTask     EntityType = "task"
+	// EntityContact is a contact card of the Contacts context (ADR 0054).
+	EntityContact EntityType = "contact"
+	// EntityRental is a rental of the Rentals context (ADR 0053): the
+	// occupancy period with its terms; its managed payment audits through
+	// the rental actions, not as a second payment.* entry.
+	EntityRental              EntityType = "rental"
+	EntitySubscription        EntityType = "subscription"
+	EntityPaymentMethod       EntityType = "payment_method"
+	EntitySubscriptionPayment EntityType = "subscription_payment"
+	EntityTariff              EntityType = "tariff"
 )
 
 // Entry is a single audit log record.
 type Entry struct {
 	ID         uuid.UUID
 	CreatedAt  time.Time
-	ActorID    *uuid.UUID // nil = system/anonymous
+	ActorID    *uuid.UUID // System or anonymous when nil.
 	ActorRole  ActorRole
 	Action     Action
-	EntityType EntityType     // "" = none
-	EntityID   *uuid.UUID     // nil = none
-	Context    map[string]any // whitelist fields only, never PII/secrets
+	EntityType EntityType     // None when empty.
+	EntityID   *uuid.UUID     // None when nil.
+	Context    map[string]any // Whitelist fields only, never PII/secrets.
 	RequestID  string
 	IP         string
+}
+
+// Actor identifies who performed an action, for audit recording. It carries
+// just enough identity (user ID + role) for the application layer to record
+// audit without depending on transport context or the full identity aggregate.
+type Actor struct {
+	ID   uuid.UUID
+	Role ActorRole
+}
+
+// ActorRoleFromRole maps a shared-kernel actor.Role to an audit ActorRole.
+// Unknown or future roles map to Anonymous rather than masking as Owner,
+// so a corrupt or unexpected value stays visible in the audit trail.
+func ActorRoleFromRole(role actor.Role) ActorRole {
+	switch role {
+	case actor.RoleOwner:
+		return ActorRoleOwner
+	case actor.RoleAdmin:
+		return ActorRoleAdmin
+	default:
+		return ActorRoleAnonymous
+	}
 }

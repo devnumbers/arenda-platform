@@ -1,0 +1,9 @@
+import type { JSX } from 'react';
+import { OperationsDirectionLoading } from '@/widgets/payments';
+
+/**
+ * Route-loading направления «Доходы» (#609).
+ */
+export default function Loading(): JSX.Element {
+  return <OperationsDirectionLoading title="Доходы" />;
+}

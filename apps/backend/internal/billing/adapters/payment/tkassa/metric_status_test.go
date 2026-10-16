@@ -2,11 +2,11 @@ package tkassa
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"testing"
 
+	"github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/payment"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 )
 
@@ -16,12 +16,13 @@ import (
 //     blocked charge, or a payment-not-found outcome;
 //   - "error" for genuine operational failures (transport/timeout/context,
 //     request-build, non-2xx HTTP, unmarshal) and for broken-integration
-//     signals (token-invalid 204/205, invalid-operation 1125/1126) — whether
-//     direct or wrapped.
+//     signals (auth-rejected 204/205, invalid-operation 9/12/1125/1126) —
+//     whether direct or wrapped.
 func TestMetricStatus(t *testing.T) {
+	t.Parallel()
 	// Mirror how post constructs a provider error-code response.
 	providerErr := &ProviderError{
-		Method:    "Charge",
+		Method:    methodCharge,
 		ErrorCode: "105",
 		Message:   "Charge rejected",
 		Details:   "insufficient funds",
@@ -37,67 +38,77 @@ func TestMetricStatus(t *testing.T) {
 		{
 			name: "nil error is ok",
 			err:  nil,
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "business decline ProviderError is ok",
 			err:  providerErr,
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "wrapped ProviderError is still ok",
 			err:  fmt.Errorf("tkassa: add customer failed: %w", providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
-			name: "card-not-found sentinel is ok",
-			err:  application.ErrProviderCardNotFound,
-			want: "ok",
+			name: "method-not-found sentinel is ok",
+			err:  application.ErrProviderMethodNotFound,
+			want: payment.StatusOK,
 		},
 		{
 			name: "charge-blocked sentinel is ok",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderChargeBlocked, providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
 			name: "payment-not-found sentinel is ok",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderPaymentNotFound, providerErr),
-			want: "ok",
+			want: payment.StatusOK,
 		},
 		{
-			name: "token-invalid sentinel is a broken-integration error",
-			err:  fmt.Errorf("%w: %w", application.ErrProviderTokenInvalid, providerErr),
-			want: "error",
+			name: "insufficient-funds sentinel is ok (business outcome)",
+			err:  fmt.Errorf("%w: %w", application.ErrProviderInsufficientFunds, providerErr),
+			want: payment.StatusOK,
+		},
+		{
+			name: "saved-method-expired sentinel is ok (business outcome)",
+			err:  fmt.Errorf("%w: %w", application.ErrProviderSavedMethodExpired, providerErr),
+			want: payment.StatusOK,
+		},
+		{
+			name: "duplicate-operation sentinel is ok (business outcome)",
+			err:  fmt.Errorf("%w: %w", application.ErrProviderDuplicateOperation, providerErr),
+			want: payment.StatusOK,
+		},
+		{
+			name: "auth-rejected sentinel is a broken-integration error",
+			err:  fmt.Errorf("%w: %w", application.ErrProviderAuthRejected, providerErr),
+			want: payment.StatusError,
 		},
 		{
 			name: "invalid-operation sentinel is a broken-integration error",
 			err:  fmt.Errorf("%w: %w", application.ErrProviderInvalidOperation, providerErr),
-			want: "error",
+			want: payment.StatusError,
 		},
 		{
 			name: "plain transport error is error",
 			err:  net.ErrClosed,
-			want: "error",
+			want: payment.StatusError,
 		},
 		{
 			name: "wrapped transport error is error",
 			err:  transportErr,
-			want: "error",
+			want: payment.StatusError,
 		},
 		{
-			name: "non-2xx HTTP error is error",
-			err:  errors.New("tkassa: Charge returned HTTP 503: unavailable"),
-			want: "error",
-		},
-		{
-			name: "cancelled context is error",
+			name: "canceled context is error",
 			err:  context.Canceled,
-			want: "error",
+			want: payment.StatusError,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := metricStatus(tt.err); got != tt.want {
 				t.Fatalf("metricStatus(%v) = %q, want %q", tt.err, got, tt.want)
 			}

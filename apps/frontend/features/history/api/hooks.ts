@@ -1,0 +1,272 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type UseInfiniteQueryResult, type UseQueryResult } from '@tanstack/react-query';
+import type { ApiError } from '@/shared/api/errors';
+import type { HistoryEntry, HistoryFilterOptions } from '@/entities/history';
+import { historyKeys, type HistoryFeedScope } from '@/shared/api/query-keys';
+import { subscribeRealtimeEntity } from '@/shared/api/realtime-subscriptions';
+import { noteFreshFeedEntryIds } from './live-fresh';
+
+import {
+  HISTORY_PAGE_SIZE,
+  type HistoryFeedPageParam,
+} from './history-url';
+
+import {
+  fetchHistoryPage,
+  historyFeedQueryOptions,
+  historyFiltersQueryOptions,
+  historyHasEntriesQueryOptions,
+  type HistoryFeedPage,
+} from './queries';
+
+import { createLiveFeedFrameHandler } from './live-feed-frames';
+
+/**
+ * Лента «История действий» (#709): двусторонний keyset по (created_at, id)
+ * — мессенджерская модель «новые снизу». Порции уходят в прошлое стороной
+ * next: fetchNextPage читает СТАРШЕ (before_cursor), поэтому «следующая»
+ * страница в модели react-query рисуется НАД загруженными — prepend старых
+ * при прокрутке вверх. Сторона prev (after_cursor) — prepend свежих
+ * записей, появившихся после загрузки; свежие prepend'ит live-догон
+ * (#718). select разворачивает ПЛОСКИЙ список страниц в
+ * хронологию — страницы приходят [новейшая, …, старейшая], внутри
+ * страницы строки по убыванию; реверс целого даёт «старые сверху, новые
+ * снизу» независимо от того, с какой стороны rides порция (реверс
+ * постранично оставил бы новую страницу на её месте в массиве — баг
+ * живой приёмки #709: prepend-страница легла в низ ленты).
+ *
+ * Смена скоупа (поиск #710: q в ключе) держит прежнюю выдачу, пока едет
+ * запрос с новым ключом (keepPreviousData, канон поиска #601/#609) —
+ * лента под полем не мигает скелетоном на каждый шаг набора.
+ *
+ * Лента живая (карта #714, тикет #718): хук подписан на кадры history
+ * realtime-стрима (ADR 0062) — точный потребитель вместо blanket-инвалидации
+ * (реестр realtime-subscriptions; провайдер подавляет инвалидацию семейства,
+ * пока подписка жива). Кадр догоняет ленту СНИЗУ — свежие строки вливаются
+ * в первую страницу кэша (mergeFreshIntoFirstPage), не перечитывая окно:
+ * keyset-страницы иммутабельны, а перечитывание сдвинуло бы границы окна и
+ * дёрнуло читающего старые строки. Правила догона — в
+ * createLiveFeedFrameHandler; на открытии стрима (переподключение, возврат
+ * видимости) ленту перечитывает onOpen-инвалидация провайдера — окно
+ * реанкеруется целиком.
+ */
+export function useHistoryFeed(
+  scope: HistoryFeedScope = {},
+  options: { readonly enabled?: boolean } = {},
+): UseInfiniteQueryResult<HistoryEntry[], ApiError> {
+  const queryClient = useQueryClient();
+  // Аннотация на константе: она же контекстный тип вывода TError — без неё
+  // наблюдатель выводит дефолтный Error вместо ApiError.
+  const query: UseInfiniteQueryResult<HistoryEntry[], ApiError> = useInfiniteQuery({
+    ...historyFeedQueryOptions({ scope }),
+    getPreviousPageParam: (firstPage): HistoryFeedPageParam | undefined =>
+      firstPage.prevCursor ? { after: firstPage.prevCursor } : undefined,
+    select: (data) => data.pages.flatMap((page) => page.items).reverse(),
+    placeholderData: keepPreviousData,
+    // Фильтры #711, выбранные «в ноль», означают пустой результат —
+    // серверный контракт пустой список не отличает от «все», запрос не
+    // делается (historyFeedScope возвращает null).
+    enabled: options.enabled ?? true,
+  });
+  useLiveFeedFrames(scope, query, queryClient);
+  return query;
+}
+
+/** Структурный срез результата useInfiniteQuery, нужный живой подписке:
+ * полные дженерики наблюдателя в сигнатуру не тащим. */
+type LiveFeedQuery = {
+  readonly isEnabled: boolean;
+  readonly isPending: boolean;
+  /** SELECT-данные (#709) — плоская хронология; длина = «есть загруженные
+   * строки» (к границе можно вливать свежие). */
+  readonly data?: HistoryEntry[];
+  refetch(): Promise<unknown>;
+};
+
+/** Вливает свежие строки в первую страницу кэша (канон prepend'а TanStack):
+ * страница растёт без добавления страницы — pageParams[0] остаётся undefined,
+ * поэтому последующий refetch ленты перечитывает её целиком и консистентен
+ * (prepend отдельной страницей через fetchPreviousPage ломал refetch:
+ * неполная prepend-страница не несёт next_cursor — контракт #708 отдаёт его
+ * только у полных порций — и обход страниц обрывался, обрезая ленту;
+ * найдено живой приёмкой #718). Свежие строки НОВЕЕ всех загруженных —
+ * в начало массива items первой страницы (порядок внутри страницы — по
+ * убыванию времени); prevCursor первой страницы сдвигается на свежайшую
+ * строку (граница следующего догона), nextCursor не трогается — граница
+ * в прошлое неизменна. Догон может приехать параллельно с полным
+ * перечитыванием ленты (onOpen-инвалидация провайдера): refetch успел
+ * перезаписать кэш между чтением границы и setQueryData — первая страница
+ * уже содержит свежие строки, и повторный влив тех же строк устраняется
+ * дедупом по id. */
+export function mergeFreshIntoFirstPage(
+  old: InfiniteData<HistoryFeedPage> | undefined,
+  freshItems: HistoryEntry[],
+  freshPrevCursor: string | null,
+): InfiniteData<HistoryFeedPage> | undefined {
+  if (old === undefined || old.pages.length === 0) {
+    return old;
+  }
+  const first = old.pages[0];
+  if (first === undefined) {
+    return old;
+  }
+  const knownIds = firstPageKnownIds(old);
+  const novelItems = freshItems.filter((item) => !knownIds.has(item.id));
+  const mergedFirst: HistoryFeedPage = {
+    items: [...novelItems, ...first.items],
+    nextCursor: first.nextCursor,
+    prevCursor: freshPrevCursor ?? first.prevCursor,
+  };
+  return { ...old, pages: [mergedFirst, ...old.pages.slice(1)] };
+}
+
+/** Идентификаторы строк первой страницы кэша — одна «уже известная»
+ * сторона дедупа для влития и для метки «новое» (#880). */
+function firstPageKnownIds(old: InfiniteData<HistoryFeedPage> | undefined): Set<string> {
+  return new Set(old?.pages[0]?.items.map((item) => item.id) ?? []);
+}
+
+/** Свежие строки, которых ещё нет в ленте (#880): догон может приехать
+ * параллельно с onOpen-перечитыванием — уже влитые строки метки «новое»
+ * не получают. Тот же дедуп по id, что у влития (firstPageKnownIds). */
+export function novelFeedEntryIds(
+  old: InfiniteData<HistoryFeedPage> | undefined,
+  freshItems: HistoryEntry[],
+): string[] {
+  const knownIds = firstPageKnownIds(old);
+  return freshItems.filter((item) => !knownIds.has(item.id)).map((item) => item.id);
+}
+
+/** Метки времени последнего live-влития в ленту — по ключу скоупа (модульный
+ * реестр: решение прокрутки на экране принимается в useLayoutEffect по краям
+ * выдачи, а рост из двух источников может приехать в одном React-коммите —
+ * fetchNextPage дописал старые сверху, live-prepend влил свежие снизу; экран
+ * отличает гонку от перечитывания окна, сравнивая метку с временем своего
+ * прошлого снимка краёв — widgets/history/lib/feed-scroll.ts). */
+const lastLiveMergeTimes = new Map<string, number>();
+
+/** Момент последнего live-влития в ленту скоупа (0 — влитий не было). */
+export function lastLiveMergeAt(scope: HistoryFeedScope): number {
+  return lastLiveMergeTimes.get(historyFeedScopeKey(scope)) ?? 0;
+}
+
+/** Ключ скоупа ленты одной строкой — общий у реестров влития (метка
+ * live-влития, свежие строки #880) и экрана (дельта снимков краёв). */
+export function historyFeedScopeKey(scope: HistoryFeedScope): string {
+  return historyKeys.feed(scope).join('/');
+}
+
+/** Подписка ленты на кадры history (тикет #718): обработчик живёт столько же,
+ * сколько хук, и читает актуальные query/scope через рефы (синхронизация —
+ * в эффекте, до подписки: SSE-кадры — макротаски, к их приходу эффекты
+ * последнего коммита сброшены); кадр догоняет ленту снизу (логика —
+ * createLiveFeedFrameHandler). */
+function useLiveFeedFrames(
+  scope: HistoryFeedScope,
+  query: LiveFeedQuery,
+  queryClient: ReturnType<typeof useQueryClient>,
+): void {
+  const queryRef = useRef(query);
+  const scopeRef = useRef(scope);
+  useEffect(() => {
+    queryRef.current = query;
+    scopeRef.current = scope;
+  });
+  useEffect(() => {
+    const handler = createLiveFeedFrameHandler({
+      state: () => ({
+        enabled: queryRef.current.isEnabled && !queryRef.current.isPending,
+        hasPages: (queryRef.current.data?.length ?? 0) > 0,
+        scopePropertyIds: scopeRef.current.propertyIds,
+      }),
+      fetchFresh: async () => {
+        const key = historyKeys.feed(scopeRef.current);
+        const raw = queryClient.getQueryData<InfiniteData<HistoryFeedPage>>(key);
+        const boundary = raw?.pages[0]?.prevCursor;
+        if (raw === undefined || raw.pages.length === 0 || boundary === null) {
+          return null;
+        }
+        const page = await fetchHistoryPage(scopeRef.current, { after: boundary });
+        // items порции readonly (HistoryFeedPage) — копия снимает readonly
+        // для дедупа и влития; сами они массив не мутируют.
+        const freshItems = [...page.items];
+        if (freshItems.length === 0) {
+          return { hasMore: false };
+        }
+        // Строки, которых в ленте не было (#880), отмечаются ДО влития —
+        // дедуп по первой странице прошлого состояния кэша; они получают
+        // row-in и метку «новое», пока читатель их не увидит (live-fresh.ts).
+        const novelIds = novelFeedEntryIds(
+          queryClient.getQueryData<InfiniteData<HistoryFeedPage>>(key),
+          freshItems,
+        );
+        queryClient.setQueryData<InfiniteData<HistoryFeedPage>>(
+          key,
+          (old) => mergeFreshIntoFirstPage(old, freshItems, page.prevCursor),
+        );
+        // Метка влития — сразу после записи в кэш: следующий коммит краёв на
+        // экране позже кадра, поэтому «метка > времени снимка» ловит влитие,
+        // приехавшее в один коммит с prepend'ом старых (гонка скролла).
+        const mergedAt = Date.now();
+        const scopeKey = historyFeedScopeKey(scopeRef.current);
+        lastLiveMergeTimes.set(scopeKey, mergedAt);
+        noteFreshFeedEntryIds(scopeKey, novelIds, mergedAt);
+        return { hasMore: freshItems.length >= HISTORY_PAGE_SIZE };
+      },
+      refetch: () => queryRef.current.refetch(),
+    });
+    return subscribeRealtimeEntity('history', {
+      onFrame: (frame) => {
+        // Пока лента — точный потребитель семейства, blanket-путь молчит:
+        // немонтированные кэши historyKeys (другие скоупы ленты, опции
+        // шита) помечаются устаревшими сами — без перечитывания активных
+        // запросов (refetchType 'none' не трогает смонтированную ленту,
+        // keyset-окно не сдвигается); повторный маунт в окно staleTime
+        // перечитает, навигация устаревших строк не увидит.
+        void queryClient.invalidateQueries({
+          queryKey: historyKeys.all,
+          refetchType: 'none',
+        });
+        handler(frame);
+      },
+    });
+  }, [queryClient]);
+}
+
+/**
+ * Опции шита фильтров (GET /history/filters, #708): ленте нужны фото
+ * объектов для шапок групп — item фото не несёт (ADR 0061 §7). Без
+ * propertyIds — опции всей области чтения: глобальная лента не прибита,
+ * объектные шапки и фильтр «Объекты» работают по всей области. С
+ * propertyIds — суженная область прибитой объектом страницы («История
+ * объекта» #840, страница пары #841):
+ * участники — собственник и соучастники объекта (D6), глобальная же
+ * область с D14 (#1305) несёт только участников моих объектов — без
+ * сужения получатель shared-доступа не увидел бы в шите чужого владельца.
+ */
+export function useHistoryFilters(
+  propertyIds?: ReadonlyArray<string>,
+): UseQueryResult<HistoryFilterOptions, ApiError> {
+  return useQuery(historyFiltersQueryOptions({ propertyIds }));
+}
+
+/**
+ * Были ли действия у объекта (решение владельца 13.10.2026): один лёгкий
+ * запрос limit=1 для пустого списка «Участников объекта» — иконка
+ * «Истории объекта» рисуется, только когда записи есть, свежий объект
+ * остаётся без входа. Запрос включается вызовом (enabled — список пуст);
+ * пока ответа нет и на ошибке — false, вход консервативно скрыт (§7:
+ * иконки появляются по факту данных).
+ */
+export function useHistoryHasEntries(
+  propertyId: string,
+  options: { readonly enabled?: boolean } = {},
+): boolean {
+  const query = useQuery({
+    ...historyHasEntriesQueryOptions({ propertyId }),
+    enabled: options.enabled ?? true,
+  });
+  return query.data ?? false;
+}

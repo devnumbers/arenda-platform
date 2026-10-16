@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted (CSRF hardening extended by ADR 0056: CrossOriginProtection + Content-Type check alongside SameSite=Lax)
 
 ## Context
 

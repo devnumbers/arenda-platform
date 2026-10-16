@@ -1,0 +1,4 @@
+{
+  "$schema": "https://unpkg.com/knip@6.32.2/schema.json",
+  "entry": ["nolint-gate.mjs"]
+}

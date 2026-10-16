@@ -2,11 +2,10 @@ package application
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/google/uuid"
-	leasesdomain "github.com/nambers/arenda-planform/apps/backend/internal/leases/domain"
+	accessdomain "github.com/nambers/arenda-planform/apps/backend/internal/access/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -44,13 +43,136 @@ type OwnerDisplayNameResolver interface {
 	DisplayName(ctx context.Context, userID uuid.UUID) (string, error)
 }
 
-// SuspendedSharedCounter reports how many shared memberships of a recipient
-// are currently suspended (hidden from the recipient's property list due to a
-// tariff slot shortage). Implemented by the access bounded context and injected
-// optionally: when nil, the properties list reports zero hidden shared.
-// See issue #158 (T4).
-type SuspendedSharedCounter interface {
-	CountSuspendedByUser(ctx context.Context, userID uuid.UUID) (int, error)
+// OwnerEmailResolver resolves a property owner's account email for the
+// detail's owner contact row (Figma 2200-97365): a deliberate exposure on
+// this surface, the same posture as suspended_shared.owner_email (ticket
+// #702). Optional.
+type OwnerEmailResolver interface {
+	GetEmail(ctx context.Context, userID uuid.UUID) (string, error)
+}
+
+// OwnerPhotoResolver resolves a property owner's profile photo streaming
+// path (ADR 0065, решение #1286) for the owner avatar on the detail and the
+// shared list rows. Optional.
+type OwnerPhotoResolver interface {
+	GetPhotoURL(ctx context.Context, userID uuid.UUID) (string, error)
+}
+
+// SharedSuspendedMembership is one suspended shared membership of the reading
+// actor (ticket #702): the blur-card shown in the property list while the
+// object is temporarily unavailable because the actor's tariff limit is
+// exceeded. It carries the object's own card data (title and address — the
+// card renders for real under the blur, Figma 2213-99113; photos are not
+// wired — every card wears the same house-glyph avatar today) plus the owner
+// contact the reason sheet renders (Figma 2229-100002). It replaces the
+// hidden-shared count footnote (issues #158 T4, #163 — same predicate and
+// FIFO order).
+type SharedSuspendedMembership struct {
+	PropertyID uuid.UUID
+	Role       sharedpolicy.Role
+	Name       string
+	Address    string
+	OwnerName  string
+	OwnerEmail string
+}
+
+// SuspendedSharedMemberships lists the reading actor's suspended shared
+// memberships (ticket #702) in the FIFO order the hidden-shared count used
+// (#158 T4, #163): suspended memberships on non-archived properties.
+// Implemented by the access bounded context and injected optionally — when
+// nil, the list carries no placeholders.
+type SuspendedSharedMemberships interface {
+	SuspendedWith(ctx context.Context, userID uuid.UUID) ([]SharedSuspendedMembership, error)
+}
+
+// PropertyOwners maps the property ids of one list read onto their data
+// owners (the projections resolve «today» and scope per data owner, ADR
+// 0048); the rows carry the owner already, so the service passes it instead
+// of every adapter re-reading the properties.
+type PropertyOwners map[uuid.UUID]uuid.UUID
+
+// OwnerCalendar resolves a user's calendar date (ADR 0048) — the list reads
+// report the reading actor's «today» so the client counts the «Осталось
+// N месяцев» rental badge against the right day boundary (ticket #586; the
+// tasks feed's today rule, #521). Implemented by the calendar adapter shared
+// with rentals/payments; optional — when nil, the lists fall back to the
+// server clock's UTC date.
+type OwnerCalendar interface {
+	Today(ctx context.Context, userID uuid.UUID) (time.Time, error)
+}
+
+// PropertiesPage is one listing read: the merged rows (own + shared, the
+// pinned first), the reading actor's calendar date (ADR 0048) the client
+// renders the rental badges against (ticket #586), and the actor's
+// suspended shared memberships as blur-card placeholders (ticket #702).
+type PropertiesPage struct {
+	Items []domain.Property
+	Today time.Time
+	// ArchivedCount is the data owner's archived property count (issue
+	// #1233): the hub gates the «Архив» entry on it — no archived rows, no
+	// button. Own archived rows only: shared properties contribute nothing,
+	// the archive is owner-only.
+	ArchivedCount int
+	// SuspendedShared lists the actor's suspended shared memberships in FIFO
+	// order (ticket #702); empty when the port is unwired or the actor has
+	// none. Only the main list fills it — archived objects hide their
+	// suspended legs behind the archive itself (#163).
+	SuspendedShared []SharedSuspendedMembership
+}
+
+// RentalOccupancyReader reports the per-property occupancy projection
+// («Занятость объекта», резолюция #584, ticket #585) computed from each
+// property's single unfinished rental against the data owner's today (ADR
+// 0048). Implemented by the rentals bounded context; injected optionally —
+// when nil, the list reads report no occupancy. Every listed property must
+// be present in the result: without an unfinished rental it reports
+// OccupancyNone.
+type RentalOccupancyReader interface {
+	OccupancyByProperty(ctx context.Context, owners PropertyOwners) (map[uuid.UUID]domain.Occupancy, error)
+}
+
+// OverdueOperationsReader reports which of the given properties have overdue
+// planned operations — stored planned rows dated before the data owner's
+// today (ADR 0048), the same predicate the payments listings resolve as the
+// overdue view status (резолюция #584: the red dot never duplicates the
+// computation). Implemented by the payments bounded context; injected
+// optionally — when nil, the list reads report no overdue flags. Properties
+// without overdue operations may miss from the result.
+type OverdueOperationsReader interface {
+	OverdueByProperty(ctx context.Context, owners PropertyOwners) (map[uuid.UUID]bool, error)
+}
+
+// ArchivePausesBridge drives the payments context's system pauses across
+// the object's archive round-trip (тикет #1342): entering the archive
+// places the open-ended auto_archive pause on every live rule of the
+// object (rent-managed included — the pause rides the object's lifecycle,
+// ADR 0053 §3, not a rental terms edit), returning from it closes ONLY the
+// auto_archive pauses — the owner's manual ones stay. Both legs run inside
+// the caller's transaction (the RentalDeletionGuard shape) so the pauses,
+// their change-log rows and their action journal rows are born and die
+// with the archive change itself. Implemented by the payments bounded
+// context; injected optionally — when nil, the lifecycle changes skip the
+// pauses (a test wiring).
+type ArchivePausesBridge interface {
+	PauseAllForArchive(ctx context.Context, tx transaction.Tx, scope, propertyID, actor uuid.UUID, role sharedpolicy.Role) error
+	ResumeArchivePauses(ctx context.Context, tx transaction.Tx, scope, propertyID, actor uuid.UUID, role sharedpolicy.Role) error
+}
+
+// RentalDeletionGuard gates the property deletion on the rentals bounded
+// context (issue #632). HasUnfinished reports the property's unfinished
+// rental — the delete is refused with ErrPropertyOccupied while the
+// property is rented out; the owner completes the rental first (#627).
+// DeleteByProperty removes the property's rental rows inside the caller's
+// transaction BEFORE the property row itself: the explicit order (the ADR
+// 0025 §2 precedent) defuses the rentals.payment_id RESTRICT FK — left to
+// the FK machinery, the rentals and the payments cascades off the property
+// row run in no guaranteed order and the RESTRICT kills the whole delete.
+// Both methods take the caller's transaction — the same shape as
+// RecipientSlotPolicy. Implemented by the rentals bounded context; injected
+// optionally — when nil, deletion skips both steps (a test wiring).
+type RentalDeletionGuard interface {
+	HasUnfinished(ctx context.Context, tx transaction.Tx, scope, propertyID uuid.UUID) (bool, error)
+	DeleteByProperty(ctx context.Context, tx transaction.Tx, scope, propertyID uuid.UUID) error
 }
 
 // RecipientSlotPolicy enforces the recipient tariff slot invariant for the
@@ -59,29 +181,42 @@ type SuspendedSharedCounter interface {
 // no slot policy runs (pre-T4 behaviour). RecoverSuspendedForProperty is called
 // when the owner archives a shared object (a slot freed for each recipient);
 // EnforceOnUnarchiveForProperty is called when the owner unarchives a shared
-// object (the object re-enters the recipients' pool); RecoverAfterPropertyDelete
-// is called before the owner deletes a shared object (the memberships are
-// dropped and the freed slots recovered FIFO). RecoverSuspended is called when
-// an owner frees one of their OWN tariff slots (archive/delete of an own object,
-// or the billing auto-archive): the owner is never a member row of their own
-// object, so the per-property entries above do not visit them as a recipient —
-// this per-recipient entry reactivates the owner's own suspended shared queue
-// FIFO. See issue #158 (T4).
+// object (the object re-enters the recipients' pool);
+// RecoverAfterPropertyDelete is called before the owner deletes a shared
+// object (the memberships are dropped and the freed slots recovered FIFO).
+// RecoverSuspended is called when an owner frees one of their OWN tariff slots
+// (archive/delete of an own object, or the billing auto-archive): the owner is
+// never a member row of their own object, so the per-property entries above do
+// not visit them as a recipient — this per-recipient entry reactivates the
+// owner's own suspended shared queue FIFO. EnforceRecipientPoolGrowth is the
+// per-recipient mirror on the growth side (D13, #1297): the recipient's own
+// object re-entered their pool (unarchive, grace restore), and the excess
+// shared memberships beyond the limit are suspended by the single eviction
+// rule — the oldest shared first, own candidates untouched. RecipientPoolFull
+// is the honest-refusal predicate of CreateProperty (#1300 Q2): the full pool
+// (own + shared) already occupies every slot, so the creation is refused
+// instead of silently suspending someone else's active access. The recoveries
+// and the growth enforcement return the affected membership rows — the caller
+// may collect their access pairs for the realtime dispatch (карта #714, #716;
+// ADR 0062). See issue #158 (T4).
 type RecipientSlotPolicy interface {
-	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
-	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
-	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) error
-	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) error
+	RecoverSuspendedForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
+	EnforceOnUnarchiveForProperty(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
+	RecoverAfterPropertyDelete(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]accessdomain.Membership, error)
+	RecoverSuspended(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) ([]accessdomain.Membership, error)
+	EnforceRecipientPoolGrowth(
+		ctx context.Context, tx transaction.Tx, recipientID uuid.UUID, trigger string,
+	) ([]accessdomain.Membership, error)
+	RecipientPoolFull(ctx context.Context, tx transaction.Tx, recipientID uuid.UUID) (bool, error)
 }
 
 // SharedMembersDeleteMailer bridges the property deletion flow to the access
-// sharing lifecycle emails (issue #162, T6). Implemented by the access bounded
-// context and injected optionally: when nil, deleting a property sends no
-// emails to former shared members. CollectFormerMemberEmails runs inside the
-// delete transaction, before the slot policy drops the memberships (only
-// active+suspended members are collected; pending invitations are not
-// memberships and receive nothing). SendPropertyDeleted runs after the commit;
-// a send failure is logged by the caller and never rolls anything back.
+// context's "object deleted" letter (issue #162, T6): CollectFormerMemberEmails
+// runs inside the property delete transaction, before the slot policy drops the
+// memberships (only active+suspended members are collected; pending
+// invitations are not memberships and receive nothing). SendPropertyDeleted
+// runs after the commit; a send failure is logged by the caller and never
+// rolls anything back.
 type SharedMembersDeleteMailer interface {
 	CollectFormerMemberEmails(ctx context.Context, tx transaction.Tx, propertyID uuid.UUID) ([]string, error)
 	SendPropertyDeleted(ctx context.Context, to, propertyTitle string) error
@@ -92,22 +227,15 @@ type SubscriptionLimiter interface {
 	WithTx(tx transaction.Tx) (SubscriptionLimiter, error)
 }
 
-// OccupancyProvider reports which properties have an open lease.
-type OccupancyProvider interface {
-	IsOccupied(ctx context.Context, scope, propertyID uuid.UUID) (bool, error)
-	OccupiedPropertyIDs(ctx context.Context, scope uuid.UUID) (map[uuid.UUID]bool, error)
-	WithTx(tx transaction.Tx) OccupancyProvider
-}
-
-// PropertyBillingLifecycle manages the billing side effects of archiving and
-// unarchiving a property.
-type PropertyBillingLifecycle interface {
-	Suspend(ctx context.Context, propertyID, scope uuid.UUID, asOf time.Time) error
-	Resume(ctx context.Context, propertyID uuid.UUID, scope uuid.UUID, asOf time.Time) error
-	// CompleteOpenLeases force-completes all open leases of the property,
-	// applying the same side effects as a user-initiated lease completion.
-	CompleteOpenLeases(ctx context.Context, scope, propertyID uuid.UUID, asOf time.Time) error
-	WithTx(tx transaction.Tx) PropertyBillingLifecycle
+// PropertySearchQuery is the visible-slice search's parameters (ticket
+// #601): the raw search substring — the store escapes the ILIKE
+// metacharacters — and the keyset window over (name, id). AfterName and
+// AfterID travel together; nil (no cursor) reads from the beginning.
+type PropertySearchQuery struct {
+	Search    string
+	AfterName *string
+	AfterID   *uuid.UUID
+	Limit     int32
 }
 
 type PropertyRepository interface {
@@ -123,48 +251,45 @@ type PropertyRepository interface {
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Property, error)
 	ListActiveByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
 	ListArchivedByOwner(ctx context.Context, scope uuid.UUID) ([]domain.Property, error)
+	// SearchVisible walks the actor's visible non-archived properties (own
+	// plus actively shared) matching the search substring, in the (name, id)
+	// keyset order — the search endpoint's window (ticket #601). AccessRole
+	// is filled per row: RoleOwner for own rows, the membership role for
+	// shared ones.
+	SearchVisible(ctx context.Context, actor uuid.UUID, q PropertySearchQuery) ([]domain.Property, error)
 	Update(ctx context.Context, scope uuid.UUID, property domain.Property) (domain.Property, error)
+	// ActorPin reads the actor's personal pin on the property (the cutover
+	// #1307, D11): nil — not pinned by this actor, a moment — pinned since
+	// then. A personal state: the value is scoped to the reader, never to
+	// the property.
+	ActorPin(ctx context.Context, actor, propertyID uuid.UUID) (*time.Time, error)
+	// InsertActorPin pins the property for the actor at the given moment and
+	// returns the effective pin time: one atomic statement — a re-pin keeps
+	// the original time (the PUT's idempotency), a fresh pin takes the
+	// moment it was given. The view capability is resolved by the service's
+	// policy before the call.
+	InsertActorPin(ctx context.Context, actor, propertyID uuid.UUID, pinnedAt time.Time) (time.Time, error)
+	// DeleteActorPin unpins the property for the actor: the row goes;
+	// unpinning an unpinned property is a no-op.
+	DeleteActorPin(ctx context.Context, actor, propertyID uuid.UUID) error
+	// ActorPins reads the actor's personal pins for the listed properties —
+	// the batch overlay behind the list reads (the lists carry pinnedAt of
+	// the actor, own and shared rows alike).
+	ActorPins(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
+	// SetPropertyPhoto writes the photo columns in one atomic UPDATE (ADR
+	// 0065): nil clears the photo. The scope is the property's owner — the
+	// edit capability is resolved by the service's policy before the call.
+	SetPropertyPhoto(ctx context.Context, id, scope uuid.UUID, key, contentType *string) (domain.Property, error)
 	Archive(ctx context.Context, id, scope uuid.UUID) error
 	Unarchive(ctx context.Context, id, scope uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error)
+	// CountArchivedByOwner counts the owner's archived rows (issue #1233) —
+	// the «Архив» button gate; shares the scoping rule with CountActiveByOwner.
+	CountArchivedByOwner(ctx context.Context, scope uuid.UUID) (int, error)
+	// CountByOwnerAndType counts the owner's properties of the given type in
+	// every status — archived count too, deleted rows are gone (hard
+	// delete). The auto-name serial source (ticket #1001).
+	CountByOwnerAndType(ctx context.Context, scope uuid.UUID, propertyType domain.PropertyType) (int, error)
 	Delete(ctx context.Context, id, scope uuid.UUID) error
-	DeleteOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
-	DeleteRecurringOperationsByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
-	DeleteLeasesByProperty(ctx context.Context, scope, propertyID uuid.UUID) error
 	WithTx(tx transaction.Tx) PropertyRepository
-}
-
-// LeaseRepository provides lease data needed by the properties bounded context.
-type LeaseRepository interface {
-	ListByProperty(ctx context.Context, scope, propertyID uuid.UUID) ([]leasesdomain.Lease, error)
-	GetOpenLeaseByProperty(ctx context.Context, scope, propertyID uuid.UUID) (leasesdomain.Lease, error)
-}
-
-// PhotoStorage persists uploaded property photos and returns their public URL.
-type PhotoStorage interface {
-	Upload(ctx context.Context, key string, contentType string, size int64, data io.Reader) (string, error)
-	Delete(ctx context.Context, key string) error
-	HeadBucket(ctx context.Context) error
-}
-
-// PropertyPhotoRepository persists photo metadata for properties.
-type PropertyPhotoRepository interface {
-	Create(ctx context.Context, photoID, propertyID uuid.UUID, url string) (domain.Photo, error)
-	GetByID(ctx context.Context, photoID uuid.UUID) (domain.Photo, error)
-	GetByIDAndPropertyID(ctx context.Context, photoID, propertyID uuid.UUID) (domain.Photo, error)
-	GetByPropertyID(ctx context.Context, propertyID uuid.UUID) ([]domain.Photo, error)
-	GetByPropertyIDs(ctx context.Context, propertyIDs []uuid.UUID) (map[uuid.UUID][]domain.Photo, error)
-	CountByPropertyID(ctx context.Context, propertyID uuid.UUID) (int, error)
-	Delete(ctx context.Context, photoID uuid.UUID) error
-	WithTx(tx transaction.Tx) PropertyPhotoRepository
-}
-
-// PropertyContactRepository persists property contact records.
-type PropertyContactRepository interface {
-	Create(ctx context.Context, contact domain.PropertyContact) (domain.PropertyContact, error)
-	ListByProperty(ctx context.Context, propertyID, scope uuid.UUID) ([]domain.PropertyContact, error)
-	GetByIDAndOwner(ctx context.Context, contactID, scope uuid.UUID) (domain.PropertyContact, error)
-	Update(ctx context.Context, scope uuid.UUID, contact domain.PropertyContact) (domain.PropertyContact, error)
-	Delete(ctx context.Context, contactID, scope uuid.UUID) error
-	WithTx(tx transaction.Tx) PropertyContactRepository
 }

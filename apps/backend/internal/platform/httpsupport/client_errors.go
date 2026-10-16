@@ -45,11 +45,11 @@ func (h *ClientErrorsHandlers) ReportClientError(w http.ResponseWriter, r *http.
 	var body openapi.ClientErrorReport
 	if err := DecodeJSONBody(w, r, &body); err != nil {
 		LoggerFromContext(ctx).WarnContext(ctx, "failed to decode client error report", slog.String("error", SanitizeError(err)))
-		WriteProblem(w, http.StatusBadRequest, Problem(ctx, "Bad request", "Некорректное тело запроса"))
+		WriteProblem(ctx, w, http.StatusBadRequest, Problem(ctx, "Bad request", "Некорректное тело запроса"))
 		return
 	}
 	if !body.App.Valid() || body.Message == "" {
-		WriteProblem(w, http.StatusBadRequest, Problem(ctx, "Bad request", "Некорректное тело запроса"))
+		WriteProblem(ctx, w, http.StatusBadRequest, Problem(ctx, "Bad request", "Некорректное тело запроса"))
 		return
 	}
 

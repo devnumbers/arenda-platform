@@ -27,8 +27,9 @@ type OwnerResolver func(ctx context.Context, propertyID uuid.UUID) (uuid.UUID, e
 // the T2 policy kept as a fallback for tests; production wires the
 // membership-aware policy from the access context.
 type OwnerOnlyPolicy struct {
-	// owner is optional. When nil, RoleForProperty cannot resolve an owner and
-	// returns RoleNone for any actor (preserving privacy for unknown objects).
+	// The owner resolver is optional. When nil, RoleForProperty cannot resolve
+	// an owner and returns RoleNone for any actor (preserving privacy for
+	// unknown objects).
 	owner OwnerResolver
 }
 

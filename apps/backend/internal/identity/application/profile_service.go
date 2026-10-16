@@ -1,41 +1,58 @@
 package application
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 
 	"github.com/google/uuid"
-	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	auditdomain "github.com/nambers/arenda-planform/apps/backend/internal/audit/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
-	sharedtz "github.com/nambers/arenda-planform/apps/backend/internal/shared/tzresolver"
-	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
+// SharedPropertyChecker reports whether two users are connected through at
+// least one property both sides can read (ADR 0028 derived read, symmetric:
+// owner↔member and co-members). The gate of the shared profile-photo reads
+// (ADR 0065, решение владельца #1286); a checker outage fails closed.
+type SharedPropertyChecker interface {
+	ShareReadableProperty(ctx context.Context, viewerID, userID uuid.UUID) (bool, error)
+}
+
 // ProfileService provides read and update operations for the user's own profile.
+//
+// It embeds the identity txStoreFactory so UpdateProfile runs through runInTx
+// (ADR 0033, migration step 3): the user repository and audit recorder are
+// bound to the transaction by the factory, and the use case describes only
+// the business logic. Me is a plain read and stays outside the transaction.
 type ProfileService struct {
-	users               UserRepository
-	audit               auditapp.Recorder
-	db                  transaction.Beginner
-	reminderRescheduler sharedtz.ReminderRescheduler
+	txStoreFactory
+	// The photos port streams the profile photo (ADR 0065): the upload lands in the
+	// private storage under a fresh UUID key, the serving endpoints open it
+	// back — no public URL ever exists.
+	photos storageshared.PhotoStorage
+	// The shared checker gates reading another user's photo (решение #1286):
+	// self-reads never consult it, foreign reads need a readable shared
+	// property and fail closed on a checker outage.
+	shared SharedPropertyChecker
+	// The logger reports the best-effort orphan cleanups.
+	logger *slog.Logger
 }
 
-// NewProfileService creates a ProfileService. A nil reminderRescheduler is
-// replaced with a no-op implementation.
-func NewProfileService(users UserRepository, audit auditapp.Recorder, db transaction.Beginner, reminderRescheduler sharedtz.ReminderRescheduler) *ProfileService {
-	if audit == nil {
-		audit = auditapp.Noop{}
-	}
-	if reminderRescheduler == nil {
-		reminderRescheduler = noopReminderRescheduler{}
-	}
-	return &ProfileService{users: users, audit: audit, db: db, reminderRescheduler: reminderRescheduler}
-}
-
-type noopReminderRescheduler struct{}
-
-func (noopReminderRescheduler) RescheduleForTimezoneChange(context.Context, uuid.UUID, string, string) error {
-	return nil
+// NewProfileService creates a ProfileService. It embeds the shared identity
+// txStoreFactory so UpdateProfile runs through runInTx; the repositories and
+// audit recorder are shared by every identity service (ADR 0033 γ-factory).
+// The photos port streams the profile photo (ADR 0065); the shared checker
+// gates the foreign photo reads (решение #1286); the logger is the
+// orphan-cleanup channel.
+func NewProfileService(
+	factory txStoreFactory, photos storageshared.PhotoStorage, shared SharedPropertyChecker, logger *slog.Logger,
+) *ProfileService {
+	return &ProfileService{txStoreFactory: factory, photos: photos, shared: shared, logger: logger}
 }
 
 // Me returns the user profile.
@@ -43,93 +60,231 @@ func (s *ProfileService) Me(ctx context.Context, userID uuid.UUID) (domain.User,
 	return s.users.GetByID(ctx, userID)
 }
 
-// UpdateProfile updates the user's personal data. When the email changes, the
-// new address is marked as unverified until confirmed.
+// UpdateProfile updates the user's personal data. The email is not part of
+// the profile contract: it changes only through the confirmed two-code flow
+// (issue #721). The mutation and the audit entry run in a single transaction
+// through runInTx (ADR 0033, ADR 0020).
 func (s *ProfileService) UpdateProfile(ctx context.Context, userID uuid.UUID, cmd UpdateProfileCommand) (domain.User, error) {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var updated domain.User
 
-	users, err := s.users.WithTx(tx)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("bind user repository to tx: %w", err)
-	}
-	user, err := users.GetByIDForUpdate(ctx, userID)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("get user: %w", err)
-	}
-
-	// Capture old timezone before mutation so we can reschedule reminders if it changed.
-	oldTimezone := user.Timezone.String()
-
-	var oldEmail string
-	if user.Email != nil {
-		oldEmail = user.Email.String()
-	}
-
-	if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Email, cmd.Timezone); err != nil {
-		return domain.User{}, fmt.Errorf("update personal data: %w", err)
-	}
-
-	emailChanged := cmd.Email != nil && user.Email != nil && user.Email.String() != oldEmail
-	if emailChanged {
-		user.EmailVerifiedAt = nil
-	}
-
-	updated, err := users.Update(ctx, user)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("update user: %w", err)
-	}
-	user = updated
-
-	if err := s.audit.WithTx(tx).Record(ctx, auditdomain.Entry{
-		ActorID:    &userID,
-		ActorRole:  AuditActorRole(user.Role),
-		Action:     auditdomain.ActionProfileUpdated,
-		EntityType: auditdomain.EntityUser,
-		EntityID:   &userID,
-		Context:    map[string]any{"fields": updatedProfileFields(cmd)},
-	}); err != nil {
-		return domain.User{}, fmt.Errorf("record audit: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.User{}, fmt.Errorf("commit tx: %w", err)
-	}
-
-	// Reschedule pending reminders if the timezone changed (wall-clock semantics).
-	// The profile update is already committed; this runs synchronously so the
-	// user sees the reschedule complete within the request.
-	newTimezone := user.Timezone.String()
-	if cmd.Timezone != nil && newTimezone != oldTimezone {
-		if err := s.reminderRescheduler.RescheduleForTimezoneChange(ctx, userID, oldTimezone, newTimezone); err != nil {
-			return domain.User{}, fmt.Errorf("reschedule reminders for timezone change: %w", err)
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		user, err := stores.users.GetByIDForUpdate(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
 		}
+
+		if err := user.UpdatePersonalData(cmd.Name, cmd.Surname, cmd.Patronymic, cmd.Timezone); err != nil {
+			return fmt.Errorf("update personal data: %w", err)
+		}
+
+		updated, err = stores.users.Update(ctx, user)
+		if err != nil {
+			return fmt.Errorf("update user: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleFromRole(updated.Role),
+			Action:     auditdomain.ActionProfileUpdated,
+			EntityType: auditdomain.EntityUser,
+			EntityID:   &userID,
+			Context:    map[string]any{"fields": cmd.ChangedFields()},
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.User{}, err
 	}
 
-	return user, nil
+	return updated, nil
 }
 
-// updatedProfileFields lists the names of the fields a command changes. Only
-// field names are audited, never their values.
-func updatedProfileFields(cmd UpdateProfileCommand) []string {
-	fields := make([]string, 0, 5)
-	if cmd.Name != nil {
-		fields = append(fields, "name")
+// checkPhotoAccess gates the photo bytes (решение владельца #1286): the
+// owner reads their own photo without a relation query; everybody else needs
+// at least one property readable by both sides (ADR 0028, symmetric derived
+// read). No relation answers the same ErrPhotoNotFound as a missing photo —
+// existence is not disclosed (privacy-404, #152); a checker outage fails
+// closed with a wrapped error for the transport's 500.
+func (s *ProfileService) checkPhotoAccess(ctx context.Context, viewerID, userID uuid.UUID) error {
+	if viewerID == userID {
+		return nil
 	}
-	if cmd.Surname != nil {
-		fields = append(fields, "surname")
+	shared, err := s.shared.ShareReadableProperty(ctx, viewerID, userID)
+	if err != nil {
+		return fmt.Errorf("check shared property: %w", err)
 	}
-	if cmd.Patronymic != nil {
-		fields = append(fields, "patronymic")
+	if !shared {
+		return ErrPhotoNotFound
 	}
-	if cmd.Email != nil {
-		fields = append(fields, "email")
+	return nil
+}
+
+// PhotoDescriptor resolves the profile photo's identity for the serving
+// endpoint (ADR 0065): the key powers the ETag — a replacement mints a new
+// UUID key, so a 304 never lies about the bytes — and the content type
+// labels the response. The viewer is gated by checkPhotoAccess: self or a
+// shared-readable relation (решение #1286).
+func (s *ProfileService) PhotoDescriptor(ctx context.Context, viewerID, userID uuid.UUID) (key, contentType string, err error) {
+	if err := s.checkPhotoAccess(ctx, viewerID, userID); err != nil {
+		return "", "", err
 	}
-	if cmd.Timezone != nil {
-		fields = append(fields, "timezone")
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return "", "", err
 	}
-	return fields
+	if user.PhotoKey == nil {
+		return "", "", ErrPhotoNotFound
+	}
+	return *user.PhotoKey, derefString(user.PhotoContentType), nil
+}
+
+// OpenedPhoto is one streaming answer's payload: the body, its byte size,
+// the stored content type and the key (the ETag source).
+type OpenedPhoto struct {
+	Body        io.ReadCloser
+	Size        int64
+	ContentType string
+	Key         string
+}
+
+// OpenPhoto opens the profile photo object (ADR 0065). The viewer is gated
+// by checkPhotoAccess (решение #1286). A column key without an object is an
+// orphan — the honest ErrPhotoNotFound.
+func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UUID) (OpenedPhoto, error) {
+	if err := s.checkPhotoAccess(ctx, viewerID, userID); err != nil {
+		return OpenedPhoto{}, err
+	}
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return OpenedPhoto{}, err
+	}
+	if user.PhotoKey == nil {
+		return OpenedPhoto{}, ErrPhotoNotFound
+	}
+	body, size, contentType, err := s.photos.Open(ctx, *user.PhotoKey)
+	if err != nil {
+		if errors.Is(err, storageshared.ErrNotFound) {
+			return OpenedPhoto{}, ErrPhotoNotFound
+		}
+		return OpenedPhoto{}, fmt.Errorf("open profile photo: %w", err)
+	}
+	return OpenedPhoto{Body: body, Size: size, ContentType: contentType, Key: *user.PhotoKey}, nil
+}
+
+// SetProfilePhoto replaces the profile photo (ADR 0065, one image per
+// entity): the processed upload lands under a fresh UUID key, the columns
+// flip in the same transaction, and the previous object is removed
+// best-effort after the commit — a failed cleanup leaves a logged orphan,
+// never a broken state.
+func (s *ProfileService) SetProfilePhoto(ctx context.Context, userID uuid.UUID, processed photo.Processed) (domain.User, error) {
+	key, err := photo.NewKey(processed.ContentType)
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	var (
+		updated domain.User
+		oldKey  *string
+	)
+	err = s.runInTx(ctx, func(stores *txStores) error {
+		user, err := stores.users.GetByIDForUpdate(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
+		}
+		oldKey = user.PhotoKey
+
+		if err := s.photos.Put(ctx, key, bytes.NewReader(processed.Data), processed.ContentType, processed.Size); err != nil {
+			return fmt.Errorf("put profile photo: %w", err)
+		}
+
+		updated, err = stores.users.SetPhoto(ctx, userID, &key, &processed.ContentType)
+		if err != nil {
+			return fmt.Errorf("set user photo: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleFromRole(updated.Role),
+			Action:     auditdomain.ActionProfilePhotoAdded,
+			EntityType: auditdomain.EntityProfilePhoto,
+			EntityID:   &userID,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		// The new object may have landed before a later step failed: it is
+		// unreferenced — remove it the same best-effort way as the replaced
+		// one.
+		s.cleanupPhoto(ctx, key)
+		return domain.User{}, err
+	}
+	if oldKey != nil {
+		s.cleanupPhoto(ctx, *oldKey)
+	}
+	return updated, nil
+}
+
+// DeleteProfilePhoto clears the photo columns; clearing an absent photo is
+// ErrPhotoNotFound — the transport's 404. The object removal stays
+// best-effort after the commit.
+func (s *ProfileService) DeleteProfilePhoto(ctx context.Context, userID uuid.UUID) (domain.User, error) {
+	var (
+		updated domain.User
+		oldKey  *string
+	)
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		user, err := stores.users.GetByIDForUpdate(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
+		}
+		if user.PhotoKey == nil {
+			return ErrPhotoNotFound
+		}
+		oldKey = user.PhotoKey
+
+		updated, err = stores.users.SetPhoto(ctx, userID, nil, nil)
+		if err != nil {
+			return fmt.Errorf("set user photo: %w", err)
+		}
+
+		if err := stores.audit.Record(ctx, auditdomain.Entry{
+			ActorID:    &userID,
+			ActorRole:  auditdomain.ActorRoleFromRole(updated.Role),
+			Action:     auditdomain.ActionProfilePhotoDeleted,
+			EntityType: auditdomain.EntityProfilePhoto,
+			EntityID:   &userID,
+		}); err != nil {
+			return fmt.Errorf("record audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.User{}, err
+	}
+	if oldKey != nil {
+		s.cleanupPhoto(ctx, *oldKey)
+	}
+	return updated, nil
+}
+
+// cleanupPhoto removes an object best-effort: a failure is logged as an
+// orphan — it never fails the mutation that already committed.
+func (s *ProfileService) cleanupPhoto(ctx context.Context, key string) {
+	if err := s.photos.Delete(ctx, key); err != nil {
+		s.logger.WarnContext(ctx, "failed to delete profile photo from storage",
+			slog.String("key", key),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

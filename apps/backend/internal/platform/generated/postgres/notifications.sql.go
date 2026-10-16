@@ -11,190 +11,755 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const cancelByIDAndOwner = `-- name: CancelByIDAndOwner :execrows
-UPDATE reminders
-SET status = 'cancelled'
-WHERE id = $1 AND owner_id = $2 AND status IN ('pending', 'sending')
+const countUnreadNotifications = `-- name: CountUnreadNotifications :one
+SELECT COUNT(*)
+FROM notifications
+WHERE user_id = $1
+  AND read_at IS NULL
+  AND deleted_at IS NULL
 `
 
-type CancelByIDAndOwnerParams struct {
-	ID      pgtype.UUID `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
+// The unread counter (решение #737): unread, not-deleted rows of the user;
+// clicks, page opens and «Прочитать все» drive it down, push/email do not
+// touch it.
+func (q *Queries) CountUnreadNotifications(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnreadNotifications, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
-func (q *Queries) CancelByIDAndOwner(ctx context.Context, arg CancelByIDAndOwnerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cancelByIDAndOwner, arg.ID, arg.OwnerID)
+const deleteAllNotifications = `-- name: DeleteAllNotifications :execrows
+UPDATE notifications
+SET deleted_at = now()
+WHERE user_id = $1 AND deleted_at IS NULL
+`
+
+// «Удалить все» (решение #737): soft-deletes every feed row of the user in
+// one statement; the result is the number of rows hidden.
+func (q *Queries) DeleteAllNotifications(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAllNotifications, userID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const cancelReminderByTarget = `-- name: CancelReminderByTarget :execrows
-UPDATE reminders
-SET status = 'cancelled'
-WHERE owner_id = $1
-  AND target_type = $2
-  AND (
-      (target_type = 'operation' AND operation_id = $3::uuid) OR
-      (target_type = 'recurring_operation' AND recurring_operation_id = $3::uuid) OR
-      (target_type = 'lease' AND lease_id = $3::uuid)
-  )
-  AND event_type = $4
-  AND status IN ('pending', 'sending')
+const deleteNotification = `-- name: DeleteNotification :execrows
+UPDATE notifications
+SET deleted_at = now()
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 `
 
-type CancelReminderByTargetParams struct {
-	OwnerID    pgtype.UUID            `json:"owner_id"`
-	TargetType NotificationTargetType `json:"target_type"`
-	TargetID   pgtype.UUID            `json:"target_id"`
-	EventType  NotificationEventType  `json:"event_type"`
+type DeleteNotificationParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
-func (q *Queries) CancelReminderByTarget(ctx context.Context, arg CancelReminderByTargetParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cancelReminderByTarget,
-		arg.OwnerID,
-		arg.TargetType,
-		arg.TargetID,
-		arg.EventType,
+// Soft-deletes one feed row («удалить», решение #737): the row stays with
+// its deleted_at, the feed and the unread counter stop seeing it. Rows
+// matched = 0 means already deleted, read-status aside — the caller maps
+// that to not-found for the reader.
+func (q *Queries) DeleteNotification(ctx context.Context, arg DeleteNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotification, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getAccessEventPropertyView = `-- name: GetAccessEventPropertyView :one
+SELECT p.name, p.address, p.type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo
+FROM properties p
+WHERE p.id = $1
+`
+
+type GetAccessEventPropertyViewRow struct {
+	Name          string `json:"name"`
+	Address       string `json:"address"`
+	Type          string `json:"type"`
+	PropertyPhoto string `json:"property_photo"`
+}
+
+// The access events' property snapshot (#751): the display name and the
+// address line the feed rows' property card carries (EntityRef, #745); the
+// type picks the card avatar's placeholder glyph (карта #1217, #1244), the
+// photo path streams the card's picture when the object has one (#1275). A
+// missing property is a no-row error — the access transitions never fire on
+// a deleted object, a miss is abnormal and fails the publication.
+func (q *Queries) GetAccessEventPropertyView(ctx context.Context, id pgtype.UUID) (GetAccessEventPropertyViewRow, error) {
+	row := q.db.QueryRow(ctx, getAccessEventPropertyView, id)
+	var i GetAccessEventPropertyViewRow
+	err := row.Scan(
+		&i.Name,
+		&i.Address,
+		&i.Type,
+		&i.PropertyPhoto,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	return i, err
 }
 
-const cancelRemindersByFreeReminderID = `-- name: CancelRemindersByFreeReminderID :execrows
-UPDATE reminders
-SET status = 'cancelled'
-WHERE free_reminder_id = $1 AND owner_id = $2 AND status IN ('pending', 'sending')
+const getEmailPreferences = `-- name: GetEmailPreferences :one
+SELECT rental, payments_operations, tasks, shared_access
+FROM notification_email_preferences
+WHERE user_id = $1
 `
 
-type CancelRemindersByFreeReminderIDParams struct {
-	FreeReminderID pgtype.UUID `json:"free_reminder_id"`
+type GetEmailPreferencesRow struct {
+	Rental             bool `json:"rental"`
+	PaymentsOperations bool `json:"payments_operations"`
+	Tasks              bool `json:"tasks"`
+	SharedAccess       bool `json:"shared_access"`
+}
+
+// The account-level email matrix (решение #738, ADR 0058): four
+// configurable categories. A missing row is the all-on default — the caller
+// falls back without inserting.
+func (q *Queries) GetEmailPreferences(ctx context.Context, userID pgtype.UUID) (GetEmailPreferencesRow, error) {
+	row := q.db.QueryRow(ctx, getEmailPreferences, userID)
+	var i GetEmailPreferencesRow
+	err := row.Scan(
+		&i.Rental,
+		&i.PaymentsOperations,
+		&i.Tasks,
+		&i.SharedAccess,
+	)
+	return i, err
+}
+
+const getNotification = `-- name: GetNotification :one
+SELECT id, user_id, category, event_type, title, body, context_label, payload, dedup_key, read_at, deleted_at, created_at FROM notifications WHERE id = $1
+`
+
+// One feed row by id for the delivery jobs (#740): a job reloads the
+// committed row (recipient, texts, payload) instead of carrying content in
+// its args. A soft-deleted row still resolves — deletion hides the row from
+// the feed, it does not retract an in-flight delivery.
+func (q *Queries) GetNotification(ctx context.Context, id pgtype.UUID) (Notification, error) {
+	row := q.db.QueryRow(ctx, getNotification, id)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Category,
+		&i.EventType,
+		&i.Title,
+		&i.Body,
+		&i.ContextLabel,
+		&i.Payload,
+		&i.DedupKey,
+		&i.ReadAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getNotificationForUser = `-- name: GetNotificationForUser :one
+SELECT id, user_id, category, event_type, title, body, context_label, payload, dedup_key, read_at, deleted_at, created_at FROM notifications
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+`
+
+type GetNotificationForUserParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+// The feed page's single row (GET /notifications/{id}, #743): scoped to the
+// reader and hidden once deleted — a foreign or deleted row does not exist
+// for them. The delivery jobs keep using the unscoped GetNotification.
+func (q *Queries) GetNotificationForUser(ctx context.Context, arg GetNotificationForUserParams) (Notification, error) {
+	row := q.db.QueryRow(ctx, getNotificationForUser, arg.ID, arg.UserID)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Category,
+		&i.EventType,
+		&i.Title,
+		&i.Body,
+		&i.ContextLabel,
+		&i.Payload,
+		&i.DedupKey,
+		&i.ReadAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPaymentOpenState = `-- name: GetPaymentOpenState :one
+SELECT EXISTS (
+    SELECT 1 FROM operations
+    WHERE payment_id = $1 AND date = $2 AND status = 'planned'
+) AS open
+`
+
+type GetPaymentOpenStateParams struct {
+	PaymentID pgtype.UUID `json:"payment_id"`
+	Date      pgtype.Date `json:"date"`
+}
+
+// Whether the notification's own payment occurrence (решение #737: payment
+// = правило + дата операции) still awaits payment: a planned operation of
+// the rule dated that day exists. The date pins the check to the notified
+// occurrence — the rule's other occurrences say nothing about it. Paid or
+// cancelled — the state has moved on; the rule deleted — its occurrences
+// lose the payment link and the «открыть платёж» button goes with the dead
+// page (решение #737).
+func (q *Queries) GetPaymentOpenState(ctx context.Context, arg GetPaymentOpenStateParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getPaymentOpenState, arg.PaymentID, arg.Date)
+	var open bool
+	err := row.Scan(&open)
+	return open, err
+}
+
+const getRentalActionState = `-- name: GetRentalActionState :one
+SELECT r.completed_date, r.planned_end_date, r.start_date, r.property_id, p.owner_id
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+WHERE r.id = $1
+`
+
+type GetRentalActionStateRow struct {
+	CompletedDate  pgtype.Date `json:"completed_date"`
+	PlannedEndDate pgtype.Date `json:"planned_end_date"`
+	StartDate      pgtype.Date `json:"start_date"`
+	PropertyID     pgtype.UUID `json:"property_id"`
 	OwnerID        pgtype.UUID `json:"owner_id"`
 }
 
-func (q *Queries) CancelRemindersByFreeReminderID(ctx context.Context, arg CancelRemindersByFreeReminderIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cancelRemindersByFreeReminderID, arg.FreeReminderID, arg.OwnerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// The live rental facts behind the «Продлить»/«Завершить» buttons
+// (решение #737: действия вычисляются при чтении): whether the rental still
+// awaits action (not completed, planned end already passed — the
+// needs_attention state, ADR 0053) and which property it belongs to, so the
+// reader's rights resolve against the live rental, not the payload snapshot.
+// No row — the rental is gone.
+func (q *Queries) GetRentalActionState(ctx context.Context, id pgtype.UUID) (GetRentalActionStateRow, error) {
+	row := q.db.QueryRow(ctx, getRentalActionState, id)
+	var i GetRentalActionStateRow
+	err := row.Scan(
+		&i.CompletedDate,
+		&i.PlannedEndDate,
+		&i.StartDate,
+		&i.PropertyID,
+		&i.OwnerID,
+	)
+	return i, err
 }
 
-const cancelRemindersByRecurringOperationID = `-- name: CancelRemindersByRecurringOperationID :execrows
-UPDATE reminders
-SET status = 'cancelled'
-WHERE owner_id = $1
-  AND recurring_operation_id = $2
-  AND status IN ('pending', 'sending')
+const getScheduledAutoPaidPayment = `-- name: GetScheduledAutoPaidPayment :one
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'paid'
+  AND o.paid_source = 'auto_pay'
+  AND o.paid_date = o.date
+  AND pay.notify_auto_paid
+  AND p.status IN ('active', 'maintenance')
+  AND o.date = ($3::timestamptz AT TIME ZONE u.timezone)::date
 `
 
-type CancelRemindersByRecurringOperationIDParams struct {
-	OwnerID              pgtype.UUID `json:"owner_id"`
-	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
+type GetScheduledAutoPaidPaymentParams struct {
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 pgtype.Date        `json:"column_2"`
+	Column3 pgtype.Timestamptz `json:"column_3"`
 }
 
-func (q *Queries) CancelRemindersByRecurringOperationID(ctx context.Context, arg CancelRemindersByRecurringOperationIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cancelRemindersByRecurringOperationID, arg.OwnerID, arg.RecurringOperationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type GetScheduledAutoPaidPaymentRow struct {
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
 }
 
-const createReminder = `-- name: CreateReminder :one
-INSERT INTO reminders (
-    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id,
-    event_type, status, scheduled_at, message_title, message_body, created_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-)
-RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id
+// The auto-paid boundary job's delivery-time resolution (#1169): the
+// operation as it stands at its 10:00 wake-up. The owner's decision
+// (гриллинг #1167): the event is about the AUTO charge — the tick's stamp
+// (status='paid', paid_source='auto_pay', paid_date = the operation date)
+// is the live predicate; a manual payment of the same occurrence is
+// silent (the owner knows — they paid it). The live day only: an
+// operation whose date is no longer the zone's today (a job awake after
+// the day rolled over) answers no row — a downtime's missed days are not
+// backfilled, the 22:00 overdue leg speaks for the unpaid past; an
+// archived property answers no row. The per-payment flag (#1189): a rule
+// with notify_auto_paid = false answers no row — the flag flipped after
+// the booking silences the standing job.
+func (q *Queries) GetScheduledAutoPaidPayment(ctx context.Context, arg GetScheduledAutoPaidPaymentParams) (GetScheduledAutoPaidPaymentRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledAutoPaidPayment, arg.Column1, arg.Column2, arg.Column3)
+	var i GetScheduledAutoPaidPaymentRow
+	err := row.Scan(
+		&i.PaymentID,
+		&i.Date,
+		&i.Title,
+		&i.AmountKopecks,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.PropertyType,
+		&i.PropertyPhoto,
+		&i.PaymentCategorySlug,
+		&i.PaymentCategoryName,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
+const getScheduledCompletedRental = `-- name: GetScheduledCompletedRental :one
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       p.owner_id
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.id = $1::uuid
+  AND r.planned_end_date = $2::date
+  AND r.completed_date IS NULL
+  AND p.status IN ('active', 'maintenance')
+  AND r.planned_end_date < ($3::timestamptz AT TIME ZONE u.timezone)::date
 `
 
-type CreateReminderParams struct {
-	ID                   pgtype.UUID            `json:"id"`
-	OwnerID              pgtype.UUID            `json:"owner_id"`
-	TargetType           NotificationTargetType `json:"target_type"`
-	OperationID          pgtype.UUID            `json:"operation_id"`
-	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
-	LeaseID              pgtype.UUID            `json:"lease_id"`
-	PropertyID           pgtype.UUID            `json:"property_id"`
-	EventType            NotificationEventType  `json:"event_type"`
-	Status               NotificationStatus     `json:"status"`
-	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
-	MessageTitle         string                 `json:"message_title"`
-	MessageBody          string                 `json:"message_body"`
-	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
+type GetScheduledCompletedRentalParams struct {
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 pgtype.Date        `json:"column_2"`
+	Column3 pgtype.Timestamptz `json:"column_3"`
 }
 
-func (q *Queries) CreateReminder(ctx context.Context, arg CreateReminderParams) (Reminder, error) {
-	row := q.db.QueryRow(ctx, createReminder,
+type GetScheduledCompletedRentalRow struct {
+	RentalID        pgtype.UUID `json:"rental_id"`
+	PlannedEndDate  pgtype.Date `json:"planned_end_date"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    string      `json:"property_name"`
+	PropertyAddress string      `json:"property_address"`
+	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// The completed boundary job's delivery-time resolution (issue #777): the
+// rental as it stands at its boundary midnight. The needs_attention
+// conditions are re-checked as of the wake-up instant ($3): a completed
+// rental, an extended one (the planned end moved off the booked date — its
+// new boundary books its own job), an archived property — and a rental
+// whose planned end is no longer strictly before the zone's today (the job
+// woke before the boundary) — answers no row, the job finishes without
+// publishing.
+func (q *Queries) GetScheduledCompletedRental(ctx context.Context, arg GetScheduledCompletedRentalParams) (GetScheduledCompletedRentalRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledCompletedRental, arg.Column1, arg.Column2, arg.Column3)
+	var i GetScheduledCompletedRentalRow
+	err := row.Scan(
+		&i.RentalID,
+		&i.PlannedEndDate,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.PropertyType,
+		&i.PropertyPhoto,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
+const getScheduledDuePayment = `-- name: GetScheduledDuePayment :one
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+  AND o.date = ($3::timestamptz AT TIME ZONE u.timezone)::date
+`
+
+type GetScheduledDuePaymentParams struct {
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 pgtype.Date        `json:"column_2"`
+	Column3 pgtype.Timestamptz `json:"column_3"`
+}
+
+type GetScheduledDuePaymentRow struct {
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
+}
+
+// The due boundary job's delivery-time resolution (issue #776): the
+// operation as it stands at its due boundary — the wall clock 10:00 of the
+// operation date in the owner's timezone (#1168). The leg's conditions are
+// re-checked as of the wake-up instant ($3): a paid, cancelled, auto-pay
+// operation, a deleted rule's orphan, an archived property — and an
+// operation whose date is no longer the zone's today (the job woke after
+// the day had rolled over) — answers no row, the job finishes without
+// publishing. The date-against-today predicate holds at any hour of the
+// boundary day — the wake-up instant itself needs no gate, the job books
+// at its own 10:00.
+func (q *Queries) GetScheduledDuePayment(ctx context.Context, arg GetScheduledDuePaymentParams) (GetScheduledDuePaymentRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledDuePayment, arg.Column1, arg.Column2, arg.Column3)
+	var i GetScheduledDuePaymentRow
+	err := row.Scan(
+		&i.PaymentID,
+		&i.Date,
+		&i.Title,
+		&i.AmountKopecks,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.PropertyType,
+		&i.PropertyPhoto,
+		&i.PaymentCategorySlug,
+		&i.PaymentCategoryName,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
+const getScheduledOverduePayment = `-- name: GetScheduledOverduePayment :one
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+  AND o.date < ($3::timestamptz AT TIME ZONE u.timezone)::date
+`
+
+type GetScheduledOverduePaymentParams struct {
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 pgtype.Date        `json:"column_2"`
+	Column3 pgtype.Timestamptz `json:"column_3"`
+}
+
+type GetScheduledOverduePaymentRow struct {
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
+}
+
+// The overdue boundary job's delivery-time resolution (issue #776): the
+// operation as it stands at its overdue boundary — the wall clock 22:00 of
+// the day after the operation date in the owner's timezone (#1168). The
+// overdue leg's conditions are re-checked as of the wake-up instant ($3):
+// planned, non-archived property, the date strictly before the zone's
+// today — auto-pay rules included, the sweep's overdue leg's shape.
+func (q *Queries) GetScheduledOverduePayment(ctx context.Context, arg GetScheduledOverduePaymentParams) (GetScheduledOverduePaymentRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledOverduePayment, arg.Column1, arg.Column2, arg.Column3)
+	var i GetScheduledOverduePaymentRow
+	err := row.Scan(
+		&i.PaymentID,
+		&i.Date,
+		&i.Title,
+		&i.AmountKopecks,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.PropertyType,
+		&i.PropertyPhoto,
+		&i.PaymentCategorySlug,
+		&i.PaymentCategoryName,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
+const getScheduledOverdueTask = `-- name: GetScheduledOverdueTask :one
+SELECT t.id AS task_id,
+       t.title,
+       t.due_date,
+       t.due_time,
+       t.property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       t.rule_id,
+       t.owner_id,
+       CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.id = $1
+  AND t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+`
+
+type GetScheduledOverdueTaskRow struct {
+	TaskID          pgtype.UUID        `json:"task_id"`
+	Title           string             `json:"title"`
+	DueDate         pgtype.Date        `json:"due_date"`
+	DueTime         pgtype.Time        `json:"due_time"`
+	PropertyID      pgtype.UUID        `json:"property_id"`
+	PropertyName    pgtype.Text        `json:"property_name"`
+	PropertyAddress pgtype.Text        `json:"property_address"`
+	PropertyType    pgtype.Text        `json:"property_type"`
+	PropertyPhoto   string             `json:"property_photo"`
+	RuleID          pgtype.UUID        `json:"rule_id"`
+	OwnerID         pgtype.UUID        `json:"owner_id"`
+	DueAt           pgtype.Timestamptz `json:"due_at"`
+}
+
+// The boundary job's delivery-time resolution (issues #750, #777): the task
+// as it stands at its boundary instant. A gone (rule edit removed the stale
+// row), completed, undated, or archived-property task answers no row — the
+// job finishes without publishing. The boundary instant in the owner's
+// timezone (due_at) — a timed task's term minute, a date-only task's
+// day-after midnight — travels for the creation/edit seam (#775), which
+// decides future-vs-past on it; the job wakes at its own instant and needs
+// no clock. Both shapes answer: the kind is one per task, the boundary
+// differs by shape.
+func (q *Queries) GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (GetScheduledOverdueTaskRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledOverdueTask, id)
+	var i GetScheduledOverdueTaskRow
+	err := row.Scan(
+		&i.TaskID,
+		&i.Title,
+		&i.DueDate,
+		&i.DueTime,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.PropertyType,
+		&i.PropertyPhoto,
+		&i.RuleID,
+		&i.OwnerID,
+		&i.DueAt,
+	)
+	return i, err
+}
+
+const getScheduledReminderPayment = `-- name: GetScheduledReminderPayment :one
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE pay.id = $1::uuid
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND pay.reminder_offset_days IS NOT NULL
+  AND (o.date - pay.reminder_offset_days) = ($3::timestamptz AT TIME ZONE u.timezone)::date
+  AND p.status IN ('active', 'maintenance')
+`
+
+type GetScheduledReminderPaymentParams struct {
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 pgtype.Date        `json:"column_2"`
+	Column3 pgtype.Timestamptz `json:"column_3"`
+}
+
+type GetScheduledReminderPaymentRow struct {
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
+}
+
+// The reminder boundary job's delivery-time resolution (карта #822, #824):
+// the operation as it stands at its reminder boundary — the wall clock
+// 10:00 of the reminder day (#1168). Planned, on a
+// non-archived property, and the rule's CURRENT lead time still landing the
+// reminder day on the zone's today ($3) — a lead time changed after the
+// booking (or a job awake after the day rolled over) answers no row, the
+// job finishes without publishing; the new boundary books its own job.
+func (q *Queries) GetScheduledReminderPayment(ctx context.Context, arg GetScheduledReminderPaymentParams) (GetScheduledReminderPaymentRow, error) {
+	row := q.db.QueryRow(ctx, getScheduledReminderPayment, arg.Column1, arg.Column2, arg.Column3)
+	var i GetScheduledReminderPaymentRow
+	err := row.Scan(
+		&i.PaymentID,
+		&i.Date,
+		&i.Title,
+		&i.AmountKopecks,
+		&i.PropertyID,
+		&i.PropertyName,
+		&i.PropertyAddress,
+		&i.PropertyType,
+		&i.PropertyPhoto,
+		&i.PaymentCategorySlug,
+		&i.PaymentCategoryName,
+		&i.OwnerID,
+	)
+	return i, err
+}
+
+const getTariffEventView = `-- name: GetTariffEventView :one
+SELECT t.name
+FROM tariffs t
+WHERE t.id = $1
+`
+
+// The tariff events' plan snapshot (#752): the slug the display name resolves
+// from (TariffDisplayName). A missing plan is a no-row error — the billing
+// events never fire on a dropped tariff, a miss is abnormal and fails the
+// publication.
+func (q *Queries) GetTariffEventView(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getTariffEventView, id)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
+const getTaskOpenState = `-- name: GetTaskOpenState :one
+SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND completed_date IS NULL) AS open
+`
+
+// Whether the notification's task still awaits action: it exists and is not
+// completed. A completed or deleted task leaves the notification without
+// its button (решение #737).
+func (q *Queries) GetTaskOpenState(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getTaskOpenState, id)
+	var open bool
+	err := row.Scan(&open)
+	return open, err
+}
+
+const insertNotification = `-- name: InsertNotification :execrows
+
+INSERT INTO notifications (id, user_id, category, event_type, title, body, context_label, payload, dedup_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (user_id, dedup_key) DO NOTHING
+`
+
+type InsertNotificationParams struct {
+	ID           pgtype.UUID           `json:"id"`
+	UserID       pgtype.UUID           `json:"user_id"`
+	Category     NotificationCategory  `json:"category"`
+	EventType    NotificationEventType `json:"event_type"`
+	Title        string                `json:"title"`
+	Body         string                `json:"body"`
+	ContextLabel pgtype.Text           `json:"context_label"`
+	Payload      []byte                `json:"payload"`
+	DedupKey     string                `json:"dedup_key"`
+}
+
+// Хранимая лента уведомлений (карта #734, тикет #739; модель — решение
+// #737). One event = one row per recipient (fan-out); the row carries the
+// text snapshot, the payload links and the personal flags.
+// Publishes one recipient's feed row. The unique (user_id, dedup_key) index
+// makes the dedup invariant durable: a repeat publication with the same key
+// inserts nothing (0 rows), it is a no-op rather than an error.
+func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertNotification,
 		arg.ID,
-		arg.OwnerID,
-		arg.TargetType,
-		arg.OperationID,
-		arg.RecurringOperationID,
-		arg.LeaseID,
-		arg.PropertyID,
+		arg.UserID,
+		arg.Category,
 		arg.EventType,
-		arg.Status,
-		arg.ScheduledAt,
-		arg.MessageTitle,
-		arg.MessageBody,
-		arg.CreatedAt,
-	)
-	var i Reminder
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.TargetType,
-		&i.OperationID,
-		&i.RecurringOperationID,
-		&i.LeaseID,
-		&i.PropertyID,
-		&i.EventType,
-		&i.Status,
-		&i.ScheduledAt,
-		&i.SentAt,
-		&i.FailedAttempts,
-		&i.NextAttemptAt,
-		&i.MessageTitle,
-		&i.MessageBody,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.FreeReminderID,
-	)
-	return i, err
-}
-
-const createSentSMSReminder = `-- name: CreateSentSMSReminder :execrows
-INSERT INTO sent_sms_reminders (id, reminder_id, owner_id, phone, message, provider_response, sent_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (reminder_id) DO NOTHING
-`
-
-type CreateSentSMSReminderParams struct {
-	ID               pgtype.UUID        `json:"id"`
-	ReminderID       pgtype.UUID        `json:"reminder_id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	Phone            string             `json:"phone"`
-	Message          string             `json:"message"`
-	ProviderResponse pgtype.Text        `json:"provider_response"`
-	SentAt           pgtype.Timestamptz `json:"sent_at"`
-}
-
-func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSReminderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, createSentSMSReminder,
-		arg.ID,
-		arg.ReminderID,
-		arg.OwnerID,
-		arg.Phone,
-		arg.Message,
-		arg.ProviderResponse,
-		arg.SentAt,
+		arg.Title,
+		arg.Body,
+		arg.ContextLabel,
+		arg.Payload,
+		arg.DedupKey,
 	)
 	if err != nil {
 		return 0, err
@@ -202,299 +767,162 @@ func (q *Queries) CreateSentSMSReminder(ctx context.Context, arg CreateSentSMSRe
 	return result.RowsAffected(), nil
 }
 
-const deleteSentEmailReminder = `-- name: DeleteSentEmailReminder :exec
-DELETE FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
+const listNotifications = `-- name: ListNotifications :many
+SELECT id, user_id, category, event_type, title, body, context_label, payload, dedup_key, read_at, deleted_at, created_at
+FROM notifications
+WHERE user_id = $1
+  AND deleted_at IS NULL
+  AND ($2::bool = false OR read_at IS NULL)
+  AND ($3::timestamptz IS NULL
+       OR (created_at, id) < ($3,
+                              $4::uuid))
+ORDER BY created_at DESC, id DESC
+LIMIT CASE WHEN $5::bigint = 0 THEN NULL::bigint
+           ELSE $5::bigint END
 `
 
-type DeleteSentEmailReminderParams struct {
-	ReminderID pgtype.UUID `json:"reminder_id"`
-	OwnerID    pgtype.UUID `json:"owner_id"`
+type ListNotificationsParams struct {
+	UserID         pgtype.UUID        `json:"user_id"`
+	UnreadOnly     bool               `json:"unread_only"`
+	AfterCreatedAt pgtype.Timestamptz `json:"after_created_at"`
+	AfterID        pgtype.UUID        `json:"after_id"`
+	PageLimit      int64              `json:"page_limit"`
 }
 
-func (q *Queries) DeleteSentEmailReminder(ctx context.Context, arg DeleteSentEmailReminderParams) error {
-	_, err := q.db.Exec(ctx, deleteSentEmailReminder, arg.ReminderID, arg.OwnerID)
-	return err
-}
-
-const deleteSentPushReminder = `-- name: DeleteSentPushReminder :exec
-DELETE FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2
-`
-
-type DeleteSentPushReminderParams struct {
-	ReminderID  pgtype.UUID `json:"reminder_id"`
-	RecipientID pgtype.UUID `json:"recipient_id"`
-}
-
-func (q *Queries) DeleteSentPushReminder(ctx context.Context, arg DeleteSentPushReminderParams) error {
-	_, err := q.db.Exec(ctx, deleteSentPushReminder, arg.ReminderID, arg.RecipientID)
-	return err
-}
-
-const getReminderByIDAndOwner = `-- name: GetReminderByIDAndOwner :one
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders WHERE id = $1 AND owner_id = $2
-`
-
-type GetReminderByIDAndOwnerParams struct {
-	ID      pgtype.UUID `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
-}
-
-func (q *Queries) GetReminderByIDAndOwner(ctx context.Context, arg GetReminderByIDAndOwnerParams) (Reminder, error) {
-	row := q.db.QueryRow(ctx, getReminderByIDAndOwner, arg.ID, arg.OwnerID)
-	var i Reminder
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.TargetType,
-		&i.OperationID,
-		&i.RecurringOperationID,
-		&i.LeaseID,
-		&i.PropertyID,
-		&i.EventType,
-		&i.Status,
-		&i.ScheduledAt,
-		&i.SentAt,
-		&i.FailedAttempts,
-		&i.NextAttemptAt,
-		&i.MessageTitle,
-		&i.MessageBody,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.FreeReminderID,
-	)
-	return i, err
-}
-
-const getReminderByIDUnscoped = `-- name: GetReminderByIDUnscoped :one
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders WHERE id = $1
-`
-
-func (q *Queries) GetReminderByIDUnscoped(ctx context.Context, id pgtype.UUID) (Reminder, error) {
-	row := q.db.QueryRow(ctx, getReminderByIDUnscoped, id)
-	var i Reminder
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.TargetType,
-		&i.OperationID,
-		&i.RecurringOperationID,
-		&i.LeaseID,
-		&i.PropertyID,
-		&i.EventType,
-		&i.Status,
-		&i.ScheduledAt,
-		&i.SentAt,
-		&i.FailedAttempts,
-		&i.NextAttemptAt,
-		&i.MessageTitle,
-		&i.MessageBody,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.FreeReminderID,
-	)
-	return i, err
-}
-
-const hasReminderForLeaseEvent = `-- name: HasReminderForLeaseEvent :one
-SELECT EXISTS(SELECT 1 FROM reminders WHERE owner_id = $1 AND lease_id = $2 AND event_type = $3 AND status IN ('pending', 'sending', 'sent')) AS exists
-`
-
-type HasReminderForLeaseEventParams struct {
-	OwnerID   pgtype.UUID           `json:"owner_id"`
-	LeaseID   pgtype.UUID           `json:"lease_id"`
-	EventType NotificationEventType `json:"event_type"`
-}
-
-func (q *Queries) HasReminderForLeaseEvent(ctx context.Context, arg HasReminderForLeaseEventParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasReminderForLeaseEvent, arg.OwnerID, arg.LeaseID, arg.EventType)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-const hasReminderForOperationEvent = `-- name: HasReminderForOperationEvent :one
-SELECT EXISTS(
-    SELECT 1 FROM reminders
-    WHERE owner_id = $1 AND operation_id = $2 AND event_type = $3
-      AND status IN ('pending', 'sending', 'sent')
-) AS exists
-`
-
-type HasReminderForOperationEventParams struct {
-	OwnerID     pgtype.UUID           `json:"owner_id"`
-	OperationID pgtype.UUID           `json:"operation_id"`
-	EventType   NotificationEventType `json:"event_type"`
-}
-
-func (q *Queries) HasReminderForOperationEvent(ctx context.Context, arg HasReminderForOperationEventParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasReminderForOperationEvent, arg.OwnerID, arg.OperationID, arg.EventType)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-const isEmailReminderSent = `-- name: IsEmailReminderSent :one
-SELECT EXISTS (
-    SELECT 1 FROM sent_email_reminders WHERE reminder_id = $1 AND owner_id = $2
-)
-`
-
-type IsEmailReminderSentParams struct {
-	ReminderID pgtype.UUID `json:"reminder_id"`
-	OwnerID    pgtype.UUID `json:"owner_id"`
-}
-
-func (q *Queries) IsEmailReminderSent(ctx context.Context, arg IsEmailReminderSentParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isEmailReminderSent, arg.ReminderID, arg.OwnerID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-const isPushReminderSent = `-- name: IsPushReminderSent :one
-SELECT EXISTS (
-    SELECT 1 FROM sent_push_reminders WHERE reminder_id = $1 AND recipient_id = $2
-)
-`
-
-type IsPushReminderSentParams struct {
-	ReminderID  pgtype.UUID `json:"reminder_id"`
-	RecipientID pgtype.UUID `json:"recipient_id"`
-}
-
-func (q *Queries) IsPushReminderSent(ctx context.Context, arg IsPushReminderSentParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isPushReminderSent, arg.ReminderID, arg.RecipientID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-const isSMSReminderSent = `-- name: IsSMSReminderSent :one
-SELECT EXISTS(SELECT 1 FROM sent_sms_reminders WHERE reminder_id = $1) AS exists
-`
-
-func (q *Queries) IsSMSReminderSent(ctx context.Context, reminderID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, isSMSReminderSent, reminderID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-const listCalendarRemindersByOwner = `-- name: ListCalendarRemindersByOwner :many
-SELECT r.id, r.owner_id, r.target_type, r.operation_id, r.recurring_operation_id, r.lease_id, r.property_id, r.event_type, r.status, r.scheduled_at, r.sent_at, r.failed_attempts, r.next_attempt_at, r.message_title, r.message_body, r.created_at, r.updated_at, r.free_reminder_id, p.name AS property_name
-FROM reminders r
-LEFT JOIN properties p ON p.id = r.property_id
-WHERE (r.owner_id = $1::uuid
-       OR (r.property_id IS NOT NULL
-           AND r.property_id = ANY($2::uuid[])
-           AND p.status IN ('active', 'maintenance')))
-  AND r.target_type IN ('operation', 'recurring_operation', 'lease')
-  AND r.status NOT IN ('cancelled', 'skipped')
-  AND r.scheduled_at >= $3
-  AND r.scheduled_at < $4
-ORDER BY r.scheduled_at ASC
-`
-
-type ListCalendarRemindersByOwnerParams struct {
-	OwnerID               pgtype.UUID        `json:"owner_id"`
-	AccessiblePropertyIds []pgtype.UUID      `json:"accessible_property_ids"`
-	FromTime              pgtype.Timestamptz `json:"from_time"`
-	ToTime                pgtype.Timestamptz `json:"to_time"`
-}
-
-type ListCalendarRemindersByOwnerRow struct {
-	Reminder     Reminder    `json:"reminder"`
-	PropertyName pgtype.Text `json:"property_name"`
-}
-
-func (q *Queries) ListCalendarRemindersByOwner(ctx context.Context, arg ListCalendarRemindersByOwnerParams) ([]ListCalendarRemindersByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, listCalendarRemindersByOwner,
-		arg.OwnerID,
-		arg.AccessiblePropertyIds,
-		arg.FromTime,
-		arg.ToTime,
+// The user's feed page, newest first, deleted rows never appear. The walk
+// resumes strictly after the (created_at, id) the previous page ended on
+// (канон #597), so rows created between loads never duplicate or drop; both
+// cursor args travel together, NULL reads from the beginning. unread_only
+// filters the page to unread rows (the partial index
+// idx_notifications_user_unread serves the filtered walk); page_limit 0 = no
+// limit.
+func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error) {
+	rows, err := q.db.Query(ctx, listNotifications,
+		arg.UserID,
+		arg.UnreadOnly,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.PageLimit,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListCalendarRemindersByOwnerRow{}
+	items := []Notification{}
 	for rows.Next() {
-		var i ListCalendarRemindersByOwnerRow
+		var i Notification
 		if err := rows.Scan(
-			&i.Reminder.ID,
-			&i.Reminder.OwnerID,
-			&i.Reminder.TargetType,
-			&i.Reminder.OperationID,
-			&i.Reminder.RecurringOperationID,
-			&i.Reminder.LeaseID,
-			&i.Reminder.PropertyID,
-			&i.Reminder.EventType,
-			&i.Reminder.Status,
-			&i.Reminder.ScheduledAt,
-			&i.Reminder.SentAt,
-			&i.Reminder.FailedAttempts,
-			&i.Reminder.NextAttemptAt,
-			&i.Reminder.MessageTitle,
-			&i.Reminder.MessageBody,
-			&i.Reminder.CreatedAt,
-			&i.Reminder.UpdatedAt,
-			&i.Reminder.FreeReminderID,
+			&i.ID,
+			&i.UserID,
+			&i.Category,
+			&i.EventType,
+			&i.Title,
+			&i.Body,
+			&i.ContextLabel,
+			&i.Payload,
+			&i.DedupKey,
+			&i.ReadAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentAutoPaidTargets = `-- name: ListPaymentAutoPaidTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE u.timezone = $1
+  AND o.date = $2::date
+  AND o.status = 'paid'
+  AND o.paid_source = 'auto_pay'
+  AND o.paid_date = o.date
+  AND pay.auto_pay = true
+  AND pay.notify_auto_paid
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $3::timestamptz
+ORDER BY o.id
+`
+
+type ListPaymentAutoPaidTargetsParams struct {
+	Timezone string             `json:"timezone"`
+	Column2  pgtype.Date        `json:"column_2"`
+	Column3  pgtype.Timestamptz `json:"column_3"`
+}
+
+type ListPaymentAutoPaidTargetsRow struct {
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's auto-pay-executed operations as of the zone's today (#1169,
+// карта #1162; решение владельца по гриллингу #1167): planned occurrences
+// of auto-pay rules that the TICK extinguished in their own day —
+// status='paid', paid_source='auto_pay', paid_date = the operation date —
+// on non-archived properties. A manual «Оплатить сейчас» is silent: the
+// stamp is the tick's alone (the owner's decision — the event is about the
+// auto charge, not about any payment). Only the live day: the leg lists
+// date = today — a downtime's missed days are not backfilled (решение
+// владельца, #1167; the overdue leg speaks for the unpaid past instead).
+// The instant gate (#1168): the boundary is the wall clock 10:00 of the
+// operation date — the sweep must not publish ahead of it. The per-payment
+// flag (гейты #1189): молчащие правила (notify_auto_paid = false) мимо —
+// событие «Автоплатёж исполнен» приходит только по разрешившим уведомление.
+func (q *Queries) ListPaymentAutoPaidTargets(ctx context.Context, arg ListPaymentAutoPaidTargetsParams) ([]ListPaymentAutoPaidTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentAutoPaidTargets, arg.Timezone, arg.Column2, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentAutoPaidTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentAutoPaidTargetsRow
+		if err := rows.Scan(
+			&i.PaymentID,
+			&i.Date,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PropertyID,
 			&i.PropertyName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listDueReminders = `-- name: ListDueReminders :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
-WHERE status = 'pending'
-  AND scheduled_at <= $1
-  AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
-ORDER BY scheduled_at ASC
-LIMIT $2
-FOR UPDATE SKIP LOCKED
-`
-
-type ListDueRemindersParams struct {
-	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
-	Limit       int32              `json:"limit"`
-}
-
-func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersParams) ([]Reminder, error) {
-	rows, err := q.db.Query(ctx, listDueReminders, arg.ScheduledAt, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Reminder{}
-	for rows.Next() {
-		var i Reminder
-		if err := rows.Scan(
-			&i.ID,
+			&i.PropertyAddress,
+			&i.PropertyType,
+			&i.PropertyPhoto,
+			&i.PaymentCategorySlug,
+			&i.PaymentCategoryName,
 			&i.OwnerID,
-			&i.TargetType,
-			&i.OperationID,
-			&i.RecurringOperationID,
-			&i.LeaseID,
-			&i.PropertyID,
-			&i.EventType,
-			&i.Status,
-			&i.ScheduledAt,
-			&i.SentAt,
-			&i.FailedAttempts,
-			&i.NextAttemptAt,
-			&i.MessageTitle,
-			&i.MessageBody,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -506,53 +934,90 @@ func (q *Queries) ListDueReminders(ctx context.Context, arg ListDueRemindersPara
 	return items, nil
 }
 
-const listRemindersByLease = `-- name: ListRemindersByLease :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
-WHERE owner_id = $1 AND lease_id = $2 AND status != 'cancelled'
-ORDER BY scheduled_at ASC
-LIMIT $3 OFFSET $4
+const listPaymentDueTargets = `-- name: ListPaymentDueTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE u.timezone = $1
+  AND o.date = $2::date
+  AND o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $3::timestamptz
+ORDER BY o.id
 `
 
-type ListRemindersByLeaseParams struct {
-	OwnerID pgtype.UUID `json:"owner_id"`
-	LeaseID pgtype.UUID `json:"lease_id"`
-	Limit   int32       `json:"limit"`
-	Offset  int32       `json:"offset"`
+type ListPaymentDueTargetsParams struct {
+	Timezone string             `json:"timezone"`
+	Column2  pgtype.Date        `json:"column_2"`
+	Column3  pgtype.Timestamptz `json:"column_3"`
 }
 
-func (q *Queries) ListRemindersByLease(ctx context.Context, arg ListRemindersByLeaseParams) ([]Reminder, error) {
-	rows, err := q.db.Query(ctx, listRemindersByLease,
-		arg.OwnerID,
-		arg.LeaseID,
-		arg.Limit,
-		arg.Offset,
-	)
+type ListPaymentDueTargetsRow struct {
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's due-day operations as of the zone's today (решение #737, тип
+// №2: в день срока): planned, dated exactly today, on rules without the
+// auto-pay mode — an auto-pay rule's due occurrence is extinguished by the
+// tick the same day (ADR 0049) and never asks to be paid; if the auto
+// charge did not happen, the operation becomes overdue and the overdue leg
+// speaks. The rule's title travels (not the operation's snapshot): the
+// notification's link lands on the payment's page, the copy names what the
+// reader sees there. The instant gate (#1168, решение владельца 06.10 по
+// гриллингу #1167): the leg's boundary is the wall clock 10:00 of the
+// operation date in the owner's timezone — the hourly backstop sweep must
+// not publish ahead of it, the same instant predicate the booking leg and
+// the tasks scan use.
+func (q *Queries) ListPaymentDueTargets(ctx context.Context, arg ListPaymentDueTargetsParams) ([]ListPaymentDueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentDueTargets, arg.Timezone, arg.Column2, arg.Column3)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Reminder{}
+	items := []ListPaymentDueTargetsRow{}
 	for rows.Next() {
-		var i Reminder
+		var i ListPaymentDueTargetsRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.PaymentID,
+			&i.Date,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.PropertyType,
+			&i.PropertyPhoto,
+			&i.PaymentCategorySlug,
+			&i.PaymentCategoryName,
 			&i.OwnerID,
-			&i.TargetType,
-			&i.OperationID,
-			&i.RecurringOperationID,
-			&i.LeaseID,
-			&i.PropertyID,
-			&i.EventType,
-			&i.Status,
-			&i.ScheduledAt,
-			&i.SentAt,
-			&i.FailedAttempts,
-			&i.NextAttemptAt,
-			&i.MessageTitle,
-			&i.MessageBody,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -564,53 +1029,87 @@ func (q *Queries) ListRemindersByLease(ctx context.Context, arg ListRemindersByL
 	return items, nil
 }
 
-const listRemindersByOperation = `-- name: ListRemindersByOperation :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
-WHERE owner_id = $1 AND operation_id = $2 AND status != 'cancelled'
-ORDER BY scheduled_at ASC
-LIMIT $3 OFFSET $4
+const listPaymentOverdueTargets = `-- name: ListPaymentOverdueTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE u.timezone = $1
+  AND o.date < $2::date
+  AND o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+  AND (((o.date + 1)::timestamp + time '22:00') AT TIME ZONE u.timezone) <= $3::timestamptz
+ORDER BY o.id
 `
 
-type ListRemindersByOperationParams struct {
-	OwnerID     pgtype.UUID `json:"owner_id"`
-	OperationID pgtype.UUID `json:"operation_id"`
-	Limit       int32       `json:"limit"`
-	Offset      int32       `json:"offset"`
+type ListPaymentOverdueTargetsParams struct {
+	Timezone string             `json:"timezone"`
+	Column2  pgtype.Date        `json:"column_2"`
+	Column3  pgtype.Timestamptz `json:"column_3"`
 }
 
-func (q *Queries) ListRemindersByOperation(ctx context.Context, arg ListRemindersByOperationParams) ([]Reminder, error) {
-	rows, err := q.db.Query(ctx, listRemindersByOperation,
-		arg.OwnerID,
-		arg.OperationID,
-		arg.Limit,
-		arg.Offset,
-	)
+type ListPaymentOverdueTargetsRow struct {
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's overdue operations as of the zone's today (решение #737, тип
+// №3: 1-й день просрочки): planned, dated strictly before today — auto-pay
+// rules included, the tick never backdates an auto charge (ADR 0049). The
+// dedup key (rule, operation date) keeps a long-unpaid operation single —
+// the sweep lists it daily, the publication inserts nothing. The instant
+// gate (#1168): the leg's boundary is the wall clock 22:00 of the day after
+// the operation date in the owner's timezone — yesterday's occurrence waits
+// for its 22:00 even though the date says overdue since the zone's midnight;
+// a long-unpaid operation's boundary is long past and the gate keeps it
+// sweeping (the persistent leg's semantics).
+func (q *Queries) ListPaymentOverdueTargets(ctx context.Context, arg ListPaymentOverdueTargetsParams) ([]ListPaymentOverdueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentOverdueTargets, arg.Timezone, arg.Column2, arg.Column3)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Reminder{}
+	items := []ListPaymentOverdueTargetsRow{}
 	for rows.Next() {
-		var i Reminder
+		var i ListPaymentOverdueTargetsRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.PaymentID,
+			&i.Date,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.PropertyType,
+			&i.PropertyPhoto,
+			&i.PaymentCategorySlug,
+			&i.PaymentCategoryName,
 			&i.OwnerID,
-			&i.TargetType,
-			&i.OperationID,
-			&i.RecurringOperationID,
-			&i.LeaseID,
-			&i.PropertyID,
-			&i.EventType,
-			&i.Status,
-			&i.ScheduledAt,
-			&i.SentAt,
-			&i.FailedAttempts,
-			&i.NextAttemptAt,
-			&i.MessageTitle,
-			&i.MessageBody,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -622,64 +1121,87 @@ func (q *Queries) ListRemindersByOperation(ctx context.Context, arg ListReminder
 	return items, nil
 }
 
-const listRemindersByOwner = `-- name: ListRemindersByOwner :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
-WHERE (owner_id = $1::uuid
-       OR (property_id IS NOT NULL
-           AND property_id = ANY($2::uuid[])
-           AND NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = reminders.property_id AND p.status = 'archived')))
-  AND CASE
-        WHEN $3::boolean THEN status::text = $4::text
-        ELSE true
-      END
-ORDER BY scheduled_at ASC
-LIMIT $6 OFFSET $5
+const listPaymentReminderTargets = `-- name: ListPaymentReminderTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       pay.title,
+       o.amount_kopecks,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       pay.category_slug AS payment_category_slug,
+       pc.name AS payment_category_name,
+       o.owner_id
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+LEFT JOIN payment_categories pc ON pc.id = pay.user_category_id
+WHERE u.timezone = $1
+  AND pay.reminder_offset_days IS NOT NULL
+  AND (o.date - pay.reminder_offset_days) = $2::date
+  AND o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+  AND (((o.date - pay.reminder_offset_days)::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $3::timestamptz
+ORDER BY o.id
 `
 
-type ListRemindersByOwnerParams struct {
-	OwnerID               pgtype.UUID   `json:"owner_id"`
-	AccessiblePropertyIds []pgtype.UUID `json:"accessible_property_ids"`
-	FilterByStatus        bool          `json:"filter_by_status"`
-	Status                string        `json:"status"`
-	Offset                int32         `json:"offset"`
-	Limit                 int32         `json:"limit"`
+type ListPaymentReminderTargetsParams struct {
+	Timezone string             `json:"timezone"`
+	Column2  pgtype.Date        `json:"column_2"`
+	Column3  pgtype.Timestamptz `json:"column_3"`
 }
 
-func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByOwnerParams) ([]Reminder, error) {
-	rows, err := q.db.Query(ctx, listRemindersByOwner,
-		arg.OwnerID,
-		arg.AccessiblePropertyIds,
-		arg.FilterByStatus,
-		arg.Status,
-		arg.Offset,
-		arg.Limit,
-	)
+type ListPaymentReminderTargetsRow struct {
+	PaymentID           pgtype.UUID `json:"payment_id"`
+	Date                pgtype.Date `json:"date"`
+	Title               string      `json:"title"`
+	AmountKopecks       int64       `json:"amount_kopecks"`
+	PropertyID          pgtype.UUID `json:"property_id"`
+	PropertyName        string      `json:"property_name"`
+	PropertyAddress     string      `json:"property_address"`
+	PropertyType        string      `json:"property_type"`
+	PropertyPhoto       string      `json:"property_photo"`
+	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
+	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
+	OwnerID             pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's reminder-day operations as of the zone's today (карта #822,
+// #824): planned, on rules with a reminder set, whose reminder day — the
+// operation date minus the rule's lead time (1/3/7) — is exactly today.
+// Auto-pay rules included: напоминание живёт независимо от auto_pay
+// (решение владельца, #823). The dedup key (rule, operation date) keeps
+// the occurrence single even if the lead time changes after firing. The
+// instant gate (#1168): the leg's boundary is the wall clock 10:00 of the
+// reminder day in the owner's timezone — the sweep must not publish ahead
+// of it.
+func (q *Queries) ListPaymentReminderTargets(ctx context.Context, arg ListPaymentReminderTargetsParams) ([]ListPaymentReminderTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentReminderTargets, arg.Timezone, arg.Column2, arg.Column3)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Reminder{}
+	items := []ListPaymentReminderTargetsRow{}
 	for rows.Next() {
-		var i Reminder
+		var i ListPaymentReminderTargetsRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.PaymentID,
+			&i.Date,
+			&i.Title,
+			&i.AmountKopecks,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.PropertyType,
+			&i.PropertyPhoto,
+			&i.PaymentCategorySlug,
+			&i.PaymentCategoryName,
 			&i.OwnerID,
-			&i.TargetType,
-			&i.OperationID,
-			&i.RecurringOperationID,
-			&i.LeaseID,
-			&i.PropertyID,
-			&i.EventType,
-			&i.Status,
-			&i.ScheduledAt,
-			&i.SentAt,
-			&i.FailedAttempts,
-			&i.NextAttemptAt,
-			&i.MessageTitle,
-			&i.MessageBody,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -691,53 +1213,389 @@ func (q *Queries) ListRemindersByOwner(ctx context.Context, arg ListRemindersByO
 	return items, nil
 }
 
-const listRemindersByRecurringOperation = `-- name: ListRemindersByRecurringOperation :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
-WHERE owner_id = $1 AND recurring_operation_id = $2 AND status != 'cancelled'
-ORDER BY scheduled_at ASC
-LIMIT $3 OFFSET $4
+const listPaymentScanZones = `-- name: ListPaymentScanZones :many
+SELECT DISTINCT u.timezone
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+ORDER BY u.timezone
 `
 
-type ListRemindersByRecurringOperationParams struct {
-	OwnerID              pgtype.UUID `json:"owner_id"`
-	RecurringOperationID pgtype.UUID `json:"recurring_operation_id"`
-	Limit                int32       `json:"limit"`
-	Offset               int32       `json:"offset"`
-}
-
-func (q *Queries) ListRemindersByRecurringOperation(ctx context.Context, arg ListRemindersByRecurringOperationParams) ([]Reminder, error) {
-	rows, err := q.db.Query(ctx, listRemindersByRecurringOperation,
-		arg.OwnerID,
-		arg.RecurringOperationID,
-		arg.Limit,
-		arg.Offset,
-	)
+// The payments scan's sweep targets (карта #734, #749; ADR 0048 p.3): the
+// distinct owner timezones having planned payment-rule operations on
+// non-archived properties — the only operations the scan can fire for (the
+// ticks' status canon, same as the rental scan; the join to payments also
+// keeps the manual facts and the deleted rules' orphans out). Stateless —
+// every run re-lists, no per-zone state is kept.
+func (q *Queries) ListPaymentScanZones(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPaymentScanZones)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Reminder{}
+	items := []string{}
 	for rows.Next() {
-		var i Reminder
+		var timezone string
+		if err := rows.Scan(&timezone); err != nil {
+			return nil, err
+		}
+		items = append(items, timezone)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentScheduledAutoPaidTargets = `-- name: ListPaymentScheduledAutoPaidTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND pay.auto_pay = true
+  AND pay.notify_auto_paid
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id
+`
+
+type ListPaymentScheduledAutoPaidTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListPaymentScheduledAutoPaidTargetsRow struct {
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	Date      pgtype.Date        `json:"date"`
+	FireAt    pgtype.Timestamptz `json:"fire_at"`
+}
+
+// The payments scan's booking list of the auto-paid leg (#1169): the
+// planned occurrences of auto-pay rules on non-archived properties whose
+// boundary — the wall clock 10:00 of the operation date in the owner's
+// timezone — falls in the window (from, until]. The occurrence is planned
+// at booking time; whether the tick (or a manual payment) extinguished it
+// by the wake-up is the delivery-time resolution's call. Only
+// notify_auto_paid-правила бронят (#1189) — молчащие не зовут событие.
+func (q *Queries) ListPaymentScheduledAutoPaidTargets(ctx context.Context, arg ListPaymentScheduledAutoPaidTargetsParams) ([]ListPaymentScheduledAutoPaidTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentScheduledAutoPaidTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentScheduledAutoPaidTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentScheduledAutoPaidTargetsRow
+		if err := rows.Scan(&i.PaymentID, &i.Date, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentScheduledDueTargets = `-- name: ListPaymentScheduledDueTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST((o.date::timestamp + time '10:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND pay.auto_pay = false
+  AND p.status IN ('active', 'maintenance')
+  AND (o.date::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND (o.date::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id
+`
+
+type ListPaymentScheduledDueTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListPaymentScheduledDueTargetsRow struct {
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	Date      pgtype.Date        `json:"date"`
+	FireAt    pgtype.Timestamptz `json:"fire_at"`
+}
+
+// The payments scan's booking list of the due leg (issue #776): the planned
+// operations whose due boundary — the wall clock 10:00 of the operation
+// date read in the owner's timezone (#1168, решение по гриллингу #1167:
+// «Оплатите платёж» больше не будит в полночь) — falls in the window
+// (from, until]. Auto-pay rules
+// excluded like the sweep's due leg (an auto-pay rule's due occurrence is
+// extinguished by the tick the same day, ADR 0049); manual facts and
+// cancelled tombstones stay out (status='planned' + the join to payments);
+// non-archived property only (the ticks' canon).
+func (q *Queries) ListPaymentScheduledDueTargets(ctx context.Context, arg ListPaymentScheduledDueTargetsParams) ([]ListPaymentScheduledDueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentScheduledDueTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentScheduledDueTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentScheduledDueTargetsRow
+		if err := rows.Scan(&i.PaymentID, &i.Date, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentScheduledOverdueTargets = `-- name: ListPaymentScheduledOverdueTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST(((o.date + 1)::timestamp + time '22:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date + 1)::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((o.date + 1)::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id
+`
+
+type ListPaymentScheduledOverdueTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListPaymentScheduledOverdueTargetsRow struct {
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	Date      pgtype.Date        `json:"date"`
+	FireAt    pgtype.Timestamptz `json:"fire_at"`
+}
+
+// The payments scan's booking list of the overdue leg (issue #776): the
+// planned operations whose overdue boundary — the wall clock 22:00 of the
+// day after the operation date read in the owner's timezone (#1168, по
+// гриллингу #1167: просрочка приходит вечером, не в полночь) — falls in the
+// window (from, until]. Auto-pay rules included (the tick never backdates an auto
+// charge, ADR 0049); the wall clock 22:00 is
+// the boundary, a DST day rolls it with the wall clock.
+func (q *Queries) ListPaymentScheduledOverdueTargets(ctx context.Context, arg ListPaymentScheduledOverdueTargetsParams) ([]ListPaymentScheduledOverdueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentScheduledOverdueTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentScheduledOverdueTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentScheduledOverdueTargetsRow
+		if err := rows.Scan(&i.PaymentID, &i.Date, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentScheduledReminderTargets = `-- name: ListPaymentScheduledReminderTargets :many
+SELECT pay.id AS payment_id,
+       o.date,
+       CAST(((o.date - pay.reminder_offset_days)::timestamp + time '10:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
+FROM operations o
+JOIN payments pay ON pay.id = o.payment_id
+JOIN properties p ON p.id = o.property_id
+JOIN users u ON u.id = o.owner_id
+WHERE o.status = 'planned'
+  AND pay.reminder_offset_days IS NOT NULL
+  AND p.status IN ('active', 'maintenance')
+  AND ((o.date - pay.reminder_offset_days)::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((o.date - pay.reminder_offset_days)::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY o.id
+`
+
+type ListPaymentScheduledReminderTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListPaymentScheduledReminderTargetsRow struct {
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	Date      pgtype.Date        `json:"date"`
+	FireAt    pgtype.Timestamptz `json:"fire_at"`
+}
+
+// The payments scan's booking list of the reminder leg (карта #822, #824):
+// the planned operations of rules with a reminder set whose reminder
+// boundary — the wall clock 10:00 of (operation date − lead time) read in
+// the owner's timezone (#1168, по гриллингу #1167) — falls in the window
+// (from, until]. Auto-pay rules included
+// (the reminder is independent of auto_pay); the wall clock 10:00 is
+// the boundary, a DST day rolls it with the wall clock.
+func (q *Queries) ListPaymentScheduledReminderTargets(ctx context.Context, arg ListPaymentScheduledReminderTargetsParams) ([]ListPaymentScheduledReminderTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentScheduledReminderTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentScheduledReminderTargetsRow{}
+	for rows.Next() {
+		var i ListPaymentScheduledReminderTargetsRow
+		if err := rows.Scan(&i.PaymentID, &i.Date, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPropertyActiveRecipients = `-- name: ListPropertyActiveRecipients :many
+SELECT user_id
+FROM property_members
+WHERE property_id = $1 AND status = 'active'
+ORDER BY user_id
+`
+
+// The property's active members' user ids — the object events' recipients
+// besides the owner (решение #737: активные участники, «Просмотр»
+// включительно; a suspended membership is not an active participant).
+func (q *Queries) ListPropertyActiveRecipients(ctx context.Context, propertyID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listPropertyActiveRecipients, propertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRentalCompletedScanZones = `-- name: ListRentalCompletedScanZones :many
+SELECT DISTINCT u.timezone
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND p.status IN ('active', 'maintenance')
+ORDER BY u.timezone
+`
+
+// The rental-completed scan's sweep targets (карта #734, #748; ADR 0048
+// p.3): the distinct owner timezones having unfinished rentals with a
+// planned end on non-archived properties — the only rentals the scan can
+// fire for (the ticks' status canon: an archived property's rentals
+// mutations are rejected, the action buttons would be dead ends).
+// Stateless — every run re-lists, no per-zone state is kept.
+func (q *Queries) ListRentalCompletedScanZones(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listRentalCompletedScanZones)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var timezone string
+		if err := rows.Scan(&timezone); err != nil {
+			return nil, err
+		}
+		items = append(items, timezone)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRentalCompletedTargets = `-- name: ListRentalCompletedTargets :many
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       p.id AS property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       p.owner_id
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE u.timezone = $1
+  AND r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND r.planned_end_date < $2::date
+  AND p.status IN ('active', 'maintenance')
+ORDER BY r.id
+`
+
+type ListRentalCompletedTargetsParams struct {
+	Timezone string      `json:"timezone"`
+	Column2  pgtype.Date `json:"column_2"`
+}
+
+type ListRentalCompletedTargetsRow struct {
+	RentalID        pgtype.UUID `json:"rental_id"`
+	PlannedEndDate  pgtype.Date `json:"planned_end_date"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    string      `json:"property_name"`
+	PropertyAddress string      `json:"property_address"`
+	PropertyType    string      `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's needs_attention rentals as of the zone's today (решение #737,
+// тип №1: the day after the planned end): not completed, planned end
+// strictly before today, non-archived property. The property snapshot
+// (name, address) travels for the publication cards (решение владельца
+// 19.09.2026, #745).
+func (q *Queries) ListRentalCompletedTargets(ctx context.Context, arg ListRentalCompletedTargetsParams) ([]ListRentalCompletedTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listRentalCompletedTargets, arg.Timezone, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRentalCompletedTargetsRow{}
+	for rows.Next() {
+		var i ListRentalCompletedTargetsRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.RentalID,
+			&i.PlannedEndDate,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.PropertyType,
+			&i.PropertyPhoto,
 			&i.OwnerID,
-			&i.TargetType,
-			&i.OperationID,
-			&i.RecurringOperationID,
-			&i.LeaseID,
-			&i.PropertyID,
-			&i.EventType,
-			&i.Status,
-			&i.ScheduledAt,
-			&i.SentAt,
-			&i.FailedAttempts,
-			&i.NextAttemptAt,
-			&i.MessageTitle,
-			&i.MessageBody,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -749,48 +1607,134 @@ func (q *Queries) ListRemindersByRecurringOperation(ctx context.Context, arg Lis
 	return items, nil
 }
 
-const listStaleSendingReminders = `-- name: ListStaleSendingReminders :many
-SELECT id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id FROM reminders
-WHERE status = 'sending'
-  AND updated_at < $1
-ORDER BY updated_at ASC
-LIMIT $2
-FOR UPDATE SKIP LOCKED
+const listRentalScheduledCompletedTargets = `-- name: ListRentalScheduledCompletedTargets :many
+SELECT r.id AS rental_id,
+       r.planned_end_date,
+       CAST(((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) AS timestamptz) AS fire_at
+FROM rentals r
+JOIN properties p ON p.id = r.property_id
+JOIN users u ON u.id = p.owner_id
+WHERE r.completed_date IS NULL
+  AND r.planned_end_date IS NOT NULL
+  AND p.status IN ('active', 'maintenance')
+  AND ((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((r.planned_end_date + 1)::timestamp AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY r.id
 `
 
-type ListStaleSendingRemindersParams struct {
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	Limit     int32              `json:"limit"`
+type ListRentalScheduledCompletedTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
 }
 
-func (q *Queries) ListStaleSendingReminders(ctx context.Context, arg ListStaleSendingRemindersParams) ([]Reminder, error) {
-	rows, err := q.db.Query(ctx, listStaleSendingReminders, arg.UpdatedAt, arg.Limit)
+type ListRentalScheduledCompletedTargetsRow struct {
+	RentalID       pgtype.UUID        `json:"rental_id"`
+	PlannedEndDate pgtype.Date        `json:"planned_end_date"`
+	FireAt         pgtype.Timestamptz `json:"fire_at"`
+}
+
+// The rental scan's booking list of the completed boundary (issue #777):
+// the unfinished rentals whose boundary — 00:00 of the day after the
+// planned end read in the owner's timezone — falls in the window (from,
+// until]. The wall-clock midnight of the next calendar date is the
+// boundary, a DST day rolls it with the wall clock (the payments' overdue
+// convention); non-archived property only (the ticks' canon).
+func (q *Queries) ListRentalScheduledCompletedTargets(ctx context.Context, arg ListRentalScheduledCompletedTargetsParams) ([]ListRentalScheduledCompletedTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listRentalScheduledCompletedTargets, arg.Column1, arg.Column2)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Reminder{}
+	items := []ListRentalScheduledCompletedTargetsRow{}
 	for rows.Next() {
-		var i Reminder
+		var i ListRentalScheduledCompletedTargetsRow
+		if err := rows.Scan(&i.RentalID, &i.PlannedEndDate, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskOverdueTargets = `-- name: ListTaskOverdueTargets :many
+SELECT t.id AS task_id,
+       t.title,
+       t.due_date,
+       t.due_time,
+       t.property_id,
+       p.name AS property_name,
+       p.address AS property_address,
+       p.type AS property_type,
+       COALESCE(CASE WHEN p.photo_key IS NOT NULL
+                     THEN '/api/properties/' || p.id::text || '/photo'
+                     END, '')::text AS property_photo,
+       t.rule_id,
+       t.owner_id
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE u.timezone = $1
+  AND t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+  AND (
+    (t.due_time IS NOT NULL AND ((t.due_date + t.due_time) AT TIME ZONE u.timezone) <= $2::timestamptz)
+    OR (t.due_time IS NULL AND t.due_date < $3::date)
+  )
+ORDER BY t.id
+`
+
+type ListTaskOverdueTargetsParams struct {
+	Timezone string             `json:"timezone"`
+	Column2  pgtype.Timestamptz `json:"column_2"`
+	Column3  pgtype.Date        `json:"column_3"`
+}
+
+type ListTaskOverdueTargetsRow struct {
+	TaskID          pgtype.UUID `json:"task_id"`
+	Title           string      `json:"title"`
+	DueDate         pgtype.Date `json:"due_date"`
+	DueTime         pgtype.Time `json:"due_time"`
+	PropertyID      pgtype.UUID `json:"property_id"`
+	PropertyName    pgtype.Text `json:"property_name"`
+	PropertyAddress pgtype.Text `json:"property_address"`
+	PropertyType    pgtype.Text `json:"property_type"`
+	PropertyPhoto   string      `json:"property_photo"`
+	RuleID          pgtype.UUID `json:"rule_id"`
+	OwnerID         pgtype.UUID `json:"owner_id"`
+}
+
+// One zone's overdue tasks as of the sweep's instant (решение #737, тип №4):
+// active, dated, term passed — the timed ones by their term minute
+// (в минуту срока, включительно, tasks/CONTEXT.md «Просрочка»), the
+// date-only ones strictly after the zone's day's end (первый скан после
+// границы суток). Non-archived property or no property at all (ADR 0052).
+// The dedup key (task id) keeps a long-overdue task single — the sweep
+// lists it hourly, the publication inserts nothing.
+func (q *Queries) ListTaskOverdueTargets(ctx context.Context, arg ListTaskOverdueTargetsParams) ([]ListTaskOverdueTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listTaskOverdueTargets, arg.Timezone, arg.Column2, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskOverdueTargetsRow{}
+	for rows.Next() {
+		var i ListTaskOverdueTargetsRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.TaskID,
+			&i.Title,
+			&i.DueDate,
+			&i.DueTime,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.PropertyAddress,
+			&i.PropertyType,
+			&i.PropertyPhoto,
+			&i.RuleID,
 			&i.OwnerID,
-			&i.TargetType,
-			&i.OperationID,
-			&i.RecurringOperationID,
-			&i.LeaseID,
-			&i.PropertyID,
-			&i.EventType,
-			&i.Status,
-			&i.ScheduledAt,
-			&i.SentAt,
-			&i.FailedAttempts,
-			&i.NextAttemptAt,
-			&i.MessageTitle,
-			&i.MessageBody,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.FreeReminderID,
 		); err != nil {
 			return nil, err
 		}
@@ -802,66 +1746,83 @@ func (q *Queries) ListStaleSendingReminders(ctx context.Context, arg ListStaleSe
 	return items, nil
 }
 
-const listUpcomingFreeRemindersByProperty = `-- name: ListUpcomingFreeRemindersByProperty :many
-SELECT r.id, r.owner_id, r.target_type, r.operation_id, r.recurring_operation_id, r.lease_id, r.property_id, r.event_type, r.status, r.scheduled_at, r.sent_at, r.failed_attempts, r.next_attempt_at, r.message_title, r.message_body, r.created_at, r.updated_at, r.free_reminder_id, fr.periodicity AS free_reminder_periodicity
-FROM reminders r
-JOIN free_reminders fr ON fr.id = r.free_reminder_id
-WHERE r.owner_id = $1
-  AND r.property_id = $2
-  AND r.target_type = 'free'
-  AND r.status = 'pending'
-  AND r.scheduled_at >= $3
-ORDER BY r.scheduled_at ASC
-LIMIT $4
+const listTaskScanZones = `-- name: ListTaskScanZones :many
+SELECT DISTINCT u.timezone
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+ORDER BY u.timezone
 `
 
-type ListUpcomingFreeRemindersByPropertyParams struct {
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-	PropertyID  pgtype.UUID        `json:"property_id"`
-	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
-	Limit       int32              `json:"limit"`
-}
-
-type ListUpcomingFreeRemindersByPropertyRow struct {
-	Reminder                Reminder `json:"reminder"`
-	FreeReminderPeriodicity string   `json:"free_reminder_periodicity"`
-}
-
-func (q *Queries) ListUpcomingFreeRemindersByProperty(ctx context.Context, arg ListUpcomingFreeRemindersByPropertyParams) ([]ListUpcomingFreeRemindersByPropertyRow, error) {
-	rows, err := q.db.Query(ctx, listUpcomingFreeRemindersByProperty,
-		arg.OwnerID,
-		arg.PropertyID,
-		arg.ScheduledAt,
-		arg.Limit,
-	)
+// The tasks scan's sweep targets (карта #734, #750; ADR 0048 p.3): the
+// distinct owner timezones having active dated tasks on non-archived
+// properties or without a property — the only tasks the scan can fire for
+// (the ticks' status canon, same as the rental scan; ADR 0052 — the task
+// without a property stays in its owner's book). Stateless — every run
+// re-lists, no per-zone state is kept.
+func (q *Queries) ListTaskScanZones(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listTaskScanZones)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListUpcomingFreeRemindersByPropertyRow{}
+	items := []string{}
 	for rows.Next() {
-		var i ListUpcomingFreeRemindersByPropertyRow
-		if err := rows.Scan(
-			&i.Reminder.ID,
-			&i.Reminder.OwnerID,
-			&i.Reminder.TargetType,
-			&i.Reminder.OperationID,
-			&i.Reminder.RecurringOperationID,
-			&i.Reminder.LeaseID,
-			&i.Reminder.PropertyID,
-			&i.Reminder.EventType,
-			&i.Reminder.Status,
-			&i.Reminder.ScheduledAt,
-			&i.Reminder.SentAt,
-			&i.Reminder.FailedAttempts,
-			&i.Reminder.NextAttemptAt,
-			&i.Reminder.MessageTitle,
-			&i.Reminder.MessageBody,
-			&i.Reminder.CreatedAt,
-			&i.Reminder.UpdatedAt,
-			&i.Reminder.FreeReminderID,
-			&i.FreeReminderPeriodicity,
-		); err != nil {
+		var timezone string
+		if err := rows.Scan(&timezone); err != nil {
+			return nil, err
+		}
+		items = append(items, timezone)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskScheduledTargets = `-- name: ListTaskScheduledTargets :many
+SELECT t.id AS task_id,
+       CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN properties p ON p.id = t.property_id
+WHERE t.completed_date IS NULL
+  AND t.due_date IS NOT NULL
+  AND (t.property_id IS NULL OR p.status IN ('active', 'maintenance'))
+  AND ((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) > $1::timestamptz
+  AND ((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) <= $2::timestamptz
+ORDER BY t.id
+`
+
+type ListTaskScheduledTargetsParams struct {
+	Column1 pgtype.Timestamptz `json:"column_1"`
+	Column2 pgtype.Timestamptz `json:"column_2"`
+}
+
+type ListTaskScheduledTargetsRow struct {
+	TaskID pgtype.UUID        `json:"task_id"`
+	DueAt  pgtype.Timestamptz `json:"due_at"`
+}
+
+// The tasks scan's scheduled leg (issues #750, #777): the active dated
+// tasks whose boundary instant — a timed task's (due_date + due_time), a
+// date-only task's day-after midnight (the wall-clock midnight, a DST day
+// rolls it with the wall clock), each read in the owner's timezone — falls
+// in the window (from, until]. Each one gets a boundary River job booked at
+// its boundary instant; the undated ones stay out (без срока — никогда).
+func (q *Queries) ListTaskScheduledTargets(ctx context.Context, arg ListTaskScheduledTargetsParams) ([]ListTaskScheduledTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listTaskScheduledTargets, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskScheduledTargetsRow{}
+	for rows.Next() {
+		var i ListTaskScheduledTargetsRow
+		if err := rows.Scan(&i.TaskID, &i.DueAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -872,363 +1833,76 @@ func (q *Queries) ListUpcomingFreeRemindersByProperty(ctx context.Context, arg L
 	return items, nil
 }
 
-const markReminderFailed = `-- name: MarkReminderFailed :execrows
-UPDATE reminders
-SET failed_attempts = failed_attempts + 1,
-    next_attempt_at = $1::timestamptz,
-    status = CASE WHEN $2::boolean THEN 'failed'::notification_status ELSE 'pending'::notification_status END
-WHERE id = $3::uuid AND status IN ('pending', 'sending')
+const markAllNotificationsRead = `-- name: MarkAllNotificationsRead :execrows
+UPDATE notifications
+SET read_at = now()
+WHERE user_id = $1
+  AND read_at IS NULL
+  AND deleted_at IS NULL
 `
 
-type MarkReminderFailedParams struct {
-	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-	MarkAsFailed  bool               `json:"mark_as_failed"`
-	ID            pgtype.UUID        `json:"id"`
-}
-
-func (q *Queries) MarkReminderFailed(ctx context.Context, arg MarkReminderFailedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markReminderFailed, arg.NextAttemptAt, arg.MarkAsFailed, arg.ID)
+// «Прочитать все» (решение #737): every unread not-deleted row of the user
+// in one statement; the result is the number of rows that flipped.
+func (q *Queries) MarkAllNotificationsRead(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markAllNotificationsRead, userID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const markReminderSending = `-- name: MarkReminderSending :one
-UPDATE reminders
-SET status = 'sending'
-WHERE id = $1 AND status = 'pending'
-RETURNING id, owner_id, target_type, operation_id, recurring_operation_id, lease_id, property_id, event_type, status, scheduled_at, sent_at, failed_attempts, next_attempt_at, message_title, message_body, created_at, updated_at, free_reminder_id
+const markNotificationRead = `-- name: MarkNotificationRead :execrows
+UPDATE notifications
+SET read_at = now()
+WHERE id = $1
+  AND user_id = $2
+  AND read_at IS NULL
+  AND deleted_at IS NULL
 `
 
-func (q *Queries) MarkReminderSending(ctx context.Context, id pgtype.UUID) (Reminder, error) {
-	row := q.db.QueryRow(ctx, markReminderSending, id)
-	var i Reminder
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.TargetType,
-		&i.OperationID,
-		&i.RecurringOperationID,
-		&i.LeaseID,
-		&i.PropertyID,
-		&i.EventType,
-		&i.Status,
-		&i.ScheduledAt,
-		&i.SentAt,
-		&i.FailedAttempts,
-		&i.NextAttemptAt,
-		&i.MessageTitle,
-		&i.MessageBody,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.FreeReminderID,
+type MarkNotificationReadParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+// Marks one row read (a click, the notification page). Idempotent: an
+// already-read or deleted row matches nothing (0 rows).
+func (q *Queries) MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationRead, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertEmailPreferences = `-- name: UpsertEmailPreferences :execrows
+INSERT INTO notification_email_preferences (user_id, rental, payments_operations, tasks, shared_access)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id) DO UPDATE SET
+    rental              = EXCLUDED.rental,
+    payments_operations = EXCLUDED.payments_operations,
+    tasks               = EXCLUDED.tasks,
+    shared_access       = EXCLUDED.shared_access
+`
+
+type UpsertEmailPreferencesParams struct {
+	UserID             pgtype.UUID `json:"user_id"`
+	Rental             bool        `json:"rental"`
+	PaymentsOperations bool        `json:"payments_operations"`
+	Tasks              bool        `json:"tasks"`
+	SharedAccess       bool        `json:"shared_access"`
+}
+
+// PUT /notification-preferences is a full replacement of the four flags
+// (канон #738).
+func (q *Queries) UpsertEmailPreferences(ctx context.Context, arg UpsertEmailPreferencesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertEmailPreferences,
+		arg.UserID,
+		arg.Rental,
+		arg.PaymentsOperations,
+		arg.Tasks,
+		arg.SharedAccess,
 	)
-	return i, err
-}
-
-const markReminderSent = `-- name: MarkReminderSent :execrows
-UPDATE reminders
-SET status = 'sent', sent_at = $1
-WHERE id = $2 AND status IN ('pending', 'sending')
-`
-
-type MarkReminderSentParams struct {
-	SentAt pgtype.Timestamptz `json:"sent_at"`
-	ID     pgtype.UUID        `json:"id"`
-}
-
-func (q *Queries) MarkReminderSent(ctx context.Context, arg MarkReminderSentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markReminderSent, arg.SentAt, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const markReminderSkipped = `-- name: MarkReminderSkipped :execrows
-UPDATE reminders
-SET status = 'skipped'
-WHERE id = $1 AND status IN ('pending', 'sending')
-`
-
-func (q *Queries) MarkReminderSkipped(ctx context.Context, id pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, markReminderSkipped, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const markSendingReminderPending = `-- name: MarkSendingReminderPending :execrows
-UPDATE reminders
-SET status = 'pending',
-    next_attempt_at = $1::timestamptz,
-    failed_attempts = failed_attempts + 1
-WHERE id = $2::uuid AND status = 'sending'
-`
-
-type MarkSendingReminderPendingParams struct {
-	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-	ID            pgtype.UUID        `json:"id"`
-}
-
-func (q *Queries) MarkSendingReminderPending(ctx context.Context, arg MarkSendingReminderPendingParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markSendingReminderPending, arg.NextAttemptAt, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const markSendingReminderSent = `-- name: MarkSendingReminderSent :execrows
-UPDATE reminders
-SET status = 'sent', sent_at = $2
-WHERE id = $1 AND status = 'sending'
-`
-
-type MarkSendingReminderSentParams struct {
-	ID     pgtype.UUID        `json:"id"`
-	SentAt pgtype.Timestamptz `json:"sent_at"`
-}
-
-func (q *Queries) MarkSendingReminderSent(ctx context.Context, arg MarkSendingReminderSentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markSendingReminderSent, arg.ID, arg.SentAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const reschedulePendingRemindersByOwner = `-- name: ReschedulePendingRemindersByOwner :execrows
-UPDATE reminders
-SET scheduled_at = ((scheduled_at AT TIME ZONE $2::text) AT TIME ZONE $1::text)
-WHERE owner_id = $3 AND status = 'pending'
-`
-
-type ReschedulePendingRemindersByOwnerParams struct {
-	NewTz   string      `json:"new_tz"`
-	OldTz   string      `json:"old_tz"`
-	OwnerID pgtype.UUID `json:"owner_id"`
-}
-
-func (q *Queries) ReschedulePendingRemindersByOwner(ctx context.Context, arg ReschedulePendingRemindersByOwnerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, reschedulePendingRemindersByOwner, arg.NewTz, arg.OldTz, arg.OwnerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const resetReminderSending = `-- name: ResetReminderSending :execrows
-UPDATE reminders
-SET status = 'pending'
-WHERE id = $1 AND status = 'sending'
-`
-
-func (q *Queries) ResetReminderSending(ctx context.Context, id pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, resetReminderSending, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const saveFreeReminder = `-- name: SaveFreeReminder :execrows
-INSERT INTO reminders (
-    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
-    property_id, free_reminder_id, event_type, status, scheduled_at,
-    message_title, message_body, created_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-)
-`
-
-type SaveFreeReminderParams struct {
-	ID                   pgtype.UUID            `json:"id"`
-	OwnerID              pgtype.UUID            `json:"owner_id"`
-	TargetType           NotificationTargetType `json:"target_type"`
-	OperationID          pgtype.UUID            `json:"operation_id"`
-	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
-	LeaseID              pgtype.UUID            `json:"lease_id"`
-	PropertyID           pgtype.UUID            `json:"property_id"`
-	FreeReminderID       pgtype.UUID            `json:"free_reminder_id"`
-	EventType            NotificationEventType  `json:"event_type"`
-	Status               NotificationStatus     `json:"status"`
-	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
-	MessageTitle         string                 `json:"message_title"`
-	MessageBody          string                 `json:"message_body"`
-	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
-}
-
-func (q *Queries) SaveFreeReminder(ctx context.Context, arg SaveFreeReminderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, saveFreeReminder,
-		arg.ID,
-		arg.OwnerID,
-		arg.TargetType,
-		arg.OperationID,
-		arg.RecurringOperationID,
-		arg.LeaseID,
-		arg.PropertyID,
-		arg.FreeReminderID,
-		arg.EventType,
-		arg.Status,
-		arg.ScheduledAt,
-		arg.MessageTitle,
-		arg.MessageBody,
-		arg.CreatedAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const saveOrReplaceOperationReminder = `-- name: SaveOrReplaceOperationReminder :execrows
-INSERT INTO reminders (
-    id, owner_id, target_type, operation_id, recurring_operation_id, lease_id,
-    property_id, event_type, status, scheduled_at, message_title, message_body,
-    created_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-ON CONFLICT (owner_id, target_type, operation_id, recurring_operation_id, lease_id, event_type)
-WHERE status IN ('pending', 'sending')
-DO UPDATE SET
-    scheduled_at = EXCLUDED.scheduled_at,
-    message_title = EXCLUDED.message_title,
-    message_body = EXCLUDED.message_body,
-    status = EXCLUDED.status
-`
-
-type SaveOrReplaceOperationReminderParams struct {
-	ID                   pgtype.UUID            `json:"id"`
-	OwnerID              pgtype.UUID            `json:"owner_id"`
-	TargetType           NotificationTargetType `json:"target_type"`
-	OperationID          pgtype.UUID            `json:"operation_id"`
-	RecurringOperationID pgtype.UUID            `json:"recurring_operation_id"`
-	LeaseID              pgtype.UUID            `json:"lease_id"`
-	PropertyID           pgtype.UUID            `json:"property_id"`
-	EventType            NotificationEventType  `json:"event_type"`
-	Status               NotificationStatus     `json:"status"`
-	ScheduledAt          pgtype.Timestamptz     `json:"scheduled_at"`
-	MessageTitle         string                 `json:"message_title"`
-	MessageBody          string                 `json:"message_body"`
-	CreatedAt            pgtype.Timestamptz     `json:"created_at"`
-}
-
-func (q *Queries) SaveOrReplaceOperationReminder(ctx context.Context, arg SaveOrReplaceOperationReminderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, saveOrReplaceOperationReminder,
-		arg.ID,
-		arg.OwnerID,
-		arg.TargetType,
-		arg.OperationID,
-		arg.RecurringOperationID,
-		arg.LeaseID,
-		arg.PropertyID,
-		arg.EventType,
-		arg.Status,
-		arg.ScheduledAt,
-		arg.MessageTitle,
-		arg.MessageBody,
-		arg.CreatedAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const saveSentEmailReminder = `-- name: SaveSentEmailReminder :execrows
-INSERT INTO sent_email_reminders (
-    id, reminder_id, owner_id, email, subject, plain_body, sent_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (reminder_id, owner_id) DO NOTHING
-`
-
-type SaveSentEmailReminderParams struct {
-	ID         pgtype.UUID        `json:"id"`
-	ReminderID pgtype.UUID        `json:"reminder_id"`
-	OwnerID    pgtype.UUID        `json:"owner_id"`
-	Email      string             `json:"email"`
-	Subject    string             `json:"subject"`
-	PlainBody  string             `json:"plain_body"`
-	SentAt     pgtype.Timestamptz `json:"sent_at"`
-}
-
-func (q *Queries) SaveSentEmailReminder(ctx context.Context, arg SaveSentEmailReminderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, saveSentEmailReminder,
-		arg.ID,
-		arg.ReminderID,
-		arg.OwnerID,
-		arg.Email,
-		arg.Subject,
-		arg.PlainBody,
-		arg.SentAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const saveSentPushReminder = `-- name: SaveSentPushReminder :execrows
-INSERT INTO sent_push_reminders (id, reminder_id, recipient_id, sent_at)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (reminder_id, recipient_id) DO NOTHING
-`
-
-type SaveSentPushReminderParams struct {
-	ID          pgtype.UUID        `json:"id"`
-	ReminderID  pgtype.UUID        `json:"reminder_id"`
-	RecipientID pgtype.UUID        `json:"recipient_id"`
-	SentAt      pgtype.Timestamptz `json:"sent_at"`
-}
-
-func (q *Queries) SaveSentPushReminder(ctx context.Context, arg SaveSentPushReminderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, saveSentPushReminder,
-		arg.ID,
-		arg.ReminderID,
-		arg.RecipientID,
-		arg.SentAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const updateReminderScheduledAt = `-- name: UpdateReminderScheduledAt :execrows
-UPDATE reminders
-SET scheduled_at = $1
-WHERE id = $2 AND owner_id = $3 AND status = 'pending'
-`
-
-type UpdateReminderScheduledAtParams struct {
-	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
-	ID          pgtype.UUID        `json:"id"`
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-}
-
-func (q *Queries) UpdateReminderScheduledAt(ctx context.Context, arg UpdateReminderScheduledAtParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateReminderScheduledAt, arg.ScheduledAt, arg.ID, arg.OwnerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const updateSentSMSReminderProviderResponse = `-- name: UpdateSentSMSReminderProviderResponse :execrows
-UPDATE sent_sms_reminders
-SET provider_response = $1
-WHERE reminder_id = $2
-`
-
-type UpdateSentSMSReminderProviderResponseParams struct {
-	ProviderResponse pgtype.Text `json:"provider_response"`
-	ReminderID       pgtype.UUID `json:"reminder_id"`
-}
-
-func (q *Queries) UpdateSentSMSReminderProviderResponse(ctx context.Context, arg UpdateSentSMSReminderProviderResponseParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateSentSMSReminderProviderResponse, arg.ProviderResponse, arg.ReminderID)
 	if err != nil {
 		return 0, err
 	}

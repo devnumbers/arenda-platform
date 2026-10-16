@@ -1,0 +1,90 @@
+'use client';
+
+import type { JSX } from 'react';
+import { ContactRowButton } from '@/entities/contact';
+import type { Contact } from '@/entities/contact';
+import type { RentalTenant } from '@/entities/rental';
+import { rentalTenantTitle } from '@/features/rentals';
+import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
+import { UserAvatar } from '@/shared/ui/design';
+
+type PropertyContactsBlockProps = {
+  /** Арендатор текущей аренды (бейдж-подпись роли «Арендатор»). */
+  readonly tenant: RentalTenant | null;
+  /** Фото контакта-арендатора — из его карточки отдельным запросом
+   * (ADR 0065, решение #1286; прецедент страницы аренды): в списке книги
+   * его искать нельзя — арендатор из списка вырезан, чтобы не
+   * дублировать строку (#1335), а keyset-порция видит не всю книгу.
+   * undefined — карточки нет или у неё нет фото. */
+  readonly tenantPhotoUrl: string | undefined;
+  readonly contacts: ReadonlyArray<Contact>;
+  readonly onOpenContact: (contactId: string) => void;
+};
+
+/** Строка арендатора — та же анатомия, что ContactRowButton (круг 44 —
+ * фото контакта из книги или BoldUser, имя 16/18, подпись роли 14/16
+ * серым), но данные приходят из аренды, а не из книги контактов
+ * (тикет #589, Figma 1185:40820: «Максим — Арендатор»). div с
+ * role=button, как канонные строки: клавиатурную активацию несёт общий
+ * хук. */
+function TenantRowButton({
+  tenant,
+  photoUrl,
+  onSelect,
+}: {
+  readonly tenant: RentalTenant;
+  /** Фото контакта-арендатора — из его карточки (ADR 0065, решение
+   * #1286); undefined — карточки нет или у неё нет фото. */
+  readonly photoUrl: string | undefined;
+  readonly onSelect: () => void;
+}): JSX.Element {
+  const activatorProps = useKeyboardActivation({ onSelect });
+  return (
+    <div
+      {...activatorProps}
+      className="flex w-full cursor-pointer items-center gap-2 py-2 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dl-surface-muted)]"
+      data-testid="property-tenant-row"
+    >
+      <UserAvatar variant="muted" photoUrl={photoUrl} />
+      <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+        <span className="truncate text-base font-medium text-content">
+          {rentalTenantTitle(tenant)}
+        </span>
+        <span className="truncate text-sm text-content-secondary">Арендатор</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Заполненная секция «Контакты» (тикет #589, Figma 1185:40820): первым —
+ * арендатор из текущей аренды с подписью роли, ниже — контакты объекта
+ * (канонная ContactRowButton на серой карточке — белые круги). Тап по
+ * строке — карточка контакта; шапка секции ведёт в книгу объекта.
+ */
+export function PropertyContactsBlock({
+  tenant,
+  tenantPhotoUrl,
+  contacts,
+  onOpenContact,
+}: PropertyContactsBlockProps): JSX.Element {
+  return (
+    <div className="flex flex-col px-6 pb-6 pt-4" data-testid="property-contacts-block">
+      {tenant !== null && (
+        <TenantRowButton
+          tenant={tenant}
+          photoUrl={tenantPhotoUrl}
+          onSelect={() => onOpenContact(tenant.contactId)}
+        />
+      )}
+      {contacts.map((contact) => (
+        <ContactRowButton
+          key={contact.id}
+          contact={contact}
+          surface="muted"
+          onSelect={() => onOpenContact(contact.id)}
+        />
+      ))}
+    </div>
+  );
+}
