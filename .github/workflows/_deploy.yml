@@ -209,6 +209,11 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           fingerprint: ${{ secrets.SSH_HOST_KEY_FINGERPRINT }}
           envs: GHCR_READ_TOKEN,GHCR_USERNAME,ENV_B64
+          # One script does the DB backup (pg_dump + off-site S3 copy), the pull
+          # of all four images and the rollout; the action default of 10m died
+          # mid-pull on a slow registry day (run 38760150299, 15.10.2026) —
+          # 20m leaves headroom without masking a genuinely hung server.
+          command_timeout: 20m
           script: |
             set -euo pipefail
             cd "/opt/arenda/${{ inputs.compose_env }}"
