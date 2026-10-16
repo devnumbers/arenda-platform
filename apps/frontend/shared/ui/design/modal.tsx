@@ -153,10 +153,9 @@ export function ModalContent({
       <DialogPortal>
         <DialogOverlay
           className={cn(
-            // modal-overlay — крючок для push-back фона в globals.css
-            // (body:has(.modal-overlay[data-state='open']) .screen-shell):
-            // оболочка приложения отодвигается вглубь, пока открыт любой
-            // Modal (канон apple-design §12). Решение владельца 14.10.
+            // modal-overlay — единый носитель стиля оверлея Modal
+            // (скрим bg-overlay поверх статичного фона; push-back оболочки
+            // отклонён владельцем 16.10, план 043).
             'modal-overlay fixed inset-0 z-50 bg-overlay',
           )}
         />
@@ -184,9 +183,9 @@ export function ModalContent({
     <Drawer.Portal>
       <Drawer.Overlay
         className={cn(
-          // modal-overlay — крючок push-back фона, как у десктопного
-          // оверлея выше: vaul-путь тоже отодвигает оболочку (канон
-          // apple-design §12, решение владельца 14.10).
+          // modal-overlay — тот же носитель стиля, что у десктопного
+          // оверлея выше: vaul-путь рисует тот же скрим поверх статичного
+          // фона.
           'modal-overlay fixed inset-0 z-50 bg-overlay',
         )}
       />

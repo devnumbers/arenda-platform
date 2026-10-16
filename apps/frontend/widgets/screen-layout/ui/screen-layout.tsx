@@ -61,13 +61,6 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
     <TabBarVisibilityProvider>
       <HubPrefetchProvider>
         <TopNavUserProvider>
-          {/* screen-shell — крючок push-back фона: при открытом Modal
-              оболочка отодвигается вглубь (globals.css, body:has(
-              .modal-overlay[data-state='open']); канон apple-design §12,
-              решение владельца 14.10). transform на оболочке делает её
-              содержащим блоком для fixed-хрома — сайдбар, пилюли и TabBar
-              уходят вглубь вместе с контентом; порталы (модалки, шиты,
-              тосты) вне оболочки и не масштабируются. */}
           <div className="screen-shell flex min-h-dvh flex-col tablet:pt-[72px]">
             <DesktopSidebar />
             <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
