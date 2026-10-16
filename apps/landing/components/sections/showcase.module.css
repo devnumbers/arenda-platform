@@ -1,9 +1,13 @@
 /* Карусель «Создайте карточку своей недвижимости» — размерная система
    по макетам 2967-75653 (ПК), 3005-78445 (планшет), 3008-79114 (мобила).
    Каждая карточка/плашка несёт --k ∈ [0..1] (0 — боковое состояние,
-   1 — центральное), все размеры интерполируются calc'ом от --k, поэтому
-   морфинг при прокрутке непрерывный. Ярусы: мобайл <481, планшет
-   481–1199 (макет = ПК-контент, карточки уже по ширине), десктоп ≥1200. */
+   1 — центральное), в покое все размеры интерполируются calc'ом от --k.
+   В движении (класс .morphing на .zone) боковые переменные коллапсируют
+   в центральные — раскладка кадра фиксируется в центральных размерах,
+   а разница состояний уезжает в translate3d + scale узлов (движок
+   showcase.tsx + showcase-flip.ts), поэтому переход без переверстки.
+   Ярусы: мобайл <481, планшет 481–1199 (макет = ПК-контент, карточки
+   уже по ширине), десктоп ≥1200. */
 
 .carousel {
   /* мобайл (макет 393 = планшет × 0.6) */
@@ -351,21 +355,49 @@
   border-radius: inherit;
 }
 
-/* В движении (драг/переход, класс ставит render() в showcase.tsx) блюр
-   стекла заморожен на покойном центральном значении: интерполяция блюра
-   перерастеризует стекло каждый кадр — самая дорогая часть морфа (в
-   Safari особенно), а ступеньку приезда глаз в движении не читает. */
-.moving .cardGlass {
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+/* В движении (драг/переход, класс ставит render() в showcase.tsx)
+   боковые переменные приравнены к центральным: каждый calc(--k) из
+   правил ниже вырождается в точное центральное значение при любом k —
+   геометрия кадра зафиксирована в центральной раскладке, записи --k
+   не трогают лэйаут. Разница состояний уезжает в translate3d + scale
+   узлов (showcase-flip.ts). Блюр стекла при этом тоже «заморожен» на
+   центральном значении: масштаб трансформа переводит его в покойное
+   боковое точно (9.6px × 0.8 = 7.68px), отдельный фриз не нужен. */
+.zone.morphing {
+  --side-w: var(--w);
+  --side-h: var(--h);
+  --side-p: var(--p);
+  --side-r: var(--r);
+  --glass-side-w: var(--glass-w);
+  --glass-side-p: var(--glass-p);
+  --glass-side-r: var(--glass-r);
+  --blur-side: var(--blur);
+  --ring-side: var(--ring);
+  --glass-gap-side: var(--glass-gap);
+  --rows-gap-side: var(--rows-gap);
+  --row-gap-side: var(--row-gap);
+  --title-side-s: var(--title-s);
+  --title-side-lh: var(--title-lh);
+  --row-side-s: var(--row-s);
+  --row-side-lh: var(--row-lh);
+  --plate-side-w: var(--plate-w);
+  --plate-side-h: var(--plate-h);
+  --plate-side-p: var(--plate-p);
+  --plate-side-pr: var(--plate-pr);
+  --plate-side-icon: var(--plate-icon);
+  --plate-gap-side: var(--plate-gap);
+  --plate-text-gap-side: var(--plate-text-gap);
+  --plate-title-side-s: var(--plate-title-s);
+  --plate-title-side-lh: var(--plate-title-lh);
+  --plate-sub-side-s: var(--plate-sub-s);
+  --plate-sub-side-lh: var(--plate-sub-lh);
+  --plate-side-arrow: var(--plate-arrow);
 }
 
 /* Стекло характеристик для тех, кто просит меньше прозрачности или
-   больший контраст: почти сплошная подложка, блюр снят целиком —
-   включая motion-фриз выше (селектор .moving .cardGlass специфичнее). */
+   больший контраст: почти сплошная подложка, блюр снят целиком. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .cardGlass,
-  .moving .cardGlass {
+  .cardGlass {
     background: rgba(0, 0, 0, 0.82);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
