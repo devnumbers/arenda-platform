@@ -177,3 +177,4 @@ test('дорисовка месяцев срабатывает с запасом
   // (24 кадра на стене на прежней механике) — регресс.
   expect(wallFramesInFlight, `кадров на стене (scrollTop 0) в полёте; ${diag}`).toBeLessThanOrEqual(4);
 });
+

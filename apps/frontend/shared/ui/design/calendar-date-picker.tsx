@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -45,6 +47,7 @@ import {
 } from '@/shared/lib/calendar';
 import { formatRangeBound } from '@/shared/lib/date-format';
 import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
+import { createPrependGate } from './calendar-feed-gate';
 import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '@/shared/ui/design/month-grid';
 
 /** Полноэкранный пикер даты (общий компонент дизайн-слоя, вырос из пикера
@@ -163,6 +166,105 @@ function scrollListToMonth(list: HTMLElement | null, month: HTMLElement | undefi
   list.scrollTop = month.offsetTop;
 }
 
+/** Блок месяца ленты (мемо, план 050): приписка перерисовывает только
+ * новые блоки — существующие выпадают из реконсиляции, и тяжесть прохода
+ * перестаёт расти с глубиной ленты (раньше каждая приписка пересчитывала
+ * все блоки: Date+ISO и дизейблы на каждую ячейку — к глубине пары лет
+ * это ~5–6k ячеек за проход). Пропсы — примитивы и стабильные колбэки:
+ * перерендер блока только когда меняются его выбор/границы (тап-уровень).
+ * Оценка высоты офскрина — 480px десктопной колонки; телефонный тир
+ * переопределяет медиа-правилом `.calendar-month-block` (globals.css). */
+const CalendarMonthBlock = memo(function CalendarMonthBlock({
+  year,
+  month0,
+  isFirst,
+  beyondMaxDate,
+  today,
+  draft,
+  value,
+  minDate,
+  maxDate,
+  allowPast,
+  registerRef,
+  onSelect,
+}: {
+  readonly year: number;
+  readonly month0: number;
+  readonly isFirst: boolean;
+  readonly beyondMaxDate: boolean;
+  readonly today: IsoDate;
+  readonly draft: IsoDate | null;
+  readonly value: IsoDate | null;
+  readonly minDate: IsoDate | undefined;
+  readonly maxDate: IsoDate | undefined;
+  readonly allowPast: boolean;
+  readonly registerRef: (key: string, node: HTMLElement | null) => void;
+  readonly onSelect: (iso: IsoDate, selected: boolean) => void;
+}): JSX.Element {
+  const days = daysInMonth(year, month0);
+  const leadingBlanks = firstWeekdayOfMonth(year, month0);
+  const key = monthKey(year, month0);
+  return (
+    <section
+      ref={(node) => {
+        registerRef(key, node);
+      }}
+      className={cn(
+        isFirst ? undefined : 'mt-8',
+        beyondMaxDate && 'opacity-50',
+        '[content-visibility:auto] [contain-intrinsic-size:auto_480px]',
+        'calendar-month-block',
+      )}
+    >
+      <h3 className="px-6 text-xl font-semibold leading-6 text-content">
+        {MONTH_LABELS[month0]}, {year}
+      </h3>
+      <div className="mt-4 grid grid-cols-7 gap-0.5 px-4">
+        {Array.from({ length: leadingBlanks }, (_, blank) => (
+          <div key={`blank-${blank}`} aria-hidden className="aspect-square" />
+        ))}
+        {Array.from({ length: days }, (_, day) => {
+          const iso = isoDateOf(year, month0, day + 1);
+          const selected = iso === draft;
+          const isToday = iso === today;
+          return (
+            <CalendarButton
+              key={iso}
+              className="aspect-square h-auto w-full"
+              state={selected ? 'selected' : isToday ? 'today' : 'default'}
+              aria-current={isToday ? 'date' : undefined}
+              // Прошлые дни закрыты полом (calendarDayDisabled):
+              // сегодня по умолчанию — задним числом даты не
+              // создаются (#498), minDate при allowPast — дата
+              // завершения бывает задним числом (#805); текущее
+              // значение-якорь в прошлом остаётся тапабельным
+              // (правка #502), повторный тап снимает дату. Дни
+              // раньше minDate недоступны без исключений (minDate —
+              // первый доступный: окончание аренды строго позже
+              // начала, ADR 0053); дни позже maxDate — тоже (дата
+              // завершения не бывает будущей, #534).
+              disabled={calendarDayDisabled({
+                iso,
+                today,
+                value,
+                minDate,
+                maxDate,
+                allowPast,
+              })}
+              // Повторный тап по выбранному дню снимает выбор
+              // (решение владельца 2026-09-03); с required дата
+              // обязательна — тап её держит.
+              onClick={() => onSelect(iso, selected)}
+            >
+              {day + 1}
+            </CalendarButton>
+          );
+        })}
+      </div>
+    </section>
+  );
+});
+
 export type CalendarDatePickerProps = {
   readonly title?: string;
   readonly confirmLabel?: string;
@@ -263,6 +365,26 @@ export function CalendarDatePicker({
   // скроллится после монтирования новых месяцев. Ключ абсолютный — старт
   // ленты уезжает назад при дорисовке.
   const pendingScrollKey = useRef<string | null>(null);
+  // Гейт приписки (план 050): одна порция в полёте — скролл-события
+  // одного кадра не суммируются в один DOM-коммит (на телефоне такие
+  // коммиты были паузами кадра 150–600 мс прямо в моментуме).
+  const [prependGate] = useState(createPrependGate);
+  // Стабильная регистрация ref'а блока месяца — проп мемо-блока.
+  const setMonthRef = useCallback((key: string, node: HTMLElement | null) => {
+    if (node !== null) {
+      monthRefs.current.set(key, node);
+    } else {
+      monthRefs.current.delete(key);
+    }
+  }, []);
+  // Выбор дня — стабильный колбэк (проп мемо-блока): повторный тап
+  // снимает выбор, required держит дату.
+  const selectDraft = useCallback(
+    (iso: IsoDate, selected: boolean) => {
+      setDraft(selected && !required ? null : iso);
+    },
+    [required],
+  );
 
   // Чип месяца показывает месяц черновика; у пустого — текущий месяц.
   const draftMonth = calendarMonthOf(draft ?? today);
@@ -284,13 +406,15 @@ export function CalendarDatePicker({
 
   // Дорисовка прыжка за край — после монтирования новых месяцев.
   useEffect(() => {
+    // Приписка доехала до DOM — гейт открывает следующий запрос (план 050).
+    prependGate.settled();
     const key = pendingScrollKey.current;
     if (key === null) {
       return;
     }
     pendingScrollKey.current = null;
     scrollListToMonth(scrollRef.current, monthRefs.current.get(key));
-  }, [monthsCount, firstMonth]);
+  }, [monthsCount, firstMonth, prependGate]);
 
   // Escape закрывает пикер; при открытом шите месяца его Esc обрабатывает
   // Radix — глобальный слушатель в этот момент глушится.
@@ -334,10 +458,18 @@ export function CalendarDatePicker({
     lastScrollRef.current = { st: list.scrollTop, t: now };
     if (endlessPast && list.scrollTop <= PREPEND_THRESHOLD_PX) {
       const chunks = flingChunks(previous, now, list.scrollTop, FEED_CHUNK_PX);
+      // Склейка по кадру (план 050): скролл-события одного кадра не
+      // суммируют порции в один DOM-коммит — пока предыдущая приписка в
+      // полёте, запросы склеиваются с ней; settled() зовёт эффект
+      // рендера приписки.
+      const portion = prependGate.request(chunks);
+      if (portion === null) {
+        return;
+      }
       setFirstMonth((month) =>
-        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_PREPEND_CHUNK * chunks),
+        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_PREPEND_CHUNK * portion),
       );
-      setMonthsCount((count) => count + CALENDAR_FEED_PREPEND_CHUNK * chunks);
+      setMonthsCount((count) => count + CALENDAR_FEED_PREPEND_CHUNK * portion);
       return;
     }
     if (
@@ -426,8 +558,6 @@ export function CalendarDatePicker({
       >
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
-            const days = daysInMonth(year, month0);
-            const leadingBlanks = firstWeekdayOfMonth(year, month0);
             // Приглушённое будущее за месяцем maxDate (жёсткий край #1394):
             // контекст после черты виден, но выбирать там нечего — 1:1 с
             // пикером периода.
@@ -437,69 +567,21 @@ export function CalendarDatePicker({
               && calendarMonthIndex({ year, month0 })
                 > calendarMonthIndex(calendarMonthOf(maxDate));
             return (
-              <section
+              <CalendarMonthBlock
                 key={monthKey(year, month0)}
-                ref={(node) => {
-                  if (node !== null) {
-                    monthRefs.current.set(monthKey(year, month0), node);
-                  } else {
-                    monthRefs.current.delete(monthKey(year, month0));
-                  }
-                }}
-                // Оффскрин-блок без layout/paint: оценка 480px до первого
-                // прохода, дальше браузер держит реальный размер.
-                className={cn(
-                  index === 0 ? undefined : 'mt-8',
-                  beyondMaxDate && 'opacity-50',
-                  '[content-visibility:auto] [contain-intrinsic-size:auto_480px]',
-                )}
-              >
-                <h3 className="px-6 text-xl font-semibold leading-6 text-content">
-                  {MONTH_LABELS[month0]}, {year}
-                </h3>
-                <div className="mt-4 grid grid-cols-7 gap-0.5 px-4">
-                  {Array.from({ length: leadingBlanks }, (_, blank) => (
-                    <div key={`blank-${blank}`} aria-hidden className="aspect-square" />
-                  ))}
-                  {Array.from({ length: days }, (_, day) => {
-                    const iso = isoDateOf(year, month0, day + 1);
-                    const selected = iso === draft;
-                    const isToday = iso === today;
-                    return (
-                      <CalendarButton
-                        key={iso}
-                        className="aspect-square h-auto w-full"
-                        state={selected ? 'selected' : isToday ? 'today' : 'default'}
-                        aria-current={isToday ? 'date' : undefined}
-                        // Прошлые дни закрыты полом (calendarDayDisabled):
-                        // сегодня по умолчанию — задним числом даты не
-                        // создаются (#498), minDate при allowPast — дата
-                        // завершения бывает задним числом (#805); текущее
-                        // значение-якорь в прошлом остаётся тапабельным
-                        // (правка #502), повторный тап снимает дату. Дни
-                        // раньше minDate недоступны без исключений (minDate —
-                        // первый доступный: окончание аренды строго позже
-                        // начала, ADR 0053); дни позже maxDate — тоже (дата
-                        // завершения не бывает будущей, #534).
-                        disabled={calendarDayDisabled({
-                          iso,
-                          today,
-                          value,
-                          minDate,
-                          maxDate,
-                          allowPast,
-                        })}
-                        // Повторный тап по выбранному дню снимает выбор
-                        // (решение владельца 2026-09-03); с required дата
-                        // обязательна — тап её держит.
-                        onClick={() => setDraft(selected && !required ? null : iso)}
-                      >
-                        {day + 1}
-                      </CalendarButton>
-                    );
-                  })}
-                </div>
-              </section>
+                year={year}
+                month0={month0}
+                isFirst={index === 0}
+                beyondMaxDate={beyondMaxDate}
+                today={today}
+                draft={draft}
+                value={value}
+                minDate={minDate}
+                maxDate={maxDate}
+                allowPast={allowPast}
+                registerRef={setMonthRef}
+                onSelect={selectDraft}
+              />
             );
           })}
         </div>
