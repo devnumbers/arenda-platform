@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest';
  * (.screen-shell: scale 0.96 + сдвиг 8px, решение 14.10) отклонён
  * владельцем — «страница отдаляется, вырезать»; страж дрейфа читает
  * globals.css по прецеденту press-feedback (правило без слоёв —
- * единственное место механики).
+ * единственное место механики). План 047 легитимно вернул селектор
+ * body:has(.modal-overlay) для точечного z-спуска хрома — гардит именно
+ * механика отодвигания (трансформ .screen-shell), не селектор.
  */
 
 const globalsCss = readFileSync(
@@ -17,10 +19,11 @@ const globalsCss = readFileSync(
 );
 
 describe('Push-back фона модалок вырезан', () => {
-  it('хук body:has(.modal-overlay не возвращается', () => {
-    expect(globalsCss, 'хук push-back в globals.css').not.toContain(
-      'body:has(.modal-overlay',
-    );
+  it('хук body:has(.modal-overlay не тянет трансформ оболочки', () => {
+    expect(
+      globalsCss,
+      'push-back: правило .screen-shell на крючке modal-overlay',
+    ).not.toContain(".modal-overlay[data-state='open']) .screen-shell");
   });
 
   it('механики отодвигания нет: translateY(8px) + scale(0.96)', () => {

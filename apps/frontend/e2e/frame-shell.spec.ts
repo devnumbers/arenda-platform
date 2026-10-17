@@ -1,17 +1,17 @@
 import type { Page } from '@playwright/test';
 import { openCabinetWithSeededSession, expect, SEEDED_GARAGE_PROPERTY_ID, test } from './fixtures';
 
-// Каркас-шелл страницы (карта #862, тикет #865; отмена хром-решения
-// 25.09 решением владельца 16.10 — план 046): колонка контента
-// центрируется во всём вьюпорте на любом ярусе; полноэкранная поверхность
-// накрывает вьюпорт целиком (лист от левого края) — хром ПК (сайдбар,
-// пилюли) под ней скрыт и некликабелен, модалки над поверхностью тем
-// более; колонки поверхности легают с колонками страниц; нижняя панель
-// на ПК — колонка 560 (углы свободны, пилюли не глушатся нижними
-// панелями никогда — «хром ПК постоянен», решение 25.09, правка #561);
-// планшетные шапки подэкранов — слоты у краёв вьюпорта; TabBar глушится
-// нижними панелями на мобайле и планшете; мобильное меню «Ещё» — без
-// изменений (указание владельца 16.10);
+// Каркас-шелл страницы (карта #862, тикет #865; канон восстановлен планом
+// 047 после регресса тотального сноса 046): колонка контента центрируется
+// во всём вьюпорте на любом ярусе; полноэкранные поверхности начинаются на
+// границе сайдбара (меню видно и кликабельно, 25.09/#865), их колонки
+// легают с колонками страниц; открытая МОДАЛКА опускает хром под скрим
+// (точечное правило плана 047 — лечение бага 16.10: сайдбар пробивал
+// скрим колесного шита над поверхностью); нижняя панель на ПК — колонка
+// 560 (углы свободны, пилюли не глушатся никогда — «хром ПК постоянен»,
+// решение 25.09, правка #561); планшетные шапки подэкранов — слоты у
+// краёв вьюпорта; TabBar глушится нижними панелями на мобайле и планшете;
+// мобильное меню «Ещё» — без изменений (указание владельца 16.10);
 // ноль дёрганья шапок хабов. Геометрия меряется bounding-box'ами —
 // вердикт живьём остаётся за /ui-walkthrough, спека держит регресс-гейт
 // на трёх ярусах (мобайл 375 / планшет 768 / ПК 1440).
@@ -19,6 +19,9 @@ import { openCabinetWithSeededSession, expect, SEEDED_GARAGE_PROPERTY_ID, test }
 const PC = { width: 1440, height: 900 };
 const TABLET = { width: 768, height: 1024 };
 const MOBILE = { width: 375, height: 812 };
+
+/** Полная ширина ПК-сайдбара (токен --sidebar-total, globals.css). */
+const SIDEBAR_TOTAL = 224;
 
 async function contentColumnRect(page: Page): Promise<{ left: number; right: number; width: number }> {
   return page.evaluate(() => {
@@ -63,7 +66,7 @@ function bottomBarButton(page: Page, name: RegExp): ReturnType<Page['getByRole']
     .getByRole('button', { name });
 }
 
-test('ПК: поверхность накрывает хром, колонка пикера легает с колонкой страницы', async ({ page, seededUser }) => {
+test('ПК: пикер периода не накрывает сайдбар, колонка пикера легает с колонкой страницы', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.setViewportSize(PC);
   await page.goto('/operations');
@@ -76,28 +79,30 @@ test('ПК: поверхность накрывает хром, колонка �
 
   const geometry = await page.evaluate(() => {
     const dialog = document.querySelector('[role="dialog"][aria-label="Выберите период"]');
-    if (!dialog) throw new Error('поверхность не найдена');
+    const sidebar = document.querySelector('nav[aria-label="Основная навигация"]');
+    if (!dialog || !sidebar) throw new Error('поверхность или сайдбар не найдены');
     const column = dialog.querySelector('.max-w-column');
     const c = column?.getBoundingClientRect();
     // Белый лист поверхности — псевдоэлемент .fullscreen-surface::before:
-    // после отмены решения 25.09 (план 046) красится от левого края —
-    // сайдбар под поверхностью скрыт.
+    // на ПК он начинается на границе сайдбара (решение 25.09/#865,
+    // возвращено планом 047 после регресса тотального сноса 046).
     const sheetLeft = getComputedStyle(dialog, '::before').left;
     return {
       sheetLeft,
       pickerColumnLeft: c ? c.left : null,
     };
   });
-  // Лист — от левого края вьюпорта; колонка пикера — по центру вьюпорта,
-  // на оси колонки страницы (открытие пикера не сдвигает контент).
-  expect(geometry.sheetLeft).toBe('0px');
+  // Лист — правее сайдбара; колонка пикера — по центру вьюпорта, на оси
+  // колонки страницы (открытие пикера не сдвигает контент).
+  expect(geometry.sheetLeft).toBe(`${SIDEBAR_TOTAL}px`);
   expect(geometry.pickerColumnLeft).not.toBeNull();
   expect(Math.abs((geometry.pickerColumnLeft ?? 0) - pageColumn.left)).toBeLessThanOrEqual(2);
 
-  // Хром ПК под поверхностью скрыт и некликабелен (решение владельца
-  // 16.10, план 046 — отмена #865): пилюли остаются смонтированными
-  // (в дереве, но накрыты), шит панели пикера — колонка 560 (углы
-  // свободны), точка над сайдбаром ловит поверхность, не пункт меню.
+  // Хром ПК не исчезает под открытой поверхностью (решение владельца
+  // 25.09, доработка #865, возвращено планом 047): шапку с крыльями
+  // рисует сама поверхность, пилюли остаются смонтированными, шит панели
+  // пикера — колонка 560 (углы свободны), клик над сайдбаром ловит
+  // пункт меню.
   const chrome = await page.evaluate(() => {
     const dialog = document.querySelector('[role="dialog"][aria-label="Выберите период"]');
     const sheet = dialog?.querySelector('.fixed.inset-x-0.bottom-0');
@@ -127,18 +132,25 @@ test('ПК: поверхность накрывает хром, колонка �
   expect(PC.width - ((profileBox?.x ?? 0) + (profileBox?.width ?? 0))).toBeLessThanOrEqual(2);
   expect(chrome.sheetWidth).toBe(560);
   expect(Math.abs((chrome.sheetLeft ?? 0) - (PC.width - 560) / 2)).toBeLessThanOrEqual(2);
-  expect(chrome.hitInSidebar).toBe(false);
+  expect(chrome.hitInSidebar).toBe(true);
+
+  // Меню кликабельно при открытом пикере (§1): клик уводит из пикера.
+  await page.getByRole('link', { name: 'Платежи' }).click();
+  await expect(surface).not.toBeVisible();
+  await expect(page).toHaveURL(/\/payments$/);
 });
 
-test('ПК: модалка над поверхностью накрывает хром целиком (план 046)', async ({
+test('ПК: модалка над поверхностью опускает хром под скрим (план 047)', async ({
   page,
   seededUser,
 }) => {
   // Баг владельца 16.10 (скриншот пикера даты на /operations/new): колесный
   // шит месяца/года открыт над полноэкранной поверхностью, а сайдбар и
   // пилюли пробивали скрим — хром, поднятый над поверхностью до z-60
-  // (#865), бил оверлей модалки (z-50). После сноса подъёма хром лежит
-  // под поверхностью, модалка — под ней всё.
+  // (#865), бил оверлей модалки (z-50). Точечное лечение плана 047:
+  // пока открыт оверлей модалки, хром спускается к z-30 — точка над
+  // сайдбаром ловит скрим, не пункт меню. Поверхность без модалки меню
+  // не прячет (тест выше).
   await openCabinetWithSeededSession(page, seededUser);
   await page.setViewportSize(PC);
   await page.goto('/operations/new');
