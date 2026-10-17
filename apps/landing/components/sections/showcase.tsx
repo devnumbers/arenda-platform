@@ -137,6 +137,12 @@ const COPIES = 3;
 const G = N * COPIES; // узлов в ленте
 const INITIAL = N + 2; // «2-комнатная на Ленина»: средняя копия (слайды N..2N−1), карта 2
 const STEP_MS = 360; // длительность любого перехода — как у Яндекса (замер)
+// Слой (will-change: transform) на дорожках держится только на время
+// движения (паттерн armLayers testimonials-carousel): постоянные слои —
+// ~15 фотокарточек 300px + ~15 плашек на страницу впустую, память на
+// дешёвых телефонах. Съём таймером с запасом к 360ms перехода; длинный
+// жест перезаводит таймер на каждом кадре движения.
+const LAYER_MS = 620;
 
 // Ширины состояний [боковая, центральная] для JS-математики — зеркало
 // CSS-переменных showcase.module.css. На ПК боковая растёт с шириной
@@ -242,6 +248,8 @@ type EngineState = {
   renderRaf: number;
   lastTxPhoto: string;
   lastTxStrip: string;
+  // таймер снятия will-change слоёв дорожек (armLayers)
+  layerTimer: ReturnType<typeof setTimeout> | null;
 };
 
 // ── Wheel: расстояние пальца + фильтр моментума ──────────────────────
@@ -284,6 +292,27 @@ export function Showcase() {
   const plateNodes = useRef<Array<HTMLElement | null>>([]);
   const stateRef = useRef<EngineState | null>(null);
 
+  // Слой (will-change: transform) на дорожках живёт только на время
+  // движения: постоянный держит слои всей ленты впустую (LAYER_MS выше).
+  // Повторный armLayers без записи стиля, если слой уже навешен.
+  const armLayers = useCallback(() => {
+    const st = stateRef.current;
+    if (!st) return;
+    for (const el of [photoTrackRef.current, stripRef.current]) {
+      if (el && el.style.willChange !== "transform") {
+        el.style.willChange = "transform";
+      }
+    }
+    if (st.layerTimer) {
+      clearTimeout(st.layerTimer);
+    }
+    st.layerTimer = setTimeout(() => {
+      st.layerTimer = null;
+      if (photoTrackRef.current) photoTrackRef.current.style.willChange = "";
+      if (stripRef.current) stripRef.current.style.willChange = "";
+    }, LAYER_MS);
+  }, []);
+
   // Один проход отрисовки: k по дистанции до позиций покоя, транслейт
   // фотодорожки, центровка ряда плашек. Источник истины — st.p.
   // Геометрия — из кеша (refreshModel): в кадре полёта ни одного чтения
@@ -317,7 +346,11 @@ export function Showcase() {
       slideNodes.current[g]?.style.setProperty("--k", kk);
       plateNodes.current[g]?.style.setProperty("--k", kk);
     }
-    zone.classList.toggle(s.moving ?? "", st.anim !== null || st.dragging);
+    const moving = st.anim !== null || st.dragging;
+    zone.classList.toggle(s.moving ?? "", moving);
+    if (moving) {
+      armLayers(); // длинный жест перезаводит таймер снятия на каждом кадре
+    }
     // Плашки: транслейт линейно по p между позициями покоя — плашечный
     // ряд скользит с той же кривой, что и фото (frac линеен по p), и
     // прибывает ровно в центр. Формула через накопление текущих ширин
@@ -342,7 +375,7 @@ export function Showcase() {
       st.lastTxStrip = txStrip;
       strip.style.transform = txStrip;
     }
-  }, []);
+  }, [armLayers]);
 
   // Рендер драга — не чаще кадра: pointermove может приходить чаще
   // дисплея (мыши до 1000Гц), каждый прямой render() между событиями —
@@ -490,6 +523,7 @@ export function Showcase() {
       renderRaf: 0,
       lastTxPhoto: "",
       lastTxStrip: "",
+      layerTimer: null,
     };
     // Общая часть смены геометрии (mount и resize — единственные точки):
     // сброс кеша записанных транслейтов и пересборка модели
@@ -549,6 +583,10 @@ export function Showcase() {
         cancelAnimationFrame(st.renderRaf);
         st.renderRaf = 0;
         st.anim = null;
+        if (st.layerTimer) {
+          clearTimeout(st.layerTimer);
+          st.layerTimer = null;
+        }
       }
     };
   }, [render]);
@@ -575,6 +613,7 @@ export function Showcase() {
       s0.anim = null; // drag перехватывает движение
       cancelAnimationFrame(s0.raf);
       viewport.classList.add(s.dragging ?? "");
+      armLayers(); // слой — до первой записи движения
       viewport.setPointerCapture(e.pointerId);
     };
 
@@ -641,7 +680,7 @@ export function Showcase() {
       viewport.removeEventListener("pointerup", onPointerUp);
       viewport.removeEventListener("pointercancel", onPointerCancel);
     };
-  }, [animateTo, render, selectNode, scheduleRender]);
+  }, [animateTo, armLayers, render, selectNode, scheduleRender]);
 
   // Shift+Scroll и горизонтальный трекпад — по расстоянию пальца:
   // каждые WHEEL_STEP_PX накопленного пальцевого пути = одна карточка

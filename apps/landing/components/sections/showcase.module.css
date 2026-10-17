@@ -68,6 +68,9 @@
   --strip-gap: 24px;
   --photo-fade-w: 624px;
   --strip-fade-w: 50px;
+  /* Сплошная подложка вместо стекла: ветка reduced-transparency ниже и
+     подмена стекла в движении (.moving) — одно значение на обоих. */
+  --glass-solid: rgba(0, 0, 0, 0.82);
 }
 
 @media (min-width: 481px) {
@@ -188,7 +191,9 @@
   gap: var(--plate-gap-y);
   height: 100%;
   width: max-content;
-  will-change: transform;
+  /* Слой (will-change: transform) вешается на время движения движком в
+     showcase.tsx (паттерн armLayers): постоянный держит слой всей ленты
+     (~15 плашек) впустую — память на дешёвых телефонах. */
 }
 
 .plate {
@@ -295,7 +300,9 @@
   gap: var(--gap);
   height: 100%;
   width: max-content;
-  will-change: transform;
+  /* Слой — на время движения, как у .stripTrack выше: постоянный
+     will-change держит слой всей фотоленты (~15 карточек 300px на мобиле)
+     впустую. */
 }
 
 .dragging {
@@ -359,22 +366,27 @@
   border-radius: inherit;
 }
 
-/* В движении (драг/переход, класс ставит render() в showcase.tsx) блюр
-   стекла заморожен на покойном центральном значении: интерполяция блюра
-   перерастеризует стекло каждый кадр — самая дорогая часть морфа (в
-   Safari особенно), а ступеньку приезда глаз в движении не читает. */
+/* В движении (драг/переход, класс ставит render() в showcase.tsx) стекло
+   подменяется сплошной подложкой: фон под стеклом едет вместе с дорожкой,
+   и backdrop-filter перерастеризует фильтр каждый кадр — самая дорогая
+   часть морфа на мобильных GPU; на покое стекло возвращается. Значение
+   подложки — кожа reduced-transparency-ветки ниже: «почти сплошная»
+   карточка уже принята в продукте, в движении глаз читает её как
+   нажатое состояние. */
 .moving .cardGlass {
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  background: var(--glass-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* Стекло характеристик для тех, кто просит меньше прозрачности или
    больший контраст: почти сплошная подложка, блюр снят целиком —
-   включая motion-фриз выше (селектор .moving .cardGlass специфичнее). */
+   включая подмену стекла в движении выше (селектор .moving .cardGlass
+   специфичнее). */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .cardGlass,
   .moving .cardGlass {
-    background: rgba(0, 0, 0, 0.82);
+    background: var(--glass-solid);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
