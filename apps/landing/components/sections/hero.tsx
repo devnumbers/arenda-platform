@@ -13,7 +13,8 @@ import heroBgMobile from "@/assets/sections/hero-bg-mobile.webp";
 // фонового фото — imageRef-заливки узлов Figma (исходники — оригинальные
 // байты заливок, пережаты в webp q100), поэтому <picture> с media-источниками.
 // Высота — решение владельца 17.10 (карта #1483): до 1680 панель занимает
-// весь экран вместе с хедером (100svh минус хедер 72 и верхний отступ 8;
+// весь экран вместе с хедером и рамкой (100svh минус хедер 72 и отступы
+// 8+8: верх и низ симметричны боковым, панель в рамке со всех сторон;
 // svh, не dvh — без прыжков при скрытии адресной строки), от 1680 высота
 // фикс 1050, ширина резиновая до 1920, дальше панель 1920 по центру —
 // кадр макета 1920×1050.
@@ -24,8 +25,8 @@ export function Hero() {
   const mobileBg = getImageProps({ src: heroBgMobile, alt: "", fill: true, sizes: "100vw", quality: 90 });
   const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 90 });
   return (
-    <section id="hero" className="px-2 pt-2">
-      <div className="relative mx-auto flex h-[calc(100svh-80px)] w-full max-w-[1920px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:px-12 tab:pt-16 tab:pb-12 desk:justify-end desk:rounded-[40px] desk:p-10 min-[1680px]:h-[1050px]">
+    <section id="hero" className="px-2 py-2">
+      <div className="relative mx-auto flex h-[calc(100svh-88px)] w-full max-w-[1920px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:px-12 tab:pt-16 tab:pb-12 desk:justify-end desk:rounded-[40px] desk:p-10 min-[1680px]:h-[1050px]">
         <picture>
           <source media="(max-width: 480.98px)" srcSet={mobileBg.props.srcSet} sizes={mobileBg.props.sizes} />
           <source
