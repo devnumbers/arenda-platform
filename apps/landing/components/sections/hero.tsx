@@ -5,13 +5,18 @@ import heroBg from "@/assets/sections/hero-bg.webp";
 import heroBgTablet from "@/assets/sections/hero-bg-tablet.webp";
 import heroBgMobile from "@/assets/sections/hero-bg-mobile.webp";
 
-// Хиро — макеты 2967-75647 (десктоп: панель 607, r40, контент внизу слева,
+// Хиро — макеты 2967-75647 (десктоп: r40, контент внизу слева,
 // H1 72/76, тень текста 0 8px 32px rgba(0,0,0,0.24)), 3005-78026 (планшет:
-// 936, r32, контент сверху по центру, H1 36/40 Medium), 3008-79108 (мобайл:
-// 788, r32, H1 28/32 SemiBold, подзаголовок 16/20); на планшете/мобайле
+// r32, контент сверху по центру, H1 36/40 Medium), 3008-79108 (мобайл:
+// r32, H1 28/32 SemiBold, подзаголовок 16/20); на планшете/мобайле
 // тень прежняя 0 8px 24px rgba(0,0,0,0.12). У планшета и мобайла свои кропы
 // фонового фото — imageRef-заливки узлов Figma (исходники — оригинальные
 // байты заливок, пережаты в webp q100), поэтому <picture> с media-источниками.
+// Высота — решение владельца 17.10 (карта #1483): до 1680 панель занимает
+// весь экран вместе с хедером (100svh минус хедер 72 и верхний отступ 8;
+// svh, не dvh — без прыжков при скрытии адресной строки), от 1680 высота
+// фикс 1050, ширина резиновая до 1920, дальше панель 1920 по центру —
+// кадр макета 1920×1050.
 export function Hero() {
   // Медиа-ветки <picture> считаем через getImageProps, чтобы планшетный и
   // мобильный кропы шли через /_next/image-оптимизатор (AVIF q90 из
@@ -20,7 +25,7 @@ export function Hero() {
   const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 90 });
   return (
     <section id="hero" className="px-2 pt-2">
-      <div className="relative flex h-[788px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:h-[936px] tab:px-12 tab:pt-16 tab:pb-12 desk:h-[607px] desk:justify-end desk:rounded-[40px] desk:p-10">
+      <div className="relative mx-auto flex h-[calc(100svh-80px)] w-full max-w-[1920px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:px-12 tab:pt-16 tab:pb-12 desk:justify-end desk:rounded-[40px] desk:p-10 min-[1680px]:h-[1050px]">
         <picture>
           <source media="(max-width: 480.98px)" srcSet={mobileBg.props.srcSet} sizes={mobileBg.props.sizes} />
           <source
