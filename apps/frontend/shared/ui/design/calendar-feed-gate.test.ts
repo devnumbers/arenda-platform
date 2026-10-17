@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createPrependGate, flingChunks, FLING_CHUNKS_CAP } from './calendar-feed-gate';
+import {
+  createPrependGate,
+  flingChunks,
+  FLING_CHUNKS_CAP,
+  shouldDeferPrepend,
+} from './calendar-feed-gate';
 
 /** Гейт приписки (план 050): одна порция «в полёте» — скролл-события
  * одного кадра не суммируются в один DOM-коммит. */
@@ -72,5 +77,27 @@ describe('flingChunks — порций на событие по скорости
 
   it('время не поехало (тот же кадр) — одна порция', () => {
     expect(flingChunks({ st: 8000, t: 1000 }, 1000, 5000, FEED_CHUNK_PX)).toBe(1);
+  });
+});
+
+/** shouldDeferPrepend (план 052): DOM не трогается на высокой скорости. */
+describe('shouldDeferPrepend — моментум-окно приписки', () => {
+  it('первое событие — не откладываем', () => {
+    expect(shouldDeferPrepend(null, 1000, 5000)).toBe(false);
+  });
+
+  it('медленный драг — пускаем', () => {
+    // 30px за 200мс = 0.15px/ms
+    expect(shouldDeferPrepend({ st: 5000, t: 1000 }, 1200, 4970)).toBe(false);
+  });
+
+  it('флик — откладываем', () => {
+    // 300px за 50мс = 6px/ms — реальный пик флика
+    expect(shouldDeferPrepend({ st: 5000, t: 1000 }, 1050, 4700)).toBe(true);
+  });
+
+  it('хвост затухания — пускаем', () => {
+    // 20px за 30мс ≈ 0.67px/ms
+    expect(shouldDeferPrepend({ st: 1000, t: 1000 }, 1030, 980)).toBe(false);
   });
 });

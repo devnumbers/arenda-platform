@@ -492,7 +492,6 @@ test.describe('визард создания платежа', () => {
     // layout-эффектом до первой отрисовки. Доскролл вверх ничего не
     // дорисовывает: назад лента идёт только в безпольном режиме, старым
     // экранам поведение не менялось.
-    const feed = dialog.locator('section');
     const todayCell = dialog.locator('button[aria-current="date"]');
     await expect(todayCell).toHaveCount(1);
 
@@ -514,13 +513,33 @@ test.describe('визард создания платежа', () => {
       });
     expect(topGap).toBeLessThan(100);
 
-    const sectionsBefore = await feed.count();
+    // Досылка вверх ничего не дорисовывает: назад лента идёт только в
+    // безпольном режиме (#1393). Инвариант роста — scrollHeight (счётчик
+    // секций в виртуальной ленте — функция позиции окна, план 052); у
+    // стены якорный месяц вне окна легитимно, возврат к якорю возвращает
+    // «сегодня».
+    const { anchoredSt, shBefore } = await dialog
+      .locator('.overflow-y-auto')
+      .evaluate((scroller) => ({
+        anchoredSt: scroller.scrollTop,
+        shBefore: scroller.scrollHeight,
+      }));
     await dialog.locator('.overflow-y-auto').evaluate((scroller) => {
       scroller.scrollTop = 200;
       scroller.scrollTop = 0;
     });
+    const shAfterWall = await dialog
+      .locator('.overflow-y-auto')
+      .evaluate((scroller) => scroller.scrollHeight);
+    // Субпиксель measureElement даёт ±1px на пересчёте окна; инвариант
+    // #1393 — нет порции (~2200px), не пиксель.
+    expect(Math.abs(shAfterWall - shBefore)).toBeLessThanOrEqual(2);
+    await dialog
+      .locator('.overflow-y-auto')
+      .evaluate((scroller, st) => {
+        scroller.scrollTop = st;
+      }, anchoredSt);
     await expect(todayCell).toHaveCount(1);
-    await expect(feed).toHaveCount(sectionsBefore);
   });
 
   test('ежегодная ветка: дата в следующем году через пикер года (дыра «только текущий месяц»)', async ({

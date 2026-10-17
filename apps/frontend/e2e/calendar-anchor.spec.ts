@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, openCabinetWithSessionToken, test } from './fixtures';
+import { MONTH_LABELS } from '../shared/ui/design/month-grid';
 
 // Ручной якорь приписки (план 051): позиция прокрутки при дорисовке
 // месяцев СВЕРХУ возвращается до пейнта ([overflow-anchor:none] + запись
@@ -75,7 +76,9 @@ function assertQuietPrependsHoldContent(frames: AnchorFrame[]): void {
     }
     const shDelta = frame.sh - prev.sh;
     const stDelta = frame.st - prev.st;
-    if (shDelta <= 0 || stDelta !== shDelta) {
+    // Субпиксельная самокоррекция measureElement может дать 1–2px
+    // расхождения между компенсацией (формула) и таблицей размеров.
+    if (shDelta <= 0 || Math.abs(stDelta - shDelta) > 2) {
       continue;
     }
     quietPrepends += 1;
@@ -102,6 +105,36 @@ test.beforeEach(async ({ page, seededUser }) => {
   await openCabinetWithSessionToken(page, seededUser.sessionToken);
 });
 
+/** Месяц якоря (текущий) ровно под верхней кромкой — контракт открытия
+ * (план 052: позиции по точным высотам, дрейф оценок устранён). */
+async function assertAnchorOpensAtTop(page: Page): Promise<void> {
+  const top = await page.evaluate(() => {
+    const el = document.querySelector('[role="dialog"] .overflow-y-auto');
+    if (el === null) {
+      return null;
+    }
+    const cRect = el.getBoundingClientRect();
+    for (const section of Array.from(el.querySelectorAll('section'))) {
+      const r = section.getBoundingClientRect();
+      if (r.bottom > cRect.top + 4) {
+        return {
+          label: section.querySelector('h3')?.textContent ?? '?',
+          offset: Math.round(r.top - cRect.top),
+        };
+      }
+    }
+    return null;
+  });
+  expect(top).not.toBeNull();
+  const now = new Date();
+  const monthLabel = `${MONTH_LABELS[now.getUTCMonth()]}, ${now.getUTCFullYear()}`;
+  expect(top?.label, 'месяц якоря под верхней кромкой').toBe(monthLabel);
+  expect(
+    Math.abs(top?.offset ?? 999),
+    `offset верхней кромки у «${top?.label}»`,
+  ).toBeLessThanOrEqual(4);
+}
+
 test('одиночный пикер (без пола): тихая приписка не двигает контент', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(UI_KIT);
@@ -111,6 +144,7 @@ test('одиночный пикер (без пола): тихая приписк
   const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
   await expect(dialog).toBeVisible();
   await page.waitForTimeout(600);
+  await assertAnchorOpensAtTop(page);
 
   const cont = dialog.locator('.overflow-y-auto');
   const box = await cont.boundingBox();
@@ -146,6 +180,7 @@ test('пикер периода: тихая приписка не двигает
   const dialog = page.getByRole('dialog', { name: 'Выберите период' });
   await expect(dialog).toBeVisible();
   await page.waitForTimeout(600);
+  await assertAnchorOpensAtTop(page);
 
   const cont = dialog.locator('.overflow-y-auto');
   const box = await cont.boundingBox();

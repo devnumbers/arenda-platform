@@ -45,6 +45,29 @@ export function createPrependGate(): CalendarPrependGate {
   };
 }
 
+/** Порог мгновенной скорости прокрутки (px/ms), выше которой DOM ленты
+ * не трогается (план 052, решение владельца «А»): коммит приписки внутри
+ * моментума на телефоне борется с тач-скроллом движка (класс
+ * react-window #122). Реальный флик — пик 3–10px/ms с затуханием;
+ * медленный драг и хвост затухания — ниже порога. Отложенная приписка
+ * доезжает в тишине (повтор по тихому таймеру), жест несут точные
+ * размеры виртуального окна и seed. */
+export const PREPEND_DEFER_PX_PER_MS = 1.5;
+
+/** Отложить ли приписку: мгновенная скорость между двумя событиями
+ * выше порога. */
+export function shouldDeferPrepend(
+  previous: { st: number; t: number } | null,
+  now: number,
+  scrollTop: number,
+): boolean {
+  if (previous === null || now <= previous.t) {
+    return false;
+  }
+  const pxPerMs = Math.abs(previous.st - scrollTop) / (now - previous.t);
+  return pxPerMs > PREPEND_DEFER_PX_PER_MS;
+}
+
 /** Кэп порций prepend на одно событие (план 051): полёт коммитит
  * ≤ 12 месяцев ≈ 4300px — реальный флик (пик ~3–10px/ms, затухает)
  * покрывается с запасом; прежний кэп 8 допускал коммит 48 месяцев
