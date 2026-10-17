@@ -85,7 +85,7 @@ export function PaymentOverdueGlobalScreen({
           />
         }
       >
-        <TopNavTitle title="Просроченные операции" />
+        <TopNavTitle title="Просроченные платежи" />
       </TopNav>
 
       <PageContent>
@@ -208,8 +208,8 @@ function OverdueEmpty(): JSX.Element {
     >
       <EmptyState
         imageSrc="/images/payments/overdue-empty.png"
-        title="У вас нет просроченных операций"
-        description="Здесь будут операции, которые не успели отметить вовремя"
+        title="У вас нет просроченных платежей"
+        description="Здесь будут платежи, которые не успели отметить вовремя"
         descriptionClassName="text-content"
       />
     </div>

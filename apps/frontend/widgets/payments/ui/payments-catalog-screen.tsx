@@ -56,8 +56,8 @@ const CATALOG: Record<
   { title: string; emptyTitle: string; emptyHint: string }
 > = {
   overdue: {
-    title: 'Просроченные операции',
-    emptyTitle: 'Нет просроченных операций',
+    title: 'Просроченные платежи',
+    emptyTitle: 'Нет просроченных платежей',
     emptyHint: 'Когда платеж просрочится, он будет здесь',
   },
   payments: {

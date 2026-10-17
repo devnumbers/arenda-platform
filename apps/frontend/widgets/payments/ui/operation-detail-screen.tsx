@@ -51,7 +51,8 @@ import {
 
 /**
  * Страница операции (Figma 1386:67731 / 1419:25859 / 1419:25645 /
- * 1444:66228): hero с иконкой категории, суммой и подписью срока, секции
+ * 1444:66228; вёрстка hero и секций — 1858:105181): hero с иконкой
+ * категории, суммой и подписью срока, секции
  * «Данные операции» и «Подробнее», внизу — «Отметить оплаченной» только у
  * той операции, которую гасит «Оплатить» страницы платежа (та же
  * oldestUnpaidOperation — решение владельца). Оплата ставит paid_date =
@@ -430,8 +431,10 @@ export function OperationView({
   );
 }
 
-/** Hero-блок (1386:67731): иконка категории 96, название,
- * чип категории, сумма 40 и подпись срока под ней. */
+/** Hero-блок (1858:105181): иконка категории 96 с глифом 52, подблок
+ * «название + чип категории» с гэпом 12, сумма 40 и подпись срока под ней;
+ * между блоками — 24. Чип крашится цветом категории на 10% (в макете
+ * rgba(...,0.1) — суффикс альфы 1A), внутри кружок 24 со сплошным цветом. */
 function OperationHero({
   operation,
   category,
@@ -448,18 +451,23 @@ function OperationHero({
   const Icon = categoryIconComponents[category.icon];
 
   return (
-    <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-6">
+    <div className="flex flex-col items-center gap-6 px-6 pt-6">
       <span
         className="flex h-24 w-24 items-center justify-center rounded-pill"
         style={{ backgroundColor: category.color }}
       >
-        {Icon !== undefined && <Icon className="h-12 w-12 text-white" aria-hidden />}
+        {Icon !== undefined && <Icon className="h-13 w-13 text-white" aria-hidden />}
       </span>
-      <span className="text-xl font-semibold leading-6 text-content">{operation.title}</span>
-      <span className="flex items-center gap-1.5 rounded-pill bg-surface-info py-1 pl-1.5 pr-3">
-        <CategoryGlyph icon={category.icon} color={category.color} circleClass="h-6 w-6" glyphClass="h-3.5 w-3.5" />
-        <span className="text-sm leading-4 text-content">{operation.categoryLabel}</span>
-      </span>
+      <div className="flex flex-col items-center gap-3">
+        <span className="text-xl leading-6 text-content">{operation.title}</span>
+        <span
+          className="flex items-center gap-1.5 rounded-pill py-0.5 pl-0.5 pr-3"
+          style={{ backgroundColor: `${category.color}1A` }}
+        >
+          <CategoryGlyph icon={category.icon} color={category.color} circleClass="h-6 w-6" glyphClass="h-3.5 w-3.5" />
+          <span className="text-sm leading-4 text-content">{operation.categoryLabel}</span>
+        </span>
+      </div>
       <span className={`text-[40px] leading-[44px] font-semibold ${amountTone}`}>
         {amountText}
       </span>
@@ -476,8 +484,9 @@ function OperationHero({
   );
 }
 
-/** Секция страницы (1386:67731): заголовок H3 20/24 и строки без
- * карточки-подложки — прямо на белом фоне экрана. */
+/** Секция страницы (1858:105181): заголовок H3 20/24 с отступом 24 сверху
+ * (Heading padding 24px 24px 0px) и строки без карточки-подложки — прямо
+ * на белом фоне экрана. */
 function OperationSection({
   title,
   children,
@@ -487,7 +496,7 @@ function OperationSection({
 }): JSX.Element {
   return (
     <section>
-      <h2 className="px-6 pb-2 text-xl font-semibold leading-6 text-content">{title}</h2>
+      <h2 className="px-6 pt-6 pb-2 text-xl font-semibold leading-6 text-content">{title}</h2>
       <div className="flex flex-col">{children}</div>
     </section>
   );

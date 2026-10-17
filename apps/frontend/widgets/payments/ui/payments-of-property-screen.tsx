@@ -134,10 +134,10 @@ export function PaymentsOfPropertyScreen({
               ) : (
                 <PaymentsSection
                   testId="section-overdue"
-                  title="Просроченные операции"
+                  title="Просроченные платежи"
                   onOpen={() => router.push(ROUTES.propertyPaymentsOverdue(propertyId))}
-                  openLabel="Открыть просроченные операции"
-                  emptyHint={'У вас нет просроченных операций'}
+                  openLabel="Открыть просроченные платежи"
+                  emptyHint={'У вас нет просроченных платежей'}
                 >
                   {overdue.length > 0
                     ? overdue.slice(0, SECTION_LIMIT).map((operation) => {
