@@ -195,14 +195,15 @@ export type PropertyManageInput = {
   readonly canLifecycle: boolean;
 };
 
-/** Строка пина: закреплённый объект предлагает «Убрать из основных»,
- * закреплённому не предложение «Сделать основным» (шит подтверждения
- * открывается только на pin, #630). Обе ветки билдера — зрителя и
- * мутантная — держат одну форму (D11 #1307). */
+/** Строка пина: закреплённому объекту — «Открепить объект»,
+ * незакреплённому — «Закрепить объект». Обе ветки билдера — зрителя и
+ * мутантная — держат одну форму (D11 #1307). Подписи — решение владельца
+ * 17.10.2026 (прежде «Сделать основным»/«Убрать из основных»); шит
+ * подтверждения пина (#630) снесён — оба направления исполняются сразу. */
 function pinAction(isPinned: boolean): PropertyDetailAction {
   return isPinned
-    ? action('unpin', 'Убрать из основных', false)
-    : action('pin', 'Сделать основным', false);
+    ? action('unpin', 'Открепить объект', false)
+    : action('pin', 'Закрепить объект', false);
 }
 
 /** Секция «Управление» (Figma 1554:98469, активный): контекстный список
@@ -264,7 +265,11 @@ export function buildPropertyManageActions(
   // (бек — 409 property_maintenance), «Начать аренду» не рисуется вовсе,
   // у спасательной незавершённой (прямой API) строки «Завершить/Удалить
   // аренду» были бы мёртвые кнопки. Люк — «Завершить ремонт» ниже.
-  if (status !== 'maintenance') {
+  // Начало/завершение — неразрушительные, живут вверху; «Удалить аренду»
+  // — вниз, предпоследней над «Удалить объект» (макет 3460-78651,
+  // решение владельца 17.10.2026): у участника без владельческой строки
+  // удаления она просто последняя.
+  if (status !== 'maintenance' && rentalState.kind !== 'upcoming') {
     items.push(rentalAction(rentalState));
   }
   items.push(
@@ -275,6 +280,10 @@ export function buildPropertyManageActions(
   if (canLifecycle) items.push(action('archive', 'Перевести в архив', false));
   items.push(action('access', 'Совместный доступ', false));
   if (canLeave) items.push(action('leave', 'Покинуть объект', true));
+  if (status !== 'maintenance' && rentalState.kind === 'upcoming') {
+    // Срез той же машины «Действий аренды» — действие записано один раз.
+    items.push(rentalAction(rentalState));
+  }
   if (canLifecycle) items.push(action('delete', 'Удалить объект', true));
   return items;
 }

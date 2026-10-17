@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import {
   Archive,
+  Cancel,
   Edit,
   Exit,
   Info,
@@ -30,7 +31,9 @@ export function propertyActionIcon(key: PropertyDetailActionKey): JSX.Element | 
     case 'complete-rental':
       return <Key className={iconClass} />;
     case 'delete-rental':
-      return <TrashBin className={iconClass} />;
+      // ✕ по макету 3460-78651 (решение владельца 17.10) — не TrashBin,
+      // чтобы не спорила с «Удалить объектом»; красит currentColor строки.
+      return <Cancel className={iconClass} />;
     case 'start-maintenance':
     case 'finish-maintenance':
       return <PaintBrush className={iconClass} />;
@@ -94,6 +97,9 @@ type PropertyStatusSheetProps = {
   readonly items: ReadonlyArray<{
     readonly key: PropertyDetailActionKey;
     readonly label: string;
+    /** Деструктивные пункты несут красную подпись (макет 3460-78651,
+     * решение владельца 17.10) — как в секции «Управление». */
+    readonly danger: boolean;
   }>;
   readonly onAction: (key: PropertyDetailActionKey) => void;
 };
@@ -131,12 +137,14 @@ export function PropertyStatusSheet({
                 onOpenChange(false);
                 onAction(item.key);
               }}
-              className={`${sheetItemClass} gap-3 text-left`}
+              className={`${sheetItemClass} gap-3 text-left ${item.danger ? 'text-danger' : ''}`}
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden>
                 {propertyActionIcon(item.key)}
               </span>
-              <span className="text-base font-medium text-content">{item.label}</span>
+              <span className={`text-base font-medium ${item.danger ? 'text-danger' : 'text-content'}`}>
+                {item.label}
+              </span>
             </button>
           ))}
         </div>

@@ -157,16 +157,36 @@ describe('buildPropertyManageActions (секция «Управление»)', (
     expect(keys).not.toContain('start-rental');
   });
 
-  it('«Ожидает начала» (#986): «Удалить аренду» — danger-строка', () => {
+  it('«Ожидает начала» (#986): «Удалить аренду» — danger-строка внизу, над «Удалить объект» (макет 3460-78651)', () => {
     const items = buildPropertyManageActions({ ...baseManage, rentalState: UPCOMING });
     const keys = items.map((item) => item.key);
-    expect(keys).toContain('delete-rental');
     expect(keys).not.toContain('start-rental');
     expect(keys).not.toContain('complete-rental');
     expect(items.find((item) => item.key === 'delete-rental')?.danger).toBe(true);
+    // Решение владельца 17.10.2026: разрушительная арендная строка —
+    // предпоследняя, непосредственно над «Удалить объект»; начало/завершение
+    // остаются вверху.
+    expect(keys.indexOf('delete-rental')).toBe(keys.indexOf('delete') - 1);
   });
 
-  it('основной объект: «Убрать из основных» вместо «Сделать основным»', () => {
+  it('участник, «Ожидает начала»: «Удалить аренду» остаётся — последней (строки удаления объекта участнику нет)', () => {
+    const keys = buildPropertyManageActions({
+      ...baseManage,
+      rentalState: UPCOMING,
+      canLifecycle: false,
+      canLeave: true,
+    }).map((item) => item.key);
+    expect(keys).toEqual([
+      'edit',
+      'pin',
+      'start-maintenance',
+      'access',
+      'leave',
+      'delete-rental',
+    ]);
+  });
+
+  it('основной объект: «Открепить объект» вместо «Закрепить объект»', () => {
     const keys = buildPropertyManageActions({ ...baseManage, isPinned: true }).map(
       (item) => item.key,
     );
@@ -210,7 +230,7 @@ describe('buildPropertyManageActions (секция «Управление»)', (
     expect(items.find((item) => item.key === 'leave')?.danger).toBe(true);
   });
 
-  it('смотрящий закрепил: «Убрать из основных» вместо «Сделать основным»', () => {
+  it('смотрящий закрепил: «Открепить объект» вместо «Закрепить объект»', () => {
     const keys = buildPropertyManageActions({
       ...baseManage,
       isPinned: true,
@@ -319,7 +339,7 @@ describe('подписи действий (канон домена)', () => {
 
   it.each([
     ['edit', 'Редактировать объект'],
-    ['pin', 'Сделать основным'],
+    ['pin', 'Закрепить объект'],
     ['start-rental', 'Начать аренду'],
     ['start-maintenance', 'Объект на ремонте'],
     ['archive', 'Перевести в архив'],
@@ -335,7 +355,7 @@ describe('подписи действий (канон домена)', () => {
   it.each([
     [{ ...baseManage, rentalState: ACTIVE }, 'complete-rental', 'Завершить аренду'],
     [{ ...baseManage, rentalState: UPCOMING }, 'delete-rental', 'Удалить аренду'],
-    [{ ...baseManage, isPinned: true }, 'unpin', 'Убрать из основных'],
+    [{ ...baseManage, isPinned: true }, 'unpin', 'Открепить объект'],
     [{ ...baseManage, status: 'maintenance' }, 'finish-maintenance', 'Завершить ремонт'],
     [{ ...baseManage, status: 'archived' }, 'unarchive', 'Вернуть из архива'],
   ] as ReadonlyArray<readonly [ManageInput, PropertyDetailActionKey, string]>)(

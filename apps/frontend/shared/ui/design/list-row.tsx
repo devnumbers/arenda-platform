@@ -7,7 +7,10 @@ import { createListRowKeyboard } from './list-row-keyboard';
  * (иконка категории 44×44 кладётся слотом), заголовок + подзаголовок с
  * мини-иконкой, значение + описание справа, ведомый элемент (иконки
  * действий). Горизонтальный паддинг 24 встроен, как в Figma-компоненте;
- * hover приглушает заголовок и значение (#6F787C).
+ * hover по умолчанию приглушает заголовок и значение (#6F787C),
+ * hoverEffect="background" переключает отклик на серый фон строки —
+ * как у секции «Управление» объекта (PropertyManageSection; строки
+ * «Управления» аренды, решение владельца 17.10.2026).
  *
  * Строка — div с role=button, а не <button>: trailing-слот несёт
  * собственные кнопки-иконки, а вложенные кнопки в HTML невалидны (ловится
@@ -45,6 +48,12 @@ export type ListRowProps = {
   /** Роль строки: option — внутри role=listbox (см. выше), button —
    * обычная строка-кнопка (по умолчанию). */
   readonly variant?: 'button' | 'option';
+  /** Отклик интерактивной строки: 'text' (по умолчанию) — приглушение
+   * заголовка и значения; 'background' — серый фон строки при hover и
+   * active без приглушения текста (отклик секции «Управление» объекта,
+   * PropertyManageSection: решение владельца 17.10.2026 для строк
+   * «Управления» аренды). Геометрию строки не меняет. */
+  readonly hoverEffect?: 'text' | 'background';
 };
 
 export function ListRow({
@@ -61,9 +70,11 @@ export function ListRow({
   className,
   titleClassName,
   variant = 'button',
+  hoverEffect = 'text',
 }: ListRowProps): JSX.Element {
   const interactive = onSelect !== undefined && !disabled;
   const isOption = variant === 'option';
+  const backgroundHover = hoverEffect === 'background';
 
   const { onKeyDown } = createListRowKeyboard<KeyboardEvent<HTMLDivElement>>({
     onSelect,
@@ -82,6 +93,7 @@ export function ListRow({
       className={cn(
         'group/row flex w-full cursor-pointer items-center gap-3 px-6 py-2 text-left font-sans outline-none',
         'transition-colors focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        backgroundHover && 'rounded-button hover:bg-surface-muted-hover active:bg-surface-muted-hover',
         onSelect === undefined && 'cursor-default',
         disabled && 'pointer-events-none opacity-50',
         className,
@@ -91,7 +103,8 @@ export function ListRow({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span
           className={cn(
-            'truncate text-base font-medium text-content group-hover/row:text-content-secondary',
+            'truncate text-base font-medium text-content',
+            !backgroundHover && 'group-hover/row:text-content-secondary',
             titleClassName,
           )}
         >
@@ -116,7 +129,12 @@ export function ListRow({
       {(value !== undefined || description !== undefined) && (
         <span className="flex shrink-0 flex-col items-end gap-1">
           {value !== undefined && (
-            <span className="text-base font-medium text-content group-hover/row:text-content-secondary">
+            <span
+              className={cn(
+                'text-base font-medium text-content',
+                !backgroundHover && 'group-hover/row:text-content-secondary',
+              )}
+            >
               {value}
             </span>
           )}

@@ -360,7 +360,10 @@ export function RentalDetailBody({
 
 /** Строка секции «Управление» (Figma 1232:62297): строчная иконка 24 и
  * подпись; канонный ListRow без хвостовых слотов. Подпись — ReactNode:
- * деструктивные строки несут красный текст (канон #535). */
+ * деструктивные строки несут красный текст (канон #535). Отклик на
+ * наведение/нажатие — фоном, как у секции «Управление» объекта
+ * (hoverEffect="background", решение владельца 17.10.2026: меню по стилю
+ * то же — и отклик должен совпадать). */
 function ManageRow({
   icon,
   label,
@@ -370,7 +373,7 @@ function ManageRow({
   readonly label: ReactNode;
   readonly onClick: () => void;
 }): JSX.Element {
-  return <ListRow leading={icon} title={label} onSelect={onClick} />;
+  return <ListRow leading={icon} title={label} onSelect={onClick} hoverEffect="background" />;
 }
 
 /** Строка платежа секции (Figma 1323:61126): иконка категории 44 с синим

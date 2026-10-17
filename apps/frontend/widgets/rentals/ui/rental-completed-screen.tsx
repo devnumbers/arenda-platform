@@ -268,13 +268,16 @@ function RentalCompletedBody({
             )}
           </RentalGroup>
 
-          {/* Удаление — только владельцу; у смотрящего секции нет. */}
+          {/* Удаление — только владельцу; у смотрящего секции нет. Отклик
+              строки — фоном, как у «Управления» объекта (решение владельца
+              17.10.2026). */}
           {canMutate && (
             <RentalGroup title="Управление" className="pb-3">
               <ListRow
                 leading={<TrashBin className="h-6 w-6 text-danger" />}
                 title={<span className="text-danger">Удалить аренду</span>}
                 onSelect={() => setDeleteOpen(true)}
+                hoverEffect="background"
               />
             </RentalGroup>
           )}
