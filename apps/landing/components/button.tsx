@@ -13,7 +13,7 @@ function cx(...classes: Array<string | false | undefined>) {
 }
 
 const BASE =
-  "inline-flex cursor-pointer items-center justify-center rounded-2xl transition-colors duration-200 outline-none select-none focus-visible:ring-2 focus-visible:ring-inset";
+  "inline-flex cursor-pointer items-center justify-center rounded-2xl transition-colors duration-200 active:duration-75 outline-none select-none focus-visible:ring-2 focus-visible:ring-inset";
 
 const VARIANTS = {
   primary:

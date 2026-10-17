@@ -48,7 +48,7 @@ export function SmoothScroll() {
       const t0 = performance.now();
       const scroll = () => {
         if (
-          html.style.overflow === "hidden" &&
+          html.classList.contains("menu-scroll-locked") &&
           performance.now() - t0 < UNLOCK_LIMIT_MS
         ) {
           requestAnimationFrame(scroll);

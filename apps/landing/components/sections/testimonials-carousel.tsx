@@ -385,9 +385,9 @@ function TestimonialsMobileCarousel() {
     // g на момент захвата: захват в полёте подхватывает ленту с живой
     // интерполированной позиции (дробной), а не с реставра покоя.
     g0: number;
-    lastX: number;
-    lastT: number;
-    v: number;
+    // Окно последних точек жеста: скорость броска считается по ~100мс,
+    // не по последнему move — на таче он почти всегда стоит на месте.
+    samples: { t: number; x: number }[];
     moved: boolean;
   } | null>(null);
 
@@ -502,9 +502,7 @@ function TestimonialsMobileCarousel() {
       id: event.pointerId,
       startX: event.clientX,
       g0: liveG(),
-      lastX: event.clientX,
-      lastT: event.timeStamp,
-      v: 0,
+      samples: [{ t: event.timeStamp, x: event.clientX }],
       moved: false,
     };
   };
@@ -523,9 +521,10 @@ function TestimonialsMobileCarousel() {
       d.moved = true;
       rootRef.current?.setPointerCapture(event.pointerId);
     }
-    d.v = (event.clientX - d.lastX) / Math.max(1, event.timeStamp - d.lastT);
-    d.lastX = event.clientX;
-    d.lastT = event.timeStamp;
+    d.samples.push({ t: event.timeStamp, x: event.clientX });
+    if (d.samples.length > 6) {
+      d.samples.shift();
+    }
     // Палец вправо — лента к предыдущей (g убывает), влево — к следующей.
     applyG(d.g0 - dx / MOB_STEP, true);
   };
@@ -562,9 +561,18 @@ function TestimonialsMobileCarousel() {
     const gNow = d.g0 - (event.clientX - d.startX) / MOB_STEP;
     let target = Math.round(gNow);
     const delta = event.clientX - d.startX;
-    if (delta <= -MOB_LONG_SWIPE_PX || d.v <= -MOB_FLICK_V) {
+    // Скорость по окну ~100мс: последний move к моменту up почти всегда
+    // стоит на месте (движения склеиваются в кадр), оконная скорость ловит
+    // бросок даже при остановившемся указателе.
+    const last = d.samples.at(-1);
+    const ref = d.samples.find((smp) => smp.t >= event.timeStamp - 100);
+    const v =
+      last && ref
+        ? (last.x - ref.x) / Math.max(1, event.timeStamp - ref.t)
+        : 0;
+    if (delta <= -MOB_LONG_SWIPE_PX || v <= -MOB_FLICK_V) {
       target = Math.round(gNow) + 1;
-    } else if (delta >= MOB_LONG_SWIPE_PX || d.v >= MOB_FLICK_V) {
+    } else if (delta >= MOB_LONG_SWIPE_PX || v >= MOB_FLICK_V) {
       target = Math.round(gNow) - 1;
     }
     target = ((target % COUNT) + COUNT) % COUNT;
@@ -647,7 +655,7 @@ function MobileSlides({
         onClick={() => goTo(index)}
         onKeyDown={onSlideKeydown(() => goTo(index), index)}
         aria-label={`Показать отзыв — ${review.name}`}
-        className={`${className} cursor-pointer`}
+        className={`${className} cursor-pointer active:opacity-[0.92] active:duration-75`}
         style={style}
       >
         {slide}
@@ -817,7 +825,7 @@ function DesktopSlides({
           onClick={() => activate(index)}
           onKeyDown={onSlideKeydown(activate, index)}
           aria-label={`Показать отзыв — ${item.name}`}
-          className={`${className} cursor-pointer`}
+          className={`${className} cursor-pointer active:opacity-[0.92] active:duration-75`}
           style={style}
         >
           {photo}

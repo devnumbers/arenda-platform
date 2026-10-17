@@ -45,13 +45,13 @@ export function SiteFooter() {
               фокус — синий текст; Default 18/22, Small (мобайл) 16/20. */}
           <Link
             href="/privacy"
-            className="leading-5 text-ink transition-colors duration-200 hover:text-primary active:text-primary-active focus-visible:text-primary desk:order-2 desk:leading-[22px]"
+            className="leading-5 text-ink transition-colors duration-200 active:duration-75 hover:text-primary active:text-primary-active focus-visible:text-primary desk:order-2 desk:leading-[22px]"
           >
             Политика конфиденциальности
           </Link>
           <Link
             href="/terms"
-            className="leading-5 text-ink transition-colors duration-200 hover:text-primary active:text-primary-active focus-visible:text-primary desk:order-3 desk:leading-[22px]"
+            className="leading-5 text-ink transition-colors duration-200 active:duration-75 hover:text-primary active:text-primary-active focus-visible:text-primary desk:order-3 desk:leading-[22px]"
           >
             Пользовательское соглашение
           </Link>

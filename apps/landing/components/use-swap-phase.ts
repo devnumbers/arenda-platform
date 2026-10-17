@@ -33,12 +33,14 @@ export function useSwapPhase<Value>({
   const swap = (next: Value) => {
     if (swapTimer.current !== null) {
       window.clearTimeout(swapTimer.current);
+      swapTimer.current = null;
     }
-    if (phase === "entering") {
-      // Клик посреди въезда: старое значение ещё полупрозрачно —
-      // подменяем его сразу и переигрываем въезд, не гоня лишнюю
-      // фазу ухода.
+    if (phase === "entering" || phase === "leaving") {
+      // Клик посреди въезда или ухода: значение подменяем сразу и
+      // переигрываем въезд — фазу ухода второй раз не гоняем (при спаме
+      // кликов текст не пустеет дольше одного короткого ухода).
       setValue(next);
+      setPhase("entering");
       return;
     }
     setPhase("leaving");

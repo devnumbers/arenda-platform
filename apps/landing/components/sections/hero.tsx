@@ -26,7 +26,7 @@ export function Hero() {
   const tabletBg = getImageProps({ src: heroBgTablet, alt: "", fill: true, sizes: "100vw", quality: 90 });
   return (
     <section id="hero" className="px-2 py-2">
-      <div className="relative mx-auto flex h-[calc(100svh-88px)] w-full max-w-[1920px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:px-12 tab:pt-16 tab:pb-12 desk:justify-end desk:rounded-[40px] desk:p-10 min-[1680px]:h-[1050px]">
+      <div className="hero-panel-h relative mx-auto flex w-full max-w-[1920px] flex-col justify-start overflow-hidden rounded-[32px] p-8 pt-12 tab:px-12 tab:pt-16 tab:pb-12 desk:justify-end desk:rounded-[40px] desk:p-10 min-[1680px]:h-[1050px]">
         <picture>
           <source media="(max-width: 480.98px)" srcSet={mobileBg.props.srcSet} sizes={mobileBg.props.sizes} />
           <source

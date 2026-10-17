@@ -61,7 +61,7 @@ export default function RootLayout({
             translate-y-6 в Tailwind v4 — отдельное свойство translate,
             transform: none его не снимает. */}
         <noscript>
-          <style>{`[data-reveal]{opacity:1!important;transform:none!important;translate:none!important}`}</style>
+          <style>{`[data-reveal]{opacity:1!important;transform:none!important;translate:none!important}[data-carousel-canvas]{visibility:visible!important}`}</style>
         </noscript>
         <SmoothScroll />
         {children}

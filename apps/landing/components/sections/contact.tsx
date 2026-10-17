@@ -62,7 +62,7 @@ export function Contact() {
                       key={id}
                       type="button"
                       onClick={() => open(id)}
-                      className="flex min-h-14 cursor-pointer items-center gap-2 rounded-2xl bg-white pl-7 pr-6 text-s leading-5 text-ink transition-colors duration-200 outline-none select-none hover:bg-surface-hover active:bg-surface-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary desk:min-h-16 desk:text-r desk:leading-[22px]"
+                      className="flex min-h-14 cursor-pointer items-center gap-2 rounded-2xl bg-white pl-7 pr-6 text-s leading-5 text-ink transition-colors duration-200 active:duration-75 outline-none select-none hover:bg-surface-hover active:bg-surface-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary desk:min-h-16 desk:text-r desk:leading-[22px]"
                     >
                       {BROWSERS[id].label}
                       <Image

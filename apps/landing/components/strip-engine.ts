@@ -38,6 +38,10 @@ const RUBBER = 0.35;
 // Порог броска по скорости, px/мс.
 const FLICK_V = 0.5;
 
+// Слой дорожки держится 620мс после последнего движения — запас к переходам
+// 360/460мс (канон armLayers showcase).
+const LAYER_MS = 620;
+
 // Порог активации drag: до него жест считается тапом — класс dragging
 // не включается, capture не ставится, клик уходит по назначению.
 const DRAG_ACTIVATE_PX = 5;
@@ -149,6 +153,22 @@ export function createStripEngine(
     dragSamples: [],
   };
   let resizeRaf = 0;
+  // Слой transform — только на время движения, снимается таймером (канон
+  // armLayers showcase: постоянный слой — впустую память на дешёвых
+  // телефонах).
+  let layerTimer: number | null = null;
+  const armLayers = () => {
+    if (track.style.willChange !== "transform") {
+      track.style.willChange = "transform";
+    }
+    if (layerTimer !== null) {
+      clearTimeout(layerTimer);
+    }
+    layerTimer = window.setTimeout(() => {
+      track.style.willChange = "";
+      layerTimer = null;
+    }, LAYER_MS);
+  };
   // Кеш модели: пересобирается в measure (mount) и на ресайз; в драге
   // тоже — следующий переход после отпускания должен считаться уже по
   // новой геометрии (та же инварианта, что у кеша showcase).
@@ -189,6 +209,7 @@ export function createStripEngine(
       render();
       return;
     }
+    armLayers();
     const narrow = window.matchMedia(`(max-width: ${NARROW_MAX - 1}px)`).matches;
     st.anim = {
       from: st.p,
@@ -253,6 +274,7 @@ export function createStripEngine(
     st.dragSamples = [{ t: performance.now(), x: e.clientX }];
     st.anim = null; // жест перехватывает движение
     cancelAnimationFrame(st.raf);
+    armLayers(); // слой — до первой записи движения
   };
 
   const onPointerMove = (e: PointerEvent) => {
@@ -283,6 +305,7 @@ export function createStripEngine(
     if (st.dragSamples.length > 6) {
       st.dragSamples.shift();
     }
+    armLayers(); // длинный жест переживает таймер слоя — перезаводим
   };
 
   const release = (e: PointerEvent, flick: boolean) => {
@@ -378,6 +401,11 @@ export function createStripEngine(
       cancelAnimationFrame(resizeRaf);
       cancelAnimationFrame(st.raf);
       st.anim = null;
+      if (layerTimer !== null) {
+        clearTimeout(layerTimer);
+        layerTimer = null;
+      }
+      track.style.willChange = "";
       if (config.draggingClass) {
         viewport.classList.remove(config.draggingClass);
       }

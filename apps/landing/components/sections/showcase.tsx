@@ -746,6 +746,7 @@ export function Showcase() {
         <Reveal delay={80} className="w-full">
           <div
             ref={zoneRef}
+            data-carousel-canvas
             className={`${s.carousel} ${s.zone}`}
             style={{ visibility: mounted ? "visible" : "hidden" }}
           >
@@ -762,6 +763,8 @@ export function Showcase() {
                         }}
                         type="button"
                         aria-label={`Показать: ${card.name}`}
+                        aria-hidden={c !== 1}
+                        tabIndex={c === 1 ? 0 : -1}
                         className={s.plate}
                         style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
                         onClick={() => selectNode(g)}
@@ -796,6 +799,7 @@ export function Showcase() {
                           data-slide-idx={g}
                           role="button"
                           tabIndex={near ? 0 : -1}
+                          aria-hidden={!near}
                           aria-label={`Показать: ${card.name}`}
                           className={s.slide}
                           style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
