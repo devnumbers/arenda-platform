@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { SmoothScroll } from "@/components/smooth-scroll";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -62,6 +63,7 @@ export default function RootLayout({
         <noscript>
           <style>{`[data-reveal]{opacity:1!important;transform:none!important;translate:none!important}`}</style>
         </noscript>
+        <SmoothScroll />
         {children}
       </body>
     </html>
