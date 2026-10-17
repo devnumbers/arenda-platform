@@ -2,34 +2,56 @@ import type { Page } from '@playwright/test';
 import { expect, openCabinetWithSessionToken, test } from './fixtures';
 import { MONTH_LABELS } from '../shared/ui/design/month-grid';
 
-// Ручной якорь приписки (план 051): позиция прокрутки при дорисовке
-// месяцев СВЕРХУ возвращается до пейнта ([overflow-anchor:none] + запись
-// scrollTop в layout-эффекте). Прежняя ставка на нативный scroll anchoring
-// (план 042) работала только на Chromium: в WebKit якоря нет
-// (overflow-anchor — Safari 27+), и на телефоне владельца каждая приписка
-// телепортировала контент на высоту порции (~2200px) — «жёстко лагает»
-// в моментуме; на ПК Chromium компенсировал нативно, поэтому «на ПК нет».
+// Лента по убыванию (план 053): индекс 0 — верхний месяц у будущего края,
+// история хранится вниз и дорисовывается append'ом ниже вьюпорта. Класс
+// prepend-багов 042-052 снят архитектурно: на приписке сверху позицию
+// держала запись scrollTop (компенсация), WebKit в моментуме терял её
+// read-back — окно замирало и прыгало на чанк (фел-чек 16.10: «завис на
+// июле 2026, дёрнулся и остановился на декабре 2025» = чанки 6±1 месяца).
+// Теперь записей в скролл не существует ни в одном направлении.
 //
-// Инвариант журнала — тихая приписка: протокол скроллит всплесками с
-// паузами, порция доезжает в паузе. Сигнатура тихой приписки в кадрах
-// rAF: scrollHeight вырос на Δ и scrollTop вырос ровно на тот же Δ —
-// компенсация (ручная или нативная) вернула ровно вставку, ничего больше
-// не скроллило. У такой пары контент обязан стоять: top общего месяца не
-// меняется (±допуск на субпиксель). Без компенсации сигнатуры не бывает
-// (scrollTop при вставке не двигается вовсе) — партий не набирается:
-// на webkit-проекте тест был красным до проводки якоря («Октябрь, 2024»
-// уезжал на ~4700px при стоящем скролле). CDP-троттлинг не нужен и
-// невозможен на webkit — красный не про производительность.
+// Главный инвариант — ноль программных записей scrollTop за весь забег
+// в прошлое (счётчик оборачивает сеттер Element.prototype.scrollTop до
+// бандла приложения; на коде 042-052 инвариант красный — компенсация
+// писала на каждый prepend). Рост истории видит scrollHeight; стена
+// снизу не достигается в полёте; в паузах протокола общие месяцы стоят.
 
 const UI_KIT = '/ui-kit';
 
 type AnchorFrame = {
   st: number;
+  ch: number;
   sh: number;
   items: Array<[string, number]>;
 };
 
-/** Журнал кадров: st/sh ленты + top всех секций в координатах вьюпорта. */
+/** Счётчик программных записей scrollTop — addInitScript, до бандла. */
+async function installScrollWriteCounter(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+    if (
+      descriptor === undefined
+      || descriptor.get === undefined
+      || descriptor.set === undefined
+    ) {
+      return;
+    }
+    const nativeGet = descriptor.get;
+    const nativeSet = descriptor.set;
+    const probe = window as unknown as { __scrollWrites: number[] };
+    probe.__scrollWrites = [];
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      get: nativeGet,
+      set(value: number) {
+        probe.__scrollWrites.push(value);
+        nativeSet.call(this, value);
+      },
+      configurable: true,
+    });
+  });
+}
+
+/** Журнал кадров: st/ch/sh ленты + top всех секций в координатах вьюпорта. */
 function installFrameJournal(page: Page): void {
   void page.evaluate(() => {
     const c = document.querySelector(
@@ -47,7 +69,8 @@ function installFrameJournal(page: Page): void {
       );
       probe.__anchorFrames.push({
         st: Math.round(c.scrollTop),
-        sh: c.scrollHeight,
+        ch: Math.round(c.clientHeight),
+        sh: Math.round(c.scrollHeight),
         items,
       });
       if (probe.__anchorFrames.length < 4000) {
@@ -58,47 +81,36 @@ function installFrameJournal(page: Page): void {
   });
 }
 
-/** Тихая приписка не двигает контент. Сигнатура тихой приписки: между
- * кадрами scrollHeight вырос на Δ и scrollTop вырос ровно на тот же Δ —
- * компенсация (ручная или нативная) вернула ровно вставку, ничего больше
- * не скроллило (паузы протокола). У такой пары контент обязан стоять:
- * top общего месяца не меняется. Без компенсации сигнатуры не бывает
- * (st не растёт вовсе) — партий не наберётся. Пары с чужим скроллом
- * (Δst ≠ Δsh) не проверяются — компенсацию там от скролла не отделить. */
-function assertQuietPrependsHoldContent(frames: AnchorFrame[]): void {
-  const TOLERANCE_PX = 48;
-  let quietPrepends = 0;
+/** Append-единственность (план 053): позиция существующего контента в
+ * координатах ленты (rect.top + scrollTop) неизменна — офсеты строк не
+ * двигаются, видимое смещение объясняется только скроллом. Проверяется
+ * по всем парам кадров с общими месяцами: topΔ + stΔ ≈ 0 (допуск —
+ * субпиксель measureElement). На коде с компенсацией инвариант красный:
+ * потерянный read-back сдвигал контент без скролла. */
+function assertAppendOnlyContent(frames: AnchorFrame[]): void {
+  const TOLERANCE_PX = 4;
+  let pairs = 0;
   for (let i = 1; i < frames.length; i += 1) {
     const prev = frames[i - 1];
     const frame = frames[i];
     if (prev === undefined || frame === undefined) {
       continue;
     }
-    const shDelta = frame.sh - prev.sh;
-    const stDelta = frame.st - prev.st;
-    // Субпиксельная самокоррекция measureElement может дать 1–2px
-    // расхождения между компенсацией (формула) и таблицей размеров.
-    if (shDelta <= 0 || Math.abs(stDelta - shDelta) > 2) {
-      continue;
-    }
-    quietPrepends += 1;
     const before = new Map(prev.items);
-    let shared = 0;
     for (const [label, top] of frame.items) {
       const prevTop = before.get(label);
       if (prevTop === undefined) {
         continue;
       }
-      shared += 1;
-      const shift = top - prevTop;
+      pairs += 1;
+      const contentShift = top + frame.st - (prevTop + prev.st);
       expect(
-        Math.abs(shift),
-        `кадр ${i}: приписка на ${shDelta}px вернула scrollTop ровно на вставку, но «${label}» уехал на ${Math.round(shift)}px — компенсация мимо контента`,
+        Math.abs(contentShift),
+        `кадр ${i}: «${label}» уехал в координатах ленты на ${Math.round(contentShift)}px — контент сдвигается без скролла`,
       ).toBeLessThanOrEqual(TOLERANCE_PX);
     }
-    expect(shared, `кадр ${i}: нет общих месяцев с предыдущим кадром`).toBeGreaterThan(0);
   }
-  expect(quietPrepends, 'тихих приписок за забег (компенсация возвращает scrollTop ровно на вставку)').toBeGreaterThanOrEqual(3);
+  expect(pairs, 'пар общих месяцев за забег').toBeGreaterThan(100);
 }
 
 test.beforeEach(async ({ page, seededUser }) => {
@@ -106,7 +118,8 @@ test.beforeEach(async ({ page, seededUser }) => {
 });
 
 /** Месяц якоря (текущий) ровно под верхней кромкой — контракт открытия
- * (план 052: позиции по точным высотам, дрейф оценок устранён). */
+ * (план 052: позиции по точным высотам; в 053 якорь всегда в верхней
+ * части окна — clamp дна невозможен). */
 async function assertAnchorOpensAtTop(page: Page): Promise<void> {
   const top = await page.evaluate(() => {
     const el = document.querySelector('[role="dialog"] .overflow-y-auto');
@@ -135,70 +148,86 @@ async function assertAnchorOpensAtTop(page: Page): Promise<void> {
   ).toBeLessThanOrEqual(4);
 }
 
-test('одиночный пикер (без пола): тихая приписка не двигает контент', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(UI_KIT);
-  await page
-    .getByRole('button', { name: 'Открыть пикер (allowPast без minDate: задним числом без пола)' })
-    .click();
-  const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
-  await expect(dialog).toBeVisible();
-  await page.waitForTimeout(600);
-  await assertAnchorOpensAtTop(page);
+for (const picker of [
+  {
+    name: 'одиночный пикер (без пола)',
+    open: 'Открыть пикер (allowPast без minDate: задним числом без пола)',
+    dialogName: 'Выбрать дату',
+  },
+  {
+    name: 'пикер периода',
+    open: 'Открыть пикер периода',
+    dialogName: 'Выберите период',
+  },
+] as const) {
+  test(`${picker.name}: забег в прошлое — ноль записей в скролл, история растёт вниз`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installScrollWriteCounter(page);
+    await page.goto(UI_KIT);
+    // Клик до гидрации теряется (кнопка уже в DOM, обработчик ещё нет —
+    // на холодном стеке next-JIT гидрация webkit дольше секунды): ретраим
+    // клик до появления диалога.
+    const openButton = page.getByRole('button', { name: picker.open });
+    const dialog = page.getByRole('dialog', { name: picker.dialogName });
+    await expect(async () => {
+      await openButton.click();
+      await expect(dialog).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30000 });
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(600);
+    await assertAnchorOpensAtTop(page);
 
-  const cont = dialog.locator('.overflow-y-auto');
-  const box = await cont.boundingBox();
-  if (box === null) {
-    throw new Error('лента пикера даты не найдена');
-  }
-  installFrameJournal(page);
+    const cont = dialog.locator('.overflow-y-auto');
+    const box = await cont.boundingBox();
+    if (box === null) {
+      throw new Error('лента пикера не найдена');
+    }
+    // Записи открытия (якорный scrollToOffset) — легитимные; забег
+    // меряем от чистого счётчика.
+    await page.evaluate(() => {
+      (window as unknown as { __scrollWrites: number[] }).__scrollWrites = [];
+    });
+    installFrameJournal(page);
 
-  // Забег в прошлое: всплеск — пауза. Порция (≤ 12 месяцев) доезжает в
-  // паузе — каждая приписка в журнале тихая. Стартовый запас 12 месяцев
-  // держит открытие выше порога 3000; 10 всплесков по 1500px дают ~4
-  // приписки.
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.5);
-  for (let f = 0; f < 10; f += 1) {
-    await page.mouse.wheel(0, -1500);
-    await page.waitForTimeout(300);
-  }
-  await page.waitForTimeout(600);
+    // Забег в прошлое (теперь это прокрутка ВНИЗ): всплеск — пауза.
+    // 10 всплесков по 1500px съедают стартовый запас (~4300px) и требуют
+    // дорисовок.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.5);
+    for (let f = 0; f < 10; f += 1) {
+      await page.mouse.wheel(0, 1500);
+      await page.waitForTimeout(300);
+    }
+    await page.waitForTimeout(600);
 
-  const frames = await page.evaluate(
-    () => (window as unknown as { __anchorFrames: AnchorFrame[] }).__anchorFrames,
-  );
-  expect(frames.length, 'журнал кадров не пуст').toBeGreaterThan(100);
-  assertQuietPrependsHoldContent(frames);
-});
+    const frames = await page.evaluate(
+      () => (window as unknown as { __anchorFrames: AnchorFrame[] }).__anchorFrames,
+    );
+    const writes = await page.evaluate(
+      () => (window as unknown as { __scrollWrites: number[] }).__scrollWrites,
+    );
+    expect(frames.length, 'журнал кадров не пуст').toBeGreaterThan(100);
+    expect(
+      writes,
+      `программных записей scrollTop за забег: ${JSON.stringify(writes.slice(0, 8))} — позицию пишет кто-то, класс prepend-багов вернулся`,
+    ).toHaveLength(0);
 
-test('пикер периода: тихая приписка не двигает контент', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(UI_KIT);
-  await expect(page.getByRole('button', { name: 'Открыть пикер периода' })).toBeVisible();
-  await page.waitForTimeout(500);
-  await page.getByRole('button', { name: 'Открыть пикер периода' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Выберите период' });
-  await expect(dialog).toBeVisible();
-  await page.waitForTimeout(600);
-  await assertAnchorOpensAtTop(page);
+    // Стена снизу не достигается в полёте (кадры после первого движения).
+    const firstMoved = frames.findIndex((f) => f.st > 0);
+    const inFlight = firstMoved === -1 ? [] : frames.slice(firstMoved);
+    const wallFrames = inFlight.filter((f) => f.st + f.ch >= f.sh - 1).length;
+    expect(
+      wallFrames,
+      `кадров на нижней стене в полёте — дорисовка не успевает`,
+    ).toBeLessThanOrEqual(4);
 
-  const cont = dialog.locator('.overflow-y-auto');
-  const box = await cont.boundingBox();
-  if (box === null) {
-    throw new Error('лента пикера периода не найдена');
-  }
-  installFrameJournal(page);
+    // История выросла: забег (~15000px) съел стартовый запас (~4300px)
+    // и потребовал несколько порций.
+    const shGrowth =
+      (frames.at(-1)?.sh ?? 0) - (frames[0]?.sh ?? 0);
+    expect(shGrowth, 'рост ленты за забег').toBeGreaterThanOrEqual(2000);
 
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.5);
-  for (let f = 0; f < 10; f += 1) {
-    await page.mouse.wheel(0, -1500);
-    await page.waitForTimeout(300);
-  }
-  await page.waitForTimeout(600);
-
-  const frames = await page.evaluate(
-    () => (window as unknown as { __anchorFrames: AnchorFrame[] }).__anchorFrames,
-  );
-  expect(frames.length, 'журнал кадров не пуст').toBeGreaterThan(100);
-  assertQuietPrependsHoldContent(frames);
-});
+    assertAppendOnlyContent(frames);
+  });
+}

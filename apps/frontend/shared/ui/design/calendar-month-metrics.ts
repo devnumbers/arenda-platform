@@ -29,29 +29,29 @@ export function calendarMonthIntrinsicPx(args: {
   return 24 + 16 + args.rows * cell + (args.rows - 1) * 2;
 }
 
-/** Высоты виртуальных строк ленты подряд идущих месяцев (план 052):
- * контент месяца + межстрочный отступ 32 у всех строк, кроме последней
- * (виртуализатор позиционирует строки абсолютно — margin-flow нет,
- * отступ живёт в размере строки как padding-bottom). Отступ «после» (а
- * не «до») делает дельты чисто аддитивными: prepend добавляет строки,
- * у каждой из которых отступ есть, и ничего не меняет у старых. */
+/** Высоты виртуальных строк ленты (план 052; отступ у всех — план 053):
+ * контент месяца + межстрочный отступ 32 у КАЖДОЙ строки (виртуализатор
+ * позиционирует строки абсолютно — margin-flow нет, отступ живёт в
+ * размере строки как padding-bottom). Отступ у всех, включая последнюю:
+ * лента растёт append'ом вниз (план 053), и бывшая последняя строка
+ * обязана сохранить свой отступ, иначе новые строки поедут на 32px выше
+ * суммы старых высот. Хвостовой отступ последней строки растворяется в
+ * хвосте прокрутки (FEED_TAIL_PX). */
 export function calendarMonthRowHeights(
   months: ReadonlyArray<{ readonly year: number; readonly month0: number }>,
   columnWidth: number | null,
 ): number[] {
-  return months.map(({ year, month0 }, index) => {
+  return months.map(({ year, month0 }) => {
     const rows = calendarMonthGridRows(daysInMonth(year, month0), firstWeekdayOfMonth(year, month0));
     const content = calendarMonthIntrinsicPx({ rows, columnWidth });
-    return index === months.length - 1 ? content : content + 32;
+    return content + 32;
   });
 }
 
 /** Смещение верхней кромки строки index (высоты строк ленты): вход
- * якорного скролла открытия, прыжков чипа и компенсации prepend — дельта
- * прокрутки при приписке N строк = rowOffset(высоты нового окна, N):
- * сумма высот новых строк, где последняя уже несёт свой межстрочный
- * отступ (за ней идут старые строки), — ровно прирост ленты над
- * вьюпортом. */
+ * якорного скролла открытия и прыжков чипа. При append'е вниз (план 053)
+ * смещения существующих строк неизменны — рост истории только добавляет
+ * высоты в хвост. */
 export function rowOffset(heights: ReadonlyArray<number>, index: number): number {
   let offset = 0;
   for (let i = 0; i < index && i < heights.length; i += 1) {

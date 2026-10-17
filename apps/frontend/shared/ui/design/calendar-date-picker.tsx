@@ -25,9 +25,9 @@ import {
 // точки входа сами по себе), как в мастере платежей.
 import {
   booleanRunSegments,
+  CALENDAR_FEED_APPEND_CHUNK,
   CALENDAR_FEED_BACKWARD_SEED,
   CALENDAR_FEED_MONTHS,
-  CALENDAR_FEED_PREPEND_CHUNK,
   calendarDayDisabled,
   calendarFeedStart,
   calendarMonthIndex,
@@ -35,13 +35,12 @@ import {
   calendarMonthOfIndex,
   calendarPastFloor,
   calendarSingleFeedWindow,
-  type CalendarMonthRef,
   type IsoDate,
   type IsoRange,
   type IsoRangeDraft,
   isoDateOf,
   isoDayOfMonth,
-  listCalendarMonths,
+  listCalendarMonthsDescending,
   pickIsoRange,
   RANGE_FEED_BACKWARD_SEED,
   rangeFeedWindow,
@@ -50,11 +49,6 @@ import {
 import { formatRangeBound } from '@/shared/lib/date-format';
 import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import {
-  createPrependGate,
-  flingChunks,
-  shouldDeferPrepend,
-} from './calendar-feed-gate';
 import {
   calendarMonthRowHeights,
   rowOffset,
@@ -66,23 +60,20 @@ const useIsomorphicLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /** Хвост прокрутки под последним месяцем — воздух под нижней панелью
- * (бывший pb-[136px] контейнера ленты, план 052). */
+ * (бывший pb-[136px] контейнера ленты, план 052); в нём растворяется и
+ * хвостовой межстрочный отступ последней строки (план 053). */
 const FEED_TAIL_PX = 136;
-
-/** Пауза повтора отложенной приписки (моментум-окно, план 052): за это
- * время хвост затухания флика опускается ниже порога скорости. */
-const DEFER_RETRY_MS = 160;
 
 /** Полноэкранный пикер даты (общий компонент дизайн-слоя, вырос из пикера
  * задач #500, Figma 1539-78660): назад, чип «Август 2026 ⌄» (шит
  * MonthYearPicker) и шапка дней недели закреплены над прокруткой — лента
  * месяцев скроллится под ними (решение владельца 2026-09-04). Лента
- * стартует на стартовый запас (seed 12, план 051) раньше якоря —
- * прокрутка вверх работает сразу, без «качания» (решение владельца
- * 13.10, #1394: на верхнем упоре scroll-событие не возникает, дорисовка
- * по порогу не запускается) и вне зоны приписки с первого пикселя;
- * оффскрин-блоки не участвуют в layout (content-visibility) — прокрутка
- * остаётся плавной на любой глубине. Открывается сеткой на
+ * виртуальна (TanStack Virtual, план 052) и хранится по убыванию (план
+ * 053): индекс 0 — верхний месяц у будущего края, история хранится вниз
+ * и дорисовывается append'ом у нижнего края — ни одна существующая
+ * строка при росте не сдвигается, записей в скролл не существует; класс
+ * prepend-багов (зависания и рывки в моментуме на WebKit, фел-чек
+ * 16.10) снят архитектурно. Открывается сеткой на
  * месяце якоря — значения, а без него «сегодня», прижатое в
  * [minDate, maxDate] (решение владельца #802 23.09: продление с далёким
  * минимумом открывается на первом доступном месяце). Черновик предвыбран
@@ -122,16 +113,19 @@ const DEFER_RETRY_MS = 160;
  *
  * Прошлое без пола (allowPast без minDate, #1393 — операции задним
  * числом): черты нет, прошедшие дни открыты без ограничения; лента
- * растёт назад по доскроллу — порции по 6 месяцев, позиция прокрутки не
- * дёргается (тот же приём, что в пикере периода); шит месяца без нижнего
+ * растёт вниз append'ом по доскроллу — порции по 6 месяцев, позиция
+ * прокрутки не сдвигается вовсе (план 053); шит месяца без нижнего
  * зажима — годы уходят в прошлое по колёснику.
  *
  * Будущее с жёстким краем (maxDate задан, решение владельца 13.10,
  * #1394): дни позже недоступны (#534), лента заканчивается месяцем maxDate
  * плюс парой приглушённых месяцев контекста — дальше не дорисовывается, и
  * шит месяца зажат по maxDate (1:1 с пикером периода). У открытого
- * будущего (maxDate не задан — начало аренды, плановые платежи) края нет:
- * лента растёт вперёд годом, как раньше.
+ * будущего (maxDate не задан — начало аренды, плановые платежи) верх
+ * ленты — на год позже позднего из якоря и «сегодня»: путь якорь→сегодня
+ * прокручивается всегда, глубже ведёт прыжок чипом (растит верх в
+ * тап-тишине; при прокрутке лента не растёт — записей в скролл не
+ * существует ни в одном направлении, план 053).
  *
  * Максимальная дата (проп maxDate, #534): дни позже недоступны — дата
  * завершения аренды не бывает будущей (ADR 0053 §3, потребитель передаёт
@@ -143,16 +137,9 @@ const DEFER_RETRY_MS = 160;
  * нижние панели во всю ширину, на ПК ≥1024 — колонка 560; решение
  * владельца 28.09 после аудита #877, канон DESIGN.md §5). */
 
-/** Порог дорисовки вперёд: до нижнего края осталось ~5 экранов —
+/** Порог дорисовки истории: до нижнего края осталось ~5 экранов —
  * запас на флик (план 042, feel-check владельца 16.10). */
 const APPEND_THRESHOLD_PX = 1500;
-
-/** Число порций prepend под текущую скорость прокрутки (план 042):
- * одна порция на медленном скролле; под фликом — столько, сколько
- * моментум съест за ~600мс после события, с кэпом FLING_CHUNKS_CAP
- * (план 051: монструозные коммиты 48 месяцев душили телефон). Сама
- * функция живёт в calendar-feed-gate — модуль тайминга ленты. */
-const FEED_CHUNK_PX = 2800;
 
 function monthKey(year: number, month0: number): string {
   return `${year}-${month0}`;
@@ -298,15 +285,14 @@ export function CalendarDatePicker({
   // Поверхность fixed без модальной обёртки: страница под пикером
   // скроллиться не должна (жест у края ленты раньше уезжал в неё).
   useBodyScrollLock();
-  // Лента (решение владельца 13.10, #1394): старт — на порцию дорисовки
-  // раньше семантического старта calendarFeedStart — над якорем всегда
-  // есть содержимое, прокрутка вверх работает сразу (на верхнем упоре
-  // scroll-событие не возникает, дорисовка по порогу не запускалась —
-  // «сначала качни вниз»); якорь скроллится на место в layout-эффекте до
-  // первой отрисовки. Вперёд при закрытом будущем (maxDate) — жёсткий
-  // край: месяц maxDate плюс пара приглушённых месяцев контекста, дальше
-  // лента не растёт (1:1 с пикером периода); у открытого будущего края
-  // нет — лента растёт годом.
+  // Лента (план 053): окно по убыванию — верх фиксирован на всю жизнь
+  // пикера (пропсы не меняются — компонент рендерится только в открытом
+  // состоянии), счётчик месяцев вниз растёт append'ом у нижнего края.
+  // Низ стартует на порцию запаса раньше семантического старта
+  // calendarFeedStart (seed 12) — под якорем всегда ≥ 12 месяцев, clamp
+  // дна невозможен. Вперёд при закрытом будущем — жёсткий край: месяц
+  // maxDate плюс пара приглушённых (1:1 с пикером периода); у открытого
+  // будущего верх на год позже позднего из якоря и «сегодня».
   const initialAnchor = value ?? initialDraft(today, minDate, maxDate);
   const pastFloor = calendarPastFloor(today, minDate, allowPast);
   const endlessPast = pastFloor === null;
@@ -318,31 +304,23 @@ export function CalendarDatePicker({
   const feedWindow = calendarSingleFeedWindow({
     feedStart,
     anchorMonth: calendarMonthOf(initialAnchor),
+    todayMonth: calendarMonthOf(today),
     maxDate,
   });
-  const [firstMonth, setFirstMonth] = useState<CalendarMonthRef>(feedWindow.first);
+  const [topIdx, setTopIdx] = useState(() => calendarMonthIndex(feedWindow.top));
   const [monthsCount, setMonthsCount] = useState(feedWindow.count);
-  // Край ленты стабилен всю жизнь смонтированного пикера (пропсы не
-  // меняются — компонент рендерится только в открытом состоянии).
   const forwardEdge = feedWindow.forwardEdge;
   const [draft, setDraft] = useState<IsoDate | null>(
     value ?? initialDraft(today, minDate, maxDate),
   );
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
-  const startIndex = calendarMonthIndex(firstMonth);
-  const anchorIndex =
-    calendarMonthIndex(calendarMonthOf(initialAnchor)) - startIndex;
-  const months = listCalendarMonths(firstMonth, monthsCount);
+  const anchorIdxFromTop =
+    topIdx - calendarMonthIndex(calendarMonthOf(initialAnchor));
+  const months = listCalendarMonthsDescending(calendarMonthOfIndex(topIdx), monthsCount);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Прыжок за окно ленты (чип «Месяц Год»): абсолютный индекс месяца —
-  // окно переносится к цели, скролл после рендера нового окна.
+  // окно доращивается к цели, скролл после рендера нового окна.
   const pendingScrollIndex = useRef<number | null>(null);
-  // Гейт приписки (план 050): одна порция в полёте — скролл-события
-  // одного кадра не суммируются в один DOM-коммит.
-  const [prependGate] = useState(createPrependGate);
-  // Компенсация prepend (планы 051→052): дельта = сумма точных высот
-  // новых строк (calendar-month-metrics), пишется в scrollTop до пейнта.
-  const pendingPrependDelta = useRef<number | null>(null);
   // Ширина колонки — вход точных высот строк. Замеряется в layout-эффекте
   // первого коммита (до пейнта) и держится ResizeObserver'ом; до замера
   // строки не монтируются — первый закрашенный кадр уже с точными
@@ -402,8 +380,11 @@ export function CalendarDatePicker({
     );
     const column = Math.min(Number.isFinite(columnToken) ? columnToken : 560, window.innerWidth);
     return rowOffset(
-      calendarMonthRowHeights(months.slice(0, Math.max(anchorIndex, 0)), column),
-      Math.max(anchorIndex, 0),
+      calendarMonthRowHeights(
+        months.slice(0, Math.max(anchorIdxFromTop, 0)),
+        column,
+      ),
+      Math.max(anchorIdxFromTop, 0),
     );
   });
   const virtualizer = useVirtualizer({
@@ -419,32 +400,20 @@ export function CalendarDatePicker({
   });
 
   // Открытие — сразу на месяц якоря (значение или ближайший доступный
-  // день): scrollTop = сумма точных высот до якоря, месяц ровно под
-  // верхней кромкой на любой ширине. Layout-эффект — до отрисовки, и
+  // день): scrollTop = сумма точных высот строк над якорем, месяц ровно
+  // под верхней кромкой на любой ширине. Layout-эффект — до отрисовки, и
   // строки к этому моменту уже смонтированы с точными размерами (замер
-  // колонки выше). Под якорем должно хватить контента на вьюпорт, иначе
-  // запись упрётся в clamp дна и месяц сядет ниже кромки (репро 16.10:
-  // безпольный пикер открывался сентябрём — якорь-октябрь был последней
-  // строкой окна): у открытого будущего окно доращивается вперёд и
-  // эффект повторяется в том же sync-ререндере до пейнта; при жёстком
-  // крае (maxDate) расти некуда — садимся максимально низко, как раньше.
+  // колонки выше). Clamp дна невозможен: под якорем всегда ≥ seed месяцев
+  // (низ окна за запасом, план 053) — якорь всегда в верхней части окна.
   // Один раз: дальше старт ленты уплывает легитимно.
   const anchorScrolledRef = useRef(false);
   useIsomorphicLayoutEffect(() => {
-    if (anchorScrolledRef.current || columnWidth === null || anchorIndex <= 0) {
+    if (anchorScrolledRef.current || columnWidth === null || anchorIdxFromTop <= 0) {
       return;
     }
     const list = scrollRef.current;
     if (list === null) {
       return;
-    }
-    const target = rowOffset(rowHeights, anchorIndex);
-    if (target > list.scrollHeight - list.clientHeight) {
-      if (forwardEdge === null) {
-        // Порядка вьюпорта месяцев ниже якоря + запас под append.
-        setMonthsCount((count) => count + Math.ceil(list.clientHeight / 240) + 2);
-        return;
-      }
     }
     anchorScrolledRef.current = true;
     // Запись только через API виртуализатора: scrollToOffset обновляет
@@ -452,14 +421,12 @@ export function CalendarDatePicker({
     // гонку инициализации слушателя на WebKit проигрывало, и
     // виртуализатор держал окно от нуля (репро 16.10: контент на месте,
     // окно рендера — строки 0..4).
-    virtualizer.scrollToOffset(target);
-  }, [anchorIndex, columnWidth, forwardEdge, rowHeights, virtualizer]);
+    virtualizer.scrollToOffset(rowOffset(rowHeights, anchorIdxFromTop));
+  }, [anchorIdxFromTop, columnWidth, rowHeights, virtualizer]);
 
   // Дорисовка прыжка за окно — скролл к цели после рендера нового окна,
   // до пейнта (запись позиции в коммите окна — канон 049/051/052).
   useIsomorphicLayoutEffect(() => {
-    // Приписка доехала до DOM — гейт открывает следующий запрос (план 050).
-    prependGate.settled();
     const absIndex = pendingScrollIndex.current;
     if (absIndex === null) {
       return;
@@ -468,7 +435,7 @@ export function CalendarDatePicker({
     if (columnWidth === null) {
       return;
     }
-    const targetIndex = absIndex - startIndex;
+    const targetIndex = topIdx - absIndex;
     // Страховка WebKit: read-back записи доезжает с лагом — проверяем окно
     // и при промахе переписываем (до ~0.5с). setTimeout, не rAF:
     // headless-браузер e2e не обязан тикать кадры (канон useBodyScrollLock).
@@ -491,21 +458,7 @@ export function CalendarDatePicker({
     guardTimer = window.setTimeout(guard, 16);
     const cleanupGuard = (): void => window.clearTimeout(guardTimer);
     return cleanupGuard;
-  }, [monthsCount, firstMonth, prependGate, columnWidth, rowHeights, startIndex, virtualizer]);
-
-  // Компенсация prepend (планы 051→052): до пейнта возвращаем позицию,
-  // сдвинутую вставкой порции над вьюпортом. Дельта — чистая математика
-  // поверх точных высот (без DOM-измерений, план 052); пишем в текущий
-  // scrollTop — моментум между событием и коммитом сохраняется.
-  useIsomorphicLayoutEffect(() => {
-    const delta = pendingPrependDelta.current;
-    pendingPrependDelta.current = null;
-    const list = scrollRef.current;
-    if (delta === null || list === null) {
-      return;
-    }
-    virtualizer.scrollToOffset(list.scrollTop + delta);
-  }, [monthsCount, firstMonth, virtualizer]);
+  }, [monthsCount, topIdx, columnWidth, rowHeights, virtualizer]);
 
   // Escape закрывает пикер; при открытом шите месяца его Esc обрабатывает
   // Radix — глобальный слушатель в этот момент глушится.
@@ -526,120 +479,44 @@ export function CalendarDatePicker({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [monthPickerOpen, onClose]);
 
-  // Приближение к нижнему краю дорисовывает ленту ещё годом — вперёд
-  // месяцы есть всегда, пока будущее открыто; при закрытом (maxDate, жёсткий
-  // край #1394) лента заканчивается парой приглушённых месяцев за краем и
-  // не растёт. В безпольном режиме (#1393) дотягивание к верху дорисовывает
-  // порцию месяцев назад. Лента виртуальна (план 052): в DOM только
-  // видимое окно + overscan, глубина не стоит ни размеров, ни коммитов.
-  // Сдвиг позиции при prepend — компенсация до пейнта (дельта точных
-  // высот), на ленте [overflow-anchor:none] — одна компенсация на всех
-  // движках (планы 051→052). Моментум-окно (план 052, решение владельца):
-  // на высокой скорости DOM не трогается вовсе — приписка откладывается
-  // и доезжает в тишине (повтор по таймеру, DEFER_RETRY_MS); жест несут
-  // точные размеры окна и seed. Порог 3000 держит триггер далеко от
-  // стены; кэп flingChunks 2 (план 051).
-  const lastScrollRef = useRef<{ st: number; t: number } | null>(null);
-  const deferredPrependTimer = useRef<number | null>(null);
-  const requestPrepend = (
-    previous: { st: number; t: number } | null,
-    now: number,
-    st: number,
-  ): void => {
-    const chunks = flingChunks(previous, now, st, FEED_CHUNK_PX);
-    // Склейка по кадру (план 050): пока предыдущая приписка в полёте,
-    // запросы склеиваются с ней; settled() зовёт эффект рендера приписки.
-    const portion = prependGate.request(chunks);
-    if (portion === null) {
-      return;
-    }
-    const newCount = CALENDAR_FEED_PREPEND_CHUNK * portion;
-    const newFirst = calendarMonthOfIndex(startIndex - newCount);
-    // Дельта компенсации — прирост ленты над вьюпортом: смещение первой
-    // старой строки в новом окне (последняя новая строка уже несёт свой
-    // межстрочный отступ). План 052, без DOM-измерений.
-    const newHeights = calendarMonthRowHeights(
-      listCalendarMonths(newFirst, monthsCount + newCount),
-      columnWidth,
-    );
-    pendingPrependDelta.current = rowOffset(newHeights, newCount);
-    setFirstMonth(newFirst);
-    setMonthsCount((count) => count + newCount);
-  };
-  const scheduleDeferredPrepend = (): void => {
-    if (deferredPrependTimer.current !== null) {
-      return;
-    }
-    deferredPrependTimer.current = window.setTimeout(() => {
-      deferredPrependTimer.current = null;
-      const list = scrollRef.current;
-      if (list === null || list.scrollTop > PREPEND_THRESHOLD_PX) {
-        return;
-      }
-      const now = performance.now();
-      const previous = lastScrollRef.current;
-      lastScrollRef.current = { st: list.scrollTop, t: now };
-      if (shouldDeferPrepend(previous, now, list.scrollTop)) {
-        scheduleDeferredPrepend();
-        return;
-      }
-      requestPrepend(previous, now, list.scrollTop);
-    }, DEFER_RETRY_MS);
-  };
-  useEffect(
-    () => () => {
-      if (deferredPrependTimer.current !== null) {
-        window.clearTimeout(deferredPrependTimer.current);
-      }
-    },
-    [],
-  );
+  // Дорисовка истории — append вниз у нижнего края (план 053): строки
+  // добавляются за вьюпорт, ни одна существующая не сдвигается, записей
+  // в скролл не существует — жест не прерывается ни в моментуме, ни в
+  // паузе (класс prepend-багов 042-052 снят архитектурно: гейт 050,
+  // моментум-окно 052, компенсация 051 удалены вместе с классом).
+  // Растущий край один — бесконечное прошлое (#1393, операции задним
+  // числом); bounded пикер (прошлое за полом, будущее за maxDate)
+  // статичен. Приглушённое будущее за maxDate — жёсткий край #1394.
   const handleScroll = (): void => {
     const list = scrollRef.current;
-    if (list === null) return;
-    const now = performance.now();
-    const previous = lastScrollRef.current;
-    lastScrollRef.current = { st: list.scrollTop, t: now };
-    if (endlessPast && list.scrollTop <= PREPEND_THRESHOLD_PX) {
-      if (shouldDeferPrepend(previous, now, list.scrollTop)) {
-        scheduleDeferredPrepend();
-        return;
-      }
-      requestPrepend(previous, now, list.scrollTop);
+    if (list === null || !endlessPast) {
       return;
     }
-    if (
-      forwardEdge === null
-      && list.scrollTop + list.clientHeight >= list.scrollHeight - APPEND_THRESHOLD_PX
-    ) {
-      setMonthsCount((count) => count + CALENDAR_FEED_MONTHS);
+    if (list.scrollTop + list.clientHeight < list.scrollHeight - APPEND_THRESHOLD_PX) {
+      return;
     }
+    setMonthsCount((count) => count + CALENDAR_FEED_APPEND_CHUNK);
   };
 
-  /** Прыжок по чипу: месяц окна — скроллом по точным высотам; за окном —
-   * перенос окна к цели целиком (виртуализатор рендерит только видимое,
-   * расстояние прыжка не стоит ни коммитов, ни кадров — план 052) и
-   * скролл после рендера. Вперёд лента растёт годом; при закрытом будущем
-   * прыжок ограничен краем (колесо годов и так не предложит месяц за
-   * maxDate). */
+  /** Прыжок по чипу: месяц окна — скроллом по точным высотам (в убывании
+   * relative = topIdx − targetIdx); глубже дна — дорисовка append'ом вниз
+   * и скролл после рендера; выше верха (только открытое будущее) — рост
+   * верха к цели: прыжок в тап-тишине, позицию хранить нечего, сразу
+   * скролл к цели. Вперед за верх (жёсткий край) колесо не предложит. */
   const jumpTo = (year: number, month0: number): void => {
     const targetIdx = calendarMonthIndex({ year, month0 });
-    const relative = targetIdx - startIndex;
+    const relative = topIdx - targetIdx;
     if (relative >= 0 && relative < monthsCount) {
       virtualizer.scrollToIndex(relative, { align: 'start' });
       return;
     }
     pendingScrollIndex.current = targetIdx;
-    if (targetIdx < startIndex) {
-      setFirstMonth(calendarMonthOfIndex(targetIdx - CALENDAR_FEED_BACKWARD_SEED));
-      setMonthsCount((count) => count + (startIndex - (targetIdx - CALENDAR_FEED_BACKWARD_SEED)));
+    if (relative >= monthsCount) {
+      setMonthsCount(relative + CALENDAR_FEED_BACKWARD_SEED + 1);
       return;
     }
-    setMonthsCount(
-      forwardEdge !== null
-        ? calendarMonthIndex(forwardEdge) - startIndex + 1
-        : relative + CALENDAR_FEED_MONTHS,
-    );
+    setTopIdx(targetIdx + CALENDAR_FEED_MONTHS);
+    setMonthsCount((count) => count + (targetIdx + CALENDAR_FEED_MONTHS - topIdx));
   };
 
   return (
@@ -685,13 +562,14 @@ export function CalendarDatePicker({
         </div>
       </div>
 
-      {/* Виртуальная лента (план 052): спейсер — колонка контента, строки
-          позиционированы абсолютно, в DOM только видимое окно + overscan.
-          Строки не монтируются до замера колонки — первый закрашенный кадр
-          уже с точными размерами и якорем открытия. Позицию при приписке
-          держит компенсация до пейнта; [overflow-anchor:none] выключает
-          нативный scroll anchoring: в WebKit его не было до Safari 27, с
-          ручной компенсацией нативная удвоила бы сдвиг на Chromium. */}
+      {/* Виртуальная лента (план 052, по убыванию — план 053): спейсер —
+          колонка контента, строки позиционированы абсолютно, в DOM только
+          видимое окно + overscan. Строки не монтируются до замера колонки —
+          первый закрашенный кадр уже с точными размерами и якорем открытия.
+          Дорисовка истории — append ниже вьюпорта: позиция не пишется
+          вовсе, [overflow-anchor:none] оставлен как страховка от нативной
+          компенсации Chromium (она сдвинула бы контент при любом
+          программном вмешательстве движка). */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -723,7 +601,11 @@ export function CalendarDatePicker({
                   className="absolute left-0 w-full"
                   style={{
                     transform: `translateY(${row.start}px)`,
-                    paddingBottom: row.index === months.length - 1 ? 0 : 32,
+                    // Отступ у каждой строки (план 053): append вниз
+                    // сохраняет офсеты существующих строк только при
+                    // равномерных высотах; хвост последней строки
+                    // растворяется в FEED_TAIL.
+                    paddingBottom: 32,
                   }}
                 >
                   <CalendarMonthBlock
@@ -802,20 +684,6 @@ function MonthJumpChip({
   );
 }
 
-/** Порог дорисовки назад безпольной ленты одиночного пикера: до верха
- * контейнера осталось меньше этого (#1393). */
-const PREPEND_THRESHOLD_PX = 3000;
-/** Порог дорисовки назад ленты пикера периода: ~5 экранов прокрутки.
- * Порция обязана отрисоваться задолго до стены: прежние 32px (потом 800)
- * срабатывали вплотную к краю — под жёстким фликом (~100px/мс) лента
- * жила циклом «стена → компенсация прыжком на порцию» (feel-check
- * владельца 16.10, замер 16.10: паузы на scrollTop 0 между каждой
- * дорисовкой). */
-const RANGE_PREPEND_THRESHOLD_PX = 3000;
-/** Сколько месяцев дорисовывается назад в ленте периода за одно
- * дотягивание к верху (решение владельца 13.10: порция 6 остаётся). */
-const RANGE_PREPEND_CHUNK = 6;
-
 export type CalendarRangePickerProps = {
   readonly title?: string;
   readonly confirmLabel?: string;
@@ -842,8 +710,9 @@ export type CalendarRangePickerProps = {
  * #477 на общий компонент; визуал шапки и ячеек — 1:1 с ним, Figma
  * 1495-64015, 1502-65940/66060/66758, 1495-64165). Отличия от одиночного
  * пикера продиктованы операционной историей: лента бесконечна назад —
- * месяцы дорисовываются порциями при дотягивании к верху (позиция
- * прокрутки сохраняется якорем), вперёд — только текущий месяц с двумя
+ * месяцы дорисовываются append'ом вниз при дотягивании к нижнему краю
+ * (план 053: позиция прокрутки не сдвигается вовсе, записей в скролл не
+ * существует), вперёд — только текущий месяц с двумя
  * приглушёнными будущими; дни позже «сегодня» недоступны (операции —
  * только paid, резолюция #474). Тап задаёт границу, второй тап завершает
  * диапазон в любую сторону (5→1 = 1–5, решение владельца 2026-09-05), по
@@ -885,25 +754,18 @@ export function CalendarRangePicker({
   const shown = draft !== null ? settleIsoRange(draft) : null;
   const draftMonth = calendarMonthOf(shown !== null ? shown.from : today);
 
-  // Окно ленты: стартовое — по rangeFeedWindow, назад дорисовывается
-  // порциями без предела, вперёд — жёсткий край у приглушённого будущего.
+  // Окно ленты (план 053): верх фиксирован — месяц «сегодня» плюс два
+  // приглушённых будущих, счётчик вниз растёт append'ом у нижнего края
+  // без предела; записей в скролл не существует.
   const feedWindow = rangeFeedWindow(value, today);
-  const [firstMonth, setFirstMonth] = useState<CalendarMonthRef>(feedWindow.first);
-  const months = listCalendarMonths(
-    firstMonth,
-    calendarMonthIndex(feedWindow.last) - calendarMonthIndex(firstMonth) + 1,
-  );
+  // Верх range-ленты не растёт никогда: колесо зажато по «сегодня», верх
+  // окна — на два месяца позже (приглушённый контекст).
+  const [topIdx] = useState(() => calendarMonthIndex(feedWindow.top));
+  const [monthsCount, setMonthsCount] = useState(feedWindow.count);
+  const months = listCalendarMonthsDescending(calendarMonthOfIndex(topIdx), monthsCount);
   const todayIdx = calendarMonthIndex(calendarMonthOf(today));
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  // Темп прокрутки для скоростно-зависимого prepend (flingChunks).
-  const lastRangeScrollRef = useRef<{ st: number; t: number } | null>(null);
-  // Гейт приписки (план 050, дотянут до range планом 051): одна порция в
-  // полёте — скролл-события кадра не складываются в один коммит.
-  const [rangePrependGate] = useState(createPrependGate);
-  // Компенсация prepend (планы 051→052): дельта = сумма точных высот новых
-  // строк, запись scrollTop до пейнта.
-  const rangePrependDelta = useRef<number | null>(null);
   // Месяц прыжка чипа за окном ленты — скролл после рендера нового окна.
   const pendingJumpIndex = useRef<number | null>(null);
   // Первый рендер — сразу к месяцу конца применённого диапазона.
@@ -951,8 +813,8 @@ export function CalendarRangePicker({
     );
     const column = Math.min(Number.isFinite(columnToken) ? columnToken : 560, window.innerWidth);
     const anchorIdx =
-      calendarMonthIndex(calendarMonthOf(value !== null ? value.to : today))
-      - calendarMonthIndex(feedWindow.first);
+      calendarMonthIndex(feedWindow.top)
+      - calendarMonthIndex(calendarMonthOf(value !== null ? value.to : today));
     return rowOffset(
       calendarMonthRowHeights(months.slice(0, Math.max(anchorIdx, 0)), column),
       Math.max(anchorIdx, 0),
@@ -973,9 +835,11 @@ export function CalendarRangePicker({
   // Первый рендер — сразу к месяцу конца применённого диапазона (без
   // выбора #670 — к текущему): scrollTop = сумма точных высот, месяц ровно
   // под верхней кромкой (план 052 — дрейф оценок открытия устранён).
+  // Clamp дна невозможен (план 053): якорь в верхней части окна, под ним
+  // ≥ стартовый запас месяцев.
   const rangeAnchorIdx =
-    calendarMonthIndex(calendarMonthOf(shown !== null ? shown.to : today))
-    - calendarMonthIndex(firstMonth);
+    topIdx
+    - calendarMonthIndex(calendarMonthOf(shown !== null ? shown.to : today));
   useIsomorphicLayoutEffect(() => {
     if (scrolledRef.current || columnWidth === null) {
       return;
@@ -997,7 +861,7 @@ export function CalendarRangePicker({
     if (columnWidth === null) {
       return;
     }
-    const rangeTargetIndex = jump - calendarMonthIndex(firstMonth);
+    const rangeTargetIndex = topIdx - jump;
     let rangeGuardFrames = 0;
     let rangeGuardTimer = 0;
     const rangeGuard = (): void => {
@@ -1014,117 +878,44 @@ export function CalendarRangePicker({
     virtualizer.scrollToIndex(rangeTargetIndex, { align: 'start' });
     rangeGuardTimer = window.setTimeout(rangeGuard, 16);
     return () => window.clearTimeout(rangeGuardTimer);
-  }, [columnWidth, firstMonth, rangeRowHeights, virtualizer]);
+  }, [monthsCount, topIdx, columnWidth, rangeRowHeights, virtualizer]);
 
-  // Приписка доехала до DOM — гейт открывает следующий запрос (план 050).
-  useEffect(() => {
-    rangePrependGate.settled();
-  }, [firstMonth, rangePrependGate]);
-
-  // Компенсация prepend (планы 051→052): до пейнта возвращаем позицию,
-  // сдвинутую вставкой порции, — дельта точных высот новых строк.
-  useIsomorphicLayoutEffect(() => {
-    const delta = rangePrependDelta.current;
-    rangePrependDelta.current = null;
-    const list = scrollRef.current;
-    if (delta === null || list === null) {
-      return;
-    }
-    virtualizer.scrollToOffset(list.scrollTop + delta);
-  }, [firstMonth, virtualizer]);
-
-  // Отложенная приписка моментум-окна (план 052) — повтор в тишине.
-  const deferredPrependTimer = useRef<number | null>(null);
-
-  const requestPrepend = (
-    previous: { st: number; t: number } | null,
-    now: number,
-    st: number,
-  ): void => {
-    const chunks = flingChunks(previous, now, st, FEED_CHUNK_PX);
-    const portion = rangePrependGate.request(chunks);
-    if (portion === null) {
-      return;
-    }
-    const newCount = RANGE_PREPEND_CHUNK * portion;
-    const newFirst = calendarMonthOfIndex(calendarMonthIndex(firstMonth) - newCount);
-    // Дельта — смещение первой старой строки в новом окне (последняя
-    // новая строка уже несёт свой межстрочный отступ), план 052.
-    rangePrependDelta.current = rowOffset(
-      calendarMonthRowHeights(
-        listCalendarMonths(
-          newFirst,
-          calendarMonthIndex(feedWindow.last) - calendarMonthIndex(newFirst) + 1,
-        ),
-        columnWidth,
-      ),
-      newCount,
-    );
-    setFirstMonth(newFirst);
-  };
-
-  const scheduleDeferredPrepend = (): void => {
-    if (deferredPrependTimer.current !== null) {
-      return;
-    }
-    deferredPrependTimer.current = window.setTimeout(() => {
-      deferredPrependTimer.current = null;
-      const container = scrollRef.current;
-      if (container === null || container.scrollTop > RANGE_PREPEND_THRESHOLD_PX) {
-        return;
-      }
-      const now = performance.now();
-      const previous = lastRangeScrollRef.current;
-      lastRangeScrollRef.current = { st: container.scrollTop, t: now };
-      if (shouldDeferPrepend(previous, now, container.scrollTop)) {
-        scheduleDeferredPrepend();
-        return;
-      }
-      requestPrepend(previous, now, container.scrollTop);
-    }, DEFER_RETRY_MS);
-  };
-  useEffect(
-    () => () => {
-      if (deferredPrependTimer.current !== null) {
-        window.clearTimeout(deferredPrependTimer.current);
-      }
-    },
-    [],
-  );
-
+  // Дорисовка истории — append вниз у нижнего края (план 053): строки
+  // добавляются за вьюпорт, ни одна существующая не сдвигается, записей
+  // в скролл не существует — класс prepend-багов 042-052 (стена →
+  // компенсация прыжком, зависания в моментуме) снят архитектурно
+  // вместе с гейтом 050 и моментум-окном 052.
   const handleScroll = (): void => {
     const container = scrollRef.current;
     if (container === null) {
       return;
     }
-    const now = performance.now();
-    const previous = lastRangeScrollRef.current;
-    lastRangeScrollRef.current = { st: container.scrollTop, t: now };
-    if (container.scrollTop > RANGE_PREPEND_THRESHOLD_PX) {
+    if (
+      container.scrollTop + container.clientHeight
+      < container.scrollHeight - APPEND_THRESHOLD_PX
+    ) {
       return;
     }
-    // Моментум-окно (план 052, решение владельца): на высокой скорости DOM
-    // не трогается — приписка откладывается и доезжает в тишине.
-    if (shouldDeferPrepend(previous, now, container.scrollTop)) {
-      scheduleDeferredPrepend();
-      return;
-    }
-    requestPrepend(previous, now, container.scrollTop);
+    setMonthsCount((count) => count + CALENDAR_FEED_APPEND_CHUNK);
   };
 
-  /** Прыжок по чипу: месяц окна — скроллом по точным высотам; глубже окна
-   * — перенос окна к цели целиком (виртуализатор, план 052) и скролл
-   * после рендера. */
+  /** Прыжок по чипу: месяц окна — скроллом по точным высотам (в убывании
+   * relative = topIdx − targetIdx); глубже дна — дорисовка append'ом вниз
+   * и скролл после рендера. Выше верха колесо не предложит (зажим по
+   * «сегодня», верх окна — на два месяца позже). */
   const jumpTo = (year: number, month0: number): void => {
     const targetIdx = calendarMonthIndex({ year, month0 });
-    if (targetIdx >= calendarMonthIndex(firstMonth)) {
-      virtualizer.scrollToIndex(targetIdx - calendarMonthIndex(firstMonth), {
-        align: 'start',
-      });
+    const relative = topIdx - targetIdx;
+    if (relative >= 0 && relative < monthsCount) {
+      virtualizer.scrollToIndex(relative, { align: 'start' });
+      return;
+    }
+    if (relative < 0) {
+      virtualizer.scrollToIndex(0, { align: 'start' });
       return;
     }
     pendingJumpIndex.current = targetIdx;
-    setFirstMonth(calendarMonthOfIndex(targetIdx - RANGE_FEED_BACKWARD_SEED));
+    setMonthsCount(relative + RANGE_FEED_BACKWARD_SEED + 1);
   };
 
   // Escape закрывает пикер; при открытом шите месяца его Esc обрабатывает
@@ -1198,13 +989,12 @@ export function CalendarRangePicker({
         </div>
       </div>
 
-      {/* Виртуальная лента (план 052): спейсер — колонка контента, строки
-          позиционированы абсолютно, в DOM только видимое окно + overscan;
-          строки не монтируются до замера колонки — первый кадр уже с
-          точным якорем. Позицию при приписке держит компенсация до
-          пейнта; [overflow-anchor:none] держит одну компенсацию (нашу) на
-          всех движках — нативного scroll anchoring в WebKit нет до
-          Safari 27. */}
+      {/* Виртуальная лента (план 052, по убыванию — план 053): спейсер —
+          колонка контента, строки позиционированы абсолютно, в DOM только
+          видимое окно + overscan; строки не монтируются до замера колонки —
+          первый кадр уже с точным якорем. Дорисовка истории — append ниже
+          вьюпорта: позиция не пишется вовсе, [overflow-anchor:none]
+          оставлен как страховка от нативной компенсации Chromium. */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -1230,7 +1020,10 @@ export function CalendarRangePicker({
                   className="absolute left-0 w-full"
                   style={{
                     transform: `translateY(${row.start}px)`,
-                    paddingBottom: row.index === months.length - 1 ? 0 : 32,
+                    // Отступ у каждой строки (план 053): append вниз
+                    // сохраняет офсеты существующих строк только при
+                    // равномерных высотах.
+                    paddingBottom: 32,
                   }}
                 >
                   <section className={cn(future && 'opacity-50')}>

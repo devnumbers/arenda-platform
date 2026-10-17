@@ -32,8 +32,8 @@ describe('calendar: геометрия блока месяца (план 051)', 
   });
 });
 
-describe('calendar: высоты виртуальных строк (план 052)', () => {
-  it('высоты строк: межстрочный отступ 32 у всех, кроме последней', () => {
+describe('calendar: высоты виртуальных строк (план 052; отступ у всех — план 053)', () => {
+  it('высоты строк: межстрочный отступ 32 у каждой строки', () => {
     const heights = calendarMonthRowHeights(
       [
         { year: 2026, month0: 7 },
@@ -46,8 +46,10 @@ describe('calendar: высоты виртуальных строк (план 052
     const fiveRows = calendarMonthIntrinsicPx({ rows: 5, columnWidth: 390 });
     expect(heights[0]).toBeCloseTo(sixRows + 32, 1);
     expect(heights[1]).toBeCloseTo(fiveRows + 32, 1);
-    // Последняя строка ленты — без отступа (хвост даёт паддинг контейнера)
-    expect(heights[2]).toBeCloseTo(fiveRows, 1);
+    // Отступ у всех, включая последнюю: при append'е бывшая последняя
+    // строка обязана сохранить свой отступ, иначе новые строки поедут
+    // на 32px выше суммы высот. Хвостовой отступ растворяется в FEED_TAIL.
+    expect(heights[2]).toBeCloseTo(fiveRows + 32, 1);
   });
 
   it('rowOffset: смещение строки = сумма предыдущих высот', () => {
@@ -58,32 +60,31 @@ describe('calendar: высоты виртуальных строк (план 052
     expect(rowOffset(heights, 5)).toBe(352);
   });
 
-  it('prepend: каждая старая строка сдвигается ровно на дельту', () => {
+  it('append (план 053): дорисовка вниз не двигает существующие строки', () => {
     const width = 390;
     const oldMonths = [
       { year: 2026, month0: 7 },
       { year: 2026, month0: 8 },
     ];
     const newMonths = [
-      { year: 2026, month0: 4 },
-      { year: 2026, month0: 5 },
-      { year: 2026, month0: 6 },
       ...oldMonths,
+      { year: 2026, month0: 9 },
+      { year: 2026, month0: 10 },
+      { year: 2026, month0: 11 },
     ];
     const oldHeights = calendarMonthRowHeights(oldMonths, width);
     const newHeights = calendarMonthRowHeights(newMonths, width);
-    const prepended = newMonths.length - oldMonths.length;
-    // Дельта — смещение первой старой строки в новом окне: сумма высот
-    // новых строк, где последняя уже несёт свой отступ (за ней старые).
-    const delta = rowOffset(newHeights, prepended);
+    // Смещение верхней кромки каждой существующей строки неизменно:
+    // история растёт только ниже, позицию хранить нечем и не нужно —
+    // записей в скролл не существует (план 053).
     for (let i = 0; i < oldMonths.length; i += 1) {
-      const before = rowOffset(oldHeights, i);
-      const after = rowOffset(newHeights, prepended + i);
-      expect(after - before).toBeCloseTo(delta, 1);
+      expect(rowOffset(newHeights, i)).toBeCloseTo(rowOffset(oldHeights, i), 1);
     }
-    // Последняя новая строка несёт отступ (за ней старые) — дельта
-    // включает его, иначе компенсация недосчитает 32px на приписку.
-    const [h0, h1, h2] = newHeights;
-    expect(delta).toBeCloseTo((h0 ?? 0) + (h1 ?? 0) + (h2 ?? 0), 1);
+    // Новые строки продолжаются ровно с итога старых высот (у бывшей
+    // последней теперь есть её отступ — верх при этом не уехал).
+    expect(rowOffset(newHeights, oldMonths.length)).toBeCloseTo(
+      rowOffset(oldHeights, oldMonths.length),
+      1,
+    );
   });
 });

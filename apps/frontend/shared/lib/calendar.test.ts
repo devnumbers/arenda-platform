@@ -22,6 +22,7 @@ import {
   isoYear,
   lastDayOfMonth,
   listCalendarMonths,
+  listCalendarMonthsDescending,
   booleanRunSegments,
   calendarDayDisabled,
   calendarPastFloor,
@@ -130,6 +131,16 @@ describe('calendar: месяцы ленты', () => {
     expect(listCalendarMonths({ year: 2026, month0: 7 }, 0)).toEqual([]);
   });
 
+  it('лента по убыванию (план 053): индекс 0 — верхний месяц, вниз через границу года', () => {
+    expect(listCalendarMonthsDescending({ year: 2026, month0: 1 }, 4)).toEqual([
+      { year: 2026, month0: 1 },
+      { year: 2026, month0: 0 },
+      { year: 2025, month0: 11 },
+      { year: 2025, month0: 10 },
+    ]);
+    expect(listCalendarMonthsDescending({ year: 2026, month0: 7 }, 0)).toEqual([]);
+  });
+
   it('старт ленты — самый ранний из «сегодня» и значения (якорь правки #502)', () => {
     const today = '2026-09-04';
     expect(calendarFeedStart(today, null)).toEqual({ year: 2026, month0: 8 });
@@ -206,25 +217,25 @@ describe('calendar: выбор диапазона (пикер периода о�
   });
 });
 
-describe('calendar: окно ленты пикера диапазона', () => {
+describe('calendar: окно ленты пикера диапазона (план 053 — верх фиксирован, счётчик вниз)', () => {
   it('свежий период — от стартового запаса назад до 2 месяцев вперёд от текущего', () => {
     expect(rangeFeedWindow({ from: '2026-09-01', to: '2026-09-30' }, '2026-09-19')).toEqual({
-      first: { year: 2025, month0: 9 },
-      last: { year: 2026, month0: 10 },
+      top: { year: 2026, month0: 10 },
+      count: 14,
     });
   });
 
-  it('глубокий период — старт от его начала минус месяц (глубже дорисуется скроллом)', () => {
+  it('глубокий период — низ от его начала минус месяц (глубже дорисуется append\'ом)', () => {
     expect(rangeFeedWindow({ from: '2024-03-10', to: '2024-03-25' }, '2026-09-19')).toEqual({
-      first: { year: 2024, month0: 1 },
-      last: { year: 2026, month0: 10 },
+      top: { year: 2026, month0: 10 },
+      count: 34,
     });
   });
 
   it('пустой выбор (#670) — контекст стартового запаса назад, преселекта нет', () => {
     expect(rangeFeedWindow(null, '2026-09-19')).toEqual({
-      first: { year: 2025, month0: 9 },
-      last: { year: 2026, month0: 10 },
+      top: { year: 2026, month0: 10 },
+      count: 14,
     });
   });
 });
@@ -395,16 +406,17 @@ describe('calendar: «сегодня» в поясе профиля (#1394)', ()
   });
 });
 
-describe('calendar: окно ленты одиночного пикера (решение 13.10, #1394; seed 12 — план 051)', () => {
+describe('calendar: окно ленты одиночного пикера (план 053 — верх фиксирован, история вниз)', () => {
   const october2026: CalendarMonthRef = { year: 2026, month0: 9 };
 
-  it('стартует стартовым запасом раньше старта — позиция открытия выше порога приписки', () => {
+  it('жёсткий край (maxDate) — верх у приглушённого контекста, низ за запасом до якоря', () => {
     const window = calendarSingleFeedWindow({
       feedStart: october2026,
       anchorMonth: october2026,
+      todayMonth: october2026,
       maxDate: '2026-10-13',
     });
-    expect(window.first).toEqual({ year: 2025, month0: 9 });
+    expect(window.top).toEqual({ year: 2026, month0: 11 });
     expect(window.forwardEdge).toEqual({ year: 2026, month0: 11 });
     expect(window.count).toBe(15);
   });
@@ -413,32 +425,35 @@ describe('calendar: окно ленты одиночного пикера (ре�
     const window = calendarSingleFeedWindow({
       feedStart: { year: 2024, month0: 0 },
       anchorMonth: { year: 2024, month0: 3 },
+      todayMonth: october2026,
       maxDate: '2026-10-13',
     });
-    expect(window.first).toEqual({ year: 2023, month0: 0 });
+    expect(window.top).toEqual({ year: 2026, month0: 11 });
     expect(window.forwardEdge).toEqual({ year: 2026, month0: 11 });
     expect(window.count).toBe(48);
   });
 
-  it('открытое будущее (maxDate не задан) — края нет, лента годом от якоря', () => {
+  it('открытое будущее (maxDate не задан) — верх на год позже позднего из якоря и «сегодня»', () => {
     const window = calendarSingleFeedWindow({
       feedStart: october2026,
       anchorMonth: october2026,
+      todayMonth: october2026,
       maxDate: undefined,
     });
-    expect(window.first).toEqual({ year: 2025, month0: 9 });
+    expect(window.top).toEqual({ year: 2027, month0: 9 });
     expect(window.forwardEdge).toBeNull();
-    expect(window.count).toBe(13);
+    expect(window.count).toBe(25);
   });
 
-  it('якорь-значение в прошлом (правка #502) тоже получает содержимое выше', () => {
+  it('открытое будущее при якоре-значении в прошлом (правка #502): верх ведёт от «сегодня» — путь якорь→сегодня прокручивается', () => {
     const window = calendarSingleFeedWindow({
       feedStart: { year: 2020, month0: 2 },
       anchorMonth: { year: 2020, month0: 2 },
+      todayMonth: october2026,
       maxDate: undefined,
     });
-    expect(window.first).toEqual({ year: 2019, month0: 2 });
+    expect(window.top).toEqual({ year: 2027, month0: 9 });
     expect(window.forwardEdge).toBeNull();
-    expect(window.count).toBe(13);
+    expect(window.count).toBe(104);
   });
 });
