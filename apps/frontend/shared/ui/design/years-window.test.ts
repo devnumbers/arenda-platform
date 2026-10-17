@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { WHEEL_NEAR_EDGE_ROWS } from './wheel-edge';
+import { WHEEL_MAX_FLING_ROWS, WHEEL_NEAR_EDGE_ROWS } from './wheel-edge';
 import {
   YEARS_BACKWARD_EXTENSION,
   YEARS_EXTENSION,
+  YEARS_INITIAL_BACKWARD_SEED,
   initialYearsWindow,
 } from './years-window';
 
@@ -18,6 +19,28 @@ describe('константы удлинения ленты годов', () => {
     // ещё, и так по кругу без всякого скролла. Шаг 400 выносит позицию
     // за пределы зоны и за пределы максимального флика (~54 ряда).
     expect(YEARS_BACKWARD_EXTENSION).toBeGreaterThan(WHEEL_NEAR_EDGE_ROWS);
+  });
+});
+
+describe('стартовый посев назад — физика флика, не круглый запас (план 048)', () => {
+  it('сид = зона триггера + максимальный флик (134, вывод из wheel-edge)', () => {
+    expect(YEARS_INITIAL_BACKWARD_SEED).toBe(
+      WHEEL_NEAR_EDGE_ROWS + WHEEL_MAX_FLING_ROWS,
+    );
+  });
+
+  it('первый жёсткий флик назад (≤54 ряда) не достаёт до стены', () => {
+    expect(YEARS_INITIAL_BACKWARD_SEED).toBeGreaterThan(WHEEL_MAX_FLING_ROWS);
+  });
+
+  it('зона триггера входит по пути первого флика — доращивание стартует', () => {
+    expect(YEARS_INITIAL_BACKWARD_SEED - WHEEL_MAX_FLING_ROWS).toBeLessThanOrEqual(
+      WHEEL_NEAR_EDGE_ROWS,
+    );
+  });
+
+  it('шаг доращивания больше сида: после компенсации колесо вынесено из зоны', () => {
+    expect(YEARS_BACKWARD_EXTENSION).toBeGreaterThan(YEARS_INITIAL_BACKWARD_SEED);
   });
 });
 

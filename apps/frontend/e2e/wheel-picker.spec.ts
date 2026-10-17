@@ -137,9 +137,10 @@ test.describe('WheelPicker: край ленты недостижим одним 
         return drawer === null ? '' : getComputedStyle(drawer).transform;
       }), { timeout: 5_000 })
       .toBe('none');
-    // Стена в прошлом сеется сразу на 400 лет: первый же флик назад
-    // встречает глубокую ленту, а не «выбранный − 3» (2023).
-    const seededFloor = 2026 - 400;
+    // Стена в прошлом сеется на глубину первого флика (134 = зона 80 +
+    // макс. флик 54, план 048 — посев 400 открывал шит секунду), первый
+    // же флик назад встречает ленту, а не «выбранный − 3» (2023).
+    const seededFloor = 2026 - 134;
     await expect(yearList.locator('li').first()).toHaveText(String(seededFloor));
     const box = await yearList.boundingBox();
     if (box === null) {

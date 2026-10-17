@@ -15,7 +15,12 @@ import {
   WheelPickerSheet,
   type WheelPickerSheetAction,
 } from './wheel-picker-sheet';
-import { initialYearsWindow, YEARS_BACKWARD_EXTENSION, YEARS_EXTENSION } from './years-window';
+import {
+  initialYearsWindow,
+  YEARS_BACKWARD_EXTENSION,
+  YEARS_EXTENSION,
+  YEARS_INITIAL_BACKWARD_SEED,
+} from './years-window';
 
 /** Шит выбора месяца и года двумя колёсами (Figma 848:8720, редизайн
  * 2026-09-04 на общий WheelPickerSheet по Figma 1539-82659). Колёса меняют
@@ -30,9 +35,9 @@ import { initialYearsWindow, YEARS_BACKWARD_EXTENSION, YEARS_EXTENSION } from '.
  * владельца 2026-09-04). Годы линейны — ось времени не замыкается; без
  * границ лента идёт от текущего года вперёд без конца
  * (years-window.ts, решение владельца 2026-10-13), с min — от min.year,
- * с max — назад без предела: сеется сразу на 400 лет в прошлое
- * (YEARS_BACKWARD_EXTENSION), у края достраивается в паузе (onNearStart;
- * история операций).
+ * с max — назад без предела: стартовый посев на глубину первого флика
+ * (YEARS_INITIAL_BACKWARD_SEED, план 048), у края достраивается в паузе
+ * по 400 (onNearStart; история операций).
  * Черновик живёт, пока шит смонтирован: при open=false шит не рендерится. */
 export type MonthYearPickerProps = {
   readonly open: boolean;
@@ -105,13 +110,17 @@ function MonthYearSheet({
   const [draftYear, setDraftYear] = useState(year);
   // Лента годов линейна и тянется за края без границы (решение владельца
   // 2026-10-13): с min — от min.year с удлинением вперёд (onNearEnd);
-  // с max — от окна вокруг выбранного назад без предела: сеется сразу на
-  // 400 лет в прошлое, чтобы первый же флик назад не встречал стены
-  // (YEARS_BACKWARD_EXTENSION); без границ — от текущего года вперёд
-  // (years-window.ts), назад лента не растёт.
+  // с max — от окна вокруг выбранного назад без предела: стартовый посев
+  // на глубину первого флика (YEARS_INITIAL_BACKWARD_SEED — план 048:
+  // посев 400 монтировал 401 анимированный ряд и открывал шит секунду),
+  // у края достройка в паузе по 400 (YEARS_BACKWARD_EXTENSION); без
+  // границ — от текущего года вперёд (years-window.ts), назад лента
+  // не растёт.
   const currentYear = new Date().getFullYear();
   const yearsWindow = initialYearsWindow(year, currentYear);
-  const [yearsStart, setYearsStart] = useState(() => year - YEARS_BACKWARD_EXTENSION);
+  const [yearsStart, setYearsStart] = useState(
+    () => year - YEARS_INITIAL_BACKWARD_SEED,
+  );
   const [yearsEnd, setYearsEnd] = useState(yearsWindow.end);
   const startYear = min?.year ?? (max !== undefined ? yearsStart : yearsWindow.start);
   const endYear = max?.year ?? yearsEnd;

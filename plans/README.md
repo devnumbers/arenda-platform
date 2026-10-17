@@ -655,6 +655,7 @@ feel-check на пересобранном стеке): push-back фона мо�
 | 045 | [Снос теневых loading.tsx хабов](045-hub-loading-shadow-sweep.md) | MEDIUM | DONE |
 | 046 | [Хром ПК под поверхностью; колесо без пресса](046-desktop-chrome-under-surface.md) | HIGH | DONE |
 | 047 | [Хром над поверхностью возвращён; модалка — точечно](047-chrome-over-surface-modal-drop.md) | HIGH | DONE |
+| 048 | [Колесо годов: посев по физике флика](048-year-wheel-seed.md) | MEDIUM | DONE |
 
 ## Порядок исполнения
 
