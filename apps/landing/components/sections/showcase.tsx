@@ -25,11 +25,13 @@ import avatarHouse from "@/assets/sections/carousel-avatar-house.webp";
 import arrowRight from "@/assets/icons/icon-arrow-right-small.svg";
 import s from "./showcase.module.css";
 
-// «Создайте карточку своей недвижимости» — макеты 2967-75653 (ПК),
-// 3005-78445 (планшет), 3008-79114 (мобила) + аннотация владельца:
+// «Создайте карточку своей недвижимости» — кадры 2993-77855 (ПК),
+// 3005-78910 (планшет), 3009-79717 (мобилка) + аннотация владельца:
 // бесконечная прокрутка, Shift+Scroll, drag мышью, клик по боковой
 // картинке или плашке приводит её к центру, плашка к центру
-// увеличивается, боковые уменьшены до 80% (мобила = планшет × 0.6).
+// увеличивается, боковая карточка — ширина центральной при высоте ×0.8.
+// Белые градиентные шторки сохранены (кадр «Без белых градиентов» —
+// демонстрация состава ленты, решение владельца 16.10).
 //
 // Механика движения — по замерам лент Яндекса (Swiper speed 360 на
 // pay.yandex.ru/business, октябрь 2026): единственная непрерывная позиция
@@ -55,7 +57,10 @@ import s from "./showcase.module.css";
 // движении (класс .morphing от render()) CSS-переменные коллапсируются
 // в центральную раскладку, а разница состояний уезжает в translate3d +
 // scale(sx, sy) узлов (математика — showcase-flip.ts, тождество с
-// k-раскладкой проверено пробойником до точности записи строк). Кадр
+// k-раскладкой проверено пробойником до точности записи строк). Фото в
+// движении несёт собственный cover-масштаб текущего (k-интерполированного)
+// бокса — кроп меняется при прокрутке непрерывно и по центру, как у
+// прежней CSS-раскладки, без щелчка на посадке. Кадр
 // движения не пересчитывает лэйаут — рендер только пишет трансформы,
 // композитор двигает готовые слои. Высоты обоих рядов зафиксированы
 // (var(--h) / var(--plate-h)), поэтому контент под каруселью не двигается
@@ -69,6 +74,12 @@ type Card = {
   address: string;
   photo: StaticImageData;
   avatar: StaticImageData;
+  // Хинт ширины — по самому широкому cover-рендеру карточки на ярусе, а
+  // не по CSS-боксу: cover зумит широкие исходники (дом 1200×454 в
+  // боксе 1.25 растягивается до 1057 CSS px) — заниженный хинт давал
+  // мобильным телефонам с высоким DPR апскейл и мыло (решение владельца
+  // 16.10, «фото в наилучшем качестве»).
+  sizes: string;
   specs: readonly Spec[];
 };
 
@@ -79,6 +90,7 @@ const CARDS: readonly Card[] = [
     address: "Краснодар, улица Гагарина",
     photo: house,
     avatar: avatarHouse,
+    sizes: "(min-width: 481px) 1057px, 640px",
     specs: [
       ["Площадь участка", "3 сотки"],
       ["Тип участка", "Садовый"],
@@ -94,6 +106,7 @@ const CARDS: readonly Card[] = [
     address: "Коломна, улица Пионерская",
     photo: warehouse,
     avatar: warehouse,
+    sizes: "(min-width: 1200px) 1000px, (min-width: 481px) 540px, 320px",
     specs: [
       ["Общая площадь", "150 м²"],
       ["Вход", "Отдельный"],
@@ -106,6 +119,7 @@ const CARDS: readonly Card[] = [
     address: "Москва, улица Ленина",
     photo: flat,
     avatar: flat,
+    sizes: "(min-width: 1200px) 1000px, (min-width: 481px) 600px, 360px",
     specs: [
       ["Общая площадь", "45,5 м²"],
       ["Жилая площадь", "30,2 м²"],
@@ -124,6 +138,7 @@ const CARDS: readonly Card[] = [
     address: "Екатеринбург, улица Гоголя",
     photo: room,
     avatar: room,
+    sizes: "(min-width: 1200px) 1000px, (min-width: 481px) 600px, 360px",
     specs: [
       ["Площадь комнаты", "20 м²"],
       ["Этаж", "7 из 10"],
@@ -140,6 +155,7 @@ const CARDS: readonly Card[] = [
     address: "Санкт-Петербург, Кирпичный переулок",
     photo: shop,
     avatar: shop,
+    sizes: "(min-width: 1200px) 1000px, (min-width: 481px) 640px, 380px",
     specs: [
       ["Общая площадь", "89,5 м²"],
       ["Тип здания", "Торговый центр"],
@@ -155,6 +171,13 @@ const COPIES = 3;
 const G = N * COPIES; // узлов в ленте
 const INITIAL = N + 2; // «2-комнатная на Ленина»: средняя копия (слайды N..2N−1), карта 2
 const STEP_MS = 360; // длительность любого перехода — как у Яндекса (замер)
+
+// Внутренние размеры источников — для покадрового cover-масштаба фото в
+// движении (photoImageTransforms); известны синхронно из импорта ассета.
+const PHOTO_DIMS: ReadonlyArray<{ w: number; h: number }> = CARDS.map((card) => ({
+  w: card.photo.width,
+  h: card.photo.height,
+}));
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -187,9 +210,9 @@ type EngineState = {
   // зоны): render() читает только её — ни одного clientWidth в кадре,
   // записи прошлого кадра не форсируют sync-layout (research #1504).
   flip: FlipModel;
-  // <img> фотокарточек (собранные один раз из slideNodes): на
-  // анизотропных ярусах несут собственный масштаб-компенсат
-  // (photoImageTransforms — сет-итог (1,1), кадр без искажений).
+  // <img> фотокарточек (собранные один раз из slideNodes): в движении
+  // несут собственный cover-масштаб текущего k-бокса
+  // (photoImageTransforms — точный cover, без щелчка на посадке).
   imgNodes: Array<HTMLImageElement | null>;
   anim: { from: number; to: number; t0: number; dur: number } | null;
   raf: number;
@@ -274,7 +297,7 @@ export function Showcase() {
       // переменных в CSS), разница размеров — в трансформах узлов.
       // --k не пишется: под .morphing он ни на что не влияет.
       const photoT = photoNodeTransforms(flip, k);
-      const imgT = photoImageTransforms(flip, k);
+      const imgT = photoImageTransforms(flip, k, PHOTO_DIMS);
       const glassT = photoGlassTransforms(flip, k);
       const plateT = plateNodeTransforms(flip, k);
       for (let g = 0; g < G; g += 1) {
@@ -719,7 +742,7 @@ export function Showcase() {
                             fill
                             draggable={false}
                             loading={near ? "eager" : "lazy"}
-                            sizes="(min-width: 1200px) 1000px, (min-width: 481px) 500px, 300px"
+                            sizes={card.sizes}
                             className={s.slidePhoto}
                           />
                           <div
