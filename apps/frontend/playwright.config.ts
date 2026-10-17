@@ -50,5 +50,33 @@ export default defineConfig({
       name: 'mobile-chromium',
       use: { ...devices['Pixel 7'] },
     },
+    {
+      // Движковый замок (план 049): WebKit — движок телефона владельца,
+      // и семьи багов позиции колеса ловились на нём трижды (#1429 —
+      // реснап промахивается при перекройке месяцев; план 042 — Safari
+      // без scroll-anchoring; план 049 — реснапа нет вовсе после
+      // доращивки, коррекция после пейнта). На Chromium это не
+      // воспроизводится никогда. Скоуп узкий — только колесные спеки; в
+      // дефолтный прогон не входит (E2E_PROJECT, как mobile-chromium):
+      // E2E_PROJECT=webkit make frontend-e2e \
+      //   TESTS="e2e/wheel-picker.spec.ts e2e/payments-wizard.spec.ts"
+      name: 'webkit',
+      testMatch: /(wheel-picker|payments-wizard)\.spec\.ts$/,
+      // Десктопный Safari: mouse.wheel (флик в спеках) в мобильном WebKit
+      // Playwright не поддержан вовсе; движок тот же, мобильные вьюпорты
+      // нужные спеки ставят сами (setViewportSize). Вьюпорт как у
+      // дефолтного chromium (1280×720), чтобы тиры/layout совпадали.
+      // Полисы CSP в этом прогоне без upgrade-insecure-requests — раннер
+      // стартует фронт с E2E_OMIT_UPGRADE_INSECURE=1 (webkit эскалирует
+      // по директиве ВСЕ http-подресурсы на https и остаётся без
+      // CSS/JS; на https-проде директива инертна, Chromium localhost не
+      // эскалирует). webkit-прогон — замок поведения колеса, не
+      // CSP-комплаенс (он живёт на chromium): прогон эмулирует
+      // https-контекст прод-страницы.
+      use: {
+        ...devices['Desktop Safari'],
+        viewport: { width: 1280, height: 720 },
+      },
+    },
   ],
 });

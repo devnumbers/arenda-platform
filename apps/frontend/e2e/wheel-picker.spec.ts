@@ -174,6 +174,67 @@ test.describe('WheelPicker: край ленты недостижим одним 
       )
       .toBeLessThan(seededFloor);
   });
+
+  test('доращивка назад не уезжает с закоммиченного года ни в одном кадре (план 049)', async ({ page }) => {
+    // Репро 17.10 (WebKit, движок телефона владельца): после приписки
+    // рядов сверху позиция держалась на «реснапе до пейнта», которого
+    // в WebKit нет — в полосе ~13 кадров висел год на 400 раньше
+    // закоммиченного, затем коррекция катила роллом через века. Проба
+    // журналит закрашиваемое состояние (ряд в полосе + длина ленты) и
+    // требует: в каждом кадре ПОСЛЕ доращивки (лента выросла) год в
+    // полосе — закоммиченный. На Chromium проба зелёная и до фикса
+    // (реснап корректен), ловит она именно WebKit — проект webkit.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(UI_KIT);
+    await page.getByRole('button', { name: 'Июнь, 2026' }).click();
+    const yearList = page.getByRole('listbox', { name: 'Год' });
+    await expect(yearList).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => {
+        const drawer = document.querySelector('[data-vaul-drawer]');
+        return drawer === null ? '' : getComputedStyle(drawer).transform;
+      }), { timeout: 5_000 })
+      .toBe('none');
+    const before = await yearList.locator('li').count();
+    // Журнал закрашиваемых кадров (ряд в полосе, длина ленты).
+    await yearList.evaluate((ul) => {
+      const w = window as unknown as { __bandJournal: Array<{ year: string; rows: number }> };
+      w.__bandJournal = [];
+      const tick = () => {
+        const rows = ul.children.length;
+        const row = Math.round(ul.scrollTop / 48);
+        const li = ul.querySelector(`li[data-index="${row}"]`);
+        w.__bandJournal.push({ year: li?.textContent ?? '?', rows });
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    // Один жёсткий флик назад из зоны посева: settle коммитит смену года
+    // и доращивку одним рендером — тот самый совпадение из репро.
+    const box = await yearList.boundingBox();
+    if (box === null) {
+      throw new Error('колесо годов не найдено');
+    }
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -3000);
+    await wheelStill(page, yearList);
+    // Доращивка доехала: первый ряд ленты уехал в прошлое глубже посева.
+    await expect
+      .poll(async () => await yearList.locator('li').count(), { timeout: 5_000 })
+      .toBeGreaterThan(before);
+    await page.waitForTimeout(400); // хвост коррекций после роста ленты
+    const committed = await yearList.locator('[aria-selected="true"]').textContent();
+    const journal = await page.evaluate(
+      () => (window as unknown as { __bandJournal: Array<{ year: string; rows: number }> })
+        .__bandJournal,
+    );
+    const grown = journal.filter((f) => f.rows > before);
+    // Проба поймала доращивку — иначе ассерт ниже пустой.
+    expect(grown.length).toBeGreaterThan(0);
+    for (const frame of grown) {
+      expect(frame.year, `кадр после доращивки: ${JSON.stringify(frame)}`).toBe(committed);
+    }
+  });
 });
 
 test.describe('WheelPicker: страница под открытым пикером не прокручивается', () => {
@@ -207,6 +268,13 @@ test.describe('WheelPicker: страница под открытым пикер�
   });
 
   test('пикер даты блокирует прокрутку страницы на мобиле (тач-цепочка)', async ({ page }) => {
+    // Свайп гонится CDP-тачем — движок только у Chromium; тач-семантика на
+    // другом движке покрыта живой приёмкой (план 049: webkit-проект —
+    // про позицию колеса, не про тач-цепочку).
+    test.skip(
+      test.info().project.name === 'webkit',
+      'CDP-тач недоступен вне Chromium; webkit-проект гоняет позиционные пробы',
+    );
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(UI_KIT);
     await stickyScroll(page, 2000);

@@ -1,3 +1,4 @@
+import type { CDPSession } from 'playwright-core';
 import {
   calendarMonthSection,
   captureScreen,
@@ -675,9 +676,14 @@ test.describe('визард создания платежа', () => {
     const nextYear = String(new Date().getFullYear() + 1);
     // Троттлинг CPU растягивает рендер перекроенной ленты: гонка реснапа
     // со зажимом о новый максимум на быстрой машине выпадает не каждый
-    // раз, под нагрузкой — почти всегда.
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 8 });
+    // раз, под нагрузкой — почти всегда. CDP есть только у Chromium;
+    // проект webkit (план 049) гоняет замок без множителя — позиция
+    // перекроенной ленты там держится фиксом до пейнта, не гонкой.
+    let cdp: CDPSession | null = null;
+    if (test.info().project.name !== 'webkit') {
+      cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 8 });
+    }
     await yearList.getByText(nextYear, { exact: true }).click();
     for (let cycle = 0; cycle < 4; cycle += 1) {
       await page.waitForTimeout(350);
@@ -686,7 +692,9 @@ test.describe('визард создания платежа', () => {
       await yearList.getByText(nextYear, { exact: true }).click();
     }
     await page.waitForTimeout(800);
-    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    if (cdp !== null) {
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    }
     const centers = await page.evaluate(
       () => (window as unknown as { __mWheel: number[] }).__mWheel,
     );
