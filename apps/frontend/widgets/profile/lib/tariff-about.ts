@@ -92,7 +92,7 @@ export type TariffFeatureRow = {
 
 const OBJECTS_LIMIT_DESCRIPTION = 'Для небольшого портфеля недвижимости';
 const SHARING_DESCRIPTION =
-  'Приглашайте в свои объекты близких и коллег, оплатить подписку нужно только вам';
+  'Приглашайте в свои объекты близких и коллег';
 const HISTORY_DESCRIPTION = 'Отслеживайте любые изменения в объектах';
 
 export function tariffFeatureRows(tariff: Tariff): TariffFeatureRow[] {
