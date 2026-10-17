@@ -319,12 +319,12 @@ test.describe('сквозная жизнь платежа', () => {
     // сносится, долг остаётся ──
     // Глубина 3 дня: «−7» у этого правила занята уже оплаченной просрочкой.
     expect(await execE2eSql(induceOverdue(id1, 3))).toBe('UPDATE 1');
-    // Секция «Просроченные операции» списка несёт лимит 3 строки от старых
+    // Секция «Просроченные платежи» списка несёт лимит 3 строки от старых
     // к новым — сидовые долги старше и вытесняют свежую просрочку правила;
     // строку правила ищем в полном списке просроченных.
     await page.goto(PAYMENTS_URL);
-    await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
-    await page.getByRole('button', { name: 'Открыть просроченные операции' }).click();
+    await expect(page.getByRole('heading', { name: 'Просроченные платежи' })).toBeVisible();
+    await page.getByRole('button', { name: 'Открыть просроченные платежи' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/overdue$`));
     await expect(page.getByText(title1).first()).toBeVisible();
 

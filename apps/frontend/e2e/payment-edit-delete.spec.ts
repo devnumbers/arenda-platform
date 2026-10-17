@@ -578,7 +578,7 @@ test.describe('удаление платежа', () => {
     await expect(page).toHaveURL(new RegExp(`/properties/${STUDIO}/payments$`));
 
     // Долг остался: обе просрочки карточками; правила в списке больше нет.
-    await expect(page.getByText('Просроченные операции')).toBeVisible();
+    await expect(page.getByText('Просроченные платежи')).toBeVisible();
     await expect(page.getByText('Консьерж-сервис')).toHaveCount(2);
   });
 

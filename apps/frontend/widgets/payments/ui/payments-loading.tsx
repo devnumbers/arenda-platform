@@ -147,13 +147,13 @@ export function PaymentsSearchLoading(): JSX.Element {
   );
 }
 
-/** «Просроченные операции»: шапка, чип сортировки (дефолт «Старые»;
+/** «Просроченные платежи»: шапка, чип сортировки (дефолт «Старые»;
  * ?sort=new применит живой экран без сдвига) и строки канона. */
 export function PaymentsOverdueLoading(): JSX.Element {
   return (
     <>
       <TopNav leading={<IconButton icon={<ArrowLeft />} label="Назад" />}>
-        <TopNavTitle title="Просроченные операции" />
+        <TopNavTitle title="Просроченные платежи" />
       </TopNav>
 
       <PageContent>

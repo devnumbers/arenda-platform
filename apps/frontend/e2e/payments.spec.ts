@@ -11,7 +11,7 @@ import {
 } from './fixtures';
 
 // Экран «Платежи объекта» (#463, Figma 1043:57610/1043:62920): три секции —
-// «Просроченные операции / Платежи / Автоплатежи», максимум 3 строки в
+// «Просроченные платежи / Платежи / Автоплатежи», максимум 3 строки в
 // секции, паузные правила видны наравне со всеми — подзаголовком «На паузе»
 // в конце секции (#1353, отмена правила #463), заголовки-стрелки ведут на
 // страницы секций.
@@ -50,7 +50,7 @@ test.describe('экран «Платежи объекта»', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(APARTMENT_PAYMENTS_URL);
 
-    await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Просроченные платежи' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Платежи', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Автоплатежи' })).toBeVisible();
 
@@ -58,7 +58,7 @@ test.describe('экран «Платежи объекта»', () => {
     // протекать в h2 — на узком экране двухстрочный «Просроченные
     // операции» рендерился по центру карточки.
     await expect(
-      page.getByRole('heading', { name: 'Просроченные операции' }),
+      page.getByRole('heading', { name: 'Просроченные платежи' }),
     ).toHaveCSS('text-align', 'left');
 
     // Строки секций считаем по текстам с суммой (заголовок-стрелка —
@@ -195,14 +195,14 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByText('На паузе').first()).toBeVisible();
   });
 
-  test('страница просроченных операций открывает полный список', async ({
+  test('страница просроченных платежей открывает полный список', async ({
     page,
     seededUser,
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(APARTMENT_PAYMENTS_URL);
 
-    await page.getByRole('button', { name: 'Открыть просроченные операции' }).click();
+    await page.getByRole('button', { name: 'Открыть просроченные платежи' }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/overdue$`));
     // Состав строк зависит от параллельных сценариев (гасят сидовые
     // просрочки), проверяем что список непуст: строки операций не
@@ -217,7 +217,7 @@ test.describe('экран «Платежи объекта»', () => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(GARAGE_PAYMENTS_URL);
 
-    await expect(page.getByText('У вас нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
     await expect(
       page.getByText('Напомним, когда нужно будет отметить оплату, вы вручную отметите платеж'),
     ).toBeVisible();
@@ -242,7 +242,7 @@ test.describe('экран «Платежи объекта»', () => {
     await expect(page.getByText('Нет автоплатежей')).toBeVisible();
 
     await page.goto(`${GARAGE_PAYMENTS_URL}/overdue`);
-    await expect(page.getByText('Нет просроченных операций')).toBeVisible();
+    await expect(page.getByText('Нет просроченных платежей')).toBeVisible();
   });
 
   // Якоря — сидовые правила, которые сценарные спеки не мутируют:
@@ -485,7 +485,7 @@ test.describe('экран «Платежи объекта» — десктоп',
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(APARTMENT_PAYMENTS_URL);
 
-    await expect(page.getByRole('heading', { name: 'Просроченные операции' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Просроченные платежи' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Платежи', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
 
