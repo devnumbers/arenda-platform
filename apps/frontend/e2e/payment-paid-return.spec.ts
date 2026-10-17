@@ -13,9 +13,9 @@ import {
 // Возврат после оплаты (#1072, Т4 карты #1068): закрытие success «Платеж
 // оплачен» («Хорошо» и крестик) возвращает на страницу, С КОТОРОЙ перешли
 // к оплате — точки входа прокидывают sanitized ?returnTo= (страница
-// платежа «Оплатить», «Оплатить платеж» аренды); «Посмотреть платеж» по-
-// прежнему ведёт на правило. Правило сценария создаётся визардом на
-// Гараже на Садовой — сидово без платежей, прогон не трогает сидовые
+// платежа «Оплатить», «Оплатить платеж» аренды). Правило сценария
+// создаётся визардом на Гараже на Садовой — сидово без платежей, прогон
+// не трогает сидовые
 // правила квартиры; аренда для второго сценария — API-постом на квартире
 // (инвариант №12: одна незавершённая, переиспользование при retry),
 // уборка возвращает квартиру без аренд — как в payment-rental-gate
@@ -115,7 +115,7 @@ test.describe('возврат на исходную страницу после 
     }
   });
 
-  test('оплата со страницы аренды — крестик возвращает на аренду; «Посмотреть платеж» ведёт на правило', async ({
+  test('оплата со страницы аренды — крестик возвращает на аренду', async ({
     page,
     seededUser,
   }) => {
@@ -162,16 +162,6 @@ test.describe('возврат на исходную страницу после 
       await screenHeader(page).getByRole('button', { name: 'Закрыть' }).click();
       await expect(page).toHaveURL(new RegExp(`${rentalPageUrl}$`));
       await expect(page.getByText('Оплачено', { exact: true })).toBeVisible();
-
-      // ── «Посмотреть платеж» остаётся каноном: success ведёт на правило ──
-      await page.goto(rentalPageUrl);
-      await page.getByRole('button', { name: 'Оплатить платеж' }).click();
-      await expect(page).toHaveURL(operationUrlPattern(APARTMENT));
-      await payFromOperationScreen(page);
-      await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
-      await expect(page).toHaveURL(
-        new RegExp(`/properties/${APARTMENT}/payments/${rentPaymentId}$`),
-      );
     } finally {
       await execE2eSql(`DELETE FROM rentals WHERE id = '${rental.id}'`);
       await execE2eSql(`DELETE FROM operations WHERE payment_id = '${rentPaymentId}'`);

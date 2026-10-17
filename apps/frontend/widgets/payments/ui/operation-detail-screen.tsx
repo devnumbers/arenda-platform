@@ -60,8 +60,8 @@ import {
  * (1444:65733): закрытие («Хорошо»/крестик, #1072) уводит на страницу, С
  * КОТОРОЙ перешли к оплате — sanitized ?returnTo= от точки входа
  * (страница платежа, аренда); без него — на страницу правила, контекст
- * операции. «Посмотреть платеж» ведёт на правило. Смотрящий и архив
- * читают без кнопок. Корзина в шапке (1386:67731) удаляет оплаченные и
+ * операции. Смотрящий и архив читают без кнопок. Корзина в шапке
+ * (1386:67731) удаляет оплаченные и
  * просроченные операции через шторку 1510:77505 — tombstone cancelled
  * стирает факт и долг; плановые и проекции не удаляются.
  *
@@ -143,7 +143,6 @@ export function OperationDetailScreen({
   if (!loading && !failed && operation !== undefined && paidResult !== null) {
     return (
       <OperationPaidSuccess
-        propertyId={propertyId}
         paid={paidResult}
         propertyTitle={property?.name ?? ''}
         onClose={() => {
@@ -552,28 +551,25 @@ function DetailRow({
 }
 
 /** Экран успеха «Платеж оплачен» (1444:65733): иконка категории с зелёной
- * галочкой, подпись «название / сумма за дату / по объекту», кнопки
- * «Хорошо» (закрытие — возврат по решению #1072, onClose решает модель)
- * и «Посмотреть платеж» (страница правила; у ручных фактов правила
- * нет — кнопки тоже). Название — самой оплаченной операции (решение
- * владельца — поправка 08.10 к #1190, #1196): эхо оплаты несёт её
- * снимок, как и деталь после отката живой перезаписи.
+ * галочкой, подпись «название / сумма за дату / по объекту», кнопка
+ * «Хорошо» (закрытие — возврат по решению #1072, onClose решает модель);
+ * «Посмотреть платеж» снята с экрана (решение владельца 17.10) — на
+ * правило и так ведёт плашка «Платеж» в «Данных операции». Название —
+ * самой оплаченной операции (решение владельца — поправка 08.10 к #1190,
+ * #1196): эхо оплаты несёт её снимок, как и деталь после отката живой
+ * перезаписи.
  */
 function OperationPaidSuccess({
-  propertyId,
   paid,
   propertyTitle,
   onClose,
 }: {
-  readonly propertyId: string;
   readonly paid: PaymentOperation;
   readonly propertyTitle: string;
   readonly onClose: () => void;
 }): JSX.Element {
-  const router = useRouter();
   const today = dateToIsoLocal(new Date());
   const paidDate: IsoDate = paid.paidDate ?? today;
-  const paymentId = paid.paymentId;
   const style = categoryStyle('default', paid.categorySlug);
   const Icon = categoryIconComponents[style.icon];
 
@@ -609,15 +605,6 @@ function OperationPaidSuccess({
         <Button className="w-full" onClick={onClose}>
           Хорошо
         </Button>
-        {paymentId !== null && (
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => router.push(ROUTES.propertyPayment(propertyId, paymentId))}
-          >
-            Посмотреть платеж
-          </Button>
-        )}
       </StickyBottomBar>
     </>
   );
