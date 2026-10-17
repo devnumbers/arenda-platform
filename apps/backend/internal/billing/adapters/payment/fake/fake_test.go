@@ -178,6 +178,38 @@ func TestProviderConfirmPaymentFlow(t *testing.T) {
 	if status.Status != domain.PaymentStatusSucceeded {
 		t.Errorf("status: got %q, want %q", status.Status, domain.PaymentStatusSucceeded)
 	}
+	if status.ChargeToken != init.SavedMethod.ChargeToken {
+		t.Errorf("status charge token = %q, want the init token — the GetState carrier of a save-method payment (#1512)",
+			status.ChargeToken)
+	}
+}
+
+// TestProviderInitMerchantPaymentHasNoSavedMethod pins the CC/COF contract
+// (ADR 0017): only a save-method parent payment produces saved credentials —
+// a merchant-initiated payment charges the credentials an earlier
+// customer-initiated payment saved, so it reports none of its own.
+func TestProviderInitMerchantPaymentHasNoSavedMethod(t *testing.T) {
+	t.Parallel()
+	p := NewProvider("http://localhost:8080", discardLogger(), newTestClock(time.Now()), nil)
+	req := validInitRequest(uuid.MustParse("11111111-1111-1111-1111-111111111111"))
+	req.Initiator = application.InitiatorMerchant
+	req.SaveMethod = false
+
+	res, err := p.InitPayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("InitPayment error: %v", err)
+	}
+	if res.SavedMethod != nil {
+		t.Errorf("merchant-initiated init returned %+v, want no saved method", res.SavedMethod)
+	}
+
+	status, err := p.PaymentStatus(context.Background(), req.PaymentID, res.ProviderPaymentID)
+	if err != nil {
+		t.Fatalf("PaymentStatus error: %v", err)
+	}
+	if status.ChargeToken != "" {
+		t.Errorf("merchant payment status charge token = %q, want empty", status.ChargeToken)
+	}
 }
 
 func TestProviderConfirmPaymentFailedFlow(t *testing.T) {

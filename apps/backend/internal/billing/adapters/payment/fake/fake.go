@@ -185,20 +185,31 @@ func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentR
 			"provider_payment_id", entry.event.Payment.ProviderPaymentID,
 			"internal_payment_id", req.PaymentID.String(),
 		)
-		return application.InitPaymentResult{
+		res := application.InitPaymentResult{
 			ProviderPaymentID: entry.event.Payment.ProviderPaymentID,
 			PaymentURL:        p.confirmURL(entry.event.Payment.InternalPaymentID),
 			Status:            domain.PaymentStatusPending,
-			SavedMethod:       &entry.savedMethod,
-		}, nil
+		}
+		if entry.savedMethod.ChargeToken != "" {
+			res.SavedMethod = &entry.savedMethod
+		}
+		return res, nil
 	}
 
 	providerPaymentID := fakeProviderPaymentIDPrefix + uuid.Must(uuid.NewV7()).String()
-	savedMethod := application.SavedMethod{
-		ChargeToken: "fake_token_" + uuid.Must(uuid.NewV7()).String(),
-		CustomerRef: req.CustomerRef,
-		MaskedPan:   fakeMaskedPan,
-		ExpDate:     fakeExpDate,
+	// Only a save-method parent payment produces saved credentials — the
+	// counterpart of the RebillId the real provider issues for the parent CC
+	// of a save-method chain (ADR 0017). A merchant-initiated payment charges
+	// credentials an earlier customer-initiated payment saved; it has none of
+	// its own.
+	var savedMethod application.SavedMethod
+	if req.Initiator == application.InitiatorCustomer && req.SaveMethod {
+		savedMethod = application.SavedMethod{
+			ChargeToken: "fake_token_" + uuid.Must(uuid.NewV7()).String(),
+			CustomerRef: req.CustomerRef,
+			MaskedPan:   fakeMaskedPan,
+			ExpDate:     fakeExpDate,
+		}
 	}
 
 	p.pending[req.PaymentID.String()] = pendingEntry{
@@ -224,12 +235,15 @@ func (p *Provider) InitPayment(ctx context.Context, req application.InitPaymentR
 
 	// The fake provider binds the charge token to the payment synchronously —
 	// the counterpart of the token-delivery webhook of a real provider.
-	return application.InitPaymentResult{
+	res = application.InitPaymentResult{
 		ProviderPaymentID: providerPaymentID,
 		PaymentURL:        p.confirmURL(req.PaymentID),
 		Status:            domain.PaymentStatusPending,
-		SavedMethod:       &savedMethod,
-	}, nil
+	}
+	if savedMethod.ChargeToken != "" {
+		res.SavedMethod = &savedMethod
+	}
+	return res, nil
 }
 
 func (p *Provider) confirmURL(internalPaymentID uuid.UUID) string {
@@ -276,6 +290,10 @@ func (p *Provider) PaymentStatus(
 		if entry.event.Payment.Status == domain.PaymentStatusFailed {
 			res.ErrorCode = defaultErrorCode
 		}
+		// GetState of a save-method parent payment reports its charge token —
+		// the recovery carrier when the token-delivery notification was lost
+		// (issue #1512). A merchant-initiated payment carries none.
+		res.ChargeToken = entry.savedMethod.ChargeToken
 		return res, nil
 	}
 	if state, ok := p.finalStates[paymentID.String()]; ok {
@@ -346,6 +364,10 @@ func (p *Provider) ChargePayment(ctx context.Context, req application.ChargeRequ
 	p.finalStates[req.PaymentID.String()] = application.PaymentStatusResult{
 		Status:   domain.PaymentStatusSucceeded,
 		CardMask: fakeMaskedPan,
+		// GetState of a recurrent charge reports the RebillId it ran on; the
+		// recovery path converges on the method already storing it (issue
+		// #1512).
+		ChargeToken: req.ChargeToken,
 	}
 	log.InfoContext(ctx, "fake charge succeeded",
 		"provider_payment_id", providerPaymentID,
@@ -800,6 +822,11 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 	// the reconciliation of a lost webhook, or the confirm endpoint's
 	// lost-entry fallback — resolves the actual outcome instead of a guess.
 	finalState := application.PaymentStatusResult{Status: status, CardMask: entry.savedMethod.MaskedPan}
+	if !failed {
+		// The token of a save-method parent payment rides the GetState answer
+		// of a successful operation (issue #1512).
+		finalState.ChargeToken = entry.savedMethod.ChargeToken
+	}
 	if errorCode != nil {
 		finalState.ErrorCode = *errorCode
 	}
@@ -815,7 +842,7 @@ func (p *Provider) confirm(internalPaymentID string, failed bool, errorCode *str
 			CardMask:          entry.savedMethod.MaskedPan,
 		},
 	}
-	if !failed {
+	if !failed && entry.savedMethod.ChargeToken != "" {
 		method := entry.savedMethod
 		event.Payment.SavedMethod = &method
 	}

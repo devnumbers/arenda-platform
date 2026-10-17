@@ -108,13 +108,10 @@ func (s *PaymentMethodService) addFromToken(
 		return AddPaymentMethodResult{}, fmt.Errorf("add payment method from token at provider: %w", err)
 	}
 	now := s.clock.Now().UTC()
-	method, err := domain.NewPaymentMethod(userID, s.provider.Name(), saved.ChargeToken, now)
+	method, err := paymentMethodFromSaved(userID, s.provider.Name(), saved, now)
 	if err != nil {
 		return AddPaymentMethodResult{}, err
 	}
-	method.ProviderCardID = saved.ProviderMethodID
-	method.DisplayMask = saved.MaskedPan
-	method.ExpDate = saved.ExpDate
 
 	var created domain.PaymentMethod
 	err = s.runInTx(ctx, func(stores *txStores) error {
@@ -360,13 +357,10 @@ func (s *PaymentMethodService) completeBindingSession(
 		if err != nil {
 			return err
 		}
-		bound, err := domain.NewPaymentMethod(current.UserID, current.Provider, method.ChargeToken, now)
+		bound, err := paymentMethodFromSaved(current.UserID, current.Provider, method, now)
 		if err != nil {
 			return err
 		}
-		bound.ProviderCardID = method.ProviderMethodID
-		bound.DisplayMask = method.MaskedPan
-		bound.ExpDate = method.ExpDate
 		_, err = applyCompletedCardBinding(ctx, stores, s.log, bound, &current, now)
 		return err
 	})

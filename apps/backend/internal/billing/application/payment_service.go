@@ -233,13 +233,10 @@ func (s *PaymentService) applyMethodBoundNotification(ctx context.Context, n *Me
 			// no retry can fix; the session stays open and expires by TTL.
 			return fmt.Errorf("%w: binding %s completed without a charge token", ErrWebhookRejected, n.BindingID)
 		}
-		method, err := domain.NewPaymentMethod(session.UserID, session.Provider, n.Method.ChargeToken, now)
+		method, err := paymentMethodFromSaved(session.UserID, session.Provider, n.Method, now)
 		if err != nil {
 			return err
 		}
-		method.ProviderCardID = n.Method.ProviderMethodID
-		method.DisplayMask = n.Method.MaskedPan
-		method.ExpDate = n.Method.ExpDate
 		_, err = applyCompletedCardBinding(ctx, stores, s.log, method, &session, now)
 		return err
 	})
@@ -302,9 +299,15 @@ func (s *PaymentService) ApplyPaymentNotification(ctx context.Context, n *Paymen
 	}
 }
 
-// applyPendingNotification backfills the provider reference of a payment whose
-// initiation result was lost — the webhook that arrives before the atomic save
-// commits. There is no outcome to apply.
+// applyPendingNotification applies a pending (AUTHORIZED) notification: it
+// backfills the provider reference of a payment whose initiation result was
+// lost — the webhook that arrives before the atomic save commits — and, when
+// the notification carries a saved method, stores it through the shared seam.
+// The RebillId of a save-method parent payment arrives exactly here (ADR
+// 0017), and the storage must run regardless of the payment's lifecycle
+// state: a late AUTHORIZED redelivery after a CONFIRMED that arrived without
+// the token is still the only carrier of it (issue #1512). Otherwise there
+// is no outcome to apply.
 func (s *PaymentService) applyPendingNotification(ctx context.Context, n *PaymentNotification) error {
 	return s.runInTx(ctx, func(stores *txStores) error {
 		payment, err := stores.paymentForUpdate(ctx, n.InternalPaymentID)
@@ -313,6 +316,11 @@ func (s *PaymentService) applyPendingNotification(ctx context.Context, n *Paymen
 		}
 		if err := s.checkProviderPaymentID(payment, n); err != nil {
 			return err
+		}
+		if n.SavedMethod != nil {
+			if err := s.ensureSavedMethod(ctx, stores, payment.UserID, *n.SavedMethod, s.clock.Now().UTC()); err != nil {
+				return err
+			}
 		}
 		if payment.HasProviderReference() || payment.IsFinalized() || n.ProviderPaymentID == "" {
 			return nil
@@ -420,7 +428,7 @@ func (s *PaymentService) finalizePayment(ctx context.Context, n *PaymentNotifica
 		case domain.PaymentStatusFailed:
 			return s.finalizeFailedPayment(ctx, grace, stores, payment, n, now)
 		case domain.PaymentStatusSucceeded:
-			return s.finalizeSucceededPayment(ctx, tariff, stores, payment, now, allowReconcile)
+			return s.finalizeSucceededPayment(ctx, tariff, stores, payment, now, allowReconcile, n.SavedMethod)
 		default:
 			return fmt.Errorf("%w: status %q", ErrWebhookUnsupported, n.Status)
 		}
@@ -512,11 +520,21 @@ func (s *PaymentService) finalizeFailedPayment(
 // switch keeps duplicate deliveries idempotent and — without allowReconcile —
 // refuses a success that arrives after the payment was already marked failed,
 // so the provider retries and the verified reconciliation path runs instead.
-// The tariff events of the notifications catalog (карта #734, #752) are
-// captured on the same seam and published strictly after the commit.
+// The notification's saved method — the RebillId of a save-method parent
+// payment, or the recovery token of a GetState answer — is stored before the
+// persisted-status switch, so a payment whose success an earlier delivery
+// applied still gains the token a later delivery or sync carries (issue
+// #1512). The tariff events of the notifications catalog (карта #734, #752)
+// are captured on the same seam and published strictly after the commit.
 func (s *PaymentService) finalizeSucceededPayment(
-	ctx context.Context, tariff *tariffEvents, stores *txStores, payment domain.SubscriptionPayment, now time.Time, allowReconcile bool,
+	ctx context.Context, tariff *tariffEvents, stores *txStores,
+	payment domain.SubscriptionPayment, now time.Time, allowReconcile bool, saved *SavedMethod,
 ) error {
+	if saved != nil {
+		if err := s.ensureSavedMethod(ctx, stores, payment.UserID, *saved, now); err != nil {
+			return err
+		}
+	}
 	skip, err := settlePaymentToSucceeded(ctx, stores, payment, now, allowReconcile)
 	if err != nil || skip {
 		return err

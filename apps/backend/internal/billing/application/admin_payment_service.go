@@ -461,13 +461,16 @@ func (s *PaymentService) providerStatus(ctx context.Context, paymentID uuid.UUID
 // notificationFromStatus builds the payment notification that routes a
 // provider-confirmed outcome through the synchronous application path the
 // webhook flow uses — the shared seam of the admin sync and the
-// reconciliation workers.
+// reconciliation workers. The charge token a GetState answer reports becomes
+// the notification's saved method: it is the recovery carrier of a lost
+// AUTHORIZED delivery, whose token the provider keeps reporting (issue
+// #1512, ADR 0017).
 func notificationFromStatus(payment domain.SubscriptionPayment, status PaymentStatusResult) *PaymentNotification {
 	var errorCode *string
 	if status.Status == domain.PaymentStatusFailed && status.ErrorCode != "" {
 		errorCode = &status.ErrorCode
 	}
-	return &PaymentNotification{
+	n := &PaymentNotification{
 		InternalPaymentID: payment.ID,
 		ProviderPaymentID: *payment.ProviderPaymentID,
 		Status:            status.Status,
@@ -475,6 +478,10 @@ func notificationFromStatus(payment domain.SubscriptionPayment, status PaymentSt
 		AmountKopecks:     payment.AmountKopecks,
 		CardMask:          status.CardMask,
 	}
+	if status.ChargeToken != "" {
+		n.SavedMethod = &SavedMethod{ChargeToken: status.ChargeToken, MaskedPan: status.CardMask}
+	}
+	return n
 }
 
 // adminPaymentSortFields is the sort whitelist of the admin payment listing,
