@@ -431,10 +431,13 @@ export function OperationView({
   );
 }
 
-/** Hero-блок (1858:105181): иконка категории 96 с глифом 52, подблок
- * «название + чип категории» с гэпом 12, сумма 40 и подпись срока под ней;
- * между блоками — 24. Чип крашится цветом категории на 10% (в макете
- * rgba(...,0.1) — суффикс альфы 1A), внутри кружок 24 со сплошным цветом. */
+/** Hero-блок (1858:105181; блок суммы и подписи срока — 1419:25859):
+ * иконка категории 96 с глифом 52, подблок «название + чип категории»
+ * с гэпом 12, блок «сумма 40 + подпись срока» с гэпом 8; между блоками —
+ * 24. Верхние 24 до контента даёт PageContent — своего pt у hero нет
+ * (правка владельца 17.10: двойной отступ 24+24 убран). Чип крашится
+ * цветом категории на 10% (в макете rgba(...,0.1) — суффикс альфы 1A),
+ * внутри кружок 24 со сплошным цветом. */
 function OperationHero({
   operation,
   category,
@@ -451,7 +454,7 @@ function OperationHero({
   const Icon = categoryIconComponents[category.icon];
 
   return (
-    <div className="flex flex-col items-center gap-6 px-6 pt-6">
+    <div className="flex flex-col items-center gap-6 px-6">
       <span
         className="flex h-24 w-24 items-center justify-center rounded-pill"
         style={{ backgroundColor: category.color }}
@@ -468,18 +471,20 @@ function OperationHero({
           <span className="text-sm leading-4 text-content">{operation.categoryLabel}</span>
         </span>
       </div>
-      <span className={`text-[40px] leading-[44px] font-semibold ${amountTone}`}>
-        {amountText}
-      </span>
-      {subtitle !== null && (
-        <span
-          className={`text-base leading-[18px] font-medium ${
-            subtitle.tone === 'danger' ? 'text-danger' : 'text-primary'
-          }`}
-        >
-          {subtitle.text}
+      <div className="flex flex-col items-center gap-2">
+        <span className={`text-[40px] leading-[44px] font-semibold ${amountTone}`}>
+          {amountText}
         </span>
-      )}
+        {subtitle !== null && (
+          <span
+            className={`text-base leading-[18px] font-medium ${
+              subtitle.tone === 'danger' ? 'text-danger' : 'text-primary'
+            }`}
+          >
+            {subtitle.text}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
