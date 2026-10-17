@@ -7,11 +7,7 @@ import { easeOut } from "@/components/carousel-ease";
 import { Reveal } from "@/components/reveal";
 import {
   buildFlipModel,
-  photoGlassTransforms,
-  photoImageTransforms,
-  photoNodeTransforms,
   photoTrackTranslate,
-  plateNodeTransforms,
   plateStripTranslate,
   type FlipModel,
   type FlipTier,
@@ -52,19 +48,16 @@ import s from "./showcase.module.css";
 // всегда даёт карточку (механика и константы — в блоке WHEEL ниже),
 // вертикальное колесо скроллит страницу.
 // Бесконечность — 3 копии набора с тихой пересадкой в среднюю на покое.
-// Морфинг размеров — FLIP-гибрид (решение #1501, рецепт research #1504):
-// в покое размеры держит CSS-система calc(--k) (0 бок / 1 центр); в
-// движении (класс .morphing от render()) CSS-переменные коллапсируются
-// в центральную раскладку, а разница состояний уезжает в translate3d +
-// scale(sx, sy) узлов (математика — showcase-flip.ts, тождество с
-// k-раскладкой проверено пробойником до точности записи строк). Фото в
-// движении несёт собственный cover-масштаб текущего (k-интерполированного)
-// бокса — кроп меняется при прокрутке непрерывно и по центру, как у
-// прежней CSS-раскладки, без щелчка на посадке. Кадр
-// движения не пересчитывает лэйаут — рендер только пишет трансформы,
-// композитор двигает готовые слои. Высоты обоих рядов зафиксированы
-// (var(--h) / var(--plate-h)), поэтому контент под каруселью не двигается
-// ни при каком движении.
+// Модель «постоянный шаг» (решение владельца 17.10): у всех карточек
+// один базовый слот, зазор постоянный, соседние карточки при смене едут
+// строго линейно с дорожкой — прежняя слотовая компенсация
+// перераспределяла место между слотами и читалась как дёргание.
+// Единственный размерный эффект — масштаб слота от --k, целиком в CSS
+// (showcase.module.css): центральная карточка = база × 1.25, ровно
+// центральные размеры кадров. Покой и движение неотличимы: кадр состоит
+// только из записей --k и транслейтов двух дорожек, лэйаут не
+// пересчитывается ни в покое, ни в полёте; высоты обоих рядов
+// зафиксированы, контент под каруселью не двигается.
 
 type Spec = readonly [label: string, value: string];
 
@@ -172,13 +165,6 @@ const G = N * COPIES; // узлов в ленте
 const INITIAL = N + 2; // «2-комнатная на Ленина»: средняя копия (слайды N..2N−1), карта 2
 const STEP_MS = 360; // длительность любого перехода — как у Яндекса (замер)
 
-// Внутренние размеры источников — для покадрового cover-масштаба фото в
-// движении (photoImageTransforms); известны синхронно из импорта ассета.
-const PHOTO_DIMS: ReadonlyArray<{ w: number; h: number }> = CARDS.map((card) => ({
-  w: card.photo.width,
-  h: card.photo.height,
-}));
-
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 function tierOf(): FlipTier {
@@ -205,15 +191,10 @@ function nearestIndex(p: number, snapArr: readonly number[]): number {
 // только в обработчиках (канон refs лендинга: никакого доступа в рендере)
 type EngineState = {
   p: number;
-  k: number[];
   // Модель покоя + метрики яруса, кэш на (ярус, ширина окна, ширина
   // зоны): render() читает только её — ни одного clientWidth в кадре,
   // записи прошлого кадра не форсируют sync-layout (research #1504).
   flip: FlipModel;
-  // <img> фотокарточек (собранные один раз из slideNodes): в движении
-  // несут собственный cover-масштаб текущего k-бокса
-  // (photoImageTransforms — точный cover, без щелчка на посадке).
-  imgNodes: Array<HTMLImageElement | null>;
   anim: { from: number; to: number; t0: number; dur: number } | null;
   raf: number;
   dragging: boolean;
@@ -267,76 +248,29 @@ export function Showcase() {
   const photoTrackRef = useRef<HTMLDivElement>(null); // дорожка фото, translate3d(−p)
   const stripRef = useRef<HTMLDivElement>(null); // дорожка плашек, центруется по p
   const slideNodes = useRef<Array<HTMLElement | null>>([]);
-  const cardNodes = useRef<Array<HTMLElement | null>>([]); // стеклянные карточки (свой scale на tab/mob)
   const plateNodes = useRef<Array<HTMLElement | null>>([]);
   const stateRef = useRef<EngineState | null>(null);
 
-  // Один проход отрисовки: k по дистанции до позиций покоя, класс
-  // .morphing, транслейт фотодорожки, центровка ряда плашек. Источник
-  // истины — st.p, геометрия — кэш st.flip. Ни одного чтения DOM:
-  // кадр движения состоит только из записей (трансформы узлов не
-  // пересчитывают лэйаут), покой — то же плюс запись k и уборка
-  // трансформов. Покой пишется безусловно (без допуска 0.002 — хвост
-  // допуска оставлял в DOM кегли/ширины на 0.2% неточными).
+  // Один проход отрисовки: k по дистанции до позиций покоя, транслейт
+  // фотодорожки, центровка ряда плашек. Покой и движение неотличимы —
+  // единственные записи кадра: --k слотов (масштаб и z считает CSS) и
+  // транслейты дорожек. Ни одного чтения DOM, ни одного лэйаута.
   const render = useCallback(() => {
-    const zone = zoneRef.current;
     const photoTrack = photoTrackRef.current;
     const strip = stripRef.current;
     const st = stateRef.current;
-    if (!zone || !photoTrack || !strip || !st) return;
+    if (!photoTrack || !strip || !st) return;
     const { flip } = st;
     const p = st.p;
-    const k = st.k;
-    const moving = st.anim !== null || st.dragging;
-    zone.classList.toggle(s.morphing ?? "", moving);
     for (let g = 0; g < G; g += 1) {
-      k[g] = clamp(1 - Math.abs(p - (flip.snapArr[g] ?? 0)) / flip.step, 0, 1);
-    }
-    if (moving) {
-      // Морфинг: фикс-геометрия центральной раскладки (коллапс боковых
-      // переменных в CSS), разница размеров — в трансформах узлов.
-      // --k не пишется: под .morphing он ни на что не влияет.
-      const photoT = photoNodeTransforms(flip, k);
-      const imgT = photoImageTransforms(flip, k, PHOTO_DIMS);
-      const glassT = photoGlassTransforms(flip, k);
-      const plateT = plateNodeTransforms(flip, k);
-      for (let g = 0; g < G; g += 1) {
-        const slide = slideNodes.current[g];
-        if (slide) slide.style.transform = photoT[g] ?? "";
-        const img = st.imgNodes[g];
-        if (img) img.style.transform = imgT[g] ?? "";
-        const card = cardNodes.current[g];
-        if (card) card.style.transform = glassT[g] ?? "";
-        const plate = plateNodes.current[g];
-        if (plate) plate.style.transform = plateT[g] ?? "";
-      }
-    } else {
-      // Покой: k пишется всегда — вектор обновлялся и в полёте, так что
-      // «ничего не изменилось» по вектору не значит «DOM уже верен»:
-      // DOM---k замер на последнем покое, пропуск записи оставил бы его
-      // досудовым. Покойные проходы редки (маунт, ресайз, посадка).
-      for (let g = 0; g < G; g += 1) {
-        const kk = (k[g] ?? 0).toFixed(3);
-        slideNodes.current[g]?.style.setProperty("--k", kk);
-        plateNodes.current[g]?.style.setProperty("--k", kk);
-      }
-      for (let g = 0; g < G; g += 1) {
-        const slide = slideNodes.current[g];
-        if (slide) slide.style.transform = "";
-        const img = st.imgNodes[g];
-        if (img) img.style.transform = "";
-        const card = cardNodes.current[g];
-        if (card) card.style.transform = "";
-        const plate = plateNodes.current[g];
-        if (plate) plate.style.transform = "";
-      }
+      const kk = clamp(1 - Math.abs(p - (flip.snapArr[g] ?? 0)) / flip.step, 0, 1).toFixed(3);
+      slideNodes.current[g]?.style.setProperty("--k", kk);
+      plateNodes.current[g]?.style.setProperty("--k", kk);
     }
     photoTrack.style.transform = photoTrackTranslate(p);
-    // Плашки: транслейт линейно по p между позициями покоя — плашечный
-    // ряд скользит с той же кривой, что и фото (frac линеен по p), и
-    // прибывает ровно в центр. Формула через накопление текущих ширин
-    // здесь не годится: при смене активного индекса она даёт скачок
-    // (centerW−sideW)/2 — найдено замером (44.7px на прибытии).
+    // Плашечный ряд скользит линейно по p (frac линеен) и прибывает
+    // ровно в центр. Формула через накопление текущих ширин не годится:
+    // при смене активного индекса она даёт скачок — найдено замером.
     strip.style.transform = `translateX(${plateStripTranslate(flip, p).toFixed(1)}px)`;
   }, []);
 
@@ -455,9 +389,7 @@ export function Showcase() {
     if (!viewport || !zone) return;
     stateRef.current ??= {
       p: 0,
-      k: new Array<number>(G).fill(0),
       flip: buildFlipModel(tierOf(), viewport.clientWidth, zone.clientWidth, N, G),
-      imgNodes: slideNodes.current.map((el) => el?.querySelector("img") ?? null),
       anim: null,
       raf: 0,
       dragging: false,
@@ -477,7 +409,6 @@ export function Showcase() {
       if (!st0) return;
       st0.anim = null;
       st0.p = st0.flip.snapArr[INITIAL] ?? 0;
-      st0.k.fill(0);
       render();
     };
     measure();
@@ -508,7 +439,6 @@ export function Showcase() {
         st0.anim = null;
         cancelAnimationFrame(st0.raf);
         st0.p = p;
-        st0.k.fill(0);
         render();
       });
     };
@@ -745,12 +675,7 @@ export function Showcase() {
                             sizes={card.sizes}
                             className={s.slidePhoto}
                           />
-                          <div
-                            className={s.card}
-                            ref={(el) => {
-                              cardNodes.current[g] = el;
-                            }}
-                          >
+                          <div className={s.card}>
                             <div className={s.cardGlass} />
                             <div className={s.cardName}>{card.name}</div>
                             <div className={s.cardRows}>

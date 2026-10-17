@@ -1,150 +1,96 @@
-/* Карусель «Создайте карточку своей недвижимости» — размерная система
-   по кадрам 2993-77855 (ПК), 3005-78910 (планшет), 3009-79717 (мобилка);
-   белые градиентные шторки сохранены по решению владельца (кадр
-   «Без белых градиентов» — демонстрация состава ленты).
-   Каждая карточка/плашка несёт --k ∈ [0..1] (0 — боковое состояние,
-   1 — центральное), в покое все размеры интерполируются calc'ом от --k.
-   В движении (класс .morphing на .zone) боковые переменные коллапсируют
-   в центральные — раскладка кадра фиксируется в центральных размерах,
-   а разница состояний уезжает в translate3d + scale узлов (движок
-   showcase.tsx + showcase-flip.ts), поэтому переход без переверстки.
-   Ярусы: мобайл <481, планшет 481–1199 (макет = ПК-контент в меньших
-   размерах), десктоп ≥1200. */
+/* Карусель «Создайте карточку своей недвижимости» — модель «постоянный
+   шаг» (решение владельца 17.10, кадры 2993-77855 / 3005-78910 /
+   3009-79717). У всех карточек один базовый слот (= боковые размеры
+   кадров), зазор постоянный (12px у фото), соседние карточки при смене
+   едут строго линейно с дорожкой. Единственный размерный эффект —
+   масштаб слота от --k (пишет движок в showcase.tsx): боковой слот =
+   база (масштаб 1), центральный = база × 1.25 — ровно центральные
+   размеры кадров (моб 300×240, таб 500×400, ПК 1000×400). Масштаб
+   равномерный, поэтому кроп object-fit: cover не меняется никогда, все
+   размеры внутри карточки зафиксированы на базовых значениях (масштаб
+   переводит их в центральные точно), и кадр движения состоит только из
+   трансформов — лэйаут не пересчитывается ни в покое, ни в полёте.
+   Центральная карточка перекрывает края соседей (z по --k) — зазор у
+   центра съедается, решено владельцем («можно не 12 держать»).
+   Плашки — тот же принцип со своим отношением (их центральный размер
+   не кратен боковому равномерно: ×1.1594 по X, ×1.25 по Y).
+   Ярусы: мобайл <481, планшет 481–1199, десктоп ≥1200. */
 
 .carousel {
-  /* мобайл (макет 393 = планшет × 0.6, кадры 3009-79717/79767);
-     боковые — ширина центральной при высоте ×0.8 (решение владельца:
-     кроп ведёт себя как cover и меняется в морфе непрерывно) */
+  /* мобайл (макет 393 = планшет × 0.6, кадры 3009-79717/79767).
+     --w/--h — центральная карточка; базовый слот = центральная / 1.25 */
   --w: 300px;
-  --side-w: 300px;
   --h: 240px;
-  --side-h: 192px;
-  --p: 24px;
-  --side-p: 19.2px;
-  --r: 24px;
-  --side-r: 19.2px;
-  --glass-w: 210px;
-  --glass-side-w: 168px;
-  --glass-p: 14.4px;
-  --glass-side-p: 11.52px;
-  --glass-r: 14.4px;
-  --glass-side-r: 11.52px;
-  --blur: 9.6px;
-  --blur-side: 7.68px;
-  --ring: 0.6px;
-  --ring-side: 0.48px;
-  --glass-gap: 9.6px;
-  --glass-gap-side: 7.68px;
-  --rows-gap: 2.4px;
-  --rows-gap-side: 1.92px;
-  --row-gap: 7.2px;
-  --row-gap-side: 5.76px;
-  --title-s: 12px;
-  --title-lh: 14.4px;
-  --title-side-s: 9.6px;
-  --title-side-lh: 11.52px;
-  --row-s: 8.4px;
-  --row-lh: 10.8px;
-  --row-side-s: 6.72px;
-  --row-side-lh: 8.64px;
+  --slot-p: 19.2px;
+  --r: 19.2px;
+  --glass-w: 168px;
+  --glass-p: 11.52px;
+  --glass-r: 11.52px;
+  --blur: 7.68px;
+  --ring: 0.48px;
+  --glass-gap: 7.68px;
+  --rows-gap: 1.92px;
+  --row-gap: 5.76px;
+  --title-s: 9.6px;
+  --title-lh: 11.52px;
+  --row-s: 6.72px;
+  --row-lh: 8.64px;
   --gap: 12px;
-  --plate-w: 240px;
-  --plate-side-w: 207px;
+  --plate-w: 207px;
   --plate-h: 60px;
-  --plate-side-h: 48px;
-  --plate-p: 14.4px;
-  --plate-side-p: 11.52px;
-  --plate-pr: 19.2px;
-  --plate-side-pr: 15.36px;
-  --plate-icon: 31.2px;
-  --plate-side-icon: 24.96px;
-  --plate-gap: 9.6px;
-  --plate-gap-side: 7.68px;
-  --plate-text-gap: 2.4px;
-  --plate-text-gap-side: 1.92px;
-  --plate-title-s: 12px;
-  --plate-title-lh: 14.4px;
-  --plate-title-side-s: 9.6px;
-  --plate-title-side-lh: 11.52px;
-  --plate-sub-s: 8.4px;
-  --plate-sub-lh: 10.8px;
-  --plate-sub-side-s: 6.72px;
-  --plate-sub-side-lh: 8.64px;
-  --plate-arrow: 14.4px;
-  --plate-side-arrow: 11.52px;
+  --plate-sx: 1.15942;
+  --plate-sy: 1.25;
+  --plate-p: 11.52px;
+  --plate-pr: 15.36px;
+  --plate-icon: 24.96px;
+  --plate-gap: 7.68px;
+  --plate-text-gap: 1.92px;
+  --plate-title-s: 9.6px;
+  --plate-title-lh: 11.52px;
+  --plate-sub-s: 6.72px;
+  --plate-sub-lh: 8.64px;
+  --plate-arrow: 11.52px;
   --plate-gap-y: 8px;
   --strip-gap: 24px;
   --photo-fade-w: 624px;
   /* Плашечная шторка на мобиле мягче (решение владельца 16.10: боковые
-     плашки не должны тонуть в белом — градиент остаётся намёком у края):
-     уже и не до белого */
+     плашки не должны тонуть в белом — градиент остаётся намёком у края) */
   --strip-fade-w: 28px;
   --strip-fade-to: rgba(255, 255, 255, 0.55);
 }
 
 @media (min-width: 481px) {
   .carousel {
-    /* планшет (кадры 3005-78910/78960): боковые — ширина центральной при
-       высоте ×0.8, как на мобиле (решение владельца: кроп фото ведёт
-       себя как cover и меняется в морфе непрерывно, по центру) */
+    /* планшет (кадры 3005-78910/78960) */
     --w: 500px;
-    --side-w: 500px;
     --h: 400px;
-    --side-h: 320px;
-    --p: 40px;
-    --side-p: 32px;
-    --r: 40px;
-    --side-r: 32px;
-    --glass-w: 350px;
-    --glass-side-w: 280px;
-    --glass-p: 24px;
-    --glass-side-p: 19.2px;
-    --glass-r: 24px;
-    --glass-side-r: 19.2px;
-    --blur: 16px;
-    --blur-side: 12.8px;
-    --ring: 1px;
-    --ring-side: 0.8px;
-    --glass-gap: 16px;
-    --glass-gap-side: 12.8px;
-    --rows-gap: 4px;
-    --rows-gap-side: 3.2px;
-    --row-gap: 12px;
-    --row-gap-side: 9.6px;
-    --title-s: 20px;
-    --title-lh: 24px;
-    --title-side-s: 16px;
-    --title-side-lh: 19.2px;
-    --row-s: 14px;
-    --row-lh: 18px;
-    --row-side-s: 11.2px;
-    --row-side-lh: 14.4px;
-    /* Зазоры по кадрам 3005-78960: фото 20, плашки 16 */
-    --gap: 20px;
-    --plate-w: 400px;
-    --plate-side-w: 345px;
+    --slot-p: 32px;
+    --r: 32px;
+    --glass-w: 280px;
+    --glass-p: 19.2px;
+    --glass-r: 19.2px;
+    --blur: 12.8px;
+    --ring: 0.8px;
+    --glass-gap: 12.8px;
+    --rows-gap: 3.2px;
+    --row-gap: 9.6px;
+    --title-s: 16px;
+    --title-lh: 19.2px;
+    --row-s: 11.2px;
+    --row-lh: 14.4px;
+    --plate-w: 345px;
     --plate-h: 100px;
-    --plate-side-h: 80px;
-    --plate-p: 24px;
-    --plate-side-p: 19.2px;
-    --plate-pr: 32px;
-    --plate-side-pr: 25.6px;
-    --plate-icon: 52px;
-    --plate-side-icon: 41.6px;
-    --plate-gap: 16px;
-    --plate-gap-side: 12.8px;
-    --plate-text-gap: 4px;
-    --plate-text-gap-side: 3.2px;
-    --plate-title-s: 20px;
-    --plate-title-lh: 24px;
-    --plate-title-side-s: 16px;
-    --plate-title-side-lh: 19.2px;
-    --plate-sub-s: 14px;
-    --plate-sub-lh: 18px;
-    --plate-sub-side-s: 11.2px;
-    --plate-sub-side-lh: 14.4px;
-    --plate-arrow: 24px;
-    --plate-side-arrow: 19.2px;
+    --plate-sx: 1.15942;
+    --plate-p: 19.2px;
+    --plate-pr: 25.6px;
+    --plate-icon: 41.6px;
+    --plate-gap: 12.8px;
+    --plate-text-gap: 3.2px;
+    --plate-title-s: 16px;
+    --plate-title-lh: 19.2px;
+    --plate-sub-s: 11.2px;
+    --plate-sub-lh: 14.4px;
+    --plate-arrow: 19.2px;
     --plate-gap-y: 16px;
     --strip-gap: 56px;
     --photo-fade-w: 1099px;
@@ -155,22 +101,15 @@
 
 @media (min-width: 1200px) {
   .carousel {
-    /* ПК: боковые = 80% центральной по всем осям. На широких экранах
-       боковые растут (clamp зеркалит JS-метрики в showcase.tsx), чтобы
-       их внешний край всегда уходил за границу экрана */
+    /* ПК (кадр 2993-77855): слоты 800×320, центральная 1000×400.
+       Базовые значения совпадают с планшетными (дизайн кратен ×0.8);
+       шторка 1640px впритык к центральной карточке и ЗА экран
+       (SVG Figma: transparent → белый на 30%), на широких мониках
+       сплошная белая зона прячет срез боковых за краем экрана */
     --w: 1000px;
-    --side-w: clamp(800px, calc(100vw - 1640px), 960px);
-    --h: 400px;
-    --side-h: 320px;
-    --gap: 20px;
-    --plate-w: 450px;
-    --plate-side-w: 360px;
+    --plate-w: 360px;
+    --plate-sx: 1.25;
     --plate-gap-y: 16px;
-    --strip-gap: 56px;
-    /* Шторка 1640px впритык к центральной карточке и ЗА экран — как в
-       Figma (SVG: transparent → белый на 30% = 492px от центра).
-       Белое не дотягивается до края экрана на родных ширинах макета,
-       на широких мониках сплошная белая зона прячет срез боковых */
     --photo-fade-w: 1640px;
     --strip-fade-w: 250px;
   }
@@ -207,14 +146,19 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: calc(var(--plate-gap-side) + (var(--plate-gap) - var(--plate-gap-side)) * var(--k));
-  width: calc(var(--plate-side-w) + (var(--plate-w) - var(--plate-side-w)) * var(--k));
-  height: calc(var(--plate-side-h) + (var(--plate-h) - var(--plate-side-h)) * var(--k));
-  padding-left: calc(var(--plate-side-p) + (var(--plate-p) - var(--plate-side-p)) * var(--k));
-  padding-right: calc(var(--plate-side-pr) + (var(--plate-pr) - var(--plate-side-pr)) * var(--k));
-  background: var(--surface, #f3f4f6);
+  gap: var(--plate-gap);
+  width: var(--plate-w);
+  /* высота слота = центральная / 1.25; масштаб ниже дорастает до неё */
+  height: calc(var(--plate-h) / var(--plate-sy));
+  padding-left: var(--plate-p);
+  padding-right: var(--plate-pr);
   border-radius: 999px;
   cursor: pointer;
+  transform: scale(
+    calc(1 + (var(--plate-sx) - 1) * var(--k)),
+    calc(1 + 0.25 * var(--k))
+  );
+  z-index: calc(1 + var(--k) * 100);
   transition: background-color 200ms ease;
 }
 
@@ -233,8 +177,8 @@
 
 .plateIcon {
   flex-shrink: 0;
-  width: calc(var(--plate-side-icon) + (var(--plate-icon) - var(--plate-side-icon)) * var(--k));
-  height: calc(var(--plate-side-icon) + (var(--plate-icon) - var(--plate-side-icon)) * var(--k));
+  width: var(--plate-icon);
+  height: var(--plate-icon);
   border-radius: 999px;
   object-fit: cover;
 }
@@ -242,7 +186,7 @@
 .plateText {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--plate-text-gap-side) + (var(--plate-text-gap) - var(--plate-text-gap-side)) * var(--k));
+  gap: var(--plate-text-gap);
   flex: 1 0 0;
   min-width: 0;
 }
@@ -250,8 +194,8 @@
 .plateName {
   font-weight: 500;
   color: var(--ink, #171a1c);
-  font-size: calc(var(--plate-title-side-s) + (var(--plate-title-s) - var(--plate-title-side-s)) * var(--k));
-  line-height: calc(var(--plate-title-side-lh) + (var(--plate-title-lh) - var(--plate-title-side-lh)) * var(--k));
+  font-size: var(--plate-title-s);
+  line-height: var(--plate-title-lh);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -260,8 +204,8 @@
 .plateAddress {
   font-weight: 400;
   color: var(--gray-2, #6f787c);
-  font-size: calc(var(--plate-sub-side-s) + (var(--plate-sub-s) - var(--plate-sub-side-s)) * var(--k));
-  line-height: calc(var(--plate-sub-side-lh) + (var(--plate-sub-lh) - var(--plate-sub-side-lh)) * var(--k));
+  font-size: var(--plate-sub-s);
+  line-height: var(--plate-sub-lh);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -269,8 +213,8 @@
 
 .plateArrow {
   flex-shrink: 0;
-  width: calc(var(--plate-side-arrow) + (var(--plate-arrow) - var(--plate-side-arrow)) * var(--k));
-  height: calc(var(--plate-side-arrow) + (var(--plate-arrow) - var(--plate-side-arrow)) * var(--k));
+  width: var(--plate-arrow);
+  height: var(--plate-arrow);
 }
 
 /* ── Ряд фотокарточек ───────────────────────────────────────── */
@@ -285,11 +229,11 @@
   transform: translateX(-50%);
 }
 
-/* Окно ленты: высота зафиксирована по центральной карточке — морфинг
-   боковых размеров не двигает контент под каруселью (фикс прыжка
-   кнопки «Попробовать»). Нативного скролла нет: позицию кладёт
-   translate3d дорожки (движок в showcase.tsx). touch-action: pan-y —
-   вертикальный жест на таче остаётся скроллом страницы. */
+/* Окно ленты: высота зафиксирована по центральной карточке — размеры
+   слотов не двигают контент под каруселью. Нативного скролла нет:
+   позицию кладёт translate3d дорожки (движок в showcase.tsx).
+   touch-action: pan-y — вертикальный жест на таче остаётся скроллом
+   страницы. */
 .scroller {
   height: var(--h);
   overflow: hidden;
@@ -318,10 +262,16 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  width: calc(var(--side-w) + (var(--w) - var(--side-w)) * var(--k));
-  height: calc(var(--side-h) + (var(--h) - var(--side-h)) * var(--k));
-  padding: calc(var(--side-p) + (var(--p) - var(--side-p)) * var(--k));
-  border-radius: calc(var(--side-r) + (var(--r) - var(--side-r)) * var(--k));
+  width: calc(var(--w) / 1.25);
+  height: calc(var(--h) / 1.25);
+  padding: var(--slot-p);
+  border-radius: var(--r);
+  /* Единственный размерный эффект: боковой слот = база, центральный =
+     база × 1.25. Равномерный масштаб не меняет кроп cover и переводит
+     базовые внутренние размеры (включая блюр стекла) в центральные
+     точно. z растёт с --k — центральная карточка поверх соседей. */
+  transform: scale(calc(1 + 0.25 * var(--k)));
+  z-index: calc(1 + var(--k) * 100);
   cursor: pointer;
 }
 
@@ -342,16 +292,17 @@
   opacity: 0.92;
 }
 
-/* Стеклянная карточка характеристик */
+/* Стеклянная карточка характеристик — базовые размеры, масштаб слота
+   дорастает их до центральных. */
 .card {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: calc(var(--glass-gap-side) + (var(--glass-gap) - var(--glass-gap-side)) * var(--k));
-  width: calc(var(--glass-side-w) + (var(--glass-w) - var(--glass-side-w)) * var(--k));
-  padding: calc(var(--glass-side-p) + (var(--glass-p) - var(--glass-side-p)) * var(--k));
-  border-radius: calc(var(--glass-side-r) + (var(--glass-r) - var(--glass-side-r)) * var(--k));
+  gap: var(--glass-gap);
+  width: var(--glass-w);
+  padding: var(--glass-p);
+  border-radius: var(--glass-r);
   overflow: hidden;
 }
 
@@ -362,48 +313,9 @@
   /* Порядок важен: Lightning CSS при минификации оставляет из пары
      алиасов последнюю декларацию — стандартный backdrop-filter должен
      быть последним, иначе из бандла уезжает и блюр пропадает */
-  -webkit-backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
-  backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
+  -webkit-backdrop-filter: blur(var(--blur));
+  backdrop-filter: blur(var(--blur));
   border-radius: inherit;
-}
-
-/* В движении (драг/переход, класс ставит render() в showcase.tsx)
-   боковые переменные приравнены к центральным: каждый calc(--k) из
-   правил ниже вырождается в точное центральное значение при любом k —
-   геометрия кадра зафиксирована в центральной раскладке, записи --k
-   не трогают лэйаут. Разница состояний уезжает в translate3d + scale
-   узлов (showcase-flip.ts). Блюр стекла при этом тоже «заморожен» на
-   центральном значении: масштаб трансформа переводит его в покойное
-   боковое точно (9.6px × 0.8 = 7.68px), отдельный фриз не нужен. */
-.zone.morphing {
-  --side-w: var(--w);
-  --side-h: var(--h);
-  --side-p: var(--p);
-  --side-r: var(--r);
-  --glass-side-w: var(--glass-w);
-  --glass-side-p: var(--glass-p);
-  --glass-side-r: var(--glass-r);
-  --blur-side: var(--blur);
-  --ring-side: var(--ring);
-  --glass-gap-side: var(--glass-gap);
-  --rows-gap-side: var(--rows-gap);
-  --row-gap-side: var(--row-gap);
-  --title-side-s: var(--title-s);
-  --title-side-lh: var(--title-lh);
-  --row-side-s: var(--row-s);
-  --row-side-lh: var(--row-lh);
-  --plate-side-w: var(--plate-w);
-  --plate-side-h: var(--plate-h);
-  --plate-side-p: var(--plate-p);
-  --plate-side-pr: var(--plate-pr);
-  --plate-side-icon: var(--plate-icon);
-  --plate-gap-side: var(--plate-gap);
-  --plate-text-gap-side: var(--plate-text-gap);
-  --plate-title-side-s: var(--plate-title-s);
-  --plate-title-side-lh: var(--plate-title-lh);
-  --plate-sub-side-s: var(--plate-sub-s);
-  --plate-sub-side-lh: var(--plate-sub-lh);
-  --plate-side-arrow: var(--plate-arrow);
 }
 
 /* Стекло характеристик для тех, кто просит меньше прозрачности или
@@ -427,15 +339,15 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: inset 0 0 0 calc(var(--ring-side) + (var(--ring) - var(--ring-side)) * var(--k)) rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 0 var(--ring) rgba(255, 255, 255, 0.32);
 }
 
 .cardName {
   position: relative;
   font-weight: 500;
   color: #fff;
-  font-size: calc(var(--title-side-s) + (var(--title-s) - var(--title-side-s)) * var(--k));
-  line-height: calc(var(--title-side-lh) + (var(--title-lh) - var(--title-side-lh)) * var(--k));
+  font-size: var(--title-s);
+  line-height: var(--title-lh);
 }
 
 .cardRows {
@@ -443,14 +355,14 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: calc(var(--rows-gap-side) + (var(--rows-gap) - var(--rows-gap-side)) * var(--k));
+  gap: var(--rows-gap);
   align-self: stretch;
 }
 
 .cardRow {
   display: flex;
   align-items: flex-start;
-  gap: calc(var(--row-gap-side) + (var(--row-gap) - var(--row-gap-side)) * var(--k));
+  gap: var(--row-gap);
   align-self: stretch;
 }
 
@@ -460,8 +372,8 @@
   min-width: 0;
   color: #fff;
   font-weight: 400;
-  font-size: calc(var(--row-side-s) + (var(--row-s) - var(--row-side-s)) * var(--k));
-  line-height: calc(var(--row-side-lh) + (var(--row-lh) - var(--row-side-lh)) * var(--k));
+  font-size: var(--row-s);
+  line-height: var(--row-lh);
 }
 
 .cardLabel {
