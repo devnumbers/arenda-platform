@@ -15,6 +15,13 @@ import {
 
 const FAVORITES_URL = '/payments/favorites';
 
+/** Пара ярусов Figma-сверки: mobile 375 и desktop 1440 (контракт
+ * testing-strategy.md:84). */
+const SPEC_VIEWPORTS = [
+  { label: 'mobile', width: 375, height: 667 },
+  { label: 'desktop', width: 1440, height: 900 },
+] as const;
+
 /** Подзапрос id владельца сида — звезда личная, строки keyed по пользователю
  * (личный cutover #1308); тот же паттерн, что OWNER_SQL в rental-спеках. */
 const OWNER_SQL = `(SELECT id FROM users WHERE email = '${process.env.E2E_USER_EMAIL}')`;
@@ -280,11 +287,9 @@ test.describe('правка избранного: перетаскивание �
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto(FAVORITES_URL);
 
-    for (const [label, viewport] of [
-      ['mobile', { width: 375, height: 667 }],
-      ['desktop', { width: 1440, height: 900 }],
-    ] as const) {
+    for (const viewport of SPEC_VIEWPORTS) {
       await page.setViewportSize(viewport);
+      const { label } = viewport;
 
       // Просмотр: звёзды строк — маркер загрузки, скелетон не снимаем.
       await expect(
@@ -297,6 +302,95 @@ test.describe('правка избранного: перетаскивание �
       await expect(page.getByTestId('favorites-save')).toBeVisible();
       await captureScreen(page, test.info(), `favorites-edit-${label}`);
       await page.getByLabel('Выйти из правки').click();
+    }
+  });
+});
+
+// Анатомия строки правки — макеты 954-52219 (mobile) и 954-51409 (desktop),
+// решение владельца 17.10 (отменяет «ручка в паддинге, без сдвига» #821:
+// глиф прижимался к краю экрана в 6px). По инспектору макета: корень строки
+// 12, трейлинг-слот ручки 44×44 с полем 12 до края (глиф Move 24 по центру
+// — 22 от края), сумма с датой отъезжает на ширину слота — правый край блока
+// в 68 от края строки; иконка категории на 24 от левого края (12 корня +
+// 12 середины). Все замеры — от бокса строки, на обоих ярусах; там же пин
+// «просмотр не тронут» (954-52460): контент просмотра на 36 от краёв.
+test.describe('правка избранного: анатомия строки по макету', () => {
+  test.beforeEach(async () => {
+    await seedFavorites();
+  });
+
+  test.afterAll(async () => {
+    await restoreSeedFavorites();
+  });
+
+  test('слот ручки 44 с полем 12, глиф 22 от края, сумма на 68, иконка на 24', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(FAVORITES_URL);
+
+    for (const viewport of SPEC_VIEWPORTS) {
+      await page.setViewportSize(viewport);
+
+      // Пин «просмотр не тронут» (954-52460, решение владельца 17.10):
+      // в просмотре сумма/дата и иконка сидят на 36 от краёв строки
+      // (px-6 корня + px-3 середины) — правку чиним, просмотр не трогаем.
+      // Строка просмотра — первый div-предок звезды (середины канона —
+      // span'ы).
+      const viewRow = page
+        .locator('[data-testid^="favorites-row-star-"]')
+        .first()
+        .locator('xpath=ancestor::div[1]');
+      const viewRowBox = await boxOrThrow(viewRow, 'строка просмотра');
+      const viewAmountBox = await boxOrThrow(
+        viewRow.locator('span.flex.shrink-0.flex-col'),
+        'блок суммы просмотра',
+      );
+      const viewBox = await boxOrThrow(
+        viewRow.locator('span.h-11.w-11').first(),
+        'иконка категории просмотра',
+      );
+      expect(
+        viewRowBox.x + viewRowBox.width - (viewAmountBox.x + viewAmountBox.width),
+      ).toBeCloseTo(36, 1);
+      expect(viewBox.x - viewRowBox.x).toBeCloseTo(36, 1);
+
+      await page.getByTestId('favorites-edit-button').click();
+      await expect(page.getByTestId('favorites-save')).toBeVisible();
+
+      const [firstId] = await editRowIds(page);
+      const row = page.getByTestId(`favorites-edit-row-${firstId}`);
+      const rowBox = await boxOrThrow(row, 'строка');
+      const grip = page.getByTestId(`favorites-grip-${firstId}`);
+      const gripBox = await boxOrThrow(grip, 'ручек');
+      const glyphBox = await boxOrThrow(grip.locator('svg'), 'глиф ручки');
+      // Классы суммы и иконки — сам контракт анатомии, который тест
+      // проверяет; локаторы замкнуты на строку.
+      const amountBox = await boxOrThrow(
+        row.locator('span.flex.shrink-0.flex-col'),
+        'блок суммы',
+      );
+      const iconBox = await boxOrThrow(
+        row.locator('span.h-11.w-11').first(),
+        'иконка категории',
+      );
+
+      const fromRight = (box: { x: number; width: number }): number =>
+        rowBox.x + rowBox.width - (box.x + box.width);
+      const fromLeft = (box: { x: number }): number => box.x - rowBox.x;
+
+      // Хит-зона ручки — слот 44×44 по анатомии макета.
+      expect(gripBox.width).toBe(44);
+      expect(gripBox.height).toBe(44);
+      expect(fromRight(gripBox)).toBeCloseTo(12, 1);
+      expect(fromRight(glyphBox)).toBeCloseTo(22, 1);
+      expect(fromRight(amountBox)).toBeCloseTo(68, 1);
+      expect(fromLeft(iconBox)).toBeCloseTo(24, 1);
+
+      // Выход из правки для следующего яруса.
+      await page.getByLabel('Выйти из правки').click();
+      await expect(page.getByTestId('favorites-save')).toHaveCount(0);
     }
   });
 });
