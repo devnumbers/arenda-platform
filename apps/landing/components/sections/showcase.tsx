@@ -5,13 +5,6 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { LandingLink } from "@/components/button";
 import { easeOut } from "@/components/carousel-ease";
 import { Reveal } from "@/components/reveal";
-import {
-  buildFlipModel,
-  photoTrackTranslate,
-  plateStripTranslate,
-  type FlipModel,
-  type FlipTier,
-} from "./showcase-flip";
 import house from "@/assets/sections/carousel-house.webp";
 import warehouse from "@/assets/sections/carousel-warehouse.webp";
 import flat from "@/assets/sections/carousel-flat.webp";
@@ -21,13 +14,11 @@ import avatarHouse from "@/assets/sections/carousel-avatar-house.webp";
 import arrowRight from "@/assets/icons/icon-arrow-right-small.svg";
 import s from "./showcase.module.css";
 
-// «Создайте карточку своей недвижимости» — кадры 2993-77855 (ПК),
-// 3005-78910 (планшет), 3009-79717 (мобилка) + аннотация владельца:
+// «Создайте карточку своей недвижимости» — макеты 2967-75653 (ПК),
+// 3005-78445 (планшет), 3008-79114 (мобила) + аннотация владельца:
 // бесконечная прокрутка, Shift+Scroll, drag мышью, клик по боковой
 // картинке или плашке приводит её к центру, плашка к центру
-// увеличивается, боковая карточка — ширина центральной при высоте ×0.8.
-// Белые градиентные шторки сохранены (кадр «Без белых градиентов» —
-// демонстрация состава ленты, решение владельца 16.10).
+// увеличивается, боковые уменьшены до 80% (мобила = планшет × 0.6).
 //
 // Механика движения — по замерам лент Яндекса (Swiper speed 360 на
 // pay.yandex.ru/business, октябрь 2026): единственная непрерывная позиция
@@ -48,16 +39,9 @@ import s from "./showcase.module.css";
 // всегда даёт карточку (механика и константы — в блоке WHEEL ниже),
 // вертикальное колесо скроллит страницу.
 // Бесконечность — 3 копии набора с тихой пересадкой в среднюю на покое.
-// Модель «постоянный шаг» (решение владельца 17.10): у всех карточек
-// один базовый слот, зазор постоянный, соседние карточки при смене едут
-// строго линейно с дорожкой — прежняя слотовая компенсация
-// перераспределяла место между слотами и читалась как дёргание.
-// Единственный размерный эффект — масштаб слота от --k, целиком в CSS
-// (showcase.module.css): центральная карточка = база × 1.25, ровно
-// центральные размеры кадров. Покой и движение неотличимы: кадр состоит
-// только из записей --k и транслейтов двух дорожек, лэйаут не
-// пересчитывается ни в покое, ни в полёте; высоты обоих рядов
-// зафиксированы, контент под каруселью не двигается.
+// Морфинг размеров — CSS --k (0 бок / 1 центр); высоты обоих рядов
+// зафиксированы (var(--h) / var(--plate-h)), поэтому контент под
+// каруселью не двигается ни при каком движении.
 
 type Spec = readonly [label: string, value: string];
 
@@ -67,12 +51,6 @@ type Card = {
   address: string;
   photo: StaticImageData;
   avatar: StaticImageData;
-  // Хинт ширины — по самому широкому cover-рендеру карточки на ярусе, а
-  // не по CSS-боксу: cover зумит широкие исходники (дом 1200×454 в
-  // боксе 1.25 растягивается до 1057 CSS px) — заниженный хинт давал
-  // мобильным телефонам с высоким DPR апскейл и мыло (решение владельца
-  // 16.10, «фото в наилучшем качестве»).
-  sizes: string;
   specs: readonly Spec[];
 };
 
@@ -83,7 +61,6 @@ const CARDS: readonly Card[] = [
     address: "Краснодар, улица Гагарина",
     photo: house,
     avatar: avatarHouse,
-    sizes: "(min-width: 481px) 1057px, 640px",
     specs: [
       ["Площадь участка", "3 сотки"],
       ["Тип участка", "Садовый"],
@@ -99,7 +76,6 @@ const CARDS: readonly Card[] = [
     address: "Коломна, улица Пионерская",
     photo: warehouse,
     avatar: warehouse,
-    sizes: "(min-width: 1200px) 1000px, (min-width: 481px) 540px, 320px",
     specs: [
       ["Общая площадь", "150 м²"],
       ["Вход", "Отдельный"],
@@ -112,7 +88,6 @@ const CARDS: readonly Card[] = [
     address: "Москва, улица Ленина",
     photo: flat,
     avatar: flat,
-    sizes: "(min-width: 1200px) 1000px, (min-width: 481px) 600px, 360px",
     specs: [
       ["Общая площадь", "45,5 м²"],
       ["Жилая площадь", "30,2 м²"],
@@ -131,7 +106,6 @@ const CARDS: readonly Card[] = [
     address: "Екатеринбург, улица Гоголя",
     photo: room,
     avatar: room,
-    sizes: "(min-width: 1200px) 1000px, (min-width: 481px) 600px, 360px",
     specs: [
       ["Площадь комнаты", "20 м²"],
       ["Этаж", "7 из 10"],
@@ -148,7 +122,6 @@ const CARDS: readonly Card[] = [
     address: "Санкт-Петербург, Кирпичный переулок",
     photo: shop,
     avatar: shop,
-    sizes: "(min-width: 1200px) 1000px, (min-width: 481px) 640px, 380px",
     specs: [
       ["Общая площадь", "89,5 м²"],
       ["Тип здания", "Торговый центр"],
@@ -165,9 +138,47 @@ const G = N * COPIES; // узлов в ленте
 const INITIAL = N + 2; // «2-комнатная на Ленина»: средняя копия (слайды N..2N−1), карта 2
 const STEP_MS = 360; // длительность любого перехода — как у Яндекса (замер)
 
+// Ширины состояний [боковая, центральная] для JS-математики — зеркало
+// CSS-переменных showcase.module.css. На ПК боковая растёт с шириной
+// экрана (clamp зеркалит --side-w в CSS): внешний край боковой карточки
+// всегда уходит за границу экрана. D — дистанция морфинга k, равна
+// шагу до соседней карточки (cardSide+gap) на всех ярусах: морфинг
+// завершается точно в момент прибытия (как у Яндекса), на покое k
+// строго 0/1 — бок ровно 80%, центр ровно по центру вьюпорта.
+const METRICS = {
+  desk: { cardSide: 800, card: 1000, gap: 20, plateSide: 360, plate: 450, plateGap: 16 },
+  tab: { cardSide: 500, card: 500, gap: 12, plateSide: 345, plate: 400, plateGap: 12 },
+  mob: { cardSide: 300, card: 300, gap: 12, plateSide: 207, plate: 240, plateGap: 8 },
+} as const;
+type Tier = keyof typeof METRICS;
+
+/* Точная модель позиций покоя. В состоянии покоя активная карточка —
+   центральная ширина, остальные — боковые, поэтому позиция p,
+   центрирующая слайд g (копия c = floor(g/N), карта i = g mod N):
+   S(g) = c×copyPlain + i×(sideW+gap) + centerW/2 − viewportW/2,
+   copyPlain = N×(sideW+gap). Сдвиг на copyPlain переводит S(g)↔S(g±N)
+   точно (соседние копии визуально идентичны) — на нём держится
+   бесконечность. Все целевые позиции считаются из модели, не из живого
+   лэйаута: ширины карточек меняются при морфинге, живые смещения в
+   момент старта анимации врали бы на (centerW−sideW)/2. */
+function snapModel(tier: Tier, viewportW: number) {
+  const m = METRICS[tier];
+  // На ПК боковая растёт с экраном — зеркало --side-w в CSS
+  // (clamp(800px, 100vw − 1640px, 960px)): внешний край боковой
+  // всегда за границей экрана до вьюпорта ~2920px
+  const cardSide =
+    tier === 'desk' ? clamp(viewportW - 1640, m.cardSide, 960) : m.cardSide;
+  const step = cardSide + m.gap;
+  const copyPlain = N * step;
+  const snap = (g: number) =>
+    Math.floor(g / N) * copyPlain + (g % N) * step + m.card / 2 - viewportW / 2;
+  const snapArr = Array.from({ length: G }, (_, g) => snap(g));
+  return { m, cardSide, step, copyPlain, snapArr };
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-function tierOf(): FlipTier {
+function tierOf(): Tier {
   if (window.matchMedia("(min-width: 1200px)").matches) return "desk";
   if (window.matchMedia("(min-width: 481px)").matches) return "tab";
   return "mob";
@@ -191,10 +202,7 @@ function nearestIndex(p: number, snapArr: readonly number[]): number {
 // только в обработчиках (канон refs лендинга: никакого доступа в рендере)
 type EngineState = {
   p: number;
-  // Модель покоя + метрики яруса, кэш на (ярус, ширина окна, ширина
-  // зоны): render() читает только её — ни одного clientWidth в кадре,
-  // записи прошлого кадра не форсируют sync-layout (research #1504).
-  flip: FlipModel;
+  k: number[];
   anim: { from: number; to: number; t0: number; dur: number } | null;
   raf: number;
   dragging: boolean;
@@ -252,34 +260,60 @@ export function Showcase() {
   const stateRef = useRef<EngineState | null>(null);
 
   // Один проход отрисовки: k по дистанции до позиций покоя, транслейт
-  // фотодорожки, центровка ряда плашек. Покой и движение неотличимы —
-  // единственные записи кадра: --k слотов (масштаб и z считает CSS) и
-  // транслейты дорожек. Ни одного чтения DOM, ни одного лэйаута.
+  // фотодорожки, центровка ряда плашек. Источник истины — st.p.
+  // Чтения (clientWidth) — ДО любых записей стилей: запись после чтения
+  // форсирует sync-layout посреди кадра (порядок «сначала читаем, потом
+  // пишем» держит один layout на кадр).
   const render = useCallback(() => {
+    const viewport = viewportRef.current;
     const photoTrack = photoTrackRef.current;
     const strip = stripRef.current;
+    const zone = zoneRef.current;
     const st = stateRef.current;
-    if (!photoTrack || !strip || !st) return;
-    const { flip } = st;
+    if (!viewport || !photoTrack || !strip || !zone || !st) return;
+    const { m, step, snapArr } = snapModel(tierOf(), viewport.clientWidth);
+    const zoneW = zone.clientWidth;
     const p = st.p;
+    const k = st.k;
+    let dirty = false;
     for (let g = 0; g < G; g += 1) {
-      const kk = clamp(1 - Math.abs(p - (flip.snapArr[g] ?? 0)) / flip.step, 0, 1).toFixed(3);
-      slideNodes.current[g]?.style.setProperty("--k", kk);
-      plateNodes.current[g]?.style.setProperty("--k", kk);
+      const nk = clamp(1 - Math.abs(p - (snapArr[g] ?? 0)) / step, 0, 1);
+      if (Math.abs(nk - (k[g] ?? 0)) > 0.002) {
+        k[g] = nk;
+        dirty = true;
+      }
     }
-    photoTrack.style.transform = photoTrackTranslate(p);
-    // Плашечный ряд скользит линейно по p (frac линеен) и прибывает
-    // ровно в центр. Формула через накопление текущих ширин не годится:
-    // при смене активного индекса она даёт скачок — найдено замером.
-    strip.style.transform = `translateX(${plateStripTranslate(flip, p).toFixed(1)}px)`;
+    if (dirty) {
+      for (let g = 0; g < G; g += 1) {
+        const kk = (k[g] ?? 0).toFixed(3);
+        slideNodes.current[g]?.setAttribute("style", `--k:${kk}`);
+        plateNodes.current[g]?.setAttribute("style", `--k:${kk}`);
+      }
+    }
+    zone.classList.toggle(s.moving ?? "", st.anim !== null || st.dragging);
+    photoTrack.style.transform = `translate3d(${(-p).toFixed(2)}px,0,0)`;
+    // Плашки: транслейт линейно по p между позициями покоя — плашечный
+    // ряд скользит с той же кривой, что и фото (frac линеен по p), и
+    // прибывает ровно в центр. Формула через накопление текущих ширин
+    // здесь не годится: при смене активного индекса она даёт скачок
+    // (centerW−sideW)/2 — найдено замером (44.7px на прибытии).
+    const pitch = m.plateSide + m.plateGap;
+    let gLo = 0;
+    while (gLo < G - 1 && (snapArr[gLo + 1] ?? 0) <= p) gLo += 1;
+    const next = snapArr[Math.min(gLo + 1, G - 1)] ?? 0;
+    const span = Math.max(next - (snapArr[gLo] ?? 0), 1);
+    const frac = clamp((p - (snapArr[gLo] ?? 0)) / span, 0, 1);
+    const tx = zoneW / 2 - (gLo * pitch + m.plate / 2) - frac * pitch;
+    strip.style.transform = `translateX(${tx.toFixed(1)}px)`;
   }, []);
 
   // Тихая пересадка в среднюю копию — только на покое (позиции покоя
   // соседних копий совпадают точно, сдвиг невидим).
   const renormalize = useCallback(() => {
+    const viewport = viewportRef.current;
     const st = stateRef.current;
-    if (!st) return;
-    const { snapArr, copyPlain } = st.flip;
+    if (!viewport || !st) return;
+    const { snapArr, copyPlain } = snapModel(tierOf(), viewport.clientWidth);
     let best = nearestIndex(st.p, snapArr);
     let shifted = false;
     while (best < 2) {
@@ -314,7 +348,7 @@ export function Showcase() {
       } else {
         st.anim = null;
         renormalize();
-        render(); // снимает .morphing (фикс-геометрия → k-раскладка) после посадки
+        render(); // снимает .moving (фриз блюра) после посадки
         // Непрерывный скролл: расстояние, набранное пальцем во время
         // анимации, продолжает серию — лок на время перехода, не тишина.
         if (st.wheelAcc >= WHEEL_STEP_PX && st.wheelSign !== 0) {
@@ -348,9 +382,10 @@ export function Showcase() {
 
   // Один wheel-шаг в направлении dir: сосед от ближайшей позиции покоя.
   const wheelStep = useCallback((dir: number) => {
+    const viewport = viewportRef.current;
     const st = stateRef.current;
-    if (!st) return;
-    const { snapArr } = st.flip;
+    if (!viewport || !st) return;
+    const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
     const cur = nearestIndex(st.p, snapArr);
     const g = clamp(cur + dir, 1, G - 2);
     st.wheelSign = dir;
@@ -369,9 +404,10 @@ export function Showcase() {
   // всегда стартует от живого p); drag перехватывает движение раньше.
   const selectNode = useCallback(
     (g: number) => {
+      const viewport = viewportRef.current;
       const st = stateRef.current;
-      if (!st || st.dragging) return;
-      const { snapArr } = st.flip;
+      if (!viewport || !st || st.dragging) return;
+      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
       const cur = nearestIndex(st.p, snapArr);
       let delta = g - cur;
       if (delta > G / 2) delta -= G;
@@ -385,11 +421,10 @@ export function Showcase() {
   // Стартовая центровка и пересборка базы на смену яруса.
   useEffect(() => {
     const viewport = viewportRef.current;
-    const zone = zoneRef.current;
-    if (!viewport || !zone) return;
+    if (!viewport) return;
     stateRef.current ??= {
       p: 0,
-      flip: buildFlipModel(tierOf(), viewport.clientWidth, zone.clientWidth, N, G),
+      k: new Array<number>(G).fill(0),
       anim: null,
       raf: 0,
       dragging: false,
@@ -408,24 +443,23 @@ export function Showcase() {
       const st0 = stateRef.current;
       if (!st0) return;
       st0.anim = null;
-      st0.p = st0.flip.snapArr[INITIAL] ?? 0;
+      st0.p = snapModel(tierOf(), viewport.clientWidth).snapArr[INITIAL] ?? 0;
+      st0.k.fill(0);
       render();
     };
     measure();
     setMounted(true);
     // Ресайз окна и смены яруса: позиция покоя пересчитывается под новую
-    // геометрию (ближайшая карточка встаёт ровно в центр), модель
-    // перестраивается. Слушатель один — matchMedia-сравнения тут не
-    // работают: к моменту события change MediaQueryList.matches уже
-    // возвращает новое значение.
+    // геометрию (ближайшая карточка встаёт ровно в центр). Слушатель один
+    // — matchMedia-сравнения тут не работают: к моменту события change
+    // MediaQueryList.matches уже возвращает новое значение.
     let resizeRaf = 0;
     const onViewportChange = () => {
       cancelAnimationFrame(resizeRaf);
       resizeRaf = requestAnimationFrame(() => {
         const st0 = stateRef.current;
         if (!st0 || st0.dragging) return;
-        st0.flip = buildFlipModel(tierOf(), viewport.clientWidth, zone.clientWidth, N, G);
-        const { snapArr, copyPlain } = st0.flip;
+        const { snapArr, copyPlain } = snapModel(tierOf(), viewport.clientWidth);
         let best = nearestIndex(st0.p, snapArr);
         let p = snapArr[best] ?? st0.p;
         while (best < 2) {
@@ -439,6 +473,7 @@ export function Showcase() {
         st0.anim = null;
         cancelAnimationFrame(st0.raf);
         st0.p = p;
+        st0.k.fill(0);
         render();
       });
     };
@@ -484,7 +519,7 @@ export function Showcase() {
       if (!s1 || !s1.dragging || e.pointerId !== s1.pointerId) return;
       const dx = e.clientX - s1.dragStartX;
       if (Math.abs(dx) > 5) s1.dragMoved = true;
-      const { snapArr } = s1.flip;
+      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
       s1.p = clamp(s1.dragStartP - dx, snapArr[1] ?? 0, snapArr[G - 2] ?? 0);
       render();
       s1.dragSamples.push({ t: performance.now(), x: e.clientX });
@@ -504,7 +539,7 @@ export function Showcase() {
         if (host) selectNode(Number(host.dataset.slideIdx));
         return;
       }
-      const { snapArr } = s2.flip;
+      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
       let best = nearestIndex(s2.p, snapArr);
       if (flick) {
         // скорость по окну ~100мс: последний сэмпл к моменту up почти
@@ -657,7 +692,7 @@ export function Showcase() {
                           role="button"
                           tabIndex={near ? 0 : -1}
                           aria-label={`Показать: ${card.name}`}
-                          className={`${s.slide} outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary`}
+                          className={s.slide}
                           style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
@@ -672,7 +707,7 @@ export function Showcase() {
                             fill
                             draggable={false}
                             loading={near ? "eager" : "lazy"}
-                            sizes={card.sizes}
+                            sizes="(min-width: 1200px) 1000px, (min-width: 481px) 500px, 300px"
                             className={s.slidePhoto}
                           />
                           <div className={s.card}>
