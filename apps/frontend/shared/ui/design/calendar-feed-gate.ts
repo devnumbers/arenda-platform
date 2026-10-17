@@ -44,3 +44,28 @@ export function createPrependGate(): CalendarPrependGate {
     },
   };
 }
+
+/** Кэп порций prepend на одно событие (план 051): полёт коммитит
+ * ≤ 12 месяцев ≈ 4300px — реальный флик (пик ~3–10px/ms, затухает)
+ * покрывается с запасом; прежний кэп 8 допускал коммит 48 месяцев
+ * (~2000 ячеек) — на телефоне это пауза кадра 150–600 мс прямо в
+ * моментуме, «жёстко лагает». Антистенную защиту несут порог 3000,
+ * гейт и стартовый запас seed (план 051), а не размер коммита. */
+export const FLING_CHUNKS_CAP = 2;
+
+/** Число порций prepend под текущую скорость прокрутки (план 042):
+ * одна порция на медленном скролле и на первом событии; под фликом —
+ * сколько моментум съедает за ~600мс после события, но не больше кэпа. */
+export function flingChunks(
+  previous: { st: number; t: number } | null,
+  now: number,
+  scrollTop: number,
+  chunkPx: number,
+  cap: number = FLING_CHUNKS_CAP,
+): number {
+  if (previous === null || now <= previous.t) {
+    return 1;
+  }
+  const pxPerMs = (previous.st - scrollTop) / (now - previous.t);
+  return Math.min(cap, Math.max(1, Math.ceil((pxPerMs * 600) / chunkPx)));
+}

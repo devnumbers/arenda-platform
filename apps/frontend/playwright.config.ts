@@ -56,12 +56,16 @@ export default defineConfig({
       // реснап промахивается при перекройке месяцев; план 042 — Safari
       // без scroll-anchoring; план 049 — реснапа нет вовсе после
       // доращивки, коррекция после пейнта). На Chromium это не
-      // воспроизводится никогда. Скоуп узкий — только колесные спеки; в
-      // дефолтный прогон не входит (E2E_PROJECT, как mobile-chromium):
+      // воспроизводится никогда. План 051 добавил календарный якорь
+      // (calendar-anchor): нативного scroll anchoring в WebKit нет до
+      // Safari 27 — приписка ленты без ручной компенсации телепортирует
+      // контент, на Chromium не воспроизводится. Скоуп узкий — колесные
+      // и якорные спеки; в дефолтный прогон не входит (E2E_PROJECT, как
+      // mobile-chromium):
       // E2E_PROJECT=webkit make frontend-e2e \
-      //   TESTS="e2e/wheel-picker.spec.ts e2e/payments-wizard.spec.ts"
+      //   TESTS="e2e/wheel-picker.spec.ts e2e/payments-wizard.spec.ts e2e/calendar-anchor.spec.ts"
       name: 'webkit',
-      testMatch: /(wheel-picker|payments-wizard)\.spec\.ts$/,
+      testMatch: /(wheel-picker|payments-wizard|calendar-anchor)\.spec\.ts$/,
       // Десктопный Safari: mouse.wheel (флик в спеках) в мобильном WebKit
       // Playwright не поддержан вовсе; движок тот же, мобильные вьюпорты
       // нужные спеки ставят сами (setViewportSize). Вьюпорт как у

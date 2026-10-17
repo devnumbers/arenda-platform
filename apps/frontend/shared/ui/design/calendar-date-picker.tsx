@@ -47,16 +47,29 @@ import {
 } from '@/shared/lib/calendar';
 import { formatRangeBound } from '@/shared/lib/date-format';
 import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
-import { createPrependGate } from './calendar-feed-gate';
+import { createPrependGate, flingChunks } from './calendar-feed-gate';
+import {
+  type PrependAnchorCapture,
+  planPrependRestore,
+} from './calendar-prepend-anchor';
+import {
+  calendarMonthGridRows,
+  calendarMonthIntrinsicPx,
+} from './calendar-month-metrics';
 import { MONTH_LABELS, daysInMonth, firstWeekdayOfMonth, WEEKDAY_LABELS } from '@/shared/ui/design/month-grid';
+
+/** SSR-безопасный layout-эффект: запись позиции до пейнта (планы 049/051). */
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /** Полноэкранный пикер даты (общий компонент дизайн-слоя, вырос из пикера
  * задач #500, Figma 1539-78660): назад, чип «Август 2026 ⌄» (шит
  * MonthYearPicker) и шапка дней недели закреплены над прокруткой — лента
  * месяцев скроллится под ними (решение владельца 2026-09-04). Лента
- * стартует на порцию дорисовки раньше якоря — прокрутка вверх работает
- * сразу, без «качания» (решение владельца 13.10, #1394: на верхнем упоре
- * scroll-событие не возникает, дорисовка по порогу не запускается);
+ * стартует на стартовый запас (seed 12, план 051) раньше якоря —
+ * прокрутка вверх работает сразу, без «качания» (решение владельца
+ * 13.10, #1394: на верхнем упоре scroll-событие не возникает, дорисовка
+ * по порогу не запускается) и вне зоны приписки с первого пикселя;
  * оффскрин-блоки не участвуют в layout (content-visibility) — прокрутка
  * остаётся плавной на любой глубине. Открывается сеткой на
  * месяце якоря — значения, а без него «сегодня», прижатое в
@@ -125,24 +138,9 @@ const APPEND_THRESHOLD_PX = 1500;
 
 /** Число порций prepend под текущую скорость прокрутки (план 042):
  * одна порция на медленном скролле; под фликом — столько, сколько
- * моментум съест за ~600мс после события: под душащим CPU scroll-события
- * доезжают с лагом в сотни мс, и одна порция за событие не поспевает
- * (замер 16.10: 7 событий на 90 000px флика). */
-function flingChunks(
-  previous: { st: number; t: number } | null,
-  now: number,
-  scrollTop: number,
-  chunkPx: number,
-): number {
-  if (previous === null || now <= previous.t) {
-    return 1;
-  }
-  const pxPerMs = (previous.st - scrollTop) / (now - previous.t);
-  return Math.min(8, Math.max(1, Math.ceil((pxPerMs * 600) / chunkPx)));
-}
-
-/** Приблизительная высота порции prepend (6 месячных сеток) — вход
- * flingChunks. */
+ * моментум съест за ~600мс после события, с кэпом FLING_CHUNKS_CAP
+ * (план 051: монструозные коммиты 48 месяцев душили телефон). Сама
+ * функция живёт в calendar-feed-gate — модуль тайминга ленты. */
 const FEED_CHUNK_PX = 2800;
 
 function monthKey(year: number, month0: number): string {
@@ -172,8 +170,9 @@ function scrollListToMonth(list: HTMLElement | null, month: HTMLElement | undefi
  * все блоки: Date+ISO и дизейблы на каждую ячейку — к глубине пары лет
  * это ~5–6k ячеек за проход). Пропсы — примитивы и стабильные колбэки:
  * перерендер блока только когда меняются его выбор/границы (тап-уровень).
- * Оценка высоты офскрина — 480px десктопной колонки; телефонный тир
- * переопределяет медиа-правилом `.calendar-month-block` (globals.css). */
+ * Оценка высоты офскрина — точная (calendar-month-metrics по ширине
+ * колонки, план 051): с ручным якорем приписки расхождение статической
+ * оценки с реальностью больше никто не компенсирует. */
 const CalendarMonthBlock = memo(function CalendarMonthBlock({
   year,
   month0,
@@ -185,6 +184,7 @@ const CalendarMonthBlock = memo(function CalendarMonthBlock({
   minDate,
   maxDate,
   allowPast,
+  columnWidth,
   registerRef,
   onSelect,
 }: {
@@ -198,22 +198,31 @@ const CalendarMonthBlock = memo(function CalendarMonthBlock({
   readonly minDate: IsoDate | undefined;
   readonly maxDate: IsoDate | undefined;
   readonly allowPast: boolean;
+  /** Ширина колонки ленты (ResizeObserver родителя) — точная оценка
+   * офскрин-высоты (план 051); null — ещё не замерена, фолбэк 360. */
+  readonly columnWidth: number | null;
   readonly registerRef: (key: string, node: HTMLElement | null) => void;
   readonly onSelect: (iso: IsoDate, selected: boolean) => void;
 }): JSX.Element {
   const days = daysInMonth(year, month0);
   const leadingBlanks = firstWeekdayOfMonth(year, month0);
   const key = monthKey(year, month0);
+  // Оценка высоты офскрина — точная (calendar-month-metrics): с ручным
+  // якорем приписки ([overflow-anchor:none]) некомпенсированный дрейф
+  // оценки при первом рендере блока дёргал бы контент на десятки px.
+  const rows = calendarMonthGridRows(days, leadingBlanks);
   return (
     <section
       ref={(node) => {
         registerRef(key, node);
       }}
+      style={{
+        containIntrinsicSize: `auto ${calendarMonthIntrinsicPx({ rows, columnWidth })}px`,
+      }}
       className={cn(
         isFirst ? undefined : 'mt-8',
         beyondMaxDate && 'opacity-50',
-        '[content-visibility:auto] [contain-intrinsic-size:auto_480px]',
-        'calendar-month-block',
+        '[content-visibility:auto]',
       )}
     >
       <h3 className="px-6 text-xl font-semibold leading-6 text-content">
@@ -369,6 +378,29 @@ export function CalendarDatePicker({
   // одного кадра не суммируются в один DOM-коммит (на телефоне такие
   // коммиты были паузами кадра 150–600 мс прямо в моментуме).
   const [prependGate] = useState(createPrependGate);
+  // Ручной якорь приписки (план 051): захват {ключ первого месяца,
+  // offsetTop} перед припиской — восстановление позиции до пейнта в
+  // layout-эффекте ниже. Нативный scroll anchoring выключен
+  // ([overflow-anchor:none] на ленте): в WebKit его не было до Safari 27,
+  // и каждая приписка телепортировала контент на высоту порции.
+  const prependAnchorRef = useRef<PrependAnchorCapture | null>(null);
+  // Ширина колонки — вход точной оценки офскрин-высоты (план 051).
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [columnWidth, setColumnWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const node = contentRef.current;
+    if (node === null || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width !== undefined && width > 0) {
+        setColumnWidth(width);
+      }
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   // Стабильная регистрация ref'а блока месяца — проп мемо-блока.
   const setMonthRef = useCallback((key: string, node: HTMLElement | null) => {
     if (node !== null) {
@@ -416,6 +448,30 @@ export function CalendarDatePicker({
     scrollListToMonth(scrollRef.current, monthRefs.current.get(key));
   }, [monthsCount, firstMonth, prependGate]);
 
+  // Ручной якорь приписки (план 051): до пейнта возвращаем позицию,
+  // сдвинутую DOM-вставой порции над вьюпортом — тот же приём, что починил
+  // колесо (план 049). Дельта offsetTop того же элемента точна при любых
+  // оценках высот; пишем в текущий scrollTop — моментум между скролл-
+  // событием и коммитом сохраняется. Захват ставится только в
+  // prepend-ветке handleScroll: прыжки чипа скроллятся к цели своим
+  // эффектом выше, аппенды внизу позицию не сдвигают.
+  useIsomorphicLayoutEffect(() => {
+    const captured = prependAnchorRef.current;
+    prependAnchorRef.current = null;
+    const list = scrollRef.current;
+    if (captured === null || list === null) {
+      return;
+    }
+    const el = monthRefs.current.get(captured.key);
+    const inserted = planPrependRestore({
+      anchorTop: el?.offsetTop ?? null,
+      capturedTop: captured.top,
+    });
+    if (inserted !== null) {
+      list.scrollTop += inserted;
+    }
+  }, [monthsCount, firstMonth]);
+
   // Escape закрывает пикер; при открытом шите месяца его Esc обрабатывает
   // Radix — глобальный слушатель в этот момент глушится.
   useEffect(() => {
@@ -441,14 +497,16 @@ export function CalendarDatePicker({
   // не растёт. В безпольном режиме (#1393) дотягивание к верху дорисовывает
   // порцию месяцев назад. DOM растёт только пройденной глубиной, а тяжёлый
   // layout оффскрина снимает content-visibility на блоках месяцев.
-  // Сдвиг позиции при prepend держит нативный scroll anchoring браузера
-  // (правка в том же layout-проходе, что и вставка, — моментум-безопасно;
-  // ручной якорь высоты убран, план 042). Порог 3000 (~5 экранов) держит
-  // триггер далеко от стены, а под фликом порций ставится несколько —
-  // по скорости прокрутки: под душащим CPU scroll-события доезжают с
-  // лагом в сотни мс (замер 16.10: 7 событий на 90 000px флика), и
-  // одна порция за событие не поспевает за моментумом — лента жила
-  // циклом «стена → прыжок на порцию» (feel-check владельца 16.10).
+  // Сдвиг позиции при prepend держит ручной якорь до пейнта (план 051,
+  // layout-эффект выше): ставка 042 на нативный scroll anchoring работала
+  // только на Chromium — в WebKit нативного якоря нет (overflow-anchor —
+  // Safari 27+), и на телефоне каждая приписка телепортировала контент на
+  // высоту порции; на ленте [overflow-anchor:none] — компенсация ровно
+  // одна, наша, на всех движках. Порог 3000 держит триггер далеко от
+  // стены, а под фликом порций ставится несколько — по скорости прокрутки
+  // (flingChunks, кэп 2 — план 051): под душащим CPU scroll-события
+  // доезжают с лагом в сотни мс (замер 16.10: 7 событий на 90 000px
+  // флика), и одна порция за событие не поспевает за моментумом.
   const lastScrollRef = useRef<{ st: number; t: number } | null>(null);
   const handleScroll = (): void => {
     const list = scrollRef.current;
@@ -466,6 +524,12 @@ export function CalendarDatePicker({
       if (portion === null) {
         return;
       }
+      // Захват якоря до приписки (план 051): layout-эффект после коммита
+      // вернёт позицию до пейнта — сдвиг порции не закрашивается.
+      const capturedKey = monthKey(firstMonth.year, firstMonth.month0);
+      const capturedEl = monthRefs.current.get(capturedKey);
+      prependAnchorRef.current =
+        capturedEl !== undefined ? { key: capturedKey, top: capturedEl.offsetTop } : null;
       setFirstMonth((month) =>
         calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_PREPEND_CHUNK * portion),
       );
@@ -551,12 +615,18 @@ export function CalendarDatePicker({
         </div>
       </div>
 
+      {/* Позицию при дорисовке держит ручной якорь до пейнта (план 051):
+          layout-эффект возвращает scrollTop в тот же кадр, что DOM-встав.
+          [overflow-anchor:none] выключает нативный scroll anchoring:
+          в WebKit его не было до Safari 27 (телефон владельца — без него),
+          и каждая приписка телепортировала контент; с ручным якорем
+          нативная компенсация удвоила бы сдвиг на Chromium. */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none]"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [overflow-anchor:none]"
       >
-        <div className="mx-auto w-full max-w-column pb-[136px]">
+        <div ref={contentRef} className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {
             // Приглушённое будущее за месяцем maxDate (жёсткий край #1394):
             // контекст после черты виден, но выбирать там нечего — 1:1 с
@@ -579,6 +649,7 @@ export function CalendarDatePicker({
                 minDate={minDate}
                 maxDate={maxDate}
                 allowPast={allowPast}
+                columnWidth={columnWidth}
                 registerRef={setMonthRef}
                 onSelect={selectDraft}
               />
@@ -742,6 +813,15 @@ export function CalendarRangePicker({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Темп прокрутки для скоростно-зависимого prepend (flingChunks).
   const lastRangeScrollRef = useRef<{ st: number; t: number } | null>(null);
+  // Гейт приписки (план 050, дотянут до range планом 051): одна порция в
+  // полёте — скролл-события кадра не складываются в один коммит; без гейта
+  // антистенная приёмка здесь держалась на склейке очереди событий в
+  // монструозный коммит из сотен месяцев — телефонные паузы в моментуме.
+  const [rangePrependGate] = useState(createPrependGate);
+  // Ручной якорь приписки (план 051) — как у одиночного пикера: нативного
+  // scroll anchoring в WebKit нет (Safari 27+), ручная компенсация до
+  // пейнта единственная.
+  const rangePrependAnchorRef = useRef<PrependAnchorCapture | null>(null);
   // Месяц прыжка чипа за дорисованный назад край — скроллится после
   // монтирования новых месяцев.
   const pendingJumpRef = useRef<string | undefined>(undefined);
@@ -756,6 +836,30 @@ export function CalendarRangePicker({
     }
   });
 
+  // Ручной якорь приписки (план 051): до пейнта возвращаем позицию,
+  // сдвинутую DOM-вставой порции, — дельта offsetTop того же элемента.
+  useIsomorphicLayoutEffect(() => {
+    const captured = rangePrependAnchorRef.current;
+    rangePrependAnchorRef.current = null;
+    const list = scrollRef.current;
+    if (captured === null || list === null) {
+      return;
+    }
+    const el = monthRefs.current.get(captured.key);
+    const inserted = planPrependRestore({
+      anchorTop: el?.offsetTop ?? null,
+      capturedTop: captured.top,
+    });
+    if (inserted !== null) {
+      list.scrollTop += inserted;
+    }
+  }, [firstMonth]);
+
+  // Приписка доехала до DOM — гейт открывает следующий запрос (план 050).
+  useEffect(() => {
+    rangePrependGate.settled();
+  }, [firstMonth, rangePrependGate]);
+
   const handleScroll = (): void => {
     const container = scrollRef.current;
     if (container === null) {
@@ -768,8 +872,17 @@ export function CalendarRangePicker({
       return;
     }
     const chunks = flingChunks(previous, now, container.scrollTop, FEED_CHUNK_PX);
+    const portion = rangePrependGate.request(chunks);
+    if (portion === null) {
+      return;
+    }
+    // Захват якоря до приписки (план 051).
+    const capturedKey = monthKey(firstMonth.year, firstMonth.month0);
+    const capturedEl = monthRefs.current.get(capturedKey);
+    rangePrependAnchorRef.current =
+      capturedEl !== undefined ? { key: capturedKey, top: capturedEl.offsetTop } : null;
     setFirstMonth((month) =>
-      calendarMonthOfIndex(calendarMonthIndex(month) - RANGE_PREPEND_CHUNK * chunks),
+      calendarMonthOfIndex(calendarMonthIndex(month) - RANGE_PREPEND_CHUNK * portion),
     );
   };
 
@@ -872,14 +985,17 @@ export function CalendarRangePicker({
         </div>
       </div>
 
-      {/* Позицию при дорисовке держит нативный scroll anchoring браузера:
-          корректировка едет в том же layout-проходе, что и вставка, —
-          моментум-безопасно (план 042). Ручная компенсация снята: с
-          включённым якорем она удваивала бы сдвиг. */}
+      {/* Позицию при дорисовке держит ручной якорь до пейнта (план 051):
+          layout-эффект возвращает scrollTop в тот же кадр, что DOM-встав.
+          Прежняя ставка на нативный scroll anchoring (план 042) работала
+          только на Chromium: в WebKit якоря нет (overflow-anchor —
+          Safari 27+), и приписка телепортировала контент; ручная
+          компенсация снята была зря. [overflow-anchor:none] держит одну
+          компенсацию (нашу) на всех движках. */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none]"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [overflow-anchor:none]"
       >
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {months.map(({ year, month0 }, index) => {

@@ -5,8 +5,11 @@ import { expect, openCabinetWithSessionToken, test } from './fixtures';
 // в паузу рендера. Прежний порог 32px срабатывал вплотную к краю: пока
 // React рисовал 6 месячных сеток (40–110мс под нагрузкой), флик
 // доезжал до scrollTop 0 — прокрутка останавливалась и «дёргалась».
-// Замер живой приёмки: триггер брал высоту ленты на scrollTop 0–9px
-// из 5 дорисовок.
+// План 051: коммит приписки ограничен (гейт + кэп 2 = ≤ 12 месяцев),
+// антистенную защиту несёт запас seed 11 (открытие ≈ 4000px выше
+// порога 3000) — метрики инвариантов пересчитаны под ограниченный
+// коммит: объём доращивки вместо количества приписок. Жёсткость
+// контента при приписке — calendar-anchor.spec.ts.
 
 const UI_KIT = '/ui-kit';
 
@@ -69,13 +72,17 @@ test('дорисовка месяцев срабатывает с запасом
     () =>
       (window as unknown as { __stFrames: Array<{ st: number; sh: number }> }).__stFrames,
   );
-  const prependCount = frames.filter(
-    (frame, i) => i > 0 && frames[i - 1] !== undefined && frame.sh !== frames[i - 1]?.sh,
-  ).length;
+  const firstFrame = frames[0];
+  const lastFrame = frames.at(-1);
+  if (firstFrame === undefined || lastFrame === undefined) {
+    throw new Error('зонд кадров пуст — rAF не тикал');
+  }
+  const shGrowth = lastFrame.sh - firstFrame.sh;
   const minSt = Math.min(...frames.map((f) => f.st));
 
-  // Дорисовки состоялись (лента реально удлинялась).
-  expect(prependCount).toBeGreaterThanOrEqual(3);
+  // Дорисовки состоялись: забег (~5500px) съел стартовый запас (~4000px)
+  // и потребовал минимум одну ограниченную порцию (~4300px).
+  expect(shGrowth, 'лента доросла под забег').toBeGreaterThanOrEqual(1000);
   // И за весь забег прокрутка ни разу не коснулась стены: триггер
   // дорисовки стоит далеко от края (кадр-зонд между дорисовками читает
   // уже компенсированную позицию — касание стены в паузу рендера и есть
@@ -83,13 +90,12 @@ test('дорисовка месяцев срабатывает с запасом
   expect(minSt).toBeGreaterThan(0);
 });
 
-  // Жёсткий непрерывный флик (карта #1437, план 042, feel-check владельца
-  // 16.10: «лагает и годы буквально пролетают»): в отличие от приёмки
-  // #1428 выше — без пауз между фликами и вдвое длиннее, скорость под
-  // 100px/мс. На прежнем пороге 32px лента жила циклом «стена →
-  // компенсация прыжком на порцию» (замер 16.10: пауза на scrollTop 0
-  // между каждой дорисовкой) — это и есть «пролетающие годы».
-  test('жёсткий непрерывный флик: стена не достигается, лента успевает', async ({ page }) => {
+  // Жёсткий флик реальной физики моментума (карта #1437; план 051:
+  // протокол переведён с синтетических 100px/ms, которые мог догнать
+  // только монструозный коммит — источник телефонных пауз, — на верхнюю
+  // границу реального флика: ~4800px суммарного пробега при душащем CPU).
+  // Инвариант тот же: стена не достигается, лента успевает.
+  test('жёсткий флик под душащим CPU: стена не достигается, лента успевает', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(UI_KIT);
     // Под нагрузкой полного прогона клик до гидрации теряется (кнопка
@@ -122,23 +128,15 @@ test('дорисовка месяцев срабатывает с запасом
     requestAnimationFrame(tick);
   });
 
-  // Разгон вниз (в будущее, до упора демо-ленты): пикер открывается
-  // прямо на верхнем крае (initialSt 0, замер 16.10) — флик вверх с
-  // потолка не может ничего скроллить. Забег: вниз набираем ход,
-  // затем непрерывный флик вверх (в прошлое): 20 wheel-всплесков по
-  // 3000px с паузой 25мс — устойчивые ~100px/мс против разовых фликов
-  // приёмки #1428. Драйвер — колесо с курсором над лентой (wheel
-  // скроллит то, что под указателем): Input.synthesizeScrollGesture под
-  // троттлингом скроллит композитором, не диспатчив на главный поток ни
-  // одного scroll-события (замер 16.10: evs=0 при прокрученной ленте).
+  // Восемь всплесков по 600px с паузой 30мс — суммарный пробег ~4800px,
+  // верх реального жёсткого флика (~3–10px/ms с затуханием); драйвер —
+  // колесо с курсором над лентой (Input.synthesizeScrollGesture под
+  // троттлингом скроллит композитором, не диспатчив ни одного
+  // scroll-события — замер 16.10).
   await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.5);
-  for (let f = 0; f < 10; f += 1) {
-    await page.mouse.wheel(0, 3000);
-    await page.waitForTimeout(25);
-  }
-  for (let f = 0; f < 20; f += 1) {
-    await page.mouse.wheel(0, -3000);
-    await page.waitForTimeout(25);
+  for (let f = 0; f < 8; f += 1) {
+    await page.mouse.wheel(0, -600);
+    await page.waitForTimeout(30);
   }
   await page.waitForTimeout(2000);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
@@ -148,10 +146,6 @@ test('дорисовка месяцев срабатывает с запасом
       (window as unknown as { __hardFrames: Array<{ st: number; sh: number }>; __evs: number[] })
         .__hardFrames,
   );
-  const evs = await page.evaluate(() => (window as unknown as { __evs: number[] }).__evs);
-  const prependCount = frames.filter(
-    (frame, i) => i > 0 && frame.sh !== frames[i - 1]?.sh,
-  ).length;
   const lastFrame = frames.at(-1);
   const firstFrame = frames[0];
   if (lastFrame === undefined || firstFrame === undefined) {
@@ -159,22 +153,19 @@ test('дорисовка месяцев срабатывает с запасом
   }
   const shGrowth = lastFrame.sh - firstFrame.sh;
   const wallFrames = frames.filter((f) => f.st === 0).length;
-  // Стена считается после первого движения: пикер открывается прямо на
-  // верхнем крае (initialSt 0) — ведущие нули это стартовая позиция, а
+  // Стена считается после первого движения: открытие стоит на стартовом
+  // запасе (~4000px, seed 11) — ведущие нули это стартовая позиция, а
   // не касание стены в полёте.
   const firstMoved = frames.findIndex((f) => f.st > 0);
   const wallFramesInFlight = (firstMoved === -1 ? [] : frames.slice(firstMoved)).filter((f) => f.st === 0).length;
-  const diag = `frames=${frames.length} last=${JSON.stringify(frames.at(-1))} evs=${evs.length} prependCount=${prependCount} shGrowth=${shGrowth} wallFrames=${wallFrames}`;
+  const diag = `frames=${frames.length} last=${JSON.stringify(frames.at(-1))} prependCount=${frames.filter((frame, i) => i > 0 && frame.sh !== frames[i - 1]?.sh).length} shGrowth=${shGrowth} wallFrames=${wallFrames}`;
 
-  // Лента догнала флик: дорисовки шли, суммарный прирост высоты покрывает
-  // забег (60 000px вверх минус стартовый буфер ~2800px — скоростные
-  // порции по несколько порций на событие).
-  expect(prependCount, diag).toBeGreaterThanOrEqual(3);
-  expect(shGrowth, diag).toBeGreaterThanOrEqual(12000);
+  // Забег (~4800px) съел запас (~4000px) и потребовал дорисовку.
+  expect(shGrowth, diag).toBeGreaterThanOrEqual(2000);
   // Стена — не более нескольких кадров в полёте: под душащим CPU событие
-  // может доехать, когда композитор уже у края, и скоростная порция
-  // снимается с них в тот же коммит; устойчивый цикл «стена → прыжок»
-  // (24 кадра на стене на прежней механике) — регресс.
+  // может доехать, когда композитор уже у края, и порция
+  // снимается с них в тот же коммит; устойчивый цикл «стена → прыжок» —
+  // регресс.
   expect(wallFramesInFlight, `кадров на стене (scrollTop 0) в полёте; ${diag}`).toBeLessThanOrEqual(4);
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPrependGate } from './calendar-feed-gate';
+import { createPrependGate, flingChunks, FLING_CHUNKS_CAP } from './calendar-feed-gate';
 
 /** Гейт приписки (план 050): одна порция «в полёте» — скролл-события
  * одного кадра не суммируются в один DOM-коммит. */
@@ -43,5 +43,34 @@ describe('createPrependGate — одна приписка в полёте', () =
     expect(gate.pending).toBe(true);
     gate.settled();
     expect(gate.pending).toBe(false);
+  });
+});
+
+/** flingChunks (план 042, кэп 051): порций на событие по скорости. */
+describe('flingChunks — порций на событие по скорости прокрутки', () => {
+  const FEED_CHUNK_PX = 2800;
+
+  it('первое событие (нет предыдущего) — одна порция', () => {
+    expect(flingChunks(null, 1000, 5000, FEED_CHUNK_PX)).toBe(1);
+  });
+
+  it('медленный скролл — одна порция', () => {
+    // 40px за 200мс = 0.2px/ms → 0.2×600/2800 < 1
+    expect(flingChunks({ st: 5000, t: 1000 }, 1200, 4960, FEED_CHUNK_PX)).toBe(1);
+  });
+
+  it('жёсткий флик — кэп 2 (было 8: коммит 48 месяцев душил телефон, план 051)', () => {
+    // 3000px за 30мс ≈ 100px/ms — синтетика 042; коммит ограничен 12 месяцами
+    expect(flingChunks({ st: 8000, t: 1000 }, 1030, 5000, FEED_CHUNK_PX)).toBe(FLING_CHUNKS_CAP);
+    expect(FLING_CHUNKS_CAP).toBe(2);
+  });
+
+  it('промежуточная скорость ~6px/ms — 2 порции, кэп не резал бы и 3', () => {
+    // 180px за 30мс = 6px/ms → ceil(6×600/2800) = 2
+    expect(flingChunks({ st: 8000, t: 1000 }, 1030, 7820, FEED_CHUNK_PX)).toBe(2);
+  });
+
+  it('время не поехало (тот же кадр) — одна порция', () => {
+    expect(flingChunks({ st: 8000, t: 1000 }, 1000, 5000, FEED_CHUNK_PX)).toBe(1);
   });
 });

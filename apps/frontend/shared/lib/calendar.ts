@@ -260,10 +260,16 @@ export function settleIsoRange(draft: IsoRangeDraft): IsoRange {
   return { from: draft.start, to: draft.end ?? draft.start };
 }
 
+/** Стартовый запас ленты пикера периода назад (план 051, зеркально
+ * CALENDAR_FEED_BACKWARD_SEED одиночного пикера): свежий выбор открывается
+ * с запасом контекста выше порога приписки, дорисовка не живёт на первом
+ * пикселе прокрутки назад. */
+export const RANGE_FEED_BACKWARD_SEED = 11;
+
 /** Окно ленты пикера диапазона: со значением — старт месяц начала диапазона
- * минус месяц, но не глубже пяти месяцев до текущего (свежий выбор
+ * минус месяц, но не глубже стартового запаса до текущего (свежий выбор
  * открывается с контекстом, глубокий — у своего начала); пустой выбор
- * (null — дефолт «весь период», #670) — те же пять месяцев назад без
+ * (null — дефолт «весь период», #670) — тот же запас назад без
  * преселекта. Конец — текущий месяц плюс два приглушённых будущих. Глубже
  * окно расширяется дорисовкой при прокрутке. */
 export function rangeFeedWindow(
@@ -271,8 +277,11 @@ export function rangeFeedWindow(
   today: IsoDate,
 ): { first: CalendarMonthRef; last: CalendarMonthRef } {
   const currentIdx = calendarMonthIndex(calendarMonthOf(today));
-  const fromIdx = value !== null ? calendarMonthIndex(calendarMonthOf(value.from)) - 1 : currentIdx - 5;
-  const firstIdx = Math.min(fromIdx, currentIdx - 5);
+  const fromIdx =
+    value !== null
+      ? calendarMonthIndex(calendarMonthOf(value.from)) - 1
+      : currentIdx - RANGE_FEED_BACKWARD_SEED;
+  const firstIdx = Math.min(fromIdx, currentIdx - RANGE_FEED_BACKWARD_SEED);
   return {
     first: calendarMonthOfIndex(firstIdx),
     last: calendarMonthOfIndex(currentIdx + 2),
@@ -283,6 +292,15 @@ export function rangeFeedWindow(
  * отступ от семантического старта — см. calendarSingleFeedWindow). */
 export const CALENDAR_FEED_PREPEND_CHUNK = 6;
 
+/** Стартовый запас ленты назад (план 051): сид сажает ленту на столько
+ * месяцев раньше семантического старта calendarFeedStart, чтобы при
+ * открытии scrollTop был заметно выше порога приписки (3000px ≈ 8
+ * месяцев): прежние 6 месяцев ≈ 2160px клали позицию открытия прямо в
+ * зону приписки — дорисовка стартовала с первого пикселя прокрутки назад
+ * и шла нон-стоп. Запас 12 ≈ 4300px держит первый кадр вне зоны, а
+ * антистенную защиту несут порог + гейт, не размер коммита. */
+export const CALENDAR_FEED_BACKWARD_SEED = 12;
+
 /** Месяцы приглушённого будущего за жёстким краем ленты (1:1 с пикером
  * периода: «текущий месяц плюс два приглушённых будущих»). */
 export const CALENDAR_FEED_FORWARD_CONTEXT = 2;
@@ -290,16 +308,18 @@ export const CALENDAR_FEED_FORWARD_CONTEXT = 2;
 /** Стартовая лента одиночного пикера без края и порция роста вперёд. */
 export const CALENDAR_FEED_MONTHS = 12;
 
-/** Окно ленты одиночного пикера дат (решение владельца 13.10, #1394).
- * Старт — на порцию дорисовки раньше семантического старта
- * calendarFeedStart: над якорем всегда есть содержимое, и прокрутка вверх
- * работает сразу — на верхнем упоре scroll-событие не возникает вовсе,
- * дорисовка по порогу не запускается («сначала качни вниз», приёмка
- * #1394). Вперёд при закрытом будущем (maxDate задан) — жёсткий край:
- * последний месяц = месяц maxDate плюс пара приглушённых месяцев
- * контекста (1:1 с rangeFeedWindow), дальше лента не растёт. У открытого
- * будущего (maxDate не задан — начало аренды, плановые платежи) края нет:
- * лента открывается годом и растёт годом, как раньше. */
+/** Окно ленты одиночного пикера дат (решение владельца 13.10, #1394;
+ * seed 12 — план 051). Старт — на стартовый запас CALENDAR_FEED_BACKWARD_SEED
+ * раньше семантического старта calendarFeedStart: над якорем всегда есть
+ * содержимое, прокрутка вверх работает сразу — на верхнем упоре
+ * scroll-событие не возникает вовсе, дорисовка по порогу не запускается
+ * («сначала качни вниз», приёмка #1394) — и позиция открытия выше порога
+ * приписки, дорисовка не живёт на первом пикселе. Вперёд при закрытом
+ * будущем (maxDate задан) — жёсткий край: последний месяц = месяц maxDate
+ * плюс пара приглушённых месяцев контекста (1:1 с rangeFeedWindow), дальше
+ * лента не растёт. У открытого будущего (maxDate не задан — начало аренды,
+ * плановые платежи) края нет: лента открывается годом и растёт годом, как
+ * раньше. */
 export function calendarSingleFeedWindow(args: {
   readonly feedStart: CalendarMonthRef;
   readonly anchorMonth: CalendarMonthRef;
@@ -310,7 +330,7 @@ export function calendarSingleFeedWindow(args: {
   readonly forwardEdge: CalendarMonthRef | null;
 } {
   const first = calendarMonthOfIndex(
-    calendarMonthIndex(args.feedStart) - CALENDAR_FEED_PREPEND_CHUNK,
+    calendarMonthIndex(args.feedStart) - CALENDAR_FEED_BACKWARD_SEED,
   );
   const anchorIdx =
     calendarMonthIndex(args.anchorMonth) - calendarMonthIndex(first);
