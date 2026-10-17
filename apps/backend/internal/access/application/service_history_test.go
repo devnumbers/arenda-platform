@@ -55,7 +55,7 @@ func newHistoryFixture(t *testing.T) *historyFixture {
 	}
 	history := &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(resolver, repo)
-	svc := NewAccessService(repo, resolver, nil, lookup, policy, nil, nil,
+	svc := NewAccessService(repo, resolver, nil, lookup, policy, nil, nil, nil,
 		newTestFactoryWithHistory(repo, &memInvitationsRepo{}, history), nil)
 	return &historyFixture{
 		t: t, owner: owner, member: member, stranger: stranger, invited: invited,
@@ -215,7 +215,7 @@ func newInvitationHistoryFixture(t *testing.T) (
 	lookup := newFakeLookup()
 	history = &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(owners, repo)
-	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
+	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, history), nil)
 	svc = NewInvitationService(access, repo, invitations, owners, nil, lookup, policy,
 		nil, nil, nil, nil,
@@ -279,7 +279,7 @@ func TestHistory_InvitationLifecycleRows(t *testing.T) {
 	lookup := newFakeLookup()
 	history := &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(owners, repo)
-	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
+	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, history), nil)
 	svc := NewInvitationService(access, repo, invitations, owners, nil, lookup, policy,
 		nil, nil, nil, nil,
@@ -330,7 +330,7 @@ func TestHistory_ParticipantRemovedRows(t *testing.T) {
 	emails := fakeEmailResolver{member: testMemberEmail}
 	history := &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(owners, repo)
-	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil,
+	access := NewAccessService(repo, owners, nil, lookup, policy, nil, nil, nil,
 		newTestFactoryWithHistory(repo, invitations, history), nil)
 	svc := NewParticipantMutationService(access, owners, nil, lookup, emails, policy,
 		nil, nil, nil, nil, nil,

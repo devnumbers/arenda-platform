@@ -62,7 +62,8 @@ func (historyPolicyAllow) RoleForProperty(context.Context, uuid.UUID, uuid.UUID)
 
 func newHistoryTestHandlers() (*HistoryHandlers, *historyReaderFake) {
 	reader := &historyReaderFake{}
-	svc := historyapp.NewHistoryReadService(reader, historyPolicyAllow{})
+	// Nil-гейт выключен — тарифный вердикт пинят tariff_gate_test.go рядом.
+	svc := historyapp.NewHistoryReadService(reader, historyPolicyAllow{}, nil)
 	return NewHistoryHandlers(svc, slog.Default()), reader
 }
 

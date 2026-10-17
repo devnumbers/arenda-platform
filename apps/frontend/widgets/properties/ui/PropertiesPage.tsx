@@ -144,7 +144,10 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
 
   const openCreate = () => {
     if (isActionLoading) return;
-    router.push(canAdd ? ROUTES.propertyNew : ROUTES.profileTariffChange);
+    // Исчерпанный конечный лимит (и «подписки нет», тот же canAdd=false) —
+    // интерстишал «Превышен лимит объектов» (#1469) вместо мгновенного
+    // редиректа на выбор тарифа; адаптивный текст экран разводит сам.
+    router.push(canAdd ? ROUTES.propertyNew : ROUTES.profileTariffPropertyLimit);
   };
 
   const createLabel = canAdd

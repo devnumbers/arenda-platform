@@ -44,31 +44,29 @@ export function propertyStatusSubtitle(status: PropertyStatus): string | null {
   return null;
 }
 
-/** Кебаб (Figma 1186:44996 — активный, 1581:52407 — архивный; платный
- * состав у смотрящего — 2235-100924). Смотрящему (canMutate=false)
- * статусные мутирующие пункты недоступны — остаются чтение и совместный
- * доступ. На basic пункты совместного доступа скрыты полностью (D15
- * #1312): платная функция не приманивает; per-object экраны остаются под
- * paywall-редиректом (ADR 0064), так что deep-link живёт, вход из UI на
- * basic — нет. */
+/** Кебаб (Figma 1186:44996 — активный, 1581:52407 — архивный; состав
+ * смотрящего — 2235-100924). Смотрящему (canMutate=false) статусные
+ * мутирующие пункты недоступны — остаются чтение и совместный доступ.
+ * Пункт «Совместного доступа» тарифу не подчиняется (D15 «платная функция
+ * не приманивает» снято решением владельца 15.10.2026, #1464): на basic
+ * клик разводит sharingGateRedirect (ADR 0064) — владелец на интерстишал
+ * #1470, участник на страницу. */
 export function buildPropertyKebabItems(
   status: PropertyStatus,
   canMutate: boolean,
-  canUseSharing: boolean,
 ): ReadonlyArray<PropertyDetailAction> {
-  const sharing = canUseSharing ? [action('access', 'Совместный доступ', false)] : [];
-  if (status === 'archived') {
-    return canMutate
-      ? [action('about', 'Об объекте', false), action('unarchive', 'Вернуть из архива', false), ...sharing]
-      : [action('about', 'Об объекте', false), ...sharing];
+  const sharing = [action('access', 'Совместный доступ', false)];
+  if (!canMutate) {
+    return [action('about', 'Об объекте', false), ...sharing];
   }
-  return canMutate
-    ? [
-        action('about', 'Об объекте', false),
-        action('change-status', 'Изменить статус', false),
-        ...sharing,
-      ]
-    : [action('about', 'Об объекте', false), ...sharing];
+  if (status === 'archived') {
+    return [action('about', 'Об объекте', false), action('unarchive', 'Вернуть из архива', false), ...sharing];
+  }
+  return [
+    action('about', 'Об объекте', false),
+    action('change-status', 'Изменить статус', false),
+    ...sharing,
+  ];
 }
 
 /**

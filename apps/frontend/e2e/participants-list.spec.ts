@@ -232,7 +232,7 @@ test('«Отозвать и удалить»: глобальный отзыв, �
   await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toBeVisible();
 });
 
-test('basic: апселл-пустота, кебаб и пилюля скрыты, CTA ведёт на оформление тарифа; тариф восстанавливается', async ({ page, seededUser }) => {
+test('basic: апселл-пустота, кебаб и пилюля скрыты, CTA ведёт на интерстишал шаринга; тариф восстанавливается', async ({ page, seededUser }) => {
   const OWNER_SUBSCRIPTION_ID = '99999999-9999-4999-8999-999999999901';
   // Перевод владельца на basic (не удаление подписки: «подписки нет» —
   // 404 → null, и optimistic-умолчание фронта считает это платным).
@@ -259,9 +259,11 @@ test('basic: апселл-пустота, кебаб и пилюля скрыт�
     await expect(page.getByTestId('participants-search-pill')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Имя' })).toHaveCount(0);
 
-    // CTA «Пригласить» — на оформление тарифа.
+    // CTA «Пригласить» — на интерстишал шаринга (#1470, решение
+    // владельца 15.10); выбор тарифа — следующей кнопкой с экрана.
     await page.getByTestId('participants-upsell-cta').click();
-    await page.waitForURL('**/profile/tariff/change');
+    await page.waitForURL('**/profile/tariff/sharing');
+    await expect(page.getByRole('heading', { name: 'Совместный доступ недоступен' })).toBeVisible();
   } finally {
     await execE2eSql(
       `UPDATE user_subscriptions SET tariff_id = (SELECT id FROM tariffs WHERE name = '${previousTariff}') ` +

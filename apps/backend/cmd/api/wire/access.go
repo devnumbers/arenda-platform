@@ -7,6 +7,7 @@ import (
 	accessevents "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/events"
 	accesspg "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/postgres"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
+	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/events"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/mailer"
@@ -36,6 +37,10 @@ type Access struct {
 // billing or properties.
 var (
 	_ propertiesapp.RecipientSlotPolicy = (*accessapp.SlotCoordinator)(nil)
+	// The billing paid-sections gate adapter doubles as the access
+	// application's tariff-gate port (ADR 0064, ревизия #1462): one adapter,
+	// two consumer-side ports — the middleware's and the use cases'.
+	_ accessapp.PaidSectionsGate = (*billinghttp.PaidSectionsGate)(nil)
 	// The SharedProperties adapter serves the recipient access context (issue
 	// T11); the AccessService resolves owner display names for the banner.
 	_ propertiesapp.SharedMemberships        = (*accesspg.SharedProperties)(nil)
@@ -135,6 +140,11 @@ func WireAccess(
 		policy,
 		slotCoordinator,
 		accessEventPublisher,
+		// The role-aware tariff gate of the access use cases (ADR 0064,
+		// ревизия #1462): the same billing adapter the route middleware of the
+		// other paid sections consumes — the verdict is read where the role is
+		// already resolved.
+		billing.PaidSectionsGate,
 		factory,
 		p.Logger,
 	)

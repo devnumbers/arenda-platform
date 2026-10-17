@@ -4401,6 +4401,24 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
+        /** @description Payment required: the tariff's active-property limit is exceeded. `property_limit_reached` — the creation or the unarchive would push the active property count over the subscription's active_property_limit (issue #1468); tell it apart from the paid sections' `tariff_required` (ADR 0064) by the code. */
+        PropertyLimitReached: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "about:blank",
+                 *       "title": "Limit exceeded",
+                 *       "status": 402,
+                 *       "detail": "Превышен лимит активных объектов",
+                 *       "code": "property_limit_reached"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Internal server error */
         InternalServerError: {
             headers: {
@@ -5036,6 +5054,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PropertyLimitReached"];
             403: components["responses"]["SubscriptionBlocked"];
         };
     };
@@ -5238,6 +5257,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PropertyLimitReached"];
             403: components["responses"]["SubscriptionBlocked"];
             404: components["responses"]["NotFound"];
         };

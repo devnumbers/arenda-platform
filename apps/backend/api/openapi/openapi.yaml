@@ -481,6 +481,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PropertyLimitReached'
         '403':
           $ref: '#/components/responses/SubscriptionBlocked'
     get:
@@ -701,6 +703,8 @@ paths:
                 $ref: '#/components/schemas/PropertyResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PropertyLimitReached'
         '404':
           $ref: '#/components/responses/NotFound'
         '403':
@@ -9674,6 +9678,23 @@ components:
             status: 403
             detail: "Доступ к объекту приостановлен: превышен лимит объектов по тарифу"
             code: membership_suspended
+    PropertyLimitReached:
+      description: >-
+        Payment required: the tariff's active-property limit is exceeded.
+        `property_limit_reached` — the creation or the unarchive would push
+        the active property count over the subscription's active_property_limit
+        (issue #1468); tell it apart from the paid sections'
+        `tariff_required` (ADR 0064) by the code.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: about:blank
+            title: Limit exceeded
+            status: 402
+            detail: "Превышен лимит активных объектов"
+            code: property_limit_reached
     InternalServerError:
       description: Internal server error
       content:

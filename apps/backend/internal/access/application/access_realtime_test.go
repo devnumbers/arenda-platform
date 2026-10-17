@@ -307,7 +307,7 @@ func TestLeavePropertyPublishesFramesWhenOwnerLookupFails(t *testing.T) {
 		events, audit, noopBeginner{}, clk, nil)
 	realtime := &realtimetest.RecordingPublisher{}
 	access := NewAccessService(repo, owners, statuses, newFakeLookup(), policy,
-		coordinator, events,
+		coordinator, events, nil,
 		newTestFactory(repo, &memInvitationsRepo{removalScope: repo.inManageScope}, audit), nil)
 	access.SetRealtimePublisher(realtime)
 

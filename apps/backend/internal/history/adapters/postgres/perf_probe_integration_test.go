@@ -39,7 +39,9 @@ func TestHistoryPerfProbe(t *testing.T) {
 	owner := seedPerfJournal(t, pool)
 	// Тот же стек, что в композиционном корне: читает владелец сида.
 	policy := accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(pool), accesspg.NewMembershipRepository(pool))
-	svc := historyapp.NewHistoryReadService(historypg.NewReadStore(pool), policy)
+	// Nil-гейт выключен: перф-проба измеряет стор и policy, тарифное
+	// измерение — юнит-тесты шва (конвенция опциональных зависимостей).
+	svc := historyapp.NewHistoryReadService(historypg.NewReadStore(pool), policy, nil)
 
 	// Скоупы пробы: один объект и один актёр из сида.
 	var propertyID, actorID uuid.UUID
