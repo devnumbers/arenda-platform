@@ -28,3 +28,11 @@ func IsForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation
 }
+
+// IsForeignKeyViolationOnConstraint reports whether err is a PostgreSQL
+// foreign-key violation raised by the named constraint — the narrowing a
+// table with several foreign keys needs to tell their causes apart.
+func IsForeignKeyViolationOnConstraint(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation && pgErr.ConstraintName == constraint
+}

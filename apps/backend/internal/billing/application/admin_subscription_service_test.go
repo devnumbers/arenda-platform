@@ -244,6 +244,72 @@ func TestAdminAssignServiceSubscription_TariffNotFound(t *testing.T) {
 	}
 }
 
+// requireRegisteredThenAdminTransition asserts the two-entry history an admin
+// tool leaves on an account without a subscription row (issue #1516): the
+// system registered entry of the freshly created basic subscription followed
+// by the admin-attributed operation on that same basic tariff, newest first.
+func (h *subscriptionHarness) requireRegisteredThenAdminTransition(
+	t *testing.T, userID, adminID uuid.UUID, reason domain.TransitionReason,
+) {
+	t.Helper()
+	transitions := h.transitionsOfSubscription(t, userID)
+	if len(transitions) != 2 {
+		t.Fatalf("transitions = %d, want 2 (%s over registered)", len(transitions), reason)
+	}
+	operation := transitions[0]
+	if operation.Reason != reason || operation.Initiator != domain.InitiatorAdmin ||
+		operation.InitiatorID == nil || *operation.InitiatorID != adminID {
+		t.Errorf("latest transition = %q/%q, want the admin %q", operation.Reason, operation.Initiator, reason)
+	}
+	if operation.FromTariffID == nil || *operation.FromTariffID != h.tariffID(t, domain.TariffBasic) {
+		t.Errorf("operation from tariff = %v, want the created basic", operation.FromTariffID)
+	}
+	registered := transitions[1]
+	if registered.Reason != domain.TransitionReasonRegistered || registered.Initiator != domain.InitiatorSystem {
+		t.Errorf("first transition = %q/%q, want the system registered", registered.Reason, registered.Initiator)
+	}
+}
+
+// TestAdminAssignServiceSubscription_AccountWithoutSubscriptionRowCreatesBasicFirst
+// proves the upsert semantics on an account with no subscription row (issue
+// #1516): an admin-role account never got one, yet the tools must work — the
+// assignment creates the free basic subscription (with its registered
+// transition) and overwrites it with the service one in the same transaction,
+// so the history starts at registered and the assignment is admin-attributed.
+func TestAdminAssignServiceSubscription_AccountWithoutSubscriptionRowCreatesBasicFirst(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	adminID := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+
+	if err := h.svc.AssignServiceSubscription(t.Context(), adminID, userID, AssignServiceSubscriptionRequest{
+		TariffName: domain.TariffBusiness,
+		TermType:   ServiceTermMonth,
+	}); err != nil {
+		t.Fatalf("AssignServiceSubscription(no subscription row) error = %v", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Source != domain.SubscriptionSourceService {
+		t.Errorf("Source = %q, want service", stored.Source)
+	}
+	if stored.TariffID != h.tariffID(t, domain.TariffBusiness) {
+		t.Errorf("TariffID = %v, want business", stored.TariffID)
+	}
+	wantUntil := h.now.AddDate(0, 1, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("ValidUntil = %v, want %v", stored.ValidUntil, wantUntil)
+	}
+
+	h.requireRegisteredThenAdminTransition(t, userID, adminID, domain.TransitionReasonServiceAssigned)
+	if entries := h.auditEntries(auditdomain.ActionSubscriptionServiceAssigned); len(entries) != 1 {
+		t.Fatalf("service_assigned audit entries = %d, want 1", len(entries))
+	}
+}
+
 // requireForceChangedSubscription asserts the force change applied the new
 // tariff for the chosen period while the source, the auto-renew setting and
 // the period kept their value.
@@ -346,6 +412,49 @@ func TestAdminForceChangeTariff_Rejections(t *testing.T) {
 		Period:     domain.PeriodMonth,
 	}); !errors.Is(err, domain.ErrInvalidSubscriptionState) {
 		t.Fatalf("ForceChangeTariff(cancelled) error = %v, want ErrInvalidSubscriptionState", err)
+	}
+}
+
+// TestAdminForceChangeTariff_AccountWithoutSubscriptionRowCreatesBasicFirst
+// proves the upsert semantics on an account with no subscription row (issue
+// #1516): the forced change creates the free basic subscription first (with
+// its registered transition) and switches it to the requested tariff in the
+// same transaction. The fresh row is on the paid track, and the forced change
+// keeps that source.
+func TestAdminForceChangeTariff_AccountWithoutSubscriptionRowCreatesBasicFirst(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	adminID := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+
+	if err := h.svc.ForceChangeTariff(t.Context(), adminID, userID, ForceChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	}); err != nil {
+		t.Fatalf("ForceChangeTariff(no subscription row) error = %v", err)
+	}
+
+	stored, err := h.stores.subscriptions.GetByUserID(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.TariffID != h.tariffID(t, domain.TariffPro) {
+		t.Errorf("TariffID = %v, want pro", stored.TariffID)
+	}
+	if stored.Source != domain.SubscriptionSourcePaid {
+		t.Errorf("Source = %q, want the fresh basic's paid source kept", stored.Source)
+	}
+	if stored.CurrentPeriod == nil || *stored.CurrentPeriod != domain.PeriodYear {
+		t.Errorf("CurrentPeriod = %v, want year", stored.CurrentPeriod)
+	}
+	wantUntil := h.now.AddDate(1, 0, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("ValidUntil = %v, want %v", stored.ValidUntil, wantUntil)
+	}
+
+	h.requireRegisteredThenAdminTransition(t, userID, adminID, domain.TransitionReasonForcedChange)
+	if entries := h.auditEntries(auditdomain.ActionSubscriptionTariffForced); len(entries) != 1 {
+		t.Fatalf("tariff_forced audit entries = %d, want 1", len(entries))
 	}
 }
 
@@ -500,6 +609,25 @@ func TestAdminCancelSubscription_FreeTariffNotGuarded(t *testing.T) {
 	}
 }
 
+// TestAdminToolsWithoutSubscriptionRow_NarrowScope pins the scope of the
+// upsert (issue #1516): only the two tools the admin UI shows unconditionally
+// — service assignment and forced tariff change — onboard a missing row.
+// Grace extension and cancellation on the user's behalf stay a miss: their
+// buttons are hidden without a subscription, and a miss is the honest answer.
+func TestAdminToolsWithoutSubscriptionRow_NarrowScope(t *testing.T) {
+	t.Parallel()
+	h := newSubscriptionHarness(t)
+	adminID := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+
+	if err := h.svc.ExtendGrace(t.Context(), adminID, userID, 3); !errors.Is(err, ErrSubscriptionNotFound) {
+		t.Fatalf("ExtendGrace(no subscription row) error = %v, want ErrSubscriptionNotFound", err)
+	}
+	if err := h.svc.CancelSubscriptionAsAdmin(t.Context(), adminID, userID); !errors.Is(err, ErrSubscriptionNotFound) {
+		t.Fatalf("CancelSubscriptionAsAdmin(no subscription row) error = %v, want ErrSubscriptionNotFound", err)
+	}
+}
+
 // TestAdminListTransitions_ResolvesTariffNames proves the transition-history
 // view (issue #255): the newest-first log with the tariff names resolved and
 // the payment reference kept.
@@ -529,11 +657,16 @@ func TestAdminListTransitions_ResolvesTariffNames(t *testing.T) {
 		t.Errorf("reason = %q, want cancelled", view.Transition.Reason)
 	}
 
+	// No subscription row — no transition history (issue #1516): the view
+	// answers an empty log instead of a miss, so the admin tab reads
+	// "no transitions" rather than an error.
 	other, err := h.svc.ListTransitions(t.Context(), uuid.Must(uuid.NewV7()))
-	if !errors.Is(err, ErrSubscriptionNotFound) {
-		t.Fatalf("ListTransitions(unknown user) error = %v, want ErrSubscriptionNotFound", err)
+	if err != nil {
+		t.Fatalf("ListTransitions(no subscription row) error = %v", err)
 	}
-	_ = other
+	if len(other) != 0 {
+		t.Fatalf("transitions = %d, want 0 (no subscription — no history)", len(other))
+	}
 }
 
 // TestChangeTariff_ServiceSubscriptionUpgradeTakesPaymentPath proves the
