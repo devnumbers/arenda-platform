@@ -3,12 +3,14 @@
 package application_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	billingapp "github.com/nambers/arenda-planform/apps/backend/internal/billing/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
 // The admin subscription operations of issue #255 against real PostgreSQL and
@@ -450,4 +452,149 @@ func TestAdminSubscription_AdminCancelRunsOutPaidPeriod(t *testing.T) {
 	}
 
 	h.requireCancelledRunsOutPaidPeriod(t, sub.UserID, cancelled.ValidUntil)
+}
+
+// requireRegisteredThenAdminTransition asserts the history of a subscription
+// an admin tool created on an account without a subscription row (issue
+// #1516): the fresh basic row starts its history with the system registered
+// entry, followed by the admin-attributed tool transition, newest first.
+func (h *adminSubscriptionHarness) requireRegisteredThenAdminTransition(t *testing.T, userID uuid.UUID, reason domain.TransitionReason) {
+	t.Helper()
+	views, err := h.subscriptionsSvc.ListTransitions(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("ListTransitions() error = %v", err)
+	}
+	if len(views) != 2 {
+		t.Fatalf("transitions = %d, want 2 (%s over registered)", len(views), reason)
+	}
+	if views[0].Transition.Reason != reason || views[0].Transition.Initiator != domain.InitiatorAdmin ||
+		views[0].Transition.InitiatorID == nil || *views[0].Transition.InitiatorID != h.adminID {
+		t.Errorf("latest transition = %q/%q, want the admin %q", views[0].Transition.Reason, views[0].Transition.Initiator, reason)
+	}
+	if views[1].Transition.Reason != domain.TransitionReasonRegistered || views[1].Transition.Initiator != domain.InitiatorSystem {
+		t.Errorf("first transition = %q/%q, want the system registered", views[1].Transition.Reason, views[1].Transition.Initiator)
+	}
+}
+
+// TestAdminSubscription_AssignServiceOnAccountWithoutSubscriptionRow proves
+// the issue #1516 reproduction against real PostgreSQL: an admin-role account
+// has no subscription row, yet the assignment works — the tool creates the
+// free basic subscription (with its registered transition) and overwrites it
+// with the service term in the same transaction.
+func TestAdminSubscription_AssignServiceOnAccountWithoutSubscriptionRow(t *testing.T) {
+	t.Parallel()
+	h := newAdminSubscriptionHarness(t)
+	userID := h.seedUserWithRole(actor.RoleAdmin)
+
+	if err := h.subscriptionsSvc.AssignServiceSubscription(h.ctx(), h.adminID, userID, billingapp.AssignServiceSubscriptionRequest{
+		TariffName: domain.TariffBusiness,
+		TermType:   billingapp.ServiceTermMonth,
+	}); err != nil {
+		t.Fatalf("AssignServiceSubscription() error = %v", err)
+	}
+
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.Source != domain.SubscriptionSourceService {
+		t.Errorf("Source = %q, want service", stored.Source)
+	}
+	if stored.TariffID != h.tariffIDByName(t, domain.TariffBusiness) {
+		t.Errorf("TariffID = %v, want business", stored.TariffID)
+	}
+	wantUntil := h.clock.Now().AddDate(0, 1, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("ValidUntil = %v, want %v", stored.ValidUntil, wantUntil)
+	}
+
+	h.requireRegisteredThenAdminTransition(t, userID, domain.TransitionReasonServiceAssigned)
+	h.requireSingleAuditEntry(t, "subscription.service_assigned", "service_assigned", stored.ID)
+}
+
+// TestAdminSubscription_ForceChangeOnAccountWithoutSubscriptionRow proves the
+// forced change works on an account without a subscription row too (issue
+// #1516): the basic subscription is created first and switched to the
+// requested tariff for the requested period, keeping the fresh row's paid
+// source.
+func TestAdminSubscription_ForceChangeOnAccountWithoutSubscriptionRow(t *testing.T) {
+	t.Parallel()
+	h := newAdminSubscriptionHarness(t)
+	userID := h.seedUserWithRole(actor.RoleAdmin)
+
+	if err := h.subscriptionsSvc.ForceChangeTariff(h.ctx(), h.adminID, userID, billingapp.ForceChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodYear,
+	}); err != nil {
+		t.Fatalf("ForceChangeTariff() error = %v", err)
+	}
+
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() error = %v", err)
+	}
+	if stored.TariffID != h.tariffIDByName(t, domain.TariffPro) {
+		t.Errorf("TariffID = %v, want pro", stored.TariffID)
+	}
+	if stored.Source != domain.SubscriptionSourcePaid {
+		t.Errorf("Source = %q, want the fresh basic's paid source kept", stored.Source)
+	}
+	if stored.CurrentPeriod == nil || *stored.CurrentPeriod != domain.PeriodYear {
+		t.Errorf("CurrentPeriod = %v, want year", stored.CurrentPeriod)
+	}
+	wantUntil := h.clock.Now().AddDate(1, 0, 0)
+	if stored.ValidUntil == nil || !stored.ValidUntil.Equal(wantUntil) {
+		t.Errorf("ValidUntil = %v, want %v", stored.ValidUntil, wantUntil)
+	}
+
+	h.requireRegisteredThenAdminTransition(t, userID, domain.TransitionReasonForcedChange)
+	h.requireSingleAuditEntry(t, "subscription.tariff_forced", "tariff_forced", stored.ID)
+}
+
+// TestAdminSubscription_TransitionsOfAccountWithoutRowAnswerEmpty proves the
+// transitions view of an account without a subscription row (issue #1516): no
+// subscription — no history, an empty log instead of the 404 the admin UI
+// could not tell apart from "no transitions".
+func TestAdminSubscription_TransitionsOfAccountWithoutRowAnswerEmpty(t *testing.T) {
+	t.Parallel()
+	h := newAdminSubscriptionHarness(t)
+	userID := h.seedUserWithRole(actor.RoleAdmin)
+
+	views, err := h.subscriptionsSvc.ListTransitions(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("ListTransitions() error = %v, want an empty history for an account without a subscription row", err)
+	}
+	if len(views) != 0 {
+		t.Fatalf("transitions = %d, want 0", len(views))
+	}
+}
+
+// TestAdminSubscription_UnknownUserWithoutSubscriptionRowStaysNotFound pins
+// the other side of the upsert (issue #1516): the user_id FK remains the
+// durable backstop — an unknown user's tool call still answers the
+// subscription miss instead of creating an orphan row, for both tools.
+func TestAdminSubscription_UnknownUserWithoutSubscriptionRowStaysNotFound(t *testing.T) {
+	t.Parallel()
+	h := newAdminSubscriptionHarness(t)
+	userID := uuid.Must(uuid.NewV7())
+
+	err := h.subscriptionsSvc.AssignServiceSubscription(h.ctx(), h.adminID, userID,
+		billingapp.AssignServiceSubscriptionRequest{
+			TariffName: domain.TariffBusiness,
+			TermType:   billingapp.ServiceTermMonth,
+		})
+	if !errors.Is(err, billingapp.ErrSubscriptionNotFound) {
+		t.Fatalf("AssignServiceSubscription(unknown user) error = %v, want ErrSubscriptionNotFound", err)
+	}
+
+	if err := h.subscriptionsSvc.ForceChangeTariff(h.ctx(), h.adminID, userID, billingapp.ForceChangeTariffRequest{
+		TariffName: domain.TariffPro,
+		Period:     domain.PeriodMonth,
+	}); !errors.Is(err, billingapp.ErrSubscriptionNotFound) {
+		t.Fatalf("ForceChangeTariff(unknown user) error = %v, want ErrSubscriptionNotFound", err)
+	}
+
+	if n := h.countRows("SELECT COUNT(*) FROM user_subscriptions WHERE user_id = $1", userID); n != 0 {
+		t.Fatalf("subscription rows for the unknown user = %d, want 0", n)
+	}
 }

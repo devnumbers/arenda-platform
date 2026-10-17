@@ -130,18 +130,25 @@ func (h *subscriptionHarness) requireCancelledSubscription(t *testing.T, sub dom
 	}
 }
 
-// requireCancelledTransitionLog asserts the transition log holds exactly one
-// user-initiated cancelled entry with the active from-side.
-func (h *subscriptionHarness) requireCancelledTransitionLog(t *testing.T, sub domain.Subscription) {
+// requireTransitionLog loads the subscription's transition log, newest first,
+// and fails when it does not hold exactly want entries.
+func (h *subscriptionHarness) requireTransitionLog(t *testing.T, sub domain.Subscription, want int) []domain.Transition {
 	t.Helper()
 	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
 	if err != nil {
 		t.Fatalf("ListBySubscriptionID() error = %v", err)
 	}
-	if len(transitions) != 1 {
-		t.Fatalf("transitions = %d, want 1", len(transitions))
+	if len(transitions) != want {
+		t.Fatalf("transitions = %d, want %d", len(transitions), want)
 	}
-	tr := transitions[0]
+	return transitions
+}
+
+// requireCancelledTransitionLog asserts the transition log holds exactly one
+// user-initiated cancelled entry with the active from-side.
+func (h *subscriptionHarness) requireCancelledTransitionLog(t *testing.T, sub domain.Subscription) {
+	t.Helper()
+	tr := h.requireTransitionLog(t, sub, 1)[0]
 	if tr.Reason != domain.TransitionReasonCancelled {
 		t.Errorf("Reason = %q, want %q", tr.Reason, domain.TransitionReasonCancelled)
 	}
@@ -841,14 +848,7 @@ func TestSubscriptionService_ResumeSubscription_KeepsScheduledDowngrade(t *testi
 // returns newest first.
 func requireResumedTransitionLog(t *testing.T, h *subscriptionHarness, sub domain.Subscription) {
 	t.Helper()
-	transitions, err := h.stores.transitions.ListBySubscriptionID(t.Context(), sub.ID)
-	if err != nil {
-		t.Fatalf("ListBySubscriptionID() error = %v", err)
-	}
-	if len(transitions) != 2 {
-		t.Fatalf("transitions = %d, want 2 (cancelled, resumed)", len(transitions))
-	}
-	resumed := transitions[len(transitions)-1]
+	resumed := h.requireTransitionLog(t, sub, 2)[0]
 	if resumed.Reason != domain.TransitionReasonResumed {
 		t.Errorf("Reason = %q, want %q", resumed.Reason, domain.TransitionReasonResumed)
 	}

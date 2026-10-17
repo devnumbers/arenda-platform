@@ -4875,6 +4875,8 @@ paths:
         The subscription transition log of one user's subscription (issue
         #255): every status and tariff change with its reason, initiator
         (user/admin/system) and the payment that caused it, newest first.
+        An account without a subscription row has no history — an empty log,
+        not a miss (issue #1516).
       parameters:
         - name: id
           in: path
@@ -4893,8 +4895,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
