@@ -25,6 +25,7 @@ import { propertyTypeIcons, type Property } from '@/entities/property';
 import type { Subscription } from '@/entities/billing';
 import {
   disableConfirmTitle,
+  keepPropertySelection,
   tariffDisableObjectsCard,
 } from '@/widgets/profile/lib/tariff-disable';
 import { tariffActionErrorDescription } from '@/widgets/profile/lib/tariff-change';
@@ -41,12 +42,14 @@ const CONFIRM_DESCRIPTION =
 
 /** Экран «Отключение тарифа» (#622, макеты 1929-76786 выбор объекта,
  * 1933-78123 подтверждение-шит, 1933-78038 успех): карточка «У вас N
- * объектов» с радиосписком активных (только когда их больше одного —
- * иначе сохраняемый выбирает бэк), карточка тарифа с «Возможностями»,
- * футер «Оставить тариф» / «Отключить тариф». Отключение — через канон
- * ConfirmDialog (danger) → POST /subscription/cancel {keepPropertyId?}.
- * Данные — кэш GET /subscription и GET /properties (staleTime 30с),
- * скелетон повторяет геометрию (DESIGN.md §7). */
+ * объектов» с радиосписком (только когда СВОИХ неархивных больше одного —
+ * иначе сохраняемый выбирает бэк; приглашённые объекты не кандидаты —
+ * keepPropertySelection; maintenance остаётся кандидатом — бэк его
+ * принимает), карточка тарифа с «Возможностями», футер «Оставить тариф» /
+ * «Отключить тариф». Отключение — через канон ConfirmDialog (danger) →
+ * POST /subscription/cancel {keepPropertyId?}. Данные — кэш GET
+ * /subscription и GET /properties (staleTime 30с), скелетон повторяет
+ * геометрию (DESIGN.md §7). */
 export function TariffDisableScreen(): JSX.Element {
   const subscription = useSubscription();
   const properties = useProperties();
@@ -96,10 +99,12 @@ function TariffDisableContent({
   const [keepPropertyId, setKeepPropertyId] = useState<string>();
   const [cancelled, setCancelled] = useState(false);
 
-  const card = tariffDisableObjectsCard(properties.length);
-  // По умолчанию выбран первый в списке — отправляем его явно, чтобы
-  // выбор на экране и keepPropertyId в запросе не расходились.
-  const selectedId = keepPropertyId ?? properties[0]?.id;
+  const { choices, selectedId, payloadKeepPropertyId } = keepPropertySelection(
+    keepPropertyId,
+    properties,
+  );
+
+  const card = tariffDisableObjectsCard(choices.length);
 
   if (cancelled) {
     return <TariffDisableSuccessScreen tariffName={subscription.tariff.name} />;
@@ -108,8 +113,8 @@ function TariffDisableContent({
   const handleConfirm = (): void => {
     cancel
       .mutateAsync(
-        card.showPicker && selectedId !== undefined
-          ? { keepPropertyId: selectedId }
+        payloadKeepPropertyId !== undefined
+          ? { keepPropertyId: payloadKeepPropertyId }
           : undefined,
       )
       .then(() => {
@@ -152,8 +157,12 @@ function TariffDisableContent({
               onValueChange={setKeepPropertyId}
               className="gap-0"
             >
-              {properties.map((property) => (
-                <PropertyPickRow key={property.id} property={property} />
+              {choices.map((property) => (
+                <PropertyPickRow
+                  key={property.id}
+                  property={property}
+                  onSelect={setKeepPropertyId}
+                />
               ))}
             </RadioGroup>
           )}
@@ -191,15 +200,19 @@ function TariffDisableContent({
 
 /** Ряд выбора сохраняемого объекта (макет 1929-76786): фото-аватар 44
  * (без фото — заглушка с глифом типа объекта #D3D7D9, Category Icon,
- * карта #1217),
- * название 16/18 и адрес 14/16, каноновое радио справа; отмеченный ряд
- * задаёт value группы RadioGroup. Список — ответ GET /properties целиком:
- * он несёт active+maintenance, и оба статуса бэк принимает в keepPropertyId
- * (архивные живут в отдельном /properties/archive). */
+ * карта #1217), название 16/18 и адрес 14/16, каноновое радио справа;
+ * отмеченный ряд задаёт value группы RadioGroup. Кандидаты даёт
+ * keepPropertySelection — только свои активные из GET /properties
+ * (приглашённые — не сохраняемые, бэк валидирует по владению).
+ * #1518: строка — настоящий button рядом с радио (не label-обёртка):
+ * клик в любом месте строки ставит выбор явно, форвардинг label→радио —
+ * единственное ненадёжное звено прежней разметки — из цепочки исключён. */
 function PropertyPickRow({
   property,
+  onSelect,
 }: {
   readonly property: Property;
+  readonly onSelect: (id: string) => void;
 }): JSX.Element {
   const photoUrl = property.photoUrl ?? undefined;
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
@@ -208,27 +221,33 @@ function PropertyPickRow({
   const [photoBroken, setPhotoBroken] = useState(false);
 
   return (
-    <label className="flex cursor-pointer items-center gap-3 py-3">
-      <CircleIcon variant="muted" aria-hidden className="relative overflow-hidden rounded-full">
-        {photoUrl !== undefined && !photoBroken ? (
-          <img
-            src={photoUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            onError={() => setPhotoBroken(true)}
-          />
-        ) : (
-          <Glyph className="h-6 w-6 text-[#D3D7D9]" />
-        )}
-      </CircleIcon>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-base font-medium leading-[18px] text-content">{property.name}</span>
-        <span className="truncate text-sm leading-4 text-content-secondary">
-          {property.address}
+    <div className="flex items-center">
+      <button
+        type="button"
+        onClick={() => onSelect(property.id)}
+        className="flex flex-1 cursor-pointer items-center gap-3 py-3 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+      >
+        <CircleIcon variant="muted" aria-hidden className="relative overflow-hidden rounded-full">
+          {photoUrl !== undefined && !photoBroken ? (
+            <img
+              src={photoUrl}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={() => setPhotoBroken(true)}
+            />
+          ) : (
+            <Glyph className="h-6 w-6 text-[#D3D7D9]" />
+          )}
+        </CircleIcon>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-base font-medium leading-[18px] text-content">{property.name}</span>
+          <span className="truncate text-sm leading-4 text-content-secondary">
+            {property.address}
+          </span>
         </span>
-      </span>
+      </button>
       <RadioGroupItem value={property.id} aria-label={property.name} className="mr-2.5" />
-    </label>
+    </div>
   );
 }
 
