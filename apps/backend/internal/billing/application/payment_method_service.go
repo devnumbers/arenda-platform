@@ -15,12 +15,15 @@ import (
 
 // methodBindingProvider is the narrow provider slice the payment-method
 // service needs: starting and polling binding sessions, detaching saved
-// methods, and the provider identity. Declared here, at the consumer, per
-// ADR 0035.
+// methods, listing the customer's bound cards — the poll answer of a binding
+// carries no display fields, so the card list is where their sync-path
+// completion reads them from (issue #1514) — and the provider identity.
+// Declared here, at the consumer, per ADR 0035.
 type methodBindingProvider interface {
 	PaymentMethodBinder
 	PaymentMethodBindingReader
 	PaymentMethodRemover
+	PaymentMethodLister
 	ProviderNamer
 }
 
@@ -266,12 +269,18 @@ func (s *PaymentMethodService) DeletePaymentMethod(ctx context.Context, userID, 
 // provider: a completed binding produces (and activates) the payment method
 // exactly like the webhook would, a failed or provider-forgotten binding is
 // closed, and an expired session is closed without polling — it can never
-// complete. The method is idempotent and returns the user's up-to-date list.
+// complete. A binding completed without webhook carries no display fields
+// (the provider's poll answer has none, issue #1514), so the sync completes
+// them from the provider's card list — both for the method it materializes
+// and for a stored method an earlier webhook-less sync left maskless. The
+// method is idempotent and returns the user's up-to-date list.
 func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]domain.PaymentMethod, error) {
 	sessions, err := s.bindings.ListOpenByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list card binding sessions: %w", err)
 	}
+
+	cards := s.providerCardList(userID.String())
 
 	now := s.clock.Now().UTC()
 	for _, session := range sessions {
@@ -306,6 +315,12 @@ func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uu
 					slog.String("binding_id", session.RequestKey))
 				continue
 			}
+			if state.Method.MaskedPan == "" {
+				if card, ok := cards.find(ctx, state.Method.ChargeToken, state.Method.ProviderMethodID); ok {
+					state.Method.MaskedPan = card.MaskedPan
+					state.Method.ExpDate = card.ExpDate
+				}
+			}
 			s.completeBindingSession(ctx, session, *state.Method, now)
 		case MethodBindingFailed:
 			s.closeBindingSession(ctx, session, now)
@@ -315,11 +330,117 @@ func (s *PaymentMethodService) SyncPaymentMethods(ctx context.Context, userID uu
 		}
 	}
 
+	s.healMasklessMethods(ctx, cards, userID, now)
+
 	methods, err := s.methods.ListByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list payment methods after sync: %w", err)
 	}
 	return methods, nil
+}
+
+// providerCardList lazily loads the customer's card list from the provider
+// once per sync (issue #1514). The poll answer of a completed binding names
+// the card (rebill, card id) but carries no mask or expiry, so the card list
+// is the only display-field source on the no-webhook path; the load is
+// deferred until something actually needs it and runs at most once — a failed
+// load is not retried within the sync, the next one tries again.
+type providerCardList struct {
+	provider    methodBindingProvider
+	customerRef string
+	log         *slog.Logger
+
+	loaded bool
+	cards  []SavedMethod
+}
+
+func (s *PaymentMethodService) providerCardList(customerRef string) *providerCardList {
+	return &providerCardList{provider: s.provider, customerRef: customerRef, log: s.log}
+}
+
+// find returns the provider's card matching the binding by its charge token
+// or card id, considering only entries that carry display fields — a list
+// entry without a mask cannot enrich anything. The boolean result is false
+// when the list is unavailable or has no match.
+func (c *providerCardList) find(ctx context.Context, chargeToken, providerMethodID string) (SavedMethod, bool) {
+	if !c.loaded {
+		c.loaded = true
+		cards, err := c.provider.ListPaymentMethods(ctx, c.customerRef)
+		switch {
+		case err == nil:
+			c.cards = cards
+		case errors.Is(err, ErrProviderCustomerNotFound):
+			// A customer with no cards: an empty list, not a failure.
+		default:
+			c.log.WarnContext(ctx, "sync payment methods: card list unavailable; completing without display fields",
+				slog.String("customer_ref", c.customerRef),
+				slog.String("error", err.Error()))
+		}
+	}
+	for _, card := range c.cards {
+		if card.MaskedPan == "" {
+			continue
+		}
+		if chargeToken != "" && card.ChargeToken == chargeToken {
+			return card, true
+		}
+		if providerMethodID != "" && card.ProviderMethodID == providerMethodID {
+			return card, true
+		}
+	}
+	return SavedMethod{}, false
+}
+
+// healMasklessMethods backfills the display fields of stored methods an
+// earlier webhook-less sync materialized maskless (issue #1514: the prod
+// binding of 17.10.2026 left a chargeable card with an empty mask). The
+// upsert converges on the row by token hash and its update set touches only
+// the display fields, so a healed card keeps its identity, token and
+// activation state. Best-effort like the rest of the sync: failures are
+// logged, not propagated.
+func (s *PaymentMethodService) healMasklessMethods(ctx context.Context, cards *providerCardList, userID uuid.UUID, now time.Time) {
+	if s.provider == nil {
+		return
+	}
+	methods, err := s.methods.ListByUserID(ctx, userID)
+	if err != nil {
+		s.log.WarnContext(ctx, "sync payment methods: failed to list methods for display-field healing",
+			slog.String("user_id", userID.String()),
+			slog.String("error", err.Error()))
+		return
+	}
+	for _, method := range methods {
+		if method.DisplayMask != "" || method.ProviderToken == "" {
+			continue
+		}
+		card, ok := cards.find(ctx, method.ProviderToken, method.ProviderCardID)
+		if !ok {
+			continue
+		}
+		healed, err := paymentMethodFromSaved(method.UserID, method.Provider, SavedMethod{
+			ProviderMethodID: method.ProviderCardID,
+			ChargeToken:      method.ProviderToken,
+			MaskedPan:        card.MaskedPan,
+			ExpDate:          card.ExpDate,
+		}, now)
+		if err != nil {
+			s.log.WarnContext(ctx, "sync payment methods: failed to build healed method",
+				slog.String("user_id", userID.String()),
+				slog.String("payment_method_id", method.ID.String()),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if _, err := s.methods.UpsertByTokenHash(ctx, healed); err != nil {
+			s.log.WarnContext(ctx, "sync payment methods: failed to heal method display fields",
+				slog.String("user_id", userID.String()),
+				slog.String("payment_method_id", method.ID.String()),
+				slog.String("error", err.Error()))
+			continue
+		}
+		s.log.InfoContext(ctx, "sync payment methods: healed method display fields from provider card list",
+			slog.String("user_id", userID.String()),
+			slog.String("payment_method_id", method.ID.String()))
+	}
 }
 
 // closeBindingSession closes an open session as rejected — the terminal step
