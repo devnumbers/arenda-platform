@@ -8,6 +8,7 @@ import { Reveal } from "@/components/reveal";
 import {
   buildFlipModel,
   photoGlassTransforms,
+  photoImageTransforms,
   photoNodeTransforms,
   photoTrackTranslate,
   plateNodeTransforms,
@@ -186,6 +187,10 @@ type EngineState = {
   // зоны): render() читает только её — ни одного clientWidth в кадре,
   // записи прошлого кадра не форсируют sync-layout (research #1504).
   flip: FlipModel;
+  // <img> фотокарточек (собранные один раз из slideNodes): на
+  // анизотропных ярусах несут собственный масштаб-компенсат
+  // (photoImageTransforms — сет-итог (1,1), кадр без искажений).
+  imgNodes: Array<HTMLImageElement | null>;
   anim: { from: number; to: number; t0: number; dur: number } | null;
   raf: number;
   dragging: boolean;
@@ -269,11 +274,14 @@ export function Showcase() {
       // переменных в CSS), разница размеров — в трансформах узлов.
       // --k не пишется: под .morphing он ни на что не влияет.
       const photoT = photoNodeTransforms(flip, k);
+      const imgT = photoImageTransforms(flip, k);
       const glassT = photoGlassTransforms(flip, k);
       const plateT = plateNodeTransforms(flip, k);
       for (let g = 0; g < G; g += 1) {
         const slide = slideNodes.current[g];
         if (slide) slide.style.transform = photoT[g] ?? "";
+        const img = st.imgNodes[g];
+        if (img) img.style.transform = imgT[g] ?? "";
         const card = cardNodes.current[g];
         if (card) card.style.transform = glassT[g] ?? "";
         const plate = plateNodes.current[g];
@@ -292,6 +300,8 @@ export function Showcase() {
       for (let g = 0; g < G; g += 1) {
         const slide = slideNodes.current[g];
         if (slide) slide.style.transform = "";
+        const img = st.imgNodes[g];
+        if (img) img.style.transform = "";
         const card = cardNodes.current[g];
         if (card) card.style.transform = "";
         const plate = plateNodes.current[g];
@@ -424,6 +434,7 @@ export function Showcase() {
       p: 0,
       k: new Array<number>(G).fill(0),
       flip: buildFlipModel(tierOf(), viewport.clientWidth, zone.clientWidth, N, G),
+      imgNodes: slideNodes.current.map((el) => el?.querySelector("img") ?? null),
       anim: null,
       raf: 0,
       dragging: false,
@@ -693,7 +704,7 @@ export function Showcase() {
                           role="button"
                           tabIndex={near ? 0 : -1}
                           aria-label={`Показать: ${card.name}`}
-                          className={s.slide}
+                          className={`${s.slide} outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary`}
                           style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
