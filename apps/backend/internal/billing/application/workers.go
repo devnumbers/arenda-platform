@@ -433,21 +433,21 @@ func (w *Workers) ProcessRenewals(ctx context.Context, now time.Time) (int, erro
 	return processed, nil
 }
 
-// ProcessGraceRetries drives the dunning minimum of spec #419 (ticket #431):
-// a subscription that entered grace after a failed renewal charge is retried
-// twice on the fixed schedule — +24 h and +72 h from the grace entry — on its
-// active payment method, whatever it is by then (a card switch between
-// retries is picked up at charge time). A retry runs through the same
-// planning and charging half as a renewal: the planning transaction locks the
-// subscription in the dunning selection (so a subscription that left grace —
-// a manual payment, an upgrade, an admin move — is a no-op), resolves the
-// current renewal terms and persists a fresh pending payment (the retry
-// boundary is consumed by any payment since the grace entry), and the charge
-// finalizes through the single success-application seam. A failed retry
-// leaves the subscription in grace — the failure freshness guard sees the
-// open grace window and does not re-enter it — and after the schedule and the
-// window are spent, the expired-grace phase keeps its old behaviour. Returns
-// the number of subscriptions charged.
+// ProcessGraceRetries drives the dunning of spec #419 (ticket #431, issue
+// #1521): a subscription that entered grace after a failed renewal charge is
+// retried daily on its active payment method — the next attempt is due 24 h
+// after the boundary the entry has last consumed — whatever the method is by
+// then (a card switch between retries is picked up at charge time). A retry
+// runs through the same planning and charging half as a renewal: the planning
+// transaction locks the subscription in the dunning selection (so a
+// subscription that left grace — a manual payment, an upgrade, an admin move
+// — is a no-op), resolves the current renewal terms and persists a fresh
+// pending payment (the retry boundary is consumed by any payment since the
+// grace entry), and the charge finalizes through the single
+// success-application seam. A failed retry leaves the subscription in grace —
+// the failure freshness guard sees the open grace window and does not re-enter
+// it — and once the window itself is spent, the expired-grace phase keeps its
+// old behaviour. Returns the number of subscriptions charged.
 func (w *Workers) ProcessGraceRetries(ctx context.Context, now time.Time) (int, error) {
 	if w.provider == nil {
 		return 0, fmt.Errorf("grace retry worker requires a payment provider: %w", ErrPaymentUnavailable)

@@ -1544,17 +1544,11 @@ WHERE ($1::uuid IS NULL OR user_id = $1)
                  WHERE g2.subscription_id = user_subscriptions.id
                    AND g2.to_status = 'grace'
                    AND g2.reason = 'grace_entered')
-             AND (
-                 (gt.created_at + interval '24 hours' <= $8
-                  AND (SELECT count(*) FROM subscription_payments p
-                       WHERE p.subscription_id = user_subscriptions.id
-                         AND p.created_at >= gt.created_at) = 0)
-                 OR
-                 (gt.created_at + interval '72 hours' <= $8
-                  AND (SELECT count(*) FROM subscription_payments p
-                       WHERE p.subscription_id = user_subscriptions.id
-                         AND p.created_at >= gt.created_at) <= 1)
-             )
+             AND gt.created_at + make_interval(hours => (24 * (
+                     (SELECT count(*) FROM subscription_payments p
+                      WHERE p.subscription_id = user_subscriptions.id
+                        AND p.created_at >= gt.created_at) + 1))::int)
+                 <= $8
        )))
 ORDER BY
   CASE WHEN $7::timestamptz IS NOT NULL THEN pending_change_at END ASC,
@@ -1592,16 +1586,17 @@ type ListSubscriptionsBySelectionParams struct {
 // the under-lock re-check of a phase, run in the transaction that locked the
 // row.
 //
-// The grace_retry_due bound (ticket #431, spec #419) selects grace
-// subscriptions with a due dunning retry: the retry schedule is anchored at
-// the latest grace entry (the newest reason='grace_entered' transition) and
-// fires twice — +24 h and +72 h — each boundary consumed by any payment
-// created at or after the entry (a prior retry or a manual payment; a
-// successful manual payment also removes the row through the status bound).
-// The window must still be open and an active payment method linked: without
-// one there is nothing to charge. The 24/72-hour offsets are product
-// constants mirrored by graceRetryFirstAfter/graceRetrySecondAfter in
-// billing/application/phases.go — no schema or config knob.
+// The grace_retry_due bound (ticket #431, spec #419; issue #1521) selects
+// grace subscriptions with a due dunning retry: the retry schedule is
+// anchored at the latest grace entry (the newest reason='grace_entered'
+// transition) and fires daily — the next boundary sits at the entry + 24 h
+// per payment created at or after the entry (a prior retry or a manual
+// payment consumes one boundary; a successful manual payment also removes
+// the row through the status bound) — with the open window as the only cap,
+// so an admin grace extension keeps the daily retries going (owner decision
+// 18.10.2026). An active payment method must be linked: without one there is
+// nothing to charge. The 24-hour cadence is a product constant mirrored by
+// graceRetryEvery in billing/application/phases.go — no schema or config knob.
 func (q *Queries) ListSubscriptionsBySelection(ctx context.Context, arg ListSubscriptionsBySelectionParams) ([]UserSubscription, error) {
 	rows, err := q.db.Query(ctx, listSubscriptionsBySelection,
 		arg.UserID,

@@ -1036,12 +1036,11 @@ func TestWorkers_Integration_GraceRetryRescuesSubscription(t *testing.T) {
 	}
 }
 
-// TestWorkers_Integration_GraceRetryFailureThenSecondRetry proves the rest of
-// the dunning schedule: a declined +24 h retry leaves the subscription in
-// grace with the window untouched, the +72 h retry fires with the card the
-// user switched to meanwhile, and its success ends the episode. After the
-// schedule is spent the phase charges nothing — the expired-grace phase keeps
-// its old behaviour from there.
+// TestWorkers_Integration_GraceRetryFailureThenSecondRetry proves the daily
+// dunning cadence: a declined first retry (+24 h) leaves the subscription in
+// grace with the window untouched, the next daily retry fires with the card
+// the user switched to meanwhile, and its success ends the episode — the
+// phase charges nothing afterwards because the subscription left grace.
 func TestWorkers_Integration_GraceRetryFailureThenSecondRetry(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
@@ -1053,12 +1052,13 @@ func TestWorkers_Integration_GraceRetryFailureThenSecondRetry(t *testing.T) {
 	}
 	graceEnd := requireGraceEnteredAfterFailedCharge(t, h, userID, sub.ID)
 
-	// The +24 h retry is declined: the subscription stays in its grace window.
+	// The first daily retry (+24 h) is declined: the subscription stays in
+	// its grace window.
 	pinGraceEpisode(t, h, sub.ID, h.clock.Now().Add(-25*time.Hour))
 	requireDeclinedGraceRetryKeepsWindow(t, h, userID, graceEnd)
 
-	// The +72 h boundary passes and the user switched cards: the second retry
-	// succeeds and ends the episode.
+	// The next daily boundary (+48 h) has long passed and the user switched
+	// cards: the second retry succeeds and ends the episode.
 	h.clock.now = h.clock.Now().Add(48 * time.Hour) // Entry + 73 h.
 	seedActiveMethod(t, h, userID, "tok_retry_late")
 	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now()); err != nil {
@@ -1069,7 +1069,7 @@ func TestWorkers_Integration_GraceRetryFailureThenSecondRetry(t *testing.T) {
 
 	requireDunningEpisodePayments(t, h, userID)
 
-	// The schedule is spent: a third tick charges nothing.
+	// The episode is over: a third tick charges nothing.
 	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("third ProcessGraceRetries() error = %v", err)
 	} else if count != 0 {
@@ -1077,7 +1077,131 @@ func TestWorkers_Integration_GraceRetryFailureThenSecondRetry(t *testing.T) {
 	}
 }
 
-// requireDeclinedGraceRetryKeepsWindow runs the +24 h retry against the
+// TestWorkers_Integration_GraceRetriesDailyUntilWindowCloses proves the daily
+// dunning cadence end to end (issue #1521): after a declined attempt the next
+// one is due a day after the consumed boundary — not two days, as the
+// pre-#1521 +24/+72 h schedule had it — every declined attempt leaves the
+// grace window untouched, and the open window itself caps the schedule: the
+// boundary at its end never fires and the expired-grace phase downgrades the
+// row to basic.
+func TestWorkers_Integration_GraceRetriesDailyUntilWindowCloses(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	wireBridges(h)
+	userID, sub := seedExpiredProSubscription(t, h, time.Hour)
+	seedActiveMethod(t, h, userID, "fake_fail_card")
+
+	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	graceEnd := requireGraceEnteredAfterFailedCharge(t, h, userID, sub.ID)
+	// Pin the anchor at the production geometry: the boundary at entry +
+	// 168 h coincides with the window's end and must stay excluded.
+	pinGraceEpisode(t, h, sub.ID, graceEnd.Add(-168*time.Hour))
+
+	// Six daily retries, each declined: entry + 24..144 h, one attempt per
+	// boundary, with the window untouched throughout.
+	for attempt := 1; attempt <= 6; attempt++ {
+		h.clock.now = h.clock.Now().Add(24 * time.Hour)
+		requireDeclinedGraceRetryKeepsWindow(t, h, userID, graceEnd)
+		// Nothing is due between the boundaries: halfway to the next one the
+		// phase charges nothing.
+		if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now().Add(6*time.Hour)); err != nil {
+			t.Fatalf("ProcessGraceRetries() (between %d and %d) error = %v", attempt, attempt+1, err)
+		} else if count != 0 {
+			t.Fatalf("ProcessGraceRetries() (between %d and %d) = %d, want 0", attempt, attempt+1, count)
+		}
+	}
+
+	// The six boundaries are consumed; the next one sits at the window's end
+	// and never fires.
+	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), graceEnd.Add(-time.Hour)); err != nil {
+		t.Fatalf("ProcessGraceRetries() (past the cap) error = %v", err)
+	} else if count != 0 {
+		t.Fatalf("ProcessGraceRetries() (past the cap) = %d, want 0", count)
+	}
+
+	payments, err := h.payments.ListByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("ListByUserID() error = %v", err)
+	}
+	if len(payments) != 7 {
+		t.Fatalf("payments = %d, want 7 (failed renewal + 6 declined retries)", len(payments))
+	}
+
+	// The expired-grace phase keeps its old behaviour: once the window runs
+	// out, the subscription falls to basic.
+	h.clock.now = graceEnd.Add(time.Hour)
+	if count, err := h.services.Workers.ProcessExpiredGrace(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessExpiredGrace() error = %v", err)
+	} else if count != 1 {
+		t.Fatalf("ProcessExpiredGrace() = %d, want 1", count)
+	}
+	requireBasicDowngrade(t, h, userID)
+}
+
+// TestWorkers_Integration_GraceExtensionContinuesDailyRetries proves the
+// owner decision behind issue #1521: an admin grace extension extends the
+// daily retries with it — the boundary the standard window ends at fires
+// once the window is extended past it, and the expired-grace phase takes
+// over only when the extended window itself runs out.
+func TestWorkers_Integration_GraceExtensionContinuesDailyRetries(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	wireBridges(h)
+	userID, sub := seedExpiredProSubscription(t, h, time.Hour)
+	seedActiveMethod(t, h, userID, "fake_fail_card")
+
+	if _, err := h.services.Workers.ProcessRenewals(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessRenewals() error = %v", err)
+	}
+	graceEnd := requireGraceEnteredAfterFailedCharge(t, h, userID, sub.ID)
+	pinGraceEpisode(t, h, sub.ID, graceEnd.Add(-168*time.Hour))
+
+	// Two declined daily retries (entry + 24 h, + 48 h).
+	h.clock.now = h.clock.Now().Add(24 * time.Hour)
+	requireDeclinedGraceRetryKeepsWindow(t, h, userID, graceEnd)
+	h.clock.now = h.clock.Now().Add(24 * time.Hour)
+	requireDeclinedGraceRetryKeepsWindow(t, h, userID, graceEnd)
+
+	// The admin grants two more days of grace.
+	adminID := h.seedUser()
+	if err := h.subscriptionsSvc.ExtendGrace(h.ctx(), adminID, userID, 2); err != nil {
+		t.Fatalf("ExtendGrace() error = %v", err)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID() after extension error = %v", err)
+	}
+	extendedEnd := *stored.ValidUntil
+
+	// The daily attempts keep firing every 24 h — through the standard
+	// window's end (entry + 168 h, now inside the extended window) and up to
+	// the boundary that opens the extended window's last day (entry + 192 h).
+	for attempt := 3; attempt <= 8; attempt++ {
+		h.clock.now = h.clock.Now().Add(24 * time.Hour)
+		requireDeclinedGraceRetryKeepsWindow(t, h, userID, extendedEnd)
+	}
+
+	// The extended window runs out and the expired-grace phase downgrades
+	// the row to basic.
+	h.clock.now = extendedEnd.Add(time.Hour)
+	if count, err := h.services.Workers.ProcessExpiredGrace(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessExpiredGrace() error = %v", err)
+	} else if count != 1 {
+		t.Fatalf("ProcessExpiredGrace() = %d, want 1", count)
+	}
+	requireBasicDowngrade(t, h, userID)
+	payments, err := h.payments.ListByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("ListByUserID() error = %v", err)
+	}
+	if len(payments) != 9 {
+		t.Fatalf("payments = %d, want 9 (failed renewal + 8 declined retries)", len(payments))
+	}
+}
+
+// requireDeclinedGraceRetryKeepsWindow runs the due daily retry against the
 // failing card and asserts the declined charge left the subscription in its
 // grace window untouched.
 func requireDeclinedGraceRetryKeepsWindow(t *testing.T, h *integrationHarness, userID uuid.UUID, graceEnd time.Time) {
@@ -1097,8 +1221,8 @@ func requireDeclinedGraceRetryKeepsWindow(t *testing.T, h *integrationHarness, u
 }
 
 // requireDunningEpisodePayments asserts the ended episode's payment history —
-// the failed renewal, the declined +24 h retry and the succeeded +72 h one —
-// and the active renewal the success bought.
+// the failed renewal, the declined first daily retry and the succeeded second
+// one — and the active renewal the success bought.
 func requireDunningEpisodePayments(t *testing.T, h *integrationHarness, userID uuid.UUID) {
 	t.Helper()
 	payments, err := h.payments.ListByUserID(h.ctx(), userID)

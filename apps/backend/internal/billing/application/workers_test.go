@@ -2290,7 +2290,7 @@ func (h *workersHarness) requireGraceRetryBoundaryConsumed(t *testing.T) {
 // TestWorkers_GraceRetryFailedStaysGrace proves a declined retry keeps the
 // subscription in its grace window: the retry payment fails, the window and
 // the schedule are untouched, and the boundary stays consumed — the next
-// scheduled retry is the +72 h one, not an immediate re-charge.
+// daily retry is the +48 h one, not an immediate re-charge.
 func TestWorkers_GraceRetryFailedStaysGrace(t *testing.T) {
 	t.Parallel()
 	h := newWorkersHarness(t, Config{})

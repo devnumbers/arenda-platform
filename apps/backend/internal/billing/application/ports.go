@@ -65,9 +65,9 @@ type SubscriptionSelection struct {
 	// due (pending_change_at <= t); nil drops the condition.
 	PendingChangeDue *time.Time
 	// GraceRetryDue selects grace subscriptions with a due dunning retry
-	// (ticket #431): the latest grace entry is old enough for the next
-	// scheduled retry (+24 h or +72 h, consumed by any payment since the
-	// entry), the grace window is still open and an active payment method is
+	// (ticket #431, issue #1521): the latest grace entry is old enough for the
+	// next daily retry (entry + 24 h per payment consumed since the entry),
+	// the grace window is still open and an active payment method is
 	// linked. The value is the tick's now; nil drops the condition. The
 	// predicate behind it — the latest reason='grace_entered' transition as
 	// the anchor — lives once in the SQL adapter.
