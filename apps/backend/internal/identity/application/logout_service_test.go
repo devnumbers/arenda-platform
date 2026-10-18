@@ -40,13 +40,14 @@ func TestLogoutService_Logout_DeletesSessionByTokenHash(t *testing.T) {
 	rawToken := "plain-test-value"
 	tokenHash := fakeHasher{}.HashToken(rawToken)
 	userID := uuid.Must(uuid.NewV7())
-	stores.sessions.sessions[tokenHash] = domain.Session{UserID: userID, TokenHash: tokenHash}
+	session := domain.Session{ID: uuid.Must(uuid.NewV7()), UserID: userID, TokenHash: tokenHash}
+	stores.sessions.sessions[session.ID] = session
 
 	if err := svc.Logout(context.Background(), rawToken, testLogoutActor); err != nil {
 		t.Fatalf("Logout error = %v, want nil", err)
 	}
 
-	if _, ok := stores.sessions.sessions[tokenHash]; ok {
+	if _, ok := stores.sessions.sessions[session.ID]; ok {
 		t.Fatal("session still present after Logout, want deleted")
 	}
 	if stores.beginner.committed != 1 {

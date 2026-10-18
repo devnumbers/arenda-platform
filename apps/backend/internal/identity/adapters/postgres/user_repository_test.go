@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -10,10 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 )
 
@@ -45,36 +42,22 @@ func setupIntegrationDB(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func noopEncryptor(t *testing.T) encryption.Encryptor {
-	t.Helper()
-	enc, err := encryption.NewEncryptor("")
-	if err != nil {
-		t.Fatalf("create noop encryptor: %v", err)
-	}
-	return enc
-}
-
 func TestUserRepository_Create_ConcurrentRace(t *testing.T) {
 	t.Parallel()
 	pool := setupIntegrationDB(t)
 	ctx := context.Background()
-	repo := NewUserRepository(pool, noopEncryptor(t))
+	repo := NewUserRepository(pool)
 
-	phone, err := domain.NewPhone("+79990000001")
-	if err != nil {
-		t.Fatalf("new phone: %v", err)
-	}
 	email, err := domain.NewEmail("race1@example.com")
 	if err != nil {
 		t.Fatalf("new email: %v", err)
 	}
 	now := time.Now().UTC()
 
-	user, err := domain.NewOwner(phone)
+	user, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("new owner: %v", err)
 	}
-	user.Email = &email
 	user.EmailVerifiedAt = &now
 
 	start := make(chan struct{})
@@ -119,7 +102,7 @@ func TestUserRepository_Create_ConcurrentRace(t *testing.T) {
 		t.Fatalf("expected both calls to return the same user, got %v and %v", users[0].ID, users[1].ID)
 	}
 
-	count, err := pgen.New(pool).CountUsersAdmin(ctx, pgen.CountUsersAdminParams{Phone: phone.String()})
+	count, err := pgen.New(pool).CountUsersAdmin(ctx, pgen.CountUsersAdminParams{Email: email.String()})
 	if err != nil {
 		t.Fatalf("count users: %v", err)
 	}
@@ -128,11 +111,16 @@ func TestUserRepository_Create_ConcurrentRace(t *testing.T) {
 	}
 }
 
-func TestUserRepository_Create_EmailAlreadyTakenDifferentPhone(t *testing.T) {
+// TestUserRepository_Create_ConflictingEmailResolvesToExisting pins the
+// create-race contract on the canonical identifier: two creates carrying the
+// same email but different aggregate ids converge on the one stored row —
+// email is the account (ADR 0067), so there is no "taken" refusal here, the
+// late insert resolves to the existing user.
+func TestUserRepository_Create_ConflictingEmailResolvesToExisting(t *testing.T) {
 	t.Parallel()
 	pool := setupIntegrationDB(t)
 	ctx := context.Background()
-	repo := NewUserRepository(pool, noopEncryptor(t))
+	repo := NewUserRepository(pool)
 
 	email, err := domain.NewEmail("shared@example.com")
 	if err != nil {
@@ -140,34 +128,27 @@ func TestUserRepository_Create_EmailAlreadyTakenDifferentPhone(t *testing.T) {
 	}
 	now := time.Now().UTC()
 
-	phone1, err := domain.NewPhone("+79990000002")
-	if err != nil {
-		t.Fatalf("new phone 1: %v", err)
-	}
-	user1, err := domain.NewOwner(phone1)
+	user1, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("new owner 1: %v", err)
 	}
-	user1.Email = &email
 	user1.EmailVerifiedAt = &now
 
 	if _, err := repo.Create(ctx, user1); err != nil {
 		t.Fatalf("create first user: %v", err)
 	}
 
-	phone2, err := domain.NewPhone("+79990000003")
-	if err != nil {
-		t.Fatalf("new phone 2: %v", err)
-	}
-	user2, err := domain.NewOwner(phone2)
+	user2, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("new owner 2: %v", err)
 	}
-	user2.Email = &email
 	user2.EmailVerifiedAt = &now
 
-	_, err = repo.Create(ctx, user2)
-	if !errors.Is(err, application.ErrEmailAlreadyTaken) {
-		t.Fatalf("expected ErrEmailAlreadyTaken, got %v", err)
+	resolved, err := repo.Create(ctx, user2)
+	if err != nil {
+		t.Fatalf("create conflicting user: %v", err)
+	}
+	if resolved.ID != user1.ID {
+		t.Fatalf("conflicting create resolved to %s, want the stored %s", resolved.ID, user1.ID)
 	}
 }

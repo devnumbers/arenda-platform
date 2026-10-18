@@ -9,7 +9,6 @@ func TestLoginCodePurpose_KnownValues(t *testing.T) {
 	t.Parallel()
 	known := map[string]LoginCodePurpose{
 		"login":        LoginCodePurposeLogin,
-		"phone_change": LoginCodePurposePhoneChange,
 		"email_change": LoginCodePurposeEmailChange,
 	}
 	for raw, want := range known {

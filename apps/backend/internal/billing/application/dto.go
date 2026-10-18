@@ -70,7 +70,7 @@ type SubscriptionPaymentView struct {
 type AdminPaymentFilters struct {
 	UserID             *uuid.UUID
 	Status             string
-	UserPhone          string
+	UserEmail          string
 	SubscriptionStatus string
 	Sort               string
 	Order              string
@@ -79,20 +79,20 @@ type AdminPaymentFilters struct {
 }
 
 // AdminPaymentRow is one row of the admin payment listing as the persistence
-// adapter produces it: the payment aggregate plus the payer's phone resolved
-// from identity (decrypted when stored as ciphertext).
+// adapter produces it: the payment aggregate plus the payer's canonical email
+// (ADR 0067).
 type AdminPaymentRow struct {
 	Payment   domain.SubscriptionPayment
-	UserPhone string
+	UserEmail string
 }
 
 // AdminSubscriptionPaymentView is the read model of one subscription payment
 // for the admin views (issue #254): the payment with its tariff resolved and
-// the payer's phone.
+// the payer's canonical email.
 type AdminSubscriptionPaymentView struct {
 	Payment   domain.SubscriptionPayment
 	Tariff    domain.Tariff
-	UserPhone string
+	UserEmail string
 }
 
 // AddPaymentMethodRequest is the application-layer input of the

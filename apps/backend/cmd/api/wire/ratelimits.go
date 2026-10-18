@@ -12,12 +12,18 @@ import (
 // per-endpoint HTTP limiters plus the anti-flood send limits (#1210)
 // consulted inside LoginCodeService.
 type RateLimiters struct {
-	IPRateLimiter            *httpsupport.RateLimiter
-	EmailSendLimiter         *httpsupport.RateLimiter
-	EmailVerifyLimiter       *httpsupport.RateLimiter
-	PhoneChangeSendLimiter   *httpsupport.RateLimiter
-	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
-	EmailChangeSendLimiter   *httpsupport.RateLimiter
+	IPRateLimiter      *httpsupport.RateLimiter
+	EmailSendLimiter   *httpsupport.RateLimiter
+	EmailVerifyLimiter *httpsupport.RateLimiter
+	// AuthSendPerIPLimiter and AuthVerifyPerIPLimiter are the IP layer of the
+	// auth throttling pair (research #1526, OWASP «both the IP and the
+	// account»): issuance is capped hard per client IP (email-bombing and
+	// cost-abuse across many mailboxes), verify is capped softer (distributed
+	// code guessing). Same in-memory token-bucket class as every limiter
+	// here — the restart resets the windows, which the e2e harness relies on.
+	AuthSendPerIPLimiter   *httpsupport.RateLimiter
+	AuthVerifyPerIPLimiter *httpsupport.RateLimiter
+	EmailChangeSendLimiter *httpsupport.RateLimiter
 	// RecipientSendLimiter and InitiatorSendLimiter are the anti-flood send
 	// limits (#1210) consulted inside LoginCodeService on each actual code
 	// issuance: per recipient email and per authenticated initiator, across
@@ -40,13 +46,15 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 	emailVerifyBurst := min(5, cfg.RateLimit.EmailVerifyPer15Min)
 	emailVerifyLimiter := httpsupport.NewRateLimiter(rate.Limit(cfg.RateLimit.EmailVerifyPer15Min)/(15*60), emailVerifyBurst, 1*time.Hour)
 
-	phoneChangeSendBurst := min(3, cfg.RateLimit.PhoneChangeSendPerHour)
-	phoneChangeSendLimiter := httpsupport.NewRateLimiter(
-		rate.Every(time.Hour/time.Duration(cfg.RateLimit.PhoneChangeSendPerHour)), phoneChangeSendBurst, 1*time.Hour)
-
-	phoneChangeVerifyBurst := min(5, cfg.RateLimit.PhoneChangeVerifyPer15Min)
-	phoneChangeVerifyLimiter := httpsupport.NewRateLimiter(
-		rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.PhoneChangeVerifyPer15Min)), phoneChangeVerifyBurst, 1*time.Hour)
+	// The IP layer of the auth throttling pair: hard on issuance, softer on
+	// verify — one IP must not drip code letters into many mailboxes, and a
+	// distributed code-guessing sweep across many accounts is throttled.
+	authSendPerIPLimiter := httpsupport.NewRateLimiter(
+		rate.Every(time.Hour/time.Duration(cfg.RateLimit.AuthSendPerIPPerHour)),
+		min(3, cfg.RateLimit.AuthSendPerIPPerHour), 1*time.Hour)
+	authVerifyPerIPLimiter := httpsupport.NewRateLimiter(
+		rate.Every(15*time.Minute/time.Duration(cfg.RateLimit.AuthVerifyPerIPPer15Min)),
+		min(5, cfg.RateLimit.AuthVerifyPerIPPer15Min), 1*time.Hour)
 
 	// The per-user budget on email-change sends to NEW addresses (step 2);
 	// grilling decision #720-3 pins it at 5/hour, mirroring the phone change.
@@ -56,7 +64,7 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 
 	// The anti-flood send limits (#1210), consumed inside LoginCodeService on
 	// each actual issuance: 5 codes per hour to one recipient address, 10 per
-	// hour per authenticated initiator — the triple throttle alone leaves a
+	// hour per authenticated initiator — the send throttle alone leaves a
 	// drip of 60 letters an hour into a victim's mailbox.
 	recipientSendLimiter := httpsupport.NewRateLimiter(
 		rate.Every(time.Hour/time.Duration(cfg.RateLimit.CodeSendPerRecipientPerHour)),
@@ -73,16 +81,16 @@ func WireRateLimiters(cfg *config.Config) *RateLimiters {
 	feedbackLimiter := httpsupport.NewRateLimiter(rate.Every(30*time.Second), 3, time.Hour)
 
 	return &RateLimiters{
-		IPRateLimiter:            ipLimiter,
-		EmailSendLimiter:         emailSendLimiter,
-		EmailVerifyLimiter:       emailVerifyLimiter,
-		PhoneChangeSendLimiter:   phoneChangeSendLimiter,
-		PhoneChangeVerifyLimiter: phoneChangeVerifyLimiter,
-		EmailChangeSendLimiter:   emailChangeSendLimiter,
-		RecipientSendLimiter:     recipientSendLimiter,
-		InitiatorSendLimiter:     initiatorSendLimiter,
-		ClientErrorsLimiter:      clientErrorsLimiter,
-		FeedbackLimiter:          feedbackLimiter,
+		IPRateLimiter:          ipLimiter,
+		EmailSendLimiter:       emailSendLimiter,
+		EmailVerifyLimiter:     emailVerifyLimiter,
+		AuthSendPerIPLimiter:   authSendPerIPLimiter,
+		AuthVerifyPerIPLimiter: authVerifyPerIPLimiter,
+		EmailChangeSendLimiter: emailChangeSendLimiter,
+		RecipientSendLimiter:   recipientSendLimiter,
+		InitiatorSendLimiter:   initiatorSendLimiter,
+		ClientErrorsLimiter:    clientErrorsLimiter,
+		FeedbackLimiter:        feedbackLimiter,
 	}
 }
 
@@ -91,8 +99,8 @@ func (r *RateLimiters) Stop() {
 	r.IPRateLimiter.Stop()
 	r.EmailSendLimiter.Stop()
 	r.EmailVerifyLimiter.Stop()
-	r.PhoneChangeSendLimiter.Stop()
-	r.PhoneChangeVerifyLimiter.Stop()
+	r.AuthSendPerIPLimiter.Stop()
+	r.AuthVerifyPerIPLimiter.Stop()
 	r.EmailChangeSendLimiter.Stop()
 	r.RecipientSendLimiter.Stop()
 	r.InitiatorSendLimiter.Stop()

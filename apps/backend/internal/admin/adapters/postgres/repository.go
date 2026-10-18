@@ -16,7 +16,6 @@ import (
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	contactsdomain "github.com/nambers/arenda-planform/apps/backend/internal/contacts/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	propertiesdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
@@ -25,15 +24,14 @@ import (
 // AdminRepository implements the admin application ports using generated SQLC queries.
 type AdminRepository struct {
 	db    postgres.DBTX
-	enc   encryption.Encryptor
 	clock clock.Clock
 }
 
 // NewAdminRepository creates a new admin repository.
 func NewAdminRepository(
-	db postgres.DBTX, enc encryption.Encryptor, clk clock.Clock,
+	db postgres.DBTX, clk clock.Clock,
 ) *AdminRepository {
-	return &AdminRepository{db: db, enc: enc, clock: clk}
+	return &AdminRepository{db: db, clock: clk}
 }
 
 func (r *AdminRepository) q() *postgres.Queries {
@@ -52,21 +50,11 @@ var (
 // ListUsers implements UserRepository.ListUsers.
 func (r *AdminRepository) ListUsers(ctx context.Context, filters adminapp.AdminUserFilters) ([]adminapp.AdminUserView, int64, error) {
 	// Trim so that whitespace-only input disables the filter instead of
-	// encrypting a value that can never match a stored phone.
-	phone := strings.TrimSpace(filters.Phone)
-	phoneEnc := ""
-	if phone != "" {
-		encrypted, err := r.enc.DeterministicEncrypt(ctx, phone)
-		if err != nil {
-			return nil, 0, fmt.Errorf("encrypt phone filter: %w", err)
-		}
-		phoneEnc = encrypted
-	}
+	// matching nothing but empty addresses.
+	email := strings.TrimSpace(filters.Email)
 
 	total, err := r.q().CountUsersAdmin(ctx, postgres.CountUsersAdminParams{
-		Phone:              phone,
-		PhoneEnc:           phoneEnc,
-		Email:              filters.Email,
+		Email:              email,
 		Role:               filters.Role,
 		SubscriptionStatus: filters.SubscriptionStatus,
 	})
@@ -75,9 +63,7 @@ func (r *AdminRepository) ListUsers(ctx context.Context, filters adminapp.AdminU
 	}
 
 	rows, err := r.q().ListUsersAdmin(ctx, postgres.ListUsersAdminParams{
-		Phone:              phone,
-		PhoneEnc:           phoneEnc,
-		Email:              filters.Email,
+		Email:              email,
 		Role:               filters.Role,
 		SubscriptionStatus: filters.SubscriptionStatus,
 		Sort:               filters.Sort,
@@ -91,18 +77,13 @@ func (r *AdminRepository) ListUsers(ctx context.Context, filters adminapp.AdminU
 
 	views := make([]adminapp.AdminUserView, 0, len(rows))
 	for _, row := range rows {
-		phone, err := r.decryptPhone(ctx, row.Phone, row.PhoneEncrypted)
-		if err != nil {
-			return nil, 0, err
-		}
 		views = append(views, adminapp.AdminUserView{
 			ID:                 pgconv.UUIDFromPgtype(row.ID),
-			Phone:              phone,
 			Role:               row.Role,
 			Name:               pgconv.TextToPtrString(row.Name),
 			Surname:            pgconv.TextToPtrString(row.Surname),
 			Patronymic:         pgconv.TextToPtrString(row.Patronymic),
-			Email:              pgconv.TextToPtrString(row.Email),
+			Email:              row.Email,
 			CreatedAt:          row.CreatedAt.Time,
 			UpdatedAt:          row.UpdatedAt.Time,
 			SubscriptionStatus: pgconv.TextToString(row.SubscriptionStatus),
@@ -122,19 +103,13 @@ func (r *AdminRepository) GetUser(ctx context.Context, id uuid.UUID) (adminapp.A
 		return adminapp.AdminUserView{}, fmt.Errorf("get user: %w", err)
 	}
 
-	phone, err := r.decryptPhone(ctx, row.Phone, row.PhoneEncrypted)
-	if err != nil {
-		return adminapp.AdminUserView{}, err
-	}
-
 	return adminapp.AdminUserView{
 		ID:         pgconv.UUIDFromPgtype(row.ID),
-		Phone:      phone,
 		Role:       row.Role,
 		Name:       pgconv.TextToPtrString(row.Name),
 		Surname:    pgconv.TextToPtrString(row.Surname),
 		Patronymic: pgconv.TextToPtrString(row.Patronymic),
-		Email:      pgconv.TextToPtrString(row.Email),
+		Email:      row.Email,
 		CreatedAt:  row.CreatedAt.Time,
 		UpdatedAt:  row.UpdatedAt.Time,
 	}, nil
@@ -179,7 +154,7 @@ func (r *AdminRepository) ListProperties(
 
 	views := make([]adminapp.AdminPropertyView, 0, len(rows))
 	for _, row := range rows {
-		view, err := r.propertyViewFromRow(ctx, row)
+		view, err := r.propertyViewFromRow(row)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -198,19 +173,17 @@ func (r *AdminRepository) GetProperty(ctx context.Context, id uuid.UUID) (admina
 		}
 		return adminapp.AdminPropertyView{}, fmt.Errorf("get property: %w", err)
 	}
-	return r.propertyViewFromRow(ctx, adminGetPropertyRowToListRow(row))
+	return r.propertyViewFromRow(adminGetPropertyRowToListRow(row))
 }
 
 // adminGetPropertyRowToListRow converts the generated get-row type to the
 // list-row type. Both structs carry the same fields because both admin
-// property queries select properties columns plus owner phone columns.
+// property queries select properties columns plus the owner email column.
 func adminGetPropertyRowToListRow(row postgres.GetPropertyByIDAdminRow) postgres.ListPropertiesAdminRow {
 	return postgres.ListPropertiesAdminRow(row)
 }
 
-func (r *AdminRepository) propertyViewFromRow(
-	ctx context.Context, row postgres.ListPropertiesAdminRow,
-) (adminapp.AdminPropertyView, error) {
+func (r *AdminRepository) propertyViewFromRow(row postgres.ListPropertiesAdminRow) (adminapp.AdminPropertyView, error) {
 	propType, err := propertiesdomain.ParsePropertyType(row.Type)
 	if err != nil {
 		return adminapp.AdminPropertyView{}, fmt.Errorf("invalid property type: %w", err)
@@ -219,11 +192,6 @@ func (r *AdminRepository) propertyViewFromRow(
 	status, err := propertiesdomain.ParsePropertyStatus(row.Status)
 	if err != nil {
 		return adminapp.AdminPropertyView{}, fmt.Errorf("invalid property status: %w", err)
-	}
-
-	ownerPhone, err := r.decryptPhone(ctx, row.OwnerPhone, row.OwnerPhoneEncrypted)
-	if err != nil {
-		return adminapp.AdminPropertyView{}, err
 	}
 
 	propertyID := pgconv.UUIDFromPgtype(row.ID)
@@ -247,7 +215,7 @@ func (r *AdminRepository) propertyViewFromRow(
 	return adminapp.AdminPropertyView{
 		ID:          propertyID,
 		OwnerID:     ownerID,
-		OwnerPhone:  ownerPhone,
+		OwnerEmail:  row.OwnerEmail,
 		Name:        row.Name,
 		Type:        propType,
 		Address:     row.Address,
@@ -457,13 +425,9 @@ func (r *AdminRepository) recentUsers(ctx context.Context) ([]adminapp.AdminRece
 
 	views := make([]adminapp.AdminRecentUserView, 0, len(rows))
 	for _, row := range rows {
-		phone, err := r.decryptPhone(ctx, row.Phone, row.PhoneEncrypted)
-		if err != nil {
-			return nil, err
-		}
 		views = append(views, adminapp.AdminRecentUserView{
 			ID:        pgconv.UUIDFromPgtype(row.ID),
-			Phone:     phone,
+			Email:     row.Email,
 			Name:      pgconv.TextToPtrString(row.Name),
 			Surname:   pgconv.TextToPtrString(row.Surname),
 			CreatedAt: row.CreatedAt.Time,
@@ -480,31 +444,16 @@ func (r *AdminRepository) recentPayments(ctx context.Context) ([]adminapp.AdminR
 
 	views := make([]adminapp.AdminRecentPaymentView, 0, len(rows))
 	for _, row := range rows {
-		phone, err := r.decryptPhone(ctx, row.UserPhone, row.UserPhoneEncrypted)
-		if err != nil {
-			return nil, err
-		}
 		views = append(views, adminapp.AdminRecentPaymentView{
 			ID:            pgconv.UUIDFromPgtype(row.ID),
 			UserID:        pgconv.UUIDFromPgtype(row.UserID),
-			UserPhone:     phone,
+			UserEmail:     row.UserEmail,
 			AmountKopecks: row.AmountKopecks,
 			Status:        row.Status,
 			CreatedAt:     row.CreatedAt.Time,
 		})
 	}
 	return views, nil
-}
-
-func (r *AdminRepository) decryptPhone(ctx context.Context, phone string, encrypted bool) (string, error) {
-	if !encrypted {
-		return phone, nil
-	}
-	decrypted, err := r.enc.Decrypt(ctx, phone)
-	if err != nil {
-		return "", fmt.Errorf("decrypt phone: %w", err)
-	}
-	return decrypted, nil
 }
 
 func toInt32(v int) int32 {

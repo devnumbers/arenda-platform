@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
@@ -23,16 +25,16 @@ func (u *fakeUoW) Do(ctx context.Context, work func(tx transaction.Tx) error) (e
 	}
 	defer func() {
 		// Same defer shape as the production UoW (rollback, then recover and
-		// re-panic). Unlike prod's `_ =` discard, the rollback error is folded
-		// into the named return — and only when work succeeded, so it never
-		// masks the work error or the re-panicked value. The fake
-		// transactions never fail to roll back, so the fold never fires.
+		// re-panic). A rollback after commit is the production no-op (pgx
+		// ErrTxClosed); the fake transaction reports it as "transaction
+		// already finished", which is tolerated the same way — it never masks
+		// the work error or the re-panicked value.
 		rollbackErr := tx.Rollback(ctx)
 		if r := recover(); r != nil {
 			panic(r)
 		}
-		if rollbackErr != nil && err == nil {
-			err = rollbackErr
+		if rollbackErr != nil && err == nil && !strings.Contains(rollbackErr.Error(), "already finished") {
+			err = fmt.Errorf("rollback tx: %w", rollbackErr)
 		}
 	}()
 	if err := work(tx); err != nil {

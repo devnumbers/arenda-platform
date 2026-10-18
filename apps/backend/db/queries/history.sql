@@ -245,7 +245,7 @@ WITH scope_property(id) AS (
     JOIN scope_property sp ON sp.id = aj.property_id
     WHERE aj.actor_id IS NOT NULL
 )
-SELECT u.id, u.name, u.surname, u.phone, u.email,
+SELECT u.id, u.name, u.surname, u.email,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
                      THEN '/api/users/' || u.id::text || '/photo'
                      END, '')::text AS photo_path,

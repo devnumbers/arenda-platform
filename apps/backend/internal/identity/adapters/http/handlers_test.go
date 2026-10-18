@@ -58,25 +58,6 @@ func (f *fakeLogout) Logout(ctx context.Context, rawToken string, actor auditdom
 	return nil
 }
 
-type fakePhoneChanger struct {
-	sendChangeCode func(ctx context.Context, userID uuid.UUID, phone domain.Phone) error
-	changePhone    func(ctx context.Context, userID uuid.UUID, phone domain.Phone, code string) (domain.User, error)
-}
-
-func (f *fakePhoneChanger) SendChangeCode(ctx context.Context, userID uuid.UUID, phone domain.Phone) error {
-	if f.sendChangeCode != nil {
-		return f.sendChangeCode(ctx, userID, phone)
-	}
-	return nil
-}
-
-func (f *fakePhoneChanger) ChangePhone(ctx context.Context, userID uuid.UUID, phone domain.Phone, code string) (domain.User, error) {
-	if f.changePhone != nil {
-		return f.changePhone(ctx, userID, phone, code)
-	}
-	return domain.User{}, errors.New("unexpected ChangePhone call")
-}
-
 // grantTokenFixture is the grant plaintext the fakes and request bodies share.
 const grantTokenFixture = "grant-token"
 
@@ -161,12 +142,12 @@ func doHandler(t *testing.T, handler http.HandlerFunc, r *http.Request) *httptes
 	return rr
 }
 
-func newHandlers(profile Profiler, logout Logout, phoneChange PhoneChanger) *AuthHandlers {
-	return newHandlersWithEmailChange(nil, profile, logout, phoneChange)
+func newHandlers(profile Profiler, logout Logout) *AuthHandlers {
+	return newHandlersWithEmailChange(nil, profile, logout)
 }
 
-func newHandlersWithEmailChange(emailChange EmailChanger, profile Profiler, logout Logout, phoneChange PhoneChanger) *AuthHandlers {
-	return newHandlersWithLimits(emailChange, profile, logout, phoneChange, AuthRateLimits{})
+func newHandlersWithEmailChange(emailChange EmailChanger, profile Profiler, logout Logout) *AuthHandlers {
+	return newHandlersWithLimits(emailChange, profile, logout, AuthRateLimits{})
 }
 
 // verifyCurrentRequest builds an authenticated step-2 request with the given
@@ -187,26 +168,16 @@ func newHandlersWithLimits(
 	emailChange EmailChanger,
 	profile Profiler,
 	logout Logout,
-	phoneChange PhoneChanger,
 	limits AuthRateLimits,
 ) *AuthHandlers {
-	return NewAuthHandlers(nil, phoneChange, emailChange, profile, nil, logout, nil, false, slog.New(slog.DiscardHandler), limits, nil)
-}
-
-func mustPhoneHandler(t *testing.T, raw string) domain.Phone {
-	t.Helper()
-	p, err := domain.NewPhone(raw)
-	if err != nil {
-		t.Fatalf("parse phone: %v", err)
-	}
-	return p
+	return NewAuthHandlers(nil, emailChange, profile, nil, logout, nil, false, slog.New(slog.DiscardHandler), limits, nil)
 }
 
 // Logout.
 
 func TestLogout_NoTokenReturns401(t *testing.T) {
 	t.Parallel()
-	h := newHandlers(nil, &fakeLogout{}, nil)
+	h := newHandlers(nil, &fakeLogout{})
 
 	rr := doHandler(t, h.Logout, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/auth/logout", nil))
 
@@ -224,7 +195,7 @@ func TestLogout_SuccessDeletesAndClearsCookie(t *testing.T) {
 			return nil
 		},
 	}
-	h := newHandlers(nil, logout, nil)
+	h := newHandlers(nil, logout)
 
 	// Inject a session cookie into the request.
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/auth/logout", nil)
@@ -256,7 +227,7 @@ func TestLogout_NotFoundIsIdempotent(t *testing.T) {
 	logout := &fakeLogout{
 		logout: func(context.Context, string, auditdomain.Actor) error { return application.ErrNotFound },
 	}
-	h := newHandlers(nil, logout, nil)
+	h := newHandlers(nil, logout)
 
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/auth/logout", nil)
 	r.AddCookie(sessionCookie("token"))
@@ -278,7 +249,7 @@ func TestLogout_OtherErrorReturns500(t *testing.T) {
 	logout := &fakeLogout{
 		logout: func(context.Context, string, auditdomain.Actor) error { return errors.New("db down") },
 	}
-	h := newHandlers(nil, logout, nil)
+	h := newHandlers(nil, logout)
 
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/auth/logout", nil)
 	r.AddCookie(sessionCookie("token"))
@@ -293,7 +264,7 @@ func TestLogout_OtherErrorReturns500(t *testing.T) {
 
 func TestGetMe_NoUserIDReturns401(t *testing.T) {
 	t.Parallel()
-	h := newHandlers(&fakeProfiler{}, nil, nil)
+	h := newHandlers(&fakeProfiler{}, nil)
 
 	rr := doHandler(t, h.GetMe, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/me", nil))
 
@@ -305,7 +276,6 @@ func TestGetMe_NoUserIDReturns401(t *testing.T) {
 func TestGetMe_Success(t *testing.T) {
 	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
-	phone := mustPhoneHandler(t, "+79160000800")
 	email := mustEmailHandler(t, testOwnerEmail)
 	name := testUserName
 	profile := &fakeProfiler{
@@ -315,14 +285,13 @@ func TestGetMe_Success(t *testing.T) {
 			}
 			return domain.User{
 				ID:    userID,
-				Phone: phone,
 				Role:  domain.RoleOwner,
 				Name:  &name,
 				Email: &email,
 			}, nil
 		},
 	}
-	h := newHandlers(profile, nil, nil)
+	h := newHandlers(profile, nil)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", userID)
 	rr := doHandler(t, h.GetMe, r)
@@ -334,8 +303,8 @@ func TestGetMe_Success(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.Phone != phone.String() {
-		t.Fatalf("phone = %s, want %s", resp.Phone, phone.String())
+	if resp.Email == nil || *resp.Email != testOwnerEmail {
+		t.Fatalf("email = %v, want %s", resp.Email, testOwnerEmail)
 	}
 	if resp.Name == nil || *resp.Name != testUserName {
 		t.Fatalf("name = %v, want Ivan", resp.Name)
@@ -347,7 +316,7 @@ func TestGetMe_NotFoundReturns401(t *testing.T) {
 	profile := &fakeProfiler{
 		me: func(context.Context, uuid.UUID) (domain.User, error) { return domain.User{}, application.ErrNotFound },
 	}
-	h := newHandlers(profile, nil, nil)
+	h := newHandlers(profile, nil)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.GetMe, r)
@@ -362,7 +331,7 @@ func TestGetMe_OtherErrorReturns500(t *testing.T) {
 	profile := &fakeProfiler{
 		me: func(context.Context, uuid.UUID) (domain.User, error) { return domain.User{}, errors.New("db down") },
 	}
-	h := newHandlers(profile, nil, nil)
+	h := newHandlers(profile, nil)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.GetMe, r)
@@ -375,10 +344,9 @@ func TestGetMe_OtherErrorReturns500(t *testing.T) {
 func TestGetMe_EnricherSuccess(t *testing.T) {
 	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
-	phone := mustPhoneHandler(t, "+79160000801")
 	profile := &fakeProfiler{
 		me: func(context.Context, uuid.UUID) (domain.User, error) {
-			return domain.User{ID: userID, Phone: phone, Role: domain.RoleOwner}, nil
+			return domain.User{ID: userID, Role: domain.RoleOwner}, nil
 		},
 	}
 	enricher := func(_ context.Context, _ uuid.UUID, resp *openapi.MeResponse) error {
@@ -388,7 +356,7 @@ func TestGetMe_EnricherSuccess(t *testing.T) {
 		resp.Name = &sub
 		return nil
 	}
-	h := NewAuthHandlers(nil, nil, nil, profile, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
+	h := NewAuthHandlers(nil, nil, profile, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", userID)
 	rr := doHandler(t, h.GetMe, r)
@@ -401,16 +369,15 @@ func TestGetMe_EnricherSuccess(t *testing.T) {
 func TestGetMe_EnricherErrorReturns500(t *testing.T) {
 	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
-	phone := mustPhoneHandler(t, "+79160000802")
 	profile := &fakeProfiler{
 		me: func(context.Context, uuid.UUID) (domain.User, error) {
-			return domain.User{ID: userID, Phone: phone, Role: domain.RoleOwner}, nil
+			return domain.User{ID: userID, Role: domain.RoleOwner}, nil
 		},
 	}
 	enricher := func(context.Context, uuid.UUID, *openapi.MeResponse) error {
 		return errors.New("billing unavailable")
 	}
-	h := NewAuthHandlers(nil, nil, nil, profile, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
+	h := NewAuthHandlers(nil, nil, profile, nil, nil, nil, false, slog.New(slog.DiscardHandler), AuthRateLimits{}, enricher)
 
 	r := authedRequest(t, http.MethodGet, "/me", "", userID)
 	rr := doHandler(t, h.GetMe, r)
@@ -424,7 +391,7 @@ func TestGetMe_EnricherErrorReturns500(t *testing.T) {
 
 func TestUpdateMe_NoUserIDReturns401(t *testing.T) {
 	t.Parallel()
-	h := newHandlers(&fakeProfiler{}, nil, nil)
+	h := newHandlers(&fakeProfiler{}, nil)
 
 	rr := doJSON(t, h.UpdateMe, "/me", `{"name":"Ivan"}`)
 
@@ -435,7 +402,7 @@ func TestUpdateMe_NoUserIDReturns401(t *testing.T) {
 
 func TestUpdateMe_BadBodyReturns400(t *testing.T) {
 	t.Parallel()
-	h := newHandlers(&fakeProfiler{}, nil, nil)
+	h := newHandlers(&fakeProfiler{}, nil)
 
 	r := authedRequest(t, http.MethodPatch, "/me", "{invalid", uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.UpdateMe, r)
@@ -448,15 +415,14 @@ func TestUpdateMe_BadBodyReturns400(t *testing.T) {
 func TestUpdateMe_Success(t *testing.T) {
 	t.Parallel()
 	userID := uuid.Must(uuid.NewV7())
-	phone := mustPhoneHandler(t, "+79160000900")
 	var gotCmd application.UpdateProfileCommand
 	profile := &fakeProfiler{
 		update: func(_ context.Context, _ uuid.UUID, cmd application.UpdateProfileCommand) (domain.User, error) {
 			gotCmd = cmd
-			return domain.User{ID: userID, Phone: phone, Role: domain.RoleOwner, Name: cmd.Name}, nil
+			return domain.User{ID: userID, Role: domain.RoleOwner, Name: cmd.Name}, nil
 		},
 	}
-	h := newHandlers(profile, nil, nil)
+	h := newHandlers(profile, nil)
 
 	r := authedRequest(t, http.MethodPatch, "/me", `{"name":"Ivan","timezone":"Europe/Moscow"}`, userID)
 	rr := doHandler(t, h.UpdateMe, r)
@@ -484,7 +450,7 @@ func TestUpdateMe_EmailFieldIsRejected(t *testing.T) {
 			return domain.User{ID: uuid.Must(uuid.NewV7()), Role: domain.RoleOwner, Name: cmd.Name}, nil
 		},
 	}
-	h := newHandlers(profile, nil, nil)
+	h := newHandlers(profile, nil)
 
 	r := authedRequest(t, http.MethodPatch, "/me", `{"email":"attacker@example.com","name":"Ivan"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.UpdateMe, r)
@@ -501,7 +467,7 @@ func TestUpdateMe_InvalidTimezoneReturns400(t *testing.T) {
 			return domain.User{}, domain.ErrInvalidTimezone
 		},
 	}
-	h := newHandlers(profile, nil, nil)
+	h := newHandlers(profile, nil)
 
 	r := authedRequest(t, http.MethodPatch, "/me", `{"timezone":"bad"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.UpdateMe, r)
@@ -518,7 +484,7 @@ func TestUpdateMe_NotFoundReturns401(t *testing.T) {
 			return domain.User{}, application.ErrNotFound
 		},
 	}
-	h := newHandlers(profile, nil, nil)
+	h := newHandlers(profile, nil)
 
 	r := authedRequest(t, http.MethodPatch, "/me", `{"name":"Ivan"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.UpdateMe, r)
@@ -528,204 +494,19 @@ func TestUpdateMe_NotFoundReturns401(t *testing.T) {
 	}
 }
 
-// SendPhoneChangeCode.
-
-func TestSendPhoneChangeCode_NoUserIDReturns401(t *testing.T) {
-	t.Parallel()
-	h := newHandlers(nil, nil, &fakePhoneChanger{})
-
-	rr := doJSON(t, h.SendPhoneChangeCode, "/me/phone/send-code", `{"phone":"+79160001000"}`)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rr.Code)
-	}
-}
-
-func TestSendPhoneChangeCode_BadPhoneReturns400(t *testing.T) {
-	t.Parallel()
-	h := newHandlers(nil, nil, &fakePhoneChanger{})
-
-	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"bad"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.SendPhoneChangeCode, r)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
-}
-
-func TestSendPhoneChangeCode_SuccessReturns204(t *testing.T) {
-	t.Parallel()
-	var gotPhone domain.Phone
-	pc := &fakePhoneChanger{
-		sendChangeCode: func(_ context.Context, _ uuid.UUID, phone domain.Phone) error {
-			gotPhone = phone
-			return nil
-		},
-	}
-	h := newHandlers(nil, nil, pc)
-	userID := uuid.Must(uuid.NewV7())
-
-	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"+79160001000"}`, userID)
-	rr := doHandler(t, h.SendPhoneChangeCode, r)
-
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", rr.Code)
-	}
-	if gotPhone.String() != "+79160001000" {
-		t.Fatalf("phone = %s, want +79160001000", gotPhone.String())
-	}
-}
-
-func TestSendPhoneChangeCode_UnchangedReturns400(t *testing.T) {
-	t.Parallel()
-	pc := &fakePhoneChanger{
-		sendChangeCode: func(context.Context, uuid.UUID, domain.Phone) error { return application.ErrPhoneUnchanged },
-	}
-	h := newHandlers(nil, nil, pc)
-
-	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"+79160001000"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.SendPhoneChangeCode, r)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
-}
-
-func TestSendPhoneChangeCode_TakenReturns409(t *testing.T) {
-	t.Parallel()
-	pc := &fakePhoneChanger{
-		sendChangeCode: func(context.Context, uuid.UUID, domain.Phone) error { return application.ErrPhoneAlreadyTaken },
-	}
-	h := newHandlers(nil, nil, pc)
-
-	r := authedRequest(t, http.MethodPost, "/me/phone/send-code", `{"phone":"+79160001000"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.SendPhoneChangeCode, r)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rr.Code)
-	}
-}
-
-// ChangePhone.
-
-func TestChangePhone_NoUserIDReturns401(t *testing.T) {
-	t.Parallel()
-	h := newHandlers(nil, nil, &fakePhoneChanger{})
-
-	rr := doJSON(t, h.ChangePhone, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rr.Code)
-	}
-}
-
-func TestChangePhone_Success(t *testing.T) {
-	t.Parallel()
-	userID := uuid.Must(uuid.NewV7())
-	phone := mustPhoneHandler(t, "+79160002000")
-	pc := &fakePhoneChanger{
-		changePhone: func(_ context.Context, _ uuid.UUID, _ domain.Phone, _ string) (domain.User, error) {
-			return domain.NewOwner(phone)
-		},
-	}
-	h := newHandlers(nil, nil, pc)
-
-	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, userID)
-	rr := doHandler(t, h.ChangePhone, r)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestChangePhone_InvalidCodeReturns401(t *testing.T) {
-	t.Parallel()
-	pc := &fakePhoneChanger{
-		changePhone: func(context.Context, uuid.UUID, domain.Phone, string) (domain.User, error) {
-			return domain.User{}, domain.ErrLoginCodeInvalid
-		},
-	}
-	h := newHandlers(nil, nil, pc)
-
-	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"000000"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.ChangePhone, r)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rr.Code)
-	}
-}
-
-func TestChangePhone_UnchangedReturns400(t *testing.T) {
-	t.Parallel()
-	pc := &fakePhoneChanger{
-		changePhone: func(context.Context, uuid.UUID, domain.Phone, string) (domain.User, error) {
-			return domain.User{}, application.ErrPhoneUnchanged
-		},
-	}
-	h := newHandlers(nil, nil, pc)
-
-	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.ChangePhone, r)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
-}
-
-func TestChangePhone_TakenReturns409(t *testing.T) {
-	t.Parallel()
-	pc := &fakePhoneChanger{
-		changePhone: func(context.Context, uuid.UUID, domain.Phone, string) (domain.User, error) {
-			return domain.User{}, application.ErrPhoneAlreadyTaken
-		},
-	}
-	h := newHandlers(nil, nil, pc)
-
-	r := authedRequest(t, http.MethodPost, "/me/phone/change", `{"phone":"+79160002000","code":"123456"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.ChangePhone, r)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rr.Code)
-	}
-}
-
 // Pure functions.
 
 func TestMeResponse_NilEmail(t *testing.T) {
 	t.Parallel()
-	phone := mustPhoneHandler(t, "+79160003000")
 	user := domain.User{
-		ID:    uuid.Must(uuid.NewV7()),
-		Phone: phone,
-		Role:  domain.RoleOwner,
+		ID:   uuid.Must(uuid.NewV7()),
+		Role: domain.RoleOwner,
 		// Email intentionally nil.
 	}
 	resp := meResponse(user)
 	if resp.Email != nil {
 		t.Fatalf("email = %v, want nil", resp.Email)
 	}
-	if resp.Phone != phone.String() {
-		t.Fatalf("phone = %s, want %s", resp.Phone, phone.String())
-	}
-}
-
-func TestRateLimitKey(t *testing.T) {
-	t.Parallel()
-	email := mustEmailHandler(t, testOwnerEmail)
-
-	t.Run("email wins when present", func(t *testing.T) {
-		t.Parallel()
-		if got := rateLimitKey("+7900", &email); got != email.String() {
-			t.Fatalf("rateLimitKey = %q, want %q", got, email.String())
-		}
-	})
-
-	t.Run("phone used when email absent", func(t *testing.T) {
-		t.Parallel()
-		if got := rateLimitKey("+7900", nil); got != "+7900" {
-			t.Fatalf("rateLimitKey = %q, want +7900", got)
-		}
-	})
 }
 
 func TestAuthRateLimits_NilLimiterAllowsAll(t *testing.T) {
@@ -738,11 +519,11 @@ func TestAuthRateLimits_NilLimiterAllowsAll(t *testing.T) {
 	if !limits.AllowVerify("k") {
 		t.Error("AllowVerify with nil limiter = false, want true")
 	}
-	if !limits.AllowPhoneChangeSend("k") {
-		t.Error("AllowPhoneChangeSend with nil limiter = false, want true")
+	if !limits.AllowSendForIP("203.0.113.9") {
+		t.Error("AllowSendForIP with nil limiter = false, want true")
 	}
-	if !limits.AllowPhoneChangeVerify("k") {
-		t.Error("AllowPhoneChangeVerify with nil limiter = false, want true")
+	if !limits.AllowVerifyForIP("203.0.113.9") {
+		t.Error("AllowVerifyForIP with nil limiter = false, want true")
 	}
 }
 
@@ -789,7 +570,7 @@ func mustEmailHandler(t *testing.T, raw string) domain.Email {
 
 func TestSendEmailChangeCode_NoUserIDReturns401(t *testing.T) {
 	t.Parallel()
-	h := newHandlersWithEmailChange(&fakeEmailChanger{}, nil, nil, nil)
+	h := newHandlersWithEmailChange(&fakeEmailChanger{}, nil, nil)
 
 	rr := doHandler(t, h.SendEmailChangeCode, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/me/email/send-code", nil))
 
@@ -807,7 +588,7 @@ func TestSendEmailChangeCode_SuccessReturns204(t *testing.T) {
 			return nil
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := authedRequest(t, http.MethodPost, "/me/email/send-code", "", uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.SendEmailChangeCode, r)
@@ -817,26 +598,6 @@ func TestSendEmailChangeCode_SuccessReturns204(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("SendCurrentEmailCode was not called")
-	}
-}
-
-func TestSendEmailChangeCode_NoEmailReturns409(t *testing.T) {
-	t.Parallel()
-	emailChange := &fakeEmailChanger{
-		sendCurrentEmailCode: func(context.Context, uuid.UUID) error {
-			return application.ErrEmailDoesNotMatch
-		},
-	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
-
-	r := authedRequest(t, http.MethodPost, "/me/email/send-code", "", uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.SendEmailChangeCode, r)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rr.Code)
-	}
-	if !strings.Contains(rr.Body.String(), "У аккаунта нет электронной почты") {
-		t.Fatalf("body = %s, want the no-email detail", rr.Body.String())
 	}
 }
 
@@ -852,7 +613,7 @@ func TestVerifyCurrentEmail_SuccessReturnsGrant(t *testing.T) {
 			return "grant-token-123", nil
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := verifyCurrentRequest(t, `{"code":"123456"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.VerifyCurrentEmail, r)
@@ -875,7 +636,7 @@ func TestVerifyCurrentEmail_InvalidCodeReturns401(t *testing.T) {
 			return "", domain.ErrLoginCodeInvalid
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := verifyCurrentRequest(t, `{"code":"000000"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.VerifyCurrentEmail, r)
@@ -892,7 +653,7 @@ func TestVerifyCurrentEmail_InvalidCodeReturns401(t *testing.T) {
 // parsed at the handler seam: a malformed address never reaches the service.
 func TestRequestNewEmailCode_BadEmailReturns400(t *testing.T) {
 	t.Parallel()
-	h := newHandlersWithEmailChange(&fakeEmailChanger{}, nil, nil, nil)
+	h := newHandlersWithEmailChange(&fakeEmailChanger{}, nil, nil)
 
 	r := requestNewEmailCodeRequest(t, `{"grant":"g","newEmail":"not-an-email"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.RequestNewEmailCode, r)
@@ -915,7 +676,7 @@ func TestRequestNewEmailCode_SuccessReturns204(t *testing.T) {
 			return nil
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := requestNewEmailCodeRequest(t, `{"grant":"grant-token-123","newEmail":"New@Example.com"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.RequestNewEmailCode, r)
@@ -938,7 +699,7 @@ func TestRequestNewEmailCode_UnchangedReturns400(t *testing.T) {
 			return application.ErrEmailUnchanged
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := requestNewEmailCodeRequest(t, `{"grant":"g","newEmail":"owner@example.com"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.RequestNewEmailCode, r)
@@ -958,7 +719,7 @@ func TestRequestNewEmailCode_TakenReturns409WithDecisionText(t *testing.T) {
 			return application.ErrEmailAlreadyTaken
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := requestNewEmailCodeRequest(t, `{"grant":"g","newEmail":"taken@example.com"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.RequestNewEmailCode, r)
@@ -978,7 +739,7 @@ func TestRequestNewEmailCode_InvalidGrantReturns409(t *testing.T) {
 			return application.ErrEmailChangeGrantInvalid
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := requestNewEmailCodeRequest(t, `{"grant":"stale","newEmail":"new@example.com"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.RequestNewEmailCode, r)
@@ -1001,7 +762,7 @@ func TestRequestNewEmailCode_BudgetExhaustedReturns429(t *testing.T) {
 			return application.ErrEmailChangeBudgetExhausted
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := requestNewEmailCodeRequest(t, `{"grant":"g","newEmail":"new@example.com"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.RequestNewEmailCode, r)
@@ -1025,7 +786,7 @@ func TestResendEmailCode_SuccessPassesGrantAndReturns204(t *testing.T) {
 			return nil
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, userID)
 	rr := doHandler(t, h.ResendEmailCode, r)
@@ -1040,7 +801,7 @@ func TestResendEmailCode_SuccessPassesGrantAndReturns204(t *testing.T) {
 
 func TestResendEmailCode_BadBodyReturns400(t *testing.T) {
 	t.Parallel()
-	h := newHandlersWithEmailChange(&fakeEmailChanger{}, nil, nil, nil)
+	h := newHandlersWithEmailChange(&fakeEmailChanger{}, nil, nil)
 
 	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant"`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.ResendEmailCode, r)
@@ -1059,7 +820,7 @@ func TestResendEmailCode_ExpiredGrantReturns409(t *testing.T) {
 			return application.ErrEmailChangeGrantInvalid
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"stale"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.ResendEmailCode, r)
@@ -1081,7 +842,7 @@ func TestResendEmailCode_ThrottledReturns429(t *testing.T) {
 			return application.ErrCodeSentTooRecently
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.ResendEmailCode, r)
@@ -1103,7 +864,7 @@ func TestResendEmailCode_BudgetExhaustedReturns429(t *testing.T) {
 			return application.ErrEmailChangeBudgetExhausted
 		},
 	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+	h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
 	rr := doHandler(t, h.ResendEmailCode, r)
@@ -1130,7 +891,7 @@ func TestResendEmailCode_SendLimitsReturn429(t *testing.T) {
 					return limitErr
 				},
 			}
-			h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
+			h := newHandlersWithEmailChange(emailChange, nil, nil)
 
 			r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
 			rr := doHandler(t, h.ResendEmailCode, r)
@@ -1142,95 +903,5 @@ func TestResendEmailCode_SendLimitsReturn429(t *testing.T) {
 				t.Fatalf("body = %s, want the generic throttle text", rr.Body.String())
 			}
 		})
-	}
-}
-
-// TestResendEmailCode_UserWithoutEmailReturns409 proves the no-email case
-// (#720 Q9) keeps its pinned text on the resend endpoint. The mapping is
-// defensive: a user without an email never holds a live grant (the grant
-// seam refuses first — see the service test), the endpoint still promises
-// the 409 contract.
-func TestResendEmailCode_UserWithoutEmailReturns409(t *testing.T) {
-	t.Parallel()
-	emailChange := &fakeEmailChanger{
-		resendNewEmailCode: func(context.Context, uuid.UUID, string) error {
-			return application.ErrEmailDoesNotMatch
-		},
-	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
-
-	r := authedRequest(t, http.MethodPost, "/me/email/resend-code", `{"grant":"grant-token"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.ResendEmailCode, r)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rr.Code)
-	}
-	if !strings.Contains(rr.Body.String(), "У аккаунта нет электронной почты") {
-		t.Fatalf("body = %s, want the no-email detail", rr.Body.String())
-	}
-}
-
-func TestChangeEmail_SuccessReturnsMe(t *testing.T) {
-	t.Parallel()
-	userID := uuid.Must(uuid.NewV7())
-	phone := mustPhoneHandler(t, "+79160001100")
-	email := mustEmailHandler(t, "new@example.com")
-	var gotCode, gotGrant string
-	emailChange := &fakeEmailChanger{
-		changeEmail: func(_ context.Context, _ uuid.UUID, code, grant string) (domain.User, error) {
-			gotCode, gotGrant = code, grant
-			return domain.User{ID: userID, Phone: phone, Role: domain.RoleOwner, Email: &email}, nil
-		},
-	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
-
-	r := authedRequest(t, http.MethodPost, "/me/email/change", `{"code":"123456","grant":"grant-token"}`, userID)
-	rr := doHandler(t, h.ChangeEmail, r)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rr.Code, rr.Body.String())
-	}
-	if gotCode != "123456" || gotGrant != grantTokenFixture {
-		t.Fatalf("service args = (%q, %q), want code and grant passed through", gotCode, gotGrant)
-	}
-	if !strings.Contains(rr.Body.String(), `"email":"new@example.com"`) {
-		t.Fatalf("body = %s, want the new email in MeResponse", rr.Body.String())
-	}
-}
-
-func TestChangeEmail_ExpiredGrantReturns409(t *testing.T) {
-	t.Parallel()
-	emailChange := &fakeEmailChanger{
-		changeEmail: func(context.Context, uuid.UUID, string, string) (domain.User, error) {
-			return domain.User{}, application.ErrEmailChangeGrantInvalid
-		},
-	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
-
-	r := authedRequest(t, http.MethodPost, "/me/email/change", `{"code":"123456","grant":"stale"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.ChangeEmail, r)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rr.Code)
-	}
-	if !strings.Contains(rr.Body.String(), "начните смену почты заново") {
-		t.Fatalf("body = %s, want the restart hint", rr.Body.String())
-	}
-}
-
-func TestChangeEmail_InvalidCodeReturns401(t *testing.T) {
-	t.Parallel()
-	emailChange := &fakeEmailChanger{
-		changeEmail: func(context.Context, uuid.UUID, string, string) (domain.User, error) {
-			return domain.User{}, domain.ErrLoginCodeInvalid
-		},
-	}
-	h := newHandlersWithEmailChange(emailChange, nil, nil, nil)
-
-	r := authedRequest(t, http.MethodPost, "/me/email/change", `{"code":"000000","grant":"grant"}`, uuid.Must(uuid.NewV7()))
-	rr := doHandler(t, h.ChangeEmail, r)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rr.Code)
 	}
 }

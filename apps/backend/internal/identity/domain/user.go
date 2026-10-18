@@ -1,4 +1,4 @@
-// Package domain defines the identity domain model: users with roles and timezones, phone and email values,
+// Package domain defines the identity domain model: users with roles and timezones, the canonical email value,
 // sessions, login codes with purposes and attempt windows.
 package domain
 
@@ -11,7 +11,6 @@ import (
 
 type User struct {
 	ID              uuid.UUID
-	Phone           Phone
 	Role            Role
 	Name            *string
 	Surname         *string
@@ -27,14 +26,14 @@ type User struct {
 	PhotoContentType *string
 }
 
-func NewOwner(phone Phone) (User, error) {
+func NewOwner(email Email) (User, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return User{}, err
 	}
 	return User{
 		ID:    id,
-		Phone: phone,
+		Email: &email,
 		Role:  RoleOwner,
 	}, nil
 }

@@ -100,38 +100,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/phone/send-code": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["sendPhoneChangeCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/phone/change": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["changePhone"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/me/email/send-code": {
         parameters: {
             query?: never;
@@ -2354,18 +2322,18 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         SendCodeRequest: {
-            phone: string;
-            email?: string;
+            /** @description The canonical email address the code is delivered to. Login and registration are one flow (ADR 0067): a code to an address the platform does not know yet creates the account when the code verifies. The response does not reveal whether an account exists. */
+            email: string;
         };
         SendCodeResponse: {
-            /** @description Whether a code was sent (false = email step required) */
+            /** @description Whether a code was sent */
             sent: boolean;
             /** @description Seconds before another code can be requested */
             retryAfter?: number;
         };
         VerifyCodeRequest: {
-            phone: string;
-            email?: string;
+            /** @description The same canonical address the code was delivered to. */
+            email: string;
             code: string;
             /** @description Browser-detected IANA timezone of the registering device (Intl.DateTimeFormat().resolvedOptions().timeZone). Applied only when this request creates a new user; an absent or invalid value keeps the Europe/Moscow default. Ignored for existing users — the manual choice in the profile picker is never overwritten. */
             timezone?: string;
@@ -2373,7 +2341,6 @@ export interface components {
         MeResponse: {
             /** Format: uuid */
             id: string;
-            phone: string;
             /** @enum {string} */
             role: "owner" | "admin";
             name?: string | null;
@@ -2420,16 +2387,6 @@ export interface components {
             patronymic?: string | null;
             /** @description IANA timezone identifier, e.g. Europe/Moscow. */
             timezone?: string | null;
-        };
-        SendPhoneChangeCodeRequest: {
-            /** @example +79990001122 */
-            phone: string;
-        };
-        ChangePhoneRequest: {
-            /** @example +79990001122 */
-            phone: string;
-            /** @example 123456 */
-            code: string;
         };
         VerifyCurrentEmailRequest: {
             /**
@@ -2653,7 +2610,8 @@ export interface components {
             provider: string;
             /** Format: uuid */
             userId: string;
-            userPhone: string;
+            /** @description The owner's canonical email address. */
+            userEmail: string;
             /** Format: int64 */
             refundedAmountKopecks?: number | null;
             /** Format: date-time */
@@ -2732,8 +2690,7 @@ export interface components {
         AdminUser: {
             /** Format: uuid */
             id: string;
-            phone: string;
-            email?: string | null;
+            email: string;
             /** @enum {string} */
             role: "owner" | "admin";
             name?: string | null;
@@ -2763,7 +2720,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             ownerId: string;
-            ownerPhone: string;
+            /** @description The owner's canonical email address. */
+            ownerEmail: string;
             name: string;
             type: components["schemas"]["PropertyType"];
             address: string;
@@ -2829,7 +2787,7 @@ export interface components {
         AdminStatsRecentUser: {
             /** Format: uuid */
             id: string;
-            phone: string;
+            email: string;
             name?: string | null;
             surname?: string | null;
             /** Format: date-time */
@@ -2840,7 +2798,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             userId: string;
-            userPhone: string;
+            userEmail: string;
             /** Format: int64 */
             amountKopecks: number;
             status: components["schemas"]["SubscriptionPaymentStatus"];
@@ -4533,7 +4491,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
@@ -4563,7 +4520,6 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
@@ -4751,62 +4707,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-        };
-    };
-    sendPhoneChangeCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SendPhoneChangeCodeRequest"];
-            };
-        };
-        responses: {
-            /** @description Code sent */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            409: components["responses"]["Conflict"];
-            429: components["responses"]["TooManyRequests"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    changePhone: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChangePhoneRequest"];
-            };
-        };
-        responses: {
-            /** @description Phone changed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MeResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            409: components["responses"]["Conflict"];
-            429: components["responses"]["TooManyRequests"];
-            500: components["responses"]["InternalServerError"];
         };
     };
     sendEmailChangeCode: {
@@ -8084,8 +7984,8 @@ export interface operations {
             query?: {
                 user_id?: string;
                 status?: components["schemas"]["SubscriptionPaymentStatus"];
-                /** @description Exact match on the user's phone number. */
-                user_phone?: string;
+                /** @description Exact case-insensitive match on the user's email address. */
+                user_email?: string;
                 /** @description Filters payments by the payer's current subscription status (issue #254). */
                 subscription_status?: components["schemas"]["SubscriptionStatus"];
                 /** @description Sort field (camelCase). Allowed: createdAt, amountKopecks, status. Defaults to createdAt descending. */
@@ -8198,7 +8098,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
-                phone?: string;
+                /** @description Case-insensitive substring search over the email address. A missing or empty value disables the filter. */
                 email?: string;
                 role?: "owner" | "admin";
                 subscription_status?: components["schemas"]["SubscriptionStatus"];

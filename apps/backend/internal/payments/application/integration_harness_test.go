@@ -186,10 +186,10 @@ func (h *paymentsHarness) withOwner(tz string) *paymentsHarness {
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("pay-harness%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, $4)`,
-		owner, phone, actor.RoleOwner, tz,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, $4)`,
+		owner, email, actor.RoleOwner, tz,
 	); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -222,10 +222,10 @@ func (h *paymentsHarness) inTx(work func(tx transaction.Tx) error) error {
 func (h *paymentsHarness) seedActor(id uuid.UUID) {
 	t := h.t
 	t.Helper()
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("pay-actor%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
-		id, phone, actor.RoleOwner,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
+		id, email, actor.RoleOwner,
 	); err != nil {
 		t.Fatalf("seed actor: %v", err)
 	}

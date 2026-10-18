@@ -33,8 +33,8 @@ type AuthenticationService struct {
 }
 
 // AuthenticationServiceConfig carries the deep-module dependencies the
-// orchestrator composes. The transactional repositories, audit recorder, and
-// UoW live in the shared txStoreFactory passed to NewAuthenticationService.
+// orchestrator composes. The transactional repositories, audit recorder, and UoW
+// live in the shared txStoreFactory passed to NewAuthenticationService.
 type AuthenticationServiceConfig struct {
 	LoginCodes *LoginCodeService
 	Sessions   SessionService
@@ -68,65 +68,38 @@ func NewAuthenticationService(
 	}
 }
 
-// SendCode generates a login code, persists it, and sends it by email after the
-// transaction commits. It validates the email preconditions for the phone
-// before delegating issuance to LoginCodeService, which authoritatively checks
-// the not-blocked rule inside its own transaction (#239).
+// SendCode generates a login code for the address, persists it, and sends it by
+// email after the transaction commits. Entry and registration are one flow
+// (ADR 0067): a code to an address the platform does not know yet creates the
+// account when the code verifies, so there is no pre-check to fail and nothing
+// to reveal — the response and the persisted work (the code row and its hash)
+// are the same whether the account exists or not (anti-enumeration, research
+// #1526). The user id rides along only when the account already exists; it is
+// metadata on the code row, never a signal.
 func (s *AuthenticationService) SendCode(
 	ctx context.Context,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 ) error {
-	user, err := s.users.GetByPhone(ctx, phone)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("get user: %w", err)
-	}
-	if errors.Is(err, ErrNotFound) {
-		// New phone: reject the registration early when the email already
-		// belongs to another account instead of failing later at verify.
-		if _, emailErr := s.users.GetByEmail(ctx, email); emailErr == nil {
-			return ErrEmailAlreadyTaken
-		} else if !errors.Is(emailErr, ErrNotFound) {
-			return fmt.Errorf("get user by email: %w", emailErr)
-		}
-	}
-	if err == nil && user.Email != nil && *user.Email != email {
-		return ErrEmailDoesNotMatch
-	}
 	var userID *uuid.UUID
-	if err == nil {
-		userID = &user.ID
+	user, err := s.users.GetByEmail(ctx, email)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		// New address: the code is issued all the same, and verifies into a
+		// fresh account.
+	case err != nil:
+		return fmt.Errorf("get user: %w", err)
+	default:
+		id := user.ID
+		userID = &id
 	}
 
-	return s.loginCodes.Send(ctx, phone, email, purpose, domain.LoginCodeStepCurrentEmail, userID)
+	return s.loginCodes.Send(ctx, email, purpose, domain.LoginCodeStepCurrentEmail, userID)
 }
 
-// SendCodeByPhone sends a login code to the email stored for the given
-// phone. It returns sent=false when the user does not exist or has no
-// email on file; the caller should then ask the user for an email.
-func (s *AuthenticationService) SendCodeByPhone(ctx context.Context, phone domain.Phone) (bool, error) {
-	user, err := s.users.GetByPhone(ctx, phone)
-	if errors.Is(err, ErrNotFound) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("get user: %w", err)
-	}
-	if user.Email == nil {
-		return false, nil
-	}
-	if err := s.SendCode(ctx, phone, *user.Email, domain.LoginCodePurposeLogin); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// VerifyCode verifies a login code and creates a session for the user.
-// A nil email is resolved from the stored user record for the phone.
-// A nil or invalid timezone keeps the creation default (Europe/Moscow,
-// migration 000088); a valid one applies only when this verify creates the
-// account — an existing user's saved zone is never overwritten (#451).
+// VerifyCode verifies a login code and creates a session for the user. An
+// optional timezone (browser-detected) applies only when this verify creates
+// the account — an existing user's saved zone is never overwritten (#451).
 //
 // The success path runs inside a single runInTx: verify → mark-used →
 // SessionService.Issue → apply registration timezone → reset attempts → audit.
@@ -136,18 +109,12 @@ func (s *AuthenticationService) SendCodeByPhone(ctx context.Context, phone domai
 // early-Commit-on-error (ADR 0033).
 func (s *AuthenticationService) VerifyCode(
 	ctx context.Context,
-	phone domain.Phone,
-	email *domain.Email,
+	email domain.Email,
 	code string,
 	timezone *string,
 	device DeviceContext,
 ) (domain.RawSession, domain.User, error) {
 	now := s.clock.Now()
-
-	resolvedEmail, err := s.resolveEmail(ctx, phone, email)
-	if err != nil {
-		return domain.RawSession{}, domain.User{}, err
-	}
 
 	// Validate before the transaction: an unparsable value is not an error —
 	// the account is simply born on the default zone.
@@ -155,15 +122,15 @@ func (s *AuthenticationService) VerifyCode(
 
 	// The not-blocked check is authoritative inside LoginCodeService.Verify,
 	// which runs within the runInTx below and returns ErrUserBlocked before any
-	// code is read (#237, #239). A blocked phone falls through to the
+	// code is read (#237, #239). A blocked address falls through to the
 	// recovery-free `case err != nil` branch — the attempt was already recorded
 	// when the block took effect, so no recovery is needed.
 	var raw domain.RawSession
 	var user domain.User
 	isNewUser := false
 
-	err = s.runInTx(ctx, func(stores *txStores) error {
-		loginCode, vErr := s.loginCodes.Verify(ctx, stores, phone, resolvedEmail, domain.LoginCodePurposeLogin, code)
+	err := s.runInTx(ctx, func(stores *txStores) error {
+		loginCode, vErr := s.loginCodes.Verify(ctx, stores, email, domain.LoginCodePurposeLogin, code)
 		if vErr != nil {
 			return vErr
 		}
@@ -172,7 +139,7 @@ func (s *AuthenticationService) VerifyCode(
 			return fmt.Errorf("mark code used: %w", err)
 		}
 
-		issued, u, isNew, iErr := s.sessions.Issue(ctx, stores, phone, resolvedEmail, device, now)
+		issued, u, isNew, iErr := s.sessions.Issue(ctx, stores, email, device, now)
 		if iErr != nil {
 			return iErr
 		}
@@ -184,7 +151,7 @@ func (s *AuthenticationService) VerifyCode(
 		}
 		user = updatedUser
 
-		if err := stores.attempts.DeleteByPhone(ctx, phone); err != nil {
+		if err := stores.attempts.DeleteByEmail(ctx, email); err != nil {
 			return fmt.Errorf("reset login attempts: %w", err)
 		}
 
@@ -216,7 +183,7 @@ func (s *AuthenticationService) VerifyCode(
 		// the original verification error.
 		//
 		// Only an invalid code triggers recovery: ErrUserBlocked (now surfaced
-		// by LoginCodeService.Verify for an already-blocked phone) passes
+		// by LoginCodeService.Verify for an already-blocked address) passes
 		// through the recovery-free branch below, since the attempt that
 		// triggered the block was recorded when the block took effect (#239).
 		//
@@ -225,17 +192,16 @@ func (s *AuthenticationService) VerifyCode(
 		// method. The deep logic already lives in RecordFailureAndAudit
 		// (ADR 0033). What remains here is orchestrator-specific data: the
 		// auditEntry carries an anonymous actor and a login-failed action that
-		// differ from PhoneChangeService, the return type is (RawSession, User,
-		// error), and the log message names this context. Folding those into
-		// OnVerifyFailure would move — not concentrate — the duplication, add a
-		// log-message parameter, and widen LoginCodeService's responsibility past
-		// login-code management. See issue #240 (re-evaluated, rejected).
+		// differ from the email-change flow, and the return type is
+		// (RawSession, User, error). Folding those into OnVerifyFailure would
+		// move — not concentrate — the duplication. See issue #240
+		// (re-evaluated, rejected).
 		finalErr := err
 		auditEntry := auditdomain.Entry{
 			ActorRole: auditdomain.ActorRoleAnonymous,
 			Action:    auditdomain.ActionAuthLoginFailed,
 		}
-		if recErr := s.loginCodes.RecordFailureAndAudit(ctx, phone, uuid.Nil, auditEntry, &finalErr); recErr != nil {
+		if recErr := s.loginCodes.RecordFailureAndAudit(ctx, email, auditEntry, &finalErr); recErr != nil {
 			s.logger.ErrorContext(ctx, "failed to record failed-login audit", slog.String("error", sanitize.Error(recErr)))
 		}
 		return domain.RawSession{}, domain.User{}, finalErr
@@ -245,7 +211,7 @@ func (s *AuthenticationService) VerifyCode(
 
 	if isNewUser {
 		if err := s.publisher.PublishUserRegistered(ctx,
-			UserRegistered{UserID: user.ID, Phone: phone, Email: resolvedEmail, At: now}); err != nil {
+			UserRegistered{UserID: user.ID, Email: email, At: now}); err != nil {
 			s.logger.ErrorContext(ctx, "failed to publish user registered event", slog.String("error", sanitize.Error(err)))
 		}
 	}
@@ -288,20 +254,4 @@ func registrationTimezone(raw *string) *domain.Timezone {
 		return nil
 	}
 	return &tz
-}
-
-// resolveEmail returns the given email or, when it is nil, the email stored
-// for the phone. ErrNotFound maps to 401 in the HTTP handler.
-func (s *AuthenticationService) resolveEmail(ctx context.Context, phone domain.Phone, email *domain.Email) (domain.Email, error) {
-	if email != nil {
-		return *email, nil
-	}
-	user, err := s.users.GetByPhone(ctx, phone)
-	if err != nil {
-		return domain.Email{}, err
-	}
-	if user.Email == nil {
-		return domain.Email{}, ErrNotFound
-	}
-	return *user.Email, nil
 }

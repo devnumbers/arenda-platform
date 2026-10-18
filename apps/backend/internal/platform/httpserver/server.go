@@ -48,7 +48,6 @@ import (
 // Deps holds the dependencies required by the HTTP server.
 type Deps struct {
 	Auth                 identityhttp.Authenticator
-	PhoneChange          identityhttp.PhoneChanger
 	EmailChange          identityhttp.EmailChanger
 	Profile              identityhttp.Profiler
 	ProfilePhotos        identityhttp.ProfilePhotos
@@ -110,21 +109,21 @@ type Deps struct {
 	// from it; the composition root passes the same hub instance as the
 	// notifications stream — the 8-connections-per-user budget covers both
 	// streams. Nil answers 503 (a build without the stream).
-	RealtimeStreamHub        *sse.Hub
-	VAPIDPublicKey           string
-	Popups                   *popupsapp.PopupService
-	AppBaseURL               string
-	CookieSecure             bool
-	Logger                   *slog.Logger
-	Clock                    clock.Clock
-	LogSuccessfulRequests    bool
-	IPRateLimiter            *httpsupport.RateLimiter
-	EmailSendLimiter         *httpsupport.RateLimiter
-	EmailVerifyLimiter       *httpsupport.RateLimiter
-	PhoneChangeSendLimiter   *httpsupport.RateLimiter
-	PhoneChangeVerifyLimiter *httpsupport.RateLimiter
-	ClientErrorsLimiter      *httpsupport.RateLimiter
-	FeedbackLimiter          *httpsupport.RateLimiter
+	RealtimeStreamHub      *sse.Hub
+	VAPIDPublicKey         string
+	Popups                 *popupsapp.PopupService
+	AppBaseURL             string
+	CookieSecure           bool
+	Logger                 *slog.Logger
+	Clock                  clock.Clock
+	LogSuccessfulRequests  bool
+	IPRateLimiter          *httpsupport.RateLimiter
+	EmailSendLimiter       *httpsupport.RateLimiter
+	EmailVerifyLimiter     *httpsupport.RateLimiter
+	AuthSendPerIPLimiter   *httpsupport.RateLimiter
+	AuthVerifyPerIPLimiter *httpsupport.RateLimiter
+	ClientErrorsLimiter    *httpsupport.RateLimiter
+	FeedbackLimiter        *httpsupport.RateLimiter
 	// FeedbackMailer sends the public landing feedback emails (карта #1010);
 	// the same smtp/fake sender the identity codes use.
 	FeedbackMailer mailer.Sender
@@ -220,7 +219,6 @@ func New(deps Deps) http.Handler {
 
 	authHandlers := identityhttp.NewAuthHandlers(
 		deps.Auth,
-		deps.PhoneChange,
 		deps.EmailChange,
 		deps.Profile,
 		deps.ProfilePhotos,
@@ -229,10 +227,10 @@ func New(deps Deps) http.Handler {
 		deps.CookieSecure,
 		deps.Logger,
 		identityhttp.AuthRateLimits{
-			Send:              deps.EmailSendLimiter,
-			Verify:            deps.EmailVerifyLimiter,
-			PhoneChangeSend:   deps.PhoneChangeSendLimiter,
-			PhoneChangeVerify: deps.PhoneChangeVerifyLimiter,
+			Send:        deps.EmailSendLimiter,
+			Verify:      deps.EmailVerifyLimiter,
+			SendPerIP:   deps.AuthSendPerIPLimiter,
+			VerifyPerIP: deps.AuthVerifyPerIPLimiter,
 		},
 		deps.MeEnricher,
 	)

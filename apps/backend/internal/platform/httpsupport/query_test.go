@@ -21,8 +21,10 @@ import (
 func TestRespondAdminListMatchesGeneratedEnvelope(t *testing.T) {
 	t.Parallel()
 
+	const userEmail = "user11233@example.com"
+
 	type userView struct{ phone string }
-	mapper := func(v userView) openapi.AdminUser { return openapi.AdminUser{Phone: v.phone} }
+	mapper := func(v userView) openapi.AdminUser { return openapi.AdminUser{Email: v.phone} }
 	noErrorHandler := func(http.ResponseWriter, *http.Request, error) {
 		t.Error("unexpected handleError call")
 	}
@@ -35,10 +37,10 @@ func TestRespondAdminListMatchesGeneratedEnvelope(t *testing.T) {
 	}{
 		{
 			name:  "items with total",
-			views: []userView{{phone: "+79001112233"}, {phone: "+79004445566"}},
+			views: []userView{{phone: userEmail}, {phone: "user45566@example.com"}},
 			total: 42,
 			want: openapi.AdminUsersResponse{
-				Items: []openapi.AdminUser{{Phone: "+79001112233"}, {Phone: "+79004445566"}},
+				Items: []openapi.AdminUser{{Email: userEmail}, {Email: "user45566@example.com"}},
 				Total: 42,
 			},
 		},
@@ -84,7 +86,7 @@ func TestRespondAdminListMatchesGeneratedEnvelope(t *testing.T) {
 func TestAdminListEnvelopeTagsPinGeneratedResponses(t *testing.T) {
 	t.Parallel()
 
-	user := openapi.AdminUser{Phone: "+79001112233"}
+	user := openapi.AdminUser{Email: "user11233@example.com"}
 	property := openapi.AdminProperty{Id: user.Id}
 	propertyContact := openapi.AdminPropertyContact{Id: user.Id}
 	auditLog := openapi.AdminAuditLog{Id: user.Id}

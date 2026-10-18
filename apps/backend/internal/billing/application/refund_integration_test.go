@@ -487,8 +487,8 @@ func (h *refundIntegrationHarness) requireFilterReturnsExactly(
 }
 
 // TestAdminPayments_ListAndFilters proves the admin payment views (issue
-// #254): the listing resolves the payer's phone (plaintext and encrypted),
-// the subscription-status filter narrows by the payer's current subscription,
+// #254): the listing resolves the payer's canonical email, the
+// subscription-status filter narrows by the payer's current subscription,
 // and a filter outside the whitelist answers ErrInvalidFilter.
 func TestAdminPayments_ListAndFilters(t *testing.T) {
 	t.Parallel()
@@ -519,50 +519,47 @@ func TestAdminPayments_ListAndFilters(t *testing.T) {
 	// TestAdminPayments_GetAdminPaymentAndInvalidFilters.
 }
 
-// TestAdminPayments_PhoneFilterDecryptsEncryptedPhone proves a payer with an
-// encrypted phone is found by the phone filter and the phone is decrypted in
-// the views (issue #254).
-func TestAdminPayments_PhoneFilterDecryptsEncryptedPhone(t *testing.T) {
+// TestAdminPayments_EmailFilterMatchesCaseInsensitively proves a payer is
+// found by the email filter regardless of letter case and the view carries the
+// canonical stored address (issue #254).
+func TestAdminPayments_EmailFilterMatchesCaseInsensitively(t *testing.T) {
 	t.Parallel()
 	h := newRefundIntegrationHarness(t)
 
 	pendingPayment := h.seedPendingPayment(t)
-	encryptedUser := h.seedUser()
-	encryptedPhone, err := h.encryptor.DeterministicEncrypt(h.ctx(), "+79990001111")
-	if err != nil {
-		t.Fatalf("DeterministicEncrypt: %v", err)
-	}
+	filteredUser := h.seedUser()
+	storedEmail := "Payer1111@Example.com"
 	if _, err := h.pool.Exec(
-		h.ctx(), "UPDATE users SET phone = $1, phone_encrypted = true WHERE id = $2",
-		encryptedPhone, encryptedUser); err != nil {
-		t.Fatalf("encrypt user phone: %v", err)
+		h.ctx(), "UPDATE users SET email = $1 WHERE id = $2",
+		storedEmail, filteredUser); err != nil {
+		t.Fatalf("set user email: %v", err)
 	}
 	pendingSub2, err := h.subscriptions.GetByUserID(h.ctx(), pendingPayment.UserID)
 	if err != nil {
 		t.Fatalf("GetByUserID: %v", err)
 	}
-	encryptedPayment, err := domain.NewSubscriptionPayment(
-		encryptedUser, pendingSub2.ID, pendingSub2.TariffID,
+	filteredPayment, err := domain.NewSubscriptionPayment(
+		filteredUser, pendingSub2.ID, pendingSub2.TariffID,
 		domain.PeriodMonth, 49000, testProviderFake, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("NewSubscriptionPayment: %v", err)
 	}
-	providerPaymentID := "enc_" + encryptedPayment.ID.String()
-	encryptedPayment.ProviderPaymentID = &providerPaymentID
-	if _, err := h.payments.Create(h.ctx(), encryptedPayment); err != nil {
+	providerPaymentID := "enc_" + filteredPayment.ID.String()
+	filteredPayment.ProviderPaymentID = &providerPaymentID
+	if _, err := h.payments.Create(h.ctx(), filteredPayment); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	phoneViews, _, err := h.paymentsSvc.ListAdminPayments(h.ctx(), billingapp.AdminPaymentFilters{
-		UserPhone: "+79990001111",
+	emailViews, _, err := h.paymentsSvc.ListAdminPayments(h.ctx(), billingapp.AdminPaymentFilters{
+		UserEmail: "payer1111@example.com",
 	})
 	if err != nil {
-		t.Fatalf("ListAdminPayments(phone): %v", err)
+		t.Fatalf("ListAdminPayments(email): %v", err)
 	}
-	if len(phoneViews) != 1 || phoneViews[0].Payment.ID != encryptedPayment.ID {
-		t.Fatalf("phone filter matched %d payments, want exactly the encrypted payer's", len(phoneViews))
+	if len(emailViews) != 1 || emailViews[0].Payment.ID != filteredPayment.ID {
+		t.Fatalf("email filter matched %d payments, want exactly the filtered payer's", len(emailViews))
 	}
-	if phoneViews[0].UserPhone != "+79990001111" {
-		t.Fatalf("decrypted phone = %q, want +79990001111", phoneViews[0].UserPhone)
+	if emailViews[0].UserEmail != storedEmail {
+		t.Fatalf("user email = %q, want the canonical %q", emailViews[0].UserEmail, storedEmail)
 	}
 }
 

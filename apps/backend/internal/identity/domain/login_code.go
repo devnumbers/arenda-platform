@@ -17,7 +17,6 @@ const (
 type LoginCode struct {
 	ID        uuid.UUID
 	UserID    *uuid.UUID
-	Phone     Phone
 	Email     Email
 	Purpose   LoginCodePurpose
 	CodeHash  string
@@ -27,7 +26,6 @@ type LoginCode struct {
 }
 
 func NewLoginCode(
-	phone Phone,
 	email Email,
 	codeHash string,
 	purpose LoginCodePurpose,
@@ -41,7 +39,6 @@ func NewLoginCode(
 	return LoginCode{
 		ID:        id,
 		UserID:    userID,
-		Phone:     phone,
 		Email:     email,
 		Purpose:   purpose,
 		CodeHash:  codeHash,

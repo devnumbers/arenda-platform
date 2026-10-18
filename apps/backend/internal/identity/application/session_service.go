@@ -37,8 +37,8 @@ type SessionService interface {
 	// session and, when a rotation won the race, the fresh raw token the
 	// transport must deliver as the new cookie value.
 	Touch(ctx context.Context, session domain.Session, clientIP string, now time.Time) (updated domain.Session, rotatedToken string, err error)
-	// Issue finds or creates the user for the phone+email pair and opens a new
-	// session for them. It runs inside the caller's transaction via stores so
+	// Issue finds or creates the user for the email and opens a new session
+	// for them. It runs inside the caller's transaction via stores so
 	// verification, mark-used, issuance, and audit share one commit (ADR 0033,
 	// migration step 4). The returned isNew flag is true only when a brand-new
 	// user row was inserted; a create that races an concurrent insert and ends
@@ -49,7 +49,6 @@ type SessionService interface {
 	Issue(
 		ctx context.Context,
 		stores *txStores,
-		phone domain.Phone,
 		email domain.Email,
 		device DeviceContext,
 		now time.Time,
@@ -194,26 +193,25 @@ func (s *sessionService) cityFor(ctx context.Context, session domain.Session, ip
 	return city
 }
 
-// Issue finds or creates the user for phone, marking email verified, then opens
-// and persists a new session. It operates inside the caller's transaction via
-// stores. Returns the raw session token, the user, and isNew (true only when a
-// new user row was inserted).
+// Issue finds or creates the user for the email, marking it verified, then
+// opens and persists a new session. It operates inside the caller's transaction
+// via stores. Returns the raw session token, the user, and isNew (true only
+// when a new user row was inserted).
 func (s *sessionService) Issue(
 	ctx context.Context,
 	stores *txStores,
-	phone domain.Phone,
 	email domain.Email,
 	device DeviceContext,
 	now time.Time,
 ) (domain.RawSession, domain.User, bool, error) {
-	user, err := stores.users.GetByPhone(ctx, phone)
+	user, err := stores.users.GetByEmail(ctx, email)
 	isNewUser := false
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("get user: %w", err)
 		}
 		isNewUser = true
-		newUser, createErr := domain.NewOwner(phone)
+		newUser, createErr := domain.NewOwner(email)
 		if createErr != nil {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("create user: %w", createErr)
 		}
@@ -225,7 +223,7 @@ func (s *sessionService) Issue(
 		if user.ID != newUser.ID {
 			isNewUser = false
 		}
-	} else if user.Email == nil || *user.Email != email || user.EmailVerifiedAt == nil {
+	} else if user.EmailVerifiedAt == nil {
 		updated, updateErr := stores.users.UpdateEmailVerified(ctx, user.ID, &email, &now)
 		if updateErr != nil {
 			return domain.RawSession{}, domain.User{}, false, fmt.Errorf("verify user email: %w", updateErr)

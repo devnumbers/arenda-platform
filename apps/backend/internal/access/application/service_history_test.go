@@ -49,9 +49,9 @@ func newHistoryFixture(t *testing.T) *historyFixture {
 	repo := newMemRepo()
 	resolver := staticResolver{property: owner}
 	lookup := fakeUserLookup{
-		owner:    {ID: owner, Name: new("Иван"), Surname: new("Иванов"), Phone: "+79120000001"},
-		member:   {ID: member, Name: new("Пётр"), Surname: new("Сидоров"), Phone: "+79120000002"},
-		stranger: {ID: stranger, Phone: "+79120000003"},
+		owner:    {ID: owner, Name: new("Иван"), Surname: new("Иванов")},
+		member:   {ID: member, Name: new("Пётр"), Surname: new("Сидоров")},
+		stranger: {ID: stranger},
 	}
 	history := &historytest.CapturingRecorder{}
 	policy := NewMembershipPolicy(resolver, repo)

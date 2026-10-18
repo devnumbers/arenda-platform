@@ -10,7 +10,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -22,8 +21,8 @@ type LoginCodeRepository struct {
 }
 
 // NewLoginCodeRepository creates a new login code repository.
-func NewLoginCodeRepository(db pgen.DBTX, enc encryption.Encryptor) *LoginCodeRepository {
-	return &LoginCodeRepository{repoBase{db: db, enc: enc}}
+func NewLoginCodeRepository(db pgen.DBTX) *LoginCodeRepository {
+	return &LoginCodeRepository{repoBase{db: db}}
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
@@ -32,23 +31,17 @@ func (r *LoginCodeRepository) WithTx(tx transaction.Tx) (application.LoginCodeRe
 	if err != nil {
 		return nil, fmt.Errorf("identity.LoginCodeRepository.WithTx: %w", err)
 	}
-	return NewLoginCodeRepository(dbtx, r.enc), nil
+	return NewLoginCodeRepository(dbtx), nil
 }
 
 func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) error {
-	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, code.Phone.String())
-	if err != nil {
-		return err
-	}
 	if err := r.q().CreateLoginCode(ctx, pgen.CreateLoginCodeParams{
-		ID:             pgconv.UUIDToPgtype(code.ID),
-		Phone:          pgtype.Text{String: encryptedPhone, Valid: true},
-		Email:          pgtype.Text{String: code.Email.String(), Valid: true},
-		CodeHash:       code.CodeHash,
-		ExpiresAt:      pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
-		UserID:         pgconv.UUIDToPgtypePtr(code.UserID),
-		Purpose:        code.Purpose.String(),
-		PhoneEncrypted: phoneEncrypted,
+		ID:        pgconv.UUIDToPgtype(code.ID),
+		Email:     code.Email.String(),
+		CodeHash:  code.CodeHash,
+		ExpiresAt: pgtype.Timestamptz{Time: code.ExpiresAt, Valid: true},
+		UserID:    pgconv.UUIDToPgtypePtr(code.UserID),
+		Purpose:   code.Purpose.String(),
 	}); err != nil {
 		if pgerr.IsUniqueViolation(err) {
 			return application.ErrCodeSentTooRecently
@@ -58,20 +51,14 @@ func (r *LoginCodeRepository) Save(ctx context.Context, code domain.LoginCode) e
 	return nil
 }
 
-func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(
+func (r *LoginCodeRepository) GetLatestByEmailAndPurpose(
 	ctx context.Context,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 	now time.Time,
 ) (domain.LoginCode, error) {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
-	if err != nil {
-		return domain.LoginCode{}, err
-	}
-	row, err := r.q().GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx, pgen.GetLatestLoginCodeByPhoneAndEmailAndPurposeParams{
-		Phone:     pgtype.Text{String: encryptedPhone, Valid: true},
-		Email:     pgtype.Text{String: email.String(), Valid: true},
+	row, err := r.q().GetLatestLoginCodeByEmailAndPurpose(ctx, pgen.GetLatestLoginCodeByEmailAndPurposeParams{
+		Email:     email.String(),
 		Purpose:   purpose.String(),
 		ExpiresAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
@@ -81,47 +68,44 @@ func (r *LoginCodeRepository) GetLatestByPhoneAndEmail(
 		}
 		return domain.LoginCode{}, fmt.Errorf("get latest login code: %w", err)
 	}
-	return r.mapLoginCode(ctx, toLoginCodeRowPhoneEmail(row))
+	return mapLoginCode(loginCodeRow{
+		id:        row.ID,
+		userID:    row.UserID,
+		email:     pgtype.Text{String: row.Email, Valid: true},
+		codeHash:  row.CodeHash,
+		expiresAt: row.ExpiresAt,
+		used:      row.Used,
+		createdAt: row.CreatedAt,
+		purpose:   row.Purpose,
+	})
 }
 
-func (r *LoginCodeRepository) DeleteExpiredByPhoneAndEmail(
+func (r *LoginCodeRepository) DeleteExpiredByEmailAndPurpose(
 	ctx context.Context,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 	before time.Time,
 ) error {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
-	if err != nil {
-		return err
-	}
-	if err := r.q().DeleteExpiredLoginCodesByPhoneAndEmail(ctx, pgen.DeleteExpiredLoginCodesByPhoneAndEmailParams{
-		Phone:     pgtype.Text{String: encryptedPhone, Valid: true},
-		Email:     pgtype.Text{String: email.String(), Valid: true},
+	if err := r.q().DeleteExpiredLoginCodesByEmailAndPurpose(ctx, pgen.DeleteExpiredLoginCodesByEmailAndPurposeParams{
+		Email:     email.String(),
 		Purpose:   purpose.String(),
 		ExpiresAt: pgtype.Timestamptz{Time: before, Valid: true},
 	}); err != nil {
-		return fmt.Errorf("delete expired login codes by phone and email: %w", err)
+		return fmt.Errorf("delete expired login codes by email: %w", err)
 	}
 	return nil
 }
 
-func (r *LoginCodeRepository) DeleteUnusedByPhoneAndEmail(
+func (r *LoginCodeRepository) DeleteUnusedByEmailAndPurpose(
 	ctx context.Context,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 ) error {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
-	if err != nil {
-		return err
-	}
-	if err := r.q().DeleteUnusedLoginCodesByPhoneAndEmail(ctx, pgen.DeleteUnusedLoginCodesByPhoneAndEmailParams{
-		Phone:   pgtype.Text{String: encryptedPhone, Valid: true},
-		Email:   pgtype.Text{String: email.String(), Valid: true},
+	if err := r.q().DeleteUnusedLoginCodesByEmailAndPurpose(ctx, pgen.DeleteUnusedLoginCodesByEmailAndPurposeParams{
+		Email:   email.String(),
 		Purpose: purpose.String(),
 	}); err != nil {
-		return fmt.Errorf("delete unused login codes by phone and email: %w", err)
+		return fmt.Errorf("delete unused login codes by email: %w", err)
 	}
 	return nil
 }
@@ -136,13 +120,6 @@ func (r *LoginCodeRepository) MarkUsedByID(ctx context.Context, id uuid.UUID) er
 func (r *LoginCodeRepository) DeleteByID(ctx context.Context, id uuid.UUID) error {
 	if err := r.q().DeleteLoginCodeByID(ctx, pgconv.UUIDToPgtype(id)); err != nil {
 		return fmt.Errorf("delete login code by id: %w", err)
-	}
-	return nil
-}
-
-func (r *LoginCodeRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
-	if err := r.q().DeleteLoginCodesByUserID(ctx, pgconv.UUIDToPgtype(userID)); err != nil {
-		return fmt.Errorf("delete login codes by user id: %w", err)
 	}
 	return nil
 }
@@ -165,38 +142,17 @@ func (r *LoginCodeRepository) DeleteExpiredBefore(ctx context.Context, before ti
 }
 
 type loginCodeRow struct {
-	id             pgtype.UUID
-	userID         pgtype.UUID
-	phone          pgtype.Text
-	email          pgtype.Text
-	codeHash       string
-	expiresAt      pgtype.Timestamptz
-	used           bool
-	createdAt      pgtype.Timestamptz
-	purpose        string
-	phoneEncrypted bool
+	id        pgtype.UUID
+	userID    pgtype.UUID
+	email     pgtype.Text
+	codeHash  string
+	expiresAt pgtype.Timestamptz
+	used      bool
+	createdAt pgtype.Timestamptz
+	purpose   string
 }
 
-func toLoginCodeRowPhoneEmail(row pgen.GetLatestLoginCodeByPhoneAndEmailAndPurposeRow) loginCodeRow {
-	return loginCodeRow{
-		id:             row.ID,
-		userID:         row.UserID,
-		phone:          row.Phone,
-		email:          row.Email,
-		codeHash:       row.CodeHash,
-		expiresAt:      row.ExpiresAt,
-		used:           row.Used,
-		createdAt:      row.CreatedAt,
-		purpose:        row.Purpose,
-		phoneEncrypted: row.PhoneEncrypted,
-	}
-}
-
-func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow) (domain.LoginCode, error) {
-	phone, err := decryptPhoneField(ctx, r.enc, row.phone.String, row.phoneEncrypted)
-	if err != nil {
-		return domain.LoginCode{}, err
-	}
+func mapLoginCode(row loginCodeRow) (domain.LoginCode, error) {
 	email, _, err := parseEmailField(row.email)
 	if err != nil {
 		return domain.LoginCode{}, err
@@ -208,7 +164,6 @@ func (r *LoginCodeRepository) mapLoginCode(ctx context.Context, row loginCodeRow
 	return domain.LoginCode{
 		ID:        pgconv.UUIDFromPgtype(row.id),
 		UserID:    pgconv.UUIDFromPgtypePtr(row.userID),
-		Phone:     phone,
 		Email:     email,
 		Purpose:   purpose,
 		CodeHash:  row.codeHash,

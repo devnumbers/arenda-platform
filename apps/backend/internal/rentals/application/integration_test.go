@@ -266,10 +266,10 @@ func (h *rentalsHarness) seedOwner() {
 	t.Helper()
 	owner, err := uuid.NewV7()
 	require.NoError(t, err)
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("%010d@example.com", time.Now().UnixNano()%10000000000)
 	_, err = h.pool.Exec(context.Background(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
-		owner, phone, actor.RoleOwner)
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
+		owner, email, actor.RoleOwner)
 	require.NoError(t, err)
 	propID, err := uuid.NewV7()
 	require.NoError(t, err)

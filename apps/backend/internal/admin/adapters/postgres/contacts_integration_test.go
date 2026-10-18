@@ -23,7 +23,7 @@ func TestAdminListContactsIntegration(t *testing.T) {
 
 	pool := testdb.Setup(t)
 	ctx := t.Context()
-	repo := NewAdminRepository(pool, nil, nil)
+	repo := NewAdminRepository(pool, nil)
 
 	owner := seedAdminContactUser(t, ctx, pool)
 	property := seedAdminContactProperty(t, ctx, pool, owner)
@@ -82,10 +82,10 @@ func seedAdminContactUser(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("admin-contact%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, 'owner', 'Europe/Moscow')`,
-		id, phone,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, 'owner', 'Europe/Moscow')`,
+		id, email,
 	); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}

@@ -27,7 +27,6 @@ type AccessEventUserReader interface {
 type AccessEventUser struct {
 	Name     *string
 	Surname  *string
-	Phone    string
 	Email    string
 	PhotoKey *string
 }
@@ -63,11 +62,7 @@ func (a *accessEventUserAdapter) GetByID(ctx context.Context, id uuid.UUID) (Acc
 	if err != nil {
 		return AccessEventUser{}, err
 	}
-	var email string
-	if u.Email != nil {
-		email = u.Email.String()
-	}
-	return AccessEventUser{Name: u.Name, Surname: u.Surname, Phone: u.Phone.String(), Email: email, PhotoKey: u.PhotoKey}, nil
+	return AccessEventUser{Name: u.Name, Surname: u.Surname, Email: u.Email.String(), PhotoKey: u.PhotoKey}, nil
 }
 
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).

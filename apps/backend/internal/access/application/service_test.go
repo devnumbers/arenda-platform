@@ -109,24 +109,24 @@ var _ UserLookup = fakeUserLookup{}
 
 // TestAccessService_DisplayName verifies the public display name used by the
 // sharing banner (issue T11): "Name Surname" when present, otherwise the
-// anonymous label «Пользователь» (карта #1105, аменд #1123: телефон больше не
-// фолбэк) — never an email. ФИО-канон D4 (карта #1324, протокол #1316):
-// пустая часть просто не пишется, имени нет — «Пользователь» независимо от
-// фамилии (голая фамилия не показывается). Lookup failures propagate.
+// anonymous label «Пользователь» (карта #1105, аменд #1123) — never an email.
+// ФИО-канон D4 (карта #1324, протокол #1316): пустая часть просто не пишется,
+// имени нет — «Пользователь» независимо от фамилии (голая фамилия не
+// показывается). Lookup failures propagate.
 func TestAccessService_DisplayName(t *testing.T) {
 	t.Parallel()
 	namedID := uuid.Must(uuid.NewV7())
-	phoneOnlyID := uuid.Must(uuid.NewV7())
+	namelessID := uuid.Must(uuid.NewV7())
 	missingID := uuid.Must(uuid.NewV7())
 	surnameOnlyID := uuid.Must(uuid.NewV7())
 	nameOnlyID := uuid.Must(uuid.NewV7())
 	name, surname := "Ivan", "Petrov"
 
 	lookup := fakeUserLookup{
-		namedID:       {ID: namedID, Name: &name, Surname: &surname, Phone: "+79123456789"},
-		phoneOnlyID:   {ID: phoneOnlyID, Phone: "+79123456789"},
-		surnameOnlyID: {ID: surnameOnlyID, Surname: &surname, Phone: "+79123456789"},
-		nameOnlyID:    {ID: nameOnlyID, Name: &name, Phone: "+79123456789"},
+		namedID:       {ID: namedID, Name: &name, Surname: &surname},
+		namelessID:    {ID: namelessID},
+		surnameOnlyID: {ID: surnameOnlyID, Surname: &surname},
+		nameOnlyID:    {ID: nameOnlyID, Name: &name},
 	}
 	svc := NewAccessService(newMemRepo(), staticResolver{}, nil, lookup, nil, nil, nil, nil,
 		newTestFactory(newMemRepo(), &memInvitationsRepo{}, auditapp.Noop{}), nil)
@@ -134,8 +134,8 @@ func TestAccessService_DisplayName(t *testing.T) {
 	if got, err := svc.DisplayName(t.Context(), namedID); err != nil || got != "Ivan Petrov" {
 		t.Errorf("named user: got %q, %v; want %q, nil", got, err, "Ivan Petrov")
 	}
-	if got, err := svc.DisplayName(t.Context(), phoneOnlyID); err != nil || got != "Пользователь" {
-		t.Errorf("phone-only user: got %q, %v; want %q, nil", got, err, "Пользователь")
+	if got, err := svc.DisplayName(t.Context(), namelessID); err != nil || got != "Пользователь" {
+		t.Errorf("nameless user: got %q, %v; want %q, nil", got, err, "Пользователь")
 	}
 	if got, err := svc.DisplayName(t.Context(), surnameOnlyID); err != nil || got != anonymousDisplayName {
 		t.Errorf("surname-only user: got %q, %v; want %q, nil (D4: голая фамилия не пишется)", got, err, anonymousDisplayName)

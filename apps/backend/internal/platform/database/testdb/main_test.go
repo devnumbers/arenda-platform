@@ -53,15 +53,17 @@ func TestSetup_Smoke(t *testing.T) {
 	}
 
 	// The users table is created in migration 000001. If it is missing,
-	// migrations did not apply. We do not assert emptiness here because some
-	// migrations seed reference data (e.g. 000042 inserts a test admin user);
-	// isolation (empty tables) is verified by TestReset_ClearsTables.
+	// migrations did not apply. No seed rows are guaranteed: the 000042 test
+	// admin has no email, and email-only identity (000162, ADR 0067) deletes
+	// accounts without a canonical identifier — an empty users table is a
+	// valid post-migration state. Isolation is verified by
+	// TestReset_ClearsTables.
 	var userCount int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&userCount); err != nil {
 		t.Fatalf("SELECT count(*) FROM users: %v", err)
 	}
-	if userCount == 0 {
-		t.Fatal("expected users table to contain seed rows after migration, got 0")
+	if userCount < 0 {
+		t.Fatalf("user count = %d, want a valid count", userCount)
 	}
 }
 
@@ -78,9 +80,10 @@ func TestReset_ClearsTables(t *testing.T) {
 	ctx := t.Context()
 
 	// Insert a throwaway row into the users table. The users table requires
-	// phone and role; uuidv7() generates the primary key (PostgreSQL 18).
+	// the canonical email and a role; uuidv7() generates the primary key
+	// (PostgreSQL 18).
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO users (id, phone, role) VALUES (uuidv7(), '+700000000000', 'owner')`,
+		`INSERT INTO users (id, email, role) VALUES (uuidv7(), 'reset-smoke@example.com', 'owner')`,
 	); err != nil {
 		t.Fatalf("insert test row: %v", err)
 	}

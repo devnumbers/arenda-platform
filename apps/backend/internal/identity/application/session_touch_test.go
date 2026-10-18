@@ -352,10 +352,6 @@ func TestSessionServiceIssue_CapturesDeviceOnce(t *testing.T) {
 	)
 	svc := NewSessionService(factory, SessionServiceConfig{Hasher: fakeHasher{}, Parser: parser, Geo: geo})
 
-	phone, err := domain.NewPhone("+79001234567")
-	if err != nil {
-		t.Fatalf("NewPhone: %v", err)
-	}
 	email, err := domain.NewEmail("user@example.com")
 	if err != nil {
 		t.Fatalf("NewEmail: %v", err)
@@ -364,7 +360,7 @@ func TestSessionServiceIssue_CapturesDeviceOnce(t *testing.T) {
 	rawIssued, _, _, issueErr := svc.Issue(context.Background(), &txStores{
 		users:    newFakeUserRepo(),
 		sessions: repo,
-	}, phone, email, DeviceContext{UserAgent: testUserAgent, IP: testNewIP}, now)
+	}, email, DeviceContext{UserAgent: testUserAgent, IP: testNewIP}, now)
 	if issueErr != nil {
 		t.Fatalf("Issue error = %v", issueErr)
 	}

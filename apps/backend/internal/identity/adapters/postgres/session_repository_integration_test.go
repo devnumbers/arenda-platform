@@ -31,11 +31,10 @@ func TestSessionRepository_DeviceFieldsRoundTrip(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := context.Background()
-	enc := noopEncryptor(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	user := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001151", "device-roundtrip@example.com")
-	repo := NewSessionRepository(pool, enc)
+	user := seedUser(t, ctx, NewUserRepository(pool), "device-roundtrip@example.com")
+	repo := NewSessionRepository(pool)
 
 	raw, err := domain.NewSession(user.ID, now)
 	if err != nil {
@@ -73,11 +72,10 @@ func TestSessionRepository_RotationGrace(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := context.Background()
-	enc := noopEncryptor(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	user := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001152", "rotation-grace@example.com")
-	repo := NewSessionRepository(pool, enc)
+	user := seedUser(t, ctx, NewUserRepository(pool), "rotation-grace@example.com")
+	repo := NewSessionRepository(pool)
 
 	raw, err := domain.NewSession(user.ID, now)
 	if err != nil {
@@ -128,12 +126,11 @@ func TestSessionRepository_ListByUserID(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := context.Background()
-	enc := noopEncryptor(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	user := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001153", "list-revoke@example.com")
-	foreign := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001154", "list-revoke-foreign@example.com")
-	repo := NewSessionRepository(pool, enc)
+	user := seedUser(t, ctx, NewUserRepository(pool), "list-revoke@example.com")
+	foreign := seedUser(t, ctx, NewUserRepository(pool), "list-revoke-foreign@example.com")
+	repo := NewSessionRepository(pool)
 
 	seed := func(userID uuid.UUID, hash string, lastUsed time.Time) domain.Session {
 		raw, err := domain.NewSession(userID, lastUsed)
@@ -190,12 +187,11 @@ func TestSessionRepository_RevokePaths(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := context.Background()
-	enc := noopEncryptor(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	user := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001155", "revoke-paths@example.com")
-	foreign := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001156", "revoke-paths-foreign@example.com")
-	repo := NewSessionRepository(pool, enc)
+	user := seedUser(t, ctx, NewUserRepository(pool), "revoke-paths@example.com")
+	foreign := seedUser(t, ctx, NewUserRepository(pool), "revoke-paths-foreign@example.com")
+	repo := NewSessionRepository(pool)
 
 	seed := func(userID uuid.UUID, hash string, lastUsed time.Time) domain.Session {
 		raw, err := domain.NewSession(userID, lastUsed)
@@ -256,11 +252,10 @@ func TestSessionRepository_ExceptDeleteHonorsRotationGrace(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := context.Background()
-	enc := noopEncryptor(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	user := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001157", "except-grace@example.com")
-	repo := NewSessionRepository(pool, enc)
+	user := seedUser(t, ctx, NewUserRepository(pool), "except-grace@example.com")
+	repo := NewSessionRepository(pool)
 
 	raw, err := domain.NewSession(user.ID, now.Add(-time.Hour))
 	if err != nil {

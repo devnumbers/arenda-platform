@@ -40,7 +40,6 @@ type Identity struct {
 	SessionLoader  httpsupport.SessionLoader
 	EventPublisher *identityevents.Publisher
 	Authentication *identityapp.AuthenticationService
-	PhoneChange    *identityapp.PhoneChangeService
 	EmailChange    *identityapp.EmailChangeService
 	Profile        *identityapp.ProfileService
 	Logout         *identityapp.LogoutService
@@ -62,7 +61,7 @@ type Identity struct {
 
 // WireIdentity constructs the identity repositories, session service, event
 // publisher, selects the email mailer based on config, and builds the
-// authentication, phone-change, email-change, profile and logout services.
+// authentication, email-change, profile and logout services.
 // It takes the event dispatcher (for the publisher) and the shared rate
 // limiters (the email-change send budget).
 func WireIdentity(
@@ -79,10 +78,10 @@ func WireIdentity(
 		return nil, err
 	}
 
-	userRepo := identitypg.NewUserRepository(p.DB, p.Encryptor)
-	codeRepo := identitypg.NewLoginCodeRepository(p.DB, p.Encryptor)
-	attemptRepo := identitypg.NewAttemptRepository(p.DB, p.Encryptor)
-	sessionRepo := identitypg.NewSessionRepository(p.DB, p.Encryptor)
+	userRepo := identitypg.NewUserRepository(p.DB)
+	codeRepo := identitypg.NewLoginCodeRepository(p.DB)
+	attemptRepo := identitypg.NewAttemptRepository(p.DB)
+	sessionRepo := identitypg.NewSessionRepository(p.DB)
 	emailChangeGrantRepo := identitypg.NewEmailChangeGrantRepository(p.DB)
 
 	// The contact-change security letters (решение #1207): the queue seam the
@@ -144,7 +143,7 @@ func WireIdentity(
 	contactWorker := identityriverqueue.NewContactChangedWorker(userRepo, emailMailer, p.Renderer, p.Logger)
 
 	// Login-code issuance/verification is a deep module shared by
-	// AuthenticationService and PhoneChangeService (ADR 0033, step 4). The
+	// AuthenticationService and EmailChangeService (ADR 0033, step 4). The
 	// anti-flood send limits (#1210) live with the transport limiters
 	// (wire/ratelimits.go) and are consulted by the service on each actual
 	// issuance: per recipient email, per authenticated initiator.
@@ -170,15 +169,6 @@ func WireIdentity(
 			LoginCodes: loginCodeService,
 			Sessions:   sessionService,
 			Publisher:  eventPublisher,
-			Clock:      p.Clock,
-			Logger:     p.Logger,
-		},
-	)
-
-	phoneChangeService := identityapp.NewPhoneChangeService(
-		factory,
-		identityapp.PhoneChangeServiceConfig{
-			LoginCodes: loginCodeService,
 			Clock:      p.Clock,
 			Logger:     p.Logger,
 		},
@@ -226,7 +216,6 @@ func WireIdentity(
 		SessionLoader:  sessionLoader,
 		EventPublisher: eventPublisher,
 		Authentication: authenticationService,
-		PhoneChange:    phoneChangeService,
 		EmailChange:    emailChangeService,
 		Profile:        profileService,
 		Logout:         logoutService,

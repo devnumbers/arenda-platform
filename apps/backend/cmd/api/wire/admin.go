@@ -16,7 +16,7 @@ type Admin struct {
 // and the admin service. It takes the billing subscriptions port (used to read
 // subscription state in admin views).
 func WireAdmin(p platformDeps, subscriptions *application.SubscriptionService) *Admin {
-	repo := adminpg.NewAdminRepository(p.DB, p.Encryptor, p.Clock)
+	repo := adminpg.NewAdminRepository(p.DB, p.Clock)
 	service := adminapp.NewAdminService(repo, repo, repo, subscriptions, repo, repo, p.Clock)
 	return &Admin{Repo: repo, Service: service}
 }

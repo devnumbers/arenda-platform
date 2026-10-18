@@ -23,6 +23,10 @@ import (
 
 // Shared wire fixtures of the handler tests: tariff names, the fake provider
 // identity, the binding id, and the admin-tariff payload keys.
+// TestPayerEmail is the payer fixture shared by the admin payments views
+// and the user_email filter tests.
+const TestPayerEmail = "payer1@example.com"
+
 const (
 	testTariffPro    = "pro"
 	testTariffBiz    = "business"
@@ -981,7 +985,7 @@ func adminPaymentView(t *testing.T) billingapp.AdminSubscriptionPaymentView {
 	return billingapp.AdminSubscriptionPaymentView{
 		Payment:   payment,
 		Tariff:    domain.Tariff{ID: payment.TariffID, Name: domain.TariffBusiness},
-		UserPhone: "+79990000001",
+		UserEmail: TestPayerEmail,
 	}
 }
 
@@ -1015,8 +1019,8 @@ func TestGetAdminSubscriptionPayment_AnswersView(t *testing.T) {
 	if resp.Id != view.Payment.ID {
 		t.Errorf("id = %v, want %v", resp.Id, view.Payment.ID)
 	}
-	if resp.UserPhone != view.UserPhone {
-		t.Errorf("userPhone = %q, want %q", resp.UserPhone, view.UserPhone)
+	if resp.UserEmail != view.UserEmail {
+		t.Errorf("userEmail = %q, want %q", resp.UserEmail, view.UserEmail)
 	}
 	if resp.RefundedAmountKopecks == nil || *resp.RefundedAmountKopecks != 99000 {
 		t.Errorf("refundedAmountKopecks = %v, want 99000", resp.RefundedAmountKopecks)
@@ -1156,8 +1160,8 @@ func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
 		if filters.Status != string(domain.PaymentStatusRefunding) {
 			t.Errorf("status filter = %q, want refunding", filters.Status)
 		}
-		if filters.UserPhone != "+79990000001" {
-			t.Errorf("userPhone filter = %q", filters.UserPhone)
+		if filters.UserEmail != TestPayerEmail {
+			t.Errorf("userEmail filter = %q", filters.UserEmail)
 		}
 		if filters.SubscriptionStatus != string(domain.SubscriptionStatusGrace) {
 			t.Errorf("subscriptionStatus filter = %q, want grace", filters.SubscriptionStatus)
@@ -1172,11 +1176,11 @@ func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
 	}}
 
 	target := "/admin/subscription/payments?user_id=" + userID.String() +
-		"&status=refunding&user_phone=%2B79990000001&subscription_status=grace" +
+		"&status=refunding&user_email=payer1%40example.com&subscription_status=grace" +
 		"&sort=amountKopecks&order=asc&limit=50&offset=10"
 	w := httptest.NewRecorder()
 	statusParam := openapi.SubscriptionPaymentStatus("refunding")
-	phoneParam := "+79990000001"
+	emailParam := TestPayerEmail
 	subscriptionStatusParam := openapi.SubscriptionStatus("grace")
 	sortParam := "amountKopecks"
 	orderParam := openapi.ListAdminSubscriptionPaymentsParamsOrder("asc")
@@ -1184,7 +1188,7 @@ func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
 		adminRequest(t, http.MethodGet, target, uuid.Must(uuid.NewV7())), openapi.ListAdminSubscriptionPaymentsParams{
 			UserId:             &userID,
 			Status:             &statusParam,
-			UserPhone:          &phoneParam,
+			UserEmail:          &emailParam,
 			SubscriptionStatus: &subscriptionStatusParam,
 			Sort:               &sortParam,
 			Order:              &orderParam,
@@ -1202,8 +1206,8 @@ func TestListAdminSubscriptionPayments_MapsFilters(t *testing.T) {
 	if resp.Total != 7 || len(resp.Items) != 1 {
 		t.Fatalf("total/items = %d/%d, want 7/1", resp.Total, len(resp.Items))
 	}
-	if resp.Items[0].UserPhone != "+79990000001" {
-		t.Errorf("item userPhone = %q", resp.Items[0].UserPhone)
+	if resp.Items[0].UserEmail != TestPayerEmail {
+		t.Errorf("item userEmail = %q", resp.Items[0].UserEmail)
 	}
 }
 

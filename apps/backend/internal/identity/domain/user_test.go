@@ -20,8 +20,7 @@ func TestUser_VerifyEmail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEmail error = %v", err)
 	}
-	phone := mustPhoneTest(t, "+79150000001")
-	user, err := NewOwner(phone)
+	user, err := NewOwner(email)
 	if err != nil {
 		t.Fatalf("NewOwner error = %v", err)
 	}
@@ -37,30 +36,22 @@ func TestUser_VerifyEmail(t *testing.T) {
 	}
 }
 
-// mustPhoneTest builds a Phone or fails the test. Kept local to avoid coupling
-// the domain test package to application-layer helpers.
-func mustPhoneTest(t *testing.T, raw string) Phone {
-	t.Helper()
-	phone, err := NewPhone(raw)
-	if err != nil {
-		t.Fatalf("NewPhone(%q) error = %v", raw, err)
-	}
-	return phone
-}
-
 func TestNewOwner(t *testing.T) {
 	t.Parallel()
 
-	phone := mustPhoneTest(t, "+79150000001")
-	user, err := NewOwner(phone)
+	email, err := NewEmail("owner@example.com")
+	if err != nil {
+		t.Fatalf("NewEmail error = %v", err)
+	}
+	user, err := NewOwner(email)
 	if err != nil {
 		t.Fatalf("NewOwner error = %v", err)
 	}
 	if user.ID == (uuid.UUID{}) {
 		t.Fatal("NewOwner produced a zero ID")
 	}
-	if user.Phone != phone {
-		t.Fatalf("user.Phone = %s, want %s", user.Phone, phone)
+	if user.Email == nil || *user.Email != email {
+		t.Fatalf("user.Email = %v, want %s", user.Email, email)
 	}
 	if user.Role != RoleOwner {
 		t.Fatalf("user.Role = %q, want %q", user.Role, RoleOwner)
@@ -79,7 +70,7 @@ func newOwnerWithVerifiedEmail(t *testing.T, at time.Time) User {
 	if err != nil {
 		t.Fatalf("NewEmail: %v", err)
 	}
-	u, err := NewOwner(mustPhoneTest(t, "+79150000001"))
+	u, err := NewOwner(email)
 	if err != nil {
 		t.Fatalf("NewOwner: %v", err)
 	}

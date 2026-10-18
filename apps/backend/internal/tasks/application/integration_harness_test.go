@@ -163,10 +163,10 @@ func (h *tasksHarness) withOwner(tz string) *tasksHarness {
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, $4)`,
-		owner, phone, actor.RoleOwner, tz,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, $4)`,
+		owner, email, actor.RoleOwner, tz,
 	); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -199,10 +199,10 @@ func (h *tasksHarness) withOwnerWithoutProperty() *tasksHarness {
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, $4)`,
-		owner, phone, actor.RoleOwner, taskMoscowTZ,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, $4)`,
+		owner, email, actor.RoleOwner, taskMoscowTZ,
 	); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -215,10 +215,10 @@ func (h *tasksHarness) withOwnerWithoutProperty() *tasksHarness {
 func (h *tasksHarness) seedActor(id uuid.UUID) {
 	t := h.t
 	t.Helper()
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
-		id, phone, actor.RoleOwner,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
+		id, email, actor.RoleOwner,
 	); err != nil {
 		t.Fatalf("seed actor: %v", err)
 	}

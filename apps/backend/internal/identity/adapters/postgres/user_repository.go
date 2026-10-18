@@ -1,19 +1,16 @@
 // Package postgres holds the identity persistence adapters: user, session, login-code and attempt-window
-// repositories, with deterministic phone encryption at the storage boundary.
+// repositories.
 package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -25,8 +22,8 @@ type UserRepository struct {
 }
 
 // NewUserRepository creates a new user repository.
-func NewUserRepository(db pgen.DBTX, enc encryption.Encryptor) *UserRepository {
-	return &UserRepository{repoBase{db: db, enc: enc}}
+func NewUserRepository(db pgen.DBTX) *UserRepository {
+	return &UserRepository{repoBase{db: db}}
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
@@ -35,7 +32,7 @@ func (r *UserRepository) WithTx(tx transaction.Tx) (application.UserRepository, 
 	if err != nil {
 		return nil, fmt.Errorf("identity.UserRepository.WithTx: %w", err)
 	}
-	return NewUserRepository(dbtx, r.enc), nil
+	return NewUserRepository(dbtx), nil
 }
 
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).
@@ -49,7 +46,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User
 		}
 		return domain.User{}, fmt.Errorf("get user by id: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
 func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.User, error) {
@@ -60,7 +57,7 @@ func (r *UserRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (do
 		}
 		return domain.User{}, fmt.Errorf("get user by id for update: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
 // ShareReadableProperty answers whether the two users are connected through
@@ -80,36 +77,6 @@ func (r *UserRepository) ShareReadableProperty(ctx context.Context, viewerID, us
 	return shared, nil
 }
 
-func (r *UserRepository) GetByPhone(ctx context.Context, phone domain.Phone) (domain.User, error) {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
-	if err != nil {
-		return domain.User{}, err
-	}
-	row, err := r.q().GetUserByPhone(ctx, encryptedPhone)
-	if err != nil {
-		if notFound(err) {
-			return domain.User{}, application.ErrNotFound
-		}
-		return domain.User{}, fmt.Errorf("get user by phone: %w", err)
-	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
-}
-
-func (r *UserRepository) GetByPhoneForUpdate(ctx context.Context, phone domain.Phone) (domain.User, error) {
-	encryptedPhone, err := encryptPhone(ctx, r.enc, phone.String())
-	if err != nil {
-		return domain.User{}, err
-	}
-	row, err := r.q().GetUserByPhoneForUpdate(ctx, encryptedPhone)
-	if err != nil {
-		if notFound(err) {
-			return domain.User{}, application.ErrNotFound
-		}
-		return domain.User{}, fmt.Errorf("get user by phone for update: %w", err)
-	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
-}
-
 func (r *UserRepository) GetByEmail(ctx context.Context, email domain.Email) (domain.User, error) {
 	row, err := r.q().GetUserByEmail(ctx, email.String())
 	if err != nil {
@@ -118,7 +85,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email domain.Email) (do
 		}
 		return domain.User{}, fmt.Errorf("get user by email: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
 func (r *UserRepository) GetByEmailForUpdate(ctx context.Context, email domain.Email) (domain.User, error) {
@@ -129,20 +96,14 @@ func (r *UserRepository) GetByEmailForUpdate(ctx context.Context, email domain.E
 		}
 		return domain.User{}, fmt.Errorf("get user by email for update: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
-	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, user.Phone.String())
-	if err != nil {
-		return domain.User{}, err
-	}
 	row, err := r.q().CreateUser(ctx, pgen.CreateUserParams{
 		ID:              pgconv.UUIDToPgtype(user.ID),
-		Phone:           encryptedPhone,
 		Role:            user.Role.String(),
-		PhoneEncrypted:  phoneEncrypted,
-		Email:           emailPtrToPgtype(user.Email),
+		Email:           emailToText(user.Email),
 		EmailVerifiedAt: pgconv.TimePtrToPgtype(user.EmailVerifiedAt),
 	})
 	if err != nil {
@@ -152,32 +113,19 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.U
 		}
 		return domain.User{}, fmt.Errorf("create user: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromCreateUser(row).toUserRow())
+	return mapUser(userSourceFromCreateUser(row).toUserRow())
 }
 
 func (r *UserRepository) resolveConflictingUser(ctx context.Context, user domain.User) (domain.User, error) {
-	existing, err := r.GetByPhone(ctx, user.Phone)
-	if err == nil {
-		return existing, nil
-	}
-	if !errors.Is(err, application.ErrNotFound) {
-		return domain.User{}, fmt.Errorf("resolve conflicting user by phone: %w", err)
-	}
-
 	if user.Email == nil {
-		return domain.User{}, fmt.Errorf("resolve conflicting user: no user by phone and no email to look up: %w", application.ErrNotFound)
+		return domain.User{}, fmt.Errorf("resolve conflicting user: no email to look up: %w", application.ErrNotFound)
 	}
-
-	existing, err = r.GetByEmail(ctx, *user.Email)
+	existing, err := r.GetByEmail(ctx, *user.Email)
 	if err != nil {
-		if errors.Is(err, application.ErrNotFound) {
+		if notFound(err) {
 			return domain.User{}, fmt.Errorf("resolve conflicting user: conflict resolved without finding user: %w", application.ErrNotFound)
 		}
 		return domain.User{}, fmt.Errorf("resolve conflicting user by email: %w", err)
-	}
-
-	if existing.Phone != user.Phone {
-		return domain.User{}, application.ErrEmailAlreadyTaken
 	}
 	return existing, nil
 }
@@ -188,7 +136,7 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.U
 		Name:            pgconv.StringPtrToPgtype(user.Name),
 		Surname:         pgconv.StringPtrToPgtype(user.Surname),
 		Patronymic:      pgconv.StringPtrToPgtype(user.Patronymic),
-		Email:           emailPtrToPgtype(user.Email),
+		Email:           emailToText(user.Email),
 		EmailVerifiedAt: pgconv.TimePtrToPgtype(user.EmailVerifiedAt),
 		Timezone:        user.Timezone.String(),
 	})
@@ -201,29 +149,7 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) (domain.U
 		}
 		return domain.User{}, fmt.Errorf("update user: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
-}
-
-func (r *UserRepository) UpdatePhone(ctx context.Context, id uuid.UUID, phone domain.Phone) (domain.User, error) {
-	encryptedPhone, phoneEncrypted, err := phoneToColumns(ctx, r.enc, phone.String())
-	if err != nil {
-		return domain.User{}, err
-	}
-	row, err := r.q().UpdateUserPhone(ctx, pgen.UpdateUserPhoneParams{
-		ID:             pgconv.UUIDToPgtype(id),
-		Phone:          encryptedPhone,
-		PhoneEncrypted: phoneEncrypted,
-	})
-	if err != nil {
-		if notFound(err) {
-			return domain.User{}, application.ErrNotFound
-		}
-		if pgerr.IsUniqueViolation(err) {
-			return domain.User{}, application.ErrPhoneAlreadyTaken
-		}
-		return domain.User{}, fmt.Errorf("update user phone: %w", err)
-	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
 func (r *UserRepository) UpdateEmailVerified(
@@ -234,7 +160,7 @@ func (r *UserRepository) UpdateEmailVerified(
 ) (domain.User, error) {
 	row, err := r.q().UpdateUserEmailVerified(ctx, pgen.UpdateUserEmailVerifiedParams{
 		ID:              pgconv.UUIDToPgtype(id),
-		Email:           emailPtrToPgtype(email),
+		Email:           emailToText(email),
 		EmailVerifiedAt: pgconv.TimePtrToPgtype(verifiedAt),
 	})
 	if err != nil {
@@ -243,7 +169,7 @@ func (r *UserRepository) UpdateEmailVerified(
 		}
 		return domain.User{}, fmt.Errorf("update user email verified: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
 // SetPhoto writes the profile photo columns (ADR 0065): the key and the
@@ -260,7 +186,7 @@ func (r *UserRepository) SetPhoto(ctx context.Context, id uuid.UUID, key, conten
 		}
 		return domain.User{}, fmt.Errorf("set user photo: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
 func (r *UserRepository) MarkEmailVerified(
@@ -278,14 +204,10 @@ func (r *UserRepository) MarkEmailVerified(
 		}
 		return domain.User{}, fmt.Errorf("mark user email verified: %w", err)
 	}
-	return mapUser(ctx, r.enc, userSourceFromUser(row).toUserRow())
+	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
-func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain.User, error) {
-	phone, err := decryptPhoneField(ctx, enc, row.Phone, row.PhoneEncrypted)
-	if err != nil {
-		return domain.User{}, err
-	}
+func mapUser(row userRow) (domain.User, error) {
 	role, err := domain.NewRole(row.Role)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("invalid role from DB: %w", err)
@@ -307,7 +229,6 @@ func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain
 	}
 	return domain.User{
 		ID:               pgconv.UUIDFromPgtype(row.ID),
-		Phone:            phone,
 		Role:             role,
 		Name:             pgconv.TextToPtrString(row.Name),
 		Surname:          pgconv.TextToPtrString(row.Surname),
@@ -318,11 +239,4 @@ func mapUser(ctx context.Context, enc encryption.Encryptor, row userRow) (domain
 		PhotoKey:         pgconv.TextToPtrString(row.PhotoKey),
 		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
 	}, nil
-}
-
-func emailPtrToPgtype(e *domain.Email) pgtype.Text {
-	if e == nil {
-		return pgtype.Text{}
-	}
-	return pgtype.Text{String: e.String(), Valid: true}
 }

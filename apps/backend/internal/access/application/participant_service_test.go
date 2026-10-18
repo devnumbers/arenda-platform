@@ -109,10 +109,11 @@ func newParticipantFixture(t *testing.T) *participantFixture {
 	}
 	name := "Иван"
 	surname := "Иванов"
-	phone := "+79991234567" // The phone-only user's display name is «Пользователь» (карта #1105, аменд #1123).
+	// The user without name/surname (u2) gets the fallback display name
+	// «Пользователь» (карта #1105, аменд #1123).
 	f.users = &fakeParticipantUsers{users: map[uuid.UUID]MemberUser{
 		f.u1: {ID: f.u1, Name: &name, Surname: &surname},
-		f.u2: {ID: f.u2, Phone: phone},
+		f.u2: {ID: f.u2},
 	}}
 	f.svc = NewParticipantService(
 		f.read,

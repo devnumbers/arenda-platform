@@ -15,9 +15,8 @@ import (
 func TestProfileIntegration_UpdatePersonalData(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000400")
 	email := mustEmail(t, "profile@example.com")
-	_, user := h.registerAndLogin(t, phone, email)
+	_, user := h.registerAndLogin(t, email)
 	ctx := h.ctx()
 
 	updated, err := h.profile.UpdateProfile(ctx, user.ID, application.UpdateProfileCommand{
@@ -55,9 +54,8 @@ func TestProfileIntegration_UpdatePersonalData(t *testing.T) {
 func TestProfileIntegration_EmailIsUntouchable(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000401")
 	email := mustEmail(t, "verified@example.com")
-	_, user := h.registerAndLogin(t, phone, email)
+	_, user := h.registerAndLogin(t, email)
 	ctx := h.ctx()
 
 	updated, err := h.profile.UpdateProfile(ctx, user.ID, application.UpdateProfileCommand{

@@ -97,18 +97,16 @@ func newEmailChangeHarness() *emailChangeHarness {
 // current address (the flow must still accept it, grilling decision #720-6).
 func (h *emailChangeHarness) seedEmailChangeUser(
 	t *testing.T,
-	phone domain.Phone,
 	email domain.Email,
 	verifiedAt *time.Time,
 ) domain.User {
 	t.Helper()
-	user, err := domain.NewOwner(phone)
+	user, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	user.Email = &email
 	user.EmailVerifiedAt = verifiedAt
-	h.users.byPhone[phone.String()] = user
+	h.users.byEmail[email.String()] = user
 	return user
 }
 
@@ -116,13 +114,12 @@ func (h *emailChangeHarness) seedEmailChangeUser(
 // taken-email guards can fire.
 func (h *emailChangeHarness) seedOtherEmailOwner(t *testing.T, email domain.Email) {
 	t.Helper()
-	other, err := domain.NewOwner(mustPhone(t, "+79160000900"))
+	other, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("create other user: %v", err)
 	}
-	other.Email = &email
 	other.EmailVerifiedAt = &testNow
-	h.users.byPhone[other.Phone.String()] = other
+	h.users.byEmail[email.String()] = other
 }
 
 // runToAddresslessGrant runs steps 1 and 2 — the code to the current address
@@ -167,14 +164,13 @@ func (h *emailChangeHarness) runToStepThree(
 // Step 1: SendCurrentEmailCode.
 
 // stepOneHappyPath covers the SendCurrentEmailCode success path: the code goes
-// to the user's current email over their phone, is persisted with purpose
-// email_change, and the delivery itself marks the current address verified.
+// to the user's current email, is persisted with purpose email_change, and the
+// delivery itself marks the current address verified.
 func stepOneHappyPath(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	phone := mustPhone(t, "+79160000100")
 	email := mustEmail(t, seedOwnerEmail)
-	user := h.seedEmailChangeUser(t, phone, email, nil) // Deliberately unverified: the address starts unconfirmed.
+	user := h.seedEmailChangeUser(t, email, nil) // Deliberately unverified: the address starts unconfirmed.
 
 	err := h.svc.SendCurrentEmailCode(t.Context(), user.ID)
 	if err != nil {
@@ -186,9 +182,6 @@ func stepOneHappyPath(t *testing.T) {
 	sent := h.sender.sent[0]
 	if sent.email != email {
 		t.Fatalf("sent email = %s, want %s (current email)", sent.email, email)
-	}
-	if sent.phone != phone {
-		t.Fatalf("sent phone = %s, want %s", sent.phone, phone)
 	}
 	// The letter is the "confirm it is you" one on the current address (issue #1204).
 	if sent.purpose != domain.LoginCodePurposeEmailChange || sent.step != domain.LoginCodeStepCurrentEmail {
@@ -219,25 +212,6 @@ func TestEmailChangeService_SendCurrentEmailCode(t *testing.T) {
 		stepOneHappyPath(t)
 	})
 
-	t.Run("user without email returns ErrEmailDoesNotMatch and sends nothing", func(t *testing.T) {
-		t.Parallel()
-		h := newEmailChangeHarness()
-		phone := mustPhone(t, "+79160000101")
-		user, err := domain.NewOwner(phone)
-		if err != nil {
-			t.Fatalf("create user: %v", err)
-		}
-		h.users.byPhone[phone.String()] = user
-
-		err = h.svc.SendCurrentEmailCode(t.Context(), user.ID)
-		if !errors.Is(err, ErrEmailDoesNotMatch) {
-			t.Fatalf("error = %v, want ErrEmailDoesNotMatch", err)
-		}
-		if len(h.sender.sent) != 0 {
-			t.Fatalf("sender calls = %d, want 0", len(h.sender.sent))
-		}
-	})
-
 	t.Run("unknown user returns ErrNotFound", func(t *testing.T) {
 		t.Parallel()
 		h := newEmailChangeHarness()
@@ -250,9 +224,8 @@ func TestEmailChangeService_SendCurrentEmailCode(t *testing.T) {
 	t.Run("re-issue within a minute is throttled without invalidating the live code", func(t *testing.T) {
 		t.Parallel()
 		h := newEmailChangeHarness()
-		phone := mustPhone(t, "+79160000102")
 		email := mustEmail(t, seedOwnerEmail)
-		user := h.seedEmailChangeUser(t, phone, email, &testNow)
+		user := h.seedEmailChangeUser(t, email, &testNow)
 
 		if err := h.svc.SendCurrentEmailCode(t.Context(), user.ID); err != nil {
 			t.Fatalf("first send: %v", err)
@@ -277,7 +250,7 @@ func TestEmailChangeService_SendCurrentEmailCode(t *testing.T) {
 // given address, with a hash matching the presented plaintext token.
 func assertStoredGrant(t *testing.T, h *emailChangeHarness, userID uuid.UUID, newEmail domain.Email, grantToken string) {
 	t.Helper()
-	grant, ok := h.grants.grants[userID]
+	grant, ok := h.grants.byUserID[userID]
 	if !ok {
 		t.Fatal("no grant stored for the user")
 	}
@@ -294,7 +267,7 @@ func assertStoredGrant(t *testing.T, h *emailChangeHarness, userID uuid.UUID, ne
 // presented plaintext token.
 func assertAddresslessGrant(t *testing.T, h *emailChangeHarness, userID uuid.UUID, grantToken string) {
 	t.Helper()
-	grant, ok := h.grants.grants[userID]
+	grant, ok := h.grants.byUserID[userID]
 	if !ok {
 		t.Fatal("no grant stored for the user")
 	}
@@ -336,9 +309,8 @@ func assertNewAddressCode(t *testing.T, h *emailChangeHarness, newEmail domain.E
 func verifyHappyPath(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	phone := mustPhone(t, "+79160000200")
 	currentEmail := mustEmail(t, seedOwnerEmail)
-	user := h.seedEmailChangeUser(t, phone, currentEmail, &testNow)
+	user := h.seedEmailChangeUser(t, currentEmail, &testNow)
 
 	if err := h.svc.SendCurrentEmailCode(t.Context(), user.ID); err != nil {
 		t.Fatalf("step 1: %v", err)
@@ -381,13 +353,13 @@ func verifyHappyPath(t *testing.T) {
 }
 
 // verifyWrongCodeRecordsWindow proves a wrong step-1-code entry lands in the
-// phone's attempt window, delivers nothing, stores no grant, and is audited —
-// the verification behavior inherited from the old confirm-current.
+// current address's attempt window, delivers nothing, stores no grant, and is
+// audited — the verification behavior inherited from the old confirm-current.
 func verifyWrongCodeRecordsWindow(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	phone := mustPhone(t, "+79160000201")
-	user := h.seedEmailChangeUser(t, phone, mustEmail(t, seedOwnerEmail), &testNow)
+	currentEmail := mustEmail(t, seedOwnerEmail)
+	user := h.seedEmailChangeUser(t, currentEmail, &testNow)
 
 	if err := h.svc.SendCurrentEmailCode(t.Context(), user.ID); err != nil {
 		t.Fatalf("step 1: %v", err)
@@ -396,9 +368,9 @@ func verifyWrongCodeRecordsWindow(t *testing.T) {
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("error = %v, want ErrLoginCodeInvalid", err)
 	}
-	window, ok := h.attempts.windows[phone.String()]
+	window, ok := h.attempts.windows[currentEmail.String()]
 	if !ok {
-		t.Fatal("no attempt window recorded for the phone")
+		t.Fatal("no attempt window recorded for the current address")
 	}
 	if window.Failures != 1 {
 		t.Fatalf("window failures = %d, want 1", window.Failures)
@@ -406,10 +378,10 @@ func verifyWrongCodeRecordsWindow(t *testing.T) {
 	if len(h.sender.sent) != 1 {
 		t.Fatalf("sender calls = %d, want 1 (step 1 only)", len(h.sender.sent))
 	}
-	if len(h.grants.grants) != 0 {
-		t.Fatalf("grants = %d, want 0", len(h.grants.grants))
+	if len(h.grants.byUserID) != 0 {
+		t.Fatalf("grants = %d, want 0", len(h.grants.byUserID))
 	}
-	// The failed attempt is audited (parity with the phone change).
+	// The failed attempt is audited.
 	if len(h.audit.entries) != 1 || h.audit.entries[0].Action != auditdomain.ActionAuthEmailChangeFailed {
 		t.Fatalf("audit entries = %+v, want one email_change_failed", h.audit.entries)
 	}
@@ -421,8 +393,8 @@ func verifyWrongCodeRecordsWindow(t *testing.T) {
 func verifyBurnedCodeCannotReplay(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	phone := mustPhone(t, "+79160000207")
-	user := h.seedEmailChangeUser(t, phone, mustEmail(t, seedOwnerEmail), &testNow)
+	currentEmail := mustEmail(t, seedOwnerEmail)
+	user := h.seedEmailChangeUser(t, currentEmail, &testNow)
 	ctx := t.Context()
 
 	if err := h.svc.SendCurrentEmailCode(ctx, user.ID); err != nil {
@@ -436,7 +408,7 @@ func verifyBurnedCodeCannotReplay(t *testing.T) {
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("replay error = %v, want ErrLoginCodeInvalid", err)
 	}
-	window, ok := h.attempts.windows[phone.String()]
+	window, ok := h.attempts.windows[currentEmail.String()]
 	if !ok || window.Failures != 1 {
 		t.Fatalf("window = %+v, want 1 failure for the replay", window)
 	}
@@ -447,13 +419,13 @@ func verifyBurnedCodeCannotReplay(t *testing.T) {
 func verifyGrantReplaced(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000204"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	ctx := t.Context()
 
 	if _, err := h.runToAddresslessGrant(ctx, t, user.ID); err != nil {
 		t.Fatalf("first flow: %v", err)
 	}
-	firstGrant := h.grants.grants[user.ID]
+	firstGrant := h.grants.byUserID[user.ID]
 
 	// Past the 1-minute throttle: the step-1 re-send shares the current
 	// triple, so advance past it.
@@ -461,7 +433,7 @@ func verifyGrantReplaced(t *testing.T) {
 	if _, err := h.runToAddresslessGrant(ctx, t, user.ID); err != nil {
 		t.Fatalf("second flow: %v", err)
 	}
-	secondGrant := h.grants.grants[user.ID]
+	secondGrant := h.grants.byUserID[user.ID]
 
 	if firstGrant.ID == secondGrant.ID {
 		t.Fatal("the first grant survived, want replaced")
@@ -479,7 +451,7 @@ func TestEmailChangeService_VerifyCurrentEmail(t *testing.T) {
 		verifyHappyPath(t)
 	})
 
-	t.Run("wrong current code records the failure on the phone window", func(t *testing.T) {
+	t.Run("wrong current code records the failure on the current-address window", func(t *testing.T) {
 		t.Parallel()
 		verifyWrongCodeRecordsWindow(t)
 	})
@@ -512,7 +484,7 @@ func TestEmailChangeService_VerifyCurrentEmail(t *testing.T) {
 func requestHappyPath(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000210"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "new@example.com")
 	ctx := t.Context()
 
@@ -554,7 +526,7 @@ func requestHappyPath(t *testing.T) {
 func requestWrongGrantToken(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000211"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "wrongtoken@example.com")
 
 	grantToken, err := h.runToAddresslessGrant(t.Context(), t, user.ID)
@@ -575,7 +547,7 @@ func requestWrongGrantToken(t *testing.T) {
 func requestExpiredGrant(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000212"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "expired@example.com")
 
 	grantToken, err := h.runToAddresslessGrant(t.Context(), t, user.ID)
@@ -597,7 +569,7 @@ func requestExpiredGrant(t *testing.T) {
 func requestSameAsCurrentRejects(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000213"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 
 	grantToken, err := h.runToAddresslessGrant(t.Context(), t, user.ID)
 	if err != nil {
@@ -618,7 +590,7 @@ func requestSameAsCurrentRejects(t *testing.T) {
 func requestTakenRejects(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000214"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	taken := mustEmail(t, "taken@example.com")
 	h.seedOtherEmailOwner(t, taken)
 
@@ -644,7 +616,7 @@ func requestTakenRejects(t *testing.T) {
 func requestBudgetExhaustedKeepsGrantAndBinding(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000215"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "new@example.com")
 	ctx := t.Context()
 
@@ -723,20 +695,20 @@ func TestEmailChangeService_RequestNewEmailCode(t *testing.T) {
 
 // changeEmailHappyPath drives the full three-step flow and returns the
 // handles the success-path assertions need.
-func changeEmailHappyPath(t *testing.T) (h *emailChangeHarness, user domain.User, newEmail domain.Email, firstHash, secondHash string) {
+func changeEmailHappyPath(t *testing.T) (h *emailChangeHarness, user domain.User, newEmail domain.Email, firstID, secondID uuid.UUID) {
 	t.Helper()
 	h = newEmailChangeHarness()
-	phone := mustPhone(t, "+79160000300")
 	currentEmail := mustEmail(t, "change@example.com")
 	newEmail = mustEmail(t, "new-change@example.com")
-	user = h.seedEmailChangeUser(t, phone, currentEmail, nil) // Unverified current address: yet to be confirmed.
+	user = h.seedEmailChangeUser(t, currentEmail, nil) // Unverified current address: yet to be confirmed.
 
 	// Two sessions: the change touches neither (решение #1380, разворот
 	// #1207) — the contact change no longer logs other devices out.
-	firstHash = h.hasher.HashToken("current-session")
-	h.sessions.sessions[firstHash] = domain.Session{UserID: user.ID, TokenHash: firstHash}
-	secondHash = h.hasher.HashToken("other-session")
-	h.sessions.sessions[secondHash] = domain.Session{UserID: user.ID, TokenHash: secondHash}
+	first := domain.Session{ID: uuid.Must(uuid.NewV7()), UserID: user.ID, TokenHash: h.hasher.HashToken("current-session")}
+	second := domain.Session{ID: uuid.Must(uuid.NewV7()), UserID: user.ID, TokenHash: h.hasher.HashToken("other-session")}
+	h.sessions.sessions[first.ID] = first
+	h.sessions.sessions[second.ID] = second
+	firstID, secondID = first.ID, second.ID
 
 	grantToken, newCode := h.runToStepThree(t, user.ID, newEmail)
 
@@ -747,7 +719,7 @@ func changeEmailHappyPath(t *testing.T) (h *emailChangeHarness, user domain.User
 	if updated.Email == nil || updated.Email.String() != newEmail.String() {
 		t.Fatalf("updated email = %v, want %s", updated.Email, newEmail)
 	}
-	return h, user, newEmail, firstHash, secondHash
+	return h, user, newEmail, firstID, secondID
 }
 
 // changeEmailAppliesAndConsumes asserts the success-path side effects: the new
@@ -756,7 +728,7 @@ func changeEmailHappyPath(t *testing.T) (h *emailChangeHarness, user domain.User
 // OLD address (решение #1207).
 func changeEmailAppliesAndConsumes(t *testing.T) {
 	t.Helper()
-	h, user, newEmail, firstHash, secondHash := changeEmailHappyPath(t)
+	h, user, newEmail, firstID, secondID := changeEmailHappyPath(t)
 	ctx := t.Context()
 
 	// The change is visible through the repository.
@@ -772,15 +744,15 @@ func changeEmailAppliesAndConsumes(t *testing.T) {
 	h.clock.verifiedEqualsNow(t, stored.EmailVerifiedAt)
 
 	// The grant is consumed — the change is one-time.
-	if len(h.grants.grants) != 0 {
-		t.Fatalf("grants remaining = %d, want 0", len(h.grants.grants))
+	if len(h.grants.byUserID) != 0 {
+		t.Fatalf("grants remaining = %d, want 0", len(h.grants.byUserID))
 	}
 
 	// Sessions: the change touches neither (решение #1380, разворот #1207).
-	if _, ok := h.sessions.sessions[firstHash]; !ok {
+	if _, ok := h.sessions.sessions[firstID]; !ok {
 		t.Fatal("first session deleted, want retained")
 	}
-	if _, ok := h.sessions.sessions[secondHash]; !ok {
+	if _, ok := h.sessions.sessions[secondID]; !ok {
 		t.Fatal("second session deleted, want retained")
 	}
 
@@ -840,12 +812,12 @@ func assertChangeLetter(
 }
 
 // changeEmailWrongCodeKeepsGrant proves a wrong step-3 code records the window
-// failure, keeps the grant for a retry, and audits the failure.
+// failure on the bound (new) address, keeps the grant for a retry, and audits
+// the failure.
 func changeEmailWrongCodeKeepsGrant(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	phone := mustPhone(t, "+79160000301")
-	user := h.seedEmailChangeUser(t, phone, mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "new@example.com")
 	grantToken, _ := h.runToStepThree(t, user.ID, newEmail)
 
@@ -854,13 +826,13 @@ func changeEmailWrongCodeKeepsGrant(t *testing.T) {
 		t.Fatalf("error = %v, want ErrLoginCodeInvalid", err)
 	}
 
-	window, ok := h.attempts.windows[phone.String()]
+	window, ok := h.attempts.windows[newEmail.String()]
 	if !ok || window.Failures != 1 {
-		t.Fatalf("window = %+v, want 1 failure on the phone", window)
+		t.Fatalf("window = %+v, want 1 failure on the new address", window)
 	}
 	// The grant survives so the user can retry the code.
-	if len(h.grants.grants) != 1 {
-		t.Fatalf("grants = %d, want 1 (grant kept for retry)", len(h.grants.grants))
+	if len(h.grants.byUserID) != 1 {
+		t.Fatalf("grants = %d, want 1 (grant kept for retry)", len(h.grants.byUserID))
 	}
 	// The email is unchanged; the code is not burned by the failure.
 	stored, err := h.users.GetByID(t.Context(), user.ID)
@@ -885,7 +857,7 @@ func changeEmailWrongCodeKeepsGrant(t *testing.T) {
 func changeEmailExpiredGrant(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000302"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "new@example.com")
 	grantToken, newCode := h.runToStepThree(t, user.ID, newEmail)
 
@@ -908,7 +880,7 @@ func changeEmailExpiredGrant(t *testing.T) {
 func changeEmailReusedGrant(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000303"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	firstEmail := mustEmail(t, "first@example.com")
 
 	// First change consumes the first grant.
@@ -943,7 +915,7 @@ func changeEmailReusedGrant(t *testing.T) {
 func changeEmailTakenBetweenSteps(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000304"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "snatched@example.com")
 	grantToken, newCode := h.runToStepThree(t, user.ID, newEmail)
 
@@ -970,7 +942,7 @@ func changeEmailTakenBetweenSteps(t *testing.T) {
 func resendHappyPath(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000400"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "resend@example.com")
 	grantToken, oldCode := h.runToStepThree(t, user.ID, newEmail)
 
@@ -1014,7 +986,7 @@ func resendHappyPath(t *testing.T) {
 func resendThrottledWithinMinute(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000401"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "throttle@example.com")
 	grantToken, liveCode := h.runToStepThree(t, user.ID, newEmail)
 
@@ -1036,7 +1008,7 @@ func resendThrottledWithinMinute(t *testing.T) {
 func resendExpiredGrant(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000402"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "expired@example.com")
 	grantToken, _ := h.runToStepThree(t, user.ID, newEmail)
 
@@ -1054,7 +1026,7 @@ func resendExpiredGrant(t *testing.T) {
 func resendWrongGrantToken(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000403"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "wrongtoken@example.com")
 	h.runToStepThree(t, user.ID, newEmail)
 
@@ -1078,7 +1050,7 @@ func resendTakenAddress(t *testing.T) {
 	// resend attempt — the refusal must leave the second unit unspent.
 	two := 2
 	h.budgetLeft = &two
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000404"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "snatched@example.com")
 	grantToken, _ := h.runToStepThree(t, user.ID, newEmail)
 
@@ -1101,7 +1073,7 @@ func resendTakenAddress(t *testing.T) {
 func resendBudgetExhausted(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000405"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 	newEmail := mustEmail(t, "budget@example.com")
 	grantToken, _ := h.runToStepThree(t, user.ID, newEmail)
 
@@ -1132,7 +1104,7 @@ func resendBudgetExhausted(t *testing.T) {
 func resendAddresslessGrantRefused(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	user := h.seedEmailChangeUser(t, mustPhone(t, "+79160000407"), mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 
 	grantToken, err := h.runToAddresslessGrant(t.Context(), t, user.ID)
 	if err != nil {
@@ -1193,28 +1165,6 @@ func TestEmailChangeService_ResendNewEmailCode(t *testing.T) {
 			t.Fatalf("error = %v, want ErrNotFound", err)
 		}
 	})
-
-	t.Run("user without email never holds a live grant — the grant seam refuses first", func(t *testing.T) {
-		t.Parallel()
-		h := newEmailChangeHarness()
-		phone := mustPhone(t, "+79160000406")
-		user, err := domain.NewOwner(phone)
-		if err != nil {
-			t.Fatalf("create user: %v", err)
-		}
-		h.users.byPhone[phone.String()] = user
-
-		// A user without an email cannot pass step 1, so no live grant can
-		// exist: the grant seam answers before the email seam ever runs —
-		// the handler-side no-email mapping (#720 Q9) stays defensive.
-		err = h.svc.ResendNewEmailCode(t.Context(), user.ID, "grant")
-		if !errors.Is(err, ErrEmailChangeGrantInvalid) {
-			t.Fatalf("error = %v, want ErrEmailChangeGrantInvalid", err)
-		}
-		if len(h.sender.sent) != 0 {
-			t.Fatalf("sender calls = %d, want 0", len(h.sender.sent))
-		}
-	})
 }
 
 // changeAddresslessGrantRefused proves an addressless grant cannot drive the
@@ -1223,8 +1173,7 @@ func TestEmailChangeService_ResendNewEmailCode(t *testing.T) {
 func changeAddresslessGrantRefused(t *testing.T) {
 	t.Helper()
 	h := newEmailChangeHarness()
-	phone := mustPhone(t, "+79160000305")
-	user := h.seedEmailChangeUser(t, phone, mustEmail(t, seedOwnerEmail), &testNow)
+	user := h.seedEmailChangeUser(t, mustEmail(t, seedOwnerEmail), &testNow)
 
 	grantToken, err := h.runToAddresslessGrant(t.Context(), t, user.ID)
 	if err != nil {
@@ -1237,7 +1186,7 @@ func changeAddresslessGrantRefused(t *testing.T) {
 	if len(h.sender.sent) != 1 {
 		t.Fatalf("sender calls = %d, want 1", len(h.sender.sent))
 	}
-	if _, ok := h.attempts.windows[phone.String()]; ok {
+	if len(h.attempts.windows) != 0 {
 		t.Fatal("attempt window touched, want untouched (no code check ran)")
 	}
 	stored, err := h.users.GetByID(t.Context(), user.ID)

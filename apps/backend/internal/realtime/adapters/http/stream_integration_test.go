@@ -128,10 +128,10 @@ func TestRealtimeStreamAudience(t *testing.T) {
 	propID := uuid.Must(uuid.NewV7())
 
 	for _, u := range []uuid.UUID{owner, member, outsider} {
-		phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+		email := fmt.Sprintf("%010d@example.com", time.Now().UnixNano()%10000000000)
 		_, err := pool.Exec(ctx,
-			`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
-			u, phone, actor.RoleOwner)
+			`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
+			u, email, actor.RoleOwner)
 		require.NoError(t, err)
 	}
 	_, err := pool.Exec(ctx,
@@ -201,10 +201,10 @@ func TestRealtimeStreamArchivedPropertyAudience(t *testing.T) {
 	propID := uuid.Must(uuid.NewV7())
 
 	for _, u := range []uuid.UUID{owner, member} {
-		phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+		email := fmt.Sprintf("%010d@example.com", time.Now().UnixNano()%10000000000)
 		_, err := pool.Exec(ctx,
-			`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
-			u, phone, actor.RoleOwner)
+			`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
+			u, email, actor.RoleOwner)
 		require.NoError(t, err)
 	}
 	_, err := pool.Exec(ctx,
