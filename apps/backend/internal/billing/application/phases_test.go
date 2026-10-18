@@ -431,53 +431,62 @@ func (h *phasesHarness) graceSub(t *testing.T, enteredAt time.Time) domain.Subsc
 	return sub
 }
 
-// TestPhaseScheduler_GraceRetrySchedule pins the dunning schedule of ticket
-// #431: the first retry is due at +24 h from the grace entry, the second at
-// +72 h, each boundary consumed by a payment created since the entry (a prior
-// retry or a manual one), and never a third. The batch keeps only rows with
+// TestPhaseScheduler_GraceRetrySchedule pins the dunning schedule (ticket
+// #431, issue #1521): the retries are due daily from the grace entry — the
+// next boundary sits at the entry + 24 h per payment the entry has already
+// consumed — and the open grace window is the only cap, so an admin
+// extension keeps the daily retries going. The batch keeps only rows with
 // auto-renew on, a linked active method and a still-open window.
 func TestPhaseScheduler_GraceRetrySchedule(t *testing.T) {
 	t.Parallel()
 	h := newPhasesHarness(t)
 	now := h.scheduler.now()
-	entered := now.Add(-48 * time.Hour)
 
-	// The +24 h boundary passed with nothing charged since the entry.
-	firstDue := h.graceSub(t, entered)
-	// A retry payment since the entry consumed the +24 h boundary; the +72 h
-	// one is still ahead (entered + 72 h > now).
-	firstConsumed := h.graceSub(t, entered)
-	h.seedPayment(t, firstConsumed, func(p *domain.SubscriptionPayment) {
-		p.CreatedAt = entered.Add(25 * time.Hour)
-	})
-	// Both boundaries passed with one payment since the entry: the second
-	// retry is due.
-	secondDue := h.graceSub(t, now.Add(-73*time.Hour))
-	h.seedPayment(t, secondDue, func(p *domain.SubscriptionPayment) {
-		p.CreatedAt = now.Add(-48 * time.Hour)
-	})
-	// Two payments since the entry: the schedule is spent.
-	spent := h.graceSub(t, now.Add(-73*time.Hour))
-	h.seedPayment(t, spent, func(p *domain.SubscriptionPayment) {
-		p.CreatedAt = now.Add(-70 * time.Hour)
-		if err := p.MarkFailed(nil, p.CreatedAt); err != nil {
-			t.Errorf("mark failed: %v", err)
-		}
-	})
-	h.seedPayment(t, spent, func(p *domain.SubscriptionPayment) {
-		p.CreatedAt = now.Add(-48 * time.Hour)
-	})
+	// The first boundary (+24 h) passed with nothing charged since the entry.
+	firstDue := h.graceSub(t, now.Add(-25*time.Hour))
+	// Seeds one consumed (failed) payment since the entry — the scenarios
+	// spend their boundaries with it.
+	seedFailedPayment := func(sub domain.Subscription, createdAt time.Time) {
+		t.Helper()
+		h.seedPayment(t, sub, func(p *domain.SubscriptionPayment) {
+			p.CreatedAt = createdAt
+			if err := p.MarkFailed(nil, createdAt); err != nil {
+				t.Errorf("mark failed: %v", err)
+			}
+		})
+	}
+	// One retry payment consumed the first boundary; the next daily boundary
+	// (+48 h) is due exactly now.
+	secondDue := h.graceSub(t, now.Add(-48*time.Hour))
+	seedFailedPayment(secondDue, now.Add(-23*time.Hour))
+	// Two payments since the entry (a manual one and a declined retry): the
+	// third daily boundary (+72 h) is due — the boundaries missed while the
+	// worker was down catch up one attempt per tick.
+	thirdDue := h.graceSub(t, now.Add(-73*time.Hour))
+	seedFailedPayment(thirdDue, now.Add(-70*time.Hour))
+	seedFailedPayment(thirdDue, now.Add(-48*time.Hour))
+	// One payment since the entry, the next daily boundary (+48 h) still
+	// ahead: nothing is due between the boundaries.
+	betweenBoundaries := h.graceSub(t, now.Add(-47*time.Hour))
+	seedFailedPayment(betweenBoundaries, now.Add(-46*time.Hour))
+	// Six payments consumed the six daily boundaries (+24..+144 h); the next
+	// one (+168 h) is at the window's end — the open window is the cap, no
+	// seventh attempt fires.
+	windowCapped := h.graceSub(t, now.Add(-145*time.Hour))
+	for _, offsetHours := range []int{25, 49, 73, 97, 121, 145} {
+		seedFailedPayment(windowCapped, now.Add(time.Duration(offsetHours-145)*time.Hour))
+	}
 
 	// Entered less than 24 h ago: nothing due yet.
 	fresh := h.graceSub(t, now.Add(-23*time.Hour))
 	// Auto-renew off: the user opted out of charges.
-	optedOut := h.graceSub(t, entered)
+	optedOut := h.graceSub(t, now.Add(-25*time.Hour))
 	optedOut.AutoRenewEnabled = false
 	if err := h.stores.subscriptions.Update(t.Context(), optedOut); err != nil {
 		t.Fatalf("store opted out: %v", err)
 	}
 	// No active method linked: nothing to charge.
-	noMethod := h.graceSub(t, entered)
+	noMethod := h.graceSub(t, now.Add(-25*time.Hour))
 	noMethod.ActivePaymentMethodID = nil
 	if err := h.stores.subscriptions.Update(t.Context(), noMethod); err != nil {
 		t.Fatalf("store no-method: %v", err)
@@ -492,8 +501,8 @@ func TestPhaseScheduler_GraceRetrySchedule(t *testing.T) {
 
 	sel := h.scheduler.graceRetryDue(now, 100)
 	requireBoundary(t, "graceRetryDue GraceRetryDue", sel.GraceRetryDue, now)
-	requireSelection(t, h.listedUserIDs(t, sel), idsOf(firstDue, secondDue),
-		idsOf(firstConsumed, spent, fresh, optedOut, noMethod, windowOver)...)
+	requireSelection(t, h.listedUserIDs(t, sel), idsOf(firstDue, secondDue, thirdDue),
+		idsOf(betweenBoundaries, windowCapped, fresh, optedOut, noMethod, windowOver)...)
 }
 
 // TestPhaseScheduler_ExpiredBindings pins the hygiene batch of ticket #433:

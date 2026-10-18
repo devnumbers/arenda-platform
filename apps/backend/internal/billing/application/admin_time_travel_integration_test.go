@@ -174,6 +174,41 @@ func TestAdmin_Integration_TimeShiftRetryPresetDrivesRetryPhase(t *testing.T) {
 	}
 }
 
+// TestAdmin_Integration_TimeShiftRetryLastPresetDrivesRetryPhase proves the
+// last-boundary preset (issue #1521): the preset lands the dunning anchor
+// just past the final daily boundary of the standard week (+144 h from the
+// grace entry, one hour of slack) while keeping the window open — the next
+// tick charges the due retry and the success renews the subscription out of
+// grace.
+func TestAdmin_Integration_TimeShiftRetryLastPresetDrivesRetryPhase(t *testing.T) {
+	t.Parallel()
+	h := newAdminSubscriptionHarness(t)
+	userID, sub, _ := seedGraceEpisode(t, h)
+
+	// The user fixes their payment method; the preset moves the anchor.
+	seedActiveMethod(t, h.integrationHarness, userID, "tok_retry_ok")
+	if err := h.subscriptionsSvc.ShiftSubscriptionTime(h.ctx(), h.adminID, userID,
+		billingapp.TimeShiftRequest{Preset: billingapp.TimeShiftPresetRetryLastDue}); err != nil {
+		t.Fatalf("ShiftSubscriptionTime(retry_last_due) error = %v", err)
+	}
+	if got := latestGraceEntryAt(t, h.integrationHarness, sub.ID); !got.Equal(h.clock.Now().Add(-145 * time.Hour)) {
+		t.Errorf("dunning anchor = %v, want the +144 h preset anchor", got)
+	}
+
+	if count, err := h.services.Workers.ProcessGraceRetries(h.ctx(), h.clock.Now()); err != nil {
+		t.Fatalf("ProcessGraceRetries(after shift) error = %v", err)
+	} else if count != 1 {
+		t.Fatalf("ProcessGraceRetries(after shift) = %d, want 1", count)
+	}
+	stored, err := h.subscriptions.GetByUserID(h.ctx(), userID)
+	if err != nil {
+		t.Fatalf("GetByUserID(after retry) error = %v", err)
+	}
+	if stored.Status != domain.SubscriptionStatusActive {
+		t.Errorf("status after the retry = %q, want active (the retry renewed)", stored.Status)
+	}
+}
+
 // TestAdmin_Integration_TimeShiftReminderPresetOpensWindow proves the
 // reminder preset: the grace deadline lands a day out — inside the reminder
 // window — and the untouched reminder phase dispatches on the next pass.

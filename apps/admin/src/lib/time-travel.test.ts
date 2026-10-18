@@ -3,7 +3,13 @@ import { acceptanceScenarioButtons, isValidTimeShiftHours, latestGraceEntryAt, m
 
 // Значения пресетов — реестр TimeShiftPreset
 // apps/backend/internal/billing/application/admin_time_travel_service.go.
-const backendTimeShiftPresets = ['period_expired', 'retry_24h_due', 'retry_72h_due', 'reminder_window'] as const;
+const backendTimeShiftPresets = [
+  'period_expired',
+  'retry_24h_due',
+  'retry_72h_due',
+  'retry_last_due',
+  'reminder_window',
+] as const;
 
 describe('timeShiftPresets', () => {
   it('covers every backend TimeShiftPreset value exactly once', () => {
@@ -15,17 +21,18 @@ describe('timeShiftPresets', () => {
 });
 
 describe('acceptanceScenarioButtons', () => {
-  it('offers the five acceptance scenarios of the full lifecycle walk (#648)', () => {
+  it('offers the six acceptance scenarios of the full lifecycle walk (#648, #1521)', () => {
     expect(acceptanceScenarioButtons.map((button) => button.name)).toEqual([
       'Войти в grace',
       'В окно ретрая +24',
       'В окно ретрая +72',
+      'В окно последнего ретрая',
       'В окно напоминания',
       'Истечь из grace',
     ]);
   });
 
-  it('maps every button onto a backend preset, covering all four', () => {
+  it('maps every button onto a backend preset, covering all five', () => {
     for (const button of acceptanceScenarioButtons) {
       expect(timeShiftPresets).toContain(button.preset);
     }
@@ -78,8 +85,8 @@ describe('latestGraceEntryAt', () => {
   });
 });
 
-// Расписание ретраев долга — +24 ч и +72 ч от анкера
-// (graceRetryFirstAfter/SecondAfter, phases.go).
+// Расписание ретраев долга — ежедневные границы +24…+144 ч от анкера
+// (graceRetryEvery, phases.go; issue #1521).
 describe('retrySchedule', () => {
   const anchor = Date.parse('2026-09-14T10:00:00Z');
 
@@ -87,12 +94,16 @@ describe('retrySchedule', () => {
     expect(retrySchedule(null, new Date())).toBeNull();
   });
 
-  it('places the two retries at +24 h and +72 h with due flags against now', () => {
+  it('places the daily retries at +24..+144 h with due flags against now', () => {
     const now = new Date(Date.parse('2026-09-15T11:00:00Z'));
     const schedule = retrySchedule(anchor, now);
     expect(schedule).toEqual([
       { label: 'Ретрай +24 ч', at: new Date(Date.parse('2026-09-15T10:00:00Z')), due: true },
+      { label: 'Ретрай +48 ч', at: new Date(Date.parse('2026-09-16T10:00:00Z')), due: false },
       { label: 'Ретрай +72 ч', at: new Date(Date.parse('2026-09-17T10:00:00Z')), due: false },
+      { label: 'Ретрай +96 ч', at: new Date(Date.parse('2026-09-18T10:00:00Z')), due: false },
+      { label: 'Ретрай +120 ч', at: new Date(Date.parse('2026-09-19T10:00:00Z')), due: false },
+      { label: 'Ретрай +144 ч', at: new Date(Date.parse('2026-09-20T10:00:00Z')), due: false },
     ]);
   });
 

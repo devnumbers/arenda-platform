@@ -9,13 +9,19 @@
  * состояния, поэтому кнопка сценария приводит границу к цели, а не стакает
  * слепые офсеты.
  */
-export const timeShiftPresets = ['period_expired', 'retry_24h_due', 'retry_72h_due', 'reminder_window'] as const;
+export const timeShiftPresets = [
+  'period_expired',
+  'retry_24h_due',
+  'retry_72h_due',
+  'retry_last_due',
+  'reminder_window',
+] as const;
 
 export type TimeShiftPreset = (typeof timeShiftPresets)[number];
 
 /**
- * Кнопки сценариев приёмки полного цикла (гриллинг #648): пять кнопок над
- * четырьмя пресетами — «войти в grace» и «истечь из grace» ссылаются на один
+ * Кнопки сценариев приёмки полного цикла (гриллинг #648, #1521): шесть кнопок
+ * над пятью пресетами — «войти в grace» и «истечь из grace» ссылаются на один
  * period_expired, фазы воркера различают сценарии по найденному статусу
  * подписки.
  */
@@ -23,6 +29,7 @@ export const acceptanceScenarioButtons: readonly { id: string; preset: TimeShift
   { id: 'enter_grace', preset: 'period_expired', name: 'Войти в grace' },
   { id: 'retry_24', preset: 'retry_24h_due', name: 'В окно ретрая +24' },
   { id: 'retry_72', preset: 'retry_72h_due', name: 'В окно ретрая +72' },
+  { id: 'retry_last', preset: 'retry_last_due', name: 'В окно последнего ретрая' },
   { id: 'reminder', preset: 'reminder_window', name: 'В окно напоминания' },
   { id: 'expire_grace', preset: 'period_expired', name: 'Истечь из grace' },
 ];
@@ -44,9 +51,10 @@ export interface RetrySchedulePoint {
 const hourMs = 60 * 60 * 1000;
 
 /**
- * Расписание ретраев долга от анкера (ms эпохи): +24 ч и +72 ч — продуктовая
- * константа фазы долга, не конфиг. null — анкера нет (пользователь не входил
- * в grace или история переходов недоступна).
+ * Расписание ретраев долга от анкера (ms эпохи): ежедневные границы
+ * +24…+144 ч (issue #1521) — продуктовая константа фазы долга
+ * (graceRetryEvery, phases.go), не конфиг. null — анкера нет (пользователь
+ * не входил в grace или история переходов недоступна).
  */
 export function retrySchedule(anchorMs: null, now: Date): null;
 export function retrySchedule(anchorMs: number, now: Date): RetrySchedulePoint[];
@@ -54,16 +62,11 @@ export function retrySchedule(anchorMs: number | null, now: Date): RetrySchedule
   if (anchorMs === null) {
     return null;
   }
-  const dueAt = (offsetHours: number): { at: Date; due: boolean } => ({
+  return [24, 48, 72, 96, 120, 144].map((offsetHours) => ({
+    label: `Ретрай +${offsetHours} ч`,
     at: new Date(anchorMs + offsetHours * hourMs),
     due: anchorMs + offsetHours * hourMs <= now.getTime(),
-  });
-  const first = dueAt(24);
-  const second = dueAt(72);
-  return [
-    { label: 'Ретрай +24 ч', ...first },
-    { label: 'Ретрай +72 ч', ...second },
-  ];
+  }));
 }
 
 /** Минимальная форма перехода истории подписки, нужная для поиска анкера. */
