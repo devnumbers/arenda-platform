@@ -228,7 +228,6 @@ export const ROUTES = {
   /** Пикер часового пояса (карта #591, тикет #594): полный список зон РФ
    * с поиском; сохранение — PATCH /me, назад — на аккаунт. */
   profileAccountTimezone: '/profile/account/timezone',
-  profileChangePhone: '/profile/account/phone',
   /** Флоу смены почты (карта #723, тикет #722): двойной код — на текущий
    * адрес, затем на новый. */
   profileChangeEmail: '/profile/account/email',

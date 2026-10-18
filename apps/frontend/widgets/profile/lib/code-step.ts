@@ -8,7 +8,8 @@ import { isValidLoginCode } from '@/shared/lib/login-code';
  * серверного троттлинга; ранний клик получает честный 429-тост сценария. */
 export const RESEND_COOLDOWN_MS = 60_000;
 
-/** Куда идёт ошибка verify-мутации шага кода (change-phone / change-email):
+/** Куда идёт ошибка verify-мутации шага кода (change-email; телефонный
+ * change-phone снесён — ADR 0067, тикет #1530):
  * неверный код (401) — inline в error-проп поля кода (макет 2343-51004,
  * текст — detail бэка «Неверный код»); остальные API-ошибки (429, 409,
  * блокировка) — null, их ведут тосты сценариев профиля. */

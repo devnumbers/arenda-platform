@@ -23,7 +23,6 @@ import {
  * (INFO_ROUTES ниже). */
 const SUBPAGE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/profile/account', 'Аккаунт'],
-  ['/profile/account/phone', 'Изменение телефона'],
   ['/profile/devices', 'Устройства'],
   ['/profile/notifications', 'Настроить уведомления'],
   ['/profile/tariff', 'Тариф'],
@@ -128,6 +127,43 @@ test.describe('дерево профиля — хром #566', () => {
     await expect(header.getByText('Аккаунт', { exact: true })).toBeVisible();
     await header.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(/\/profile$/);
+  });
+
+  test('хаб и «Аккаунт» без телефона: почта — идентификатор (#1530, ADR 0067)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await openCabinetWithSeededSession(page, seededUser);
+
+    // Хаб: под именем — почта юзера, телефонных следов нет. Фильтр visible —
+    // Next держит в body скрытый клон дерева (канон #698).
+    await page.goto('/profile');
+    await expect(
+      page.getByText(seededUser.email, { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(page.getByText('+7').filter({ visible: true })).toHaveCount(0);
+    await captureScreen(page, testInfo, 'profile-hub-email-mobile');
+
+    // Аккаунт: строка «Электронная почта» ведёт на флоу смены (ссылка
+    // называется значением — заголовок живёт над боксом), строки
+    // «Телефон» нет (снесена с флоу /profile/account/phone).
+    await page.goto('/profile/account');
+    await expect(
+      page.getByText(seededUser.email, { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText('Телефон', { exact: true }).filter({ visible: true }),
+    ).toHaveCount(0);
+    await page.getByRole('link', { name: seededUser.email }).click();
+    await expect(page).toHaveURL(/\/profile\/account\/email$/);
+
+    // Снесённый флоу смены телефона — 308 в proxy (канон #975), не 404:
+    // старые входы ведут на экран «Аккаунт».
+    await page.goto('/profile/account/phone');
+    await expect(page).toHaveURL(/\/profile\/account$/);
+    await expect(
+      screenHeader(page).getByText('Аккаунт', { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
   });
 
   test('хаб: строка «Устройства» ведёт в дерево устройств (#724, #729)', async ({
