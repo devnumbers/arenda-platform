@@ -249,7 +249,10 @@ export function PaymentDayPicker({
       >
         <TopNavTitle title="Выберите день" />
       </TopNav>
-      <PageContent className="relative flex h-[calc(100dvh-72px)] flex-col pb-0">
+      {/* tablet:mt-[72px] — компенсация закреплённого TopNav (канон
+          CalendarDatePicker): на планшете/ПК бар фиксируется и выпадает
+          из потока поверхности, без него контент уезжает под хедер. */}
+      <PageContent className="relative flex h-[calc(100dvh-72px)] flex-col pb-0 tablet:mt-[72px]">
         <div className="flex-1 min-h-0 overflow-y-auto pb-6">
           <div className="pt-6">
             <MonthDaysGrid

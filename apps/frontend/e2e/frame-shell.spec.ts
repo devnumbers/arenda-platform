@@ -1,5 +1,11 @@
 import type { Page } from '@playwright/test';
-import { openCabinetWithSeededSession, expect, SEEDED_GARAGE_PROPERTY_ID, test } from './fixtures';
+import {
+  openCabinetWithSeededSession,
+  expect,
+  SEEDED_APARTMENT_PROPERTY_ID,
+  SEEDED_GARAGE_PROPERTY_ID,
+  test,
+} from './fixtures';
 
 // Каркас-шелл страницы (карта #862, тикет #865 + доработка 25.09 по
 // макетам 1185-40815/40811/40814 + хром-фикс 25.09): колонка контента
@@ -286,6 +292,32 @@ test('кнопка «Настройки» истории — над видимы
     const settingsBox = await settings.boundingBox();
     const tabBox = await tabbar.boundingBox();
     expect((settingsBox?.y ?? 0) + (settingsBox?.height ?? 0)).toBeLessThanOrEqual((tabBox?.y ?? 0) + 2);
+  }
+});
+
+// Полноэкранный пикер дня оплаты аренды (#530/#532): на планшете и ПК TopNav
+// внутри поверхности фиксируется (tablet:fixed) и выпадает из её потока —
+// без компенсации tablet:mt-[72px] (канон CalendarDatePicker) контент
+// поверхности уезжает под бар. Мобайл держит хедер в потоке — зазор там
+// структурный.
+test('пикер дня оплаты: календарь не заезжает под закреплённый хедер (мобайл, планшет, ПК)', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+
+  for (const viewport of [MOBILE, TABLET, PC]) {
+    await page.setViewportSize(viewport);
+    await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/rentals/new`);
+    await expect(page.getByRole('heading', { name: 'Цена и число оплаты' })).toBeVisible();
+    await page.getByRole('button', { name: 'День оплаты: Выбрать день' }).click();
+    const picker = page.getByRole('dialog', { name: 'Выбор дня оплаты' });
+    await expect(picker).toBeVisible();
+
+    const gap = await picker.evaluate((dialog) => {
+      const header = dialog.querySelector('header');
+      const grid = dialog.querySelector('.grid.grid-cols-7');
+      if (!header || !grid) throw new Error('хедер или грид дней пикера не найден');
+      return grid.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+    });
+    expect(gap).toBeGreaterThanOrEqual(-1);
   }
 });
 
