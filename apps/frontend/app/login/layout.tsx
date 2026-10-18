@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
   title: 'Вход — Рентли',
-  description: 'Войдите по номеру телефона',
+  description: 'Войдите или зарегистрируйтесь по электронной почте',
 };
 
 export default function LoginLayout({ children }: { readonly children: ReactNode }) {

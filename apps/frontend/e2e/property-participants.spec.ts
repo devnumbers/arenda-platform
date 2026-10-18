@@ -227,16 +227,16 @@ test('suspended-участник: warning-чип в ряду; сид восст�
 test('безымянный участник: «Пользователь» в титуле ряда, почта подзаголовком (карта #1105, аменд #1123); сид восстанавливается', async ({ page, seededUser }) => {
   // Зарегистрированный юзер без имени: display_name собирает бекенд по
   // канону карты #1105 — «Пользователь» вместо маски «+7***» (#1106);
-  // аменд #1123: телефон больше не фолбэк. Телефон сидится плейнтекстом
-  // при phone_encrypted = false — decryptPhone читает как есть,
-  // шифрование нужно только логину.
+  // аменд #1123: телефон больше не фолбэк, из схемы он ушёл совсем
+  // (ADR 0067, миграция 000162) — пин «телефона в ряду нет» остаётся
+  // страховкой от любых остаточных масок в UI.
   const NAMELESS_ID = '15111111-1111-4111-8111-111111111151';
   const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999951';
   const NAMELESS_PHONE = '+79131234567';
   const NAMELESS_EMAIL = 'e2e-nameless@example.com';
   await execE2eSql(
-    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
-      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+    `INSERT INTO users (id, role, name, surname, email, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', 'UTC') ` +
       `ON CONFLICT (id) DO NOTHING; ` +
       `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
       `VALUES ('${NAMELESS_MEMBER_ID}', '${APARTMENT_ID}', '${NAMELESS_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +

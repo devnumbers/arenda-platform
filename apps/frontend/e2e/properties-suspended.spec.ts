@@ -131,8 +131,8 @@ test('блюр-карточка и шит причины безымянного 
   const NAMELESS_PHONE = '+79137654326';
   const NAMELESS_EMAIL = 'e2e-nameless-suspended@example.com';
   await execE2eSql(
-    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
-      `VALUES ('${NAMELESS_OWNER_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+    `INSERT INTO users (id, role, name, surname, email, timezone) ` +
+      `VALUES ('${NAMELESS_OWNER_ID}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', 'UTC') ` +
       `ON CONFLICT (id) DO NOTHING; ` +
       `INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status) VALUES ` +
       `('${NAMELESS_PROPERTY_ID}', '${NAMELESS_OWNER_ID}', 'Дача без имени', 'house', 'Москва, ул. Анонимная, 8', '', '{}', 'active') ` +

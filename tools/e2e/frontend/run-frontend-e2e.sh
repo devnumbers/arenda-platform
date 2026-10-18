@@ -146,11 +146,16 @@ E2E_DADATA_API_KEY="${DADATA_API_KEY:-e2e-dadata-dummy}"
 E2E_RATE_LIMIT_IP_RPS=200
 E2E_RATE_LIMIT_IP_BURST=400
 # Анти-флуд лимиты отправки кодов (#1210) ослаблены: живые ноги сюита
-# (вход + смена email + смена телефона) легитимно доставляют сид-ящику больше
+# (вход + смена email) легитимно доставляют сид-ящику больше
 # 5 кодов в час — продовые дефолты 5/10 429-или бы живые ноги; свежий бэк на
-# прогон и так держит бюджеты в чистой памяти.
+# прогон и так держит бюджеты в чистой памяти. IP-слой аутентификации
+# (#1528: жёсткий на issuance /auth/send, мягкий на verify) ослаблен по той
+# же причине — сюита живёт одним IP, продовый дефолт 30/час с burst 3
+# сжигается первыми же UI-логинами (#1529).
 E2E_RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR=500
 E2E_RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR=500
+E2E_RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR=500
+E2E_RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN=500
 (
   cd "$PROJECT_ROOT"
   APP_ENV=local \
@@ -168,6 +173,8 @@ E2E_RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR=500
   RATE_LIMIT_IP_BURST="$E2E_RATE_LIMIT_IP_BURST" \
   RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR="$E2E_RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR" \
   RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR="$E2E_RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR" \
+  RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR="$E2E_RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR" \
+  RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN="$E2E_RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN" \
   LOG_FORMAT=json \
   LOG_LEVEL=info \
   LOG_SUCCESSFUL_REQUESTS=false \

@@ -156,10 +156,11 @@ test('чужие карточки: ряд владельца — имя, у бе
   const MARIA_MEMBER_ID = '99999999-9999-4999-8999-999999999971';
   const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999972';
   await execE2eSql(
-    // Телефон безымянного сидится плейнтекстом при phone_encrypted = false
-    // (паттерн #1107): decryptPhone читает как есть.
-    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
-      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, 'e2e-nameless-cards@example.com', FALSE, 'UTC') ` +
+    // Телефона в схеме больше нет (ADR 0067, миграция 000162); пин
+    // «телефона в ряду нет» (аменд #1123) остаётся страховкой от
+    // остаточных масок.
+    `INSERT INTO users (id, role, name, surname, email, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', 'owner', NULL, NULL, 'e2e-nameless-cards@example.com', 'UTC') ` +
       `ON CONFLICT (id) DO NOTHING; ` +
       `INSERT INTO properties (id, owner_id, name, type, address, status) VALUES ` +
       `('${MARIA_PROPERTY_ID}', '12111111-1111-4111-8111-111111111121', 'Офис у Марии', 'office', 'Москва, ул. Обручева, 9', 'active'), ` +
