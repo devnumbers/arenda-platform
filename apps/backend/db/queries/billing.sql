@@ -179,16 +179,17 @@ WHERE subscription_id = sqlc.arg('subscription_id');
 -- the under-lock re-check of a phase, run in the transaction that locked the
 -- row.
 --
--- The grace_retry_due bound (ticket #431, spec #419) selects grace
--- subscriptions with a due dunning retry: the retry schedule is anchored at
--- the latest grace entry (the newest reason='grace_entered' transition) and
--- fires twice — +24 h and +72 h — each boundary consumed by any payment
--- created at or after the entry (a prior retry or a manual payment; a
--- successful manual payment also removes the row through the status bound).
--- The window must still be open and an active payment method linked: without
--- one there is nothing to charge. The 24/72-hour offsets are product
--- constants mirrored by graceRetryFirstAfter/graceRetrySecondAfter in
--- billing/application/phases.go — no schema or config knob.
+-- The grace_retry_due bound (ticket #431, spec #419; issue #1521) selects
+-- grace subscriptions with a due dunning retry: the retry schedule is
+-- anchored at the latest grace entry (the newest reason='grace_entered'
+-- transition) and fires daily — the next boundary sits at the entry + 24 h
+-- per payment created at or after the entry (a prior retry or a manual
+-- payment consumes one boundary; a successful manual payment also removes
+-- the row through the status bound) — with the open window as the only cap,
+-- so an admin grace extension keeps the daily retries going (owner decision
+-- 18.10.2026). An active payment method must be linked: without one there is
+-- nothing to charge. The 24-hour cadence is a product constant mirrored by
+-- graceRetryEvery in billing/application/phases.go — no schema or config knob.
 SELECT * FROM user_subscriptions
 WHERE (sqlc.narg('user_id')::uuid IS NULL OR user_id = sqlc.narg('user_id'))
   AND user_subscriptions.status = sqlc.arg('status')
@@ -212,17 +213,11 @@ WHERE (sqlc.narg('user_id')::uuid IS NULL OR user_id = sqlc.narg('user_id'))
                  WHERE g2.subscription_id = user_subscriptions.id
                    AND g2.to_status = 'grace'
                    AND g2.reason = 'grace_entered')
-             AND (
-                 (gt.created_at + interval '24 hours' <= sqlc.narg('grace_retry_due')
-                  AND (SELECT count(*) FROM subscription_payments p
-                       WHERE p.subscription_id = user_subscriptions.id
-                         AND p.created_at >= gt.created_at) = 0)
-                 OR
-                 (gt.created_at + interval '72 hours' <= sqlc.narg('grace_retry_due')
-                  AND (SELECT count(*) FROM subscription_payments p
-                       WHERE p.subscription_id = user_subscriptions.id
-                         AND p.created_at >= gt.created_at) <= 1)
-             )
+             AND gt.created_at + make_interval(hours => (24 * (
+                     (SELECT count(*) FROM subscription_payments p
+                      WHERE p.subscription_id = user_subscriptions.id
+                        AND p.created_at >= gt.created_at) + 1))::int)
+                 <= sqlc.narg('grace_retry_due')
        )))
 ORDER BY
   CASE WHEN sqlc.narg('pending_change_due')::timestamptz IS NOT NULL THEN pending_change_at END ASC,

@@ -303,10 +303,11 @@ func subscriptionPendingChangeInSelection(s domain.Subscription, sel Subscriptio
 }
 
 // subscriptionGraceRetryInSelection matches the dunning-retry bound of the
-// grace-retry batch (ticket #431) — the Go mirror of the grace_retry_due
-// predicate: an open window, a linked active method, a grace entry old enough
-// for the next scheduled retry (+24 h / +72 h) and no payment created since
-// the entry consuming that boundary. The cross-table halves (the latest
+// grace-retry batch (ticket #431, issue #1521) — the Go mirror of the
+// grace_retry_due predicate: an open window, a linked active method, a grace
+// entry old enough for the next daily retry (entry + 24 h per payment
+// consumed since the entry) with the open window as the only cap. The
+// cross-table halves (the latest
 // grace-entered transition and the payments since it) resolve through the
 // hook fakeStores wires; without it the bound matches nothing, the way a row
 // without a grace-entered transition never matches in SQL.
@@ -887,8 +888,8 @@ func newFakeStores(tariffs ...domain.Tariff) *fakeStores {
 				sinceEntry++
 			}
 		}
-		return (!now.Before(entered.Add(graceRetryFirstAfter)) && sinceEntry == 0) ||
-			(!now.Before(entered.Add(graceRetrySecondAfter)) && sinceEntry <= 1)
+		next := entered.Add(time.Duration(sinceEntry+1) * graceRetryEvery)
+		return !now.Before(next)
 	}
 	return &fakeStores{
 		tariffs:       newFakeTariffRepo(tariffs...),

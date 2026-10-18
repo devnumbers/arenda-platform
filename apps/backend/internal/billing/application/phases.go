@@ -12,8 +12,8 @@ import (
 // reconciliation staleness windows. It is the workers' single seam for time:
 // built on the injected clock, it holds no path to the system clock, so every
 // phase boundary is testable on deterministic time (phases_test.go), and the
-// dunning retry schedule of spec #419 (+24/+72 h inside grace) extends this
-// component instead of the workers.
+// dunning retry schedule of spec #419 (daily retries inside grace, issue
+// #1521) extends this component instead of the workers.
 //
 // One worker tick owns one time snapshot: the scheduling shell reads it once
 // and the phases thread it through their listing and the under-lock re-check,
@@ -129,18 +129,18 @@ func (s *phaseScheduler) scheduledDowngradeChargeDue(now time.Time, limit int) S
 	}
 }
 
-// The dunning retry schedule of spec #419 (ticket #431): two planned
-// auto-retries of the failed renewal charge inside the grace window, +24 h and
-// +72 h from the grace entry. Product constants, not config — no new settings
-// (spec decision); the values are mirrored in the grace_retry_due bound of
+// The dunning retry schedule of spec #419 (ticket #431, issue #1521): the
+// failed renewal charge is retried daily inside the grace window — the next
+// boundary sits at the entry + 24 h per payment the entry has already
+// consumed (a prior retry or a manual one) — and the open window is the only
+// cap, so an admin grace extension keeps the daily retries going (owner
+// decision 18.10.2026). Product constant, not config — no new settings (spec
+// decision); the formula is mirrored by the grace_retry_due bound of
 // ListSubscriptionsBySelection.
-const (
-	graceRetryFirstAfter  = 24 * time.Hour
-	graceRetrySecondAfter = 72 * time.Hour
-)
+const graceRetryEvery = 24 * time.Hour
 
 // graceRetryDue is the dunning batch (ticket #431): grace subscriptions whose
-// next scheduled retry is due — anchored at the latest grace entry, consumed
+// next daily retry is due — anchored at the latest grace entry, consumed
 // by any payment created since it (a prior retry or a manual one) — with the
 // window still open, auto-renew on and an active method linked (without one
 // there is nothing to charge; the phase re-picks the row once the user binds

@@ -45,9 +45,15 @@ const (
 	// first retry boundary (+24 h from the grace entry, one hour of slack),
 	// keeping the window open — the next tick charges the retry.
 	TimeShiftPresetRetryFirstDue TimeShiftPreset = "retry_24h_due"
-	// TimeShiftPresetRetrySecondDue lands the dunning anchor past the second
-	// retry boundary (+72 h from the grace entry, one hour of slack).
+	// TimeShiftPresetRetrySecondDue lands the dunning anchor past the +72 h
+	// boundary from the grace entry (the third daily attempt of the standard
+	// week, one hour of slack).
 	TimeShiftPresetRetrySecondDue TimeShiftPreset = "retry_72h_due"
+	// TimeShiftPresetRetryLastDue lands the dunning anchor past the final
+	// daily boundary of the standard week (+144 h from the grace entry, one
+	// hour of slack, issue #1521) — the boundary the unextended window ends
+	// at, so the preset is meaningful chiefly on an admin-extended window.
+	TimeShiftPresetRetryLastDue TimeShiftPreset = "retry_last_due"
 	// TimeShiftPresetReminderWindow lands the grace deadline a day out —
 	// comfortably inside the reminder window
 	// [grace_end − GraceExpiryReminderBefore, grace_end) — so the next tick
@@ -59,20 +65,22 @@ const (
 func (p TimeShiftPreset) valid() bool {
 	switch p {
 	case TimeShiftPresetPeriodExpired, TimeShiftPresetRetryFirstDue,
-		TimeShiftPresetRetrySecondDue, TimeShiftPresetReminderWindow:
+		TimeShiftPresetRetrySecondDue, TimeShiftPresetRetryLastDue, TimeShiftPresetReminderWindow:
 		return true
 	}
 	return false
 }
 
 // The preset anchors, relative to the shift moment: the dunning boundaries
-// mirror the +24 h/+72 h schedule (graceRetryFirstAfter/SecondAfter) with an
-// hour of slack so the boundary is comfortably due when the tick runs; the
-// expired boundary sits an hour into the past; the reminder target keeps a
-// full day of window ahead.
+// mirror the daily retry schedule (graceRetryEvery) with an hour of slack so
+// the boundary is comfortably due when the tick runs; retry_last_due lands
+// the final boundary of the standard week (+144 h — the window's seventh day
+// belongs to the expiry phase); the expired boundary sits an hour into the
+// past; the reminder target keeps a full day of window ahead.
 const (
 	timeShiftRetryFirstAnchor  = -25 * time.Hour
 	timeShiftRetrySecondAnchor = -73 * time.Hour
+	timeShiftRetryLastAnchor   = -145 * time.Hour
 	timeShiftExpiredTarget     = -1 * time.Hour
 	timeShiftReminderTarget    = 24 * time.Hour
 )
@@ -183,20 +191,16 @@ func (s *SubscriptionService) resolveTimeShift(
 				domain.ErrInvalidSubscriptionState)
 		}
 		return now.Add(timeShiftExpiredTarget).Sub(*sub.ValidUntil), nil
-	case TimeShiftPresetRetryFirstDue, TimeShiftPresetRetrySecondDue:
+	case TimeShiftPresetRetryFirstDue, TimeShiftPresetRetrySecondDue, TimeShiftPresetRetryLastDue:
 		if sub.Status != domain.SubscriptionStatusGrace {
 			return 0, fmt.Errorf("%w: the retry presets re-anchor a grace window, the subscription is %s",
 				domain.ErrInvalidSubscriptionState, sub.Status)
-		}
-		target := timeShiftRetryFirstAnchor
-		if req.Preset == TimeShiftPresetRetrySecondDue {
-			target = timeShiftRetrySecondAnchor
 		}
 		anchor, err := latestGraceEntry(ctx, stores, sub.ID)
 		if err != nil {
 			return 0, err
 		}
-		delta := now.Add(target).Sub(anchor.CreatedAt)
+		delta := now.Add(retryPresetAnchor(req.Preset)).Sub(anchor.CreatedAt)
 		if !sub.ValidUntil.Add(delta).After(now) {
 			return 0, fmt.Errorf("%w: the shift would close the grace window; run the reminder or expiry preset",
 				domain.ErrInvalidSubscriptionState)
@@ -214,6 +218,21 @@ func (s *SubscriptionService) resolveTimeShift(
 		return now.Add(timeShiftReminderTarget).Sub(*sub.ValidUntil), nil
 	default:
 		return 0, fmt.Errorf("%w: unknown preset %q", domain.ErrInvalidTimeShift, req.Preset)
+	}
+}
+
+// retryPresetAnchor maps the retry presets to their anchors relative to the
+// shift moment (the constants block above). The default is unreachable for
+// valid requests — the guard case in resolveTimeShift admits only the three
+// retry presets here — and falls to the first boundary.
+func retryPresetAnchor(preset TimeShiftPreset) time.Duration {
+	switch preset {
+	case TimeShiftPresetRetrySecondDue:
+		return timeShiftRetrySecondAnchor
+	case TimeShiftPresetRetryLastDue:
+		return timeShiftRetryLastAnchor
+	default:
+		return timeShiftRetryFirstAnchor
 	}
 }
 

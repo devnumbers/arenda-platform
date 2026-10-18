@@ -470,11 +470,11 @@ func TestSubscriptionRepository_Integration_ReminderFlagDropsRow(t *testing.T) {
 }
 
 // TestSubscriptionRepository_Integration_GraceRetrySelection pins the dunning
-// selection's SQL predicate (ticket #431) to the Go mirror of phases_test: the
-// batch keeps grace subscriptions whose next scheduled retry (+24 h / +72 h
-// from the latest grace-entered transition) is due and not consumed by a
-// payment created since the entry, with auto-renew on, an active method linked
-// and the window still open.
+// selection's SQL predicate (ticket #431, issue #1521) to the Go mirror of
+// phases_test: the batch keeps grace subscriptions whose next daily retry
+// (the latest grace-entered transition + 24 h per payment consumed since the
+// entry) is due, with auto-renew on, an active method linked and the window
+// still open — the open window is the only cap.
 func TestSubscriptionRepository_Integration_GraceRetrySelection(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
@@ -539,10 +539,20 @@ func TestSubscriptionRepository_Integration_GraceRetrySelection(t *testing.T) {
 	}
 
 	firstDue := seedEpisode("first due", 25*time.Hour, 0, nil)
-	secondDue := seedEpisode("second due", 73*time.Hour, 1, nil)
+	// One payment consumed the first boundary; the next daily boundary
+	// (+48 h from the entry) is due exactly now.
+	secondDue := seedEpisode("second due", 48*time.Hour, 1, nil)
+	// Two payments consumed the first two boundaries; the third (+72 h) is
+	// due — the boundaries missed while the worker was down catch up one
+	// attempt per tick.
+	catchUp := seedEpisode("catch up", 97*time.Hour, 2, nil)
 	tooYoung := seedEpisode("too young", 23*time.Hour, 0, nil)
-	firstConsumed := seedEpisode("first consumed", 25*time.Hour, 1, nil)
-	spent := seedEpisode("spent", 73*time.Hour, 2, nil)
+	// One payment since the entry, the next daily boundary (+48 h) still
+	// ahead: nothing is due between the boundaries.
+	betweenBoundaries := seedEpisode("between boundaries", 47*time.Hour, 1, nil)
+	// Six payments consumed the six daily boundaries (+24..+144 h) of the
+	// standard week; the open window caps the schedule — no seventh attempt.
+	windowCapped := seedEpisode("window capped", 145*time.Hour, 6, nil)
 	optedOut := seedEpisode("auto-renew off", 25*time.Hour, 0, func(s *domain.Subscription) {
 		s.AutoRenewEnabled = false
 	})
@@ -560,7 +570,7 @@ func TestSubscriptionRepository_Integration_GraceRetrySelection(t *testing.T) {
 		Limit:            100,
 	}
 	// The batch order follows the grace window clock: the older episode first.
-	requireSelectionUserIDs(t, h, sel, []uuid.UUID{secondDue, firstDue})
+	requireSelectionUserIDs(t, h, sel, []uuid.UUID{catchUp, secondDue, firstDue})
 
 	// The under-lock re-check narrows to the due row and answers miss for
 	// every other state.
@@ -569,7 +579,7 @@ func TestSubscriptionRepository_Integration_GraceRetrySelection(t *testing.T) {
 	if found, err := h.subscriptions.List(h.ctx(), narrowed); err != nil || len(found) != 1 {
 		t.Errorf("List(narrowed to due) = %d (err %v), want 1", len(found), err)
 	}
-	for _, id := range []uuid.UUID{tooYoung, firstConsumed, spent, optedOut, windowOver} {
+	for _, id := range []uuid.UUID{tooYoung, betweenBoundaries, windowCapped, optedOut, windowOver} {
 		narrowed.UserID = &id
 		if found, err := h.subscriptions.List(h.ctx(), narrowed); err != nil || len(found) != 0 {
 			t.Errorf("List(narrowed to %s) = %d (err %v), want 0", id, len(found), err)
