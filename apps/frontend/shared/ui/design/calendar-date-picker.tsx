@@ -28,11 +28,14 @@ import {
   CALENDAR_FEED_BACKWARD_SEED,
   CALENDAR_FEED_CHUNK,
   calendarDayDisabled,
+  calendarFeedGrowth,
   calendarFeedWindow,
   calendarMonthIndex,
   calendarMonthOf,
   calendarMonthOfIndex,
   calendarPastFloor,
+  type CalendarFeedInflight,
+  type CalendarFeedTrigger,
   type IsoDate,
   type IsoRange,
   type IsoRangeDraft,
@@ -139,15 +142,6 @@ const FEED_TAIL_PX = 136;
  * кнопка «Выбрать» тоже (StickyBottomBar, универсальное правило планшета:
  * нижние панели во всю ширину, на ПК ≥1024 — колонка 560; решение
  * владельца 28.09 после аудита #877, канон DESIGN.md §5). */
-
-/** Порог дорисовки будущего: до нижнего края осталось ~5 экранов —
- * запас на флик (план 042, feel-check владельца 16.10). */
-const APPEND_THRESHOLD_PX = 1500;
-
-/** Порог дорисовки истории (prepend сверху): до верхнего края осталось
- * меньше ~8 экранов (планы 042/051; позицию при prepend'е держит
- * библиотека — план 054). */
-const PREPEND_THRESHOLD_PX = 3000;
 
 function monthKey(year: number, month0: number): string {
   return `${year}-${month0}`;
@@ -480,15 +474,49 @@ export function CalendarDatePicker({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [monthPickerOpen, onClose]);
 
-  // Дорисовка ленты (план 054): история — prepend сверху (позицию держит
-  // библиотека по ключам, anchorTo: 'end'), будущее — append снизу за
-  // пределами вьюпорта. Жёсткие края (пол прошлого, maxDate) не растут.
-  // Рост — только в направлении жеста (append при движении вниз, prepend
-  // при движении вверх) и одна порция на приближение к краю: записи
-  // позиции самой библиотекой (якорные подстройки, репро 18.10 — каскад
-  // append'ов и увод ленты в 2324 год) рост не триггерят.
-  const prependedRef = useRef(false);
-  const appendedRef = useRef(false);
+  // Дорисовка ленты (план 055): решения — чистый автомат
+  // calendarFeedGrowth (гибрид «направление + стена»), рост цепочкой,
+  // гейт «в полёте». Гистерезис 054 «одна порция на приближение» снят: на
+  // телефоне флик инерции обгонял дорисовку, лента билась в scrollTop 0 —
+  // там scroll-событий не бывает вовсе, а флаг, сбрасываемый только
+  // выходом из зоны, запирал все следующие жесты (репро владельца 19.10:
+  // стена «апрель 2025», ПК чисто). Стену предупреждают и лечат жестами:
+  // touchstart/wheel НА стене доращивают ленту до всякого scroll-события.
+  // Каскад «2324 год» (репро 18.10) невозможен по построению: каждая
+  // порция выносит позицию из зоны (~6 месяцев выше порогов), append
+  // позицию не трогает (followOnAppend: false, scrollEndThreshold: -1).
+  const inflightRef = useRef<CalendarFeedInflight>('none');
+  // Гейт «в полёте» сбрасывается самим коммитом окна — детерминированно,
+  // не позицией: следующее событие решает по свежей геометрии.
+  useIsomorphicLayoutEffect(() => {
+    inflightRef.current = 'none';
+  }, [firstMonth, monthsCount]);
+  const requestFeedGrowth = (trigger: CalendarFeedTrigger, direction: 'up' | 'down' | null): void => {
+    const list = scrollRef.current;
+    if (list === null) {
+      return;
+    }
+    const decision = calendarFeedGrowth({
+      scrollTop: list.scrollTop,
+      clientHeight: list.clientHeight,
+      scrollHeight: list.scrollHeight,
+      startEdgeOpen: startEdge === null,
+      forwardEdgeOpen: forwardEdge === null,
+      inflight: inflightRef.current,
+      trigger,
+      direction,
+    });
+    if (decision === 'none') {
+      return;
+    }
+    inflightRef.current = decision;
+    if (decision === 'prepend') {
+      setFirstMonth((month) =>
+        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_CHUNK),
+      );
+    }
+    setMonthsCount((count) => count + CALENDAR_FEED_CHUNK);
+  };
   const lastScrollSt = useRef<number | null>(null);
   const handleScroll = (): void => {
     const list = scrollRef.current;
@@ -496,33 +524,23 @@ export function CalendarDatePicker({
       return;
     }
     const st = list.scrollTop;
+    // Первый кадр (placement-скролл открытия, канон 052) — без решений
+    // о росте: позицию ставит scrollToIndex, а не жест.
     const previousSt = lastScrollSt.current;
     lastScrollSt.current = st;
-    // Первый кадр (scrollToEnd/initialOffset) — без решений о росте.
-    if (previousSt === null) {
+    if (previousSt === null || st === previousSt) {
       return;
     }
-    const nearTop = st <= PREPEND_THRESHOLD_PX;
-    if (!nearTop) {
-      prependedRef.current = false;
-    }
-    const nearEnd =
-      st + list.clientHeight >= list.scrollHeight - APPEND_THRESHOLD_PX;
-    if (!nearEnd) {
-      appendedRef.current = false;
-    }
-    if (startEdge === null && nearTop && st < previousSt - 1 && !prependedRef.current) {
-      prependedRef.current = true;
-      setFirstMonth((month) =>
-        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_CHUNK),
-      );
-      setMonthsCount((count) => count + CALENDAR_FEED_CHUNK);
+    requestFeedGrowth('scroll', st < previousSt ? 'up' : 'down');
+  };
+  const handleTouchStart = (): void => {
+    requestFeedGrowth('touch', null);
+  };
+  const handleWheel = (event: React.WheelEvent): void => {
+    if (event.deltaY === 0) {
       return;
     }
-    if (forwardEdge === null && nearEnd && st > previousSt + 1 && !appendedRef.current) {
-      appendedRef.current = true;
-      setMonthsCount((count) => count + CALENDAR_FEED_CHUNK);
-    }
+    requestFeedGrowth('wheel', event.deltaY < 0 ? 'up' : 'down');
   };
 
   /** Прыжок по чипу: месяц окна — скроллом по точным высотам; за верхним
@@ -597,6 +615,8 @@ export function CalendarDatePicker({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
+        onTouchStart={handleTouchStart}
+        onWheel={handleWheel}
         className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [overflow-anchor:none]"
       >
         <div
@@ -733,9 +753,9 @@ export type CalendarRangePickerProps = {
  * #477 на общий компонент; визуал шапки и ячеек — 1:1 с ним, Figma
  * 1495-64015, 1502-65940/66060/66758, 1495-64165). Отличия от одиночного
  * пикера продиктованы операционной историей: лента бесконечна назад —
- * месяцы дорисовываются append'ом вниз при дотягивании к нижнему краю
- * (план 053: позиция прокрутки не сдвигается вовсе, записей в скролл не
- * существует), вперёд — только текущий месяц с двумя
+ * история дорисовывается prepend'ом сверху (план 054: позицию держит
+ * библиотека по ключам; план 055: цепочкой, жесты у стены доращивают),
+ * вперёд — только текущий месяц с двумя
  * приглушёнными будущими; дни позже «сегодня» недоступны (операции —
  * только paid, резолюция #474). Тап задаёт границу, второй тап завершает
  * диапазон в любую сторону (5→1 = 1–5, решение владельца 2026-09-05), по
@@ -896,12 +916,44 @@ export function CalendarRangePicker({
     return () => window.clearTimeout(rangeGuardTimer);
   }, [monthsCount, firstMonth, firstIdx, columnWidth, rangeRowHeights, virtualizer]);
 
-  // Дорисовка ленты (план 054): история — prepend сверху (позицию держит
-  // библиотека по ключам, anchorTo: 'end'), бесконечно; будущее — жёсткий
-  // край (пара приглушённых за «сегодня»), не растёт. Рост — только при
-  // движении вверх и одна порция на приближение (страховка от петель
-  // якорных подстроек, репро 18.10).
-  const prependedRef = useRef(false);
+  // Дорисовка ленты (план 055): тот же автомат, что у одиночного пикера —
+  // гибрид «направление + стена», рост цепочкой, гейт «в полёте» на
+  // коммите окна, жесты (touchstart/wheel) доращивают НА стене. История —
+  // prepend сверху (позицию держит библиотека по ключам, anchorTo: 'end'),
+  // бесконечно; будущее — жёсткий край (пара приглушённых за «сегодня»),
+  // не растёт: forwardEdge всегда задан, автомат его сторону не открывает.
+  const inflightRef = useRef<CalendarFeedInflight>('none');
+  useIsomorphicLayoutEffect(() => {
+    inflightRef.current = 'none';
+  }, [firstMonth, monthsCount]);
+  const requestFeedGrowth = (trigger: CalendarFeedTrigger, direction: 'up' | 'down' | null): void => {
+    const container = scrollRef.current;
+    if (container === null) {
+      return;
+    }
+    const decision = calendarFeedGrowth({
+      scrollTop: container.scrollTop,
+      clientHeight: container.clientHeight,
+      scrollHeight: container.scrollHeight,
+      startEdgeOpen: feedWindow.startEdge === null,
+      // Низ жёсткий по контракту rangeFeedWindow (тип forwardEdge непуст):
+      // будущее закрыто, автомат эту сторону не открывает.
+      forwardEdgeOpen: false,
+      inflight: inflightRef.current,
+      trigger,
+      direction,
+    });
+    if (decision === 'none') {
+      return;
+    }
+    inflightRef.current = decision;
+    if (decision === 'prepend') {
+      setFirstMonth((month) =>
+        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_CHUNK),
+      );
+    }
+    setMonthsCount((count) => count + CALENDAR_FEED_CHUNK);
+  };
   const lastScrollSt = useRef<number | null>(null);
   const handleScroll = (): void => {
     const container = scrollRef.current;
@@ -909,22 +961,22 @@ export function CalendarRangePicker({
       return;
     }
     const st = container.scrollTop;
+    // Первый кадр (placement-скролл открытия) — без решений о росте.
     const previousSt = lastScrollSt.current;
     lastScrollSt.current = st;
-    if (previousSt === null) {
+    if (previousSt === null || st === previousSt) {
       return;
     }
-    const nearTop = st <= PREPEND_THRESHOLD_PX;
-    if (!nearTop) {
-      prependedRef.current = false;
+    requestFeedGrowth('scroll', st < previousSt ? 'up' : 'down');
+  };
+  const handleTouchStart = (): void => {
+    requestFeedGrowth('touch', null);
+  };
+  const handleWheel = (event: React.WheelEvent): void => {
+    if (event.deltaY === 0) {
+      return;
     }
-    if (nearTop && st < previousSt - 1 && !prependedRef.current) {
-      prependedRef.current = true;
-      setFirstMonth((month) =>
-        calendarMonthOfIndex(calendarMonthIndex(month) - CALENDAR_FEED_CHUNK),
-      );
-      setMonthsCount((count) => count + CALENDAR_FEED_CHUNK);
-    }
+    requestFeedGrowth('wheel', event.deltaY < 0 ? 'up' : 'down');
   };
 
   /** Прыжок по чипу: месяц окна — скроллом по точным высотам; за верхним
@@ -1027,6 +1079,8 @@ export function CalendarRangePicker({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
+        onTouchStart={handleTouchStart}
+        onWheel={handleWheel}
         className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [overflow-anchor:none]"
       >
         <div

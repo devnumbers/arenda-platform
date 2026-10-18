@@ -358,6 +358,103 @@ export function calendarFeedWindow(args: {
   };
 }
 
+/** Порог дорисовки будущего: до нижнего края осталось ~5 экранов — запас
+ * на флик (план 042, feel-check владельца 16.10). */
+export const CALENDAR_FEED_APPEND_THRESHOLD_PX = 1500;
+
+/** Порог дорисовки истории (prepend сверху): до верхнего края осталось
+ * меньше ~8 экранов (планы 042/051; позицию при prepend'е держит
+ * библиотека — план 054). */
+export const CALENDAR_FEED_PREPEND_THRESHOLD_PX = 3000;
+
+/** Допуск «на стене» для жестов: резинка iOS даёт отрицательный scrollTop
+ * на отскоке, scrollHeight бывает дробным — стены сравниваются с запасом
+ * 1px. */
+export const CALENDAR_FEED_WALL_EPS_PX = 1;
+
+/** Порция дорисовки, о решении которой автомат уже сказал, а коммит окна
+ * ещё не прошёл (гейт «в полёте»). */
+export type CalendarFeedInflight = 'none' | 'prepend' | 'append';
+
+/** Решение автомата дорисовки. */
+export type CalendarFeedGrowth = 'none' | 'prepend' | 'append';
+
+/** Откуда автомат увидел событие: scroll-событие (направление = знак
+ * дельты), касание (направления не имеет) или колесо (знак deltaY). */
+export type CalendarFeedTrigger = 'scroll' | 'touch' | 'wheel';
+
+/** Автомат дорисовки ленты календаря (план 055) — чистое решение; компонент
+ * кормит им все триггеры. Гибрид «направление + стена», починка репро
+ * владельца 19.10 «апрель 2025»:
+ *
+ * — **scroll** (направление дельты обязательно): вверх — prepend в зоне
+ * порога (3000px), вниз — append в зоне порога (1500px). Направление
+ * отсекает паразитный рост на коротких лентах, где зоны перекрываются
+ * (регресс e2e визарда платежа «прошлое закрыто и лента не растёт назад»:
+ * скролл вверх от жёсткого верха проваливался в append короткого
+ * открытого низа). Цепочка внутри одного флика жива: у инерции направление
+ * постоянно, коммит окна открывает гейт «в полёте», следующее событие
+ * решает по свежей геометрии.
+ *
+ * — **touchstart / wheel** (хозяева стены): у упора scroll-событий не
+ * бывает вовсе — инерция телефона, обогнав дорисовку, умирает об стену,
+ * и только жест может доращить ленту (репро «стена апрель 2025»; ПК чисто:
+ * колесо не перескакивает буфер одним жестом). Жест действует только НА
+ * стене (±1px) и только своей стороны: касание и wheel вверх открывают
+ * верхнюю, wheel вниз — нижнюю; чужую сторону у противоположной стены жест
+ * не трогает — инертность жёсткого края (контракт «прошлое закрыто»)
+ * важнее упреждающего роста.
+ *
+ * Гейт «в полёте» вместо гистерезиса 054 «одна порция на приближение»:
+ * флаг, сбрасываемый только выходом из зоны, навсегда запирал цепочку
+ * после смерти инерции в зоне. Каскад «2324 год» (репро 18.10) невозможен
+ * по построению: каждая порция выносит позицию из зоны (~6 месяцев выше
+ * порогов), append позицию не трогает вовсе (followOnAppend: false,
+ * scrollEndThreshold: -1). Жёсткие края (пол прошлого, maxDate) не растут:
+ * их стороны приходят закрытыми (startEdgeOpen/forwardEdgeOpen = false). */
+export function calendarFeedGrowth(args: {
+  readonly scrollTop: number;
+  readonly clientHeight: number;
+  readonly scrollHeight: number;
+  readonly startEdgeOpen: boolean;
+  readonly forwardEdgeOpen: boolean;
+  readonly inflight: CalendarFeedInflight;
+  readonly trigger: CalendarFeedTrigger;
+  readonly direction: 'up' | 'down' | null;
+}): CalendarFeedGrowth {
+  if (args.inflight !== 'none') {
+    return 'none';
+  }
+  if (args.trigger === 'scroll') {
+    if (
+      args.direction === 'up'
+      && args.startEdgeOpen
+      && args.scrollTop <= CALENDAR_FEED_PREPEND_THRESHOLD_PX
+    ) {
+      return 'prepend';
+    }
+    if (
+      args.direction === 'down'
+      && args.forwardEdgeOpen
+      && args.scrollTop + args.clientHeight
+        >= args.scrollHeight - CALENDAR_FEED_APPEND_THRESHOLD_PX
+    ) {
+      return 'append';
+    }
+    return 'none';
+  }
+  const atTop = args.scrollTop <= CALENDAR_FEED_WALL_EPS_PX;
+  const atEnd =
+    args.scrollTop + args.clientHeight >= args.scrollHeight - CALENDAR_FEED_WALL_EPS_PX;
+  if (args.direction !== 'down' && atTop && args.startEdgeOpen) {
+    return 'prepend';
+  }
+  if (args.direction !== 'up' && atEnd && args.forwardEdgeOpen) {
+    return 'append';
+  }
+  return 'none';
+}
+
 /** Непрерывные отрезки подложки диапазона внутри одной недели календаря:
  * серые «пилюли» от границы до границы — ряды целиком в диапазоне и
  * частичные ряды краёв. Индексы 0-based включительно по колонкам недели. */
