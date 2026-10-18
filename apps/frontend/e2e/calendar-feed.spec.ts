@@ -170,3 +170,57 @@ test('дорисовка месяцев срабатывает с запасом
   // «упор → дорисовка» — регресс.
   expect(wallFrames, `кадров на верхнем упоре в полёте; ${diag}`).toBeLessThanOrEqual(4);
 });
+
+// Репро владельца 19.10 («стена апрель 2025»): флик инерции телефона
+// обгонял дорисовку, лента билась в scrollTop 0 — у упора scroll-событий
+// не бывает вовсе, а флаг гистерезиса 054, сбрасываемый только выходом из
+// зоны, запирал все следующие жесты (ПК чисто: колесо не перескакивает
+// буфер одним жестом). Контракт 055: после смерти инерции об упор лента
+// доращивается от самого упора — жест (touchstart/wheel) у стены вызывает
+// prepend без «джиги» вниз за порог.
+test('стена не держит: после упора инерции жест вверх доращивает ленту', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(UI_KIT);
+  await expect(page.getByRole('button', { name: 'Открыть пикер периода' })).toBeVisible();
+  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: 'Открыть пикер периода' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Выберите период' });
+  await expect(dialog).toBeVisible();
+  await page.waitForTimeout(800);
+
+  const cont = dialog.locator('.overflow-y-auto');
+  const box = await cont.boundingBox();
+  if (box === null) {
+    throw new Error('лента пикера периода не найдена');
+  }
+
+  // Слэм: инерция обогнала дорисовку и умерла о верхний упор —
+  // programmatically ставим ленту в то состояние, в котором телефон
+  // застревал навсегда.
+  await cont.evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await page.waitForTimeout(300);
+
+  const shBefore = await cont.evaluate((el) => el.scrollHeight);
+
+  // Пользователь продолжает фликать вверх от упора — колесо над лентой.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.5);
+  for (let f = 0; f < 6; f += 1) {
+    await page.mouse.wheel(0, -800);
+    await page.waitForTimeout(200);
+  }
+  await page.waitForTimeout(600);
+
+  const after = await cont.evaluate((el) => ({
+    st: Math.round(el.scrollTop),
+    sh: el.scrollHeight,
+  }));
+  const shGrowth = after.sh - shBefore;
+  const diag = `before sh=${shBefore} after=${JSON.stringify(after)}`;
+  // Лента доращена от самого упора: жест у стены вызвал prepend без
+  // отскролла вниз за порог (старый контракт требовал джигу >3000px).
+  expect(shGrowth, `рост ленты от упора; ${diag}`).toBeGreaterThanOrEqual(1000);
+  // Позиция отошла от упора: контент появился над вьюпортом.
+  expect(after.st, `позиция отошла от упора; ${diag}`).toBeGreaterThan(0);
+});
