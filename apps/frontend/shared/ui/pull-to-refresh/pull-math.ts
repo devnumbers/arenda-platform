@@ -19,7 +19,9 @@
  * The component (PullToRefresh.tsx) runs the same constants through
  * `animate()` of the `motion` library (semi-implicit spring integrator);
  * `springPeak` below is the closed form of that model (mass = 1), so the
- * flick decision matches what the animation will actually do.
+ * flick decision matches what the animation will actually do. Сюда же
+ * живёт чистый словарь гейтинга жеста (решение направления, чтение
+ * overflow цепочки цели) — DOM читает компонент, решает предикат.
  */
 
 /** Armed threshold: visual rubber-band offset that arms the refresh. */
@@ -33,9 +35,49 @@ export const SPRING_STIFFNESS = 200;
 export const SPRING_DAMPING = 26;
 /** Velocity samples older than this stop counting (ms). */
 export const VELOCITY_WINDOW_MS = 100;
+/** Hysteresis before the gesture intent commits (~10px — канон жестов:
+ *  направление фиксируется по доминанте оси, пока движение не дошло до
+ *  порога, ни один жест не решён). */
+export const PTR_INTENT_LOCK_PX = 10;
 /** The reveal completes this far into the threshold (native feel: the
  *  control is fully visible about half-way to the trigger). */
 const REVEAL_THRESHOLD_FRACTION = 0.5;
+
+/** Итог разрешения направления касания. `horizontal` для PTR мёртв: жест
+ *  завершается (свайпы каруселей/чипов не должны тянуть контент). */
+export type GestureIntent = 'undecided' | 'vertical' | 'horizontal';
+
+/**
+ * Разрешение направления по суммарному смещению от точки касания. Вертикаль
+ * — когда |dy| достигла гистерезиса и доминирует; при равенстве осей
+ * (|dx| = |dy| ≥ порога) — горизонталь: fail-closed, неоднозначный жест не
+ * захватываем. Знак не учитывается: тягу вверх отменяет компонент (жест
+ * кончается), а не разрешатель направления.
+ */
+export function resolveGestureIntent(dx: number, dy: number): GestureIntent {
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    if (Math.max(absX, absY) < PTR_INTENT_LOCK_PX) return 'undecided';
+    return absY > absX ? 'vertical' : 'horizontal';
+}
+
+/** Чтение overflow одной поверхности цепочки касания (getComputedStyle). */
+export type OverflowReading = { readonly x: string; readonly y: string };
+
+/**
+ * Перехватывает ли цепочка цели внутренний скроллер (конвенция изоляции
+ * скроллеров, карта #1416): auto/scroll по любой оси у любого элемента
+ * между точкой касания и корнем документа означает, что жест принадлежит
+ * внутренней ленте/шиту/пикеру — а не документу, который тянет PTR.
+ * Корневые значения (visible на документной поверхности, clip на html/body,
+ * hidden под локом модальной поверхности) перехватом не считаются: html/body —
+ * сам документный скроллер, а «открыта модальная поверхность» решается в
+ * компоненте отдельной проверкой лока. */
+export function interceptedByInnerScroller(overflows: ReadonlyArray<OverflowReading>): boolean {
+    return overflows.some(
+        ({ x, y }) => x === 'auto' || x === 'scroll' || y === 'auto' || y === 'scroll',
+    );
+}
 
 /** Native rubber band: visual offset for `dragPx` beyond the edge. */
 export function rubberBandOffset(dragPx: number, viewportPx: number): number {

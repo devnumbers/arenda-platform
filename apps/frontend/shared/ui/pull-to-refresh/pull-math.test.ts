@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    PTR_INTENT_LOCK_PX,
     PTR_PIN_PX,
     PTR_THRESHOLD_PX,
     RUBBER_BAND_C,
@@ -8,6 +9,8 @@ import {
     VELOCITY_WINDOW_MS,
     createVelocityTracker,
     flickTriggersRefresh,
+    interceptedByInnerScroller,
+    resolveGestureIntent,
     rubberBandOffset,
     spinnerReveal,
     springPeak,
@@ -140,5 +143,64 @@ describe('константы канона', () => {
     it('порог 70px, пин 60px — высота UIRefreshControl', () => {
         expect(PTR_THRESHOLD_PX).toBe(70);
         expect(PTR_PIN_PX).toBe(60);
+    });
+});
+
+describe('resolveGestureIntent — вертикальное намерение с гистерезисом', () => {
+    it('hysteresis ~10px: движение меньше порога не решает', () => {
+        expect(PTR_INTENT_LOCK_PX).toBe(10);
+        expect(resolveGestureIntent(0, 9)).toBe('undecided');
+        expect(resolveGestureIntent(9, 0)).toBe('undecided');
+        expect(resolveGestureIntent(3, 3)).toBe('undecided');
+        expect(resolveGestureIntent(0, 0)).toBe('undecided');
+    });
+
+    it('вертикаль тяги: |dy| доминирует и достигла порога', () => {
+        expect(resolveGestureIntent(2, 12)).toBe('vertical');
+        expect(resolveGestureIntent(0, 10)).toBe('vertical');
+        // направление вниз/вверх не различаем — отмену вверх делает компонент
+        expect(resolveGestureIntent(0, -12)).toBe('vertical');
+    });
+
+    it('горизонтальный жест мёртв для PTR: |dx| доминирует', () => {
+        expect(resolveGestureIntent(12, 2)).toBe('horizontal');
+        expect(resolveGestureIntent(300, 20)).toBe('horizontal');
+        expect(resolveGestureIntent(-300, -20)).toBe('horizontal');
+    });
+
+    it('ничья |dx| = |dy| >= порога — горизонталь (fail-closed: не захватываем)', () => {
+        expect(resolveGestureIntent(10, 10)).toBe('horizontal');
+        expect(resolveGestureIntent(15, 15)).toBe('horizontal');
+    });
+});
+
+describe('interceptedByInnerScroller — жест из внутреннего скроллера не наш', () => {
+    it('auto/scroll по любой оси в цепочке перехватывает жест', () => {
+        expect(interceptedByInnerScroller([{ x: 'visible', y: 'auto' }])).toBe(true);
+        expect(interceptedByInnerScroller([{ x: 'scroll', y: 'visible' }])).toBe(true);
+        expect(
+            interceptedByInnerScroller([
+                { x: 'visible', y: 'visible' },
+                { x: 'visible', y: 'auto' },
+            ]),
+        ).toBe(true);
+    });
+
+    it('лента календаря — auto по Y при contain-overscroll: перехват', () => {
+        expect(
+            interceptedByInnerScroller([{ x: 'visible', y: 'auto' }, { x: 'visible', y: 'visible' }]),
+        ).toBe(true);
+    });
+
+    it('документная поверхность (visible/clip/hidden) жест не перехватывает', () => {
+        expect(interceptedByInnerScroller([{ x: 'visible', y: 'visible' }])).toBe(false);
+        // html/body: overflow-x clip — это корень документа, не внутренний скроллер
+        expect(interceptedByInnerScroller([{ x: 'clip', y: 'visible' }])).toBe(false);
+        // лок модальной поверхности — hidden, решает отдельная проверка лока
+        expect(interceptedByInnerScroller([{ x: 'hidden', y: 'hidden' }])).toBe(false);
+    });
+
+    it('пустая цепочка — жест свободен', () => {
+        expect(interceptedByInnerScroller([])).toBe(false);
     });
 });
