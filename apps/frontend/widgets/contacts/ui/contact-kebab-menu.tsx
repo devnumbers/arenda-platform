@@ -1,64 +1,44 @@
 'use client';
 
 import type { JSX } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Kebab, TrashBin } from '@/shared/assets/icons';
-import { IconButton } from '@/shared/ui/design';
+import { Edit, Kebab, TrashBin } from '@/shared/assets/icons';
+import { IconButton, Menu, MenuContent, MenuItem, MenuTrigger } from '@/shared/ui/design';
 
 /**
- * Кебаб-меню карточки контакта (#510 → перекомпоновка #1333, макет
- * 3304:75726): тап по ⋮ в шапке открывает привязанное к кнопке меню —
- * белая карточка со скруглением и тенью, пункт «Удалить»
- * (Icon/R/TrashBin). Единственный пункт — по решению карты #1332:
- * правка переехала в тап по карточке «Информация», за кебабом — только
- * удаление. Примитив — Radix DropdownMenu (ADR 0050): клавиатура, фокус
- * и закрытие по клику вне/Escape — из коробки. Первый примитив
- * DropdownMenu в дизайн-контуре — при втором потребителе переезжает в
- * shared/ui/design.
+ * Кебаб-меню карточки контакта (карта #510 → перекомпоновка #1333; решение
+ * владельца 18.10): тап по ⋮ в шапке — «Изменить контакт» и danger-пункт
+ * «Удалить» (канон опасных пунктов — «Отозвать доступ» экрана участника).
+ * Правка — единственным входом через меню: прежний тап по карточке
+ * «Информация» больше не правит. Примитив — канон Menu дизайн-слоя
+ * (shared/ui/design/menu.tsx, как на деталке объекта, участнике и истории
+ * платежа): клавиатура, фокус и закрытие по клику вне/Escape — из Radix,
+ * стили и размеры иконок — из дизайн-слоя. collisionPadding 24 — прежний
+ * отступ от краёв вьюпорта (кебаб у правого верхнего угла экрана).
  */
 export function ContactKebabMenu({
+  onEdit,
   onDelete,
 }: {
+  readonly onEdit: () => void;
   readonly onDelete: () => void;
 }): JSX.Element {
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
+    <Menu>
+      <MenuTrigger asChild>
         <IconButton icon={<Kebab className="h-6 w-6" />} label="Меню контакта" />
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          sideOffset={4}
-          collisionPadding={24}
-          className="z-50 min-w-[250px] rounded-3xl bg-white p-2 shadow-[0_8px_32px_rgba(23,26,28,0.16)] outline-none"
+      </MenuTrigger>
+      <MenuContent collisionPadding={24}>
+        <MenuItem icon={<Edit className="h-6 w-6" />} onSelect={onEdit}>
+          Изменить контакт
+        </MenuItem>
+        <MenuItem
+          icon={<TrashBin className="h-6 w-6 text-error" />}
+          className="text-error"
+          onSelect={onDelete}
         >
-          <MenuItem onSelect={onDelete} icon={<TrashBin className="h-[18px] w-[17px]" />} label="Удалить" />
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-  );
-}
-
-/** Пункт меню (макет 1424-54725): иконка 24 + заголовок 16/500, строка 48. */
-function MenuItem({
-  onSelect,
-  icon,
-  label,
-}: {
-  readonly onSelect: () => void;
-  readonly icon: JSX.Element;
-  readonly label: string;
-}): JSX.Element {
-  return (
-    <DropdownMenu.Item
-      onSelect={onSelect}
-      className="flex h-12 cursor-pointer select-none items-center gap-3 rounded-2xl px-3 text-base font-medium leading-[18px] text-content outline-none transition-colors data-[highlighted]:bg-surface-muted"
-    >
-      <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center">
-        {icon}
-      </span>
-      {label}
-    </DropdownMenu.Item>
+          Удалить
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
 }
