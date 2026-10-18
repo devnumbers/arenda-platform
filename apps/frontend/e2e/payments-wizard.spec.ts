@@ -495,50 +495,42 @@ test.describe('визард создания платежа', () => {
     const todayCell = dialog.locator('button[aria-current="date"]');
     await expect(todayCell).toHaveCount(1);
 
-    // Якорь у верхней кромки скроллера: секция «сегодня» начинается у верха
-    // вьюпорта ленты, а не на дорисовочной порции над ней (канарейка
-    // якорного скролла открытия).
-    const topGap = await dialog
-      .locator('.overflow-y-auto')
-      .evaluate((scroller) => {
-        const today = scroller.querySelector('button[aria-current="date"]');
-        if (today === null) {
-          throw new Error('сегодняшняя клетка не найдена');
-        }
-        const section = today.closest('section');
-        if (section === null) {
-          throw new Error('секция текущего месяца не найдена');
-        }
-        return section.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-      });
-    expect(topGap).toBeLessThan(100);
-
-    // Досылка вверх ничего не дорисовывает: назад лента идёт только в
-    // безпольном режиме (#1393). Инвариант роста — scrollHeight (счётчик
-    // секций в виртуальной ленте — функция позиции окна, план 052); у
-    // стены якорный месяц вне окна легитимно, возврат к якорю возвращает
-    // «сегодня».
-    const { anchoredSt, shBefore } = await dialog
-      .locator('.overflow-y-auto')
-      .evaluate((scroller) => ({
-        anchoredSt: scroller.scrollTop,
-        shBefore: scroller.scrollHeight,
-      }));
-    await dialog.locator('.overflow-y-auto').evaluate((scroller) => {
-      scroller.scrollTop = 200;
-      scroller.scrollTop = 0;
+    // Открытие — месяц якоря ровно под верхней кромкой (план 054: контракт
+    // бага-2 в раскладке Т-Банка), «сегодня» в кадре.
+    const scroller = dialog.locator('.overflow-y-auto');
+    const topGap = await scroller.evaluate((el) => {
+      const today = el.querySelector('button[aria-current="date"]');
+      if (today === null) {
+        return null;
+      }
+      const section = today.closest('section');
+      if (section === null) {
+        return null;
+      }
+      return section.getBoundingClientRect().top - el.getBoundingClientRect().top;
     });
-    const shAfterWall = await dialog
-      .locator('.overflow-y-auto')
-      .evaluate((scroller) => scroller.scrollHeight);
-    // Субпиксель measureElement даёт ±1px на пересчёте окна; инвариант
-    // #1393 — нет порции (~2200px), не пиксель.
+    expect(topGap, 'секция «сегодня» найдена').not.toBeNull();
+    expect(Math.abs(topGap ?? 999), 'месяц якоря у верхней кромки').toBeLessThanOrEqual(4);
+    await expect(todayCell).toBeVisible();
+
+    // Досылка вверх ничего не дорисовывает: назад лента ограничена полом
+    // «сегодня» (дефолтный режим, контракт #498/#1393). Будущее у пикера
+    // без maxDate бесконечно (план 054) — к нижнему краю лента растёт
+    // легитимно, поэтому стена проверяется только сверху. Инвариант
+    // роста — scrollHeight (счётчик секций — функция позиции окна).
+    const anchoredSt = await scroller.evaluate((el) => el.scrollTop);
+    const shBefore = await scroller.evaluate((el) => el.scrollHeight);
+    await scroller.evaluate((el) => {
+      el.scrollTop = 200;
+      el.scrollTop = 0;
+    });
+    const shAfterWall = await scroller.evaluate((el) => el.scrollHeight);
+    // Субпиксель measureElement даёт ±1px на пересчёте окна; инвариант —
+    // нет порции (~2200px), не пиксель.
     expect(Math.abs(shAfterWall - shBefore)).toBeLessThanOrEqual(2);
-    await dialog
-      .locator('.overflow-y-auto')
-      .evaluate((scroller, st) => {
-        scroller.scrollTop = st;
-      }, anchoredSt);
+    await scroller.evaluate((el, st) => {
+      el.scrollTop = st;
+    }, anchoredSt);
     await expect(todayCell).toHaveCount(1);
   });
 

@@ -1,12 +1,11 @@
 import { expect, openCabinetWithSessionToken, test } from './fixtures';
 
-// Дорисовка ленты месяцев назад (пикер периода, #1428 → план 053):
-// история растёт append'ом вниз, порция добавляется ниже вьюпорта
-// задолго до нижней стены. Инерция не зажимается о край: записей в
-// скролл не существует (главный инвариант — calendar-anchor.spec.ts),
-// здесь проверяется антистенная механика под душащим CPU — жёсткость
-// контента и протоколы фликов прежние, направление протокола перевёрнуто
-// (прошлое теперь вниз).
+// Дорисовка ленты месяцев (пикер периода, #1428 → план 054): лента по
+// макету Т-Банка — снизу будущее (жёсткий край: «сегодня» + 2 приглушённых),
+// сверху прошлое (бесконечное, prepend — позицию держит библиотека
+// anchorTo: 'end'). Антистенная механика прошлого края: порция
+// дорисовывается задолго до верхнего упора, инерция не зажимается о край
+// в паузу рендера. Протоколы фликов перевёрнуты: прошлое теперь ВВЕРХ.
 
 const UI_KIT = '/ui-kit';
 
@@ -14,7 +13,7 @@ test.beforeEach(async ({ page, seededUser }) => {
   await openCabinetWithSessionToken(page, seededUser.sessionToken);
 });
 
-test('дорисовка месяцев срабатывает с запасом от стены, флик не зажимается', async ({ page }) => {
+test('дорисовка месяцев срабатывает с запасом от верхнего упора, флик не зажимается', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(UI_KIT);
   await page.getByRole('button', { name: 'Открыть пикер периода' }).click();
@@ -33,9 +32,8 @@ test('дорисовка месяцев срабатывает с запасом
     throw new Error('лента пикера периода не найдена');
   }
   const x = box.x + box.width / 2;
-  // Траектория внутри ленты: низ ленты визуально уходит под фиксированную
-  // нижнюю панель — тач на 95% высоты садится на её кнопки и не скроллит
-  // (старый протокол начинал с безопасных 30%, зеркалим с запасом).
+  // Траектория внутри ленты: низ визуально уходит под фиксированную
+  // нижнюю панель — тач на 95% высоты садится на её кнопки.
   const y1 = box.y + box.height * 0.25;
   const y2 = box.y + box.height * 0.8;
 
@@ -57,14 +55,14 @@ test('дорисовка месяцев срабатывает с запасом
     requestAnimationFrame(tick);
   });
 
-  // Десять жёстких свайпов вверх экрана = прокрутка вниз в прошлое
-  // (план 053: лента растёт вниз), непрерывно.
+  // Десять жёстких свайпов вниз экрана = прокрутка вверх в прошлое
+  // (план 054: прошлое сверху), непрерывно.
   for (let f = 0; f < 10; f += 1) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y2 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y1 }] });
     for (let s = 1; s <= 6; s += 1) {
       await cdp.send('Input.dispatchTouchEvent', {
         type: 'touchMove',
-        touchPoints: [{ x, y: y2 + (y1 - y2) * (s / 6) }],
+        touchPoints: [{ x, y: y1 + (y2 - y1) * (s / 6) }],
       });
     }
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -83,23 +81,24 @@ test('дорисовка месяцев срабатывает с запасом
     throw new Error('зонд кадров пуст — rAF не тикал');
   }
   const shGrowth = lastFrame.sh - firstFrame.sh;
+
   // Дорисовки состоялись: забег (~5500px) съел стартовый запас (~4000px)
   // и потребовал минимум одну порцию.
   expect(shGrowth, 'лента доросла под забег').toBeGreaterThanOrEqual(1000);
 
-  // За весь забег прокрутка ни разу не коснулась нижней стены: триггер
-  // дорисовки стоит далеко от края (кадр после первого движения, касание
-  // стены в паузу рендера — то самое дёрганье, теперь оно не возникает).
-  const firstMoved = frames.findIndex((f) => f.st > 0);
+  // За весь забег прокрутка ни разу не коснулась верхнего упора
+  // (scrollTop 0): триггер дорисовки стоит далеко от края — касание
+  // упора в паузу рендера было тем самым дёрганьем, теперь его нет.
+  const firstMoved = frames.findIndex((f) => f.st < firstFrame.st);
   const inFlight = firstMoved === -1 ? [] : frames.slice(firstMoved);
-  const wallFrames = inFlight.filter((f) => f.st + f.ch >= f.sh - 1).length;
-  expect(wallFrames, `кадров на нижней стене в полёте (из ${inFlight.length})`).toBeLessThanOrEqual(4);
+  const wallFrames = inFlight.filter((f) => f.st <= 0).length;
+  expect(wallFrames, `кадров на верхнем упоре в полёте (из ${inFlight.length})`).toBeLessThanOrEqual(4);
 });
 
-  // Жёсткий флик реальной физики моментума (карта #1437; план 051:
-  // протокол на верхней границе реального флика ~4800px суммарного
-  // пробега при душащем CPU). Инварианты те же, стена — нижняя.
-  test('жёсткий флик под душащим CPU: стена не достигается, лента успевает', async ({ page }) => {
+  // Жёсткий флик реальной физики моментума (карта #1437; протокол на
+  // верхней границе реального флика ~4800px при душащем CPU, план 051).
+  // Инвариант тот же, направление перевёрнуто: прошлый край — верхний.
+  test('жёсткий флик под душащим CPU: упор не достигается, лента успевает', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(UI_KIT);
     // Под нагрузкой полного прогона клик до гидрации теряется (кнопка
@@ -136,14 +135,14 @@ test('дорисовка месяцев срабатывает с запасом
     requestAnimationFrame(tick);
   });
 
-  // Восемь всплесков по 600px с паузой 30мс — суммарный пробег ~4800px,
-  // верх реального жёсткого флика (~3–10px/ms с затуханием); драйвер —
+  // Восемь всплесков по 600px с паузой 30мс — суммарный пробег ~4800px;
   // колесо с курсором над лентой (Input.synthesizeScrollGesture под
   // троттлингом скроллит композитором, не диспатчив ни одного
-  // scroll-события — замер 16.10).
+  // scroll-события — замер 16.10). deltaY < 0 = прокрутка вверх = в
+  // прошлое (план 054: прошлое сверху).
   await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.5);
   for (let f = 0; f < 8; f += 1) {
-    await page.mouse.wheel(0, 600);
+    await page.mouse.wheel(0, -600);
     await page.waitForTimeout(30);
   }
   await page.waitForTimeout(2000);
@@ -160,14 +159,14 @@ test('дорисовка месяцев срабатывает с запасом
     throw new Error('зонд кадров пуст — rAF не тикал');
   }
   const shGrowth = lastFrame.sh - firstFrame.sh;
-  const firstMoved = frames.findIndex((f) => f.st > 0);
+  const firstMoved = frames.findIndex((f) => f.st < firstFrame.st);
   const inFlight = firstMoved === -1 ? [] : frames.slice(firstMoved);
-  const wallFrames = inFlight.filter((f) => f.st + f.ch >= f.sh - 1).length;
+  const wallFrames = inFlight.filter((f) => f.st <= 0).length;
   const diag = `frames=${frames.length} last=${JSON.stringify(frames.at(-1))} growths=${frames.filter((frame, i) => i > 0 && frame.sh !== frames[i - 1]?.sh).length} shGrowth=${shGrowth} wallFrames=${wallFrames}`;
 
   // Забег (~4800px) съел запас (~4000px) и потребовал дорисовку.
   expect(shGrowth, diag).toBeGreaterThanOrEqual(2000);
-  // Стена — не более нескольких кадров в полёте; устойчивый цикл
-  // «стена → дорисовка» — регресс.
-  expect(wallFrames, `кадров на нижней стене в полёте; ${diag}`).toBeLessThanOrEqual(4);
+  // Упор — не более нескольких кадров в полёте; устойчивый цикл
+  // «упор → дорисовка» — регресс.
+  expect(wallFrames, `кадров на верхнем упоре в полёте; ${diag}`).toBeLessThanOrEqual(4);
 });

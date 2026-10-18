@@ -60,7 +60,7 @@ describe('calendar: высоты виртуальных строк (план 052
     expect(rowOffset(heights, 5)).toBe(352);
   });
 
-  it('append (план 053): дорисовка вниз не двигает существующие строки', () => {
+  it('append (план 054): рост в конец идёт за краем вьюпорта — новые строки продолжают старый итог', () => {
     const width = 390;
     const oldMonths = [
       { year: 2026, month0: 7 },
@@ -74,17 +74,38 @@ describe('calendar: высоты виртуальных строк (план 052
     ];
     const oldHeights = calendarMonthRowHeights(oldMonths, width);
     const newHeights = calendarMonthRowHeights(newMonths, width);
-    // Смещение верхней кромки каждой существующей строки неизменно:
-    // история растёт только ниже, позицию хранить нечем и не нужно —
-    // записей в скролл не существует (план 053).
+    // Офсеты существующих строк неизменны: append не трогает начало окна.
     for (let i = 0; i < oldMonths.length; i += 1) {
       expect(rowOffset(newHeights, i)).toBeCloseTo(rowOffset(oldHeights, i), 1);
     }
-    // Новые строки продолжаются ровно с итога старых высот (у бывшей
-    // последней теперь есть её отступ — верх при этом не уехал).
     expect(rowOffset(newHeights, oldMonths.length)).toBeCloseTo(
       rowOffset(oldHeights, oldMonths.length),
       1,
     );
+  });
+
+  it('prepend (план 054): досыпка истории сверху сдвигает все существующие строки на дельту — позицию держит библиотека по ключам', () => {
+    const width = 390;
+    const oldMonths = [
+      { year: 2026, month0: 7 },
+      { year: 2026, month0: 8 },
+    ];
+    const newMonths = [
+      { year: 2026, month0: 4 },
+      { year: 2026, month0: 5 },
+      { year: 2026, month0: 6 },
+      ...oldMonths,
+    ];
+    const oldHeights = calendarMonthRowHeights(oldMonths, width);
+    const newHeights = calendarMonthRowHeights(newMonths, width);
+    const prepended = newMonths.length - oldMonths.length;
+    // Смещение первой старой строки = сумма высот новых строк (у всех
+    // равномерный межстрочный отступ — дельта чисто аддитивна).
+    const delta = rowOffset(newHeights, prepended);
+    for (let i = 0; i < oldMonths.length; i += 1) {
+      const before = rowOffset(oldHeights, i);
+      const after = rowOffset(newHeights, prepended + i);
+      expect(after - before).toBeCloseTo(delta, 1);
+    }
   });
 });

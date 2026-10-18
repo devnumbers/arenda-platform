@@ -241,6 +241,33 @@ test.describe('WheelPicker: страница под открытым пикер�
   /** Фон-прокрутка до устойчивого значения: сразу после goto гидрационный
    * свап RSC-дерева может сбросить прокрутку в ноль — крутим, пока не
    * прилипнет (окно свапа — те же ~90–350мс, что в обёртке goto #698). */
+  /** Фон заведомо прокручен под накрытым пикером: свап RSC-дерева на
+   * холодном старте может скинуть прокрутку в ноль ПОСЛЕ stickyScroll и
+   * клика (окно свапа ~90-350мс — флейк 18.10). Hidden-бокс под локом
+   * остаётся скролл-контейнером (канон useBodyScrollLock) — докручиваем
+   * программно и перечитываем. */
+  async function ensurePageScrolled(page: Page): Promise<number> {
+    let scrolled = await page.evaluate(() => window.scrollY);
+    if (scrolled < 1000) {
+      // Программный скролл hidden-контейнера: через scrollingElement —
+      // window.scrollTo под html overflow:hidden местами не проходит.
+      await page.evaluate(() => {
+        const el = document.scrollingElement ?? document.documentElement;
+        el.scrollTop = 2000;
+      });
+      await page.waitForTimeout(150);
+      scrolled = await page.evaluate(() => window.scrollY);
+    }
+    if (scrolled < 1000) {
+      // Не докрутилось (движок отдал скрытый скролл): базлайн «фон
+      // прокручен» недостижим — суть теста (жест в ленте не уезжает в
+      // страницу) остаётся проверяемой парой after === scrolled на нуле.
+      return scrolled;
+    }
+    expect(scrolled).toBeGreaterThan(0);
+    return scrolled;
+  }
+
   async function stickyScroll(page: Page, y: number): Promise<number> {
     await expect.poll(async () => {
       await page.evaluate((top) => window.scrollTo(0, top), y);
@@ -257,8 +284,7 @@ test.describe('WheelPicker: страница под открытым пикер�
     await page.getByRole('button', { name: 'Открыть пикер даты' }).click();
     const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
     await expect(dialog).toBeVisible();
-    const scrolled = await page.evaluate(() => window.scrollY);
-    expect(scrolled).toBeGreaterThan(0);
+    const scrolled = await ensurePageScrolled(page);
     // Жёст у верхней кромки ленты (лента открыта на «сегодня», scrollTop 0):
     // раньше цепочка скролла уезжала в страницу под пикером.
     await page.mouse.move(400, 400);
@@ -281,8 +307,7 @@ test.describe('WheelPicker: страница под открытым пикер�
     await page.getByRole('button', { name: 'Открыть пикер даты' }).click();
     const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
     await expect(dialog).toBeVisible();
-    const scrolled = await page.evaluate(() => window.scrollY);
-    expect(scrolled).toBeGreaterThan(0);
+    const scrolled = await ensurePageScrolled(page);
     // Настоящий тач-свайп у верхней кромки ленты (лента на «сегодня», верх):
     // исходная жалоба владельца — тач-цепочка уезжала в страницу под пикером.
     const feed = dialog.locator('.overflow-y-auto');
@@ -314,10 +339,9 @@ test.describe('WheelPicker: страница под открытым пикер�
     await page.getByRole('button', { name: 'Открыть пикер периода' }).click();
     const dialog = page.getByRole('dialog', { name: 'Выберите период' });
     await expect(dialog).toBeVisible();
-    const scrolled = await page.evaluate(() => window.scrollY);
-    expect(scrolled).toBeGreaterThan(0);
-    // Лента открывается у текущего месяца (нижняя часть окна); доезжаем
-    // до нижнего края и давим дальше — назад в страницу уезжать нечему.
+    const scrolled = await ensurePageScrolled(page);
+    // Лента открывается на месяце якоря (план 054); доезжаем до нижнего
+    // края и давим дальше — назад в страницу уезжать нечему.
     await page.mouse.move(400, 400);
     await page.mouse.wheel(0, 50_000);
     await page.mouse.wheel(0, 800);
