@@ -239,11 +239,19 @@
 }
 
 @layer base {
-  /* Стрипы-«вылезайки» (showcase) не должны расширять канву; clip, не hidden —
-     hidden создаёт скролл-контейнер и ломает sticky-хедер (канон #709). */
+  /* Стрипы-«вылезайки» (showcase) не должны расширять канву; база hidden
+     для движков старее Safari 16, clip поверх — где поддержан (канон
+     #709: скролл-контейнер не создаётся). Форма через @supports: каскад
+     «hidden; clip» Lightning CSS вырезает по browserslist. */
   html,
   body {
-    overflow-x: clip;
+    overflow-x: hidden;
+  }
+  @supports (overflow-x: clip) {
+    html,
+    body {
+      overflow-x: clip;
+    }
   }
 
   body {
@@ -259,6 +267,9 @@
     /* Ландшафтный Safari не вправе раздувать шрифты (baseline скилла). */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* scroll-behavior здесь НЕ ставится: smooth на html анимирует и
+       программный скролл Next при смене роута (#1520 — переход на terms
+       улетал наверх). Плавный якорный скролл живёт в smooth-scroll.tsx. */
   }
 
   /* Тап без задержки двойного нажатия (iOS Safari добивает часть
@@ -291,12 +302,55 @@
    селектор с html побеждает библиотечный независимо от порядка стилей
    (канон #925 фронта). */
 html body[data-scroll-locked] {
-  overflow: clip !important;
+  overflow: hidden !important;
   margin-right: 0 !important;
   padding-right: 0 !important;
 }
+@supports (overflow-x: clip) {
+  html body[data-scroll-locked] {
+    overflow: clip !important;
+  }
+}
+
+/* Лок фона мобильного меню — без смены overflow корневого скроллера:
+   смена overflow на html инвалидирует лэйаут всего документа (аудит
+   #1483: на CPU×4 старт шторки ловил кадр до 425мс). touch-action и
+   overscroll живут на hit-test/композитинге, лэйаут не трогают; колесо
+   и трекпад гасит слушатель в mobile-menu.tsx, Esc там же закрывает
+   меню. Класс вместо inline-стилей. Клавиатурный скролл фона остаётся —
+   осознанный компромисс. */
+html.menu-scroll-locked {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
 
 @layer components {
+  /* Фолбэки вьюпортных единиц (progressive enhancement, аудит #1483):
+     движки старее 15.4 отбрасывают декларацию с svh/dvh целиком — без
+     фолбэка карточка в flex-центрировании вылезает за экран, hero
+     схлопывается. Каскад «vh; dvh» Lightning CSS вырезает по
+     browserslist (safari 16.4 всё поддерживают), поэтому фолбэк живёт в
+     положительном @supports — условие минификатор не вычисляет и блок
+     сохраняет. */
+  .dl-max-h-viewport {
+    max-height: 92vh;
+  }
+  @supports (height: 100dvh) {
+    .dl-max-h-viewport {
+      max-height: 92dvh;
+    }
+  }
+
+  /* Панель hero (hero.tsx): в высоту экрана минус хедер. */
+  .hero-panel-h {
+    height: calc(100vh - 88px);
+  }
+  @supports (height: 100svh) {
+    .hero-panel-h {
+      height: calc(100svh - 88px);
+    }
+  }
+
   /* Конический градиент-обвод стеклянных тарифных карточек (узел Figma
      2846-153711, stroke fill_f0f18fa9): border-image не умеет скруглённые
      углы, поэтому кольцо 1px рисует псевдоэлемент с двухслойной маской

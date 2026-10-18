@@ -142,7 +142,7 @@ export function InstallModal({
           <Dialog.Content
             aria-describedby={undefined}
             className={cn(
-              "relative flex max-h-[92dvh] w-full max-w-[400px] flex-col gap-6 overflow-y-auto overscroll-y-contain rounded-[40px] bg-white p-6 font-sans outline-none",
+              "relative flex dl-max-h-viewport w-full max-w-[400px] flex-col gap-6 overflow-y-auto overscroll-y-contain rounded-[40px] bg-white p-6 font-sans outline-none",
               closing ? "dl-card-out" : "dl-card-in",
             )}
           >

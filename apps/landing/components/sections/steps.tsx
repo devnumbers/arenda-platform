@@ -22,6 +22,11 @@ const TEXT_OUT_MS = 180;
 
 export function Steps() {
   const [active, setActive] = useState(0);
+  // Прежний активный слой стека: кроссфейд на мокапах с альфой нельзя
+  // вести встречно (обе плёнки полупрозрачны в середине — фон
+  // просвечивает), поэтому гаснет только въезжающий верхний, а уходящий
+  // держится непрозрачным под ним.
+  const [prev, setPrev] = useState<number | null>(null);
   const {
     phase: textPhase,
     value: textStep,
@@ -38,6 +43,7 @@ export function Steps() {
     if (index === active) {
       return;
     }
+    setPrev(active);
     setActive(index);
     swapTextStep(index);
   };
@@ -65,7 +71,7 @@ export function Steps() {
                       aria-pressed={active === index}
                       aria-label={`Шаг ${index + 1}`}
                       onClick={() => selectStep(index)}
-                      className={`flex size-11 cursor-pointer items-center justify-center rounded-[100px] text-xl font-bold transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [text-shadow:0_8px_24px_rgba(43,127,255,0.08)] ${
+                      className={`flex size-11 cursor-pointer items-center justify-center rounded-[100px] text-xl font-bold transition-colors duration-200 active:duration-75 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [text-shadow:0_8px_24px_rgba(43,127,255,0.08)] ${
                         active === index
                           ? "bg-primary text-white"
                           : "bg-primary-light text-primary-disabled hover:text-primary active:text-primary-active"
@@ -92,20 +98,28 @@ export function Steps() {
             </Reveal>
             <Reveal delay={80} className="mt-14">
               <div className="relative h-[400px] w-[273px]">
-                {STEPS.map((item, index) => (
-                  <Image
-                    key={item.text}
-                    src={item.image}
-                    alt={item.alt}
-                    width={273}
-                    height={400}
-                    sizes="273px"
-                    priority={false}
-                    className={`absolute inset-0 transition-opacity duration-[600ms] ease-inout ${
-                      active === index ? "opacity-100" : "opacity-0"
-                    }`}
-                  />
-                ))}
+                {STEPS.map((item, index) => {
+                  const isActive = active === index;
+                  const isPrev = prev === index;
+                  return (
+                    <Image
+                      key={item.text}
+                      src={item.image}
+                      alt={item.alt}
+                      width={273}
+                      height={400}
+                      sizes="273px"
+                      priority={false}
+                      className={`absolute inset-0 ${
+                        isActive
+                          ? "z-10 opacity-100 transition-opacity duration-[600ms] ease-inout"
+                          : isPrev
+                            ? "z-0 opacity-100"
+                            : "z-0 opacity-0"
+                      }`}
+                    />
+                  );
+                })}
               </div>
             </Reveal>
           </div>

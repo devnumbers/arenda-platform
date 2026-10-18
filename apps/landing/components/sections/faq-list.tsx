@@ -27,16 +27,18 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
               {group.category}
             </p>
             <div className="flex min-w-0 flex-1 flex-col desk:rounded-[40px] desk:bg-surface desk:px-10 desk:py-5">
-              {group.items.map((item) => {
+              {group.items.map((item, itemIndex) => {
                 const key = `${group.category}:${item.question}`;
                 const expanded = open === key;
+                const panelId = `faq-panel-${groupIndex}-${itemIndex}`;
                 return (
                   <div key={key} className="flex w-full flex-col py-[14px] tab:py-[18px]">
                     <button
                       type="button"
                       aria-expanded={expanded}
+                      aria-controls={panelId}
                       onClick={() => setOpen(expanded ? null : key)}
-                      className="flex w-full cursor-pointer items-center gap-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="flex w-full cursor-pointer items-center gap-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:opacity-80"
                     >
                       <span className="min-h-6 flex-1 text-r text-ink">
                         {item.question}
@@ -62,6 +64,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
                       </svg>
                     </button>
                     <div
+                      id={panelId}
                       className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
                         expanded
                           ? "opacity-100 [grid-template-rows:1fr]"
