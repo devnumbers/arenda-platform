@@ -49,11 +49,12 @@ func (s *SubscriptionService) runLifecycleTx(ctx context.Context, work func(*txS
 // AssignServiceSubscription assigns a service subscription (issue #255,
 // billing CONTEXT.md): the tariff runs for the requested fixed term without
 // payment, auto-renew is off, and the assignment overwrites the current
-// subscription — the paid remainder does not stack. At the end of the term the
-// expiry worker downgrades the subscription to basic through the common
-// expiry path, archiving excess properties. When the new tariff's limit is
-// lower than the overwritten one's, the excess is archived in the same
-// transaction.
+// subscription — the paid remainder does not stack. An account without a
+// subscription row (an admin-role account, issue #1516) first gets the free
+// basic one in the same transaction. At the end of the term the expiry worker
+// downgrades the subscription to basic through the common expiry path,
+// archiving excess properties. When the new tariff's limit is lower than the
+// overwritten one's, the excess is archived in the same transaction.
 func (s *SubscriptionService) AssignServiceSubscription(
 	ctx context.Context, adminID, userID uuid.UUID, req AssignServiceSubscriptionRequest,
 ) error {
@@ -69,7 +70,7 @@ func (s *SubscriptionService) AssignServiceSubscription(
 			}
 			return fmt.Errorf("get tariff: %w", err)
 		}
-		sub, err := stores.subscriptionForUpdate(ctx, userID)
+		sub, err := stores.ensureSubscriptionForUpdate(ctx, userID)
 		if err != nil {
 			return err
 		}
@@ -125,9 +126,11 @@ func serviceTermValidUntil(req AssignServiceSubscriptionRequest, now time.Time) 
 // ForceChangeTariff switches the subscription's tariff immediately without
 // payment (issue #255): the new tariff runs for the requested period from
 // now, the subscription keeps its source and auto-renew setting, and any
-// pending change is dropped. Excess properties beyond the new tariff's limit
-// are archived in the same transaction. The incident-repair lever — an
-// ordinary compensation without payment is a service subscription.
+// pending change is dropped. An account without a subscription row (issue
+// #1516) first gets the free basic one in the same transaction. Excess
+// properties beyond the new tariff's limit are archived in the same
+// transaction. The incident-repair lever — an ordinary compensation without
+// payment is a service subscription.
 func (s *SubscriptionService) ForceChangeTariff(ctx context.Context, adminID, userID uuid.UUID, req ForceChangeTariffRequest) error {
 	now := s.clock.Now().UTC()
 	return s.runLifecycleTx(ctx, func(stores *txStores) error {
@@ -138,7 +141,7 @@ func (s *SubscriptionService) ForceChangeTariff(ctx context.Context, adminID, us
 			}
 			return fmt.Errorf("get tariff: %w", err)
 		}
-		sub, err := stores.subscriptionForUpdate(ctx, userID)
+		sub, err := stores.ensureSubscriptionForUpdate(ctx, userID)
 		if err != nil {
 			return err
 		}
@@ -232,11 +235,14 @@ func (s *SubscriptionService) CancelSubscriptionAsAdmin(ctx context.Context, adm
 // ListTransitions returns the user's subscription transition history for the
 // admin views (issue #255): every status and tariff change with its reason,
 // initiator and payment reference, newest first, the tariff names resolved.
+// An account without a subscription row has no history — an empty log, not a
+// miss (issue #1516), so the admin tab reads "no transitions" rather than an
+// error.
 func (s *SubscriptionService) ListTransitions(ctx context.Context, userID uuid.UUID) ([]SubscriptionTransitionView, error) {
 	sub, err := s.subscriptions.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return nil, ErrSubscriptionNotFound
+			return []SubscriptionTransitionView{}, nil
 		}
 		return nil, fmt.Errorf("get subscription: %w", err)
 	}

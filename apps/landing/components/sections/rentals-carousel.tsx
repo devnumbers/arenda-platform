@@ -127,7 +127,11 @@ export function RentalsCarousel() {
             key={card.title}
             className="relative h-[500px] w-[320px] shrink-0 overflow-clip rounded-[32px] bg-surface px-6 pt-12 desk:h-[550px] desk:w-[380px] desk:rounded-[40px] desk:px-10 desk:pt-[52px]"
           >
-            <div className="mx-auto flex w-full max-w-[220px] flex-col items-center gap-2 text-center desk:gap-3 desk:max-w-[300px]">
+            {/* Колонка текста — макет: 272 (карточка 320 минус паддинги
+                24×2) на планшете-мобиле, 300 на десктопе (380−2×40). При
+                прежних 220 заголовки «Напомним…» и «Добавляйте контакты…»
+                ломались на 3 строки вместо двух (#1517). */}
+            <div className="mx-auto flex w-full max-w-[272px] flex-col items-center gap-2 text-center desk:gap-3 desk:max-w-[300px]">
               <h3 className="text-[22px] font-medium leading-[26px] desk:text-[28px] desk:leading-8">
                 {card.title}
               </h3>
@@ -141,18 +145,22 @@ export function RentalsCarousel() {
                 {card.text}
               </p>
             </div>
-            <Image
-              src={card.img}
-              alt={card.alt}
-              width={card.imgWidth}
-              height={card.imgWidth}
-              sizes="(min-width: 1200px) 380px, 320px"
-              draggable={false}
-              className={`absolute bottom-0 left-1/2 h-auto -translate-x-1/2 ${
-                card.imgBottomSub ? "mb-[50px] desk:mb-[70px]" : "mb-0"
-              }`}
-              style={{ maxWidth: card.imgWidth }}
-            />
+              {/* max-width не выше карточки: в макете мобилы фото
+                  последних трёх карточек — ровно во всю ширину 320
+                  (верх y=180), а не 380 с обрезом краями карточки,
+                  поднимавший рисунок на текст (#1517). */}
+              <Image
+                src={card.img}
+                alt={card.alt}
+                width={card.imgWidth}
+                height={card.imgWidth}
+                sizes="(min-width: 1200px) 380px, 320px"
+                draggable={false}
+                className={`absolute bottom-0 left-1/2 h-auto -translate-x-1/2 ${
+                  card.imgBottomSub ? "mb-[50px] desk:mb-[70px]" : "mb-0"
+                }`}
+                style={{ maxWidth: `min(100%, ${card.imgWidth}px)` }}
+              />
           </article>
         ))}
       </div>

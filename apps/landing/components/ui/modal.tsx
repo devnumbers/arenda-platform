@@ -178,7 +178,7 @@ export function ModalContent({
               // карточку, а не в фуллскрин-обёртку. База — ПЕРВЫМ аргументом
               // слияния, className потребителя — последним (tailwind-merge
               // отдаёт приоритет последнему).
-              "relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none",
+              "relative flex dl-max-h-viewport w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none",
               closing
                 ? "dl-card-out"
                 : "dl-card-in",
@@ -210,7 +210,7 @@ export function ModalContent({
           className,
           // Вход/выход анимирует сам vaul (slideFromBottom 0.5s на кривой
           // cubic-bezier(0.32,0.72,0,1)) — скоординировано с drag.
-          "fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-white font-sans outline-none",
+          "fixed inset-x-0 bottom-0 z-50 mx-auto flex dl-max-h-viewport w-full flex-col rounded-t-sheet bg-white font-sans outline-none",
         )}
       >
         {body}

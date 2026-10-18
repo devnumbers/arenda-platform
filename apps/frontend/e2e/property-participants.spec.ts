@@ -445,7 +445,7 @@ test('D15 снято #1464: пункт «Совместного доступа»
     // /subscription разрешился basic'ом: секция «Управление» отрисована,
     // строка пина скрыта (canPin=false).
     await expect(page.getByRole('button', { name: 'Редактировать объект' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Сделать основным' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Закрепить объект' })).toHaveCount(0);
 
     // Кебаб владельца на basic: статусные мутации живы, пункт «Совместного
     // доступа» виден — D15 «платная функция не приманивает» снято #1464

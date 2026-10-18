@@ -304,19 +304,24 @@ test.describe('страница платежа', () => {
     await page.goBack();
     await page.getByRole('button', { name: 'Оплатить' }).click();
     await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+(\\?.*)?$`));
+    const operationUrl = page.url();
     await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
 
-    // Экран успеха (1444:65733); «Посмотреть платеж» ведёт на страницу
+    // Экран успеха (1444:65733) без «Посмотреть платеж» (решение владельца
+    // 17.10): закрытие «Хорошим» возвращает по returnTo на страницу
     // правила — долг закрыт, тик материализовал следующее вхождение и
     // «Оплатить» снова активна (оплатить можно досрочно, история 24).
     await expect(page.getByText('Платеж оплачен')).toBeVisible();
-    await page.getByRole('button', { name: 'Посмотреть платеж' }).click();
+    await expect(page.getByRole('button', { name: 'Посмотреть платеж' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+$`));
     await expect(page.getByText('У вас нет просроченных платежей')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
 
-    // Назад по истории — операция в состоянии «Выполнена», кнопки нет.
-    await page.goBack();
+    // Прямая ссылка на операцию — состояние «Выполнена», кнопки нет
+    // (goBack на неё уже не приводит: «Хорошо» вернуло по returnTo,
+    // вытолкнув операцию из back-стека).
+    await page.goto(operationUrl);
     await expect(page.getByText('Выполнена')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Отметить оплаченной' })).toHaveCount(0);
 

@@ -13,8 +13,14 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared"
+	"github.com/nambers/arenda-planform/apps/backend/internal/shared/pgerr"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
+
+// userSubscriptionsUserIDFK is the inline user_id foreign key of the init
+// schema; PostgreSQL named it after the table and column. The Create backstop
+// narrows its violation to the unknown-user miss.
+const userSubscriptionsUserIDFK = "user_subscriptions_user_id_fkey"
 
 // SubscriptionRepository persists subscriptions.
 type SubscriptionRepository struct {
@@ -118,7 +124,11 @@ func mapSubscriptions(rows []postgres.UserSubscription) ([]domain.Subscription, 
 
 // Create inserts a new subscription. If a subscription already exists for the
 // user (unique user_id), the existing row is returned without error —
-// onboarding relies on this for redelivered registration events.
+// onboarding relies on this for redelivered registration events. The user_id
+// FK is the durable backstop of the missing-row onboarding (issue #1516): an
+// insert for an unknown user surfaces as ErrNotFound — narrowed to that one
+// constraint, so a violation of any other foreign key stays the failure it
+// is.
 func (r *SubscriptionRepository) Create(ctx context.Context, sub domain.Subscription) (domain.Subscription, error) {
 	row, err := r.q().CreateSubscription(ctx, mapCreateSubscriptionParams(sub))
 	if err != nil {
@@ -128,6 +138,9 @@ func (r *SubscriptionRepository) Create(ctx context.Context, sub domain.Subscrip
 				return domain.Subscription{}, fmt.Errorf("fetch existing subscription: %w", err)
 			}
 			return mapSubscription(existing)
+		}
+		if pgerr.IsForeignKeyViolationOnConstraint(err, userSubscriptionsUserIDFK) {
+			return domain.Subscription{}, application.ErrNotFound
 		}
 		return domain.Subscription{}, fmt.Errorf("create subscription: %w", err)
 	}

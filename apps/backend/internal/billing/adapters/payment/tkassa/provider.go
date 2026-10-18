@@ -521,18 +521,20 @@ func (p *Provider) BindPaymentMethod(ctx context.Context, req application.BindMe
 
 	// The official AddCard schema (developer.tbank.ru/eacq/api/add-card) only
 	// contains TerminalKey, CustomerKey, Token, CheckType, IP and
-	// ResidentState — no URL fields at all. RedirectUrl/FailRedirectUrl are
-	// legacy undocumented names that the production gateway ignores: relying
-	// on them failed the bank-form redirect in prod with error 9
-	// ("Переадресовываемый url пуст"). We therefore additionally send the
-	// documented names SuccessAddCardURL/FailAddCardURL/NotificationURL. All
-	// of these extras sit outside the schema, so the T-Kassa server excludes
-	// them from token verification while sign() hashes the whole body —
-	// including them in the signature produced error 204 ("Неверный токен")
-	// in prod. The token is hence computed over the schema fields only and
-	// the extras are appended to the request body afterwards. If the
-	// per-request URLs turn out to be ignored too, the documented fallback
-	// is terminal-level URLs configured via acq_help@tbank.ru (ADR 0017).
+	// ResidentState — no URL fields at all. The URL extras sent below (the
+	// legacy RedirectUrl names whose per-request use failed the bank-form
+	// redirect in prod with error 9, and the documented
+	// SuccessAddCardURL/FailAddCardURL/NotificationURL) are all confirmed
+	// ignored by the production gateway (issue #1514, 17.10.2026: the ADD
+	// notification never reached the per-request NotificationURL and the
+	// bank's "return to shop" button led to the shop root). The operating
+	// channel for every AddCard callback is therefore the terminal-level
+	// NotificationURL/SuccessAddCardURL/FailAddCardURL configured via
+	// acq_help@tbank.ru (ADR 0017) — now pointing at this app's webhook and
+	// return routes. The extras are kept harmless: they are appended after
+	// the token is computed over the schema fields only (hashing them
+	// produced error 204 in prod), and a future gateway that honors
+	// per-request URLs would simply name the same routes.
 	cardBody, err := bodyFromStruct(spec.AddCardRequest{
 		TerminalKey: p.terminalKey,
 		CustomerKey: req.CustomerRef,

@@ -15,8 +15,9 @@ import (
 
 // Shared fixtures of the payment-method tests.
 const (
-	testMaskedPan   = "4111********1111"
-	testChargeToken = "token_1"
+	testMaskedPan      = "4111********1111"
+	testChargeToken    = "token_1"
+	testProviderCardID = "card_1"
 )
 
 // stubMethodProvider is a configurable provider for the payment-method tests:
@@ -36,6 +37,10 @@ type stubMethodProvider struct {
 
 	removeCalls int
 	removeErr   error
+
+	listCalls int
+	listRes   []SavedMethod
+	listErr   error
 
 	// StartedBindings records the request keys BindPaymentMethod handed out,
 	// so ConfirmCardBinding can distinguish started from unknown bindings.
@@ -97,6 +102,13 @@ func (p *stubMethodProvider) RemovePaymentMethod(_ context.Context, _, _ string)
 	defer p.mu.Unlock()
 	p.removeCalls++
 	return p.removeErr
+}
+
+func (p *stubMethodProvider) ListPaymentMethods(_ context.Context, _ string) ([]SavedMethod, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.listCalls++
+	return p.listRes, p.listErr
 }
 
 func (p *stubMethodProvider) ParseWebhook(_ context.Context, _ []byte) (WebhookEvent, error) {
@@ -308,6 +320,10 @@ func (p bankFormStubProvider) PaymentStatus(
 
 func (p bankFormStubProvider) RemovePaymentMethod(ctx context.Context, customerRef, providerMethodID string) error {
 	return p.stub.RemovePaymentMethod(ctx, customerRef, providerMethodID)
+}
+
+func (p bankFormStubProvider) ListPaymentMethods(ctx context.Context, customerRef string) ([]SavedMethod, error) {
+	return p.stub.ListPaymentMethods(ctx, customerRef)
 }
 
 func (p bankFormStubProvider) ParseWebhook(ctx context.Context, payload []byte) (WebhookEvent, error) {
@@ -696,7 +712,7 @@ func TestSyncPaymentMethods_CompletesOpenBinding(t *testing.T) {
 	h.provider.pollState = MethodBindingState{
 		Status: MethodBindingCompleted,
 		Method: &SavedMethod{
-			ProviderMethodID: "card_1",
+			ProviderMethodID: testProviderCardID,
 			ChargeToken:      testChargeToken,
 			MaskedPan:        testMaskedPan,
 		},
@@ -722,6 +738,230 @@ func TestSyncPaymentMethods_CompletesOpenBinding(t *testing.T) {
 	}
 	if closed.Status != domain.CardBindingCompleted {
 		t.Errorf("session status = %q, want completed", closed.Status)
+	}
+}
+
+// TestSyncPaymentMethods_EnrichesCompletedBindingDisplayFields proves the
+// sync path completes the display fields the provider's GetAddCardState does
+// not carry (issue #1514): the prod binding of 17.10.2026 materialized a
+// chargeable card with an empty mask because the poll answer holds only the
+// card id and rebill. The provider card list, matched by the rebill, supplies
+// the mask and expiry before the method is written.
+func TestSyncPaymentMethods_EnrichesCompletedBindingDisplayFields(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	userID, _ := h.seedMethodSubscription(t)
+	h.openSession(t, userID)
+	h.provider.pollState = MethodBindingState{
+		Status: MethodBindingCompleted,
+		Method: &SavedMethod{
+			ProviderMethodID: testProviderCardID,
+			ChargeToken:      testChargeToken,
+		},
+	}
+	h.provider.listRes = []SavedMethod{
+		{
+			ProviderMethodID: testProviderCardID,
+			ChargeToken:      testChargeToken,
+			MaskedPan:        testMaskedPan,
+			ExpDate:          "1230",
+		},
+	}
+
+	methods, err := h.methods.SyncPaymentMethods(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods() error = %v", err)
+	}
+	if h.provider.listCalls != 1 {
+		t.Errorf("ListPaymentMethods calls = %d, want 1", h.provider.listCalls)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("methods = %d, want one", len(methods))
+	}
+	if methods[0].DisplayMask != testMaskedPan || methods[0].ExpDate != "1230" {
+		t.Errorf("method display fields = %q/%q, want %q/1230", methods[0].DisplayMask, methods[0].ExpDate, testMaskedPan)
+	}
+}
+
+// TestSyncPaymentMethods_EnrichMatchesByCardIDWhenRebillDiffers proves the
+// card-list match falls back to the card id when the list's rebill differs
+// from the poll answer's (a re-bound card keeps its card id under a new
+// rebill).
+func TestSyncPaymentMethods_EnrichMatchesByCardIDWhenRebillDiffers(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	userID, _ := h.seedMethodSubscription(t)
+	h.openSession(t, userID)
+	h.provider.pollState = MethodBindingState{
+		Status: MethodBindingCompleted,
+		Method: &SavedMethod{
+			ProviderMethodID: testProviderCardID,
+			ChargeToken:      testChargeToken,
+		},
+	}
+	h.provider.listRes = []SavedMethod{
+		{
+			ProviderMethodID: testProviderCardID,
+			ChargeToken:      "rebill_other",
+			MaskedPan:        testMaskedPan,
+			ExpDate:          "1230",
+		},
+	}
+
+	methods, err := h.methods.SyncPaymentMethods(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods() error = %v", err)
+	}
+	if len(methods) != 1 || methods[0].DisplayMask != testMaskedPan || methods[0].ExpDate != "1230" {
+		t.Fatalf("methods = %+v, want one card enriched by card id match", methods)
+	}
+	// The charge token of the binding — not the list item's — is what the
+	// method stores: the binding state is the completion authority.
+	if methods[0].ProviderToken != testChargeToken {
+		t.Errorf("stored token = %q, want the binding's %q", methods[0].ProviderToken, testChargeToken)
+	}
+}
+
+// TestSyncPaymentMethods_CardListFailureKeepsBindingCompletion proves a
+// failed card-list load does not block the binding: the method materializes
+// exactly as before the enrichment — chargeable, maskless — and the next sync
+// heals it (issue #1514).
+func TestSyncPaymentMethods_CardListFailureKeepsBindingCompletion(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	userID, _ := h.seedMethodSubscription(t)
+	session := h.openSession(t, userID)
+	h.provider.pollState = MethodBindingState{
+		Status: MethodBindingCompleted,
+		Method: &SavedMethod{
+			ProviderMethodID: testProviderCardID,
+			ChargeToken:      testChargeToken,
+		},
+	}
+	h.provider.listErr = errors.New("card list unavailable")
+
+	methods, err := h.methods.SyncPaymentMethods(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods() error = %v, want nil", err)
+	}
+	if len(methods) != 1 || methods[0].DisplayMask != "" {
+		t.Fatalf("methods = %+v, want one maskless method", methods)
+	}
+	closed, err := h.stores.bindings.GetByRequestKeyForUpdate(t.Context(), testProviderFake, session.RequestKey)
+	if err != nil {
+		t.Fatalf("GetByRequestKeyForUpdate() error = %v", err)
+	}
+	if closed.Status != domain.CardBindingCompleted {
+		t.Errorf("session status = %q, want completed", closed.Status)
+	}
+}
+
+// TestSyncPaymentMethods_CardListOfUnknownCustomerIsEmpty proves the card
+// list's "customer not found" answer (the provider's error 7 for a customer
+// with no cards) is an empty list, not a sync failure (issue #1514).
+func TestSyncPaymentMethods_CardListOfUnknownCustomerIsEmpty(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	userID, _ := h.seedMethodSubscription(t)
+	h.openSession(t, userID)
+	h.provider.pollState = MethodBindingState{
+		Status: MethodBindingCompleted,
+		Method: &SavedMethod{
+			ProviderMethodID: testProviderCardID,
+			ChargeToken:      testChargeToken,
+		},
+	}
+	h.provider.listErr = ErrProviderCustomerNotFound
+
+	methods, err := h.methods.SyncPaymentMethods(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods() error = %v, want nil", err)
+	}
+	if len(methods) != 1 || methods[0].DisplayMask != "" {
+		t.Fatalf("methods = %+v, want one maskless method", methods)
+	}
+}
+
+// TestSyncPaymentMethods_HealsMasklessMethodDisplayFields proves the sync
+// heals a stored method the pre-enrichment sync path materialized maskless
+// (the prod record of issue #1514): the card list match backfills the mask
+// and expiry through the upsert, which converges on the row by token hash —
+// the healed card keeps its identity and activation state.
+func TestSyncPaymentMethods_HealsMasklessMethodDisplayFields(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	userID, _ := h.seedMethodSubscription(t)
+	maskless, err := paymentMethodFromSaved(userID, testProviderFake, SavedMethod{
+		ProviderMethodID: testProviderCardID,
+		ChargeToken:      testChargeToken,
+	}, h.now)
+	if err != nil {
+		t.Fatalf("paymentMethodFromSaved() error = %v", err)
+	}
+	stored, err := h.stores.methods.UpsertByTokenHash(t.Context(), maskless)
+	if err != nil {
+		t.Fatalf("seed UpsertByTokenHash() error = %v", err)
+	}
+	// The prod record the healing serves is the user's active charge target:
+	// the sync path activated it at materialization, maskless. Healing must
+	// not disturb that activation.
+	if err := h.stores.methods.SetActive(t.Context(), userID, stored.ID); err != nil {
+		t.Fatalf("seed SetActive() error = %v", err)
+	}
+	h.provider.listRes = []SavedMethod{
+		{
+			ProviderMethodID: testProviderCardID,
+			ChargeToken:      testChargeToken,
+			MaskedPan:        testMaskedPan,
+			ExpDate:          "1230",
+		},
+	}
+
+	methods, err := h.methods.SyncPaymentMethods(t.Context(), userID)
+	if err != nil {
+		t.Fatalf("SyncPaymentMethods() error = %v", err)
+	}
+	if h.provider.listCalls != 1 {
+		t.Errorf("ListPaymentMethods calls = %d, want 1", h.provider.listCalls)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("methods = %d, want one", len(methods))
+	}
+	healed := methods[0]
+	if healed.ID != stored.ID {
+		t.Errorf("healed method id = %v, want the stored row's %v", healed.ID, stored.ID)
+	}
+	if healed.DisplayMask != testMaskedPan || healed.ExpDate != "1230" {
+		t.Errorf("healed display fields = %q/%q, want %q/1230", healed.DisplayMask, healed.ExpDate, testMaskedPan)
+	}
+	if !healed.IsActive {
+		t.Errorf("healed method lost activation, want the active card still active")
+	}
+}
+
+// TestSyncPaymentMethods_NoCardListWithoutMissingDisplayFields proves the
+// card list loads lazily: a sync whose binding already carries display fields
+// (the webhook-shaped state) and whose stored methods have masks makes no
+// provider list call at all.
+func TestSyncPaymentMethods_NoCardListWithoutMissingDisplayFields(t *testing.T) {
+	t.Parallel()
+	h := newMethodHarness(t)
+	userID, _ := h.seedMethodSubscription(t)
+	h.openSession(t, userID)
+	h.provider.pollState = MethodBindingState{
+		Status: MethodBindingCompleted,
+		Method: &SavedMethod{
+			ProviderMethodID: testProviderCardID,
+			ChargeToken:      testChargeToken,
+			MaskedPan:        testMaskedPan,
+		},
+	}
+
+	if _, err := h.methods.SyncPaymentMethods(t.Context(), userID); err != nil {
+		t.Fatalf("SyncPaymentMethods() error = %v", err)
+	}
+	if h.provider.listCalls != 0 {
+		t.Errorf("ListPaymentMethods calls = %d, want 0", h.provider.listCalls)
 	}
 }
 

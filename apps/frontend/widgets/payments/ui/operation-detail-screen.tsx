@@ -51,7 +51,8 @@ import {
 
 /**
  * Страница операции (Figma 1386:67731 / 1419:25859 / 1419:25645 /
- * 1444:66228): hero с иконкой категории, суммой и подписью срока, секции
+ * 1444:66228; вёрстка hero и секций — 1858:105181): hero с иконкой
+ * категории, суммой и подписью срока, секции
  * «Данные операции» и «Подробнее», внизу — «Отметить оплаченной» только у
  * той операции, которую гасит «Оплатить» страницы платежа (та же
  * oldestUnpaidOperation — решение владельца). Оплата ставит paid_date =
@@ -59,8 +60,8 @@ import {
  * (1444:65733): закрытие («Хорошо»/крестик, #1072) уводит на страницу, С
  * КОТОРОЙ перешли к оплате — sanitized ?returnTo= от точки входа
  * (страница платежа, аренда); без него — на страницу правила, контекст
- * операции. «Посмотреть платеж» ведёт на правило. Смотрящий и архив
- * читают без кнопок. Корзина в шапке (1386:67731) удаляет оплаченные и
+ * операции. Смотрящий и архив читают без кнопок. Корзина в шапке
+ * (1386:67731) удаляет оплаченные и
  * просроченные операции через шторку 1510:77505 — tombstone cancelled
  * стирает факт и долг; плановые и проекции не удаляются.
  *
@@ -142,7 +143,6 @@ export function OperationDetailScreen({
   if (!loading && !failed && operation !== undefined && paidResult !== null) {
     return (
       <OperationPaidSuccess
-        propertyId={propertyId}
         paid={paidResult}
         propertyTitle={property?.name ?? ''}
         onClose={() => {
@@ -430,8 +430,13 @@ export function OperationView({
   );
 }
 
-/** Hero-блок (1386:67731): иконка категории 96, название,
- * чип категории, сумма 40 и подпись срока под ней. */
+/** Hero-блок (1858:105181; блок суммы и подписи срока — 1419:25859):
+ * иконка категории 96 с глифом 52, подблок «название + чип категории»
+ * с гэпом 12, блок «сумма 40 + подпись срока» с гэпом 8; между блоками —
+ * 24. Верхние 24 до контента даёт PageContent — своего pt у hero нет
+ * (правка владельца 17.10: двойной отступ 24+24 убран). Чип крашится
+ * цветом категории на 10% (в макете rgba(...,0.1) — суффикс альфы 1A),
+ * внутри кружок 24 со сплошным цветом. */
 function OperationHero({
   operation,
   category,
@@ -448,36 +453,44 @@ function OperationHero({
   const Icon = categoryIconComponents[category.icon];
 
   return (
-    <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-6">
+    <div className="flex flex-col items-center gap-6 px-6">
       <span
         className="flex h-24 w-24 items-center justify-center rounded-pill"
         style={{ backgroundColor: category.color }}
       >
-        {Icon !== undefined && <Icon className="h-12 w-12 text-white" aria-hidden />}
+        {Icon !== undefined && <Icon className="h-13 w-13 text-white" aria-hidden />}
       </span>
-      <span className="text-xl font-semibold leading-6 text-content">{operation.title}</span>
-      <span className="flex items-center gap-1.5 rounded-pill bg-surface-info py-1 pl-1.5 pr-3">
-        <CategoryGlyph icon={category.icon} color={category.color} circleClass="h-6 w-6" glyphClass="h-3.5 w-3.5" />
-        <span className="text-sm leading-4 text-content">{operation.categoryLabel}</span>
-      </span>
-      <span className={`text-[40px] leading-[44px] font-semibold ${amountTone}`}>
-        {amountText}
-      </span>
-      {subtitle !== null && (
+      <div className="flex flex-col items-center gap-3">
+        <span className="text-xl leading-6 text-content">{operation.title}</span>
         <span
-          className={`text-base leading-[18px] font-medium ${
-            subtitle.tone === 'danger' ? 'text-danger' : 'text-primary'
-          }`}
+          className="flex items-center gap-1.5 rounded-pill py-0.5 pl-0.5 pr-3"
+          style={{ backgroundColor: `${category.color}1A` }}
         >
-          {subtitle.text}
+          <CategoryGlyph icon={category.icon} color={category.color} circleClass="h-6 w-6" glyphClass="h-3.5 w-3.5" />
+          <span className="text-sm leading-4 text-content">{operation.categoryLabel}</span>
         </span>
-      )}
+      </div>
+      <div className="flex flex-col items-center gap-2">
+        <span className={`text-[40px] leading-[44px] font-semibold ${amountTone}`}>
+          {amountText}
+        </span>
+        {subtitle !== null && (
+          <span
+            className={`text-base leading-[18px] font-medium ${
+              subtitle.tone === 'danger' ? 'text-danger' : 'text-primary'
+            }`}
+          >
+            {subtitle.text}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
-/** Секция страницы (1386:67731): заголовок H3 20/24 и строки без
- * карточки-подложки — прямо на белом фоне экрана. */
+/** Секция страницы (1858:105181): заголовок H3 20/24 с отступом 24 сверху
+ * (Heading padding 24px 24px 0px) и строки без карточки-подложки — прямо
+ * на белом фоне экрана. */
 function OperationSection({
   title,
   children,
@@ -487,7 +500,7 @@ function OperationSection({
 }): JSX.Element {
   return (
     <section>
-      <h2 className="px-6 pb-2 text-xl font-semibold leading-6 text-content">{title}</h2>
+      <h2 className="px-6 pt-6 pb-2 text-xl font-semibold leading-6 text-content">{title}</h2>
       <div className="flex flex-col">{children}</div>
     </section>
   );
@@ -538,28 +551,25 @@ function DetailRow({
 }
 
 /** Экран успеха «Платеж оплачен» (1444:65733): иконка категории с зелёной
- * галочкой, подпись «название / сумма за дату / по объекту», кнопки
- * «Хорошо» (закрытие — возврат по решению #1072, onClose решает модель)
- * и «Посмотреть платеж» (страница правила; у ручных фактов правила
- * нет — кнопки тоже). Название — самой оплаченной операции (решение
- * владельца — поправка 08.10 к #1190, #1196): эхо оплаты несёт её
- * снимок, как и деталь после отката живой перезаписи.
+ * галочкой, подпись «название / сумма за дату / по объекту», кнопка
+ * «Хорошо» (закрытие — возврат по решению #1072, onClose решает модель);
+ * «Посмотреть платеж» снята с экрана (решение владельца 17.10) — на
+ * правило и так ведёт плашка «Платеж» в «Данных операции». Название —
+ * самой оплаченной операции (решение владельца — поправка 08.10 к #1190,
+ * #1196): эхо оплаты несёт её снимок, как и деталь после отката живой
+ * перезаписи.
  */
 function OperationPaidSuccess({
-  propertyId,
   paid,
   propertyTitle,
   onClose,
 }: {
-  readonly propertyId: string;
   readonly paid: PaymentOperation;
   readonly propertyTitle: string;
   readonly onClose: () => void;
 }): JSX.Element {
-  const router = useRouter();
   const today = dateToIsoLocal(new Date());
   const paidDate: IsoDate = paid.paidDate ?? today;
-  const paymentId = paid.paymentId;
   const style = categoryStyle('default', paid.categorySlug);
   const Icon = categoryIconComponents[style.icon];
 
@@ -595,15 +605,6 @@ function OperationPaidSuccess({
         <Button className="w-full" onClick={onClose}>
           Хорошо
         </Button>
-        {paymentId !== null && (
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => router.push(ROUTES.propertyPayment(propertyId, paymentId))}
-          >
-            Посмотреть платеж
-          </Button>
-        )}
       </StickyBottomBar>
     </>
   );

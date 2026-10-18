@@ -30,7 +30,7 @@ import { overdueDaysLine } from "../lib/payments-global-model";
 import { PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
 
 /**
- * Экран «Просроченные операции» (карта #573, тикет #580; вход — карточка
+ * Экран «Просроченные платежи» (карта #573, тикет #580; вход — карточка
  * «Все просроченные» главного экрана #578). Список (706:14684): строки
  * канона PaymentRowButton — иконка категории с красным (!)-бейджем,
  * название, объект; сумма обычным цветом, срок «N дней» красным
@@ -85,7 +85,7 @@ export function PaymentOverdueGlobalScreen({
           />
         }
       >
-        <TopNavTitle title="Просроченные операции" />
+        <TopNavTitle title="Просроченные платежи" />
       </TopNav>
 
       <PageContent>
@@ -208,8 +208,8 @@ function OverdueEmpty(): JSX.Element {
     >
       <EmptyState
         imageSrc="/images/payments/overdue-empty.png"
-        title="У вас нет просроченных операций"
-        description="Здесь будут операции, которые не успели отметить вовремя"
+        title="У вас нет просроченных платежей"
+        description="Здесь будут платежи, которые не успели отметить вовремя"
         descriptionClassName="text-content"
       />
     </div>

@@ -137,6 +137,12 @@ const COPIES = 3;
 const G = N * COPIES; // узлов в ленте
 const INITIAL = N + 2; // «2-комнатная на Ленина»: средняя копия (слайды N..2N−1), карта 2
 const STEP_MS = 360; // длительность любого перехода — как у Яндекса (замер)
+// Слой (will-change: transform) на дорожках держится только на время
+// движения (паттерн armLayers testimonials-carousel): постоянные слои —
+// ~15 фотокарточек 300px + ~15 плашек на страницу впустую, память на
+// дешёвых телефонах. Съём таймером с запасом к 360ms перехода; длинный
+// жест перезаводит таймер на каждом кадре движения.
+const LAYER_MS = 620;
 
 // Ширины состояний [боковая, центральная] для JS-математики — зеркало
 // CSS-переменных showcase.module.css. На ПК боковая растёт с шириной
@@ -178,6 +184,26 @@ function snapModel(tier: Tier, viewportW: number) {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+// Кеш геометрии ленты: модель и ширина колонки зависят только от яруса
+// и ширины окна, обе меняются только через resize (пересборка в measure
+// и onViewportChange). Горячий путь — render() каждый кадр полёта и
+// pointermove драга (до сотен событий в секунду) — читает кеш без
+// clientWidth: чтение лэйаута после записей прошлого кадра форсирует
+// sync-layout посреди кадра. Инвариант: refreshModel зовётся до любого
+// render (measure на mount, onViewportChange на resize) — рендер при
+// пустом кеше no-op. Ширина колонки — функция ширины окна (макс-w +
+// паддинги колонки), не шрифтов, поэтому кеш вне resize не протухает.
+// Кеш и changedIdx модульные: движок showcase на странице один.
+type CachedModel = ReturnType<typeof snapModel> & { zoneW: number };
+let cachedModel: CachedModel | null = null;
+function refreshModel(tier: Tier, viewportW: number, zoneW: number): CachedModel {
+  cachedModel = { ...snapModel(tier, viewportW), zoneW };
+  return cachedModel;
+}
+
+// Буфер изменённых узлов за кадр — один на модуль, без аллокаций в кадре
+const changedIdx = new Array<number>(G);
+
 function tierOf(): Tier {
   if (window.matchMedia("(min-width: 1200px)").matches) return "desk";
   if (window.matchMedia("(min-width: 481px)").matches) return "tab";
@@ -217,6 +243,13 @@ type EngineState = {
   wheelBuf: Array<{ t: number; d: number }>;
   lastWheelT: number;
   lastWheelD: number;
+  // отложенный рендер драга (коалесинг pointermove в один кадр) и
+  // последние записанные транслейты — чтобы не писать одинаковые строки
+  renderRaf: number;
+  lastTxPhoto: string;
+  lastTxStrip: string;
+  // таймер снятия will-change слоёв дорожек (armLayers)
+  layerTimer: ReturnType<typeof setTimeout> | null;
 };
 
 // ── Wheel: расстояние пальца + фильтр моментума ──────────────────────
@@ -259,39 +292,65 @@ export function Showcase() {
   const plateNodes = useRef<Array<HTMLElement | null>>([]);
   const stateRef = useRef<EngineState | null>(null);
 
+  // Слой (will-change: transform) на дорожках живёт только на время
+  // движения: постоянный держит слои всей ленты впустую (LAYER_MS выше).
+  // Повторный armLayers без записи стиля, если слой уже навешен.
+  const armLayers = useCallback(() => {
+    const st = stateRef.current;
+    if (!st) return;
+    for (const el of [photoTrackRef.current, stripRef.current]) {
+      if (el && el.style.willChange !== "transform") {
+        el.style.willChange = "transform";
+      }
+    }
+    if (st.layerTimer) {
+      clearTimeout(st.layerTimer);
+    }
+    st.layerTimer = setTimeout(() => {
+      st.layerTimer = null;
+      if (photoTrackRef.current) photoTrackRef.current.style.willChange = "";
+      if (stripRef.current) stripRef.current.style.willChange = "";
+    }, LAYER_MS);
+  }, []);
+
   // Один проход отрисовки: k по дистанции до позиций покоя, транслейт
   // фотодорожки, центровка ряда плашек. Источник истины — st.p.
-  // Чтения (clientWidth) — ДО любых записей стилей: запись после чтения
-  // форсирует sync-layout посреди кадра (порядок «сначала читаем, потом
-  // пишем» держит один layout на кадр).
+  // Геометрия — из кеша (refreshModel): в кадре полёта ни одного чтения
+  // лэйаута и ни одной аллокации. Стиль меняют только узлы, чей k ушёл
+  // за порог: запись неизменному узлу перерисовывает его стиль зря
+  // (setAttribute пересобирает весь инлайн-стиль), setProperty точечнее.
   const render = useCallback(() => {
-    const viewport = viewportRef.current;
     const photoTrack = photoTrackRef.current;
     const strip = stripRef.current;
     const zone = zoneRef.current;
     const st = stateRef.current;
-    if (!viewport || !photoTrack || !strip || !zone || !st) return;
-    const { m, step, snapArr } = snapModel(tierOf(), viewport.clientWidth);
-    const zoneW = zone.clientWidth;
+    if (!photoTrack || !strip || !zone || !st || !cachedModel) return;
+    const { m, step, snapArr, zoneW } = cachedModel;
     const p = st.p;
     const k = st.k;
-    let dirty = false;
+    let changed = 0;
     for (let g = 0; g < G; g += 1) {
       const nk = clamp(1 - Math.abs(p - (snapArr[g] ?? 0)) / step, 0, 1);
-      if (Math.abs(nk - (k[g] ?? 0)) > 0.002) {
+      // Точные 0/1 пишутся всегда: хвост ease-out затухает ниже порога,
+      // и без этого на покое залипает k=0.999 (размер до 0.4px мимо),
+      // хотя на покое k строго 0/1
+      if (nk === 0 || nk === 1 || Math.abs(nk - (k[g] ?? 0)) > 0.002) {
         k[g] = nk;
-        dirty = true;
+        changedIdx[changed] = g;
+        changed += 1;
       }
     }
-    if (dirty) {
-      for (let g = 0; g < G; g += 1) {
-        const kk = (k[g] ?? 0).toFixed(3);
-        slideNodes.current[g]?.setAttribute("style", `--k:${kk}`);
-        plateNodes.current[g]?.setAttribute("style", `--k:${kk}`);
-      }
+    for (let i = 0; i < changed; i += 1) {
+      const g = changedIdx[i] ?? 0;
+      const kk = (k[g] ?? 0).toFixed(3);
+      slideNodes.current[g]?.style.setProperty("--k", kk);
+      plateNodes.current[g]?.style.setProperty("--k", kk);
     }
-    zone.classList.toggle(s.moving ?? "", st.anim !== null || st.dragging);
-    photoTrack.style.transform = `translate3d(${(-p).toFixed(2)}px,0,0)`;
+    const moving = st.anim !== null || st.dragging;
+    zone.classList.toggle(s.moving ?? "", moving);
+    if (moving) {
+      armLayers(); // длинный жест перезаводит таймер снятия на каждом кадре
+    }
     // Плашки: транслейт линейно по p между позициями покоя — плашечный
     // ряд скользит с той же кривой, что и фото (frac линеен по p), и
     // прибывает ровно в центр. Формула через накопление текущих ширин
@@ -304,16 +363,38 @@ export function Showcase() {
     const span = Math.max(next - (snapArr[gLo] ?? 0), 1);
     const frac = clamp((p - (snapArr[gLo] ?? 0)) / span, 0, 1);
     const tx = zoneW / 2 - (gLo * pitch + m.plate / 2) - frac * pitch;
-    strip.style.transform = `translateX(${tx.toFixed(1)}px)`;
-  }, []);
+    // Точность транслейтов одинаковая (0.01px): на 120Гц шаг 0.1px у
+    // плашек читался как лёгкая ступенька относительно фотодорожки
+    const txPhoto = `translate3d(${(-p).toFixed(2)}px,0,0)`;
+    if (txPhoto !== st.lastTxPhoto) {
+      st.lastTxPhoto = txPhoto;
+      photoTrack.style.transform = txPhoto;
+    }
+    const txStrip = `translateX(${tx.toFixed(2)}px)`;
+    if (txStrip !== st.lastTxStrip) {
+      st.lastTxStrip = txStrip;
+      strip.style.transform = txStrip;
+    }
+  }, [armLayers]);
+
+  // Рендер драга — не чаще кадра: pointermove может приходить чаще
+  // дисплея (мыши до 1000Гц), каждый прямой render() между событиями —
+  // лишняя работа стилей до бесполезной (виден только последний).
+  const scheduleRender = useCallback(() => {
+    const st = stateRef.current;
+    if (!st || st.renderRaf !== 0) return;
+    st.renderRaf = requestAnimationFrame(() => {
+      st.renderRaf = 0;
+      render();
+    });
+  }, [render]);
 
   // Тихая пересадка в среднюю копию — только на покое (позиции покоя
   // соседних копий совпадают точно, сдвиг невидим).
   const renormalize = useCallback(() => {
-    const viewport = viewportRef.current;
     const st = stateRef.current;
-    if (!viewport || !st) return;
-    const { snapArr, copyPlain } = snapModel(tierOf(), viewport.clientWidth);
+    if (!st || !cachedModel) return;
+    const { snapArr, copyPlain } = cachedModel;
     let best = nearestIndex(st.p, snapArr);
     let shifted = false;
     while (best < 2) {
@@ -341,7 +422,10 @@ export function Showcase() {
       const a = st.anim;
       if (!a) return;
       const x = a.dur <= 0 ? 1 : clamp((t - a.t0) / a.dur, 0, 1);
-      st.p = a.from + (a.to - a.from) * easeOut(x);
+      // Последний кадр сажает p ровно в to: from+(to-from)*easeOut(1)
+      // несёт FP-пыль (посадка мимо снапа на ~1e-12), из-за неё на покое
+      // не сходится строго 0/1
+      st.p = x < 1 ? a.from + (a.to - a.from) * easeOut(x) : a.to;
       render();
       if (x < 1) {
         st.raf = requestAnimationFrame(stepFn);
@@ -382,10 +466,9 @@ export function Showcase() {
 
   // Один wheel-шаг в направлении dir: сосед от ближайшей позиции покоя.
   const wheelStep = useCallback((dir: number) => {
-    const viewport = viewportRef.current;
     const st = stateRef.current;
-    if (!viewport || !st) return;
-    const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+    if (!st || !cachedModel) return;
+    const { snapArr } = cachedModel;
     const cur = nearestIndex(st.p, snapArr);
     const g = clamp(cur + dir, 1, G - 2);
     st.wheelSign = dir;
@@ -404,10 +487,9 @@ export function Showcase() {
   // всегда стартует от живого p); drag перехватывает движение раньше.
   const selectNode = useCallback(
     (g: number) => {
-      const viewport = viewportRef.current;
       const st = stateRef.current;
-      if (!viewport || !st || st.dragging) return;
-      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+      if (!st || st.dragging || !cachedModel) return;
+      const { snapArr } = cachedModel;
       const cur = nearestIndex(st.p, snapArr);
       let delta = g - cur;
       if (delta > G / 2) delta -= G;
@@ -438,12 +520,23 @@ export function Showcase() {
       wheelBuf: [],
       lastWheelT: 0,
       lastWheelD: 0,
+      renderRaf: 0,
+      lastTxPhoto: "",
+      lastTxStrip: "",
+      layerTimer: null,
+    };
+    // Общая часть смены геометрии (mount и resize — единственные точки):
+    // сброс кеша записанных транслейтов и пересборка модели
+    const rebase = (st0: EngineState) => {
+      st0.lastTxPhoto = "";
+      st0.lastTxStrip = "";
+      return refreshModel(tierOf(), viewport.clientWidth, zoneRef.current?.clientWidth ?? 0);
     };
     const measure = () => {
       const st0 = stateRef.current;
       if (!st0) return;
       st0.anim = null;
-      st0.p = snapModel(tierOf(), viewport.clientWidth).snapArr[INITIAL] ?? 0;
+      st0.p = rebase(st0).snapArr[INITIAL] ?? 0;
       st0.k.fill(0);
       render();
     };
@@ -458,8 +551,11 @@ export function Showcase() {
       cancelAnimationFrame(resizeRaf);
       resizeRaf = requestAnimationFrame(() => {
         const st0 = stateRef.current;
-        if (!st0 || st0.dragging) return;
-        const { snapArr, copyPlain } = snapModel(tierOf(), viewport.clientWidth);
+        if (!st0) return;
+        // Кеш пересобирается всегда — и в драге тоже: следующий переход
+        // после отпускания должен считаться уже по новой геометрии
+        const { snapArr, copyPlain } = rebase(st0);
+        if (st0.dragging) return;
         let best = nearestIndex(st0.p, snapArr);
         let p = snapArr[best] ?? st0.p;
         while (best < 2) {
@@ -484,7 +580,13 @@ export function Showcase() {
       const st = stateRef.current;
       if (st) {
         cancelAnimationFrame(st.raf);
+        cancelAnimationFrame(st.renderRaf);
+        st.renderRaf = 0;
         st.anim = null;
+        if (st.layerTimer) {
+          clearTimeout(st.layerTimer);
+          st.layerTimer = null;
+        }
       }
     };
   }, [render]);
@@ -511,6 +613,7 @@ export function Showcase() {
       s0.anim = null; // drag перехватывает движение
       cancelAnimationFrame(s0.raf);
       viewport.classList.add(s.dragging ?? "");
+      armLayers(); // слой — до первой записи движения
       viewport.setPointerCapture(e.pointerId);
     };
 
@@ -519,9 +622,10 @@ export function Showcase() {
       if (!s1 || !s1.dragging || e.pointerId !== s1.pointerId) return;
       const dx = e.clientX - s1.dragStartX;
       if (Math.abs(dx) > 5) s1.dragMoved = true;
-      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+      const snapArr = cachedModel?.snapArr;
+      if (!snapArr) return;
       s1.p = clamp(s1.dragStartP - dx, snapArr[1] ?? 0, snapArr[G - 2] ?? 0);
-      render();
+      scheduleRender();
       s1.dragSamples.push({ t: performance.now(), x: e.clientX });
       if (s1.dragSamples.length > 6) s1.dragSamples.shift();
     };
@@ -539,7 +643,8 @@ export function Showcase() {
         if (host) selectNode(Number(host.dataset.slideIdx));
         return;
       }
-      const { snapArr } = snapModel(tierOf(), viewport.clientWidth);
+      const snapArr = cachedModel?.snapArr;
+      if (!snapArr) return;
       let best = nearestIndex(s2.p, snapArr);
       if (flick) {
         // скорость по окну ~100мс: последний сэмпл к моменту up почти
@@ -575,7 +680,7 @@ export function Showcase() {
       viewport.removeEventListener("pointerup", onPointerUp);
       viewport.removeEventListener("pointercancel", onPointerCancel);
     };
-  }, [animateTo, render, selectNode]);
+  }, [animateTo, armLayers, render, selectNode, scheduleRender]);
 
   // Shift+Scroll и горизонтальный трекпад — по расстоянию пальца:
   // каждые WHEEL_STEP_PX накопленного пальцевого пути = одна карточка
@@ -641,6 +746,7 @@ export function Showcase() {
         <Reveal delay={80} className="w-full">
           <div
             ref={zoneRef}
+            data-carousel-canvas
             className={`${s.carousel} ${s.zone}`}
             style={{ visibility: mounted ? "visible" : "hidden" }}
           >
@@ -657,6 +763,8 @@ export function Showcase() {
                         }}
                         type="button"
                         aria-label={`Показать: ${card.name}`}
+                        aria-hidden={c !== 1}
+                        tabIndex={c === 1 ? 0 : -1}
                         className={s.plate}
                         style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
                         onClick={() => selectNode(g)}
@@ -691,6 +799,7 @@ export function Showcase() {
                           data-slide-idx={g}
                           role="button"
                           tabIndex={near ? 0 : -1}
+                          aria-hidden={!near}
                           aria-label={`Показать: ${card.name}`}
                           className={s.slide}
                           style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}

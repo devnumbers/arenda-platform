@@ -38,6 +38,10 @@ const RUBBER = 0.35;
 // Порог броска по скорости, px/мс.
 const FLICK_V = 0.5;
 
+// Слой дорожки держится 620мс после последнего движения — запас к переходам
+// 360/460мс (канон armLayers showcase).
+const LAYER_MS = 620;
+
 // Порог активации drag: до него жест считается тапом — класс dragging
 // не включается, capture не ставится, клик уходит по назначению.
 const DRAG_ACTIVATE_PX = 5;
@@ -78,6 +82,18 @@ type EngineState = {
   dragStartP: number;
   dragSamples: Array<{ t: number; x: number }>;
 };
+
+// Модель позиций покоя живёт в кеше замыкания: пересборка — только точки
+// смены геометрии (mount и resize; у окна ленты больше нет источников
+// правды о ширинах — ярусы и ширины карточек меняются только через
+// вьюпорт). Горячий путь — onPointerDown/onPointerMove/release/stepBy —
+// читает кеш: на таче pointermove приходит до сотен раз в секунду, и
+// getBoundingClientRect всех детей на каждом событии — чтение лэйаута
+// без причины (записи transform лэйаут не грязнят, но и пользы от
+// повторного замера нет: между ресайзами геометрия та же). Если у ленты
+// появятся дети, чья ширина меняется вне ресайза окна (контент, шрифт) —
+// кеш обязан инвалидироваться в той же точке, что и смена ширин.
+type StripModel = ReturnType<typeof model>;
 
 // Позиции покоя: k-й шаг прижат к контентной колонке; последняя позиция
 // — правый край стрипа у правого края колонки (maxP) — шаг длину стрипа
@@ -137,6 +153,30 @@ export function createStripEngine(
     dragSamples: [],
   };
   let resizeRaf = 0;
+  // Слой transform — только на время движения, снимается таймером (канон
+  // armLayers showcase: постоянный слой — впустую память на дешёвых
+  // телефонах).
+  let layerTimer: number | null = null;
+  const armLayers = () => {
+    if (track.style.willChange !== "transform") {
+      track.style.willChange = "transform";
+    }
+    if (layerTimer !== null) {
+      clearTimeout(layerTimer);
+    }
+    layerTimer = window.setTimeout(() => {
+      track.style.willChange = "";
+      layerTimer = null;
+    }, LAYER_MS);
+  };
+  // Кеш модели: пересобирается в measure (mount) и на ресайз; в драге
+  // тоже — следующий переход после отпускания должен считаться уже по
+  // новой геометрии (та же инварианта, что у кеша showcase).
+  let modelCache: StripModel | null = null;
+  const cachedModel = (): StripModel => {
+    modelCache ??= model(viewport, track, config);
+    return modelCache;
+  };
   // Источник истины — st.p; один проход отрисовки кладёт её в дорожку.
   const render = () => {
     track.style.transform = `translate3d(${(-st.p).toFixed(2)}px,0,0)`;
@@ -169,6 +209,7 @@ export function createStripEngine(
       render();
       return;
     }
+    armLayers();
     const narrow = window.matchMedia(`(max-width: ${NARROW_MAX - 1}px)`).matches;
     st.anim = {
       from: st.p,
@@ -182,7 +223,7 @@ export function createStripEngine(
 
   // Один шаг в направлении dir: соседняя позиция покоя от ближайшей.
   const stepBy = (dir: number) => {
-    const { pos } = model(viewport, track, config);
+    const { pos } = cachedModel();
     const cur = nearestIndex(st.p, pos);
     const target = Math.min(Math.max(cur + dir, 0), pos.length - 1);
     animateTo(pos[target] ?? st.p);
@@ -193,16 +234,23 @@ export function createStripEngine(
   const measure = () => {
     st.anim = null;
     cancelAnimationFrame(st.raf);
-    const { pos } = model(viewport, track, config);
-    st.p = pos[nearestIndex(st.p, pos)] ?? 0;
+    modelCache = model(viewport, track, config);
+    st.p = modelCache.pos[nearestIndex(st.p, modelCache.pos)] ?? 0;
     render();
   };
 
   const onResize = () => {
     cancelAnimationFrame(resizeRaf);
     resizeRaf = requestAnimationFrame(() => {
+      // Кеш пересобирается всегда — и в драге тоже: snap после отпускания
+      // обязан считаться по новой геометрии. Переезд на новую позицию
+      // покоя — только не в драге (палец держит ленту сам).
+      modelCache = model(viewport, track, config);
       if (!st.dragging) {
-        measure();
+        st.anim = null;
+        cancelAnimationFrame(st.raf);
+        st.p = modelCache.pos[nearestIndex(st.p, modelCache.pos)] ?? 0;
+        render();
       }
     });
   };
@@ -214,7 +262,7 @@ export function createStripEngine(
     if (e.pointerType === "mouse" && e.button !== 0) {
       return;
     }
-    if (model(viewport, track, config).maxP <= 0) {
+    if (cachedModel().maxP <= 0) {
       return; // лента влезает в колонку — двигать нечего
     }
     st.armed = true;
@@ -226,6 +274,7 @@ export function createStripEngine(
     st.dragSamples = [{ t: performance.now(), x: e.clientX }];
     st.anim = null; // жест перехватывает движение
     cancelAnimationFrame(st.raf);
+    armLayers(); // слой — до первой записи движения
   };
 
   const onPointerMove = (e: PointerEvent) => {
@@ -246,7 +295,7 @@ export function createStripEngine(
       }
       viewport.setPointerCapture(e.pointerId);
     }
-    const { maxP } = model(viewport, track, config);
+    const { maxP } = cachedModel();
     const raw = st.dragStartP - dx;
     // резиновый край: за пределами позиций полоса следует с затуханием
     st.p =
@@ -256,6 +305,7 @@ export function createStripEngine(
     if (st.dragSamples.length > 6) {
       st.dragSamples.shift();
     }
+    armLayers(); // длинный жест переживает таймер слоя — перезаводим
   };
 
   const release = (e: PointerEvent, flick: boolean) => {
@@ -274,11 +324,11 @@ export function createStripEngine(
       // Тап без движения перебивает полёт (жест перехватывает движение,
       // канон) — лента доезжает до ближайшей позиции покоя, а не застывает
       // между карточками до следующего жеста. На покое это no-op.
-      const { pos } = model(viewport, track, config);
+      const { pos } = cachedModel();
       animateTo(pos[nearestIndex(st.p, pos)] ?? st.p);
       return;
     }
-    const { pos } = model(viewport, track, config);
+    const { pos } = cachedModel();
     let best = nearestIndex(st.p, pos);
     if (flick) {
       // скорость по окну ~100мс: последний сэмпл к моменту up почти
@@ -351,6 +401,11 @@ export function createStripEngine(
       cancelAnimationFrame(resizeRaf);
       cancelAnimationFrame(st.raf);
       st.anim = null;
+      if (layerTimer !== null) {
+        clearTimeout(layerTimer);
+        layerTimer = null;
+      }
+      track.style.willChange = "";
       if (config.draggingClass) {
         viewport.classList.remove(config.draggingClass);
       }

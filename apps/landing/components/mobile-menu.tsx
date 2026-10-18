@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "./logo";
 import type { NavItem } from "@/lib/nav";
@@ -21,9 +21,10 @@ import type { NavItem } from "@/lib/nav";
 // висящей панели давал клинья в стыке (решение владельца 29.09 позднее —
 // откат эксперимента со скруглением на старте закрытия).
 // Морф иконки: средняя линия гаснет, крайние съезжаются в крест (240мс).
-// Страница под открытым меню блокируется от скролла (overflow hidden на
-// html + scrollbar-gutter stable — на классических скроллбарах без сдвига
-// контента).
+// Страница под открытым меню блокируется от скролла без смены overflow
+// html (класс menu-scroll-locked: touch-action/overscroll + гвард колеса
+// — смена overflow инвалидирует лэйаут всего документа, аудит #1483).
+// Esc закрывает меню.
 //
 // Машина состояний: open («раскрыто» — высота, каскад), closing (свёртывание:
 // open уже false, панель едет вниз до среза; срез — таймаутом на шаг длиннее
@@ -72,28 +73,48 @@ export function MobileMenu({
     return () => mq.removeEventListener("change", onDesk);
   }, []);
 
-  // Лок скролла на всё открытое состояние (включая свёртывание): overflow
-  // правим напрямую (внешняя система), gutter резервирует полосу
-  // классического скроллбара, чтобы блокировка не двигала контент.
+  const startClose = useCallback(() => {
+    if (open && !closing) {
+      setOpen(false);
+      setClosing(true);
+    }
+  }, [open, closing]);
+  // Мост в эффект лока: листенеры зовут свежий startClose, не включая
+  // его в зависимости (канон goToRef в testimonials-carousel).
+  const startCloseRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    startCloseRef.current = startClose;
+  }, [startClose]);
+
+  // Блокировка фона на всё открытое состояние (включая свёртывание) —
+  // без смены overflow корневого скроллера: она инвалидирует лэйаут
+  // всего документа и стоила старту шторки кадр до 425мс на CPU×4
+  // (аудит #1483). touch-action/overscroll лэйаут не трогают; колесо и
+  // трекпад (планшет) гасит слушатель, Esc закрывает меню. Клавиатурный
+  // скролл фона (space/стрелки) остаётся возможным — осознанный
+  // компромисс.
   useEffect(() => {
     if (!open && !closing) {
       return;
     }
     const html = document.documentElement;
-    html.style.overflow = "hidden";
-    html.style.scrollbarGutter = "stable";
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        startCloseRef.current();
+      }
+    };
+    html.classList.add("menu-scroll-locked");
+    document.addEventListener("wheel", onWheel, { passive: false });
+    document.addEventListener("keydown", onKey);
     return () => {
-      html.style.overflow = "";
-      html.style.scrollbarGutter = "";
+      html.classList.remove("menu-scroll-locked");
+      document.removeEventListener("wheel", onWheel);
+      document.removeEventListener("keydown", onKey);
     };
   }, [open, closing]);
-
-  const startClose = () => {
-    if (open && !closing) {
-      setOpen(false);
-      setClosing(true);
-    }
-  };
 
   const toggle = () => {
     if (closing) {
@@ -136,7 +157,7 @@ export function MobileMenu({
             aria-expanded={open}
             aria-controls="mobile-menu"
             aria-label={open ? "Закрыть меню" : "Открыть меню"}
-            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl bg-surface transition-colors duration-200 outline-none hover:bg-surface-hover active:bg-surface-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl bg-surface transition-colors duration-200 active:duration-75 outline-none hover:bg-surface-hover active:bg-surface-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
             {/* Бургер 2859-4421 (3 линии 16×1.5 с шагом 7) морфится в крест:
                 средняя гаснет, крайние съезжаются на центральную ось. */}

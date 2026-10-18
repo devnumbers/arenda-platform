@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
  * (ring-2 без смещения), только с клавиатуры.
  */
 const iconButtonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-pill font-sans outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-pill font-sans outline-none transition-colors duration-200 active:duration-75 focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {

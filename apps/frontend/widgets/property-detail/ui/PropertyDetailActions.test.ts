@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
-import { PropertyStatusSheet } from './PropertyDetailActions';
+import { Cancel } from '@/shared/assets/icons';
+import { propertyActionIcon, PropertyStatusSheet } from './PropertyDetailActions';
 
 /** Плоское дерево React-элементов шита без рендера: канон тестов
  * фронта — node без DOM (vitest.config.mts); шит без хуков можно
@@ -58,7 +59,7 @@ function renderSheet(onClose: () => void): ReturnType<typeof collect> {
           onClose();
         }
       },
-      items: [{ key: 'start-rental', label: 'Начать аренду' }],
+      items: [{ key: 'start-rental', label: 'Начать аренду', danger: false }],
       onAction: () => {},
     }),
   );
@@ -114,5 +115,46 @@ describe('PropertyStatusSheet — «Отменить» в контейнере �
     expect(classes).toContain('h-14');
     expect(classes).toContain('rounded-button');
     expect(classes).toContain('bg-surface-muted');
+  });
+});
+
+describe('«Удалить аренду» — глиф и цвет по макету 3460-78651 (решение владельца 17.10)', () => {
+  it('иконка строки — канонный Cancel (✕), не TrashBin как у «Удалить объект»', () => {
+    const icon = propertyActionIcon('delete-rental');
+    expect(icon).not.toBeNull();
+    expect(icon?.type).toBe(Cancel);
+  });
+
+  it('danger-пункт шита статуса несёт красную подпись и красный глиф, обычные — content', () => {
+    const { elements } = collect(
+      PropertyStatusSheet({
+        open: true,
+        onOpenChange: () => {},
+        items: [
+          { key: 'delete-rental', label: 'Удалить аренду', danger: true },
+          { key: 'start-maintenance', label: 'Объект на ремонте', danger: false },
+        ],
+        onAction: () => {},
+      }),
+    );
+
+    // Красный глиф: text-danger на самой кнопке пункта (иконка красится
+    // currentColor), подпись — своим спаном.
+    const dangerRow = elements.find(
+      (element) =>
+        String(element.props.className ?? '').includes('bg-surface-muted') &&
+        collect(element).strings.includes('Удалить аренду'),
+    );
+    expect(String(dangerRow?.props.className)).toContain('text-danger');
+
+    const labelClassOf = (label: string): string => {
+      // Прямой ребёнок — строка-лейбл: иначе первым находится контейнер
+      // меню, в поддереве которого лейблы тоже лежат.
+      const span = elements.find((element) => element.props.children === label);
+      return String(span?.props.className ?? '');
+    };
+    expect(labelClassOf('Удалить аренду')).toContain('text-danger');
+    expect(labelClassOf('Объект на ремонте')).toContain('text-content');
+    expect(labelClassOf('Объект на ремонте')).not.toContain('text-danger');
   });
 });

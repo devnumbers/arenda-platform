@@ -180,6 +180,14 @@ export function ListRowSection(): JSX.Element {
                     titleClassName="text-primary"
                     onSelect={() => undefined}
                 />
+                {/* Отклик фоном — строки «Управления» аренды (решение
+                    владельца 17.10.2026): фон при наведении/нажатии, текст
+                    не гаснет; дефолт канона — приглушение текста. */}
+                <ListRow
+                    title="Продлить аренду"
+                    onSelect={() => undefined}
+                    hoverEffect="background"
+                />
             </div>
         </div>
     );

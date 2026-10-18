@@ -122,6 +122,75 @@ func (s *txStores) subscriptionForUpdate(ctx context.Context, userID uuid.UUID) 
 	return sub, nil
 }
 
+// ensureSubscriptionForUpdate is subscriptionForUpdate extended with the
+// missing-row onboarding of the admin tools (issue #1516): an account without
+// a subscription row — an admin-role account, for one — first gets the free
+// basic subscription, and the locked row is returned whatever path created
+// it. An unknown user stays a miss: the basic creation cannot beat the
+// user_id foreign key.
+func (s *txStores) ensureSubscriptionForUpdate(ctx context.Context, userID uuid.UUID) (domain.Subscription, error) {
+	sub, err := s.subscriptionForUpdate(ctx, userID)
+	if !errors.Is(err, ErrSubscriptionNotFound) {
+		return sub, err
+	}
+	if _, _, err := s.ensureBasicSubscription(ctx, userID); err != nil {
+		return domain.Subscription{}, err
+	}
+	return s.subscriptionForUpdate(ctx, userID)
+}
+
+// ensureBasicSubscription returns the user's subscription, creating the free
+// basic one — with its "registered" transition — when the account has no
+// subscription row yet. The created flag reports a fresh creation, so the
+// onboarding event handler logs only real creations. Both paths are
+// idempotent: an existing row is left untouched, and a create race lost to a
+// concurrent delivery returns the winner's row without a second transition.
+// An unknown user (the user_id foreign key rejects the insert) surfaces as
+// ErrSubscriptionNotFound.
+func (s *txStores) ensureBasicSubscription(ctx context.Context, userID uuid.UUID) (domain.Subscription, bool, error) {
+	sub, err := s.subscriptions.GetByUserID(ctx, userID)
+	if err == nil {
+		return sub, false, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return domain.Subscription{}, false, fmt.Errorf("get subscription: %w", err)
+	}
+
+	tariff, err := s.tariffs.GetByName(ctx, domain.TariffBasic)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Subscription{}, false, fmt.Errorf("basic tariff seed is missing: %w", ErrTariffNotFound)
+		}
+		return domain.Subscription{}, false, fmt.Errorf("get basic tariff: %w", err)
+	}
+	sub, err = domain.NewBasicSubscription(userID, tariff.ID)
+	if err != nil {
+		return domain.Subscription{}, false, fmt.Errorf("build basic subscription: %w", err)
+	}
+	created, err := s.subscriptions.Create(ctx, sub)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.Subscription{}, false, ErrSubscriptionNotFound
+		}
+		return domain.Subscription{}, false, fmt.Errorf("save subscription: %w", err)
+	}
+	if created.ID != sub.ID {
+		// A concurrent delivery won the create race; the repository
+		// returned the existing row. Leave it — and its transition —
+		// untouched.
+		return created, false, nil
+	}
+
+	transition, err := domain.NewTransition(created, nil, nil, domain.TransitionReasonRegistered, domain.InitiatorSystem, nil)
+	if err != nil {
+		return domain.Subscription{}, false, fmt.Errorf("build registration transition: %w", err)
+	}
+	if err := s.transitions.Append(ctx, transition); err != nil {
+		return domain.Subscription{}, false, fmt.Errorf("append registration transition: %w", err)
+	}
+	return created, true, nil
+}
+
 // lockInSelection locks the user's subscription and reports whether it still
 // matches the worker selection that listed it (issue #286). The batch
 // predicate lives in SQL, so the under-lock re-check re-lists the selection

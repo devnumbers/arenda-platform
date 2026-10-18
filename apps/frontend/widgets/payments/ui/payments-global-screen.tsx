@@ -689,7 +689,7 @@ function PaymentsGlobalPlaceholder({
   readonly children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex w-full items-center gap-6 rounded-card bg-surface-muted pl-7 pr-6">
+    <div className="flex w-full min-h-[96px] items-center gap-6 rounded-card bg-surface-muted pl-7 pr-6">
       <p className="min-w-0 flex-1 text-base leading-[18px] text-content-secondary">
         {children}
       </p>

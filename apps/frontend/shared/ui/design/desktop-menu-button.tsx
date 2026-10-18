@@ -65,11 +65,12 @@ export function DesktopMenuButton({
       </span>
       {badge !== undefined && badge > 0 && (
         // Число непрочитанных: без потолка — счётчик бэка всегда конечен;
-        // текст 13/15 Medium белый, pill 18px (Figma NumbersAlerts,
-        // padding 0 6); стоит вплотную к подписи с зазором 8 (Figma
-        // 2329:148713 — внешний row gap 8, внутри icon+label gap 12),
+        // текст 13/15 Medium белый, pill 20×20 (Figma NumbersAlerts,
+        // padding 0 6; правка владельца 17.10: min-width 20, контент по
+        // центру, padding-top 2); стоит вплотную к подписи с зазором 8
+        // (Figma 2329:148713 — внешний row gap 8, внутри icon+label gap 12),
         // не прижат к правому краю пилюли.
-        <span className="flex h-[18px] shrink-0 items-center rounded-pill bg-danger px-1.5 text-[13px] font-medium leading-[15px] text-surface">
+        <span className="flex h-[20px] min-w-[20px] shrink-0 items-center justify-center rounded-pill bg-danger px-1.5 pt-0.5 text-[13px] font-medium leading-[15px] text-surface">
           {badge}
         </span>
       )}

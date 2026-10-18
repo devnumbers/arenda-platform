@@ -368,8 +368,9 @@ func (r *fakeTransitionRepo) Append(_ context.Context, transition domain.Transit
 func (r *fakeTransitionRepo) ListBySubscriptionID(_ context.Context, subscriptionID uuid.UUID) ([]domain.Transition, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Newest first, like the postgres adapter ordering its created_at DESC.
 	result := make([]domain.Transition, 0, len(r.transitions))
-	for _, t := range r.transitions {
+	for _, t := range slices.Backward(r.transitions) {
 		if t.SubscriptionID == subscriptionID {
 			result = append(result, t)
 		}

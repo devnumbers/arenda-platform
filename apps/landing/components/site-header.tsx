@@ -41,7 +41,7 @@ function DesktopBar({ action }: { action: ReactNode }) {
           <a
             key={item.href}
             href={item.href}
-            className="rounded-lg px-3 py-2 text-xs text-ink transition-colors duration-200 outline-none hover:text-primary active:text-primary-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            className="rounded-lg px-3 py-2 text-xs text-ink transition-colors duration-200 active:duration-75 outline-none hover:text-primary active:text-primary-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
             {item.label}
           </a>

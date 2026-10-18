@@ -3,18 +3,21 @@
 package httpserver
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	accesshttp "github.com/nambers/arenda-planform/apps/backend/internal/access/adapters/http"
 	accessapp "github.com/nambers/arenda-planform/apps/backend/internal/access/application"
 	adminhttp "github.com/nambers/arenda-planform/apps/backend/internal/admin/adapters/http"
 	adminapp "github.com/nambers/arenda-planform/apps/backend/internal/admin/application"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	billinghttp "github.com/nambers/arenda-planform/apps/backend/internal/billing/adapters/http"
+	billingdomain "github.com/nambers/arenda-planform/apps/backend/internal/billing/domain"
 	contactshttp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters/http"
 	contactsapp "github.com/nambers/arenda-planform/apps/backend/internal/contacts/application"
 	historyhttp "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/http"
@@ -370,11 +373,14 @@ func New(deps Deps) http.Handler {
 	// basic tariff — the role-aware verdict lives in HistoryReadService
 	// (the handlers answer its ErrTariffRequired with the same 402 body).
 
-	// T-Kassa redirects the user here after the add-card bank form. Redirect them
-	// back to the frontend payment-methods page with a query flag so the UI can
-	// refresh the list and show the appropriate toast.
-	r.Get("/subscription/payment-methods/add-card/success", addCardReturnHandler(deps.AppBaseURL, true))
-	r.Get("/subscription/payment-methods/add-card/fail", addCardReturnHandler(deps.AppBaseURL, false))
+	// T-Kassa redirects the user here after the add-card bank form (the
+	// terminal-level SuccessAddCardURL/FailAddCardURL, issue #1514). Before
+	// sending the browser to the frontend payment-methods page, the success
+	// return runs the user's binding sync: the provider's notification
+	// retries run hourly, so the browser's own return is the earliest
+	// reliable completion moment. The redirect happens either way.
+	r.Get("/subscription/payment-methods/add-card/success", addCardReturnHandler(deps.AppBaseURL, deps.PaymentMethods, deps.Logger, true))
+	r.Get("/subscription/payment-methods/add-card/fail", addCardReturnHandler(deps.AppBaseURL, nil, nil, false))
 
 	// The local-only fake confirmation endpoints (issues #250/#251) live
 	// outside the generated contract: the billing wiring constructs their
@@ -396,8 +402,34 @@ func New(deps Deps) http.Handler {
 	return generated
 }
 
-func addCardReturnHandler(baseURL string, success bool) http.HandlerFunc {
+// addCardBindingSyncer is the narrow slice of the payment-method manager the
+// add-card return route needs (ADR 0035): materialize the completed binding
+// before the browser is sent on (issue #1514).
+type addCardBindingSyncer interface {
+	SyncPaymentMethods(ctx context.Context, userID uuid.UUID) ([]billingdomain.PaymentMethod, error)
+}
+
+// addCardReturnSyncBudget bounds the opportunistic binding sync of the
+// success return: the user's browser is waiting on the redirect, and the
+// aligned webhook budget (webhookProcessBudget of the billing HTTP layer)
+// already proves one provider round-trip set fits comfortably.
+const addCardReturnSyncBudget = 8 * time.Second
+
+func addCardReturnHandler(baseURL string, syncer addCardBindingSyncer, log *slog.Logger, success bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if success && syncer != nil {
+			if userID, ok := httpsupport.UserIDFromContext(r.Context()); ok {
+				syncCtx, cancel := context.WithTimeout(r.Context(), addCardReturnSyncBudget)
+				defer cancel()
+				if _, err := syncer.SyncPaymentMethods(syncCtx, userID); err != nil {
+					if log != nil {
+						log.WarnContext(r.Context(), "add-card return: binding sync failed; redirecting anyway",
+							slog.String("user_id", userID.String()),
+							slog.String("error", err.Error()))
+					}
+				}
+			}
+		}
 		result := httpsupport.AddCardResultFailed
 		if success {
 			result = httpsupport.AddCardResultSuccess

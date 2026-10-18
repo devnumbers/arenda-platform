@@ -173,6 +173,10 @@
   position: relative;
   height: var(--plate-h);
   overflow: hidden;
+  /* Морф плашек меняет лэйаут каждый кадр: контейнменты держат
+     перерасчёт внутри полосы — наружу (колонка, секции ниже) при
+     морфинге не выходит ничего, высота полосы зафиксирована */
+  contain: layout paint;
 }
 
 .stripTrack {
@@ -184,7 +188,9 @@
   gap: var(--plate-gap-y);
   height: 100%;
   width: max-content;
-  will-change: transform;
+  /* Слой (will-change: transform) вешается на время движения движком в
+     showcase.tsx (паттерн armLayers): постоянный держит слой всей ленты
+     (~15 плашек) впустую — память на дешёвых телефонах. */
 }
 
 .plate {
@@ -279,6 +285,10 @@
   overflow: hidden;
   cursor: grab;
   touch-action: pan-y;
+  /* Контейнменты морфа: перерасчёт лэйаута карточек не выходит за
+     окно ленты (высота зафиксирована, клип уже был) — колонка и контент
+     под каруселью не перестраиваются в кадрах движения */
+  contain: layout paint;
 }
 
 .track {
@@ -287,7 +297,9 @@
   gap: var(--gap);
   height: 100%;
   width: max-content;
-  will-change: transform;
+  /* Слой — на время движения, как у .stripTrack выше: постоянный
+     will-change держит слой всей фотоленты (~15 карточек 300px на мобиле)
+     впустую. */
 }
 
 .dragging {

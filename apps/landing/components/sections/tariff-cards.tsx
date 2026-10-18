@@ -276,7 +276,7 @@ export function TariffCards({
               type="button"
               aria-pressed={billing === value}
               onClick={() => selectBilling(value)}
-              className={`relative flex h-[52px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-[14px] text-xs transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              className={`relative flex h-[52px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-[14px] text-xs transition-colors duration-200 active:opacity-80 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                 billing === value ? "text-ink" : "text-gray-2"
               }`}
             >
