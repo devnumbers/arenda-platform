@@ -8,7 +8,7 @@ import {
 // Единая поверхность поддержки — модалка «Связаться с нами» (карта #761,
 // тикет #766): страница /support снесена, пилюля десктопа, шестая ячейка
 // шита «Еще», кнопка экрана «Тариф» и пилюли «Написать в поддержку» шагов
-// входа открывают одну и ту же модалку (Telegram-заглушка t.me/swirnowwwivan,
+// входа открывают одну и ту же модалку (Telegram t.me/smirnowwwivan,
 // почта hello@rentlee.ru с копированием в буфер).
 
 test('модалка открывается с пилюли «Написать в поддержку» шага входа', async ({ page }, testInfo) => {
@@ -19,10 +19,10 @@ test('модалка открывается с пилюли «Написать �
   await expect(dialog).toBeVisible();
   await expect(page.getByText('Напишите нам в Телеграм или на почту')).toBeVisible();
 
-  // Telegram — внешняя ссылка в новой вкладке; адрес — заглушка из
-  // shared/config/support.ts (владелец заменит).
+  // Telegram — внешняя ссылка в новой вкладке; адрес — из
+  // shared/config/support.ts.
   const telegram = dialog.getByRole('link', { name: 'Написать в Телеграм' });
-  await expect(telegram).toHaveAttribute('href', 'https://t.me/swirnowwwivan');
+  await expect(telegram).toHaveAttribute('href', 'https://t.me/smirnowwwivan');
   await expect(telegram).toHaveAttribute('target', '_blank');
 
   // Почта — копирование в буфер: иконка/подпись сменяются на «Скопировано»
