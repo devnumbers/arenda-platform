@@ -2224,7 +2224,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The subscription transition log of one user's subscription (issue #255): every status and tariff change with its reason, initiator (user/admin/system) and the payment that caused it, newest first. */
+        /** @description The subscription transition log of one user's subscription (issue #255): every status and tariff change with its reason, initiator (user/admin/system) and the payment that caused it, newest first. An account without a subscription row has no history — an empty log, not a miss (issue #1516). */
         get: operations["listAdminSubscriptionTransitions"];
         put?: never;
         post?: never;
@@ -8650,7 +8650,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };
