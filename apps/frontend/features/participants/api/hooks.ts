@@ -7,7 +7,6 @@ import type { ApiError } from '@/shared/api/errors';
 import type { components } from '@/shared/api/dto';
 import { accessKeys, participantsKeys, propertyKeys } from '@/shared/api/query-keys';
 import type { QueryClient } from '@tanstack/react-query';
-import { mapParticipant } from '@/entities/participants';
 import type { Participant } from '@/entities/participants';
 import {
   countGrantOutcomes,
@@ -17,9 +16,7 @@ import {
   type InviteParticipantCommand,
 } from './wire';
 
-type ParticipantsResponse = components['schemas']['ParticipantsResponse'];
-
-import { participantQueryOptions } from './queries';
+import { participantQueryOptions, participantsListQueryOptions } from './queries';
 
 /** Строки участников проецируются в двух видах: агрегаты
  * GET /participants* и списки объекта GET /properties/{id}/access/members
@@ -40,11 +37,7 @@ export function useParticipantsList(
   options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<Participant[], ApiError> {
   return useQuery({
-    queryKey: participantsKeys.list(),
-    queryFn: async (): Promise<Participant[]> => {
-      const response = await apiClient<ParticipantsResponse>('/participants');
-      return response.items.map(mapParticipant);
-    },
+    ...participantsListQueryOptions(),
     enabled: options.enabled,
   });
 }

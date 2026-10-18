@@ -312,11 +312,13 @@ export function TasksFeedScreen({
             <TasksStateCard
               title="Не удалось загрузить задачи"
               onRetry={() => void activeQuery.refetch()}
+              loading={activeQuery.isFetching}
             />
           ) : completedQuery.isError ? (
             <TasksStateCard
               title="Не удалось загрузить выполненные"
               onRetry={() => void completedQuery.refetch()}
+              loading={completedQuery.isFetching}
             />
           ) : empty === 'filtered' ? (
             // Пусто под фильтром «Объект» — канон пустого периода операций

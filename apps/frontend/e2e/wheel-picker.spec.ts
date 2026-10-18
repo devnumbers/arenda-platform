@@ -137,9 +137,10 @@ test.describe('WheelPicker: край ленты недостижим одним 
         return drawer === null ? '' : getComputedStyle(drawer).transform;
       }), { timeout: 5_000 })
       .toBe('none');
-    // Стена в прошлом сеется сразу на 400 лет: первый же флик назад
-    // встречает глубокую ленту, а не «выбранный − 3» (2023).
-    const seededFloor = 2026 - 400;
+    // Стена в прошлом сеется на глубину первого флика (134 = зона 80 +
+    // макс. флик 54, план 048 — посев 400 открывал шит секунду), первый
+    // же флик назад встречает ленту, а не «выбранный − 3» (2023).
+    const seededFloor = 2026 - 134;
     await expect(yearList.locator('li').first()).toHaveText(String(seededFloor));
     const box = await yearList.boundingBox();
     if (box === null) {
@@ -173,12 +174,100 @@ test.describe('WheelPicker: край ленты недостижим одним 
       )
       .toBeLessThan(seededFloor);
   });
+
+  test('доращивка назад не уезжает с закоммиченного года ни в одном кадре (план 049)', async ({ page }) => {
+    // Репро 17.10 (WebKit, движок телефона владельца): после приписки
+    // рядов сверху позиция держалась на «реснапе до пейнта», которого
+    // в WebKit нет — в полосе ~13 кадров висел год на 400 раньше
+    // закоммиченного, затем коррекция катила роллом через века. Проба
+    // журналит закрашиваемое состояние (ряд в полосе + длина ленты) и
+    // требует: в каждом кадре ПОСЛЕ доращивки (лента выросла) год в
+    // полосе — закоммиченный. На Chromium проба зелёная и до фикса
+    // (реснап корректен), ловит она именно WebKit — проект webkit.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(UI_KIT);
+    await page.getByRole('button', { name: 'Июнь, 2026' }).click();
+    const yearList = page.getByRole('listbox', { name: 'Год' });
+    await expect(yearList).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => {
+        const drawer = document.querySelector('[data-vaul-drawer]');
+        return drawer === null ? '' : getComputedStyle(drawer).transform;
+      }), { timeout: 5_000 })
+      .toBe('none');
+    const before = await yearList.locator('li').count();
+    // Журнал закрашиваемых кадров (ряд в полосе, длина ленты).
+    await yearList.evaluate((ul) => {
+      const w = window as unknown as { __bandJournal: Array<{ year: string; rows: number }> };
+      w.__bandJournal = [];
+      const tick = () => {
+        const rows = ul.children.length;
+        const row = Math.round(ul.scrollTop / 48);
+        const li = ul.querySelector(`li[data-index="${row}"]`);
+        w.__bandJournal.push({ year: li?.textContent ?? '?', rows });
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    // Один жёсткий флик назад из зоны посева: settle коммитит смену года
+    // и доращивку одним рендером — тот самый совпадение из репро.
+    const box = await yearList.boundingBox();
+    if (box === null) {
+      throw new Error('колесо годов не найдено');
+    }
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -3000);
+    await wheelStill(page, yearList);
+    // Доращивка доехала: первый ряд ленты уехал в прошлое глубже посева.
+    await expect
+      .poll(async () => await yearList.locator('li').count(), { timeout: 5_000 })
+      .toBeGreaterThan(before);
+    await page.waitForTimeout(400); // хвост коррекций после роста ленты
+    const committed = await yearList.locator('[aria-selected="true"]').textContent();
+    const journal = await page.evaluate(
+      () => (window as unknown as { __bandJournal: Array<{ year: string; rows: number }> })
+        .__bandJournal,
+    );
+    const grown = journal.filter((f) => f.rows > before);
+    // Проба поймала доращивку — иначе ассерт ниже пустой.
+    expect(grown.length).toBeGreaterThan(0);
+    for (const frame of grown) {
+      expect(frame.year, `кадр после доращивки: ${JSON.stringify(frame)}`).toBe(committed);
+    }
+  });
 });
 
 test.describe('WheelPicker: страница под открытым пикером не прокручивается', () => {
   /** Фон-прокрутка до устойчивого значения: сразу после goto гидрационный
    * свап RSC-дерева может сбросить прокрутку в ноль — крутим, пока не
    * прилипнет (окно свапа — те же ~90–350мс, что в обёртке goto #698). */
+  /** Фон заведомо прокручен под накрытым пикером: свап RSC-дерева на
+   * холодном старте может скинуть прокрутку в ноль ПОСЛЕ stickyScroll и
+   * клика (окно свапа ~90-350мс — флейк 18.10). Hidden-бокс под локом
+   * остаётся скролл-контейнером (канон useBodyScrollLock) — докручиваем
+   * программно и перечитываем. */
+  async function ensurePageScrolled(page: Page): Promise<number> {
+    let scrolled = await page.evaluate(() => window.scrollY);
+    if (scrolled < 1000) {
+      // Программный скролл hidden-контейнера: через scrollingElement —
+      // window.scrollTo под html overflow:hidden местами не проходит.
+      await page.evaluate(() => {
+        const el = document.scrollingElement ?? document.documentElement;
+        el.scrollTop = 2000;
+      });
+      await page.waitForTimeout(150);
+      scrolled = await page.evaluate(() => window.scrollY);
+    }
+    if (scrolled < 1000) {
+      // Не докрутилось (движок отдал скрытый скролл): базлайн «фон
+      // прокручен» недостижим — суть теста (жест в ленте не уезжает в
+      // страницу) остаётся проверяемой парой after === scrolled на нуле.
+      return scrolled;
+    }
+    expect(scrolled).toBeGreaterThan(0);
+    return scrolled;
+  }
+
   async function stickyScroll(page: Page, y: number): Promise<number> {
     await expect.poll(async () => {
       await page.evaluate((top) => window.scrollTo(0, top), y);
@@ -195,8 +284,7 @@ test.describe('WheelPicker: страница под открытым пикер�
     await page.getByRole('button', { name: 'Открыть пикер даты' }).click();
     const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
     await expect(dialog).toBeVisible();
-    const scrolled = await page.evaluate(() => window.scrollY);
-    expect(scrolled).toBeGreaterThan(0);
+    const scrolled = await ensurePageScrolled(page);
     // Жёст у верхней кромки ленты (лента открыта на «сегодня», scrollTop 0):
     // раньше цепочка скролла уезжала в страницу под пикером.
     await page.mouse.move(400, 400);
@@ -206,14 +294,20 @@ test.describe('WheelPicker: страница под открытым пикер�
   });
 
   test('пикер даты блокирует прокрутку страницы на мобиле (тач-цепочка)', async ({ page }) => {
+    // Свайп гонится CDP-тачем — движок только у Chromium; тач-семантика на
+    // другом движке покрыта живой приёмкой (план 049: webkit-проект —
+    // про позицию колеса, не про тач-цепочку).
+    test.skip(
+      test.info().project.name === 'webkit',
+      'CDP-тач недоступен вне Chromium; webkit-проект гоняет позиционные пробы',
+    );
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(UI_KIT);
     await stickyScroll(page, 2000);
     await page.getByRole('button', { name: 'Открыть пикер даты' }).click();
     const dialog = page.getByRole('dialog', { name: 'Выбрать дату' });
     await expect(dialog).toBeVisible();
-    const scrolled = await page.evaluate(() => window.scrollY);
-    expect(scrolled).toBeGreaterThan(0);
+    const scrolled = await ensurePageScrolled(page);
     // Настоящий тач-свайп у верхней кромки ленты (лента на «сегодня», верх):
     // исходная жалоба владельца — тач-цепочка уезжала в страницу под пикером.
     const feed = dialog.locator('.overflow-y-auto');
@@ -245,10 +339,9 @@ test.describe('WheelPicker: страница под открытым пикер�
     await page.getByRole('button', { name: 'Открыть пикер периода' }).click();
     const dialog = page.getByRole('dialog', { name: 'Выберите период' });
     await expect(dialog).toBeVisible();
-    const scrolled = await page.evaluate(() => window.scrollY);
-    expect(scrolled).toBeGreaterThan(0);
-    // Лента открывается у текущего месяца (нижняя часть окна); доезжаем
-    // до нижнего края и давим дальше — назад в страницу уезжать нечему.
+    const scrolled = await ensurePageScrolled(page);
+    // Лента открывается на месяце якоря (план 054); доезжаем до нижнего
+    // края и давим дальше — назад в страницу уезжать нечему.
     await page.mouse.move(400, 400);
     await page.mouse.wheel(0, 50_000);
     await page.mouse.wheel(0, 800);

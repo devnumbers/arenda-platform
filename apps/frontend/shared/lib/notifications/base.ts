@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { toast } from 'react-toastify/unstyled';
 import { ApiError } from '@/shared/api/errors';
+import { outcomeHaptic } from '@/shared/ui/design/action-haptics';
 import {
   ToastBody,
   type ToastBodyProps,
@@ -56,6 +57,7 @@ function error(
   titleOrError: string | unknown,
   options?: ScenarioOptions,
 ): NotificationKey {
+  outcomeHaptic('error');
   const title =
     typeof titleOrError === 'string'
       ? titleOrError
@@ -97,8 +99,9 @@ export type NotifyBase = {
 let promiseToastCounter = 0;
 
 export const notify: NotifyBase = {
-  success: (title, options): NotificationKey =>
-    showDisplacingToast(() =>
+  success: (title, options): NotificationKey => {
+    outcomeHaptic('success');
+    return showDisplacingToast(() =>
       String(
         toast.success(
           ({ closeToast }) =>
@@ -109,7 +112,8 @@ export const notify: NotifyBase = {
           { autoClose: options?.duration ?? DEFAULT_DURATIONS.success },
         ),
       ),
-    ),
+    );
+  },
 
   error,
 
@@ -176,6 +180,10 @@ export const notify: NotifyBase = {
     promiseToastCounter += 1;
     const key = `promise-${promiseToastCounter}`;
 
+    void promise.then(
+      () => outcomeHaptic('success'),
+      () => outcomeHaptic('error'),
+    );
     return showDisplacingToast(() => {
       void toast.promise<T>(
         promise,

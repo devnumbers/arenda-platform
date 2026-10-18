@@ -100,12 +100,13 @@ function baseMaxScrollLeft(rail: HTMLDivElement): number {
 }
 
 /** Snap-позиции детей в пространстве scrollLeft: карточки снапятся левым
- * краем на линию `scroll-padding-left` (bleed ≤560 держит 24px). Замеры
- * устойчивы к резинке: разница rect-ов ребёнка и контента гасит и
- * трансформ-вылет, и поле-расширение, и текущий scrollLeft — остаётся
- * лэйаут-смещение. Максимум — из лэйаут-ширины контента
- * (baseMaxScrollLeft). Точки клампятся в достижимый диапазон: хвост
- * ленты снапится к концу без пустот, как у натива. */
+ * краем на линию `scroll-padding-left` (bleed ≤560 держит 24px). Замер —
+ * layout-разность offsetLeft'ов ребёнка и контента (общий offsetParent):
+ * оба значения чисто лэйаут — пресс-скейл нажатой карточки (`.pressable`,
+ * план 007) и трансформ-вылет резинки в геометрию не текут. Максимум —
+ * из лэйаут-ширины контента (baseMaxScrollLeft). Точки клампятся в
+ * достижимый диапазон: хвост ленты снапится к концу без пустот, как у
+ * натива. */
 function collectSnapPoints(
   rail: HTMLDivElement,
   content: HTMLDivElement,
@@ -113,11 +114,10 @@ function collectSnapPoints(
   const style = getComputedStyle(rail);
   const scrollPadding = Number.parseFloat(style.scrollPaddingLeft) || 0;
   const railPaddingLeft = Number.parseFloat(style.paddingLeft) || 0;
-  const contentRect = content.getBoundingClientRect();
   const maxScrollLeft = baseMaxScrollLeft(rail);
   return Array.from(content.children).map((child) => {
     const layoutOffset =
-      child.getBoundingClientRect().left - contentRect.left;
+      (child as HTMLElement).offsetLeft - content.offsetLeft;
     const point = railPaddingLeft + layoutOffset - scrollPadding;
     return Math.min(Math.max(point, 0), maxScrollLeft);
   });

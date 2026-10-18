@@ -22,7 +22,8 @@ import { useTabBarSuppressionState } from './tab-bar';
  * тикет #865): пилюли не глушатся нижними панелями — шит панели на ПК
  * сужается до колонки 560, углы свободны. Класс .desktop-chrome — хук для
  * globals.css: при открытой полноэкранной поверхности хром поднимается
- * над ней (z-60), оставаясь кликабельным. */
+ * над ней (z-60, 25.09/#865 — возвращено планом 047), при открытой
+ * модалке опускается под скрим (z-30, план 047). */
 export function DesktopNavPills({ notificationsBadge = 0 }: { readonly notificationsBadge?: number } = {}): JSX.Element | null {
   const { present } = useTabBarSuppressionState();
   const pathname = usePathname();

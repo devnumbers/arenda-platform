@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { type JSX } from 'react';
 import { BoldHome, BoldObjects, CheckBoxFalse, CheckBoxTrue, EditSmall, EyeSmall, FullAccessSmall, Minus } from '@/shared/assets/icons';
 import NextLink from 'next/link';
 import { ROUTES } from '@/shared/config/routes';
 import { type PropertyType } from '@/entities/property';
 import { propertyTypeIcons } from '@/entities/property';
 import { cn } from '@/shared/lib/cn';
-import { buttonVariants, CircleIcon, EmptyState } from '@/shared/ui/design';
+import { buttonVariants, CircleIcon, CirclePhoto, EmptyState } from '@/shared/ui/design';
 
 /** Иконка роли у почты в рядах и карточках участников (макет 1980-107096,
  * решение владельца 13.10.2026 #1389): владелец — открытый замок,
@@ -25,7 +25,7 @@ export const EMAIL_ROLE_ICONS = {
  * 936:39348): общий для страницы участника, экрана прав и мультичека
  * приглашения; роль ряда (кнопка/checkbox) задаёт потребитель. */
 export const PARTICIPANT_ROW_BASE_CLASS =
-  'flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80';
+  'pressable flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
 /** Row Button нижних строк макета 2177-59620: ведущий слот-круг 44 под
  * иконку 24, подпись 16/18 Medium; высота строки 52 (44 + py 4). Общая
@@ -33,17 +33,16 @@ export const PARTICIPANT_ROW_BASE_CLASS =
  * строк стоят на одной оси; member-режим прав (#1362) берёт класс для
  * своей строки действий. */
 export const RIGHTS_ROW_ACTION_CLASS = cn(
-  'flex w-full cursor-pointer items-center rounded-button py-1 text-left text-base font-medium outline-none',
-  'transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80',
+  'pressable flex w-full cursor-pointer items-center rounded-button py-1 text-left text-base font-medium outline-none',
+  'hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
 );
 
 /** Круглый аватар объекта 44px (Category Icon из Figma): фото или глиф —
  * Bold/Objects у агрегатной строки «Все объекты», глиф типа объекта
  * (Category Icon, карта #1217; без типа — Bold/Home) у конкретных
- * объектов; белое кольцо 2.5px по компоненту (2008-81468). Гард '' —
- * канон UserAvatar: легаси-бэк мог отдать пустую строку вместо null, а
- * <img src=""> не стреляет onError в WebKit — без него круг без глифа
- * (страница участника, фикс 14.10.2026). */
+ * объектов; белое кольцо 2.5px по компоненту (2008-81468). Механика
+ * показа — примитив CirclePhoto (#1423): гард '' и фолбэк битого фото
+ * (канон #1275, #1286) там же; строки участников — ленивая подача. */
 export function ObjectAvatarGlyph({
   photoUrl,
   type,
@@ -55,23 +54,19 @@ export function ObjectAvatarGlyph({
 }): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : BoldHome;
-  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
-  const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl !== undefined && photoUrl !== '' && !photoBroken;
   return (
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-      {showPhoto ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : isAll ? (
-        <BoldObjects className="h-6 w-6 text-content-tertiary" />
-      ) : (
-        <Glyph className="h-6 w-6 text-content-tertiary" />
-      )}
+      <CirclePhoto
+        photoUrl={photoUrl}
+        loading="lazy"
+        glyph={
+          isAll ? (
+            <BoldObjects className="h-6 w-6 text-content-tertiary" />
+          ) : (
+            <Glyph className="h-6 w-6 text-content-tertiary" />
+          )
+        }
+      />
     </CircleIcon>
   );
 }

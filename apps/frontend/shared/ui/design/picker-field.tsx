@@ -100,6 +100,10 @@ export function PickerField({
         className={cn(
           'flex h-14 w-full cursor-pointer items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2 text-left transition-shadow',
           !disabled && error === undefined && 'hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
+          // Нажатие — шагом плашки (hover — рамкой-инсетом, так что active
+          // на *-hover-токене не повторяет hover); error-бокс — диалект
+          // danger, без шагов.
+          !disabled && error === undefined && 'active:bg-surface-muted-hover',
           error !== undefined && 'bg-surface-danger hover:shadow-none',
         )}
       >

@@ -37,6 +37,7 @@ export function SearchField({
     >
       <input
         type="search"
+        enterKeyHint="search"
         /* Кегль — гард-токен --font-size-input (16px), не шкала текста:
          * iOS Safari зумит страницу при фокусе в инпут <16px и не
          * возвращает (maximumScale сознательно не ставится — WCAG 1.4.4;

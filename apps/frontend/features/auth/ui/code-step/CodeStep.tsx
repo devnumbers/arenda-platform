@@ -78,6 +78,10 @@ export function CodeStep({
                     name="code"
                     type="text"
                     inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    enterKeyHint="done"
                     value={code}
                     onChange={handleChange}
                     onClear={onClear}

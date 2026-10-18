@@ -163,14 +163,38 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   const [patronymic, setPatronymic] = useState(me.patronymic ?? '');
   // Фото применяется сразу (решение владельца: экран автосейв-формы,
   // «при изменении фото оно сразу должно меняться» — пересмотр
-  // стейдж-канона #1228 для этого экрана). Stage — только превью летящей
-  // загрузки (data URL, CSP img-src 'self' data:, ADR 0065): ответ гасит
-  // его, отказ возвращает круг к серверному состоянию с тостом (ретрай —
-  // повторный выбор).
+  // стейдж-канона #1228 для этого экрана). Stage — превью выбранного
+  // файла (data URL, CSP img-src 'self' data:, ADR 0065); успех гасит
+  // его, провал ДЕРЖИТ файл (план 037): «Повторить» в тосте — первый
+  // потребитель action-канона — или тап по кругу досылают тот же файл,
+  // замена — пикер.
   const [photoStage, setPhotoStage] = useState<MePhotoStage | null>(null);
+  // Проценты XHR-выгрузки (план 036) — кольцо слота; null — загрузки нет.
+  const [photoProgress, setPhotoProgress] = useState<number | null>(null);
   // Фото-мутация в полёте — управление слота глушится (одна картинка на
   // профиль, параллельные загрузка и удаление недопустимы).
   const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
+
+  const uploadProfilePhoto = (file: File): void => {
+    uploadPhoto.mutate(
+      { file, onProgress: setPhotoProgress },
+      {
+        onSuccess: () => {
+          setPhotoStage(null);
+          setPhotoProgress(null);
+        },
+        onError: (error) => {
+          setPhotoProgress(null);
+          // Файл переживает провал (план 037): stage помечается failed,
+          // круг зовёт повтор; замена файла — новый выбор через пикер.
+          setPhotoStage((prev) => (prev?.kind === 'file' ? { ...prev, failed: true } : prev));
+          notify.scenarios.profile.photoUpdateError(error, {
+            action: { label: 'Повторить', onPress: () => uploadProfilePhoto(file) },
+          });
+        },
+      },
+    );
+  };
 
   const handlePhotoFile = (file: File): void => {
     void readPhotoDataUrl(file).then((previewUrl) => {
@@ -179,14 +203,15 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
       if (previewUrl !== null) {
         setPhotoStage({ kind: 'file', file, previewUrl });
       }
-      uploadPhoto.mutate(file, {
-        onSuccess: () => setPhotoStage(null),
-        onError: (error) => {
-          setPhotoStage(null);
-          notify.scenarios.profile.photoUpdateError(error);
-        },
-      });
+      uploadProfilePhoto(file);
     });
+  };
+
+  /** Повтор провалившейся загрузки тем же файлом (тап по кругу). */
+  const retryPhotoUpload = (): void => {
+    if (photoStage?.kind === 'file') {
+      uploadProfilePhoto(photoStage.file);
+    }
   };
 
   const handlePhotoRemove = (): void => {
@@ -234,8 +259,10 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
           photoUrl={me.photoUrl}
           stage={photoStage}
           busy={photoBusy}
+          progress={photoProgress}
           onFileChosen={handlePhotoFile}
           onRemove={handlePhotoRemove}
+          onRetry={retryPhotoUpload}
         />
       </div>
       <div className="flex flex-col gap-8">

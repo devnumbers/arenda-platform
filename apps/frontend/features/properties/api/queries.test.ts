@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Транспорт подменяется стабом, ловящим вызов: тест пинит wire-контракт
-// фото-пары (multipart POST + DELETE, ADR 0065) и маппинг ответа. Рендер
-// хука в node-окружении недоступен — функции зовутся напрямую.
+// Транспорт подменяется стабами, ловящими вызовы: тест пинит wire-контракт
+// фото-пары (ADR 0065) и маппинг ответа. POST фото идёт через XHR-транспорт
+// uploadFile (план 036 — fetch не отдаёт upload-progress), DELETE — через
+// apiClient; wire-контракт XHR пинит upload.test.ts, здесь — делегация и
+// маппинг. Рендер хука в node-окружении недоступен — функции зовутся напрямую.
 vi.mock('@/shared/api/client', () => ({ apiClient: vi.fn() }));
+vi.mock('@/shared/api/upload', () => ({ uploadFile: vi.fn() }));
 
 import { apiClient } from '@/shared/api/client';
+import { uploadFile } from '@/shared/api/upload';
 import type { components } from '@/shared/api/dto';
 import { deletePropertyPhoto, uploadPropertyPhoto } from './queries';
 
 const apiClientMock = vi.mocked(apiClient);
+const uploadFileMock = vi.mocked(uploadFile);
 
 function makeDto(
   overrides: Partial<components['schemas']['PropertyResponse']> = {},
@@ -31,24 +36,18 @@ function makeDto(
 /** Файл-заглушка: хелпер-функции читают только идентичность и размер. */
 const file = new File(['bytes'], 'photo.jpg', { type: 'image/jpeg' });
 
-describe('uploadPropertyPhoto — POST /properties/{id}/photo (multipart, ADR 0065)', () => {
+describe('uploadPropertyPhoto — POST /properties/{id}/photo (XHR, ADR 0065)', () => {
   beforeEach(() => {
-    apiClientMock.mockReset();
-    apiClientMock.mockResolvedValue(makeDto({ photo_url: '/api/properties/prop-1/photo' }));
+    uploadFileMock.mockReset();
+    uploadFileMock.mockResolvedValue(makeDto({ photo_url: '/api/properties/prop-1/photo' }));
   });
 
-  it('уходит multipart-формой с полем file на фото-путь объекта', async () => {
-    await uploadPropertyPhoto({ id: 'prop-1', file });
+  it('делегирует в uploadFile фото-путём, файлом и прогрессом выгрузки', async () => {
+    const onProgress = (): void => undefined;
+    await uploadPropertyPhoto({ id: 'prop-1', file, onProgress });
 
-    expect(apiClientMock).toHaveBeenCalledTimes(1);
-    const [path, init] = apiClientMock.mock.calls[0] ?? [];
-    expect(path).toBe('/properties/prop-1/photo');
-    expect(init?.method).toBe('POST');
-    const body = init?.body;
-    expect(body).toBeInstanceOf(FormData);
-    if (body instanceof FormData) {
-      expect(body.get('file')).toBe(file);
-    }
+    expect(uploadFileMock).toHaveBeenCalledTimes(1);
+    expect(uploadFileMock).toHaveBeenCalledWith('/properties/prop-1/photo', file, onProgress);
   });
 
   it('ответ маппится в сущность — photo_url становится photoUrl', async () => {

@@ -1,6 +1,10 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
-import { ProfileHub } from '@/widgets/profile';
+import { meQueryOptions } from '@/features/auth';
+import { ProfileHub, ProfileHubSkeleton } from '@/widgets/profile';
+import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
+import { serverApiClient } from '@/shared/api/server-client';
 
 export const metadata: Metadata = {
   title: 'Профиль — Рентли',
@@ -12,7 +16,10 @@ export const metadata: Metadata = {
  * 02.10, образец — /profile/devices): крылья только на ПК, заголовок
  * «Профиль» 16/18 в баре по центру на всех ярусах. Ниже ПК вход в профиль —
  * TabBar («Еще») и крылья других хабов, на ПК — крыло UserButton.
- * Подэкраны /profile* ссылаются на него фолбэком «Назад». */
+ * Подэкраны /profile* ссылаются на него фолбэком «Назад».
+ * Серверный префетч useMe (§15, тикет #1422): граница внутри Suspense
+ * поверх контента, хром маршрута вне фазы загрузки; fallback — тот же
+ * скелетон, что держит хаб в pending (тот же кадр, #609). */
 export default function ProfilePage() {
   return (
     <>
@@ -20,7 +27,15 @@ export default function ProfilePage() {
         <TopNavTitle title="Профиль" />
       </TopNav>
       <PageContent>
-        <ProfileHub />
+        <Suspense fallback={<ProfileHubSkeleton />}>
+          <ServerPrefetchBoundary
+            prefetch={(queryClient) => {
+              void queryClient.prefetchQuery(meQueryOptions(serverApiClient));
+            }}
+          >
+            <ProfileHub />
+          </ServerPrefetchBoundary>
+        </Suspense>
       </PageContent>
     </>
   );

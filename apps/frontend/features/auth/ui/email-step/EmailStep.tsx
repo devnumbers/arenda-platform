@@ -71,6 +71,7 @@ export function EmailStep({
                     type="email"
                     inputMode="email"
                     autoComplete="email"
+                    enterKeyHint="go"
                     value={email}
                     onChange={handleChange}
                     onClear={() => onEmailChange("")}

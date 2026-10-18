@@ -33,6 +33,15 @@
     animation: ptr-spin 0.8s linear infinite;
 }
 
+/* Reduced-motion: вращение останавливаем (функциональный индикатор остаётся
+   видимым на месте — пониманию помогает, вестибулярно нейтрален;
+   стратегия §8 «укоротить, не отключить» к бесконечным циклам неприменима). */
+@media (prefers-reduced-motion: reduce) {
+    .refreshing svg {
+        animation: none;
+    }
+}
+
 @keyframes ptr-spin {
     to {
         transform: rotate(360deg);

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, JSX, KeyboardEvent } from 'react';
 import Image from 'next/image';
 import { cn } from '@/shared/lib/cn';
+import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import { focusListboxEdge } from '@/shared/ui/design/listbox-keyboard';
 import { fullscreenSurfaceClass, IconButton, PageContent, SearchField, TopNav } from '@/shared/ui/design';
 import { Cancel } from '@/shared/assets/icons';
@@ -42,6 +43,11 @@ export function PropertyAddressSearch({
   onSelect,
   onClose,
 }: PropertyAddressSearchProps): JSX.Element {
+  // Лок фона: поверхность непрозрачно накрывает ленту — жест у края
+  // внутренней ленты не должен уезжать в цепочку скролла страницы
+  // (канон useBodyScrollLock, решение владельца 2026-10-13; конвенция
+  // слоёв — тикет #1417).
+  useBodyScrollLock();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [inputValue, setInputValue] = useState(value);
@@ -65,7 +71,7 @@ export function PropertyAddressSearch({
       role="dialog"
       aria-modal="true"
       aria-label="Поиск адреса"
-      className={cn(fullscreenSurfaceClass, 'overflow-y-auto')}
+      className={cn(fullscreenSurfaceClass, 'overflow-y-auto overscroll-y-contain [scrollbar-width:none]')}
     >
       <TopNav
         variant="search"

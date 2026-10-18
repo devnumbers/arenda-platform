@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import type { JSX } from 'react';
 import {
   DialogClose,
@@ -11,6 +12,7 @@ import {
 } from '@radix-ui/react-dialog';
 import { Cancel, StatusIconGood } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { outcomeHaptic } from './action-haptics';
 import { IconButton } from './icon-button';
 
 /**
@@ -34,6 +36,11 @@ export type SuccessPopupProps = {
 };
 
 export function SuccessPopup({ open, onOpenChange, message }: SuccessPopupProps): JSX.Element {
+  useEffect(() => {
+    if (open) {
+      outcomeHaptic('success');
+    }
+  }, [open]);
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
@@ -41,9 +48,7 @@ export function SuccessPopup({ open, onOpenChange, message }: SuccessPopupProps)
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
           <DialogContent
             className={cn(
-              'relative w-full max-w-[400px] rounded-sheet bg-white p-6 font-sans shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] outline-none',
-              'data-[state=open]:animate-[modal-card-in_400ms_var(--dl-ease)]',
-              'data-[state=closed]:animate-[modal-card-out_220ms_var(--dl-ease)]',
+              'modal-card relative w-full max-w-[400px] rounded-sheet bg-white p-6 font-sans shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] outline-none',
             )}
           >
             <div className="flex flex-col items-center gap-2">

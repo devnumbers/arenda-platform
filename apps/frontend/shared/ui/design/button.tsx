@@ -34,7 +34,7 @@ const primaryFill = 'bg-primary text-white hover:bg-primary-hover active:bg-prim
  * (next/link не дружит с Radix Slot — классы не мёржатся, проверено на
  * #620), поэтому ссылки на канонные кнопки стилизуются buttonVariants. */
 export const buttonVariants = cva(
-  'inline-flex cursor-pointer items-center justify-center whitespace-nowrap font-sans font-medium transition-colors outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50',
+  'pressable inline-flex cursor-pointer items-center justify-center whitespace-nowrap font-sans font-medium outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {

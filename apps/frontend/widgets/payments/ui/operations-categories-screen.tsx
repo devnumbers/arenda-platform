@@ -137,7 +137,7 @@ export function OperationsCategoriesScreen({
           <OperationsPeriodChip period={period} onOpen={() => setPeriodOpen(true)} />
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto pt-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-width:none] pt-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
           {summaryQuery.isPending ? (
             // Паритет §7: строки «иконка + название + сумма + чекбокс»;
             // чипы контекста выше — вне фазы загрузки.

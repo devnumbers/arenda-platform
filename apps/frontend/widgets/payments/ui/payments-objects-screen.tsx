@@ -285,7 +285,7 @@ function PaymentObjectCard({
       type="button"
       data-testid={`payments-object-card-${object.propertyId}`}
       onClick={onSelect}
-      className="flex cursor-pointer flex-col gap-3 rounded-card bg-surface-muted p-6 text-left outline-none transition-opacity hover:opacity-90 active:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
+      className="pressable flex cursor-pointer flex-col gap-3 rounded-card bg-surface-muted p-6 text-left outline-none hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
     >
       <div className="flex items-center gap-3">
         <PaymentObjectAvatar photoUrl={object.photoUrl} type={object.type} surface="card" />

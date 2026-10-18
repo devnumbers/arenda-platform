@@ -207,7 +207,9 @@ export function WizardDirectionSegment({
               'min-h-10 flex-1 cursor-pointer rounded-[14px] text-sm font-medium leading-4 transition-colors outline-none focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface '
               + (selected
                 ? 'bg-surface text-content shadow-[0_2px_4px_rgba(0,0,0,0.16)]'
-                : 'text-content-secondary')
+                // Радио-диалект: невыбранный темнеет шагами трека
+                // (прецедент ParticipantRoleSegmented), выбранный — без шагов.
+                : 'text-content-secondary hover:bg-surface-muted-hover active:bg-surface-muted-active')
             }
           >
             {TYPE_LABELS[option]}

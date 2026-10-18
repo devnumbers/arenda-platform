@@ -9,6 +9,7 @@
 export { Button, type ButtonProps, buttonVariants } from './button';
 export { IconButton, type IconButtonProps } from './icon-button';
 export { PhotoRemoveBadge, type PhotoRemoveBadgeProps } from './photo-remove-badge';
+export { PhotoProgressRing, PHOTO_RING_LENGTH, type PhotoProgressRingProps } from './photo-progress-ring';
 export { UserButton, type UserButtonProps } from './user-button';
 export { UserAvatar, type UserAvatarProps } from './user-avatar';
 export { TextField, type TextFieldProps, type TextFieldVariant } from './text-field';
@@ -43,6 +44,12 @@ export {
 } from './calendar-date-picker';
 export { ListRow, type ListRowProps } from './list-row';
 export { CircleIcon, type CircleIconProps } from './circle-icon';
+export {
+  CirclePhoto,
+  circlePhotoView,
+  type CirclePhotoFlags,
+  type CirclePhotoProps,
+} from './circle-photo';
 export {
   type CircleIconVariant,
   circleIconPair,

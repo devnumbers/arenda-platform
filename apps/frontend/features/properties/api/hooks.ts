@@ -301,15 +301,17 @@ export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: str
  * без рефетча), список инвалидается как обычная мутация объекта. Бастер
  * photoBuster инкрементится рядом: путь выдачи не меняется, без него
  * <img> показал бы прежние байты из кэша браузера (private, max-age=300).
+ * onProgress — проценты XHR-выгрузки (план 036), экран пишет их в стейт
+ * кольца слота.
  */
 export function useUploadPropertyPhoto(): UseMutationResult<
   Property,
   ApiError,
-  { id: string; file: File }
+  { id: string; file: File; onProgress?: (percent: number) => void }
 > {
   const queryClient = useQueryClient();
   return useGuardedMutation({
-    mutationFn: ({ id, file }) => uploadPropertyPhoto({ id, file }),
+    mutationFn: ({ id, file, onProgress }) => uploadPropertyPhoto({ id, file, onProgress }),
     onSuccess: (property, { id }) => {
       queryClient.setQueryData(propertyKeys.detail(id), property);
       bumpPhotoBuster(queryClient, id);

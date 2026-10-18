@@ -10,7 +10,8 @@ import { createListRowKeyboard } from './list-row-keyboard';
  * hover по умолчанию приглушает заголовок и значение (#6F787C),
  * hoverEffect="background" переключает отклик на серый фон строки —
  * как у секции «Управление» объекта (PropertyManageSection; строки
- * «Управления» аренды, решение владельца 17.10.2026).
+ * «Управления» аренды, решение владельца 17.10.2026). Пресс-отклик —
+ * канон дизайн-слоя .pressable (цветовой шаг без трансформаций).
  *
  * Строка — div с role=button, а не <button>: trailing-слот несёт
  * собственные кнопки-иконки, а вложенные кнопки в HTML невалидны (ловится
@@ -91,8 +92,8 @@ export function ListRow({
       onClick={interactive ? onSelect : undefined}
       onKeyDown={onKeyDown}
       className={cn(
-        'group/row flex w-full cursor-pointer items-center gap-3 px-6 py-2 text-left font-sans outline-none',
-        'transition-colors focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        'pressable group/row flex w-full cursor-pointer items-center gap-3 px-6 py-2 text-left font-sans outline-none',
+        'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         backgroundHover && 'rounded-button hover:bg-surface-muted-hover active:bg-surface-muted-hover',
         onSelect === undefined && 'cursor-default',
         disabled && 'pointer-events-none opacity-50',
@@ -103,7 +104,7 @@ export function ListRow({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span
           className={cn(
-            'truncate text-base font-medium text-content',
+            'truncate text-base font-medium text-content transition-colors',
             !backgroundHover && 'group-hover/row:text-content-secondary',
             titleClassName,
           )}

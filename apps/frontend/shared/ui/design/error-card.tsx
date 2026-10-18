@@ -9,6 +9,9 @@ export type ErrorCardProps = {
    * («Не удалось загрузить контакты», «…раздел», «…участников»). */
   readonly title: string;
   readonly onRetry: () => void;
+  /** Повтор в полёте (#1114, граница из решения #1420): кнопка глушится
+   * машинно (disabled || loading, aria-busy), текст видим, спиннера нет. */
+  readonly loading?: boolean;
   readonly className?: string;
 };
 
@@ -16,7 +19,7 @@ export type ErrorCardProps = {
  * (DESIGN.md §7): серая карточка, заголовок 20/24, пояснение 14/16,
  * вторичная кнопка «Повторить». Экстракция #697: одинаковые карточки
  * контактов (#508) и хаба участников (#696) жили поэкранно. */
-export function ErrorCard({ title, onRetry, className }: ErrorCardProps): JSX.Element {
+export function ErrorCard({ title, onRetry, loading = false, className }: ErrorCardProps): JSX.Element {
   return (
     <section className={cn('mx-6 rounded-card bg-surface-muted px-6 py-6', className)}>
       <h2 className="text-xl font-semibold leading-6 text-content">{title}</h2>
@@ -24,7 +27,7 @@ export function ErrorCard({ title, onRetry, className }: ErrorCardProps): JSX.El
         Проверьте подключение и попробуйте еще раз
       </p>
       <div className="mt-4">
-        <Button size="small" variant="secondary" onClick={onRetry}>
+        <Button size="small" variant="secondary" onClick={onRetry} loading={loading}>
           Повторить
         </Button>
       </div>

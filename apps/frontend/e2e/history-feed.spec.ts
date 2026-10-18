@@ -389,7 +389,7 @@ test('короткая лента прижата к низу вьюпорта �
   await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
 
   // Страница ровно вьюпорт: узел контента ScreenLayout — flex-1 от
-  // min-h-screen оболочки, лента с flex-1 тянется до нижнего края на
+  // min-h-dvh оболочки, лента с flex-1 тянется до нижнего края на
   // всех ярусах (высота шапки и safe-area учитываются сами). Иначе —
   // не якорь.
   const metrics = await page.evaluate(() => ({

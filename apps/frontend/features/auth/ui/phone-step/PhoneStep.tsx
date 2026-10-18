@@ -72,6 +72,7 @@ export function PhoneStep({
                     type="tel"
                     inputMode="tel"
                     autoComplete="tel"
+                    enterKeyHint="go"
                     value={phone}
                     onChange={handleChange}
                     onClear={() => onPhoneChange("")}

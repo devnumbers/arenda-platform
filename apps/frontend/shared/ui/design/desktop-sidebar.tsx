@@ -17,8 +17,9 @@ import { DesktopMenuButton } from './desktop-menu-button';
  * планшет 561–1023, ПК от 1024 — боковое меню есть только у ПК-версии,
  * в 561–1023 планшетный хром с TabBar). Рендерит ScreenLayout. Класс
  * .desktop-chrome — хук для globals.css: при открытой полноэкранной
- * поверхности меню поднимается над ней (z-60) и остаётся кликабельным
- * (решение владельца 25.09, доработка #865). */
+ * поверхности меню поднимается над ней (z-60, решение владельца 25.09,
+ * доработка #865 — возвращено планом 047 после регресса сноса 046), а
+ * при открытой модалке опускается под скрим (z-30, план 047). */
 export function DesktopSidebar(): JSX.Element {
   const pathname = usePathname();
   const activeSectionId = getActiveNavItem(pathname, mainNavSections)?.id;

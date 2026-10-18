@@ -179,7 +179,7 @@ export function ContactBookScreen({
             <ContactsBookSkeleton />
           </>
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} loading={contactsQuery.isFetching} />
         ) : (
           <>
             {contacts.length === 0 ? (

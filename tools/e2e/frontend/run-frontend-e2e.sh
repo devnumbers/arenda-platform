@@ -233,7 +233,14 @@ docker exec -i "$PG_CONTAINER" \
   < "$SCRIPT_DIR/live-overlay.sql" >/dev/null
 
 log "Building frontend (production standalone)"
-if ! (cd "$FRONTEND_DIR" && NEXT_TELEMETRY_DISABLED=1 npm run build) > "$FRONTEND_LOG" 2>&1; then
+# План 049: проект webkit — без upgrade-insecure-requests в CSP
+# (shared/lib/csp.ts): WebKit эскалирует по директиве все http-подресурсы
+# на https против http-стека стенда; на https-проде директива инертна.
+CSP_ENV_ARGS=""
+if [ "${E2E_PROJECT:-chromium}" = "webkit" ]; then
+  CSP_ENV_ARGS="E2E_OMIT_UPGRADE_INSECURE=1"
+fi
+if ! (cd "$FRONTEND_DIR" && env $CSP_ENV_ARGS NEXT_TELEMETRY_DISABLED=1 npm run build) > "$FRONTEND_LOG" 2>&1; then
   echo "--- frontend build failed; log tail: ---" >&2
   tail -n 50 "$FRONTEND_LOG" >&2 || true
   die "frontend build failed"
@@ -248,10 +255,11 @@ cp -R "$FRONTEND_DIR/.next/static" "$FRONTEND_DIR/.next/standalone/.next/static"
 log "Starting frontend on $FRONTEND_URL"
 (
   cd "$FRONTEND_DIR"
-  PORT="$E2E_FRONTEND_PORT" \
-  HOSTNAME=127.0.0.1 \
-  BACKEND_URL="$BACKEND_URL" \
-  exec node .next/standalone/server.js
+  exec env $CSP_ENV_ARGS \
+    PORT="$E2E_FRONTEND_PORT" \
+    HOSTNAME=127.0.0.1 \
+    BACKEND_URL="$BACKEND_URL" \
+    node .next/standalone/server.js
 ) >> "$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
 wait_for_url "$FRONTEND_URL/login" 60 "frontend" "$FRONTEND_LOG"
@@ -272,7 +280,12 @@ if [ "${E2E_LIVE:-0}" = "1" ]; then
 fi
 
 log "Installing Playwright browsers (idempotent)"
-(cd "$FRONTEND_DIR" && npx playwright install chromium) >/dev/null
+if [ "${E2E_PROJECT:-chromium}" = "webkit" ]; then
+  # Движковый замок плана 049: для проекта webkit нужен браузер webkit.
+  (cd "$FRONTEND_DIR" && npx playwright install chromium webkit) >/dev/null
+else
+  (cd "$FRONTEND_DIR" && npx playwright install chromium) >/dev/null
+fi
 
 log "Running Playwright"
 status=0
@@ -290,7 +303,7 @@ status=0
   E2E_BACKEND_LOG="$BACKEND_LOG" \
   E2E_PG_CONTAINER="$PG_CONTAINER" \
   E2E_ENCRYPTION_KEY="$E2E_ENCRYPTION_KEY" \
-  npx playwright test "$@"
+  npx playwright test --project="${E2E_PROJECT:-chromium}" "$@"
 ) || status=$?
 
 if [ "$status" -eq 0 ]; then

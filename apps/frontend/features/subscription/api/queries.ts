@@ -5,7 +5,10 @@ import type { ApiError } from '@/shared/api/errors';
 import { subscriptionKeys } from '@/shared/api/query-keys';
 import type { components } from '@/shared/api/dto';
 
-type Subscription = components['schemas']['Subscription'];
+/** Сущность подписки — DTO-тип, реэкспорт из фичи: consumers за пределами
+ * features/ (гейт серверного префетча в app/) читают кэш по ключу без
+ * импорта shared/api/dto (запрет на app/widgets). */
+export type Subscription = components['schemas']['Subscription'];
 
 /** Двойной модуль API-слоя subscription (без 'use client'): чистые
  * fetch-функции и queryOptions-фабрики канона #887 — общий источник

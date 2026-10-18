@@ -9,6 +9,7 @@ import {
 import { useGuardedMutation } from '@/shared/lib/hooks/use-guarded-mutation';
 import { apiClient } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
+import { uploadFile } from '@/shared/api/upload';
 import { authKeys } from '@/shared/api/query-keys';
 import { mapMeResponse } from '@/entities/user';
 import { mapSessionListResponse } from '@/entities/session';
@@ -233,18 +234,19 @@ function bumpMePhotoBuster(queryClient: ReturnType<typeof useQueryClient>): void
  * рефетча). Бастер authKeys.photoBuster инкрементится рядом: путь выдачи
  * не меняется, без него <img> показал бы прежние байты из кэша браузера
  * (private, max-age=300). Полной инвалидации authKeys.all не нужно —
- * ответ и есть свежий /me.
+ * ответ и есть свежий /me. Транспорт — XHR-выгрузка с onprogress
+ * (план 036): fetch не отдаёт upload-progress; проценты экран пишет в
+ * стейт кольца слота.
  */
-export function useUploadMePhoto(): UseMutationResult<User, ApiError, File> {
+export function useUploadMePhoto(): UseMutationResult<
+  User,
+  ApiError,
+  { file: File; onProgress?: (percent: number) => void }
+> {
   const queryClient = useQueryClient();
   return useGuardedMutation({
-    mutationFn: async (file: File) => {
-      const body = new FormData();
-      body.append('file', file);
-      const res = await apiClient<Parameters<typeof mapMeResponse>[0]>('/me/photo', {
-        method: 'POST',
-        body,
-      });
+    mutationFn: async ({ file, onProgress }) => {
+      const res = await uploadFile<Parameters<typeof mapMeResponse>[0]>('/me/photo', file, onProgress);
       return mapMeResponse(res);
     },
     onSuccess: (user) => {

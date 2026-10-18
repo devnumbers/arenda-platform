@@ -135,13 +135,16 @@ test('фильтры переиспользуются, «Объект» приб
   await page.getByRole('button', { name: 'Настройки' }).click();
   const dialog = page.getByRole('dialog', { name: 'Фильтры истории' });
   await expect(dialog.getByText('Основные действия')).toBeVisible();
-  await expect(dialog.getByText('Участники')).toBeVisible();
+  // Запрос скоуплен кнопкой-заголовком группы: контент групп с планом 013
+  // всегда в DOM (канон 0fr→1fr), и голый getByText('Участники') ловит
+  // ещё и заголовок секции внутри свёрнутой группы.
+  await expect(dialog.getByRole('button', { name: /Участники/ })).toBeVisible();
 
   // Группа «Объект» — только прибитый объект, 1/1, серым и незабираемым
   // (#840, макет 2184-94176, решение владельца 24.09; подпись прибитой
   // группы в единственном числе — решение владельца 10.10.2026,
   // доработка #1321).
-  await expect(dialog.getByText('Объект', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Объект/ })).toBeVisible();
   await expect(dialog.getByText('1/1')).toBeVisible();
   const master = dialog.getByRole('checkbox', { name: 'Выбрать все: Объект' });
   await expect(master).toBeDisabled();

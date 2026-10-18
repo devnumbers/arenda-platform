@@ -117,12 +117,17 @@ export function PaymentHistoryScreen({
   );
 
   // Контент фазы: дефолт ждёт только операции, изменения — оба источника.
+  // Гард «данных нет» по-запросный (§7, политика ошибки перечитывания
+  // #1422): первичный провал источника без данных — карточка; провал
+  // перечитывания загруженного источника константного ключа — удержанные
+  // данные остаются на экране.
   const pending = changesMode
     ? operationsQuery.isPending || changesQuery.isPending
     : operationsQuery.isPending;
   const failed = changesMode
-    ? operationsQuery.isError || changesQuery.isError
-    : operationsQuery.isError;
+    ? (operationsQuery.isError && operationsQuery.data === undefined)
+      || (changesQuery.isError && changesQuery.data === undefined)
+    : operationsQuery.isError && operationsQuery.data === undefined;
   const showEmpty = timeline.length === 0;
 
   return (
@@ -283,6 +288,10 @@ function FeedTail({
           operationsQuery.hasNextPage === true || changesQuery?.hasNextPage === true,
         isFetchingNextPage:
           operationsQuery.isFetchingNextPage || (changesQuery?.isFetchingNextPage ?? false),
+        // Провал порции — канон хвоста (план 032 #1442): ручная проекция
+        // двух запросов несёт isError сама, иначе немой цикл автоповтора
+        // жив и карточки повтора в хвосте не будет.
+        isError: operationsQuery.isError || (changesQuery?.isError ?? false),
         fetchNextPage: () =>
           Promise.all([
             operationsQuery.hasNextPage ? operationsQuery.fetchNextPage() : Promise.resolve(),

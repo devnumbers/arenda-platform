@@ -61,9 +61,9 @@ export function PaymentCardButton({
         /* h-[137px] — паритет скелетона (#605): худший случай контента
          * (двухстрочный заголовок 13/30) = 16+44+12+30+4+15+16; текстовый
          * блок прижат к дну (mt-auto) — плитки секции ровным рядом. */
-        'flex h-[137px] w-[168.5px] shrink-0 cursor-pointer flex-col rounded-card bg-surface-muted p-4 outline-none',
-        'transition-opacity focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-        'hover:opacity-80 active:opacity-80',
+        'pressable flex h-[137px] w-[168.5px] shrink-0 cursor-pointer flex-col rounded-card bg-surface-muted p-4 outline-none',
+        'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        'hover:opacity-80',
         onSelect === undefined && 'cursor-default',
         disabled && 'pointer-events-none opacity-50',
         className,

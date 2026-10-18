@@ -23,7 +23,7 @@ export function Switch({ className, ...props }: SwitchProps): JSX.Element {
       )}
       {...props}
     >
-      <SwitchThumb className="block h-6 w-9 rounded-pill bg-white shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition-transform ease-apple duration-(--dl-duration-move) data-[state=checked]:translate-x-6" />
+      <SwitchThumb className="block h-6 w-9 rounded-pill bg-white shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition-transform ease-apple duration-(--dl-duration-move) motion-reduce:duration-150 data-[state=checked]:translate-x-6" />
     </SwitchRoot>
   );
 }

@@ -95,7 +95,8 @@ type PickerMenuRowProps = {
 /** Опция: в меню — пункт с ведущим selection-квадратом (Figma 1186:44732 +
  * Selection Button Checkbox, radius 8: синий с белой галкой у выбранного,
  * серое кольцо у остальных); в шите — серая плашка 48 radius 16 с
- * radio-кружком справа (Figma Row Button 1041:48796). */
+ * radio-кружком справа (Figma Row Button 1041:48796). Шаги hover/active —
+ * muted-пара серой плашки (радио-диалект цветовых шагов, без скейла). */
 function PickerMenuRow({ variant, option }: PickerMenuRowProps): JSX.Element {
   if (variant === 'menu') {
     return (
@@ -123,6 +124,7 @@ function PickerMenuRow({ variant, option }: PickerMenuRowProps): JSX.Element {
       onClick={option.onSelect}
       className={cn(
         'flex h-12 w-full cursor-pointer items-center justify-between gap-3 rounded-button bg-surface-muted pr-3 pl-5 text-left font-sans outline-none transition-colors',
+        'hover:bg-surface-muted-hover active:bg-surface-muted-active',
         'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
       )}
     >

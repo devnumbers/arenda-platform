@@ -260,77 +260,101 @@ export function settleIsoRange(draft: IsoRangeDraft): IsoRange {
   return { from: draft.start, to: draft.end ?? draft.start };
 }
 
-/** Окно ленты пикера диапазона: со значением — старт месяц начала диапазона
- * минус месяц, но не глубже пяти месяцев до текущего (свежий выбор
- * открывается с контекстом, глубокий — у своего начала); пустой выбор
- * (null — дефолт «весь период», #670) — те же пять месяцев назад без
- * преселекта. Конец — текущий месяц плюс два приглушённых будущих. Глубже
- * окно расширяется дорисовкой при прокрутке. */
+/** Стартовый запас ленты пикера периода назад (план 051, зеркально
+ * CALENDAR_FEED_BACKWARD_SEED одиночного пикера): свежий выбор открывается
+ * с запасом контекста выше порога приписки, дорисовка не живёт на первом
+ * пикселе прокрутки назад. */
+export const RANGE_FEED_BACKWARD_SEED = 11;
+
+/** Окно ленты пикера диапазона (план 054 — низ жёсткий, верх бесконечен):
+ * низ — «сегодня» плюс два приглушённых (жёсткий край), верх — месяц
+ * начала диапазона минус месяц, но не глубже стартового запаса до
+ * текущего (свежий выбор открывается с контекстом, глубокий — у своего
+ * начала); пустой выбор (null — дефолт «весь период», #670) — тот же
+ * запас назад без преселекта. Глубже окно растёт prepend'ом (позицию
+ * держит библиотека по ключам), будущее — жёсткий край. */
 export function rangeFeedWindow(
   value: IsoRange | null,
   today: IsoDate,
-): { first: CalendarMonthRef; last: CalendarMonthRef } {
+): {
+  first: CalendarMonthRef;
+  count: number;
+  startEdge: CalendarMonthRef | null;
+  forwardEdge: CalendarMonthRef;
+} {
   const currentIdx = calendarMonthIndex(calendarMonthOf(today));
-  const fromIdx = value !== null ? calendarMonthIndex(calendarMonthOf(value.from)) - 1 : currentIdx - 5;
-  const firstIdx = Math.min(fromIdx, currentIdx - 5);
+  const fromIdx =
+    value !== null
+      ? calendarMonthIndex(calendarMonthOf(value.from)) - 1
+      : currentIdx - RANGE_FEED_BACKWARD_SEED;
+  const firstIdx = Math.min(fromIdx, currentIdx - RANGE_FEED_BACKWARD_SEED);
+  const forwardIdx = currentIdx + CALENDAR_FEED_EDGE_CONTEXT;
   return {
     first: calendarMonthOfIndex(firstIdx),
-    last: calendarMonthOfIndex(currentIdx + 2),
+    count: forwardIdx - firstIdx + 1,
+    startEdge: null,
+    forwardEdge: calendarMonthOfIndex(forwardIdx),
   };
 }
 
-/** Порция дорисовки ленты одиночного пикера назад по доскроллу (и стартовый
- * отступ от семантического старта — см. calendarSingleFeedWindow). */
-export const CALENDAR_FEED_PREPEND_CHUNK = 6;
+/** Порция дорисовки ленты (план 054): prepend истории сверху и append
+ * будущего снизу. */
+export const CALENDAR_FEED_CHUNK = 6;
 
-/** Месяцы приглушённого будущего за жёстким краем ленты (1:1 с пикером
- * периода: «текущий месяц плюс два приглушённых будущих»). */
-export const CALENDAR_FEED_FORWARD_CONTEXT = 2;
+/** Стартовый запас ленты назад (план 051): сид сажает ленту на столько
+ * месяцев раньше семантического старта calendarFeedStart, чтобы при
+ * открытии scrollTop был заметно выше порога приписки (3000px ≈ 8
+ * месяцев): прежние 6 месяцев ≈ 2160px клали позицию открытия прямо в
+ * зону приписки — дорисовка стартовала с первого пикселя прокрутки назад
+ * и шла нон-стоп. Запас 12 ≈ 4300px держит первый кадр вне зоны, а
+ * антистенную защиту несут порог + гейт, не размер коммита. */
+export const CALENDAR_FEED_BACKWARD_SEED = 12;
 
-/** Стартовая лента одиночного пикера без края и порция роста вперёд. */
+/** Месяцы приглушённого контекста за жёстким краем ленты (план 054,
+ * слова владельца «если есть ограничение — даётся всего +2 месяца»):
+ * у нижнего края — за maxDate/«сегодня», у верхнего — за полом прошлого.
+ * Симметрично обе стороны. */
+export const CALENDAR_FEED_EDGE_CONTEXT = 2;
+
+/** Стартовый запас ленты будущего (открытый низ растёт append'ом). */
 export const CALENDAR_FEED_MONTHS = 12;
 
-/** Окно ленты одиночного пикера дат (решение владельца 13.10, #1394).
- * Старт — на порцию дорисовки раньше семантического старта
- * calendarFeedStart: над якорем всегда есть содержимое, и прокрутка вверх
- * работает сразу — на верхнем упоре scroll-событие не возникает вовсе,
- * дорисовка по порогу не запускается («сначала качни вниз», приёмка
- * #1394). Вперёд при закрытом будущем (maxDate задан) — жёсткий край:
- * последний месяц = месяц maxDate плюс пара приглушённых месяцев
- * контекста (1:1 с rangeFeedWindow), дальше лента не растёт. У открытого
- * будущего (maxDate не задан — начало аренды, плановые платежи) края нет:
- * лента открывается годом и растёт годом, как раньше. */
-export function calendarSingleFeedWindow(args: {
-  readonly feedStart: CalendarMonthRef;
+/** Окно ленты одиночного пикера (план 054 — Т-Банк: низ будущее, верх
+ * прошлое; вьюпорт якорится к нижнему краю). Жёсткий край получает ровно
+ * CALENDAR_FEED_EDGE_CONTEXT приглушённых месяцев контекста: низ — за
+ * maxDate, верх — за полом прошлого (null — сторона бесконечна и растёт
+ * порциями при прокрутке: prepend истории сверху / append будущего
+ * снизу). Открытая сторона будущего стартует с запаса «сегодня» + 2;
+ * открытая сторона прошлого — с запаса CALENDAR_FEED_BACKWARD_SEED до
+ * якоря (значение правки #502 или «сегодня»). */
+export function calendarFeedWindow(args: {
   readonly anchorMonth: CalendarMonthRef;
-  readonly maxDate: IsoDate | undefined;
+  readonly todayMonth: CalendarMonthRef;
+  readonly pastFloorMonth?: CalendarMonthRef;
+  readonly maxDateMonth?: CalendarMonthRef;
 }): {
   readonly first: CalendarMonthRef;
   readonly count: number;
+  readonly startEdge: CalendarMonthRef | null;
   readonly forwardEdge: CalendarMonthRef | null;
 } {
-  const first = calendarMonthOfIndex(
-    calendarMonthIndex(args.feedStart) - CALENDAR_FEED_PREPEND_CHUNK,
-  );
-  const anchorIdx =
-    calendarMonthIndex(args.anchorMonth) - calendarMonthIndex(first);
-  if (args.maxDate === undefined) {
-    return {
-      first,
-      count: Math.max(CALENDAR_FEED_MONTHS, anchorIdx + 1),
-      forwardEdge: null,
-    };
-  }
-  const edge = calendarMonthOfIndex(
-    calendarMonthIndex(calendarMonthOf(args.maxDate)) + CALENDAR_FEED_FORWARD_CONTEXT,
-  );
+  const forwardEdge = args.maxDateMonth
+    ? calendarMonthOfIndex(calendarMonthIndex(args.maxDateMonth) + CALENDAR_FEED_EDGE_CONTEXT)
+    : null;
+  const startEdge = args.pastFloorMonth
+    ? calendarMonthOfIndex(calendarMonthIndex(args.pastFloorMonth) - CALENDAR_FEED_EDGE_CONTEXT)
+    : null;
+  const bottomIdx = forwardEdge
+    ? calendarMonthIndex(forwardEdge)
+    : calendarMonthIndex(args.todayMonth) + CALENDAR_FEED_EDGE_CONTEXT;
+  const firstIdx = startEdge
+    ? calendarMonthIndex(startEdge)
+    : calendarMonthIndex(args.anchorMonth) - CALENDAR_FEED_BACKWARD_SEED;
   return {
-    first,
-    count: Math.max(
-      anchorIdx + 1,
-      calendarMonthIndex(edge) - calendarMonthIndex(first) + 1,
-    ),
-    forwardEdge: edge,
+    first: calendarMonthOfIndex(firstIdx),
+    count: bottomIdx - firstIdx + 1,
+    startEdge,
+    forwardEdge,
   };
 }
 

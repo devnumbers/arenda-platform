@@ -174,7 +174,7 @@ export function ContactsOfPropertyScreen({
       )}
 
       <PageContent>
-        {contactsQuery.isPending ? (
+        {(contactsQuery.isPending || (searching && contactsQuery.isFetching && contacts.length === 0)) ? (
           <>
             {sortChipRow}
             {/* Скелетон — книга объекта: алфавитные группы с буквами
@@ -182,7 +182,7 @@ export function ContactsOfPropertyScreen({
             <ContactsBookSkeleton />
           </>
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} loading={contactsQuery.isFetching} />
         ) : searchOpen && !searching ? (
           <ContactsSearchHint />
         ) : searching && contacts.length === 0 ? (

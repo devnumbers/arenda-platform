@@ -16,6 +16,7 @@ import {
   Button,
   Checkbox,
   CircleIcon,
+  CirclePhoto,
   IconButton,
   ListRow,
   PageContent,
@@ -213,20 +214,11 @@ export function SelectAvatar({ photoUrl, fallback }: {
   readonly photoUrl?: string;
   readonly fallback: JSX.Element;
 }): JSX.Element {
-  // Битое фото (404 стрима) откатывается к фолбэку — канон #1275 (#1286).
-  const [photoBroken, setPhotoBroken] = useState(false);
+  // Механика показа (битое фото — канон #1275/#1286, гард '', ожидание) —
+  // примитив CirclePhoto (#1423); строки выбора — ленивая подача.
   return (
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-      {photoUrl !== undefined && !photoBroken ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : (
-        fallback
-      )}
+      <CirclePhoto photoUrl={photoUrl} loading="lazy" glyph={fallback} />
     </CircleIcon>
   );
 }
