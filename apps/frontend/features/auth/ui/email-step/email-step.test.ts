@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
+import { ROUTES } from '@/shared/config/routes';
 import { Button, ResendCodeTile } from '@/shared/ui/design';
 import { EmailStep } from './EmailStep';
 
@@ -78,5 +79,31 @@ describe('EmailStep — кулдаун resend-канона', () => {
     expect(submit).toBeDefined();
     expect(submit?.props.disabled).toBe(false);
     expect(elements.find((element) => element.type === ResendCodeTile)).toBeUndefined();
+  });
+});
+
+describe('EmailStep — consent-футер первого шага', () => {
+  it('юртекст согласия с ссылками на лендинг в новой вкладке (переехал с телефонного шага, ADR 0067)', () => {
+    const { elements, strings } = inspect(baseProps);
+
+    // Шаг почты — теперь вход в поток (вход = регистрация), consent живёт
+    // здесь: прежний носитель — шаг телефона — снесён (#1529).
+    const privacy = elements.find(
+      (element) => element.type === 'a' && element.props.href === ROUTES.landingPrivacy,
+    );
+    const terms = elements.find(
+      (element) => element.type === 'a' && element.props.href === ROUTES.landingTerms,
+    );
+    expect(privacy).toBeDefined();
+    expect(terms).toBeDefined();
+    expect(privacy?.props.target).toBe('_blank');
+    expect(terms?.props.target).toBe('_blank');
+
+    const consent = strings.join(' ');
+    // Кнопка шага названа по имени — согласие привязано к «Получить код»,
+    // а не к прежнему «Войти».
+    expect(consent).toContain('Нажимая кнопку «Получить код»');
+    expect(consent).toContain('политику конфиденциальности');
+    expect(consent).toContain('обработку персональных данных');
   });
 });

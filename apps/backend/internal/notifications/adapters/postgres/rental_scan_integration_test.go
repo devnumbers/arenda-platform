@@ -22,10 +22,10 @@ func createUserInZone(t *testing.T, pool *pgxpool.Pool, timezone string) uuid.UU
 	// The digits come from the uuid's random half (bytes 8..11): ID() is the
 	// millisecond timestamp prefix, and two UUIDv7 minted in the same
 	// millisecond — the parallel tests do exactly that — would collide.
-	phone := fmt.Sprintf("+7999%07d", binary.BigEndian.Uint32(id[8:12])%10_000_000)
+	email := fmt.Sprintf("%07d@example.com", binary.BigEndian.Uint32(id[8:12])%10_000_000)
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, 'owner', $3)`,
-		id, phone, timezone)
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, 'owner', $3)`,
+		id, email, timezone)
 	require.NoError(t, err)
 	return id
 }

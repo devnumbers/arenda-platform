@@ -156,21 +156,28 @@ type Config struct {
 
 // RateLimit holds per-key rate-limiting configuration.
 type RateLimit struct {
-	IPRPS                     float64
-	IPBurst                   int
-	EmailSendPerHour          int
-	EmailVerifyPer15Min       int
-	PhoneChangeSendPerHour    int
-	PhoneChangeVerifyPer15Min int
-	EmailChangeSendPerHour    int
+	IPRPS                  float64
+	IPBurst                int
+	EmailSendPerHour       int
+	EmailVerifyPer15Min    int
+	EmailChangeSendPerHour int
 	// CodeSendPerRecipientPerHour caps the codes one email address receives
 	// per hour, across all flows and initiators — the per-recipient anti-flood
 	// limit (#1210).
 	CodeSendPerRecipientPerHour int
 	// CodeSendPerInitiatorPerHour caps the codes an authenticated user
-	// initiates per hour across phone- and email-change flows — the
-	// per-initiator anti-flood limit (#1210).
+	// initiates per hour in the email-change flow — the per-initiator
+	// anti-flood limit (#1210).
 	CodeSendPerInitiatorPerHour int
+	// AuthSendPerIPPerHour caps /auth/send requests per client IP per hour —
+	// the hard IP layer of the throttling pair (research #1526, OWASP «both
+	// the IP and the account»): one address must not drip code letters into
+	// many mailboxes.
+	AuthSendPerIPPerHour int
+	// AuthVerifyPerIPPer15Min caps /auth/verify requests per client IP per 15
+	// minutes — the softer second IP layer: distributed code guessing across
+	// many accounts is throttled, a NAT of legitimate users is not strangled.
+	AuthVerifyPerIPPer15Min int
 }
 
 // DBPoolConfig holds PostgreSQL connection pool settings.
@@ -408,13 +415,13 @@ func (c *Config) loadRateLimit() error {
 	if err := c.overrideRateLimitEmail(); err != nil {
 		return err
 	}
-	if err := c.overrideRateLimitPhoneChange(); err != nil {
-		return err
-	}
 	if err := c.overrideRateLimitEmailChange(); err != nil {
 		return err
 	}
 	if err := c.overrideRateLimitCodeSend(); err != nil {
+		return err
+	}
+	if err := c.overrideRateLimitAuthPerIP(); err != nil {
 		return err
 	}
 	return c.validateRateLimit()
@@ -428,11 +435,11 @@ func defaultRateLimit() RateLimit {
 		IPBurst:                     40,
 		EmailSendPerHour:            60,
 		EmailVerifyPer15Min:         30,
-		PhoneChangeSendPerHour:      5,
-		PhoneChangeVerifyPer15Min:   10,
 		EmailChangeSendPerHour:      5,
 		CodeSendPerRecipientPerHour: 5,
 		CodeSendPerInitiatorPerHour: 10,
+		AuthSendPerIPPerHour:        30,
+		AuthVerifyPerIPPer15Min:     60,
 	}
 }
 
@@ -474,26 +481,6 @@ func (c *Config) overrideRateLimitEmail() error {
 	return nil
 }
 
-// overrideRateLimitPhoneChange applies the phone-change send/verify overrides,
-// keeping the built-in defaults when a value arrives unset.
-func (c *Config) overrideRateLimitPhoneChange() error {
-	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR %q: %w", v, err)
-		}
-		c.RateLimit.PhoneChangeSendPerHour = n
-	}
-	if v := os.Getenv("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("invalid RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN %q: %w", v, err)
-		}
-		c.RateLimit.PhoneChangeVerifyPer15Min = n
-	}
-	return nil
-}
-
 // overrideRateLimitEmailChange applies the email-change send override
 // (codes to NEW addresses, issue #721), keeping the built-in default when the
 // value arrives unset.
@@ -529,6 +516,27 @@ func (c *Config) overrideRateLimitCodeSend() error {
 	return nil
 }
 
+// overrideRateLimitAuthPerIP applies the per-IP auth-endpoint overrides — the
+// IP layer of the throttling pair (research #1526): hard on issuance
+// (/auth/send), softer on verify (/auth/verify).
+func (c *Config) overrideRateLimitAuthPerIP() error {
+	if v := os.Getenv("RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR %q: %w", v, err)
+		}
+		c.RateLimit.AuthSendPerIPPerHour = n
+	}
+	if v := os.Getenv("RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN %q: %w", v, err)
+		}
+		c.RateLimit.AuthVerifyPerIPPer15Min = n
+	}
+	return nil
+}
+
 // validateRateLimit rejects non-positive limits in the fixed section order.
 func (c *Config) validateRateLimit() error {
 	if c.RateLimit.IPRPS <= 0 {
@@ -543,12 +551,6 @@ func (c *Config) validateRateLimit() error {
 	if c.RateLimit.EmailVerifyPer15Min <= 0 {
 		return errors.New("RATE_LIMIT_EMAIL_VERIFY_PER_15MIN must be positive")
 	}
-	if c.RateLimit.PhoneChangeSendPerHour <= 0 {
-		return errors.New("RATE_LIMIT_PHONE_CHANGE_SEND_PER_HOUR must be positive")
-	}
-	if c.RateLimit.PhoneChangeVerifyPer15Min <= 0 {
-		return errors.New("RATE_LIMIT_PHONE_CHANGE_VERIFY_PER_15MIN must be positive")
-	}
 	if c.RateLimit.EmailChangeSendPerHour <= 0 {
 		return errors.New("RATE_LIMIT_EMAIL_CHANGE_SEND_PER_HOUR must be positive")
 	}
@@ -557,6 +559,12 @@ func (c *Config) validateRateLimit() error {
 	}
 	if c.RateLimit.CodeSendPerInitiatorPerHour <= 0 {
 		return errors.New("RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR must be positive")
+	}
+	if c.RateLimit.AuthSendPerIPPerHour <= 0 {
+		return errors.New("RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR must be positive")
+	}
+	if c.RateLimit.AuthVerifyPerIPPer15Min <= 0 {
+		return errors.New("RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN must be positive")
 	}
 	return nil
 }

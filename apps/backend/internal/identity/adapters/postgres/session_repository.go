@@ -12,7 +12,6 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/pgconv"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -23,8 +22,8 @@ type SessionRepository struct {
 }
 
 // NewSessionRepository creates a new session repository.
-func NewSessionRepository(db pgen.DBTX, enc encryption.Encryptor) *SessionRepository {
-	return &SessionRepository{repoBase{db: db, enc: enc}}
+func NewSessionRepository(db pgen.DBTX) *SessionRepository {
+	return &SessionRepository{repoBase{db: db}}
 }
 
 // WithTx returns a repository instance bound to the provided transaction.
@@ -33,7 +32,7 @@ func (r *SessionRepository) WithTx(tx transaction.Tx) (application.SessionReposi
 	if err != nil {
 		return nil, fmt.Errorf("identity.SessionRepository.WithTx: %w", err)
 	}
-	return NewSessionRepository(dbtx, r.enc), nil
+	return NewSessionRepository(dbtx), nil
 }
 
 // inetParam converts a stored IP string into the netip.Addr the generated
@@ -200,7 +199,7 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 		return domain.Session{}, domain.User{}, fmt.Errorf("get session by token hash: %w", err)
 	}
 
-	user, err := mapUser(ctx, r.enc, userSourceFromSession(row).toUserRow())
+	user, err := mapUser(userSourceFromSession(row).toUserRow())
 	if err != nil {
 		return domain.Session{}, domain.User{}, err
 	}

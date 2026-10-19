@@ -17,8 +17,6 @@ import type { ActiveSession } from '@/entities/session';
 import type {
   User,
   UserUpdateCommand,
-  SendPhoneChangeCodeCommand,
-  ChangePhoneCommand,
   VerifyCurrentEmailCommand,
   RequestNewEmailCodeCommand,
   ChangeEmailCommand,
@@ -85,44 +83,6 @@ export function useUpdateMe(): UseMutationResult<
     },
     onSuccess: (data) => {
       queryClient.setQueryData(authKeys.me, data);
-      void queryClient.invalidateQueries({ queryKey: authKeys.all });
-    },
-  });
-}
-
-export function useChangePhoneSendCode(): UseMutationResult<
-  void,
-  ApiError,
-  SendPhoneChangeCodeCommand
-> {
-  return useGuardedMutation({
-    mutationFn: async ({ phone }: SendPhoneChangeCodeCommand) => {
-      await apiClient<void>('/me/phone/send-code', {
-        method: 'POST',
-        body: JSON.stringify({ phone }),
-      });
-    },
-  });
-}
-
-export function useChangePhone(): UseMutationResult<
-  User,
-  ApiError,
-  ChangePhoneCommand
-> {
-  const queryClient = useQueryClient();
-  return useGuardedMutation({
-    mutationFn: async ({ phone, code }: ChangePhoneCommand) => {
-      const res = await apiClient<Parameters<typeof mapMeResponse>[0]>(
-        '/me/phone/change',
-        {
-          method: 'POST',
-          body: JSON.stringify({ phone, code }),
-        },
-      );
-      return mapMeResponse(res);
-    },
-    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: authKeys.all });
     },
   });

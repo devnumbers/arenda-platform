@@ -4,12 +4,6 @@ SELECT * FROM users WHERE id = $1;
 -- name: GetUserByIDForUpdate :one
 SELECT * FROM users WHERE id = $1 FOR UPDATE;
 
--- name: GetUserByPhone :one
-SELECT * FROM users WHERE phone = $1;
-
--- name: GetUserByPhoneForUpdate :one
-SELECT * FROM users WHERE phone = $1 FOR UPDATE;
-
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE LOWER(email) = LOWER($1::text);
 
@@ -17,46 +11,43 @@ SELECT * FROM users WHERE LOWER(email) = LOWER($1::text);
 SELECT * FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE;
 
 -- name: CreateUser :one
-INSERT INTO users (id, phone, role, phone_encrypted, email, email_verified_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO users (id, role, email, email_verified_at)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT DO NOTHING
-RETURNING id, phone, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, phone_encrypted, timezone;
+RETURNING id, role, name, surname, patronymic, email, email_verified_at, created_at, updated_at, timezone;
 
--- GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
--- login code for a (phone, email, purpose) tuple. It is served by the partial unique
--- index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
--- WHERE used=false created by migration 000063 — the same index that backs
--- CreateLoginCode's ON CONFLICT upsert. The index serves both writes and reads; no
--- separate read index is needed (issue #224, EXPLAIN-verified: at production scale
--- the planner chooses an index scan over this index; email falls into Filter, not
--- Index Cond, because the index column is COALESCE(email, ...) and cannot match a raw
--- email=$2 equality, but the phone+purpose prefix narrows the scan efficiently).
--- name: GetLatestLoginCodeByPhoneAndEmailAndPurpose :one
-SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted FROM login_codes
-WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at > $4
+-- GetLatestLoginCodeByEmailAndPurpose reads the newest non-expired unused
+-- login code for an (email, purpose) pair. It is served by the partial unique
+-- index idx_login_codes_unique_unused (email, purpose) WHERE used=false created
+-- by migration 000162 — the same index that backs CreateLoginCode's ON CONFLICT
+-- upsert. The index serves both writes and reads; no separate read index is
+-- needed (issue #224, EXPLAIN-verified for the predecessor form: the planner
+-- chooses an index scan over this index).
+-- name: GetLatestLoginCodeByEmailAndPurpose :one
+SELECT id, user_id, email, code_hash, expires_at, used, created_at, purpose FROM login_codes
+WHERE email = $1 AND purpose = $2 AND used = false AND expires_at > $3
 ORDER BY created_at DESC
 LIMIT 1
 FOR UPDATE;
 
 -- name: CreateLoginCode :exec
-INSERT INTO login_codes (id, phone, email, code_hash, expires_at, user_id, purpose, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-ON CONFLICT (phone, COALESCE(email, ''), purpose) WHERE used = false
+INSERT INTO login_codes (id, email, code_hash, expires_at, user_id, purpose)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (email, purpose) WHERE used = false
 DO UPDATE SET
     id = EXCLUDED.id,
     code_hash = EXCLUDED.code_hash,
     expires_at = EXCLUDED.expires_at,
     user_id = EXCLUDED.user_id,
-    phone_encrypted = EXCLUDED.phone_encrypted,
     created_at = now();
 
--- name: DeleteExpiredLoginCodesByPhoneAndEmail :exec
+-- name: DeleteExpiredLoginCodesByEmailAndPurpose :exec
 DELETE FROM login_codes
-WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at < $4;
+WHERE email = $1 AND purpose = $2 AND used = false AND expires_at < $3;
 
--- name: DeleteUnusedLoginCodesByPhoneAndEmail :exec
+-- name: DeleteUnusedLoginCodesByEmailAndPurpose :exec
 DELETE FROM login_codes
-WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false;
+WHERE email = $1 AND purpose = $2 AND used = false;
 
 -- name: MarkLoginCodeUsed :exec
 UPDATE login_codes SET used = true WHERE id = $1;
@@ -64,50 +55,41 @@ UPDATE login_codes SET used = true WHERE id = $1;
 -- name: DeleteLoginCodeByID :exec
 DELETE FROM login_codes WHERE id = $1;
 
--- name: DeleteLoginCodesByUserID :exec
-DELETE FROM login_codes WHERE user_id = $1;
-
 -- name: DeleteExpiredLoginCodesBatch :execrows
 DELETE FROM login_codes t WHERE t.ctid IN (
     SELECT s.ctid FROM login_codes s WHERE s.expires_at < $1 LIMIT $2
 );
 
--- name: GetLoginAttemptByPhone :one
-SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1;
+-- name: GetLoginAttemptByEmail :one
+SELECT id, email, failures, first_failure_at, last_failure_at FROM login_attempts WHERE email = $1;
 
--- name: GetLoginAttemptByPhoneForUpdate :one
-SELECT id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted FROM login_attempts WHERE phone = $1 FOR UPDATE;
+-- name: GetLoginAttemptByEmailForUpdate :one
+SELECT id, email, failures, first_failure_at, last_failure_at FROM login_attempts WHERE email = $1 FOR UPDATE;
 
 -- ResetLoginAttempt writes the absolute attempt-window state, used when the
 -- window is new or has expired (TTL reset) and the failure counter must be set
 -- to an absolute value rather than incremented.
 -- name: ResetLoginAttempt :exec
-INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (phone) DO UPDATE SET
+INSERT INTO login_attempts (id, email, failures, first_failure_at, last_failure_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (email) DO UPDATE SET
     failures = EXCLUDED.failures,
     first_failure_at = EXCLUDED.first_failure_at,
-    last_failure_at = EXCLUDED.last_failure_at,
-    user_id = EXCLUDED.user_id,
-    phone_encrypted = EXCLUDED.phone_encrypted;
+    last_failure_at = EXCLUDED.last_failure_at;
 
 -- IncrementLoginAttempt atomically increments the failure counter on the
 -- existing row, so concurrent upserts cannot lose an increment (issue #215).
 -- failures carries the delta to add; first_failure_at is intentionally left
 -- untouched on the conflict branch because the window is not being reset.
 -- name: IncrementLoginAttempt :exec
-INSERT INTO login_attempts (id, phone, failures, first_failure_at, last_failure_at, user_id, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (phone) DO UPDATE SET
+INSERT INTO login_attempts (id, email, failures, first_failure_at, last_failure_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (email) DO UPDATE SET
     failures = login_attempts.failures + EXCLUDED.failures,
-    last_failure_at = EXCLUDED.last_failure_at,
-    user_id = EXCLUDED.user_id;
+    last_failure_at = EXCLUDED.last_failure_at;
 
--- name: DeleteLoginAttemptByPhone :exec
-DELETE FROM login_attempts WHERE phone = $1;
-
--- name: DeleteLoginAttemptsByUserID :exec
-DELETE FROM login_attempts WHERE user_id = $1;
+-- name: DeleteLoginAttemptByEmail :exec
+DELETE FROM login_attempts WHERE email = $1;
 
 -- name: DeleteStaleLoginAttemptsBatch :execrows
 DELETE FROM login_attempts t WHERE t.ctid IN (
@@ -166,7 +148,7 @@ DELETE FROM sessions t WHERE t.ctid IN (
 -- name: GetSessionByTokenHash :one
 SELECT s.id, s.token_hash, s.previous_token_hash, s.expires_at, s.created_at, s.last_used_at, s.rotated_at,
        s.last_ip, s.user_agent, s.device_type, s.browser, s.browser_major, s.os, s.city,
-       u.id AS user_id, u.phone, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.phone_encrypted, u.timezone
+       u.id AS user_id, u.role, u.name, u.surname, u.patronymic, u.email, u.email_verified_at, u.timezone
 FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE (s.token_hash = sqlc.arg('token_hash')::text OR (s.previous_token_hash = sqlc.arg('token_hash')::text AND s.rotated_at > sqlc.arg('grace_cutoff'))) AND s.expires_at > sqlc.arg('seen_after');
@@ -201,14 +183,6 @@ SET name = $2,
     email = $5,
     email_verified_at = $6,
     timezone = $7,
-    updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: UpdateUserPhone :one
-UPDATE users
-SET phone = $2,
-    phone_encrypted = $3,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
@@ -248,8 +222,7 @@ DELETE FROM email_change_grants WHERE user_id = $1;
 SELECT u.*, us.status AS subscription_status
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
-WHERE (sqlc.arg('phone')::text = '' OR u.phone = sqlc.arg('phone_enc')::text OR (u.phone = sqlc.arg('phone')::text AND u.phone_encrypted = false))
-  AND (sqlc.arg('email')::text = '' OR LOWER(u.email) LIKE LOWER('%' || sqlc.arg('email') || '%'))
+WHERE (sqlc.arg('email')::text = '' OR LOWER(u.email) LIKE LOWER('%' || sqlc.arg('email') || '%'))
   AND (sqlc.arg('role')::text = '' OR u.role = sqlc.arg('role')::text)
   AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status')::text)
 ORDER BY
@@ -265,8 +238,7 @@ LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 SELECT COUNT(*)
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
-WHERE (sqlc.arg('phone')::text = '' OR u.phone = sqlc.arg('phone_enc')::text OR (u.phone = sqlc.arg('phone')::text AND u.phone_encrypted = false))
-  AND (sqlc.arg('email')::text = '' OR LOWER(u.email) LIKE LOWER('%' || sqlc.arg('email') || '%'))
+WHERE (sqlc.arg('email')::text = '' OR LOWER(u.email) LIKE LOWER('%' || sqlc.arg('email') || '%'))
   AND (sqlc.arg('role')::text = '' OR u.role = sqlc.arg('role')::text)
   AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status')::text);
 
@@ -280,7 +252,7 @@ SELECT COUNT(*) FROM users
 WHERE created_at >= now() - interval '30 days';
 
 -- name: ListRecentUsersAdmin :many
-SELECT id, phone, phone_encrypted, name, surname, created_at
+SELECT id, email, name, surname, created_at
 FROM users
 ORDER BY created_at DESC, id DESC
 LIMIT 5;

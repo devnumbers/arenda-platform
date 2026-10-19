@@ -146,15 +146,14 @@ JOIN users u ON u.id = sp.user_id
 LEFT JOIN user_subscriptions us ON us.user_id = sp.user_id
 WHERE ($1::uuid IS NULL OR sp.user_id = $1)
   AND ($2::text = '' OR sp.status = $2)
-  AND ($3::text = '' OR u.phone = $4::text OR (u.phone = $3::text AND u.phone_encrypted = false))
-  AND ($5::text = '' OR us.status = $5)
+  AND ($3::text = '' OR LOWER(u.email) = LOWER($3::text))
+  AND ($4::text = '' OR us.status = $4)
 `
 
 type CountSubscriptionPaymentsAdminParams struct {
 	UserID             pgtype.UUID `json:"user_id"`
 	Status             string      `json:"status"`
-	UserPhone          string      `json:"user_phone"`
-	UserPhoneEnc       string      `json:"user_phone_enc"`
+	UserEmail          string      `json:"user_email"`
 	SubscriptionStatus string      `json:"subscription_status"`
 }
 
@@ -162,8 +161,7 @@ func (q *Queries) CountSubscriptionPaymentsAdmin(ctx context.Context, arg CountS
 	row := q.db.QueryRow(ctx, countSubscriptionPaymentsAdmin,
 		arg.UserID,
 		arg.Status,
-		arg.UserPhone,
-		arg.UserPhoneEnc,
+		arg.UserEmail,
 		arg.SubscriptionStatus,
 	)
 	var count int64
@@ -757,7 +755,7 @@ SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
        sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at, sp.card_mask,
-       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+       u.email AS user_email
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
 WHERE sp.id = $1
@@ -783,8 +781,7 @@ type GetSubscriptionPaymentAdminRow struct {
 	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
 	CardMask              pgtype.Text        `json:"card_mask"`
-	UserPhone             string             `json:"user_phone"`
-	UserPhoneEncrypted    bool               `json:"user_phone_encrypted"`
+	UserEmail             string             `json:"user_email"`
 }
 
 func (q *Queries) GetSubscriptionPaymentAdmin(ctx context.Context, id pgtype.UUID) (GetSubscriptionPaymentAdminRow, error) {
@@ -810,8 +807,7 @@ func (q *Queries) GetSubscriptionPaymentAdmin(ctx context.Context, id pgtype.UUI
 		&i.SucceededAt,
 		&i.ExpiresAt,
 		&i.CardMask,
-		&i.UserPhone,
-		&i.UserPhoneEncrypted,
+		&i.UserEmail,
 	)
 	return i, err
 }
@@ -1162,7 +1158,7 @@ func (q *Queries) ListPendingSubscriptionPaymentsByUserID(ctx context.Context, u
 
 const listRecentSubscriptionPaymentsAdmin = `-- name: ListRecentSubscriptionPaymentsAdmin :many
 SELECT sp.id, sp.user_id, sp.amount_kopecks, sp.status, sp.created_at,
-       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+       u.email AS user_email
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
 ORDER BY sp.created_at DESC, sp.id DESC
@@ -1170,13 +1166,12 @@ LIMIT 5
 `
 
 type ListRecentSubscriptionPaymentsAdminRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	UserID             pgtype.UUID        `json:"user_id"`
-	AmountKopecks      int64              `json:"amount_kopecks"`
-	Status             string             `json:"status"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UserPhone          string             `json:"user_phone"`
-	UserPhoneEncrypted bool               `json:"user_phone_encrypted"`
+	ID            pgtype.UUID        `json:"id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	AmountKopecks int64              `json:"amount_kopecks"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UserEmail     string             `json:"user_email"`
 }
 
 func (q *Queries) ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]ListRecentSubscriptionPaymentsAdminRow, error) {
@@ -1194,8 +1189,7 @@ func (q *Queries) ListRecentSubscriptionPaymentsAdmin(ctx context.Context) ([]Li
 			&i.AmountKopecks,
 			&i.Status,
 			&i.CreatedAt,
-			&i.UserPhone,
-			&i.UserPhoneEncrypted,
+			&i.UserEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -1213,31 +1207,30 @@ SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
        sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at, sp.card_mask,
-       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+       u.email AS user_email
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
 LEFT JOIN user_subscriptions us ON us.user_id = sp.user_id
 WHERE ($1::uuid IS NULL OR sp.user_id = $1)
   AND ($2::text = '' OR sp.status = $2)
-  AND ($3::text = '' OR u.phone = $4::text OR (u.phone = $3::text AND u.phone_encrypted = false))
-  AND ($5::text = '' OR us.status = $5)
+  AND ($3::text = '' OR LOWER(u.email) = LOWER($3::text))
+  AND ($4::text = '' OR us.status = $4)
 ORDER BY
-  CASE WHEN $6::text = 'createdAt' AND $7::text = 'asc' THEN sp.created_at END ASC,
-  CASE WHEN $6::text = 'createdAt' AND $7::text = 'desc' THEN sp.created_at END DESC,
-  CASE WHEN $6::text = 'amountKopecks' AND $7::text = 'asc' THEN sp.amount_kopecks END ASC,
-  CASE WHEN $6::text = 'amountKopecks' AND $7::text = 'desc' THEN sp.amount_kopecks END DESC,
-  CASE WHEN $6::text = 'status' AND $7::text = 'asc' THEN sp.status END ASC,
-  CASE WHEN $6::text = 'status' AND $7::text = 'desc' THEN sp.status END DESC,
-  CASE WHEN $6::text = '' THEN sp.created_at END DESC,
+  CASE WHEN $5::text = 'createdAt' AND $6::text = 'asc' THEN sp.created_at END ASC,
+  CASE WHEN $5::text = 'createdAt' AND $6::text = 'desc' THEN sp.created_at END DESC,
+  CASE WHEN $5::text = 'amountKopecks' AND $6::text = 'asc' THEN sp.amount_kopecks END ASC,
+  CASE WHEN $5::text = 'amountKopecks' AND $6::text = 'desc' THEN sp.amount_kopecks END DESC,
+  CASE WHEN $5::text = 'status' AND $6::text = 'asc' THEN sp.status END ASC,
+  CASE WHEN $5::text = 'status' AND $6::text = 'desc' THEN sp.status END DESC,
+  CASE WHEN $5::text = '' THEN sp.created_at END DESC,
   sp.id DESC
-LIMIT $9 OFFSET $8
+LIMIT $8 OFFSET $7
 `
 
 type ListSubscriptionPaymentsAdminParams struct {
 	UserID             pgtype.UUID `json:"user_id"`
 	Status             string      `json:"status"`
-	UserPhone          string      `json:"user_phone"`
-	UserPhoneEnc       string      `json:"user_phone_enc"`
+	UserEmail          string      `json:"user_email"`
 	SubscriptionStatus string      `json:"subscription_status"`
 	Sort               string      `json:"sort"`
 	Order              string      `json:"order"`
@@ -1265,20 +1258,17 @@ type ListSubscriptionPaymentsAdminRow struct {
 	SucceededAt           pgtype.Timestamptz `json:"succeeded_at"`
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
 	CardMask              pgtype.Text        `json:"card_mask"`
-	UserPhone             string             `json:"user_phone"`
-	UserPhoneEncrypted    bool               `json:"user_phone_encrypted"`
+	UserEmail             string             `json:"user_email"`
 }
 
-// Admin payment views (issue #254). The phone filter matches the stored
-// ciphertext (deterministic encryption) or the plaintext of a not-yet-
-// encrypted row, mirroring ListUsersAdmin; user input is never interpolated
-// into SQL — sort/order map to columns through fixed CASE arms.
+// Admin payment views (issue #254). The email filter is an exact
+// case-insensitive match on the canonical address; user input is never
+// interpolated into SQL — sort/order map to columns through fixed CASE arms.
 func (q *Queries) ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error) {
 	rows, err := q.db.Query(ctx, listSubscriptionPaymentsAdmin,
 		arg.UserID,
 		arg.Status,
-		arg.UserPhone,
-		arg.UserPhoneEnc,
+		arg.UserEmail,
 		arg.SubscriptionStatus,
 		arg.Sort,
 		arg.Order,
@@ -1312,8 +1302,7 @@ func (q *Queries) ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSub
 			&i.SucceededAt,
 			&i.ExpiresAt,
 			&i.CardMask,
-			&i.UserPhone,
-			&i.UserPhoneEncrypted,
+			&i.UserEmail,
 		); err != nil {
 			return nil, err
 		}

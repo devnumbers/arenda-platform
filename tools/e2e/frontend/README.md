@@ -52,9 +52,10 @@ make frontend-e2e          # из корня репо; нужен Docker + Node 
 ## Контракт тестов
 
 Тестам оркестратор отдаёт: `E2E_BASE_URL`, `E2E_SESSION_TOKEN` (сырой токен
-сид-сессии → кука `session_id`), `E2E_USER_PHONE` (цифры без +7),
-`E2E_USER_EMAIL`, `E2E_BACKEND_LOG` (путь к логу бекенда для извлечения кода
-входа). Фикстуры и хелперы — `apps/frontend/e2e/fixtures.ts`.
+сид-сессии → кука `session_id`), `E2E_USER_EMAIL`, `E2E_BACKEND_LOG` (путь к
+логу бекенда для извлечения кода входа). Вход email-only (ADR 0067, #1529):
+`E2E_USER_PHONE` снесён вместе с телефонным шагом. Фикстуры и хелперы —
+`apps/frontend/e2e/fixtures.ts`.
 
 ## Отладка одной спеки против живого стека
 
@@ -69,7 +70,7 @@ E2E_BASE_URL=http://127.0.0.1:3010 \
 E2E_SESSION_TOKEN=<owner-токен из вывода live-up> \
 E2E_MEMBER_SESSION_TOKEN=<full-access-токен> \
 E2E_VIEWER_SESSION_TOKEN=<viewer-токен> \
-E2E_USER_PHONE=9150000001 E2E_USER_EMAIL=e2e@example.com \
+E2E_USER_EMAIL=e2e@example.com \
 E2E_PG_CONTAINER=arenda-e2e-postgres-1 \
 E2E_BACKEND_LOG=../../.tmp/e2e-frontend/backend.log \
 npx playwright test e2e/payment-detail.spec.ts -g 'отмена в шторке паузы'

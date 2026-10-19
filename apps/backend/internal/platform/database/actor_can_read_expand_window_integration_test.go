@@ -118,10 +118,10 @@ func seedExpandWindowFixture(t *testing.T, pool *pgxpool.Pool) expandWindowFixtu
 		propertyID: newID(),
 	}
 
-	exec(`INSERT INTO users (id, phone, role) VALUES ($1, $2, 'owner')`,
-		f.ownerID, "+79990000001")
-	exec(`INSERT INTO users (id, phone, role) VALUES ($1, $2, 'owner')`,
-		f.strangerID, "+79990000002")
+	exec(`INSERT INTO users (id, email, role) VALUES ($1, $2, 'owner')`,
+		f.ownerID, "expand-owner@example.com")
+	exec(`INSERT INTO users (id, email, role) VALUES ($1, $2, 'owner')`,
+		f.strangerID, "expand-stranger@example.com")
 	exec(`INSERT INTO properties (id, owner_id, name, type, address, status)
 	      VALUES ($1, $2, 'Expand window', 'apartment', '', 'active')`,
 		f.propertyID, f.ownerID)

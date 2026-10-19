@@ -86,7 +86,6 @@ type MemberUser struct {
 	ID       uuid.UUID
 	Name     *string
 	Surname  *string
-	Phone    string
 	PhotoKey *string
 }
 

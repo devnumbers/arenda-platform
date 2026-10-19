@@ -137,7 +137,6 @@ func (s *ActorStore) Snapshot(ctx context.Context, userID uuid.UUID) (domain.Act
 		ID:      userID,
 		Name:    pgconv.TextToPtrString(user.Name),
 		Surname: pgconv.TextToPtrString(user.Surname),
-		Phone:   user.Phone,
 	})
-	return domain.ActorSnapshot{Name: name, Email: pgconv.TextToString(user.Email)}, nil
+	return domain.ActorSnapshot{Name: name, Email: user.Email}, nil
 }

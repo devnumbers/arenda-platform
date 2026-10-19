@@ -13,20 +13,20 @@ import (
 // across the auth handlers to their RFC 7807 responses and reports whether it
 // wrote one. When it returns true the caller must stop handling the error.
 //
-// It collapses the ~5 duplicated switch arms (ErrUserBlocked ×5, ErrNotFound ×5,
-// ErrEmailAlreadyTaken ×3, ErrCodeSentTooRecently ×3, ErrEmailDoesNotMatch ×2)
-// that previously appeared in every auth handler (issue #222, grilling E2):
+// It collapses the duplicated switch arms (ErrUserBlocked ×5, ErrNotFound ×5,
+// ErrEmailAlreadyTaken ×3, ErrCodeSentTooRecently ×3) that previously appeared
+// in every auth handler (issue #222, grilling E2):
 //
 //   - ErrUserBlocked / domain.ErrTooManyAttempts / ErrCodeSentTooRecently /
 //     ErrRecipientSendLimitExceeded / ErrInitiatorSendLimitExceeded → 429
-//   - ErrEmailAlreadyTaken / ErrEmailDoesNotMatch → 409
+//   - ErrEmailAlreadyTaken → 409
 //   - ErrNotFound → 401
 //
 // ErrNotFound is cross-cutting only in status code (401): each handler still
 // owns its detail text, so notFoundDetail is threaded in rather than fixed
-// here. Handler-specific errors (ErrInvalidEmail, ErrLoginCodeInvalid,
-// ErrPhoneUnchanged, ErrPhoneAlreadyTaken, …) stay in each handler's local
-// switch so the set of errors a handler can return stays readable. The
+// here. Handler-specific errors (ErrInvalidEmail, ErrLoginCodeInvalid, …) stay
+// in each handler's local switch so the set of errors a handler can return
+// stays readable. The
 // anti-flood send limits (#1210) ride the 429 arm with the generic default
 // text: one UX for every send refusal, and no address- or account-specific
 // wording on a pre-auth-reachable path.
@@ -39,8 +39,7 @@ func writeSharedIdentityError(w http.ResponseWriter, r *http.Request, err error,
 		errors.Is(err, application.ErrInitiatorSendLimitExceeded):
 		httpsupport.WriteTooManyRequests(w, r, userFacingDetailOrDefault(err, "Превышен лимит запросов"))
 		return true
-	case errors.Is(err, application.ErrEmailAlreadyTaken),
-		errors.Is(err, application.ErrEmailDoesNotMatch):
+	case errors.Is(err, application.ErrEmailAlreadyTaken):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict", userFacingDetailOrDefault(err, "Некорректные учётные данные")))
 		return true
@@ -70,14 +69,8 @@ func userFacingDetail(err error) (string, bool) {
 		return detailUserBlocked, true
 	case errors.Is(err, application.ErrCodeSentTooRecently):
 		return "Код отправлен слишком недавно", true
-	case errors.Is(err, application.ErrPhoneAlreadyTaken):
-		return "Этот номер телефона уже используется", true
-	case errors.Is(err, application.ErrPhoneUnchanged):
-		return "Новый номер должен отличаться от текущего", true
 	case errors.Is(err, domain.ErrTooManyAttempts):
 		return "Слишком много попыток", true
-	case errors.Is(err, application.ErrEmailDoesNotMatch):
-		return "Некорректные учётные данные", true
 	case errors.Is(err, application.ErrEmailAlreadyTaken):
 		return detailEmailTaken, true
 	}

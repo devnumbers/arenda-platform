@@ -1,6 +1,5 @@
 export type User = {
   readonly id: string;
-  readonly phone: string;
   readonly role: 'owner' | 'admin';
   readonly name: string | null;
   readonly surname: string | null;
@@ -22,15 +21,6 @@ export type UserUpdateCommand = {
   surname?: string | null;
   patronymic?: string | null;
   timezone?: string | null;
-};
-
-export type SendPhoneChangeCodeCommand = {
-  phone: string;
-};
-
-export type ChangePhoneCommand = {
-  phone: string;
-  code: string;
 };
 
 /** Шаг 2 флоу смены email (#721/#722, протокол #1202): код с текущего

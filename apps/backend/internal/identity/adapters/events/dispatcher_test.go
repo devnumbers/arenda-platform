@@ -33,17 +33,12 @@ func TestPublisher_PublishUserRegistered(t *testing.T) {
 	pub := NewPublisher(d)
 
 	userID := uuid.Must(uuid.NewV7())
-	phone, err := domain.NewPhone("+79160004000")
-	if err != nil {
-		t.Fatalf("parse phone: %v", err)
-	}
 	email, err := domain.NewEmail("owner@example.com")
 	if err != nil {
 		t.Fatalf("parse email: %v", err)
 	}
 	event := identityapp.UserRegistered{
 		UserID: userID,
-		Phone:  phone,
 		Email:  email,
 	}
 
@@ -59,9 +54,6 @@ func TestPublisher_PublishUserRegistered(t *testing.T) {
 	}
 	if got.UserID != userID {
 		t.Fatalf("event UserID = %s, want %s", got.UserID, userID)
-	}
-	if got.Phone != phone {
-		t.Fatalf("event Phone = %s, want %s", got.Phone, phone)
 	}
 	if got.Email != email {
 		t.Fatalf("event Email = %s, want %s", got.Email, email)

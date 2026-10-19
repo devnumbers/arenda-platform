@@ -337,23 +337,22 @@ ORDER BY
   sp.id ASC
 LIMIT sqlc.arg('batch_limit');
 
--- Admin payment views (issue #254). The phone filter matches the stored
--- ciphertext (deterministic encryption) or the plaintext of a not-yet-
--- encrypted row, mirroring ListUsersAdmin; user input is never interpolated
--- into SQL — sort/order map to columns through fixed CASE arms.
+-- Admin payment views (issue #254). The email filter is an exact
+-- case-insensitive match on the canonical address; user input is never
+-- interpolated into SQL — sort/order map to columns through fixed CASE arms.
 
 -- name: ListSubscriptionPaymentsAdmin :many
 SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id,
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
        sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at, sp.card_mask,
-       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+       u.email AS user_email
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
 LEFT JOIN user_subscriptions us ON us.user_id = sp.user_id
 WHERE (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id'))
   AND (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status'))
-  AND (sqlc.arg('user_phone')::text = '' OR u.phone = sqlc.arg('user_phone_enc')::text OR (u.phone = sqlc.arg('user_phone')::text AND u.phone_encrypted = false))
+  AND (sqlc.arg('user_email')::text = '' OR LOWER(u.email) = LOWER(sqlc.arg('user_email')::text))
   AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status'))
 ORDER BY
   CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('order')::text = 'asc' THEN sp.created_at END ASC,
@@ -373,7 +372,7 @@ JOIN users u ON u.id = sp.user_id
 LEFT JOIN user_subscriptions us ON us.user_id = sp.user_id
 WHERE (sqlc.arg('user_id')::uuid IS NULL OR sp.user_id = sqlc.arg('user_id'))
   AND (sqlc.arg('status')::text = '' OR sp.status = sqlc.arg('status'))
-  AND (sqlc.arg('user_phone')::text = '' OR u.phone = sqlc.arg('user_phone_enc')::text OR (u.phone = sqlc.arg('user_phone')::text AND u.phone_encrypted = false))
+  AND (sqlc.arg('user_email')::text = '' OR LOWER(u.email) = LOWER(sqlc.arg('user_email')::text))
   AND (sqlc.arg('subscription_status')::text = '' OR us.status = sqlc.arg('subscription_status'));
 
 -- name: GetSubscriptionPaymentAdmin :one
@@ -381,7 +380,7 @@ SELECT sp.id, sp.user_id, sp.subscription_id, sp.tariff_id, sp.payment_method_id
        sp.period, sp.amount_kopecks, sp.provider, sp.provider_payment_id, sp.payment_url,
        sp.status, sp.refunded_amount_kopecks, sp.charge_attempts, sp.error_code,
        sp.created_at, sp.updated_at, sp.succeeded_at, sp.expires_at, sp.card_mask,
-       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+       u.email AS user_email
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
 WHERE sp.id = $1;
@@ -538,7 +537,7 @@ WHERE created_at >= now() - interval '30 days';
 
 -- name: ListRecentSubscriptionPaymentsAdmin :many
 SELECT sp.id, sp.user_id, sp.amount_kopecks, sp.status, sp.created_at,
-       u.phone AS user_phone, u.phone_encrypted AS user_phone_encrypted
+       u.email AS user_email
 FROM subscription_payments sp
 JOIN users u ON u.id = sp.user_id
 ORDER BY sp.created_at DESC, sp.id DESC

@@ -28,7 +28,7 @@ type SubscriptionPaymentStatus = 'pending' | 'succeeded' | 'failed' | 'refunded'
 // Структуры синхронизированы со схемой AdminStats в apps/backend/api/openapi/openapi.yaml.
 interface AdminStatsRecentUser {
   id: string;
-  phone: string;
+  email: string;
   name?: string | null;
   surname?: string | null;
   createdAt: string;
@@ -37,7 +37,7 @@ interface AdminStatsRecentUser {
 interface AdminStatsRecentPayment {
   id: string;
   userId: string;
-  userPhone: string;
+  userEmail: string;
   amountKopecks: number;
   status: SubscriptionPaymentStatus;
   createdAt: string;
@@ -120,7 +120,7 @@ const PaymentsSummaryCard = ({ stats }: { stats: AdminStats }) => (
   </Card>
 );
 
-/** Карточка «Последние пользователи»: телефон (+ ФИО), дата регистрации, ссылка на Show. */
+/** Карточка «Последние пользователи»: email (+ ФИО), дата регистрации, ссылка на Show. */
 const RecentUsersCard = ({ users }: { users: AdminStatsRecentUser[] }) => (
   <Card sx={{ height: '100%' }}>
     <CardContent>
@@ -136,7 +136,7 @@ const RecentUsersCard = ({ users }: { users: AdminStatsRecentUser[] }) => (
                 <ListItemText
                   primary={
                     <Link to={`/users/${user.id}/show`}>
-                      {name ? `${user.phone} (${name})` : user.phone}
+                      {name ? `${user.email} (${name})` : user.email}
                     </Link>
                   }
                   secondary={`Регистрация: ${dateFormatter.format(new Date(user.createdAt))}`}
@@ -172,7 +172,7 @@ const RecentPaymentsCard = ({ payments }: { payments: AdminStatsRecentPayment[] 
               <ListItemText
                 primary={
                   <>
-                    <Link to={`/users/${payment.userId}/show`}>{payment.userPhone}</Link>
+                    <Link to={`/users/${payment.userId}/show`}>{payment.userEmail}</Link>
                     {' — '}
                     <Link to={`/subscriptionPayments/${payment.id}/show`}>
                       {formatKopecks(payment.amountKopecks)}

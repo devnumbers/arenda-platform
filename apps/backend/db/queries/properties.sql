@@ -160,7 +160,7 @@ WHERE user_id = sqlc.arg('actor')::uuid
   AND property_id = ANY(sqlc.arg('property_ids')::uuid[]);
 
 -- name: ListPropertiesAdmin :many
-SELECT p.*, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.*, u.email AS owner_email
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE (sqlc.arg('owner_id')::uuid IS NULL OR p.owner_id = sqlc.arg('owner_id')::uuid)
@@ -186,7 +186,7 @@ WHERE (sqlc.arg('owner_id')::uuid IS NULL OR owner_id = sqlc.arg('owner_id')::uu
   AND (sqlc.arg('q')::text = '' OR name ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\' OR address ILIKE '%' || sqlc.arg('q')::text || '%' ESCAPE '\');
 
 -- name: GetPropertyByIDAdmin :one
-SELECT p.*, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.*, u.email AS owner_email
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE p.id = $1;

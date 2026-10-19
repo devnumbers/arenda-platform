@@ -498,7 +498,7 @@ WITH scope_property(id) AS (
     JOIN scope_property sp ON sp.id = aj.property_id
     WHERE aj.actor_id IS NOT NULL
 )
-SELECT u.id, u.name, u.surname, u.phone, u.email,
+SELECT u.id, u.name, u.surname, u.email,
        COALESCE(CASE WHEN u.photo_key IS NOT NULL
                      THEN '/api/users/' || u.id::text || '/photo'
                      END, '')::text AS photo_path,
@@ -523,8 +523,7 @@ type ListHistoryFilterParticipantsRow struct {
 	ID        pgtype.UUID `json:"id"`
 	Name      pgtype.Text `json:"name"`
 	Surname   pgtype.Text `json:"surname"`
-	Phone     string      `json:"phone"`
-	Email     pgtype.Text `json:"email"`
+	Email     string      `json:"email"`
 	PhotoPath string      `json:"photo_path"`
 	FirstName string      `json:"first_name"`
 	IsOwner   bool        `json:"is_owner"`
@@ -585,7 +584,6 @@ func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHis
 			&i.ID,
 			&i.Name,
 			&i.Surname,
-			&i.Phone,
 			&i.Email,
 			&i.PhotoPath,
 			&i.FirstName,

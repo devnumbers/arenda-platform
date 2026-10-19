@@ -69,7 +69,6 @@ func toMemberUser(u identitydomain.User) application.MemberUser {
 		ID:       u.ID,
 		Name:     u.Name,
 		Surname:  u.Surname,
-		Phone:    u.Phone.String(),
 		PhotoKey: u.PhotoKey,
 	}
 }

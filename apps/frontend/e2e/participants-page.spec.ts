@@ -63,8 +63,9 @@ test('страница участника: шапка, чип агрегата, 
 test('безымянный участник: «Пользователь» — заголовок шапки, почта подзаголовком (карта #1105, аменд #1123); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
   // Тот же канон карты #1105, что и в ряду списка: display_name
   // безымянного собирает бекенд (#1106) — «Пользователь» (аменд #1123:
-  // телефон больше не фолбэк). Телефон сидится плейнтекстом при
-  // phone_encrypted = false. Идентификаторы
+  // телефон больше не фолбэк; из схемы он ушёл совсем — ADR 0067,
+  // миграция 000162, пин «телефона нет» — страховка от остаточных масок).
+  // Идентификаторы
   // свои (не из participants-list.spec.ts): утечка строки одного теста
   // не должна подменять данные другого (ON CONFLICT (id) DO NOTHING).
   const NAMELESS_ID = '16111111-1111-4111-8111-111111111162';
@@ -72,8 +73,8 @@ test('безымянный участник: «Пользователь» — з
   const NAMELESS_PHONE = '+79137654322';
   const NAMELESS_EMAIL = 'e2e-nameless-page@example.com';
   await execE2eSql(
-    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
-      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+    `INSERT INTO users (id, role, name, surname, email, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', 'UTC') ` +
       `ON CONFLICT (id) DO NOTHING; ` +
       `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
       `VALUES ('${NAMELESS_MEMBER_ID}', '${APARTMENT_ID}', '${NAMELESS_ID}', 'viewer', '11111111-1111-4111-8111-111111111111') ` +

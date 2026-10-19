@@ -162,10 +162,10 @@ func suspendMembership(t *testing.T, pool *pgxpool.Pool, propertyID, userID uuid
 func TestReadStore_FeedVisibility(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
-	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
-	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "anna@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "zina@example.com")
 
 	liveProperty := seedProperty(t, pool, owner)
 	archivedProperty := seedProperty(t, pool, owner)
@@ -236,8 +236,8 @@ func TestReadStore_FeedVisibility(t *testing.T) {
 func TestReadStore_FeedGlobalPrependScope(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "anna@example.com")
 
 	liveProperty := seedProperty(t, pool, owner)
 	seedMembership(t, pool, liveProperty, viewer)
@@ -277,8 +277,8 @@ func TestReadStore_FeedGlobalPrependScope(t *testing.T) {
 func TestReadStore_FeedScopedCanonForMember(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "anna@example.com")
 
 	liveProperty := seedProperty(t, pool, owner)
 	seedMembership(t, pool, liveProperty, viewer)
@@ -317,9 +317,9 @@ func TestReadStore_FeedScopedCanonForMember(t *testing.T) {
 func TestReadStore_InvisiblePropertyIDIsPrivacy404(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
-	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000003", "zina@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "zina@example.com")
 	property := seedProperty(t, pool, owner)
 	seedMembership(t, pool, property, member)
 	seedEntry(t, pool, owner, property, time.Unix(100, 0), domain.KindOperation, domain.ActionOperationPaid,
@@ -351,7 +351,7 @@ func TestReadStore_InvisiblePropertyIDIsPrivacy404(t *testing.T) {
 func TestReadStore_DownwardKeysetWalk(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
 	property := seedProperty(t, pool, owner)
 
 	// 12 строк с шагом в секунду — детерминированный порядок (created_at, id).
@@ -433,7 +433,7 @@ func walkToTail(
 func TestReadStore_UpwardKeysetWalkAndPrepend(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
 	property := seedProperty(t, pool, owner)
 
 	total := 12
@@ -492,7 +492,7 @@ func TestReadStore_UpwardKeysetWalkAndPrepend(t *testing.T) {
 func TestReadStore_PrependNewArrival(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
 	property := seedProperty(t, pool, owner)
 	for i := range 6 {
 		seedEntry(t, pool, owner, property, time.Unix(int64(1000+i), 0),
@@ -528,7 +528,7 @@ func TestReadStore_PrependNewArrival(t *testing.T) {
 func TestReadStore_AfterCursorBurstWalk(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
 	property := seedProperty(t, pool, owner)
 
 	for i := range 5 {
@@ -630,8 +630,8 @@ func assertAfterPage(
 func TestReadStore_Filters(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
 	propertyA := seedProperty(t, pool, owner)
 	propertyB := seedProperty(t, pool, owner)
 	seedMembership(t, pool, propertyA, member)
@@ -687,8 +687,8 @@ func TestReadStore_Filters(t *testing.T) {
 func TestReadStore_SearchRespectsScope(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr.petrov@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr.petrov@example.com")
 	property := seedProperty(t, pool, owner)
 	seedMembership(t, pool, property, member)
 
@@ -837,8 +837,8 @@ func searchPredicateKeyset(t *testing.T, svc *historyapp.HistoryReadService, own
 func TestReadStore_SearchPredicate(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	maria := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	maria := seedUser(t, pool, "Мария", "Петрова", "maria@example.com")
 	property := seedProperty(t, pool, owner)
 	seedMembership(t, pool, property, maria)
 
@@ -917,10 +917,10 @@ func TestReadStore_SearchPredicate(t *testing.T) {
 func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
-	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
-	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "anna@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "zina@example.com")
 
 	property := seedProperty(t, pool, owner)
 	otherProperty := seedProperty(t, pool, stranger)
@@ -930,7 +930,7 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 	base := time.Unix(1000, 0)
 	// Отозванный актёр: вышел из объекта — записи остались,
 	// фильтруемым остался.
-	exited := seedUser(t, pool, "Олег", "Ушёл", "+79990000005", "oleg@example.com")
+	exited := seedUser(t, pool, "Олег", "Ушёл", "oleg@example.com")
 	seedMembership(t, pool, property, exited)
 	seedEntry(t, pool, exited, property, base,
 		domain.KindRental, domain.ActionRentalCreated, domain.BaseAdded, "Аренда создана")
@@ -941,7 +941,7 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 	}
 	// Обезличенный актёр: пользователь удалён (actor_id SET NULL) — в
 	// опциях его нет, строка остаётся.
-	ghost := seedUser(t, pool, "Лев", "Призрак", "+79990000006", "ghost@example.com")
+	ghost := seedUser(t, pool, "Лев", "Призрак", "ghost@example.com")
 	seedEntry(t, pool, ghost, property, base.Add(time.Second),
 		domain.KindTask, domain.ActionTaskCompleted, domain.BaseCompleted, "Задача выполнена")
 	if _, err := pool.Exec(t.Context(), `DELETE FROM users WHERE id = $1`, ghost); err != nil {
@@ -1007,9 +1007,9 @@ func TestReadStore_FilterOptionsParticipants(t *testing.T) {
 func TestReadStore_GlobalFilterParticipantsIsolation(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	recipient := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
-	ownMember := seedUser(t, pool, "Сергей", "Сидоров", "+79990000003", "sergey@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	recipient := seedUser(t, pool, "Мария", "Петрова", "maria@example.com")
+	ownMember := seedUser(t, pool, "Сергей", "Сидоров", "sergey@example.com")
 
 	sharedProperty := seedProperty(t, pool, owner)
 	ownProperty := seedProperty(t, pool, recipient)
@@ -1053,8 +1053,8 @@ func TestReadStore_GlobalFilterParticipantsIsolation(t *testing.T) {
 func TestReadStore_GlobalFilterObjectsIsolation(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	recipient := seedUser(t, pool, "Мария", "Петрова", "+79990000002", "maria@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	recipient := seedUser(t, pool, "Мария", "Петрова", "maria@example.com")
 
 	sharedProperty := seedProperty(t, pool, owner)
 	ownProperty := seedProperty(t, pool, recipient)
@@ -1089,15 +1089,15 @@ func TestReadStore_GlobalFilterObjectsIsolation(t *testing.T) {
 // чтения, помечен is_owner; приглашённый без своих объектов — нет.
 // Замок у того, кто пригласил (#711, макет 2067-163528). First_name —
 // имя без фамилии; у пользователя без имени — пусто (name — полный
-// телефон, #1105).
+// идентификатор, #1105; сейчас email, ADR 0067).
 func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	const namelessPhone = "+79990000009"
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
-	invited := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
-	nameless := seedUser(t, pool, "", "", namelessPhone, "nameless@example.com")
+	const namelessEmail = "nameless@example.com"
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
+	invited := seedUser(t, pool, "Анна", "Сидорова", "anna@example.com")
+	nameless := seedUser(t, pool, "", "", namelessEmail)
 
 	property := seedProperty(t, pool, owner)
 	ownProperty := seedProperty(t, pool, member) // Пётр владеет вторым объектом области.
@@ -1164,7 +1164,7 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 
 	// Скоуп по property_ids: единственный участник — владелец суженной
 	// области, замок и first_name доходят и в суженном запросе.
-	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "zina@example.com")
 	foreignProperty := seedProperty(t, pool, stranger)
 	scopedOpts, err := svc.Filters(t.Context(), stranger, []uuid.UUID{foreignProperty})
 	if err != nil {
@@ -1185,11 +1185,11 @@ func TestReadStore_FilterOptionsParticipantOwnerFlag(t *testing.T) {
 func TestReadStore_FilterOptionsParticipantRoles(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	fullAccess := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
-	viewer := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
-	exited := seedUser(t, pool, "Олег", "Ушёл", "+79990000004", "oleg@example.com")
-	mixed := seedUser(t, pool, "Мария", "Петрова", "+79990000005", "maria@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	fullAccess := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
+	viewer := seedUser(t, pool, "Анна", "Сидорова", "anna@example.com")
+	exited := seedUser(t, pool, "Олег", "Ушёл", "oleg@example.com")
+	mixed := seedUser(t, pool, "Мария", "Петрова", "maria@example.com")
 
 	property := seedProperty(t, pool, owner)
 	seedMembership(t, pool, property, fullAccess)
@@ -1291,8 +1291,8 @@ func TestReadStore_FilterOptionsParticipantRoles(t *testing.T) {
 func TestReadStore_FilterOptionsObjects(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	stranger := seedUser(t, pool, "Зина", "Злобина", "+79990000004", "zina@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	stranger := seedUser(t, pool, "Зина", "Злобина", "zina@example.com")
 
 	property := seedProperty(t, pool, owner)
 	seedProperty(t, pool, stranger)
@@ -1323,9 +1323,9 @@ func TestReadStore_FilterOptionsObjects(t *testing.T) {
 func TestReadStore_ArchivedScopeForOptions(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
-	coMember := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
+	coMember := seedUser(t, pool, "Анна", "Сидорова", "anna@example.com")
 	property := seedProperty(t, pool, owner)
 	// Свой живой объект участника с соучастником: глобальный фильтр
 	// participant-скипа D14 непуст — архивная нога чужого объекта видна
@@ -1382,12 +1382,12 @@ func TestReadStore_ArchivedScopeForOptions(t *testing.T) {
 func TestReadStore_ParticipantStatus(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	member := seedUser(t, pool, "Пётр", "Петров", "+79990000002", "petr@example.com")
-	suspendedOne := seedUser(t, pool, "Анна", "Сидорова", "+79990000003", "anna@example.com")
-	revoked := seedUser(t, pool, "Олег", "Ушёл", "+79990000004", "oleg@example.com")
-	readded := seedUser(t, pool, "Мира", "Вернувшаяся", "+79990000005", "mira@example.com")
-	journalOnly := seedUser(t, pool, "Борис", "Сторонний", "+79990000006", "boris@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
+	suspendedOne := seedUser(t, pool, "Анна", "Сидорова", "anna@example.com")
+	revoked := seedUser(t, pool, "Олег", "Ушёл", "oleg@example.com")
+	readded := seedUser(t, pool, "Мира", "Вернувшаяся", "mira@example.com")
+	journalOnly := seedUser(t, pool, "Борис", "Сторонний", "boris@example.com")
 
 	propertyA := seedProperty(t, pool, owner)
 	propertyB := seedProperty(t, pool, owner)
@@ -1478,8 +1478,8 @@ func TestReadStore_ParticipantStatus(t *testing.T) {
 func TestReadStore_DetailsAndLiveActorLegs(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
-	ghost := seedUser(t, pool, "Лев", "Призрак", "+79990000002", "ghost@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	ghost := seedUser(t, pool, "Лев", "Призрак", "ghost@example.com")
 	property := seedProperty(t, pool, owner)
 
 	base := time.Unix(1000, 0)

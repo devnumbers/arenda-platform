@@ -34,7 +34,9 @@ import {
 } from './fields';
 
 const filters = [
-  <TextInput key="user_phone" source="user_phone" label="Телефон пользователя" alwaysOn />,
+  // Фильтр точный: бэкенд сравнивает адрес без регистра целиком (не подстрока,
+  // в отличие от фильтра email списка пользователей).
+  <TextInput key="user_email" source="user_email" label="Email пользователя" alwaysOn />,
   <SelectInput key="status" source="status" label="Статус платежа" choices={subscriptionPaymentStatusChoices} alwaysOn />,
   <SelectInput
     key="subscription_status"

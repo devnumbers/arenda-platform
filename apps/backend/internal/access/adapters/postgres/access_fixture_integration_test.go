@@ -12,7 +12,6 @@ import (
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	identitypg "github.com/nambers/arenda-planform/apps/backend/internal/identity/adapters/postgres"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	genpostgres "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -158,15 +157,10 @@ func newAccessLifecycleFixture(t *testing.T) *accessLifecycleFixture {
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	encryptor, err := encryption.NewEncryptor("")
-	if err != nil {
-		t.Fatalf("noop encryptor: %v", err)
-	}
-
 	memberRepo := NewMembershipRepository(tx)
 	invitationRepo := NewInvitationRepository(tx)
 	ownerResolver := NewOwnerResolver(tx)
-	userRepo := identitypg.NewUserRepository(tx, encryptor)
+	userRepo := identitypg.NewUserRepository(tx)
 	userLookup := NewUserLookup(userRepo)
 	emailResolver := NewUserEmailResolver(userRepo)
 	policy := accessapp.NewMembershipPolicy(ownerResolver, memberRepo)
@@ -200,7 +194,7 @@ func (f *accessLifecycleFixture) addUserWithEmail(t *testing.T, email string) uu
 	id := createAccessTestUser(t, f.bg(), f.q)
 	_, err := f.q.UpdateUserEmailVerified(f.bg(), genpostgres.UpdateUserEmailVerifiedParams{
 		ID:    pgUUID(id),
-		Email: pgtype.Text{String: email, Valid: true},
+		Email: email,
 	})
 	if err != nil {
 		t.Fatalf("set user email: %v", err)

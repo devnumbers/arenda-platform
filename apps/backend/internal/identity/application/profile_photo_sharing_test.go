@@ -36,7 +36,7 @@ func seedPhotoUser(t *testing.T, h *profileHarness) domain.User {
 	}
 	user.PhotoKey = new(key)
 	user.PhotoContentType = new("image/jpeg")
-	h.users.byPhone[user.Phone.String()] = user
+	h.users.byEmail[user.Email.String()] = user
 	return user
 }
 

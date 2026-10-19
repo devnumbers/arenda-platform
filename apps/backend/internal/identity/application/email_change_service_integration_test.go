@@ -21,10 +21,9 @@ import (
 func TestEmailChangeIntegration_HappyPath(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000500")
 	currentEmail := mustEmail(t, "current@example.com")
 	newEmail := mustEmail(t, "changed@example.com")
-	token, user := h.registerAndLogin(t, phone, currentEmail)
+	token, user := h.registerAndLogin(t, currentEmail)
 	ctx := h.ctx()
 
 	// Step 1: code to the current address.
@@ -113,9 +112,8 @@ func assertPersistedEmailChange(t *testing.T, h *integrationHarness, userID uuid
 func TestEmailChangeIntegration_StepOneVerifiesCurrentAddress(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000501")
 	email := mustEmail(t, "unverified@example.com")
-	_, user := h.registerAndLogin(t, phone, email)
+	_, user := h.registerAndLogin(t, email)
 	ctx := h.ctx()
 
 	// Reset verification to model a user whose address was never confirmed.
@@ -141,14 +139,13 @@ func TestEmailChangeIntegration_StepOneVerifiesCurrentAddress(t *testing.T) {
 
 // TestEmailChangeIntegration_GrantLifecycle proves the grant against real
 // PostgreSQL: expiry forces a restart, a wrong final code keeps the grant and
-// records the phone-window failure, and a consumed grant cannot be replayed.
+// records the address-window failure, and a consumed grant cannot be replayed.
 func TestEmailChangeIntegration_GrantLifecycle(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000502")
 	currentEmail := mustEmail(t, "lifecycle@example.com")
 	newEmail := mustEmail(t, "lifecycle-new@example.com")
-	_, user := h.registerAndLogin(t, phone, currentEmail)
+	_, user := h.registerAndLogin(t, currentEmail)
 	ctx := h.ctx()
 
 	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
@@ -163,11 +160,12 @@ func TestEmailChangeIntegration_GrantLifecycle(t *testing.T) {
 	}
 	newCode := h.sender.lastCode(t)
 
-	// A wrong final code fails, records the window failure, and keeps the grant.
+	// A wrong final code fails, records the window failure on the bound
+	// (new) address, and keeps the grant.
 	if _, err := h.email.ChangeEmail(ctx, user.ID, "000000", grantToken); !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("wrong code error = %v, want ErrLoginCodeInvalid", err)
 	}
-	if n := h.countFailedAttempts(t, phone); n != 1 {
+	if n := h.countFailedAttempts(t, newEmail); n != 1 {
 		t.Fatalf("failed attempts = %d, want 1", n)
 	}
 	if _, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken); err != nil {
@@ -209,10 +207,9 @@ func TestEmailChangeIntegration_GrantLifecycle(t *testing.T) {
 func TestEmailChangeIntegration_ResendNewEmailCode(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000505")
 	currentEmail := mustEmail(t, "resend@example.com")
 	newEmail := mustEmail(t, "resend-new@example.com")
-	_, user := h.registerAndLogin(t, phone, currentEmail)
+	_, user := h.registerAndLogin(t, currentEmail)
 	ctx := h.ctx()
 
 	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
@@ -265,10 +262,9 @@ func TestEmailChangeIntegration_ResendNewEmailCode(t *testing.T) {
 func TestEmailChangeIntegration_TakenBetweenSteps(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000503")
 	currentEmail := mustEmail(t, "race@example.com")
 	newEmail := mustEmail(t, "race-new@example.com")
-	_, user := h.registerAndLogin(t, phone, currentEmail)
+	_, user := h.registerAndLogin(t, currentEmail)
 	ctx := h.ctx()
 
 	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
@@ -284,7 +280,7 @@ func TestEmailChangeIntegration_TakenBetweenSteps(t *testing.T) {
 	newCode := h.sender.lastCode(t)
 
 	// Another user takes the address between the steps.
-	h.seedVerifiedUser(t, mustPhone(t, "+79160000504"), newEmail)
+	h.seedVerifiedUser(t, newEmail)
 
 	if _, err := h.email.ChangeEmail(ctx, user.ID, newCode, grantToken); !errors.Is(err, application.ErrEmailAlreadyTaken) {
 		t.Fatalf("error = %v, want ErrEmailAlreadyTaken", err)
@@ -300,16 +296,15 @@ func TestEmailChangeIntegration_TakenBetweenSteps(t *testing.T) {
 
 // TestEmailChangeIntegration_AddresslessGrant proves the new grant lifecycle
 // against real PostgreSQL (#1202): a wrong verify-current code records the
-// phone-window failure, the grant is born with a NULL email, refuses the
+// address-window failure, the grant is born with a NULL email, refuses the
 // resend and the change until an address binds to it, and the binding itself
 // is visible in the persisted row.
 func TestEmailChangeIntegration_AddresslessGrant(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000506")
 	currentEmail := mustEmail(t, "addressless@example.com")
 	newEmail := mustEmail(t, "addressless-new@example.com")
-	_, user := h.registerAndLogin(t, phone, currentEmail)
+	_, user := h.registerAndLogin(t, currentEmail)
 	ctx := h.ctx()
 
 	// A wrong step-2 code records the window failure — the verification
@@ -320,7 +315,7 @@ func TestEmailChangeIntegration_AddresslessGrant(t *testing.T) {
 	if _, err := h.email.VerifyCurrentEmail(ctx, user.ID, "000000"); !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("wrong code error = %v, want ErrLoginCodeInvalid", err)
 	}
-	if n := h.countFailedAttempts(t, phone); n != 1 {
+	if n := h.countFailedAttempts(t, currentEmail); n != 1 {
 		t.Fatalf("failed attempts = %d, want 1", n)
 	}
 
@@ -346,7 +341,7 @@ func TestEmailChangeIntegration_AddresslessGrant(t *testing.T) {
 	if !errors.Is(err, application.ErrEmailChangeGrantInvalid) {
 		t.Fatalf("addressless change error = %v, want ErrEmailChangeGrantInvalid", err)
 	}
-	if n := h.countFailedAttempts(t, phone); n != 1 {
+	if n := h.countFailedAttempts(t, currentEmail); n != 1 {
 		t.Fatalf("failed attempts = %d, want 1 (no code check ran)", n)
 	}
 
@@ -374,14 +369,13 @@ func TestEmailChangeIntegration_AddresslessGrant(t *testing.T) {
 func TestEmailChangeIntegration_KeepsSessionsAndSchedulesLetter(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000510")
 	currentEmail := mustEmail(t, "old@example.com")
 	newEmail := mustEmail(t, "fresh@example.com")
-	token, user := h.registerAndLogin(t, phone, currentEmail)
+	token, user := h.registerAndLogin(t, currentEmail)
 	ctx := h.ctx()
 
 	// Issue a second session so we can prove ChangeEmail leaves it alive.
-	secondToken := h.openSecondSession(t, phone, currentEmail)
+	secondToken := h.openSecondSession(t, currentEmail)
 	if n := h.countSessionsForUser(t, user.ID); n != 2 {
 		t.Fatalf("sessions before change = %d, want 2", n)
 	}
@@ -460,12 +454,11 @@ func assertIntegrationLetter(
 func TestEmailChangeIntegration_TakenEmailSchedulesNoLetter(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000511")
 	currentEmail := mustEmail(t, "roller@example.com")
-	h.seedVerifiedUser(t, mustPhone(t, "+79160000512"), mustEmail(t, "taken@example.com"))
+	takenEmail := mustEmail(t, "taken@example.com")
 	// The address is owned by the other user, seeded just above.
-	newEmail := mustEmail(t, "taken@example.com")
-	_, user := h.registerAndLogin(t, phone, currentEmail)
+	h.seedVerifiedUser(t, takenEmail)
+	_, user := h.registerAndLogin(t, currentEmail)
 	ctx := h.ctx()
 
 	if err := h.email.SendCurrentEmailCode(ctx, user.ID); err != nil {
@@ -476,7 +469,7 @@ func TestEmailChangeIntegration_TakenEmailSchedulesNoLetter(t *testing.T) {
 		t.Fatalf("step 2: %v", err)
 	}
 	// Step 3 fails on the taken address — the flow never reaches the change.
-	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, newEmail); !errors.Is(err, application.ErrEmailAlreadyTaken) {
+	if err := h.email.RequestNewEmailCode(ctx, user.ID, grantToken, takenEmail); !errors.Is(err, application.ErrEmailAlreadyTaken) {
 		t.Fatalf("step 3 error = %v, want ErrEmailAlreadyTaken", err)
 	}
 	if len(h.notifier.scheduled) != 0 {

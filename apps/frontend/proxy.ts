@@ -111,6 +111,14 @@ export async function proxy(request: NextRequest) {
   if (/^\/history\/participants\/[^/]+\/?$/.test(request.nextUrl.pathname)) {
     return NextResponse.redirect(new URL('/history', request.url), 308);
   }
+  // Флоу смены телефона /profile/account/phone снесён с полем (ADR 0067,
+  // тикет #1530, карта #1525): телефон покинул Identity и профиль, email —
+  // идентификатор аккаунта. Старые входы (закладка, история браузера с
+  // шага кода) ведут на экран «Аккаунт» — родителя снесённого подэкрана.
+  // 308 перманентный — канон /dashboard выше.
+  if (request.nextUrl.pathname === '/profile/account/phone') {
+    return NextResponse.redirect(new URL('/profile/account', request.url), 308);
+  }
   // Разведка строгой CSP: nonce на каждый запрос. Заголовок запроса Next
   // разбирает при SSR и вешает nonce на фреймворк-скрипты и инлайн-стили
   // (Report-Only он понимает так же, как блокирующий — app-render Next 16);

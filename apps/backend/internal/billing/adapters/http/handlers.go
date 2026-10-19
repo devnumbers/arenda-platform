@@ -712,8 +712,8 @@ func (h *BillingHandlers) ListAdminSubscriptionPayments(
 	if params.Status != nil {
 		filters.Status = string(*params.Status)
 	}
-	if params.UserPhone != nil {
-		filters.UserPhone = *params.UserPhone
+	if params.UserEmail != nil {
+		filters.UserEmail = *params.UserEmail
 	}
 	if params.SubscriptionStatus != nil {
 		filters.SubscriptionStatus = string(*params.SubscriptionStatus)
@@ -927,7 +927,7 @@ func adminSubscriptionPaymentResponse(view billingapp.AdminSubscriptionPaymentVi
 		Status:          openapi.SubscriptionPaymentStatus(p.Status),
 		Provider:        string(p.Provider),
 		UserId:          p.UserID,
-		UserPhone:       view.UserPhone,
+		UserEmail:       view.UserEmail,
 		CreatedAt:       p.CreatedAt,
 		UpdatedAt:       p.UpdatedAt,
 		SucceededAt:     p.SucceededAt,

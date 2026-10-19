@@ -8,15 +8,15 @@ import (
 	propertiesdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 )
 
-// AdminUserView is a cross-user read-only view of an account.
+// AdminUserView is a cross-user read-only view of an account. Email is the
+// canonical identifier (ADR 0067).
 type AdminUserView struct {
 	ID                 uuid.UUID
-	Phone              string
 	Role               string
 	Name               *string
 	Surname            *string
 	Patronymic         *string
-	Email              *string
+	Email              string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	SubscriptionStatus string
@@ -39,7 +39,7 @@ type AdminUserDetailView struct {
 type AdminPropertyView struct {
 	ID          uuid.UUID
 	OwnerID     uuid.UUID
-	OwnerPhone  string
+	OwnerEmail  string
 	Name        string
 	Type        propertiesdomain.PropertyType
 	Address     string
@@ -68,7 +68,6 @@ type AdminContactView struct {
 
 // AdminUserFilters carries optional filters for the admin users list.
 type AdminUserFilters struct {
-	Phone              string
 	Email              string
 	Role               string
 	SubscriptionStatus string
@@ -127,21 +126,21 @@ type AdminAuditLogFilters struct {
 }
 
 // AdminRecentUserView is a read-only view of a recently registered user for
-// the admin dashboard. Phone is stored decrypted.
+// the admin dashboard.
 type AdminRecentUserView struct {
 	ID        uuid.UUID
-	Phone     string
+	Email     string
 	Name      *string
 	Surname   *string
 	CreatedAt time.Time
 }
 
 // AdminRecentPaymentView is a read-only view of a recent subscription payment
-// for the admin dashboard. UserPhone is stored decrypted.
+// for the admin dashboard. UserEmail is the payer's canonical address.
 type AdminRecentPaymentView struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID
-	UserPhone     string
+	UserEmail     string
 	AmountKopecks int64
 	Status        string
 	CreatedAt     time.Time

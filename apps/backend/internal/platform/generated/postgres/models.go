@@ -297,25 +297,21 @@ type IdempotencyKey struct {
 
 type LoginAttempt struct {
 	ID             pgtype.UUID        `json:"id"`
-	Phone          string             `json:"phone"`
 	Failures       int32              `json:"failures"`
 	FirstFailureAt pgtype.Timestamptz `json:"first_failure_at"`
 	LastFailureAt  pgtype.Timestamptz `json:"last_failure_at"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	PhoneEncrypted bool               `json:"phone_encrypted"`
+	Email          string             `json:"email"`
 }
 
 type LoginCode struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	Phone          pgtype.Text        `json:"phone"`
-	Email          pgtype.Text        `json:"email"`
-	CodeHash       string             `json:"code_hash"`
-	Purpose        string             `json:"purpose"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	Used           bool               `json:"used"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	PhoneEncrypted bool               `json:"phone_encrypted"`
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Email     string             `json:"email"`
+	CodeHash  string             `json:"code_hash"`
+	Purpose   string             `json:"purpose"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	Used      bool               `json:"used"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type Notification struct {
@@ -598,15 +594,13 @@ type TmpCompletedRentalPayment struct {
 
 type User struct {
 	ID               pgtype.UUID        `json:"id"`
-	Phone            string             `json:"phone"`
 	Role             string             `json:"role"`
 	Name             pgtype.Text        `json:"name"`
 	Surname          pgtype.Text        `json:"surname"`
 	Patronymic       pgtype.Text        `json:"patronymic"`
-	Email            pgtype.Text        `json:"email"`
+	Email            string             `json:"email"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	PhoneEncrypted   bool               `json:"phone_encrypted"`
 	EmailVerifiedAt  pgtype.Timestamptz `json:"email_verified_at"`
 	Timezone         string             `json:"timezone"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`

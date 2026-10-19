@@ -142,10 +142,10 @@ func (h *paymentsHarness) seedGlobalUser(tz string) uuid.UUID {
 	if err != nil {
 		h.t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()+int64(len(tz)))
+	email := fmt.Sprintf("global%013d@example.com", time.Now().UnixNano()+int64(len(tz)))
 	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, 'owner', $3)`,
-		id, phone, tz,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, 'owner', $3)`,
+		id, email, tz,
 	); err != nil {
 		h.t.Fatalf("seed user: %v", err)
 	}

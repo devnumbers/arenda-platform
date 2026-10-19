@@ -325,8 +325,8 @@ test('удалённый участник — секции «Текущие»/«
   const REMOVED_ID = '16111111-1111-4111-8111-111111111173';
   const REMOVED_EMAIL = 'e2e-removed-hfilters@example.com';
   await execE2eSql(
-    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
-      `VALUES ('${REMOVED_ID}', '+79137654329', 'owner', 'Павел', 'Отозванный', '${REMOVED_EMAIL}', FALSE, 'UTC') ` +
+    `INSERT INTO users (id, role, name, surname, email, timezone) ` +
+      `VALUES ('${REMOVED_ID}', 'owner', 'Павел', 'Отозванный', '${REMOVED_EMAIL}', 'UTC') ` +
       `ON CONFLICT (id) DO NOTHING`,
   );
   try {
@@ -387,17 +387,19 @@ test('удалённый участник — секции «Текущие»/«
 test('безымянный участник в чипах: «Пользователь» титулом, почта подзаголовком (карта #1105, аменд #1123)', async ({ page, seededUser }) => {
   // Зарегистрированный юзер без имени: канон карты #1105 собирает бекенд
   // одним швом display_name (#1106, аменд #1123 — телефон больше не
-  // фолбэк), чипы фильтров резолвятся при чтении
-  // (FilterParticipants → DisplayNameOf). Телефон сидится плейнтекстом
-  // при phone_encrypted = false — decryptPhone читает как есть, шифрование
-  // нужно только логину. Ноги участника на объекте не даём — в опции
-  // шита исторический актёр журнала попадает по UNION-ноге SQL.
+  // фолбэк; из схемы он ушёл совсем — ADR 0067, миграция 000162), чипы
+  // фильтров резолвятся при чтении
+  // (FilterParticipants → DisplayNameOf). Ноги участника на объекте не
+  // даём — в опции шита исторический актёр журнала попадает по
+  // UNION-ноге SQL.
   const NAMELESS_ID = '16111111-1111-4111-8111-111111111172';
-  const NAMELESS_PHONE = '+79137654328';
+  /** Легаси-снимок actor_name строки журнала (записан до ADR 0067, когда
+   * фолбэком был телефон) — живой резолв значения снимка не показывает. */
+  const LEGACY_ACTOR_SNAPSHOT = '+79137654328';
   const NAMELESS_EMAIL = 'e2e-nameless-hfilters@example.com';
   await execE2eSql(
-    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
-      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+    `INSERT INTO users (id, role, name, surname, email, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', 'UTC') ` +
       `ON CONFLICT (id) DO NOTHING`,
   );
   try {
@@ -405,7 +407,7 @@ test('безымянный участник в чипах: «Пользоват�
     await seedJournalEntry(
       memberTaskEntry('b0000000-0000-4000-8000-000000000009', 0, {
         actorIdSql: `(SELECT id FROM users WHERE email = '${NAMELESS_EMAIL}')`,
-        actorName: NAMELESS_PHONE,
+        actorName: LEGACY_ACTOR_SNAPSHOT,
         text: 'Задача выполнена: Заменить замок',
       }),
       seededUser,

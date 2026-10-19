@@ -50,7 +50,7 @@ func createPushTestUser(t *testing.T, ctx context.Context, q *genpostgres.Querie
 	}
 	_, err = q.CreateUser(ctx, genpostgres.CreateUserParams{
 		ID:    pgUUID(id),
-		Phone: fmt.Sprintf("+7999%07d", binary.BigEndian.Uint32(id[12:])%10000000),
+		Email: fmt.Sprintf("push%07d@example.com", binary.BigEndian.Uint32(id[12:])%10000000),
 		Role:  "owner",
 	})
 	if err != nil {

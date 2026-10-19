@@ -116,10 +116,10 @@ func (h *contactsHarness) seedUser() uuid.UUID {
 	if err != nil {
 		h.t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("contact%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := h.pool.Exec(h.t.Context(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
-		id, phone, actor.RoleOwner,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, 'Europe/Moscow')`,
+		id, email, actor.RoleOwner,
 	); err != nil {
 		h.t.Fatalf("seed user: %v", err)
 	}

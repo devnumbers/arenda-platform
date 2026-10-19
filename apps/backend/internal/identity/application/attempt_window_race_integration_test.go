@@ -7,16 +7,15 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
 )
 
 // TestAttemptWindowRace_ConcurrentIncrementsAreNotLost exercises the full
 // failed-login path: N goroutines call VerifyCode with an invalid code for the
-// same phone at once, and the persisted failure count must equal N — no
+// same address at once, and the persisted failure count must equal N — no
 // increment lost. This guards the end-to-end orchestrator path (VerifyCode →
-// recordFailedLogin → RecordFailure → Save).
+// RecordFailureAndAudit → RecordFailure → Save).
 //
 // Note: this path always acquires a FOR UPDATE lock inside RecordFailure, so it
 // proves the domain+repository cooperate correctly under concurrency but does
@@ -27,14 +26,13 @@ func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
 	const concurrentAttempts = 10 // < domain.MaxLoginFailures (15).
 
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000200")
 	email := mustEmail(t, "race@example.com")
-	h.seedVerifiedUser(t, phone, email)
+	h.seedVerifiedUser(t, email)
 	ctx := h.ctx()
 
 	// Issue one live code so Verify reaches the invalid-code branch and the
 	// orchestrator records a failure for each attempt.
-	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+	if err := h.auth.SendCode(ctx, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode: %v", err)
 	}
 
@@ -47,9 +45,9 @@ func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
 			<-start
 			// An invalid code always yields ErrLoginCodeInvalid (or
 			// ErrTooManyAttempts near the threshold), both of which record a
-			// failure via recordFailedLogin; anything else would break the
+			// failure via RecordFailureAndAudit; anything else would break the
 			// count assertion below.
-			_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000", nil, application.DeviceContext{})
+			_, _, err := h.auth.VerifyCode(ctx, email, "000000", nil, application.DeviceContext{})
 			errs <- err
 		})
 	}
@@ -63,7 +61,7 @@ func TestAttemptWindowRace_ConcurrentIncrementsAreNotLost(t *testing.T) {
 	}
 
 	// Every concurrent increment must have been persisted: no lost update.
-	got := h.countFailedAttempts(t, phone)
+	got := h.countFailedAttempts(t, email)
 	if got != concurrentAttempts {
 		t.Fatalf("failed attempts after %d concurrent VerifyCode = %d, want %d (lost update detected)",
 			concurrentAttempts, got, concurrentAttempts)
@@ -95,19 +93,19 @@ func TestAttemptWindowRace_SaveWithoutLockIsAtomic(t *testing.T) {
 	const concurrentAttempts = 10
 
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000201")
+	email := mustEmail(t, "race-save@example.com")
 	ctx := h.ctx()
 	now := h.clock.Now()
 
 	// Each goroutine saves a single-failure window with delta=1, racing on the
-	// same phone with no preceding GetForUpdate and no shared transaction.
+	// same address with no preceding GetForUpdate and no shared transaction.
 	start := make(chan struct{})
 	errs := make(chan error, concurrentAttempts)
 	var wg sync.WaitGroup
 	for range concurrentAttempts {
 		wg.Go(func() {
 			<-start
-			errs <- h.attempts.Save(ctx, phone, uuid.Nil, domain.AttemptWindow{
+			errs <- h.attempts.Save(ctx, email, domain.AttemptWindow{
 				FirstFailureAt: now,
 				LastFailureAt:  now,
 			}, 1)
@@ -122,7 +120,7 @@ func TestAttemptWindowRace_SaveWithoutLockIsAtomic(t *testing.T) {
 		}
 	}
 
-	got := h.countFailedAttempts(t, phone)
+	got := h.countFailedAttempts(t, email)
 	if got != concurrentAttempts {
 		t.Fatalf("failed attempts after %d unlocked concurrent Save(delta=1) = %d, want %d "+
 			"(SQL increment is not atomic — lost update detected)",

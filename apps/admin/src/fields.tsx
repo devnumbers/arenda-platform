@@ -105,7 +105,8 @@ export const auditActionChoices: Choice[] = [
   { id: 'auth.login_failed', name: 'Неудачный вход' },
   { id: 'auth.logout', name: 'Выход' },
   { id: 'auth.logout_all', name: 'Выход со всех устройств' },
-  { id: 'auth.phone_changed', name: 'Смена телефона' },
+  { id: 'auth.email_changed', name: 'Смена email' },
+  { id: 'auth.email_change_failed', name: 'Неудачная смена email' },
   { id: 'profile.updated', name: 'Обновление профиля' },
   { id: 'notification_preferences.updated', name: 'Изменение настроек уведомлений' },
   { id: 'property.created', name: 'Создание объекта' },
@@ -206,9 +207,9 @@ export const ChoiceChipField = ({ choices, ...props }: FieldProps & { choices: C
 };
 
 /**
- * Ссылка на Show пользователя: телефон (+ ФИО, если есть в записи).
+ * Ссылка на Show пользователя: email (+ ФИО, если есть в записи).
  * source указывает на поле с id пользователя (userId/ownerId); запросов не выполняет,
- * используются данные текущей записи (userPhone/phone).
+ * используются данные текущей записи (userEmail/email).
  */
 export const UserLinkField = (props: FieldProps) => {
   const record = useRecordContext();
@@ -219,20 +220,20 @@ export const UserLinkField = (props: FieldProps) => {
   if (typeof userId !== 'string' || userId === '') {
     return null;
   }
-  const phone =
-    typeof record.userPhone === 'string' ? record.userPhone : typeof record.phone === 'string' ? record.phone : '';
+  const email =
+    typeof record.userEmail === 'string' ? record.userEmail : typeof record.email === 'string' ? record.email : '';
   const name = fullName(asPersonName(record));
   return (
     <Link to={`/users/${userId}/show`} onClick={stopPropagation}>
-      {name ? `${phone} (${name})` : phone || userId}
+      {name ? `${email} (${name})` : email || userId}
     </Link>
   );
 };
 
 /**
- * Владелец записи: ссылка на Show пользователя, текст — ownerPhone.
+ * Владелец записи: ссылка на Show пользователя, текст — ownerEmail.
  * source указывает на поле ownerId; запросов не выполняет,
- * используются ownerPhone/ownerId текущей записи (AdminProperty).
+ * используются ownerEmail/ownerId текущей записи (AdminProperty).
  */
 export const OwnerLinkField = (props: FieldProps) => {
   const record = useRecordContext();
@@ -243,10 +244,10 @@ export const OwnerLinkField = (props: FieldProps) => {
   if (typeof ownerId !== 'string' || ownerId === '') {
     return null;
   }
-  const phone = typeof record.ownerPhone === 'string' ? record.ownerPhone : '';
+  const email = typeof record.ownerEmail === 'string' ? record.ownerEmail : '';
   return (
     <Link to={`/users/${ownerId}/show`} onClick={stopPropagation}>
-      {phone || ownerId}
+      {email || ownerId}
     </Link>
   );
 };
@@ -285,14 +286,14 @@ export const PropertyLinkField = (props: FieldProps) => {
 // RA батчит id в один getMany, а fan-out getMany→getOne приемлем для масштаба админки.
 
 const renderUser = (user: RaRecord) => {
-  const phone = typeof user.phone === 'string' ? user.phone : '';
+  const email = typeof user.email === 'string' ? user.email : '';
   const name = fullName(asPersonName(user));
-  return name ? `${phone} (${name})` : phone;
+  return name ? `${email} (${name})` : email;
 };
 
 type ReferenceProps = Omit<ReferenceFieldProps, 'reference' | 'children'>;
 
-/** Владелец/пользователь: ссылка на Show пользователя, телефон (+ ФИО). */
+/** Владелец/пользователь: ссылка на Show пользователя, email (+ ФИО). */
 export const UserReferenceField = (props: ReferenceProps) => (
   <ReferenceField reference="users" link="show" {...props}>
     <FunctionField render={renderUser} />

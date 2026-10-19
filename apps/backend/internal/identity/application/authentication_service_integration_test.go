@@ -19,14 +19,13 @@ import (
 func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000001")
 	email := mustEmail(t, "owner@example.com")
 	ctx := h.ctx()
 
 	// Seed an existing user so this is a login, not a registration.
-	seeded := h.seedVerifiedUser(t, phone, email)
+	seeded := h.seedVerifiedUser(t, email)
 
-	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+	if err := h.auth.SendCode(ctx, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode: %v", err)
 	}
 	if len(h.sender.codes) != 1 {
@@ -34,7 +33,7 @@ func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
 	}
 	code := h.sender.lastCode(t)
 
-	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil, application.DeviceContext{})
+	raw, user, err := h.auth.VerifyCode(ctx, email, code, nil, application.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode: %v", err)
 	}
@@ -72,28 +71,27 @@ func TestAuthenticationIntegration_LoginHappyPath(t *testing.T) {
 	}
 
 	// The code was marked used: a second verify with the same code fails.
-	_, _, err = h.auth.VerifyCode(ctx, phone, &email, code, nil, application.DeviceContext{})
+	_, _, err = h.auth.VerifyCode(ctx, email, code, nil, application.DeviceContext{})
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("re-verify used code error = %v, want ErrLoginCodeInvalid", err)
 	}
 }
 
 // TestAuthenticationIntegration_RegistrationCreatesNewUser proves a brand-new
-// phone+email pair creates a user row, marks the email verified, publishes a
+// address creates a user row, marks the email verified, publishes a
 // UserRegistered event, and records the registration audit action.
 func TestAuthenticationIntegration_RegistrationCreatesNewUser(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000002")
 	email := mustEmail(t, "new@example.com")
 	ctx := h.ctx()
 
-	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+	if err := h.auth.SendCode(ctx, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode: %v", err)
 	}
 	code := h.sender.lastCode(t)
 
-	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil, application.DeviceContext{})
+	raw, user, err := h.auth.VerifyCode(ctx, email, code, nil, application.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode: %v", err)
 	}
@@ -108,9 +106,9 @@ func TestAuthenticationIntegration_RegistrationCreatesNewUser(t *testing.T) {
 	}
 
 	// The user row exists in PostgreSQL.
-	got, err := h.users.GetByPhone(ctx, phone)
+	got, err := h.users.GetByEmail(ctx, email)
 	if err != nil {
-		t.Fatalf("GetByPhone after registration: %v", err)
+		t.Fatalf("GetByEmail after registration: %v", err)
 	}
 	if got.ID != user.ID {
 		t.Fatalf("persisted user ID = %s, want %s", got.ID, user.ID)
@@ -126,6 +124,37 @@ func TestAuthenticationIntegration_RegistrationCreatesNewUser(t *testing.T) {
 
 	if !h.auditActionExists(t, string(auditdomain.ActionAuthRegistered)) {
 		t.Fatal("audit_log missing auth.registered entry")
+	}
+}
+
+// TestAuthenticationIntegration_SendCodeIsAntiEnumeration pins the send-side
+// anti-enumeration contract (ADR 0067, research #1526) against real PostgreSQL:
+// a code for an address the platform does not know is issued and delivered
+// exactly like for an existing account — the only observable difference is the
+// absent user id on the code row, and no account is created at send time.
+func TestAuthenticationIntegration_SendCodeIsAntiEnumeration(t *testing.T) {
+	t.Parallel()
+	h := newIntegrationHarness(t)
+	unknown := mustEmail(t, "ghost@example.com")
+	ctx := h.ctx()
+
+	if err := h.auth.SendCode(ctx, unknown, domain.LoginCodePurposeLogin); err != nil {
+		t.Fatalf("SendCode for unknown address: %v", err)
+	}
+	if len(h.sender.codes) != 1 {
+		t.Fatalf("delivered codes = %d, want 1 (the unknown address gets a code)", len(h.sender.codes))
+	}
+	// The code row is persisted (with its hash), without a user id.
+	code, err := h.codes.GetLatestByEmailAndPurpose(ctx, unknown, domain.LoginCodePurposeLogin, h.clock.Now())
+	if err != nil {
+		t.Fatalf("code row for unknown address: %v", err)
+	}
+	if code.UserID != nil {
+		t.Fatalf("code user id = %s, want nil for an unknown address", *code.UserID)
+	}
+	// No account was created at send time.
+	if _, err := h.users.GetByEmail(ctx, unknown); !errors.Is(err, application.ErrNotFound) {
+		t.Fatalf("GetByEmail after send = %v, want ErrNotFound (no account at send time)", err)
 	}
 }
 
@@ -146,22 +175,21 @@ func TestAuthenticationIntegration_RegistrationTimezone(t *testing.T) {
 	t.Run("new user with device timezone", func(t *testing.T) {
 		t.Parallel()
 		h := newIntegrationHarness(t)
-		phone := mustPhone(t, "+79160000021")
 		email := mustEmail(t, "tz-new@example.com")
 		ctx := h.ctx()
 
-		if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+		if err := h.auth.SendCode(ctx, email, domain.LoginCodePurposeLogin); err != nil {
 			t.Fatalf("SendCode: %v", err)
 		}
 		timezone := testDeviceTimezone
-		_, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), &timezone, application.DeviceContext{})
+		_, _, err := h.auth.VerifyCode(ctx, email, h.sender.lastCode(t), &timezone, application.DeviceContext{})
 		if err != nil {
 			t.Fatalf("VerifyCode: %v", err)
 		}
 
-		got, err := h.users.GetByPhone(ctx, phone)
+		got, err := h.users.GetByEmail(ctx, email)
 		if err != nil {
-			t.Fatalf("GetByPhone: %v", err)
+			t.Fatalf("GetByEmail: %v", err)
 		}
 		if got.Timezone.String() != testDeviceTimezone {
 			t.Fatalf("registered timezone = %q, want %s", got.Timezone.String(), testDeviceTimezone)
@@ -171,10 +199,9 @@ func TestAuthenticationIntegration_RegistrationTimezone(t *testing.T) {
 	t.Run("new user without timezone keeps the Europe/Moscow default", func(t *testing.T) {
 		t.Parallel()
 		h := newIntegrationHarness(t)
-		phone := mustPhone(t, "+79160000022")
 		email := mustEmail(t, "tz-default@example.com")
 
-		_, user := h.registerAndLogin(t, phone, email)
+		_, user := h.registerAndLogin(t, email)
 
 		got, err := h.users.GetByID(h.ctx(), user.ID)
 		if err != nil {
@@ -188,9 +215,8 @@ func TestAuthenticationIntegration_RegistrationTimezone(t *testing.T) {
 	t.Run("existing user keeps their saved timezone", func(t *testing.T) {
 		t.Parallel()
 		h := newIntegrationHarness(t)
-		phone := mustPhone(t, "+79160000023")
 		email := mustEmail(t, "tz-existing@example.com")
-		seeded := h.seedVerifiedUser(t, phone, email)
+		seeded := h.seedVerifiedUser(t, email)
 		// A zone other than the column default: the assertion must be able to
 		// tell "manual choice survived" from "fell back to Europe/Moscow".
 		manual, err := domain.NewTimezone("Europe/Kaliningrad")
@@ -202,43 +228,22 @@ func TestAuthenticationIntegration_RegistrationTimezone(t *testing.T) {
 			t.Fatalf("seed saved timezone: %v", err)
 		}
 
-		if err := h.auth.SendCode(h.ctx(), phone, email, domain.LoginCodePurposeLogin); err != nil {
+		if err := h.auth.SendCode(h.ctx(), email, domain.LoginCodePurposeLogin); err != nil {
 			t.Fatalf("SendCode: %v", err)
 		}
 		timezone := testDeviceTimezone
-		if _, _, err := h.auth.VerifyCode(h.ctx(), phone, &email, h.sender.lastCode(t), &timezone, application.DeviceContext{}); err != nil {
+		if _, _, err := h.auth.VerifyCode(h.ctx(), email, h.sender.lastCode(t), &timezone, application.DeviceContext{}); err != nil {
 			t.Fatalf("VerifyCode: %v", err)
 		}
 
-		got, err := h.users.GetByPhone(h.ctx(), phone)
+		got, err := h.users.GetByEmail(h.ctx(), email)
 		if err != nil {
-			t.Fatalf("GetByPhone: %v", err)
+			t.Fatalf("GetByEmail: %v", err)
 		}
 		if got.Timezone.String() != "Europe/Kaliningrad" {
 			t.Fatalf("timezone after login = %q, want saved Europe/Kaliningrad", got.Timezone.String())
 		}
 	})
-}
-
-// TestAuthenticationIntegration_DuplicateEmailRejectedAtSend proves that sending
-// a code for a new phone whose email already belongs to another user is rejected
-// with ErrEmailAlreadyTaken before any code is persisted or delivered.
-func TestAuthenticationIntegration_DuplicateEmailRejectedAtSend(t *testing.T) {
-	t.Parallel()
-	h := newIntegrationHarness(t)
-	takenEmail := mustEmail(t, "taken@example.com")
-	takenPhone := mustPhone(t, "+79160000003")
-	h.seedVerifiedUser(t, takenPhone, takenEmail)
-
-	newPhone := mustPhone(t, "+79160000004")
-
-	err := h.auth.SendCode(h.ctx(), newPhone, takenEmail, domain.LoginCodePurposeLogin)
-	if !errors.Is(err, application.ErrEmailAlreadyTaken) {
-		t.Fatalf("SendCode duplicate email error = %v, want ErrEmailAlreadyTaken", err)
-	}
-	if len(h.sender.codes) != 0 {
-		t.Fatalf("delivered codes = %d, want 0 on duplicate-email rejection", len(h.sender.codes))
-	}
 }
 
 // TestAuthenticationIntegration_LoginFailRecordsAttemptAndAudit proves an invalid
@@ -248,27 +253,26 @@ func TestAuthenticationIntegration_DuplicateEmailRejectedAtSend(t *testing.T) {
 func TestAuthenticationIntegration_LoginFailRecordsAttemptAndAudit(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000005")
 	email := mustEmail(t, "owner@example.com")
-	h.seedVerifiedUser(t, phone, email)
+	h.seedVerifiedUser(t, email)
 	ctx := h.ctx()
 
-	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+	if err := h.auth.SendCode(ctx, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode: %v", err)
 	}
 
-	_, _, err := h.auth.VerifyCode(ctx, phone, &email, "000000", nil, application.DeviceContext{})
+	_, _, err := h.auth.VerifyCode(ctx, email, "000000", nil, application.DeviceContext{})
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("VerifyCode wrong code error = %v, want ErrLoginCodeInvalid", err)
 	}
 
 	// No session was created (success path rolled back).
-	if n := h.countSessionsForUser(t, h.userIDForPhone(t, phone)); n != 0 {
+	if n := h.countSessionsForUser(t, h.userIDForEmail(t, email)); n != 0 {
 		t.Fatalf("sessions = %d, want 0 on failed verify", n)
 	}
 
 	// The attempt-window failure was recorded despite the rollback.
-	if n := h.countFailedAttempts(t, phone); n != 1 {
+	if n := h.countFailedAttempts(t, email); n != 1 {
 		t.Fatalf("failed attempts = %d, want 1", n)
 	}
 
@@ -285,9 +289,8 @@ func TestAuthenticationIntegration_LoginFailRecordsAttemptAndAudit(t *testing.T)
 func TestAuthenticationIntegration_SlidingSessionRefresh(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000006")
 	email := mustEmail(t, "owner@example.com")
-	token, _ := h.registerAndLogin(t, phone, email)
+	token, _ := h.registerAndLogin(t, email)
 	ctx := h.ctx()
 
 	// Snapshot the original expiration.

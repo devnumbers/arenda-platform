@@ -1,4 +1,4 @@
-// Package http holds the identity HTTP adapters: authentication and phone-change endpoints, profile updates,
+// Package http holds the identity HTTP adapters: authentication and email-change endpoints, profile updates,
 // logout flows and session loading.
 package http
 
@@ -23,58 +23,40 @@ import (
 // required.
 type MeEnricher func(ctx context.Context, userID uuid.UUID, resp *openapi.MeResponse) error
 
-// AuthRateLimits bundles the per-action auth rate limiters. A nil limiter
+// AuthRateLimits bundles the per-action auth rate limiters. The Send/Verify
+// pair is keyed by the canonical email; the SendPerIP/VerifyPerIP pair is the
+// IP layer of the throttling pair (research #1526, OWASP «both the IP and the
+// account») — hard on issuance, softer on verify. A nil limiter
 // means "allow" (no limit), so the zero-value AuthRateLimits{} permits
 // everything — used by tests.
 type AuthRateLimits struct {
-	Send              *httpsupport.RateLimiter
-	Verify            *httpsupport.RateLimiter
-	PhoneChangeSend   *httpsupport.RateLimiter
-	PhoneChangeVerify *httpsupport.RateLimiter
+	Send        *httpsupport.RateLimiter
+	Verify      *httpsupport.RateLimiter
+	SendPerIP   *httpsupport.RateLimiter
+	VerifyPerIP *httpsupport.RateLimiter
 }
 
-// AllowSend reports whether a send-code request for key is allowed. A nil
-// Send limiter permits all requests.
-func (l AuthRateLimits) AllowSend(key string) bool {
-	if l.Send == nil {
-		return true
-	}
-	return l.Send.Allow(key)
+// AllowSend reports whether a send-code request for the address is allowed.
+// A nil Send limiter permits all requests.
+func (l AuthRateLimits) AllowSend(email string) bool {
+	return l.Send == nil || l.Send.Allow(email)
 }
 
-// AllowVerify reports whether a verify-code request for key is allowed.
-func (l AuthRateLimits) AllowVerify(key string) bool {
-	if l.Verify == nil {
-		return true
-	}
-	return l.Verify.Allow(key)
+// AllowVerify reports whether a verify-code request for the address is allowed.
+func (l AuthRateLimits) AllowVerify(email string) bool {
+	return l.Verify == nil || l.Verify.Allow(email)
 }
 
-// AllowPhoneChangeSend reports whether a phone-change send-code request for
-// key is allowed.
-func (l AuthRateLimits) AllowPhoneChangeSend(key string) bool {
-	if l.PhoneChangeSend == nil {
-		return true
-	}
-	return l.PhoneChangeSend.Allow(key)
+// AllowSendForIP reports whether a send-code request from the client IP is
+// allowed — the hard IP layer on issuance.
+func (l AuthRateLimits) AllowSendForIP(ip string) bool {
+	return l.SendPerIP == nil || l.SendPerIP.Allow(ip)
 }
 
-// AllowPhoneChangeVerify reports whether a phone-change verify request for
-// key is allowed.
-func (l AuthRateLimits) AllowPhoneChangeVerify(key string) bool {
-	if l.PhoneChangeVerify == nil {
-		return true
-	}
-	return l.PhoneChangeVerify.Allow(key)
-}
-
-// rateLimitKey returns the bucket key shared by the send/verify handlers:
-// email wins when present, otherwise phone.
-func rateLimitKey(phone string, email *domain.Email) string {
-	if email != nil {
-		return email.String()
-	}
-	return phone
+// AllowVerifyForIP reports whether a verify-code request from the client IP
+// is allowed — the softer IP layer on verify.
+func (l AuthRateLimits) AllowVerifyForIP(ip string) bool {
+	return l.VerifyPerIP == nil || l.VerifyPerIP.Allow(ip)
 }
 
 // The four service interfaces below are consumed only by this package, so per
@@ -83,18 +65,13 @@ func rateLimitKey(phone string, email *domain.Email) string {
 
 // Authenticator issues and verifies login codes.
 type Authenticator interface {
-	SendCode(ctx context.Context, phone domain.Phone, email domain.Email, purpose domain.LoginCodePurpose) error
-	// SendCodeByPhone sends a login code to the email stored for the given
-	// phone. It returns sent=false when the user does not exist or has no
-	// email on file; the caller should then ask the user for an email.
-	SendCodeByPhone(ctx context.Context, phone domain.Phone) (sent bool, err error)
-	// VerifyCode accepts an optional email; nil resolves the email from the
-	// stored user record for the phone. An optional timezone (browser-detected,
-	// #451) applies only when the verify registers a new user. The device
-	// context (raw User-Agent + client IP) is captured onto the created
-	// session once (#728).
+	SendCode(ctx context.Context, email domain.Email, purpose domain.LoginCodePurpose) error
+	// VerifyCode verifies the code sent to the address. An optional timezone
+	// (browser-detected, #451) applies only when the verify registers a new
+	// user. The device context (raw User-Agent + client IP) is captured onto
+	// the created session once (#728).
 	VerifyCode(
-		ctx context.Context, phone domain.Phone, email *domain.Email, code string, timezone *string, device application.DeviceContext,
+		ctx context.Context, email domain.Email, code string, timezone *string, device application.DeviceContext,
 	) (domain.RawSession, domain.User, error)
 }
 
@@ -104,12 +81,6 @@ type SessionLister interface {
 	List(ctx context.Context, userID uuid.UUID, currentToken string) ([]domain.Session, uuid.UUID, error)
 	Revoke(ctx context.Context, userID, sessionID uuid.UUID, currentToken string, actor auditdomain.Actor) error
 	RevokeOthers(ctx context.Context, userID uuid.UUID, currentToken string, actor auditdomain.Actor) (int64, error)
-}
-
-// PhoneChanger handles phone-number change for authenticated users.
-type PhoneChanger interface {
-	SendChangeCode(ctx context.Context, userID uuid.UUID, newPhone domain.Phone) error
-	ChangePhone(ctx context.Context, userID uuid.UUID, newPhone domain.Phone, code string) (domain.User, error)
 }
 
 // EmailChanger handles confirmed email change for authenticated users
@@ -152,7 +123,6 @@ type Logout interface {
 // AuthHandlers implements the generated non-strict ServerInterface.
 type AuthHandlers struct {
 	auth         Authenticator
-	phoneChange  PhoneChanger
 	emailChange  EmailChanger
 	profile      Profiler
 	profilePhoto ProfilePhotos
@@ -167,7 +137,6 @@ type AuthHandlers struct {
 // NewAuthHandlers creates HTTP handlers for the auth API.
 func NewAuthHandlers(
 	auth Authenticator,
-	phoneChange PhoneChanger,
 	emailChange EmailChanger,
 	profile Profiler,
 	profilePhoto ProfilePhotos,
@@ -180,7 +149,6 @@ func NewAuthHandlers(
 ) *AuthHandlers {
 	return &AuthHandlers{
 		auth:         auth,
-		phoneChange:  phoneChange,
 		emailChange:  emailChange,
 		profile:      profile,
 		profilePhoto: profilePhoto,
@@ -201,6 +169,14 @@ type authSendCodeResponse struct {
 
 // SendCode implements POST /auth/send.
 func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
+	// The transport throttling pair (research #1526): the hard per-IP layer
+	// is consulted first — it prices issuance whatever body the request
+	// carries, so a flood of malformed requests does not skim past it.
+	if !h.limits.AllowSendForIP(requestctx.ClientIPFromContext(r.Context())) {
+		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
+		return
+	}
+
 	var body openapi.SendCodeRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
@@ -209,55 +185,39 @@ func (h *AuthHandlers) SendCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, err := domain.NewPhone(body.Phone)
-	if err != nil {
-		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
-		return
-	}
-
-	email, ok := parseOptionalEmail(w, r, body.Email)
+	email, ok := parseEmail(w, r, body.Email)
 	if !ok {
 		return
 	}
 
-	// Phone-only and email requests use separate buckets; the service-level
+	// The per-address layer caps one mailbox; the service-level
 	// minSendInterval still caps actual code sends.
-	if !h.limits.AllowSend(rateLimitKey(phone.String(), email)) {
+	if !h.limits.AllowSend(email.String()) {
 		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
 
-	retry := httpsupport.RetryAfterSeconds
-	if email == nil {
-		sent, err := h.auth.SendCodeByPhone(r.Context(), phone)
-		if err != nil {
-			if !writeSharedIdentityError(w, r, err, "") {
-				httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-			}
-			return
-		}
-		if !sent {
-			httpsupport.WriteJSON(r.Context(), w, http.StatusOK, authSendCodeResponse{Sent: false})
-			return
-		}
-		httpsupport.WriteJSON(r.Context(), w, http.StatusOK, authSendCodeResponse{Sent: true, RetryAfter: &retry})
-		return
-	}
-
-	if err := h.auth.SendCode(r.Context(), phone, *email, domain.LoginCodePurposeLogin); err != nil {
+	if err := h.auth.SendCode(r.Context(), email, domain.LoginCodePurposeLogin); err != nil {
 		if !writeSharedIdentityError(w, r, err, "") {
 			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
 		return
 	}
 
+	retry := httpsupport.RetryAfterSeconds
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, authSendCodeResponse{Sent: true, RetryAfter: &retry})
 }
 
 // VerifyCode implements POST /auth/verify.
 func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
+	// The softer per-IP layer is consulted before any parsing — brute force
+	// and body floods hit it first; the per-address key and the service-level
+	// attempt window come next.
+	if !h.limits.AllowVerifyForIP(requestctx.ClientIPFromContext(r.Context())) {
+		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
+		return
+	}
+
 	var body openapi.VerifyCodeRequest
 	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
 		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
@@ -266,22 +226,12 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, err := domain.NewPhone(body.Phone)
-	if err != nil {
-		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
-		return
-	}
-
-	email, ok := parseOptionalEmail(w, r, body.Email)
+	email, ok := parseEmail(w, r, body.Email)
 	if !ok {
 		return
 	}
 
-	// Phone-only verify requests are keyed by phone; brute force is
-	// additionally capped by the service-level attempt window.
-	if !h.limits.AllowVerify(rateLimitKey(phone.String(), email)) {
+	if !h.limits.AllowVerify(email.String()) {
 		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
 		return
 	}
@@ -290,15 +240,15 @@ func (h *AuthHandlers) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		UserAgent: r.Header.Get("User-Agent"),
 		IP:        requestctx.ClientIPFromContext(r.Context()),
 	}
-	raw, user, err := h.auth.VerifyCode(r.Context(), phone, email, body.Code, body.Timezone, device)
+	raw, user, err := h.auth.VerifyCode(r.Context(), email, body.Code, body.Timezone, device)
 	if err != nil {
-		if writeSharedIdentityError(w, r, err, "Неверный телефон, почта или код") {
+		if writeSharedIdentityError(w, r, err, "Неверная почта или код") {
 			return
 		}
 		switch {
 		case errors.Is(err, domain.ErrLoginCodeInvalid):
 			httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-				httpsupport.Problem(r.Context(), "Unauthorized", "Неверный телефон, почта или код"))
+				httpsupport.Problem(r.Context(), "Unauthorized", "Неверная почта или код"))
 		default:
 			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
 		}
@@ -442,113 +392,6 @@ func (h *AuthHandlers) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, resp)
 }
 
-// SendPhoneChangeCode implements POST /me/phone/send-code.
-func (h *AuthHandlers) SendPhoneChangeCode(w http.ResponseWriter, r *http.Request) {
-	userID, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	var body openapi.SendPhoneChangeCodeRequest
-	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	phone, err := domain.NewPhone(body.Phone)
-	if err != nil {
-		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
-		return
-	}
-
-	if !h.limits.AllowPhoneChangeSend(phone.String()) {
-		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
-		return
-	}
-
-	if err := h.phoneChange.SendChangeCode(r.Context(), userID, phone); err != nil {
-		if writeSharedIdentityError(w, r, err, "") {
-			return
-		}
-		switch {
-		case errors.Is(err, application.ErrPhoneUnchanged):
-			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-				httpsupport.Problem(r.Context(), "Invalid phone",
-					userFacingDetailOrDefault(err, "Новый номер должен отличаться от текущего")))
-		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-				httpsupport.Problem(r.Context(), "Conflict",
-					userFacingDetailOrDefault(err, "Этот номер телефона уже используется")))
-		default:
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		}
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// ChangePhone implements POST /me/phone/change.
-func (h *AuthHandlers) ChangePhone(w http.ResponseWriter, r *http.Request) {
-	userID, ok := httpsupport.UserIDFromContext(r.Context())
-	if !ok {
-		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
-			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
-		return
-	}
-
-	var body openapi.ChangePhoneRequest
-	if err := httpsupport.DecodeJSONBody(w, r, &body); err != nil {
-		h.logger.WarnContext(r.Context(), "failed to decode request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Bad request", "Некорректное тело запроса"))
-		return
-	}
-
-	phone, err := domain.NewPhone(body.Phone)
-	if err != nil {
-		h.logger.WarnContext(r.Context(), "invalid phone in request body", slog.String("error", httpsupport.SanitizeError(err)))
-		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-			httpsupport.Problem(r.Context(), "Invalid phone", "Некорректный номер телефона"))
-		return
-	}
-
-	if !h.limits.AllowPhoneChangeVerify(phone.String()) {
-		httpsupport.WriteTooManyRequests(w, r, "Превышен лимит запросов")
-		return
-	}
-
-	user, err := h.phoneChange.ChangePhone(r.Context(), userID, phone, body.Code)
-	if err != nil {
-		if writeSharedIdentityError(w, r, err, "Неверный код") {
-			return
-		}
-		switch {
-		case errors.Is(err, application.ErrPhoneUnchanged):
-			httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
-				httpsupport.Problem(r.Context(), "Invalid phone",
-					userFacingDetailOrDefault(err, "Новый номер должен отличаться от текущего")))
-		case errors.Is(err, application.ErrPhoneAlreadyTaken):
-			httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-				httpsupport.Problem(r.Context(), "Conflict",
-					userFacingDetailOrDefault(err, "Этот номер телефона уже используется")))
-		case errors.Is(err, domain.ErrLoginCodeInvalid):
-			httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized, httpsupport.Problem(r.Context(), "Unauthorized", "Неверный код"))
-		default:
-			httpsupport.WriteProblem(r.Context(), w, http.StatusInternalServerError, httpsupport.InternalError(r.Context(), err))
-		}
-		return
-	}
-
-	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, meResponse(user))
-}
-
 // detailEmailTakenForChange is the conflict text pinned by grilling decision
 // #720-4 for the email-change endpoints. The login flow asserts its own
 // fixture text, so the two wording families stay separate.
@@ -566,9 +409,6 @@ func writeEmailChangeError(w http.ResponseWriter, r *http.Request, err error) bo
 	case errors.Is(err, application.ErrEmailAlreadyTaken):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict", detailEmailTakenForChange))
-	case errors.Is(err, application.ErrEmailDoesNotMatch):
-		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
-			httpsupport.Problem(r.Context(), "Conflict", "У аккаунта нет электронной почты"))
 	case errors.Is(err, application.ErrEmailChangeGrantInvalid):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusConflict,
 			httpsupport.Problem(r.Context(), "Conflict", "Подтверждение истекло, начните смену почты заново"))
@@ -772,7 +612,6 @@ func meResponse(user domain.User) openapi.MeResponse {
 	}
 	return openapi.MeResponse{
 		Id:         user.ID,
-		Phone:      user.Phone.String(),
 		Role:       openapi.MeResponseRole(user.Role),
 		Name:       user.Name,
 		Surname:    user.Surname,

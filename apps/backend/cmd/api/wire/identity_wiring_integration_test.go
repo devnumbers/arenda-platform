@@ -55,8 +55,8 @@ func TestWireIdentityAssembly(t *testing.T) {
 			IPBurst:                     40,
 			EmailSendPerHour:            60,
 			EmailVerifyPer15Min:         30,
-			PhoneChangeSendPerHour:      5,
-			PhoneChangeVerifyPer15Min:   10,
+			AuthSendPerIPPerHour:        30,
+			AuthVerifyPerIPPer15Min:     60,
 			EmailChangeSendPerHour:      5,
 			CodeSendPerRecipientPerHour: 5,
 			CodeSendPerInitiatorPerHour: 10,
@@ -90,7 +90,6 @@ func TestWireIdentityAssembly(t *testing.T) {
 	require.NotNil(t, identity.SessionLoader)
 	require.NotNil(t, identity.EventPublisher)
 	require.NotNil(t, identity.Authentication)
-	require.NotNil(t, identity.PhoneChange)
 	// The exact field 84d14023 left out of the composition root.
 	require.NotNil(t, identity.EmailChange)
 	require.NotNil(t, identity.Profile)
@@ -133,8 +132,8 @@ func TestWireIdentityContactQueueBindsAndEnqueuesAtomically(t *testing.T) {
 			IPBurst:                     40,
 			EmailSendPerHour:            60,
 			EmailVerifyPer15Min:         30,
-			PhoneChangeSendPerHour:      5,
-			PhoneChangeVerifyPer15Min:   10,
+			AuthSendPerIPPerHour:        30,
+			AuthVerifyPerIPPer15Min:     60,
 			EmailChangeSendPerHour:      5,
 			CodeSendPerRecipientPerHour: 5,
 			CodeSendPerInitiatorPerHour: 10,

@@ -87,7 +87,7 @@ func WireAccess(
 	invitationRepo := accesspg.NewInvitationRepository(p.DB)
 	participantRepo := accesspg.NewParticipantRepository(p.DB)
 	ownerResolver := accesspg.NewOwnerResolver(p.DB)
-	userRepo := identitypg.NewUserRepository(p.DB, p.Encryptor)
+	userRepo := identitypg.NewUserRepository(p.DB)
 	userLookup := accesspg.NewUserLookup(userRepo)
 	emailResolver := accesspg.NewUserEmailResolver(userRepo)
 	sharedProperties := accesspg.NewSharedProperties(p.DB)

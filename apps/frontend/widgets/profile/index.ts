@@ -6,7 +6,6 @@ export { CopyrightYear } from './ui/copyright-year';
 export { PaymentDetail } from './ui/PaymentDetail';
 export { PaymentList } from './ui/PaymentList';
 export { PaymentMethodList } from './ui/PaymentMethodList';
-export { PhoneChangeScreen } from './ui/PhoneChangeScreen';
 export { ProfileHub, ProfileHubSkeleton } from './ui/ProfileHub';
 export { TariffChangeScreen } from './ui/tariff/tariff-change-screen';
 export { TariffChangeSuccess } from './ui/TariffChangeSuccess';

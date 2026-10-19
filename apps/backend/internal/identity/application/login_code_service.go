@@ -18,7 +18,7 @@ import (
 
 const (
 	// The minSendInterval throttles repeated code issuance for the same
-	// phone+email+purpose triple. A code requested sooner is rejected with
+	// email+purpose pair. A code requested sooner is rejected with
 	// ErrCodeSentTooRecently without invalidating the in-flight code.
 	minSendInterval = 1 * time.Minute
 	// The codeSpace is the size of the numeric code space (000000–999999).
@@ -68,17 +68,17 @@ type LoginCodeServiceConfig struct {
 	// AllowRecipientSend guards the per-recipient hourly cap on code sends:
 	// one email address must not receive more than a bounded number of codes
 	// per window, whatever the flows or initiators behind them (#1210) — the
-	// triple throttle alone lets a phone-knowledge outsider drip 60 letters
-	// an hour into a victim's mailbox. Consulted once per actual issuance,
-	// after the triple throttle has passed, so throttled requests spend
+	// send throttle alone lets an outsider who knows an address drip 60
+	// letters an hour into its mailbox. Consulted once per actual issuance,
+	// after the send throttle has passed, so throttled requests spend
 	// nothing. Nil means allow (tests).
 	AllowRecipientSend func(email domain.Email) bool
 	// AllowInitiatorSend guards the per-initiator hourly cap on code sends an
-	// authenticated user triggers across phone- and email-change flows
-	// (#1210) — obsessive initiation is capped at the domain level, not only
-	// per endpoint. Login codes never consult it: their user is the code's
+	// authenticated user triggers in the email-change flow (#1210) —
+	// obsessive initiation is capped at the domain level, not only per
+	// endpoint. Login codes never consult it: their user is the code's
 	// subject, not the initiator — the flow is unauthenticated, and counting
-	// login sends would let whoever knows the phone spend the account's own
+	// login sends would let whoever knows the address spend the account's own
 	// budget (an OWASP account-lockout DoS). Consulted under the same rules
 	// as AllowRecipientSend. Nil means allow (tests).
 	AllowInitiatorSend func(userID uuid.UUID) bool
@@ -110,20 +110,19 @@ func NewLoginCodeService(
 }
 
 // hashCode derives the stored hash for a login code. The hash covers purpose,
-// phone, email, and the plaintext code so a code is only valid for the exact
-// triple it was issued for.
-func (s *LoginCodeService) hashCode(purpose domain.LoginCodePurpose, phone domain.Phone, email domain.Email, code string) string {
-	return s.hasher.HashToken("login_code:" + purpose.String() + ":" + phone.String() + ":" + email.String() + ":" + code)
+// email, and the plaintext code so a code is only valid for the exact pair it
+// was issued for.
+func (s *LoginCodeService) hashCode(purpose domain.LoginCodePurpose, email domain.Email, code string) string {
+	return s.hasher.HashToken("login_code:" + purpose.String() + ":" + email.String() + ":" + code)
 }
 
-// Send issues a login code for the phone+email+purpose triple, persists it, and
+// Send issues a login code for the email+purpose pair, persists it, and
 // delivers it after the transaction commits. The purpose+step pair selects the
 // letter the delivery renders. It enforces the not-blocked check, purges
 // expired and unused prior codes, and throttles re-issuance within
 // minSendInterval of a live code.
 func (s *LoginCodeService) Send(
 	ctx context.Context,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 	step domain.LoginCodeStep,
@@ -134,19 +133,19 @@ func (s *LoginCodeService) Send(
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		var err error
-		loginCode, plaintextCode, err = s.IssueInTx(ctx, stores, phone, email, purpose, userID)
+		loginCode, plaintextCode, err = s.IssueInTx(ctx, stores, email, purpose, userID)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 
-	return s.Deliver(ctx, phone, email, purpose, step, loginCode, plaintextCode)
+	return s.Deliver(ctx, email, purpose, step, loginCode, plaintextCode)
 }
 
-// IssueInTx is the transactional half of Send: it guards the phone against
+// IssueInTx is the transactional half of Send: it guards the address against
 // the attempt-window block, clears the way past superseded codes and the send
-// throttle, and persists a freshly generated code for the triple. It returns
+// throttle, and persists a freshly generated code for the pair. It returns
 // the persisted code together with its plaintext for post-commit delivery.
 // Orchestrators that verify another code in the same transaction (email-change
 // step 2, issue #721) call it directly so verify, burn, and issue share one
@@ -154,45 +153,43 @@ func (s *LoginCodeService) Send(
 func (s *LoginCodeService) IssueInTx(
 	ctx context.Context,
 	stores *txStores,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 	userID *uuid.UUID,
 ) (domain.LoginCode, string, error) {
 	now := s.clock.Now()
 
-	if err := s.purgeAndThrottle(ctx, stores, phone, email, purpose, userID, now); err != nil {
+	if err := s.purgeAndThrottle(ctx, stores, email, purpose, userID, now); err != nil {
 		return domain.LoginCode{}, "", err
 	}
-	return s.persistNewCode(ctx, stores, phone, email, purpose, userID, now)
+	return s.persistNewCode(ctx, stores, email, purpose, userID, now)
 }
 
 // purgeAndThrottle clears the way for a new code inside the caller's
-// transaction: a blocked phone is refused outright, expired codes are purged
+// transaction: a blocked address is refused outright, expired codes are purged
 // first, the send throttle then rejects a live code issued within
 // minSendInterval, the send limits price the issuance (#1210), and only then
 // are the remaining unused codes deleted. The order matters: the latest code
-// must still be readable when the throttle is checked (CONTEXT.md, "Throttle
+// must still be readable when the throttle is checked (GLOSSARY.md, "Throttle
 // отправки"), and a limit refusal must leave the in-flight code alive — the
 // same contract the throttle holds — so the limits run before the cleanup.
 func (s *LoginCodeService) purgeAndThrottle(
 	ctx context.Context,
 	stores *txStores,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 	userID *uuid.UUID,
 	now time.Time,
 ) error {
-	if err := checkNotBlocked(ctx, stores.attempts, s.clock, phone); err != nil {
+	if err := checkNotBlocked(ctx, stores.attempts, s.clock, email); err != nil {
 		return err
 	}
 
-	if err := stores.codes.DeleteExpiredByPhoneAndEmail(ctx, phone, email, purpose, now); err != nil {
+	if err := stores.codes.DeleteExpiredByEmailAndPurpose(ctx, email, purpose, now); err != nil {
 		return fmt.Errorf("delete expired login codes: %w", err)
 	}
 
-	latest, err := stores.codes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)
+	latest, err := stores.codes.GetLatestByEmailAndPurpose(ctx, email, purpose, now)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get latest code: %w", err)
 	}
@@ -204,16 +201,16 @@ func (s *LoginCodeService) purgeAndThrottle(
 		return err
 	}
 
-	if err := stores.codes.DeleteUnusedByPhoneAndEmail(ctx, phone, email, purpose); err != nil {
+	if err := stores.codes.DeleteUnusedByEmailAndPurpose(ctx, email, purpose); err != nil {
 		return fmt.Errorf("delete unused login codes: %w", err)
 	}
 	return nil
 }
 
 // checkSendLimits consults the anti-flood guards (#1210) at the one point
-// every code issuance flows through, once the triple throttle has passed: the
+// every code issuance flows through, once the send throttle has passed: the
 // per-recipient hourly cap first, then the per-initiator one for the flows
-// with an authenticated actor (phone/email change — never the unauthenticated
+// with an authenticated actor (email change — never the unauthenticated
 // login, whose user is the code's subject). A refusal here happens before the
 // unused-code cleanup, so the in-flight code survives, and before any counter
 // is spent on a request that will not issue.
@@ -235,11 +232,10 @@ func sendThrottled(latest domain.LoginCode, found bool, now time.Time) bool {
 }
 
 // persistNewCode generates the plaintext code, builds the domain LoginCode for
-// the triple, and saves it inside the caller's transaction.
+// the pair, and saves it inside the caller's transaction.
 func (s *LoginCodeService) persistNewCode(
 	ctx context.Context,
 	stores *txStores,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 	userID *uuid.UUID,
@@ -250,7 +246,7 @@ func (s *LoginCodeService) persistNewCode(
 		return domain.LoginCode{}, "", fmt.Errorf("generate code: %w", err)
 	}
 
-	loginCode, err := domain.NewLoginCode(phone, email, s.hashCode(purpose, phone, email, plaintextCode), purpose, userID, now)
+	loginCode, err := domain.NewLoginCode(email, s.hashCode(purpose, email, plaintextCode), purpose, userID, now)
 	if err != nil {
 		return domain.LoginCode{}, "", fmt.Errorf("create login code: %w", err)
 	}
@@ -270,7 +266,6 @@ func (s *LoginCodeService) persistNewCode(
 // transaction commits.
 func (s *LoginCodeService) Deliver(
 	ctx context.Context,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 	step domain.LoginCodeStep,
@@ -280,7 +275,7 @@ func (s *LoginCodeService) Deliver(
 	s.logger.InfoContext(ctx, "sending login code",
 		slog.String("purpose", purpose.String()),
 		slog.String("step", step.String()))
-	if err := s.sender.Send(ctx, phone, email, plaintextCode, purpose, step); err != nil {
+	if err := s.sender.Send(ctx, email, plaintextCode, purpose, step); err != nil {
 		s.logger.ErrorContext(ctx, "failed to send login code", slog.String("error", sanitize.Error(err)))
 		if delErr := s.codes.DeleteByID(ctx, loginCode.ID); delErr != nil {
 			s.logger.ErrorContext(ctx, "failed to delete unsent login code", slog.String("error", sanitize.Error(delErr)))
@@ -294,12 +289,12 @@ func (s *LoginCodeService) Deliver(
 	return nil
 }
 
-// Verify checks the code for the phone+email+purpose triple against the latest
+// Verify checks the code for the email+purpose pair against the latest
 // stored code. It operates inside the caller's transaction via stores and
 // returns the verified code on success, or domain.ErrLoginCodeInvalid when the
 // code is absent, expired, used, or wrong. It returns ErrUserBlocked when the
-// phone is currently blocked by the attempt window — checked first, before any
-// code is read, so a blocked phone cannot be verified.
+// address is currently blocked by the attempt window — checked first, before any
+// code is read, so a blocked address cannot be verified.
 //
 // Verify deliberately does NOT record the attempt-window failure: the success
 // path transaction will roll back on this error, and recording inside it would
@@ -308,18 +303,17 @@ func (s *LoginCodeService) Deliver(
 func (s *LoginCodeService) Verify(
 	ctx context.Context,
 	stores *txStores,
-	phone domain.Phone,
 	email domain.Email,
 	purpose domain.LoginCodePurpose,
 	code string,
 ) (domain.LoginCode, error) {
-	if err := checkNotBlocked(ctx, stores.attempts, s.clock, phone); err != nil {
+	if err := checkNotBlocked(ctx, stores.attempts, s.clock, email); err != nil {
 		return domain.LoginCode{}, err
 	}
 
 	now := s.clock.Now()
 
-	loginCode, err := stores.codes.GetLatestByPhoneAndEmail(ctx, phone, email, purpose, now)
+	loginCode, err := stores.codes.GetLatestByEmailAndPurpose(ctx, email, purpose, now)
 	if errors.Is(err, ErrNotFound) {
 		return domain.LoginCode{}, domain.ErrLoginCodeInvalid
 	}
@@ -327,29 +321,29 @@ func (s *LoginCodeService) Verify(
 		return domain.LoginCode{}, fmt.Errorf("get code: %w", err)
 	}
 
-	if err := loginCode.Verify(s.hashCode(purpose, phone, email, code), now); err != nil {
+	if err := loginCode.Verify(s.hashCode(purpose, email, code), now); err != nil {
 		return domain.LoginCode{}, domain.ErrLoginCodeInvalid
 	}
 
 	return loginCode, nil
 }
 
-// RecordFailure records a single failed attempt into the window bound to phone,
-// operating inside the caller's transaction via stores. It is the canonical
-// place the orchestrators call from a separate short transaction after a
-// verification failure rolls back the success path, so the rate-limit mutation
-// survives the rollback (ADR 0033). Returns domain.ErrTooManyAttempts once the
-// window threshold is reached; otherwise returns nil. Callers treat both as
-// expected outcomes and only surface infrastructure errors.
+// RecordFailure records a single failed attempt into the window bound to the
+// canonical email, operating inside the caller's transaction via stores. It is
+// the canonical place the orchestrators call from a separate short transaction
+// after a verification failure rolls back the success path, so the rate-limit
+// mutation survives the rollback (ADR 0033). Returns domain.ErrTooManyAttempts
+// once the window threshold is reached; otherwise returns nil. Callers treat
+// both as expected outcomes and only surface infrastructure errors.
 //
 // The failure counter is persisted atomically: a plain increment delegates to
 // an atomic database-side add (Issue #215), and a TTL reset writes the absolute
 // counter. The ForUpdate lock acquired here is retained for correctness of the
 // read-modify-write of the window's timestamps, but the counter itself no
 // longer depends on it to avoid a lost update.
-func (s *LoginCodeService) RecordFailure(ctx context.Context, stores *txStores, phone domain.Phone, userID uuid.UUID) error {
+func (s *LoginCodeService) RecordFailure(ctx context.Context, stores *txStores, email domain.Email) error {
 	now := s.clock.Now()
-	window, err := stores.attempts.GetByPhoneForUpdate(ctx, phone)
+	window, err := stores.attempts.GetByEmailForUpdate(ctx, email)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get attempts: %w", err)
 	}
@@ -366,12 +360,12 @@ func (s *LoginCodeService) RecordFailure(ctx context.Context, stores *txStores, 
 	if recErr := window.RecordFailure(now); recErr != nil {
 		// Persist the threshold-reaching failure before returning so the block
 		// takes effect even though the caller treats this as an expected error.
-		if saveErr := stores.attempts.Save(ctx, phone, userID, window, attemptDelta(prev, window)); saveErr != nil {
+		if saveErr := stores.attempts.Save(ctx, email, window, attemptDelta(prev, window)); saveErr != nil {
 			return fmt.Errorf("save attempts: %w", saveErr)
 		}
 		return recErr
 	}
-	if err := stores.attempts.Save(ctx, phone, userID, window, attemptDelta(prev, window)); err != nil {
+	if err := stores.attempts.Save(ctx, email, window, attemptDelta(prev, window)); err != nil {
 		return fmt.Errorf("save attempts: %w", err)
 	}
 	return nil
@@ -380,9 +374,8 @@ func (s *LoginCodeService) RecordFailure(ctx context.Context, stores *txStores, 
 // RecordFailureAndAudit records a failed verification attempt and the
 // corresponding audit entry in a single short transaction, so they outlive the
 // rolled-back success path of the calling orchestrator. It is the shared deep
-// method that both AuthenticationService (login) and PhoneChangeService
-// (phone-change) invoke after a verification failure, deduplicating the two
-// previously separate inline copies.
+// method that AuthenticationService (login) and EmailChangeService invoke after
+// a verification failure.
 //
 // It opens its own runInTx (not the caller's stores) so the rate-limit mutation
 // and audit entry survive the rollback of the success-path transaction. Inside,
@@ -396,13 +389,12 @@ func (s *LoginCodeService) RecordFailure(ctx context.Context, stores *txStores, 
 // domain errors from RecordFailure are captured via outErr.
 func (s *LoginCodeService) RecordFailureAndAudit(
 	ctx context.Context,
-	phone domain.Phone,
-	userID uuid.UUID,
+	email domain.Email,
 	auditEntry auditdomain.Entry,
 	outErr *error,
 ) error {
 	return s.runInTx(ctx, func(stores *txStores) error {
-		if err := s.RecordFailure(ctx, stores, phone, userID); err != nil {
+		if err := s.RecordFailure(ctx, stores, email); err != nil {
 			if errors.Is(err, domain.ErrTooManyAttempts) {
 				*outErr = err
 			} else if !errors.Is(err, domain.ErrLoginCodeInvalid) {
@@ -439,22 +431,13 @@ func attemptDelta(prev, next domain.AttemptWindow) int {
 	return next.Failures - prev.Failures
 }
 
-// userEmail returns the email of a user, or ErrEmailDoesNotMatch when the user
-// has none. It is shared by PhoneChangeService, which must resolve the stored
-// email before issuing or verifying a phone-change code.
-func userEmail(user domain.User) (domain.Email, error) {
-	if user.Email == nil {
-		return domain.Email{}, ErrEmailDoesNotMatch
-	}
-	return *user.Email, nil
-}
-
-// checkNotBlocked reports whether the phone is currently blocked by the attempt
-// window. A blocked phone yields ErrUserBlocked before any code work begins.
-func checkNotBlocked(ctx context.Context, attempts AttemptRepository, clk clock.Clock, phone domain.Phone) error {
+// checkNotBlocked reports whether the address is currently blocked by the
+// attempt window. A blocked address yields ErrUserBlocked before any code work
+// begins.
+func checkNotBlocked(ctx context.Context, attempts AttemptRepository, clk clock.Clock, email domain.Email) error {
 	now := clk.Now()
 
-	window, err := attempts.GetByPhone(ctx, phone)
+	window, err := attempts.GetByEmail(ctx, email)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("get attempts: %w", err)
 	}

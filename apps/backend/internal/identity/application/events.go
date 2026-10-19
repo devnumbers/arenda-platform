@@ -11,7 +11,6 @@ import (
 // UserRegistered is emitted after a new user is created during authentication.
 type UserRegistered struct {
 	UserID uuid.UUID
-	Phone  domain.Phone
 	Email  domain.Email
 	At     time.Time
 }

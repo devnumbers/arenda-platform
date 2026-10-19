@@ -67,7 +67,6 @@ DATABASE_URL="postgres://arenda:arenda@localhost:${E2E_PG_PORT}/arenda?sslmode=d
 BACKEND_URL="http://127.0.0.1:${E2E_BACKEND_PORT}"
 FRONTEND_URL="http://127.0.0.1:${E2E_FRONTEND_PORT}"
 
-USER_PHONE_DIGITS="9150000001"
 USER_EMAIL="e2e@example.com"
 
 BACKEND_PID=""
@@ -147,11 +146,16 @@ E2E_DADATA_API_KEY="${DADATA_API_KEY:-e2e-dadata-dummy}"
 E2E_RATE_LIMIT_IP_RPS=200
 E2E_RATE_LIMIT_IP_BURST=400
 # Анти-флуд лимиты отправки кодов (#1210) ослаблены: живые ноги сюита
-# (вход + смена email + смена телефона) легитимно доставляют сид-ящику больше
+# (вход + смена email) легитимно доставляют сид-ящику больше
 # 5 кодов в час — продовые дефолты 5/10 429-или бы живые ноги; свежий бэк на
-# прогон и так держит бюджеты в чистой памяти.
+# прогон и так держит бюджеты в чистой памяти. IP-слой аутентификации
+# (#1528: жёсткий на issuance /auth/send, мягкий на verify) ослаблен по той
+# же причине — сюита живёт одним IP, продовый дефолт 30/час с burst 3
+# сжигается первыми же UI-логинами (#1529).
 E2E_RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR=500
 E2E_RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR=500
+E2E_RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR=500
+E2E_RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN=500
 (
   cd "$PROJECT_ROOT"
   APP_ENV=local \
@@ -169,6 +173,8 @@ E2E_RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR=500
   RATE_LIMIT_IP_BURST="$E2E_RATE_LIMIT_IP_BURST" \
   RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR="$E2E_RATE_LIMIT_CODE_SEND_PER_RECIPIENT_PER_HOUR" \
   RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR="$E2E_RATE_LIMIT_CODE_SEND_PER_INITIATOR_PER_HOUR" \
+  RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR="$E2E_RATE_LIMIT_AUTH_SEND_PER_IP_PER_HOUR" \
+  RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN="$E2E_RATE_LIMIT_AUTH_VERIFY_PER_IP_PER_15MIN" \
   LOG_FORMAT=json \
   LOG_LEVEL=info \
   LOG_SUCCESSFUL_REQUESTS=false \
@@ -203,23 +209,16 @@ log "Seeding database"
 E2E_SESSION_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
 E2E_MEMBER_SESSION_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
 E2E_VIEWER_SESSION_TOKEN="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
-# token_hash mirrors encryption.hashToken (HMAC-SHA256 over the raw token);
-# phone_det mirrors encryption.DeterministicEncrypt — users.phone is looked
-# up by its ciphertext, so a plaintext seed row would never match.
+# token_hash mirrors encryption.hashToken (HMAC-SHA256 over the raw token).
 CRYPTO="$SCRIPT_DIR/e2e-crypto.mjs"
 TOKEN_HASH="$(node "$CRYPTO" hash-token "$E2E_ENCRYPTION_KEY" "$E2E_SESSION_TOKEN")"
 MEMBER_TOKEN_HASH="$(node "$CRYPTO" hash-token "$E2E_ENCRYPTION_KEY" "$E2E_MEMBER_SESSION_TOKEN")"
 VIEWER_TOKEN_HASH="$(node "$CRYPTO" hash-token "$E2E_ENCRYPTION_KEY" "$E2E_VIEWER_SESSION_TOKEN")"
-PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+7$USER_PHONE_DIGITS")"
-MEMBER_PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+79150000002")"
-VIEWER_PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+79150000003")"
-LIMITED_PHONE_DET="$(node "$CRYPTO" det-phone "$E2E_ENCRYPTION_KEY" "+79150000004")"
 docker exec -i "$PG_CONTAINER" \
   psql -U arenda -d arenda -v ON_ERROR_STOP=1 \
-  -v token_hash="$TOKEN_HASH" -v phone_det="$PHONE_DET" \
-  -v member_token_hash="$MEMBER_TOKEN_HASH" -v member_phone_det="$MEMBER_PHONE_DET" \
-  -v viewer_token_hash="$VIEWER_TOKEN_HASH" -v viewer_phone_det="$VIEWER_PHONE_DET" \
-  -v limited_phone_det="$LIMITED_PHONE_DET" \
+  -v token_hash="$TOKEN_HASH" \
+  -v member_token_hash="$MEMBER_TOKEN_HASH" \
+  -v viewer_token_hash="$VIEWER_TOKEN_HASH" \
   < "$SEED_SQL" >/dev/null
 
 # Поверх базового сида всегда применяется оверлей (live-overlay.sql):
@@ -269,12 +268,12 @@ if [ "${E2E_LIVE:-0}" = "1" ]; then
   log "Live walkthrough stack is ready (kept running):"
   echo "  frontend  $FRONTEND_URL          (go here)"
   echo "  backend   $BACKEND_URL/healthz   (log: $BACKEND_LOG)"
-  echo "  seed      phone +7$USER_PHONE_DIGITS, email $USER_EMAIL, session token:"
+  echo "  seed      email $USER_EMAIL, session token:"
   echo "            $E2E_SESSION_TOKEN"
   echo "  roles     подмена роли — cookie session_id=<token> на $FRONTEND_URL:"
-  echo "            owner       +7$USER_PHONE_DIGITS  $E2E_SESSION_TOKEN"
-  echo "            full access +79150000002         $E2E_MEMBER_SESSION_TOKEN"
-  echo "            viewer      +79150000003         $E2E_VIEWER_SESSION_TOKEN"
+  echo "            owner       e2e@example.com         $E2E_SESSION_TOKEN"
+  echo "            full access e2e-member@example.com  $E2E_MEMBER_SESSION_TOKEN"
+  echo "            viewer      e2e-viewer@example.com  $E2E_VIEWER_SESSION_TOKEN"
   echo "  teardown  make frontend-e2e-live-down"
   exit 0
 fi
@@ -298,7 +297,6 @@ status=0
   E2E_SESSION_TOKEN="$E2E_SESSION_TOKEN" \
   E2E_MEMBER_SESSION_TOKEN="$E2E_MEMBER_SESSION_TOKEN" \
   E2E_VIEWER_SESSION_TOKEN="$E2E_VIEWER_SESSION_TOKEN" \
-  E2E_USER_PHONE="$USER_PHONE_DIGITS" \
   E2E_USER_EMAIL="$USER_EMAIL" \
   E2E_BACKEND_LOG="$BACKEND_LOG" \
   E2E_PG_CONTAINER="$PG_CONTAINER" \
