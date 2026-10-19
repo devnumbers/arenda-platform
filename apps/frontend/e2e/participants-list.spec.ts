@@ -188,7 +188,7 @@ test('кебаб: «Отозвать доступ всем» открывает 
   await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
 });
 
-test('«Отозвать и удалить»: глобальный отзыв, попап успеха, пустое состояние с CTA; сид восстанавливается', async ({ page, seededUser }) => {
+test('«Отозвать и удалить»: глобальный отзыв, тост успеха, пустое состояние с CTA; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/participants');
 
@@ -199,15 +199,16 @@ test('«Отозвать и удалить»: глобальный отзыв, �
   try {
     await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
 
-    // Попап успеха по макету 2008-84101; список под ним перечитан
-    // (sr-only заголовок несёт тот же текст — проверяем видимый <p>).
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Все участники удалены' }),
-    ).toBeVisible();
+    // Тост успеха по макету 2008-84101 (тост вместо успех-попапа,
+    // решение владельца 19.10.2026). Закрываем кнопкой: автоухол на паузе
+    // без фокуса окна, тост поверх шапки перехватывает клики (канон
+    // contacts/payment-lifecycle-спек).
+    const toast = page.locator('.Toastify__toast', { hasText: 'Все участники удалены' });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
     await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
 
-    await page.keyboard.press('Escape');
     // Пустой список платного тарифа (макет 3313-78626): CTA «Пригласить»
     // в форме, кебаб остаётся — но без красного пункта (макет 3314-79248).
     await expect(page.getByText('Участников нет')).toBeVisible();

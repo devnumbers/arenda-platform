@@ -57,12 +57,13 @@ test.describe('лента уведомлений — меню и пустые с
     await expect(menu.getByRole('menuitem', { name: 'Удалить все уведомления' })).toBeVisible();
     await captureScreen(page, testInfo, 'notifications-menu');
 
-    // «Прочитать все» — мутация без подтверждения: попап успеха; под ним
-    // страница aria-hidden — сначала закрыть, потом ассерты ленты.
+    // «Прочитать все» — мутация без подтверждения: тост успеха (тост
+    // вместо успех-попапа, решение владельца 19.10.2026); закрываем
+    // кнопкой, чтобы не перехватывал клики (канон contacts-спек).
     await menu.getByRole('menuitem', { name: 'Прочитать все' }).click();
-    await expect(page.getByText('Все уведомления прочитаны')).toBeVisible();
-    await page.getByRole('button', { name: 'Закрыть' }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const toast = page.locator('.Toastify__toast', { hasText: 'Все уведомления прочитаны' });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
     // Строки погасли (прочитаны), счётчик чипа слетел.
     await expect(page.getByRole('button', { name: 'Непрочитанные', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Непрочитанные 2' })).toHaveCount(0);

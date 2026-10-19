@@ -399,7 +399,7 @@ test.describe('правка избранного: анатомия строки 
 // Выделение и удаление (#814): клик строки на десктопе выделяет,
 // long-press на таче выделяет и включает режим выбора (тапы дальше
 // переключают), заголовок → «Выбрано N», trash в навбаре удаляет через
-// ConfirmDialog с попапом успеха. Серверная правда — is_favorite и
+// ConfirmDialog с тостом успеха. Серверная правда — is_favorite и
 // favorite_order.
 test.describe('правка избранного: выделение и удаление', () => {
   test.beforeEach(async () => {
@@ -521,11 +521,14 @@ test.describe('правка избранного: выделение и удал
     ).toBeVisible();
     await page.getByRole('button', { name: 'Убрать', exact: true }).click();
 
-    // Попап успеха после выходной анимации диалога.
-    await expect(
-      page.getByText('Платежи больше не в избранном').first(),
-    ).toBeVisible({ timeout: 5000 });
-    await page.getByLabel('Закрыть').click();
+    // Тост успеха (тост вместо успех-попапа, решение владельца
+    // 19.10.2026); закрываем кнопкой, чтобы не перехватывал клики
+    // (канон contacts/payment-lifecycle-спек).
+    const toast = page.locator('.Toastify__toast', {
+      hasText: 'Платежи больше не в избранном',
+    });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
 
     // Правка продолжается: выделение сброшено, заголовок обычный,
     // trash скрыт, «Сохранить» погашена (порядок не менялся).
@@ -644,10 +647,13 @@ test.describe('правка избранного: выделение и удал
     await page.getByTestId('favorites-trash').click();
     await page.getByRole('button', { name: 'Убрать', exact: true }).click();
 
-    await expect(
-      page.getByText('Платежи больше не в избранном').first(),
-    ).toBeVisible({ timeout: 5000 });
-    await page.getByLabel('Закрыть').click();
+    // Тост успеха (тост вместо успех-попапа, решение владельца
+    // 19.10.2026); закрываем кнопкой, чтобы не перехватывал клики.
+    const toast = page.locator('.Toastify__toast', {
+      hasText: 'Платежи больше не в избранном',
+    });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
 
     // Избранного не осталось: пустое состояние, правки больше нет
     // (и карандаша нет — править нечего).

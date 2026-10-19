@@ -6,7 +6,6 @@ import {
   ArrowDown,
   ArrowLeft,
   Block,
-  Cancel,
   Kebab,
   Search,
   SmallArrowDown,
@@ -41,8 +40,6 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
-  Modal,
-  ModalContent,
   PageContent,
   PickerMenu,
   SearchField,
@@ -51,7 +48,6 @@ import {
   MeSuffix,
   skeletonRowWidths,
   StickyBottomBar,
-  StatusIcon,
   TopNav,
   TopNavBackButton,
   TopNavTitle,
@@ -74,10 +70,8 @@ import {
   type PropertyParticipantRow,
   type PropertyParticipantSortOrder,
 } from '../lib/property-participants-list';
-import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
 import { resolvePropertyParticipantsError } from '../lib/property-participants-error';
 import { EMAIL_ROLE_ICONS, PropertyAccessNotFound } from './participant-fragments';
-import { ParticipantSuccessPopup } from './participant-success-popup';
 
 /**
  * Экран «Участники объекта» (D6 #1312, макет 3298-75434): полный состав
@@ -143,10 +137,6 @@ export function PropertyParticipantsScreen({
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
-  const [showAllRevoked, setShowAllRevoked] = useState(false);
-  // «Участник приглашен» (макет 2035-82202): возврат из приглашения от
-  // объекта — попап рендерится здесь по staged-флагу (канон #697/#699).
-  const invitedPopup = useParticipantPopup() === 'invited';
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
@@ -253,7 +243,10 @@ export function PropertyParticipantsScreen({
       onSuccess: (result) => {
         setConfirmOpen(false);
         if (result.failed === 0) {
-          setShowAllRevoked(true);
+          // Тост вместо успех-попапа (макет 2035-82834, решение
+          // владельца 19.10.2026): только при полном успехе партии —
+          // частичный исход макетом не различён и фидбека не имел.
+          notify.scenarios.access.allRevoked();
         }
       },
     });
@@ -519,34 +512,6 @@ export function PropertyParticipantsScreen({
         pending={leaveProperty.isPending}
         onConfirm={confirmLeave}
       />
-
-      {/* Попап «Все участники удалены» (макет 2035-82834): канон #697 —
-       * зелёная галочка 48 и текст; владелец в списке остаётся. */}
-      {showAllRevoked && (
-        <Modal open onOpenChange={(open) => open || setShowAllRevoked(false)}>
-          <ModalContent title="Все участники удалены" titleSrOnly>
-            <IconButton
-              icon={<Cancel />}
-              label="Закрыть"
-              onClick={() => setShowAllRevoked(false)}
-              className="hidden desktop:absolute desktop:right-3 desktop:top-3 desktop:block"
-            />
-            <div className="flex flex-col items-center gap-2">
-              <StatusIcon status="good" className="h-12 w-12" />
-              <p className="text-center text-base font-medium leading-[18px] text-success">
-                Все участники удалены
-              </p>
-            </div>
-          </ModalContent>
-        </Modal>
-      )}
-
-      {invitedPopup && (
-        <ParticipantSuccessPopup
-          title="Участник приглашен"
-          onClose={() => popParticipantPopup()}
-        />
-      )}
     </>
   );
 }

@@ -135,6 +135,7 @@
 | `Download` | `download.svg` | `R/Download` | 189:836 | новая |
 | `Key` | `key.svg` | `R/Key` | 119:1104 | новая |
 | `Team` | `team.svg` | `R/Team` | 472:5276 | новая |
+| `Loading` | `loading.svg` | `R/Loading` | 3467:152280 | новая (19.10.2026, спиннер loading-тоста вместо Sync; запечённый цвет экспорта перекрашен в currentColor) |
 | `Copy` | `copy.svg` | `R/Copy` | 1323:59291 | заменена |
 | `Info` | `info.svg` | `R/Info` | 1296:48308 | новая |
 | `CreditCard` | `credit-card.svg` | `R/CreditCard` | 1917:72300 | новая (12.09.2026, экран «Тариф» #620) |

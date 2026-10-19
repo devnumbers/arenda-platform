@@ -76,18 +76,37 @@ const propertyContacts = {
   photoDeleteError: errorScenario('Не удалось удалить фото'),
 } as const;
 
+/** Успехи участников — тосты вместо успех-попапов (решение владельца
+ * 19.10.2026: снос модалок-фидбеков, тексты 1:1 из макетов попапов).
+ * Черновые тексты мёртвых сценариев («Участник добавлен», «Роль изменена»,
+ * «Доступ отозван», «Приглашение отправлено») заменены одобренными. */
 const access = {
-  memberAdded: ((options?) =>
-    notify.success('Участник добавлен', options)) satisfies ScenarioFn,
+  /** «Пригласить в объект» со страницы участника (2010-131859). */
+  granted: ((options?) =>
+    notify.success('Доступ выдан', options)) satisfies ScenarioFn,
+  /** Приглашение из хаба (2010-134458) и от объекта (2035-82202). */
   invited: ((options?) =>
-    notify.success('Приглашение отправлено', options)) satisfies ScenarioFn,
+    notify.success('Участник приглашен', options)) satisfies ScenarioFn,
   inviteError: errorScenario('Не удалось отправить приглашение'),
+  /** Смена роли на странице прав (2177-59799). */
   roleChanged: ((options?) =>
-    notify.success('Роль изменена', options)) satisfies ScenarioFn,
+    notify.success('Права изменены', options)) satisfies ScenarioFn,
   roleChangeError: errorScenario('Не удалось изменить роль'),
+  /** Полный отзыв участника со страницы участника (2008-83716) — тост
+   * показывается в момент успеха и виден на списке после возврата. */
   revoked: ((options?) =>
-    notify.success('Доступ отозван', options)) satisfies ScenarioFn,
+    notify.success('Участник удален', options)) satisfies ScenarioFn,
   revokeError: errorScenario('Не удалось отозвать доступ'),
+  /** Отзыв одной ноги на странице прав (2008-83135). */
+  revokedFromProperty: ((options?) =>
+    notify.success(
+      'У участника больше нет доступа к объекту',
+      options,
+    )) satisfies ScenarioFn,
+  /** Массовый отзыв: «всем вашим объектам» (2008-84101) и «к объекту»
+   * (2035-82834) — текст попапа общий. */
+  allRevoked: ((options?) =>
+    notify.success('Все участники удалены', options)) satisfies ScenarioFn,
   invitationResent: ((options?) =>
     notify.success('Приглашение отправлено повторно', options)) satisfies ScenarioFn,
   resendError: errorScenario('Не удалось переотправить приглашение'),
@@ -254,6 +273,10 @@ const payments = {
   favoriteRemoved: ((options?) =>
     notify.success('Платеж больше не в избранном', options)) satisfies ScenarioFn,
   favoriteError: errorScenario('Не удалось обновить избранное'),
+  /** Массовое снятие в «Избранном» (макет 2009-57584) — тост вместо
+   * успех-попапа (решение владельца 19.10.2026). */
+  favoritesRemoved: ((options?) =>
+    notify.success('Платежи больше не в избранном', options)) satisfies ScenarioFn,
 } as const;
 
 /** Контекст «Аренда» (#530): успех дублирует экран успеха визарда — как у
@@ -298,9 +321,15 @@ const tasks = {
   updateError: errorScenario('Не удалось сохранить задачу'),
 } as const;
 
+/** Успехи массовых действий ленты — тосты вместо успех-попапа (тексты
+ * макетов 2329-148575 / 2329-152324, решение владельца 19.10.2026). */
 const notifications = {
+  markAllRead: ((options?) =>
+    notify.success('Все уведомления прочитаны', options)) satisfies ScenarioFn,
   markReadError: errorScenario('Не удалось отметить уведомление прочитанным'),
   markAllError: errorScenario('Не удалось отметить все уведомления'),
+  deleteAll: ((options?) =>
+    notify.success('Все уведомления удалены', options)) satisfies ScenarioFn,
   deleteError: errorScenario('Не удалось удалить уведомление'),
   deleteAllError: errorScenario('Не удалось удалить уведомления'),
 } as const;

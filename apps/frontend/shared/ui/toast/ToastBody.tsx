@@ -2,7 +2,7 @@
 
 import type {JSX, ReactNode} from 'react';
 import NextLink from 'next/link';
-import {BadgeDanger, BadgeGood, BadgeInfo, BadgeWarning, Sync} from '@/shared/assets/icons';
+import {BadgeDanger, BadgeGood, BadgeInfo, BadgeWarning, Loading} from '@/shared/assets/icons';
 import type {NotificationAction} from '@/shared/lib/notifications/types';
 import {buttonVariants, Button} from '@/shared/ui/design';
 import styles from './ToastProvider.module.css';
@@ -38,9 +38,10 @@ function VariantIcon({
         case 'info':
             return <BadgeInfo aria-hidden/>;
         case 'loading':
-            // Спиннер — канонная иконка Sync в спине (паттерн loading
-            // канонного Button): цвет наследует варианту тоста.
-            return <Sync className="h-6 w-6 animate-spin" aria-hidden/>;
+            // Спиннер — канонная иконка Icon/R/Loading в спине (решение
+            // владельца 19.10: замена Sync в тосте): цвет наследует
+            // варианту тоста.
+            return <Loading className="h-6 w-6 animate-spin" aria-hidden/>;
         case 'default':
             return null;
     }

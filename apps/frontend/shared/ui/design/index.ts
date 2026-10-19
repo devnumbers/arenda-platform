@@ -135,4 +135,3 @@ export {
   InfiniteQueryTail as InfiniteQueryHead,
   type InfiniteQueryTailQuery as InfiniteQueryHeadQuery,
 } from './infinite-query-tail';
-export { SuccessPopup, type SuccessPopupProps } from './success-popup';

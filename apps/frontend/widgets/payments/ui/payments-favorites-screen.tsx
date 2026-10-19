@@ -7,7 +7,6 @@ import { Reorder, useDragControls } from "framer-motion";
 import { useReducedMotion } from "@/shared/lib/hooks/useReducedMotion";
 import {
   ArrowLeft,
-  Cancel,
   Edit,
   Move,
   Star,
@@ -26,10 +25,7 @@ import {
   ConfirmDialog,
   EmptyState,
   IconButton,
-  Modal,
-  ModalContent,
   PageContent,
-  StatusIcon,
   StickyBottomBar,
   TopNav,
   TopNavTitle,
@@ -79,15 +75,12 @@ import { GlobalPaymentRuleIcon, PaymentsRowsSkeleton, PaymentsStateCard } from "
  * long-press плашки на таче выделяет её и включает режим выбора, дальше
  * одиночные тапы переключают; на десктопе клик = выделить (зажатие —
  * только тач-жест); при выборе заголовок → «Выбрано N», trash в навбаре —
- * на mobile так же; удаление выбранных — канон ConfirmDialog и попап
- * успеха «Платежи больше не в избранном» (StatusIcon, как #533), пустое
+ * на mobile так же; удаление выбранных — канон ConfirmDialog и тост
+ * успеха «Платежи больше не в избранном» (макет 2009-57584; тост вместо
+ * успех-попапа, решение владельца 19.10.2026), пустое
  * состояние, если избранного не осталось (889:28111). Старые StarOff-
  * пометки строк (#579) снесены. «Сохранить» применяет только порядок.
  */
-/** vaul не поднимает шит, смонтированный в одном батче с закрытием
- * другого (остаётся за нижним краем) — попап успеха ждёт выходной
- * анимации подтверждения (280ms) с запасом. */
-const SUCCESS_POPUP_DELAY_MS = 450;
 
 export function PaymentFavoritesScreen(): JSX.Element {
   const router = useRouter();
@@ -117,7 +110,6 @@ export function PaymentFavoritesScreen(): JSX.Element {
   // клик выделяет всегда, флаг не участвует.
   const [selectionArmed, setSelectionArmed] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [successShown, setSuccessShown] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const setFavorite = useSetPaymentFavorite();
@@ -176,7 +168,7 @@ export function PaymentFavoritesScreen(): JSX.Element {
   /** Trash навбара: убирает выбранные из избранного и сохраняет порядок
    * оставшихся (нарушенный порядок тоже применяется — по контракту PUT
    * это полное замещение). Правка продолжается; без оставшихся — выход.
-   * Попап успеха ждёт выходной анимации диалога (vaul-грабля выше). */
+   * Тост успеха — в момент успеха, без ожидания анимаций диалогов. */
   const deleteSelected = async (): Promise<void> => {
     if (saving) {
       return;
@@ -208,7 +200,7 @@ export function PaymentFavoritesScreen(): JSX.Element {
         setInitialOrder(remaining);
         setDraftOrder(remaining);
       }
-      window.setTimeout(() => setSuccessShown(true), SUCCESS_POPUP_DELAY_MS);
+      notify.scenarios.payments.favoritesRemoved();
     } catch (error) {
       notify.scenarios.payments.favoriteError(error);
     } finally {
@@ -389,31 +381,6 @@ export function PaymentFavoritesScreen(): JSX.Element {
         pending={saving}
         onConfirm={() => void deleteSelected()}
       />
-
-      {/* Всегда смонтирован с open-пропом: vaul не поднимает шит,
-          открытый при самом монтировании (условный рендер оставляет
-          карточку за нижним краем). Важно: без className-пропов с
-          position — twMerge перебил бы fixed шита. */}
-      <Modal
-        open={successShown}
-        onOpenChange={(open) => open || setSuccessShown(false)}
-      >
-        <ModalContent title="Платежи больше не в избранном" titleSrOnly>
-          <div className="absolute right-3 top-3 hidden desktop:block">
-            <IconButton
-              icon={<Cancel />}
-              label="Закрыть"
-              onClick={() => setSuccessShown(false)}
-            />
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <StatusIcon status="good" className="h-12 w-12" />
-            <p className="text-center text-base font-medium leading-[18px] text-success">
-              Платежи больше не в избранном
-            </p>
-          </div>
-        </ModalContent>
-      </Modal>
     </>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowDown, Block, Cancel, Kebab, TeamAdd, TimeHistory } from '@/shared/assets/icons';
+import { ArrowDown, Block, Kebab, TeamAdd, TimeHistory } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import { isPaidTariff } from '@/entities/user';
@@ -30,22 +30,18 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
-  Modal,
-  ModalContent,
   PageContent,
   PickerMenu,
   SearchPill,
-  StatusIcon,
   TopNav,
 } from '@/shared/ui/design';
-import { popParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
+import { notify } from '@/shared/lib/notifications';
 import {
   DEFAULT_PARTICIPANTS_LIST_ORDER,
   PARTICIPANTS_LIST_ORDER_PARAMS,
   serializeParticipantsListOrderToParams,
 } from '../lib/participants-list-model';
 import { ParticipantsListSkeleton } from './participants-list-skeletons';
-import { ParticipantSuccessPopup } from './participant-success-popup';
 
 /**
  * Раздел «Участники» — единая страница списка (D1–D4 #1313; Figma
@@ -71,9 +67,9 @@ import { ParticipantSuccessPopup } from './participant-success-popup';
  * «Отозвать доступ всем» — ConfirmDialog канона #629: крупный заголовок,
  * кнопки столбиком, «Отозвать и удалить» (danger). Один вызов глобального
  * DELETE /participants (#1310): все членства и pending-приглашения по
- * всем объектам, идемпотентно. Успех — попап по макету 2008-84101
- * (StatusIcon good 48 + зелёный текст, на мобайле закрытие
- * свайпом/оверлеем).
+ * всем объектам, идемпотентно. Успех — тост «Все участники удалены»
+ * (макет 2008-84101; тост вместо успех-попапа, решение владельца
+ * 19.10.2026).
  *
  * Поиск — клиентская фильтрация на поисковой странице (объём мал —
  * тарифные слоты, список приходит целиком без пагинации; канон
@@ -104,15 +100,6 @@ export function ParticipantsListScreen({
     initialOrder ?? DEFAULT_PARTICIPANTS_LIST_ORDER,
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  // «Участник удален» (макет 2008-83716): отзыв одного участника со
-  // страницы участника (#698) возвращается на список по канону истории
-  // (goBack) — попап рендерится здесь по staged-флагу. «Участник
-  // приглашен» (2010-134458, #699) — тот же механизм из приглашения
-  // раздела.
-  const stagedPopup = useParticipantPopup();
-  const deletedPopup = stagedPopup === 'deleted';
-  const invitedPopup = stagedPopup === 'invited';
 
   // Тариф решает, список или апселл (D2): null-подписка — базовый тариф
   // (канон paid-sections), сбой чтения подписки — платный фолбэк канона
@@ -157,7 +144,7 @@ export function ParticipantsListScreen({
     revokeAll.mutate(undefined, {
       onSuccess: () => {
         setConfirmOpen(false);
-        setShowSuccess(true);
+        notify.scenarios.access.allRevoked();
       },
     });
   };
@@ -318,45 +305,6 @@ export function ParticipantsListScreen({
         pending={revokeAll.isPending}
         onConfirm={confirmRevokeAll}
       />
-
-      {deletedPopup && (
-        <ParticipantSuccessPopup
-          title="Участник удален"
-          onClose={() => popParticipantPopup()}
-        />
-      )}
-
-      {/* «Участник приглашен» (макет 2010-134458): возврат из приглашения
-       * (#699); список под попапом перечитан инвалидацией участников. */}
-      {invitedPopup && (
-        <ParticipantSuccessPopup
-          title="Участник приглашен"
-          onClose={() => popParticipantPopup()}
-        />
-      )}
-
-      {/* Попап успеха (макет 2008-84101): зелёная галочка 48 и текст;
-       * список под ним уже перечитан инвалидацией. Крестик — явно в углу
-       * карточки на десктопе; на мобайле закрытие — свайп/оверлей, шит
-       * канона. */}
-      {showSuccess && (
-        <Modal open onOpenChange={(open) => open || setShowSuccess(false)}>
-          <ModalContent title="Все участники удалены" titleSrOnly>
-            <IconButton
-              icon={<Cancel />}
-              label="Закрыть"
-              onClick={() => setShowSuccess(false)}
-              className="hidden desktop:absolute desktop:right-3 desktop:top-3 desktop:block"
-            />
-            <div className="flex flex-col items-center gap-2">
-              <StatusIcon status="good" className="h-12 w-12" />
-              <p className="text-center text-base font-medium leading-[18px] text-success">
-                Все участники удалены
-              </p>
-            </div>
-          </ModalContent>
-        </Modal>
-      )}
     </>
   );
 }

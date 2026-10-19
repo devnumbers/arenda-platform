@@ -154,7 +154,7 @@ test('чип-фильтр ролей: «Просмотр» оставляет з
   await expect(page.getByText('Иван (Вы)')).toBeVisible();
 });
 
-test('приглашение от объекта: свой email — 400, свежая почта — попап и SQL; сид восстанавливается', async ({ page, seededUser }) => {
+test('приглашение от объекта: свой email — 400, свежая почта — тост и SQL; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
@@ -174,17 +174,19 @@ test('приглашение от объекта: свой email — 400, све
   await page.getByRole('button', { name: 'Пригласить' }).filter({ hasText: 'Пригласить' }).click();
   await expect(page.getByText('Нельзя добавить себя участником')).toBeVisible();
 
-  // Свежая почта — pending-приглашение, возврат на список с попапом.
+  // Свежая почта — pending-приглашение, возврат на список с тостом.
   await emailField.fill(INVITE_EMAIL);
   await page.getByRole('radio', { name: 'Управление' }).click();
   try {
     await page.getByRole('button', { name: 'Пригласить' }).filter({ hasText: 'Пригласить' }).click();
 
     await expect(screenHeader(page).getByText('Участники объекта')).toBeVisible();
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Тост «Участник приглашен» (2035-82202; тост вместо успех-попапа,
+    // решение владельца 19.10.2026); закрываем кнопкой, чтобы не
+    // перехватывал клики (канон contacts-спек).
+    const toast = page.locator('.Toastify__toast', { hasText: 'Участник приглашен' });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
 
     // Pending-строка по D6 (3298-75434): титул «Пользователь» (бекенд
     // display_name pending не наполняет — лейбл #1105 ставит VM), почта
@@ -262,7 +264,7 @@ test('безымянный участник: «Пользователь» в т�
   }
 });
 
-test('кебаб «Отозвать доступ всем»: подтверждение, попап, владелец остаётся; сид восстанавливается', async ({ page, seededUser }) => {
+test('кебаб «Отозвать доступ всем»: подтверждение, тост, владелец остаётся; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/properties/${APARTMENT_ID}/participants`);
 
@@ -285,11 +287,12 @@ test('кебаб «Отозвать доступ всем»: подтвержд�
   try {
     await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
 
-    // Попап успеха (2035-82834): владелец в списке, участников нет.
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Все участники удалены' }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Тост успеха (2035-82834; тост вместо успех-попапа, решение
+    // владельца 19.10.2026): владелец в списке, участников нет. Тост
+    // закрываем кнопкой, чтобы не перехватывал клики.
+    const toast = page.locator('.Toastify__toast', { hasText: 'Все участники удалены' });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
     await expect(page.getByText('Иван (Вы)')).toBeVisible();
     await expect(page.getByRole('button', { name: /Мария Петрова/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);

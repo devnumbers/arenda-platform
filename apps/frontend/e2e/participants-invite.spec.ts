@@ -10,7 +10,7 @@ import {
 // Экран «Пригласите участника» (карта #692, тикет #699): полноэкранный
 // флоу приглашения из хаба — почта, сегмент роли, свёрнутый выбор
 // объектов («Все N объектов» / выбранные), пикер «Выбрать объект» с
-// tri-state «Все объекты», POST /participants/invite и попап «Участник
+// tri-state «Все объекты», POST /participants/invite и тост «Участник
 // приглашен» на цели возврата. Сид: владелец «Квартиры на Ленина»
 // (33333333-…), «Гаража на Садовой» (44444444-…) и «Студии на Полевой»
 // (46464646-…) — три объекта в скоупе; Мария Петрова (12111111-…21)
@@ -111,12 +111,12 @@ test('пикер «Выбрать объект»: tri-state «Все объек�
   await expect(page.getByText('Укажите корректную электронную почту')).toBeVisible();
 });
 
-test('приглашение незарегистрированной почты: все объекты, попап «Участник приглашен», pending-ряд на списке; сид восстанавливается', async ({ page, seededUser }) => {
+test('приглашение незарегистрированной почты: все объекты, тост «Участник приглашен», pending-ряд на списке; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
 
   // Путь пользователя: раздел → кебаб → «Пригласить участника» (CTA
   // нижней панели снесена с хабом, D1 #1313; нужна история — возврат
-  // goBack ведёт на раздел с попапом).
+  // goBack ведёт на раздел с тостом).
   await page.goto('/participants');
   await openSectionInvite(page);
   await expect(page.getByRole('heading', { name: 'Пригласите участника' })).toBeVisible();
@@ -128,15 +128,15 @@ test('приглашение незарегистрированной почты
       .filter({ hasText: 'Пригласить' })
       .click();
 
-    // Попап «Участник приглашен» (2010-134458) на разделе «Участники»;
-    // URL с якорем конца строки отличает раздел от вложенных маршрутов
-    // (заголовок хаба не проверяем: открытая модалка прячет фон из
-    // a11y-дерева — aria-modal).
+    // Тост «Участник приглашен» (2010-134458) — в момент успеха, виден на
+    // разделе после возврата (тост вместо успех-попапа, решение владельца
+    // 19.10.2026); закрываем кнопкой, чтобы не перехватывал клики (канон
+    // contacts-спек). URL с якорем конца строки отличает раздел от
+    // вложенных маршрутов.
     await expect(page).toHaveURL(/\/participants$/);
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    const toast = page.locator('.Toastify__toast', { hasText: 'Участник приглашен' });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
 
     // Pending-ряд появился: почта — титул, бейдж «Аккаунт не создан»
     // (D3 #1313: у pending-агрегата ровно этот статус).
@@ -157,23 +157,22 @@ test('приглашение незарегистрированной почты
   await expect(page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) })).toHaveCount(0);
 });
 
-test('приёмник-раздел: приглашение из раздела → возврат на /participants → попап «Участник приглашен» (цикл ×3); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+test('приёмник-раздел: приглашение из раздела → возврат на /participants → тост «Участник приглашен» (цикл ×3); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
   await openCabinetWithSeededSession(page, seededUser);
-  // Мобильная канва — условия обхода #759: попап здесь рисует vaul-шит,
-  // и именно на ней #771 поймал «невидимый» попап (шит за сгибом).
+  // Мобильная канва — тост сверху по центру, флоу приглашения проверяем
+  // на телефоне.
   await page.setViewportSize({ width: 375, height: 667 });
 
   // P2-хвост #759 / #771: вход во флоу — из раздела «Участники» (кебаб;
   // CTA нижней панели снесена с хабом, D1 #1313), возврат goBack ведёт на
-  // раздел — попап рисует список (D3). На приёмнике была поймана редкая
-  // потеря попапа (1 из 8 прогонов). Цикл повторов — регрессионная сетка
-  // нестабильности; у каждого цикла своя почта, иначе повторное
-  // приглашение уходит в granted=0 без попапа.
+  // раздел. Цикл повторов — регрессионная сетка нестабильности; у каждого
+  // цикла своя почта, иначе повторное приглашение уходит в granted=0
+  // без тоста и без возврата.
   await page.goto('/participants');
 
   // Самозаживление: провал предыдущего прогона до очистки оставил бы
-  // pending-приглашения — повторное приглашение ушло бы в granted=0 без
-  // попапа и отравило бы весь цикл.
+  // pending-приглашения — повторное приглашение ушло бы в granted=0 и
+  // отравило бы весь цикл.
   await execE2eSql(`DELETE FROM property_member_invitations WHERE email LIKE 'e2e-invite-hub-%'`);
 
   for (let cycle = 1; cycle <= 3; cycle++) {
@@ -188,37 +187,20 @@ test('приёмник-раздел: приглашение из раздела 
       .filter({ hasText: 'Пригласить' })
       .click();
 
-    // Приёмник goBack — именно хаб, с попапом «Участник приглашен»
-    // (2010-134458). URL с якорем конца строки отличает хаб от списка
-    // (заголовок хаба не проверяем: открытая модалка прячет фон из
-    // a11y-дерева — aria-modal).
+    // Приёмник goBack — именно хаб, с тостом «Участник приглашен»
+    // (2010-134458; тост вместо успех-попапа, решение владельца
+    // 19.10.2026). URL с якорем конца строки отличает хаб от списка.
     await expect(page).toHaveURL(/\/participants$/);
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
-    ).toBeVisible();
-    // Попап целиком в вьюпорте: в DOM он был и когда шит терял
-    // position:fixed (#771: tailwind-merge снимал fixed под relative
-    // потребителя) и рисовался за сгибом — toBeVisible такой дефект не
-    // ловит, прямоугольник ловит. Поллинг — шит въезжает 0.5s, ждём
-    // завершение слайда, а не первый кадр.
-    const viewport = page.viewportSize();
-    await expect
-      .poll(
-        async () => {
-          const box = await page.getByRole('dialog').boundingBox();
-          return box === null ? Number.POSITIVE_INFINITY : box.y + box.height;
-        },
-        { timeout: 3_000 },
-      )
-      .toBeLessThanOrEqual(viewport ? viewport.height : Number.POSITIVE_INFINITY);
-    expect(
-      await page.getByRole('dialog').boundingBox().then((box) => (box === null ? null : box.y)),
-    ).toBeGreaterThanOrEqual(0);
+    const toast = page.locator('.Toastify__toast', { hasText: 'Участник приглашен' });
+    await expect(toast).toBeVisible();
     if (cycle === 1) {
-      await captureScreen(page, testInfo, 'participants-invite-hub-popup');
+      await captureScreen(page, testInfo, 'participants-invite-hub-toast');
     }
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
+    // Ждём полного ухода тоста: на локальном стеке следующий цикл
+    // успевает показать новый до конца 350ms exit-анимации предыдущего —
+    // два узла под общим локатором дают strict violation.
+    await expect(page.locator('.Toastify__toast')).toHaveCount(0);
 
     // Серверная правда: pending-приглашения на все 3 объекта снапшота;
     // чистим сразу, чтобы циклы были независимы.
@@ -259,11 +241,11 @@ test('приглашение зарегистрированной почты н�
       .click();
 
     // granted=2 (suspended — у Анны нет подписки, тарифный слот превышен;
-    // грабля #698) — попап успеха, возврат на список.
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Участник приглашен' }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    // грабля #698) — тост успеха, возврат на список; закрываем кнопкой,
+    // чтобы не перехватывал клики.
+    const toast = page.locator('.Toastify__toast', { hasText: 'Участник приглашен' });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
 
     // Чип агрегата Анны сменился: активна квартира + suspended гараж и
     // студия — «Превышен лимит объектов» (макет 2036-84861).

@@ -801,8 +801,7 @@ h-137 оставлял объектным пустоту в середине); �
   паттерн трёх состояний idle / pending / error-retry (secondary small,
   прецедент `profile/tariff/payment-methods/add`).
   *Хаптика* — исходы действия (успех/ошибка) вибрируют вместе с
-  видимым сигналом: тост (`notify`, включая promise-путь) или попап
-  успеха (`SuccessPopup`, `ParticipantSuccessPopup`) — модуль
+  видимым сигналом: тост (`notify`, включая promise-путь) — модуль
   `action-haptics.ts` (план 018; Apple §13: каузальность и utility).
   Коммит без видимого сигнала не хаптится; пресс не хаптится;
   info/warning/loading молчат. Только Android (`navigator.vibrate`),
@@ -834,8 +833,8 @@ h-137 оставлял объектным пустоту в середине); �
   — сменой модальности на клавиатурную (Escape по клик-фокусу
   перематчивает `:focus-visible` без фокус-события); для этого флейвора
   возврат делает blur + свежий фокус с опцией.
-  Смонтирован на Modal (обе канвы — Radix-карточка и vaul-шит),
-  SuccessPopup и MenuContent; more-sheet не тронут (modal={false} —
+  Смонтирован на Modal (обе канвы — Radix-карточка и vaul-шит) и
+  MenuContent; more-sheet не тронут (modal={false} —
   возврата фокуса нет, залипаться нечему). Живая эвристика —
   e2e `modal-focus-ring.spec.ts`, механика — юнит-канон
   `focus-restore.test.ts`.
@@ -1069,7 +1068,6 @@ h-137 оставлял объектным пустоту в середине); �
 | `Category Icon` | круглый слот иконки в строках (§6) — канон `CircleIcon` (кольцо 2.5px по подложке, варианты muted/white, #846); с каталог-подложкой и бейджами — `CategoryIcon`; категория уведомлений — `NotificationCategoryIcon` (3D-PNG эталоны + запечённая точка, #744) |
 | `StatusHouseBadge` | бейджи статуса объекта (`PropertyStatusBadge`) |
 | `Notification Dot` | `notification-dot.svg` (§10, запечённый) |
-| `Modal` вариант Popup (успех-попап, 2329:148661) | `success-popup.tsx` (#744 — карточка на любой ширине, фон не затемняется) |
 | `NumbersAlerts` | не иконка: живое число в пилюле, design-компонента нет |
 | `Icon/Bold/*`, `Icon/R/*`, `Icon/S/*` | барель `shared/assets/icons` (§10) |
 | `DesktopMenuButton` | `desktop-menu-button.tsx`; из них собраны `DesktopSidebar` и `DesktopNavPills` — десктопный хром (§2, #561) |
