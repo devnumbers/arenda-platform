@@ -63,6 +63,33 @@ func TestFeedbackHandlersSendFeedback(t *testing.T) {
 		assert.Contains(t, sender.msg.TextBody, "user@example.com")
 	})
 
+	// Решение владельца 19.10: на stage/prod Caddy режет /api/* напрямую в
+	// бекенд (префикс снимается), лендинговый прокси остаётся позади —
+	// браузерная форма приходит с honeypot-полем website в теле. Пустое
+	// поле декодируется и игнорируется; заполненное — фейковый успех без
+	// письма (та же семантика, что у прокси).
+	t.Run("accepts the browser form payload with the empty honeypot", func(t *testing.T) {
+		t.Parallel()
+		sender := &captureMailer{}
+		h := NewFeedbackHandlers(sender, "owner@example.com", nil)
+
+		rr := doFeedbackJSON(t, h.SendFeedback, `{"email":"user@example.com","message":"вопрос","website":""}`)
+
+		require.Equal(t, http.StatusNoContent, rr.Code)
+		assert.Contains(t, sender.msg.TextBody, "вопрос")
+	})
+
+	t.Run("answers success without mailing when the honeypot is filled", func(t *testing.T) {
+		t.Parallel()
+		sender := &captureMailer{}
+		h := NewFeedbackHandlers(sender, "owner@example.com", nil)
+
+		rr := doFeedbackJSON(t, h.SendFeedback, `{"email":"bot@example.com","message":"spam","website":"http://spam.example"}`)
+
+		require.Equal(t, http.StatusNoContent, rr.Code)
+		assert.Empty(t, sender.msg.To)
+	})
+
 	t.Run("redacts sensitive data from the message body", func(t *testing.T) {
 		t.Parallel()
 		sender := &captureMailer{}

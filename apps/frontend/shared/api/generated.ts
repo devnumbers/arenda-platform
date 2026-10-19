@@ -4083,6 +4083,8 @@ export interface components {
             email: string;
             /** @description Feedback question text */
             message: string;
+            /** @description Honeypot anti-spam field of the landing form (invisible to humans). The browser form posts it straight through the /api/* Caddy route (решение владельца 19.10): empty means a human, filled means a bot — the endpoint answers success without sending mail. */
+            website?: string;
         };
         /** @description День оплаты аренды: число месяца 1–31 или строка "last" — «последний день месяца». «31-е число» и "last" — одно поведение: в коротком месяце прижимается к последнему дню (ADR 0053 §4). */
         RentalPaymentDay: number | "last";

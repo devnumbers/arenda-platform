@@ -25,9 +25,12 @@ const (
 var errInvalidFeedbackEmail = errors.New("invalid feedback email")
 
 // FeedbackHandlers implements the public landing feedback endpoint
-// (POST /feedback, карта #1010): the landing's server-side proxy forwards
-// the «Задать вопрос» modal form, the question is emailed to the configured
-// FEEDBACK_EMAIL recipient. Nothing is persisted.
+// (POST /feedback, карта #1010): the question is emailed to the configured
+// FEEDBACK_EMAIL recipient. Nothing is persisted. Two callers reach it:
+// the landing's server-side proxy (strips the honeypot itself) and, since
+// the owner's 19.10 decision, the browser form directly — Caddy routes
+// /api/* to the backend with the prefix stripped, so the raw form body
+// arrives with the honeypot field, which the handler answers itself.
 type FeedbackHandlers struct {
 	mailer    mailer.Sender
 	recipient string
@@ -58,6 +61,13 @@ func (h *FeedbackHandlers) SendFeedback(w http.ResponseWriter, r *http.Request) 
 	if err := DecodeJSONBody(w, r, &body); err != nil {
 		LoggerFromContext(ctx).WarnContext(ctx, "failed to decode feedback request", slog.String("error", SanitizeError(err)))
 		WriteProblem(ctx, w, http.StatusBadRequest, Problem(ctx, "Bad request", "Некорректное тело запроса"))
+		return
+	}
+	// Honeypot (неконтролируемое поле формы, человеком не видится):
+	// заполненное — бот, фейковый успех без письма и без валидации остального
+	// (та же семантика, что у лендингового прокси).
+	if body.Website != nil && strings.TrimSpace(*body.Website) != "" {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	email, err := normalizeFeedbackEmail(body.Email)

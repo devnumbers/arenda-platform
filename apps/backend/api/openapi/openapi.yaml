@@ -9150,6 +9150,15 @@ components:
           type: string
           maxLength: 1000
           description: Feedback question text
+        website:
+          type: string
+          maxLength: 2048
+          description: >-
+            Honeypot anti-spam field of the landing form (invisible to
+            humans). The browser form posts it straight through the /api/*
+            Caddy route (решение владельца 19.10): empty means a human,
+            filled means a bot — the endpoint answers success without
+            sending mail.
 
     RentalPaymentDay:
       description: >-
