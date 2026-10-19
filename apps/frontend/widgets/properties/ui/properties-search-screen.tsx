@@ -79,7 +79,13 @@ export function PropertiesSearchScreen(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        {(searchQuery.isPending || (searching && searchQuery.isFetching && properties.length === 0)) ? (
+        {/* Скелетон — только в поиске: при пустом поле хук выключен
+         * (enabled-гард, 400-контракт), а выключенный запрос TanStack v5
+         * держит isPending вечно — голый isPending рисовал бы скелетон
+         * вместо подсказки на всём открытии (ad9b5b4d6). */}
+        {(searching &&
+          (searchQuery.isPending ||
+            (searchQuery.isFetching && properties.length === 0))) ? (
           <PropertiesSearchSkeleton />
         ) : searchQuery.isError ? (
           <PropertiesSearchErrorCard onRetry={() => void searchQuery.refetch()} loading={searchQuery.isFetching} />

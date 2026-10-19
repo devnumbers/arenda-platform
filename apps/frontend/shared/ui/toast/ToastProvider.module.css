@@ -15,17 +15,23 @@
    нативный ReactToastify.css определяет тот же var на :root (320), и при
    совпадающей специфичности порядок CSS-чанков решает — на живой сборке
    побеждала нативная двойка (замер приёмкой 13.10). Элементная переменная
-   бьёт любое :root-наследование. */
+   бьёт любое :root-наследование. Поля от краёв экрана — 24 на всех ярусах
+   (решение владельца 19.10.2026): нативные дефолты библиотеки (16) и
+   мобильные 12 первого ребилда сняты; max с env держит чёлку/вырезы в
+   standalone. Нативное правило top-right читает эти же переменные —
+   десктопному контейнеру больше ничего задавать не нужно. */
 .container {
     --toastify-toast-width: 460px;
+    --toastify-toast-top: max(24px, env(safe-area-inset-top));
+    --toastify-toast-right: max(24px, env(safe-area-inset-right));
     pointer-events: none;
 }
 
 @media (max-width: 767px) {
     .container {
-        --toastify-toast-width: calc(100vw - 24px);
-        --toastify-toast-right: 12px;
-        --toastify-toast-left: 12px;
+        --toastify-toast-width: calc(100vw - 48px);
+        --toastify-toast-right: 24px;
+        --toastify-toast-left: 24px;
     }
 }
 
@@ -41,14 +47,17 @@
 }
 
 /* Absolute-укладка, мобайл (top-center): контейнер растягивается в полосу
-   между полями 12 (нативный left:50% + translateX(-50%) снят — transform
+   между полями 24 (нативный left:50% + translateX(-50%) снят — transform
    на контейнере конфликтовал бы с центрированием), карточки центрируются
    margin-inline: auto без transform — кейфреймы и drag держат transform
-   карточки целиком. */
+   карточки целиком. top — явно элементным правилом: нативный блок ≤480
+   перебивает --toastify-toast-top голым env(safe-area-inset-top), который
+   в браузерной вкладке равен 0 — тост прижимался к самому краю. */
 @media (max-width: 767px) {
     .container:global(.Toastify__toast-container--top-center) {
-        left: 12px;
-        right: 12px;
+        top: max(24px, env(safe-area-inset-top));
+        left: 24px;
+        right: 24px;
         width: auto;
         transform: none;
     }

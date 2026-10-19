@@ -339,6 +339,33 @@ test('кнопка «Настройки» истории — над видимы
   }
 });
 
+// Safe-area нижнего хрома — ровно env(safe-area-inset-bottom), без
+// хардкорного минимума (решение владельца 19.10.2026: фолбэк 12px из
+// max(12px, env) снесён во всей связке бар/лист/панель/запас + плавающий
+// хром истории). В браузере e2e env = 0, поэтому спека держит числа
+// «только то, что сам посчитал хром»: у бара нет своего паддинга (раньше
+// 12px минимума), «Настройки» висит на 72 (ряд табов) + 12 (зазор
+// паттерна «CTA над TabBar») над краем — связка считает одну высоту.
+test('таб-бар без хардкорного минимума safe-area (мобайл и планшет)', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+
+  for (const viewport of [MOBILE, TABLET]) {
+    await page.setViewportSize(viewport);
+
+    await page.goto('/history');
+    const tabbar = page.getByRole('navigation', { name: 'Нижняя навигация' });
+    await expect(tabbar).toBeVisible();
+    const paddingBottom = await tabbar.evaluate((nav) => getComputedStyle(nav).paddingBottom);
+    expect(paddingBottom).toBe('0px');
+
+    const settings = page.getByRole('button', { name: 'Настройки' });
+    await expect(settings).toBeVisible();
+    const settingsBox = await settings.boundingBox();
+    const bottomGap = viewport.height - ((settingsBox?.y ?? 0) + (settingsBox?.height ?? 0));
+    expect(Math.abs(bottomGap - 84)).toBeLessThanOrEqual(1);
+  }
+});
+
 // Полноэкранный пикер дня оплаты аренды (#530/#532): на планшете и ПК TopNav
 // внутри поверхности фиксируется (tablet:fixed) и выпадает из её потока —
 // без компенсации tablet:mt-[72px] (канон CalendarDatePicker) контент

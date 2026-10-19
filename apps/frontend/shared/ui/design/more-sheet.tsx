@@ -120,7 +120,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps): JSX.Element {
           onClick={() => handleOpenChange(false)}
         />
         <Drawer.Content
-          className="more-sheet-drawer pointer-events-auto fixed inset-x-0 bottom-0 z-[45] rounded-t-sheet bg-white pb-[calc(72px+max(12px,env(safe-area-inset-bottom)))] font-sans outline-none"
+          className="more-sheet-drawer pointer-events-auto fixed inset-x-0 bottom-0 z-[45] rounded-t-sheet bg-white pb-[calc(72px+env(safe-area-inset-bottom))] font-sans outline-none"
         >
           <Drawer.Title className="sr-only">Еще</Drawer.Title>
           <SheetDragHandle wide />

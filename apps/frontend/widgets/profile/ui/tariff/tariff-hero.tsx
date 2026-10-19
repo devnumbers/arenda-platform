@@ -15,10 +15,16 @@ const heroLinkFocus =
  * 1943-115049): скругление 32, паддинг 32, вертикальный ритм 24.
  * Платные тарифы и базовый — фото-фон (imageRef 253b396c…, cover) с белым
  * текстом (подписи 60% opacity); остановленный — серая карточка с тёмным
- * текстом (опечатка макета «Про остановлен » исправлена). Внутри карточки
- * две ссылки-строки: заголовок с шевроном (→ «О тарифе») и нижний ряд —
- * «О тарифе» (grace — CTA «Оплатить тариф» на флоу оплаты, 1917-72464);
- * карточка целиком ссылкой не является, чтобы не вкладывать интерактивы. */
+ * текстом (опечатка макета «Про остановлен » исправлена). Карточка
+ * кликается целиком (решение владельца 19.10.2026, сменило прежний канон
+ * «целиком ссылкой не является»): stretched-link — ссылка-заголовок
+ * растягивает ::after на всю карточку (→ «О тарифе»), клик в любое место,
+ * включая поле паддинга, ведёт туда же; сама ссылка не позиционирована,
+ * псевдо якорится в relative-обёртку контента и уходит на -inset-8 — ровно
+ * по паддингу p-8 накрывает карточку до скруглений (overflow-hidden).
+ * Нижняя строка — «О тарифе» (grace — CTA «Оплатить тариф» на флоу оплаты,
+ * 1917-72464) — самостоятельная positioned-зона поверх оверлея (позже в
+ * DOM, кликается по-своему). */
 export function TariffHero({ hero }: { readonly hero: TariffHeroModel }): JSX.Element {
   const stopped = hero.kind === 'stopped';
 
@@ -44,9 +50,17 @@ export function TariffHero({ hero }: { readonly hero: TariffHeroModel }): JSX.El
       )}
 
       <div className="relative flex flex-col gap-6">
+        {/* Stretched-link: псевдоэлемент якорится в ЭТУ relative-обёртку
+         * (она держит контент над фото) и растягивается на её поле — минус
+         * 32 по всем сторонам ровно накрывает паддинг p-8 карточки, так что
+         * кликабельна вся карточка, а не только строки. Ссылка сама остаётся
+         * непозиционированной. */}
         <NextLink
           href={ROUTES.profileTariffAbout}
-          className={cn('flex items-center justify-between gap-4', heroLinkFocus)}
+          className={cn(
+            'flex items-center justify-between gap-4 after:absolute after:-inset-8 after:content-[""]',
+            heroLinkFocus,
+          )}
         >
           <h2 className="m-0 text-2xl font-semibold leading-8">{hero.title}</h2>
           <SmallArrowRight className="shrink-0" aria-hidden />
@@ -74,9 +88,14 @@ export function TariffHero({ hero }: { readonly hero: TariffHeroModel }): JSX.El
           </div>
         )}
 
+        {/* Positioned поверх stretched-оверлея (позже в DOM): в grace здесь
+         * «Оплатить тариф» с другим назначением — своя кликабельная зона. */}
         <NextLink
           href={hero.kind === 'grace' ? ROUTES.profileTariffChange : ROUTES.profileTariffAbout}
-          className={cn('flex items-center gap-1.5 text-base font-medium leading-[18px]', heroLinkFocus)}
+          className={cn(
+            'relative flex items-center gap-1.5 text-base font-medium leading-[18px]',
+            heroLinkFocus,
+          )}
         >
           <InfoSmall className="h-4 w-4 shrink-0" aria-hidden />
           {hero.kind === 'grace' ? 'Оплатить тариф' : 'О тарифе'}

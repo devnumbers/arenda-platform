@@ -25,7 +25,7 @@ export function PageContent({ children, className, aboveTabBarFooter = false }: 
       className={cn(
         'mx-auto flex w-full max-w-column flex-col pt-6 pb-[136px] font-sans',
         aboveTabBarFooter &&
-          'max-desktop:pb-[calc(136px_+_72px_+_max(12px,env(safe-area-inset-bottom)))]',
+          'max-desktop:pb-[calc(136px_+_72px_+_env(safe-area-inset-bottom))]',
         className,
       )}
     >
