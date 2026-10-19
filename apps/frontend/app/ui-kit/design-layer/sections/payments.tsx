@@ -67,8 +67,11 @@ export function PaymentButtonsSection(): JSX.Element {
         <div className={styles.group}>
             <h3 className={styles.groupTitle}>PaymentRowButton · PaymentCardButton — композиты платежей (#462)</h3>
             <p className={styles.groupTitle}>
-                Строка операции (White/Gray) и карточка просроченного 168.5px; danger красит
-                сумму и срок (#452). Слева — CategoryIcon с серым кантом на серой плитке.
+                Строка операции (White/Gray) и карточка-плитка fluid: 2 на
+                мобайл-ярусе, 3 на планшете/ПК (18.10). danger у строки красит
+                сумму и срок (#452), у плитки — только срок, сумма чёрная
+                (макеты 18.10). Слева — CategoryIcon с серым кантом на серой
+                плитке.
             </p>
             <div className={styles.column} style={{ maxWidth: 480 }}>
                 <PaymentRowButton

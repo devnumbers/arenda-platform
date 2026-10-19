@@ -663,6 +663,7 @@ feel-check на пересобранном стеке): push-back фона мо�
 | 053 | [Календарь: лента по убыванию — история append'ом вниз](053-calendar-descending-feed.md) | HIGH | DONE |
 | 054 | [Календарь: макет Т-Банка — будущее снизу, anchorTo:'end'](054-calendar-inverted-feed.md) | HIGH | DONE |
 | 055 | [Календарь: стена не держит — цепной рост и жесты у края](055-calendar-wall-recovery.md) | HIGH | DONE |
+| 057 | [Платежи: ленты хаба — живой тач, липкий край, fluid-плитки, без снапа](057-payments-hub-rails.md) | HIGH | DONE |
 
 ## Порядок исполнения
 
