@@ -30,8 +30,8 @@ export default function App() {
       loginPage={LoginPage}
       dashboard={Dashboard}
     >
-      <Resource name="users" list={UserList} show={UserShow} icon={PeopleIcon} recordRepresentation="phone" />
-      <Resource name="subscriptionPayments" list={SubscriptionPaymentList} show={SubscriptionPaymentShow} icon={PaymentIcon} recordRepresentation="userPhone" />
+      <Resource name="users" list={UserList} show={UserShow} icon={PeopleIcon} recordRepresentation="email" />
+      <Resource name="subscriptionPayments" list={SubscriptionPaymentList} show={SubscriptionPaymentShow} icon={PaymentIcon} recordRepresentation="userEmail" />
       <Resource name="tariffs" list={TariffList} icon={SellIcon} recordRepresentation={tariffRepresentation} />
       <Resource name="properties" list={PropertyList} show={PropertyShow} icon={HomeWorkIcon} recordRepresentation="name" />
       <Resource name="propertyContacts" recordRepresentation="name" />

@@ -27,7 +27,6 @@ import { SubscriptionActions, SubscriptionStateFields, SubscriptionTransitionsPa
 import { TimeTravelPanel } from './timeTravel';
 
 const userFilters = [
-  <TextInput key="phone" source="phone" label="Телефон" />,
   <TextInput key="email" source="email" label="Email" />,
   <SelectInput key="role" source="role" label="Роль" choices={roleChoices} />,
   <SelectInput
@@ -56,9 +55,8 @@ const userAuditLogTabFilters = [
 export const UserList = () => (
   <List filters={userFilters} sort={{ field: 'createdAt', order: 'DESC' }}>
     <Datagrid rowClick="show" bulkActionButtons={false}>
-      <TextField source="phone" sortable={false} />
-      <FullNameField source="surname" label="ФИО" sortable={false} />
       <TextField source="email" sortable={false} />
+      <FullNameField source="surname" label="ФИО" sortable={false} />
       <TextField source="role" sortable={false} />
       <ChoiceChipField source="subscriptionStatus" choices={subscriptionStatusChoices} sortable={false} />
       <DateField source="createdAt" showTime />
@@ -70,7 +68,6 @@ export const UserShow = () => (
   <Show>
     <TabbedShowLayout>
       <Tab label="Профиль">
-        <TextField source="phone" />
         <TextField source="email" />
         <SelectField source="role" choices={roleChoices} />
         <DateField source="createdAt" showTime />
