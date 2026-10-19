@@ -14,8 +14,6 @@ services:
   postgres:
     image: postgres:18
     restart: unless-stopped
-    mem_limit: 768m
-    cpus: 1.00
     command:
       - postgres
       - -c
@@ -42,8 +40,6 @@ services:
   backend:
     image: ${BACKEND_IMAGE}
     restart: unless-stopped
-    mem_limit: 768m
-    cpus: 1.00
     logging: *default-logging
     env_file: *prod-env-file
     environment:
@@ -67,8 +63,6 @@ services:
   frontend:
     image: ${FRONTEND_IMAGE}
     restart: unless-stopped
-    mem_limit: 512m
-    cpus: 0.75
     logging: *default-logging
     environment:
       BACKEND_URL: http://backend:8080
@@ -89,8 +83,6 @@ services:
   landing:
     image: ${LANDING_IMAGE}
     restart: unless-stopped
-    mem_limit: 256m
-    cpus: 0.25
     logging: *default-logging
     environment:
       # Tariff-aware хедер лендинга читает /me напрямую по compose-сети
@@ -119,8 +111,6 @@ services:
   admin:
     image: ${ADMIN_IMAGE}
     restart: unless-stopped
-    mem_limit: 128m
-    cpus: 0.25
     logging: *default-logging
     depends_on:
       backend:
