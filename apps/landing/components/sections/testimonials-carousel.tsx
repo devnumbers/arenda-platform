@@ -317,7 +317,10 @@ function TestimonialsStripCard({ review }: { review: Review }) {
 // полоса уезжает за край, новая выезжает из-за края (баг «картинка слева
 // просто пропадает» был от того, что обе дальние стояли справа и левая
 // полоса телепортировалась прыжком). Управление: свайп 1:1 за пальцем
-// (старт после 5px), снап по порогу 160px или флику 0.5px/ms; медленный
+// (старт после 10px и только при |dx| > |dy| — вертикальное намерение
+// остаётся скроллу страницы, решение владельца 19.10; pointercancel —
+// не свайп, лента возвращается в покой), снап по порогу 160px или флику
+// 0.5px/ms; медленный
 // недотянутый свайп — отскок (у Яндекса так же); горизонтальное
 // колесо/трекпад — шаг (нативный addEventListener passive:false — React
 // onWheel пассивен, preventDefault кидал ошибку консоли); тап по
@@ -334,7 +337,16 @@ const MOB_STEP = 310;
 // постоянные слои — 10 фотокарточек на страницу впустую (5 мобайл + 5
 // десктоп), память на дешёвых телефонах.
 const MOB_LAYER_MS = 620;
-const MOB_DRAG_ACTIVATE_PX = 5;
+// Активация драга (решение владельца 19.10, «карусель листается при
+// скролле страницы»): раньше порог был 5px по одной оси X — вертикальный
+// скролл страницы с дрейфом пальца ≥5px по X активировал драг; браузер
+// забирал жест под нативный скролл, pointercancel приходил с координатами
+// (0,0), и фантомная дельта −startX пробивала порог длинного свайпа —
+// лента прыгала на два слайда посреди скролла страницы (Chromium/Android;
+// на iOS тот же жест давал подёргивание). Теперь порог 10px с гейтом
+// направления: горизонталь обязана вести вертикаль (|dx| > |dy|) —
+// гистерезис по канону прерываемых жестов (Apple, WWDC 2018 §10).
+const MOB_DRAG_ACTIVATE_PX = 10;
 // Порог долгого свайпа — половина слайда (longSwipes Яндекса).
 const MOB_LONG_SWIPE_PX = 160;
 // Порог флика по скорости пальца (shortSwipes).
@@ -382,8 +394,11 @@ function TestimonialsMobileCarousel() {
   const drag = useRef<{
     id: number;
     startX: number;
+    // Стартовая Y — гейт направления при активации (|dx| > |dy|):
+    // вертикальное намерение остаётся скроллу страницы.
+    startY: number;
     // g на момент захвата: захват в полёте подхватывает ленту с живой
-    // интерполированной позиции (дробной), а не с реставра покоя.
+    // интерполированной позиции (дробной), а не с рестава покоя.
     g0: number;
     // Окно последних точек жеста: скорость броска считается по ~100мс,
     // не по последнему move — на таче он почти всегда стоит на месте.
@@ -501,6 +516,7 @@ function TestimonialsMobileCarousel() {
     drag.current = {
       id: event.pointerId,
       startX: event.clientX,
+      startY: event.clientY,
       g0: liveG(),
       samples: [{ t: event.timeStamp, x: event.clientX }],
       moved: false,
@@ -515,7 +531,11 @@ function TestimonialsMobileCarousel() {
     armLayers(); // длинный жест переживает таймер слоя — перезаводим
     const dx = event.clientX - d.startX;
     if (!d.moved) {
-      if (Math.abs(dx) < MOB_DRAG_ACTIVATE_PX) {
+      const dy = event.clientY - d.startY;
+      if (
+        Math.abs(dx) < MOB_DRAG_ACTIVATE_PX ||
+        Math.abs(dx) <= Math.abs(dy)
+      ) {
         return;
       }
       d.moved = true;
@@ -546,6 +566,23 @@ function TestimonialsMobileCarousel() {
     }
   };
 
+  // Отмена жеста браузером (нативный вертикальный скролл забрал указатель)
+  // — НЕ решение о свайпе: координаты события не имеют смысла (Chromium
+  // шлёт (0,0), фантомная дельта −startX пробивала порог длинного свайпа
+  // и листала ленту посреди скролла страницы — поймано приёмкой 19.10).
+  // Лента просто доезжает до ближайшего покоя; недвигавшийся драг (гейт
+  // направления не пустил) делать ничего не должен.
+  const cancelDrag = (event: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || event.pointerId !== d.id) {
+      return;
+    }
+    drag.current = null;
+    if (d.moved) {
+      settle();
+    }
+  };
+
   const endDrag = (event: React.PointerEvent) => {
     const d = drag.current;
     if (!d || event.pointerId !== d.id) {
@@ -557,7 +594,9 @@ function TestimonialsMobileCarousel() {
     }
     // База решения — ближайшая к живой позиции покой (в полёте она бывает
     // и не та, с которой стартовал жест); бросок и долгий свайп двигают
-    // на одну от неё.
+    // на одну от неё — но только если тягой порог половины слайда ещё не
+    // взят (гард как в strip-engine: иначе долгий драг 160–310px
+    // перескакивал ближайшую карточку — поймано приёмкой 19.10).
     const gNow = d.g0 - (event.clientX - d.startX) / MOB_STEP;
     let target = Math.round(gNow);
     const delta = event.clientX - d.startX;
@@ -570,9 +609,13 @@ function TestimonialsMobileCarousel() {
       last && ref
         ? (last.x - ref.x) / Math.max(1, event.timeStamp - ref.t)
         : 0;
-    if (delta <= -MOB_LONG_SWIPE_PX || v <= -MOB_FLICK_V) {
+    const nearHalfway = Math.round(gNow) !== Math.round(d.g0);
+    if ((delta <= -MOB_LONG_SWIPE_PX || v <= -MOB_FLICK_V) && !nearHalfway) {
       target = Math.round(gNow) + 1;
-    } else if (delta >= MOB_LONG_SWIPE_PX || v >= MOB_FLICK_V) {
+    } else if (
+      (delta >= MOB_LONG_SWIPE_PX || v >= MOB_FLICK_V) &&
+      !nearHalfway
+    ) {
       target = Math.round(gNow) - 1;
     }
     target = ((target % COUNT) + COUNT) % COUNT;
@@ -590,7 +633,7 @@ function TestimonialsMobileCarousel() {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
-      onPointerCancel={endDrag}
+      onPointerCancel={cancelDrag}
       className="relative h-[500px] w-full touch-pan-y select-none"
     >
       <MobileSlides activeIndex={active.index} previous={active.previous} goTo={goTo} />
