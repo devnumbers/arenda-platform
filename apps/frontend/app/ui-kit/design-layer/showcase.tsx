@@ -47,7 +47,6 @@ import { PickerFieldSection } from './sections/pickers';
 import {
     ConfirmDialogSection,
     ModalSection,
-    SuccessPopupSection,
     SupportModalSection,
 } from './sections/dialogs';
 import {
@@ -126,7 +125,6 @@ export function DesignLayerShowcase(): JSX.Element {
                 <SnapRailSection />
                 <ConfirmDialogSection />
                 <StickyBottomBarSection />
-                <SuccessPopupSection />
             </section>
 
             <StickyBottomBar>

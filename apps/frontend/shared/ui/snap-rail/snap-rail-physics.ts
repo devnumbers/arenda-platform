@@ -20,9 +20,9 @@
  *   INTO the target and never crosses it; bounce lives only in the edge
  *   rubber band.
  * - The edge rubber band is the reverse-engineered UIScrollView curve
- *   `b = (1 − 1/(x·c/H + 1))·H` with `c = 0.55` — the same constant and
- *   function the PTR gesture runs (`pull-math.ts`), so every gesture in
- *   the app shares one physics.
+ *   `b = (1 − 1/(x·c/H + 1))·H` with `c = 0.55` — the shared
+ *   `pull-math.ts` function, so every custom gesture in the app shares
+ *   one physics.
  *
  * Touch never enters the proxy: the hook gates it on
  * `pointerType: mouse | pen`, so touch rails keep native momentum, native
@@ -45,7 +45,7 @@ export const SETTLE_OMEGA = (2 * Math.PI) / RAIL_SPRING_RESPONSE_S;
 /** Резинка у краёв — константа UIScrollView; сама функция живёт в
  * pull-math (одна физика на все жесты приложения), сюда реэкспортируется
  * под именем модуля. */
-export { rubberBandOffset as railRubberBandOffset } from "@/shared/ui/pull-to-refresh/pull-math";
+export { rubberBandOffset as railRubberBandOffset } from "./pull-math";
 export const RUBBER_BAND_C = 0.55;
 
 /**

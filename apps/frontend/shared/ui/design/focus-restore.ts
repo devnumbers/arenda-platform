@@ -22,9 +22,9 @@ import { useState } from 'react';
  * (Chromium 145+, Firefox 104+, Safari 18.4+; на старых движках опция
  * игнорируется — осознанная деградация к прежнему поведению, решение
  * владельца 19.10). Потребители: Modal (modal.tsx, обе канвы — Radix
- * Dialog и vaul Drawer, автофокус-пропсы пробрасываются), SuccessPopup,
- * Menu (menu.tsx — захват на триггере, у DropdownMenu своего
- * onOpenAutoFocus нет). more-sheet не трогаем: Drawer с modal={false}
+ * Dialog и vaul Drawer, автофокус-пропсы пробрасываются), Menu (menu.tsx —
+ * захват на триггере, у DropdownMenu своего onOpenAutoFocus нет).
+ * more-sheet не трогаем: Drawer с modal={false}
  * фокус на закрытие не возвращает — залипаться нечему.
  */
 

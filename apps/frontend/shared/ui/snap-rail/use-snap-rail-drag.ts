@@ -13,8 +13,8 @@ import { useReducedMotion } from "@/shared/lib/hooks/useReducedMotion";
 import {
   createVelocityTracker,
   rubberBandOffset,
-} from "@/shared/ui/pull-to-refresh/pull-math";
-import type { VelocityTracker } from "@/shared/ui/pull-to-refresh/pull-math";
+  type VelocityTracker,
+} from "./pull-math";
 import {
   criticalSettle,
   isHorizontalDrag,

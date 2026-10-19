@@ -40,8 +40,7 @@ import {
   PropertyAccessNotFound,
   RIGHTS_ROW_ACTION_CLASS,
 } from './participant-fragments';
-import { stageParticipantPopup } from '../lib/participant-popups';
-import { ParticipantSuccessPopup } from './participant-success-popup';
+import { notify } from '@/shared/lib/notifications';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantRightsSkeleton } from './participants-skeletons';
 
@@ -81,10 +80,10 @@ const OWN_CHANGE_WINDOW_MS = 3000;
  * по user_id (pending-приглашение — по email). Роль уходит в PATCH
  * members (pending — invitations), отзыв — DELETE members (pending —
  * DELETE invitations); после мутации агрегаты инвалидируются (чипы ролей
- * на странице участника и в списке перечитаются). Успех роли — попап
+ * на странице участника и в списке перечитаются). Успех роли — тост
  * «Права изменены» (2177-59799); успех отзыва — переход на страницу
- * участника с попапом «У участника больше нет доступа к объекту»
- * (2008-83135, staged-флаг participant-popups — канон one-shot #771).
+ * участника с тостом «У участника больше нет доступа к объекту»
+ * (2008-83135; тосты вместо успех-попапов, решение владельца 19.10.2026).
  * Если это был последний объект,
  * страница участника честно покажет «Участник не найден» — контракт
  * приватного 404 (#693). Строки нет уже на этом экране (нога отозвана
@@ -108,7 +107,6 @@ export function ParticipantRightsScreen({
   const deleteMember = useDeletePropertyAccessMember(propertyId);
   const cancelInvitation = useCancelPropertyAccessInvitation(propertyId);
 
-  const [showRoleChanged, setShowRoleChanged] = useState(false);
   const [confirmRevokeOpen, setConfirmRevokeOpen] = useState(false);
   // Защёлка «своего» изменения (канон #880): своя смена роли — мгновенно,
   // без dim/вспышки на бейдже; чужая правка (второй manage-читатель)
@@ -151,14 +149,14 @@ export function ParticipantRightsScreen({
       return;
     }
     // Инвалидацию обеих семей делает access-хук (onSettled) — здесь только
-    // попап и защёлка «своего» изменения.
+    // тост и защёлка «своего» изменения.
     const onSuccess = (): void => {
       setOwnChangeLatch(true);
       if (ownLatchTimerRef.current !== null) {
         clearTimeout(ownLatchTimerRef.current);
       }
       ownLatchTimerRef.current = setTimeout(() => setOwnChangeLatch(false), OWN_CHANGE_WINDOW_MS);
-      setShowRoleChanged(true);
+      notify.scenarios.access.roleChanged();
     };
     if (member.status === 'pending') {
       updateInvitation.mutate({ invitationId: member.id, role }, { onSuccess });
@@ -172,11 +170,12 @@ export function ParticipantRightsScreen({
       return;
     }
     // Инвалидацию обеих семей делает access-хук (onSettled) — здесь только
-    // навигация и попап.
+    // навигация и тост.
     const onDone = (): void => {
-      // Источник — страница участника: возврат по канону истории, попап
-      // «У участника больше нет доступа к объекту» рендерит он (2008-83135).
-      stageParticipantPopup('revokedFromProperty');
+      // Источник — страница участника: возврат по канону истории, тост
+      // «У участника больше нет доступа к объекту» показывается в момент
+      // успеха и виден на странице участника (2008-83135).
+      notify.scenarios.access.revokedFromProperty();
       goBack(router, ROUTES.participant(participantId));
     };
     if (member.status === 'pending') {
@@ -332,13 +331,6 @@ export function ParticipantRightsScreen({
         }
         onConfirm={revoke}
       />
-
-      {showRoleChanged && (
-        <ParticipantSuccessPopup
-          title="Права изменены"
-          onClose={() => setShowRoleChanged(false)}
-        />
-      )}
     </>
   );
 }

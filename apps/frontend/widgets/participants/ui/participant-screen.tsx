@@ -31,8 +31,7 @@ import {
   PARTICIPANT_ROW_BASE_CLASS,
   ParticipantNotFound,
 } from './participant-fragments';
-import { popParticipantPopup, stageParticipantPopup, useParticipantPopup } from '../lib/participant-popups';
-import { ParticipantSuccessPopup } from './participant-success-popup';
+import { notify } from '@/shared/lib/notifications';
 import { ParticipantScreenSkeleton } from './participants-skeletons';
 
 /**
@@ -42,8 +41,9 @@ import { ParticipantScreenSkeleton } from './participants-skeletons';
  * и чевроном) и кебаб шапки: «Пригласить в объект» (#694, отдельный экран)
  * и «Отозвать доступ к объектам» (макет 2008-48318; ConfirmDialog 2008-82147
  * канона #629 — крупный заголовок, кнопки столбиком) → DELETE
- * /participants/{id} → goBack на список (источник), где рендерится попап
- * «Участник удален» (2008-83716; флаг — stageParticipantPopup).
+ * /participants/{id} → goBack на список (источник), тост «Участник
+ * удален» показывается в момент успеха (2008-83716; тост вместо
+ * успех-попапа, решение владельца 19.10.2026).
  *
  * Пункт кебаба «Действия участника» снят вместе с его страницей (решение
  * владельца 12.10.2026, #1361): глобальная лента по одному человеку
@@ -68,13 +68,6 @@ export function ParticipantScreen({
   const propertiesQuery = useProperties();
 
   const [confirmRevokeOpen, setConfirmRevokeOpen] = useState(false);
-  // Попап, принесённый возвратом с экрана приглашения/прав (#698):
-  // 'deleted' здесь не бывает — его рендерит список.
-  const stagedPopup = useParticipantPopup();
-  const popup =
-    stagedPopup === 'granted' || stagedPopup === 'revokedFromProperty'
-      ? stagedPopup
-      : null;
 
   const participant = participantQuery.data;
   const headerLoaded = participant !== undefined;
@@ -176,27 +169,14 @@ export function ParticipantScreen({
           revoke.mutate(participantId, {
             onSuccess: () => {
               setConfirmRevokeOpen(false);
-              // Источник страницы — список: возврат по канону истории,
-              // попап «Участник удален» рендерит список (2008-83716).
-              stageParticipantPopup('deleted');
+              // Тост в момент успеха — виден и на списке после возврата
+              // по канону истории (goBack ниже).
+              notify.scenarios.access.revoked();
               goBack(router, ROUTES.participants);
             },
           });
         }}
       />
-
-      {/* Попапы, принесённые возвратом: «Пригласить в объект» (#698,
-       * 2010-131859) и отзыв из объекта с экрана прав (#698, 2008-83135). */}
-      {popup !== null && (
-        <ParticipantSuccessPopup
-          title={
-            popup === 'granted'
-              ? 'Доступ выдан'
-              : 'У участника больше нет доступа к объекту'
-          }
-          onClose={() => popParticipantPopup()}
-        />
-      )}
     </>
   );
 }

@@ -1,10 +1,9 @@
 'use client';
 
-import { useRef, type JSX, type ReactNode } from 'react';
+import { type JSX, type ReactNode } from 'react';
 import { useUnreadNotificationsCount } from '@/features/notifications';
 import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
 import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
-import { PullToRefresh } from '@/shared/ui/pull-to-refresh';
 import {
   DesktopNavPills,
   DesktopSidebar,
@@ -32,10 +31,8 @@ import { TopNavUserProvider } from './top-nav-user-provider';
  * TabBarVisibilityProvider/useTabBarSuppression — вместе с ним глушатся
  * и пилюли. TopNavUserProvider прокидывает имя собственника в «крыло»
  * профиля (граница shared/feature). Здесь же живёт PWA-инфраструктура
- * приложения (ADR 0031/0032): регистрация и тихое обновление service
- * worker, pull-to-refresh (ADR 0031 — ref делится с узлом контента:
- * жест двигает transform'ом именно его; сайдбар, пилюли и TabBar
- * `position: fixed` и остаются на месте) и PushPermissionGate — невидимый
+ * приложения (ADR 0032): регистрация и тихое обновление service worker
+ * и PushPermissionGate — невидимый
  * стартовый гейт пушей: heal-проверка правды подписки при загрузке и
  * авто-промпт новому юзеру (слайс 2 #1038); системный промпт из него
  * поднимает только авто-промпт, и только пока разрешение `default`.
@@ -50,9 +47,6 @@ function useNavigationBadge(): number | null {
 }
 
 export function ScreenLayout({ children }: { readonly children: ReactNode }): JSX.Element {
-  // PullToRefresh drives `transform` on the content node during the gesture,
-  // so the layout shares its ref with the component.
-  const contentRef = useRef<HTMLDivElement>(null);
   // Подпись и адрес пункта «Объекты» — из нав-модели (решение владельца
   // #1240: direct-переход «Объект» снесён вместе с правилом #984).
   const notificationsBadge = useNavigationBadge();
@@ -63,14 +57,13 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
         <TopNavUserProvider>
           <div className="screen-shell flex min-h-dvh flex-col tablet:pt-[72px]">
             <DesktopSidebar />
-            <div className="flex min-w-0 flex-1 flex-col" ref={contentRef}>
+            <div className="flex min-w-0 flex-1 flex-col">
               {children}
             </div>
             <DesktopNavPills notificationsBadge={notificationsBadge ?? 0} />
             <TabBar notificationsUnread={(notificationsBadge ?? 0) > 0} />
             <ServiceWorkerRegister />
             <ServiceWorkerUpdater />
-            <PullToRefresh contentRef={contentRef} />
             <PushPermissionGate />
             <NotificationStreamGate />
             <RealtimeStreamProvider />

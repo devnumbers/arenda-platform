@@ -18,6 +18,7 @@ import {
   useParticipant,
 } from '@/features/participants';
 import { useProperties } from '@/features/properties';
+import { notify } from '@/shared/lib/notifications';
 import {
   Button,
   EmptyState,
@@ -32,7 +33,6 @@ import {
 } from '@/shared/ui/design';
 import { ParticipantNotFound } from './participant-fragments';
 import { InvitePropertiesRows } from './invite-properties-rows';
-import { stageParticipantPopup } from '../lib/participant-popups';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantInviteSkeleton } from './participants-skeletons';
 
@@ -48,9 +48,9 @@ import { ParticipantInviteSkeleton } from './participants-skeletons';
  *
  * Кнопка «Пригласить» открывает шит роли (сегмент «Просмотр |
  * Управление», кнопка «Пригласить» — макет 2010-131724) → POST
- * /participants/{id}/properties → назад на страницу участника с попапом
- * «Доступ выдан» (2010-131859, staged-флаг participant-popups #771).
- * granted=0 при выбранных
+ * /participants/{id}/properties → назад на страницу участника с тостом
+ * «Доступ выдан» (2010-131859; тост вместо успех-попапа, решение
+ * владельца 19.10.2026). granted=0 при выбранных
  * объектах — инфра-аномалия параллельного отзыва: шит остаётся открыт
  * с ошибкой.
  */
@@ -106,7 +106,9 @@ export function ParticipantInviteScreen({
             setGrantError('Не удалось выдать доступ — попробуйте еще раз');
             return;
           }
-          stageParticipantPopup('granted');
+          // Тост в момент успеха — переживает возврат на страницу
+          // участника в корневом контейнере тостов.
+          notify.scenarios.access.granted();
           goBack(router, ROUTES.participant(participantId));
         },
         onError: () => setGrantError('Не удалось выдать доступ — попробуйте еще раз'),

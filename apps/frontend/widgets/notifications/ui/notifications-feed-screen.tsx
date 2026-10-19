@@ -26,7 +26,6 @@ import {
   MenuItem,
   MenuTrigger,
   PageContent,
-  SuccessPopup,
   TopNav,
 } from '@/shared/ui/design';
 import { NotificationRow } from './notification-row';
@@ -42,8 +41,9 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
  * без крыльев) заменено макетами 3178 — лента стала полным хабом. Чипы
  * «Все» / «Непрочитанные N» — фильтр ленты (выбор в query строки
  * ?unread=1, канон страницы «Контакты»); «Прочитать все» — пункт кебаба
- * (макет 3183-86541, #1171), подтверждения не требует — успех-попап
- * «Все уведомления прочитаны» (2329-148575); кебаб — «Настроить
+ * (макет 3183-86541, #1171), подтверждения не требует — тост успеха
+ * «Все уведомления прочитаны» (2329-148575; тост вместо успех-попапа,
+ * решение владельца 19.10.2026); кебаб — «Настроить
  * уведомления» и красное «Удалить все уведомления» (подтверждение
  * 2329-152107, успех 2329-152324). Кебаб заменяется
  * шестерёнкой, когда удалять нечего — лента пуста (2329-152324).
@@ -68,8 +68,6 @@ export function NotificationsFeedScreen({
   const deleteAll = useDeleteAllNotifications();
 
   const [deleteOpen, setDeleteOpen] = useState(false);
-  // Успех-попап — один на оба действия: текст сообщения и есть состояние.
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const notifications = feedQuery.data ?? [];
   const unreadCount = unreadCountQuery.data ?? 0;
@@ -83,7 +81,7 @@ export function NotificationsFeedScreen({
 
   const markAllRead = (): void => {
     markAll.mutate(undefined, {
-      onSuccess: () => setSuccessMessage('Все уведомления прочитаны'),
+      onSuccess: () => notify.scenarios.notifications.markAllRead(),
       onError: (error) => notify.scenarios.notifications.markAllError(error),
     });
   };
@@ -92,7 +90,7 @@ export function NotificationsFeedScreen({
     deleteAll.mutate(undefined, {
       onSuccess: () => {
         setDeleteOpen(false);
-        setSuccessMessage('Все уведомления удалены');
+        notify.scenarios.notifications.deleteAll();
       },
       onError: (error) => notify.scenarios.notifications.deleteAllError(error),
     });
@@ -239,15 +237,6 @@ export function NotificationsFeedScreen({
         pending={deleteAll.isPending}
         onOpenChange={setDeleteOpen}
         onConfirm={deleteEverything}
-      />
-      <SuccessPopup
-        open={successMessage !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSuccessMessage(null);
-          }
-        }}
-        message={successMessage ?? ''}
       />
     </>
   );

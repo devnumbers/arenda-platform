@@ -13,7 +13,7 @@ import {
   TopNav,
   TopNavBackButton,
 } from '@/shared/ui/design';
-import { stageParticipantPopup } from '../lib/participant-popups';
+import { notify } from '@/shared/lib/notifications';
 import { useInviteForm } from '../lib/use-invite-form';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 
@@ -25,12 +25,13 @@ import { ParticipantRoleSegmented } from './participant-role-segmented';
  *
  * Отправка — POST /participants/invite (#694) с одним объектом:
  * зарегистрированная почта получает членство сразу (слот получателя может
- * сделать его suspended — это приглашённый исход, попап общий, решение
+ * сделать его suspended — это приглашённый исход, тост общий, решение
  * владельца 17.09), незарегистрированная — pending-приглашение и письмо.
  * granted=0 — объект ушёл в skipped_* (обычно доступ уже есть): честный
  * текст без «попробуйте еще раз» (решение #699, единственное число).
- * Успех — попап «Участник приглашен» (2035-82202) на списке участников
- * объекта: goBack по канону истории, staged-флаг рендерит приёмник.
+ * Успех — тост «Участник приглашен» (2035-82202) на списке участников
+ * объекта: goBack по канону истории, тост показывается в момент успеха
+ * (вместо успех-попапа, решение владельца 19.10.2026).
  */
 export function PropertyParticipantsInviteScreen(): JSX.Element {
   const params = useParams<{ id: string }>();
@@ -41,7 +42,9 @@ export function PropertyParticipantsInviteScreen(): JSX.Element {
     propertyIds: () => [propertyId],
     grantedZeroMessage: 'Пользователь уже имеет доступ к объекту',
     onInvited: () => {
-      stageParticipantPopup('invited');
+      // Тост в момент успеха — переживает возврат на список в корневом
+      // контейнере тостов.
+      notify.scenarios.access.invited();
       goBack(router, ROUTES.propertyParticipants(propertyId));
     },
   });

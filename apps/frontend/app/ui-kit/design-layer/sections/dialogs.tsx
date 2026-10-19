@@ -10,7 +10,6 @@ import {
     ModalContent,
     ModalTrigger,
     SupportModal,
-    SuccessPopup,
 } from '@/shared/ui/design';
 import styles from '../../page.module.css';
 
@@ -147,31 +146,5 @@ export function ConfirmDialogSection(): JSX.Element {
                 </p>
             </ConfirmDialog>
         </div>
-    );
-}
-
-export function SuccessPopupSection(): JSX.Element {
-    const [successPopupOpen, setSuccessPopupOpen] = useState(false);
-
-    return (
-        <>
-            <div className={styles.group}>
-                <h3 className={styles.groupTitle}>SuccessPopup · успех-попап</h3>
-                <p className={styles.groupTitle}>
-                    Центрированная карточка без затемнения на любой ширине (#744, Figma
-                    2329:148661): иконка Icon/Color/GoodWhite 48, зелёное сообщение 16/18
-                    Medium (#00A63E из макета), крестик закрытия. Потребители — действия
-                    центра уведомлений.
-                </p>
-                <div className={styles.grid}>
-                    <Button onClick={() => setSuccessPopupOpen(true)}>Показать попап</Button>
-                </div>
-            </div>
-            <SuccessPopup
-                open={successPopupOpen}
-                onOpenChange={setSuccessPopupOpen}
-                message="Все уведомления прочитаны"
-            />
-        </>
     );
 }

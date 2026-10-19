@@ -2,8 +2,8 @@
  * iOS / iPadOS device detection.
  *
  * This is a shared-layer utility: the platform check is not specific to any
- * single feature (Web Push install requirements, the pull-to-refresh gate),
- * so it lives here and is importable from any layer per Feature-Sliced
+ * single feature (Web Push install requirements), so it lives here and is
+ * importable from any layer per Feature-Sliced
  * Design boundaries — mirroring `standalone.ts`.
  *
  * Every helper is SSR-safe — returns a benign default when `window` is
@@ -27,9 +27,8 @@ type WindowWithMSStream = Window & {
  * deprecated and is deliberately not read. The `MSStream` guard stops
  * Edge / IE from false-matching.
  *
- * Consumers care about the platform family, not the vendor: on iOS WebKit
- * disables the native pull-to-refresh in standalone PWAs (ADR 0031 gates the
- * custom gesture on this helper) and Web Push requires a home-screen install.
+ * Consumers care about the platform family, not the vendor: Web Push on iOS
+ * requires a home-screen install (standalone mode).
  */
 export function isIosDevice(): boolean {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;

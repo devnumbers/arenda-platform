@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isIosDevice } from './ios';
 
 // Перенесено из features/push-notifications/lib/platform.test.ts вместе с
-// самим хелпером (12.10.2026): детект платформы стал общим — его читает и
-// гейт кастомного pull-to-refresh в shared/ui (ADR 0031), а features-слой
-// импортировать из shared/ui нельзя. Матрица без изменений.
+// самим хелпером (12.10.2026): детект платформы стал общим для shared- и
+// features-потребителей. Матрица без изменений.
 
 // Desktop-mode iPadOS 13+ Safari: the UA is byte-identical to desktop macOS
 // Safari, which is the whole reason the Mac+touch signal exists.

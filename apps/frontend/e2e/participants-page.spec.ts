@@ -115,7 +115,7 @@ test('deep-link на отозванного/чужого участника — 
   await expect(header.getByRole('button', { name: 'Назад' })).toBeVisible();
 });
 
-test('права участника: смена роли сегментом, попап «Права изменены»; сид восстанавливается', async ({ page, seededUser }) => {
+test('права участника: смена роли сегментом, тост «Права изменены»; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/participants/${MARIA_ID}`);
   const header = screenHeader(page);
@@ -133,10 +133,12 @@ test('права участника: смена роли сегментом, п�
   try {
     await page.getByRole('radio', { name: 'Просмотр' }).click();
 
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Тост «Права изменены» (2177-59799; тост вместо успех-попапа,
+    // решение владельца 19.10.2026); закрываем кнопкой, чтобы не
+    // перехватывал клики (канон contacts-спек).
+    const toast = page.locator('.Toastify__toast', { hasText: 'Права изменены' });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
 
     // Бейдж на странице участника перечитан (инвалидация агрегатов).
     await header.getByRole('button', { name: 'Назад' }).click();
@@ -211,9 +213,12 @@ test('переключатель роли: курсор-пойнтер на кн
   }
 
   await expect(
-    page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
+    page.locator('.Toastify__toast', { hasText: 'Права изменены' }),
   ).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page
+    .locator('.Toastify__toast', { hasText: 'Права изменены' })
+    .getByRole('button', { name: 'Закрыть' })
+    .click();
 
   try {
     // Сид восстанавливается — тот же член ряда, что в сценарии смены роли.
@@ -293,15 +298,15 @@ test('пригласить в объект: мультичек гаража, ш�
   try {
     await sheet.getByRole('button', { name: 'Пригласить' }).click();
 
-    // Попап «Доступ выдан» (2010-131859) на странице участника; грант
+    // Тост «Доступ выдан» (2010-131859) на странице участника; грант
     // пришёл suspended — у сид-получателя нет подписки, тарифный слот
     // превышен (второй объект). Статус и пояснение — на уровне участника
     // (макет 2036-84861, правка приёмки #756): чип в шапке + жёлтая
-    // карточка; ноги несут бейджи ролей.
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Доступ выдан' }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    // карточка; ноги несут бейджи ролей. Тост закрываем кнопкой, чтобы
+    // не перехватывал клики (канон contacts-спек).
+    const grantedToast = page.locator('.Toastify__toast', { hasText: 'Доступ выдан' });
+    await expect(grantedToast).toBeVisible();
+    await grantedToast.getByRole('button', { name: 'Закрыть' }).click();
     await expect(page.getByText('Превышен лимит объектов').first()).toBeVisible();
     await expect(page.getByTestId('participant-limit-notice')).toBeVisible();
     await expect(
@@ -325,7 +330,7 @@ test('пригласить в объект: мультичек гаража, ш�
   await expect(page.getByText('Превышен лимит объектов')).toHaveCount(0);
 });
 
-test('отзыв из объекта: подтверждение, попап успеха, ряд исчезает; сид восстанавливается', async ({ page, seededUser }) => {
+test('отзыв из объекта: подтверждение, тост успеха, ряд исчезает; сид восстанавливается', async ({ page, seededUser }) => {
   // Нога на гараже — временная, создаётся и убирается этим тестом.
   await execE2eSql(
     `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
@@ -346,13 +351,13 @@ test('отзыв из объекта: подтверждение, попап у�
   try {
     await dialog.getByRole('button', { name: 'Отозвать' }).click();
 
-    // Попап (2008-83135) на странице участника; нога на гараже исчезла.
-    await expect(
-      page.getByRole('dialog').locator('p', {
-        hasText: 'У участника больше нет доступа к объекту',
-      }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Тост (2008-83135) на странице участника; нога на гараже исчезла.
+    // Тост закрываем кнопкой, чтобы не перехватывал клики.
+    const toast = page.locator('.Toastify__toast', {
+      hasText: 'У участника больше нет доступа к объекту',
+    });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
     await expect(page.getByRole('button', { name: /Гараж на Садовой/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Квартира на Ленина/ })).toBeVisible();
   } finally {
@@ -362,7 +367,7 @@ test('отзыв из объекта: подтверждение, попап у�
   }
 });
 
-test('кебаб «Отозвать доступ к объектам»: подтверждение, попап «Участник удален» на списке; сид восстанавливается', async ({ page, seededUser }) => {
+test('кебаб «Отозвать доступ к объектам»: подтверждение, тост «Участник удален» на списке; сид восстанавливается', async ({ page, seededUser }) => {
   await openCabinetWithSeededSession(page, seededUser);
   // Путь пользователя: раздел «Участники» → ряд Сергея (нужна история —
   // успех возврата по канону goBack ведёт именно на раздел).
@@ -392,16 +397,14 @@ test('кебаб «Отозвать доступ к объектам»: подт
   try {
     await dialog.getByRole('button', { name: 'Отозвать и удалить' }).click();
 
-    // Возврат в раздел «Участники» с попапом «Участник удален»
-    // (2008-83716); URL с якорем конца строки отличает раздел от
-    // страницы участника (заголовок хаба не проверяем: открытая модалка
-    // прячет фон из a11y-дерева — aria-modal).
+    // Возврат в раздел «Участники» с тостом «Участник удален»
+    // (2008-83716; тост вместо успех-попапа, решение владельца
+    // 19.10.2026); URL с якорем конца строки отличает раздел от страницы
+    // участника. Тост закрываем кнопкой, чтобы не перехватывал клики.
     await expect(page).toHaveURL(/\/participants$/);
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Участник удален' }),
-    ).toBeVisible();
-    // Модалка скрывает фон от a11y-дерева — список проверяем после закрытия.
-    await page.keyboard.press('Escape');
+    const toast = page.locator('.Toastify__toast', { hasText: 'Участник удален' });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
     await expect(page.getByRole('button', { name: /Сергей Сидоров/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Мария Петрова/ })).toBeVisible();
   } finally {
@@ -455,10 +458,9 @@ test('pending-участник: deep-link по почте, бейдж «Акка
     await expect(page.getByRole('radio', { name: 'Просмотр' })).toBeChecked();
 
     await page.getByRole('radio', { name: 'Управление' }).click();
-    await expect(
-      page.getByRole('dialog').locator('p', { hasText: 'Права изменены' }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    const rightsToast = page.locator('.Toastify__toast', { hasText: 'Права изменены' });
+    await expect(rightsToast).toBeVisible();
+    await rightsToast.getByRole('button', { name: 'Закрыть' }).click();
 
     // Серверная правда: роль приглашения реально сменилась.
     expect(
@@ -528,7 +530,7 @@ test('права участника без аккаунта (D7): карточк
   }
 });
 
-test('отзыв pending-приглашения с D7-экрана: подтверждение, попап, приглашение снято; сид восстанавливается', async ({ page, seededUser }) => {
+test('отзыв pending-приглашения с D7-экрана: подтверждение, тост, приглашение снято; сид восстанавливается', async ({ page, seededUser }) => {
   await seedPendingRightsInvitation('viewer');
   try {
     await openCabinetWithSeededSession(page, seededUser);
@@ -541,14 +543,14 @@ test('отзыв pending-приглашения с D7-экрана: подтве
     await expect(dialog.getByText('Уверены, что хотите отозвать доступ?')).toBeVisible();
     await dialog.getByRole('button', { name: 'Отозвать' }).click();
 
-    // Попап (2008-83135) на странице участника; единственная нога снята —
+    // Тост (2008-83135) на странице участника; единственная нога снята —
     // агрегат честно отвечает «Участник не найден» (приватный 404 #693).
-    await expect(
-      page.getByRole('dialog').locator('p', {
-        hasText: 'У участника больше нет доступа к объекту',
-      }),
-    ).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Тост закрываем кнопкой, чтобы не перехватывал клики.
+    const toast = page.locator('.Toastify__toast', {
+      hasText: 'У участника больше нет доступа к объекту',
+    });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: 'Закрыть' }).click();
     await expect(page.getByText('Участник не найден')).toBeVisible();
 
     // Серверная правда: приглашение отменено.

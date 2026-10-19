@@ -9,6 +9,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
 import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import { pluralize } from '@/shared/lib/pluralize';
+import { notify } from '@/shared/lib/notifications';
 import {
   allInvitedProperties,
   collapsedInviteRows,
@@ -34,7 +35,6 @@ import {
 } from '@/shared/ui/design';
 import { ObjectAvatarGlyph, PARTICIPANT_ROW_BASE_CLASS } from './participant-fragments';
 import { InvitePropertiesRows } from './invite-properties-rows';
-import { stageParticipantPopup } from '../lib/participant-popups';
 import { useInviteForm } from '../lib/use-invite-form';
 import { ParticipantRoleSegmented } from './participant-role-segmented';
 import { ParticipantsInviteSkeleton } from './participants-skeletons';
@@ -56,8 +56,9 @@ import { ParticipantsInviteSkeleton } from './participants-skeletons';
  * «Пригласить» → POST /participants/invite (#694): зарегистрированная
  * почта получает членства сразу (per-property слоты — партия может
  * смешать active и suspended), незарегистрированная — pending-приглашения
- * и одно письмо. Любой granted (включая suspended) — попап «Участник
- * приглашен» (2010-134458) на цели goBack по канону истории; granted=0
+ * и одно письмо. Любой granted (включая suspended) — тост «Участник
+ * приглашен» (2010-134458) на цели goBack по канону истории (тост вместо
+ * успех-попапа, решение владельца 19.10.2026); granted=0
  * или ошибка — сообщение под полем почты, экран остаётся на месте.
  */
 export function ParticipantsInviteScreen(): JSX.Element {
@@ -72,7 +73,9 @@ export function ParticipantsInviteScreen(): JSX.Element {
     propertyIds: () => [...selection],
     grantedZeroMessage: 'Пользователь уже имеет доступ к выбранным объектам',
     onInvited: () => {
-      stageParticipantPopup('invited');
+      // Тост в момент успеха — переживает возврат на список в корневом
+      // контейнере тостов.
+      notify.scenarios.access.invited();
       goBack(router, ROUTES.participants);
     },
   });
