@@ -1,5 +1,26 @@
 import { expect, openCabinetWithSeededSession, test } from './fixtures';
 
+// Открытие поиска с пустым полем — подсказка «Введите название или адрес»
+// (канон соседей, #601), не скелетон: хук при пустом запросе выключен
+// (ad9b5b4d6 — 400-контракт), а выключенный запрос TanStack v5 держит
+// isPending вечно — гейт скелетона обязан сидеть за searching.
+test('пустое поле при открытии — подсказка, не скелетон', async ({
+  page,
+  seededUser,
+}) => {
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.goto('/properties/search');
+
+  // Сайдбар дозагрузился (UserButton рисует имя) — пульсы шапки не
+  // подмешиваются в ассерты скелетона.
+  await expect(page.getByText('Иван', { exact: true })).toBeVisible();
+
+  await expect(
+    page.getByText('Введите название или адрес объекта'),
+  ).toBeVisible();
+  await expect(page.locator('div[aria-hidden] .animate-pulse')).toHaveCount(0);
+});
+
 // Поиск объектов (тикет #601): stale empty state — план 029 конвейера
 // скелетонов (#1437/#1442). После осевшего пустого ответа правка запроса
 // показывает скелетон, а не «Такого объекта нет» за летящим запросом:
