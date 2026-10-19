@@ -99,15 +99,19 @@ function StaticHeader({
 }
 
 /**
- * Шаг «успех» потоков смены (телефон 1869-68303, почта 105223): галка good,
- * сообщение с новым значением, шит «Хорошо» возвращает на аккаунт; в шапке
- * только крест. Экран сам подтверждение — тост успеха не дублируется.
+ * Шаг «успех» потоков смены (почта 105223; телефонный 1869-68303 снесён —
+ * ADR 0067, тикет #1530): галка good, сообщение с новым значением,
+ * опциональный сабтайтл (#1531 — «Вход в аккаунт теперь по этому адресу»:
+ * email — единственный логин, ADR 0067), шит «Хорошо» возвращает на аккаунт;
+ * в шапке только крест. Экран сам подтверждение — тост успеха не дублируется.
  */
 export function MeFlowSuccessScreen({
   message,
+  subtitle,
   onClose,
 }: {
   readonly message: string;
+  readonly subtitle?: string;
   readonly onClose: () => void;
 }): JSX.Element {
   return (
@@ -121,6 +125,11 @@ export function MeFlowSuccessScreen({
           <h1 className="m-0 mt-10 text-center text-xl font-semibold leading-6 text-content">
             {message}
           </h1>
+          {subtitle !== undefined && (
+            <p className="m-0 mt-3 text-center text-sm leading-4 text-content-secondary">
+              {subtitle}
+            </p>
+          )}
         </div>
       </PageContent>
       <StickyBottomBar>

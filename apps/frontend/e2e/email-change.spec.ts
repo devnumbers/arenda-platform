@@ -18,6 +18,12 @@ import {
 // and swapped back in one test: the suite shares one seeded user, and the
 // other specs expect its original email.
 //
+// Email-only stakes (#1531, ADR 0067): the address is the only login
+// identifier now, so the address step carries the stakes subtitle («Почта —
+// ваш единственный способ входа…») and the success sheet adds the subline
+// «Вход в аккаунт теперь по этому адресу». The two-code protocol with the
+// grant (#721/#1202) is untouched.
+//
 // Budget note: each leg of the swap sends one code to the address being
 // changed TO — at that moment a "new" address for the user — so a run
 // consumes 2 of the backend's new-address sends. The budget is 5/hour per
@@ -93,6 +99,14 @@ test('смена почты двойным кодом и возврат адре
 
   await submitCode(page, currentCode);
   await expect(page.getByRole('heading', { name: 'Введите новую почту' })).toBeVisible();
+  // The stakes subtitle (#1531): before the user commits to a new address,
+  // the screen says the address is the only way in and the next login
+  // happens by the new one.
+  await expect(
+    page.getByText(
+      'Почта — ваш единственный способ входа в аккаунт. После смены вход будет по новому адресу.',
+    ),
+  ).toBeVisible();
 
   // Same-as-current is a client-side error: inline message, «Продолжить»
   // stays disabled (#720 Q4).
@@ -129,6 +143,8 @@ test('смена почты двойным кодом и возврат адре
   await expect(
     page.getByRole('heading', { name: `Новая электронная почта ${NEW_EMAIL}` }),
   ).toBeVisible();
+  // The success subline (#1531): the account now logs in by the new address.
+  await expect(page.getByText('Вход в аккаунт теперь по этому адресу')).toBeVisible();
   await captureScreen(page, test.info(), '06-success');
 
   await page.getByRole('button', { name: 'Хорошо' }).click();
