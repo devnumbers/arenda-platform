@@ -48,7 +48,7 @@ export function StickyBottomBar({
         // паддинг (тот же расчёт, что у history-чипа #718); на ПК TabBar
         // скрыт — панель остаётся у нижнего края.
         aboveTabBar
-          ? 'bottom-0 max-desktop:bottom-[calc(72px_+_max(12px,env(safe-area-inset-bottom)))]'
+          ? 'bottom-0 max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom))]'
           : 'bottom-0',
         // «Хром ПК постоянен» (решение владельца 25.09, правка канона
         // #561, тикет #865): шит панели на ПК — колонка 560 по центру

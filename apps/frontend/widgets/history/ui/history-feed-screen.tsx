@@ -617,7 +617,7 @@ export function HistoryFeedScreen({
         * Ниже ПК (паттерн «CTA над TabBar» #1166) чип живёт над кнопкой,
         * а кнопка — над видимым футером (72 + паддинг + зазор 12). */}
       {hasNewBelow && feedRendered && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))_+_68px)] max-desktop:bottom-[calc(72px_+_max(12px,env(safe-area-inset-bottom))_+_80px)] z-40 flex justify-center">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))_+_68px)] max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom)_+_80px)] z-40 flex justify-center">
           <button
             type="button"
             onClick={scrollToFresh}
@@ -636,7 +636,7 @@ export function HistoryFeedScreen({
         * сама кнопка. Ниже ПК кнопка плавает над видимым TabBar (паттерн
         * «CTA над TabBar», решение владельца 06.10.2026 #1166): футер 72 +
         * паддинг + зазор 12; на ПК TabBar нет — у нижнего края. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-desktop:bottom-[calc(72px_+_max(12px,env(safe-area-inset-bottom))_+_12px)] z-40 flex justify-center">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom)_+_12px)] z-40 flex justify-center">
         <div className="pointer-events-auto mx-auto flex w-full max-w-column justify-center">
           <Button type="button" onClick={() => setFiltersOpen(true)}>
             Настройки

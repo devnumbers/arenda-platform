@@ -99,15 +99,18 @@ export function TabBar({
     <>
       <nav
         aria-label="Нижняя навигация"
-        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 w-full bg-white pb-[max(12px,env(safe-area-inset-bottom))] font-sans desktop:hidden"
+        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 w-full bg-white pb-[env(safe-area-inset-bottom)] font-sans desktop:hidden"
       >
         {/* Табы во всю ширину вьюпорта — футер существует только там, где
          * нет ПК-хрома (1023 и уже), кап-колонка не нужна. Паддинг nav —
          * единственный носитель safe-area бара: ряд TabBarRow (72px) ничего
-         * о ней не знает и переиспользуется шитом «Еще». Фолбэк 12px в
-         * max() — тот же, что у листа и StickyBottomBar (research §4): все
-         * трое считают одну высоту 72px + max(12px, env), поэтому полоса,
-         * лист и панель сходятся на любой устройстве. Бар живёт НАД
+         * о ней не знает и переиспользуется шитом «Еще». Формула — ровно
+         * env, без хардкорного минимума (решение владельца 19.10.2026:
+         * фолбэк 12px из max(12px, env) снесён — на устройствах без
+         * home-indicator он рисовал 12px, которых нет в макете). Лист
+         * «Еще», StickyBottomBar, запас page-content и нижний хром истории
+         * считают ту же высоту 72px + env — полоса, лист и панель
+         * сходятся на любой устройстве. Бар живёт НАД
          * оверлеем шита (z-50 против z-40) — одна поверхность с листом, не
          * темнеет и кликабелен в любой фазе анимации. pointer-events-auto
          * обязателен: открытый шит (dismissable-layer Radix) ставит body
