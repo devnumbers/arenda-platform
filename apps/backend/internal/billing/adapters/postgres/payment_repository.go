@@ -207,14 +207,14 @@ func (r *SubscriptionPaymentRepository) Count(ctx context.Context, sel applicati
 }
 
 // adminPaymentQueryParams maps the validated application filters to the SQL
-// parameters. The phone filter is encrypted deterministically so it matches
-// the stored ciphertext; a plaintext row still matches its own form.
+// parameters. The email filter is an exact case-insensitive match on the
+// canonical address (ADR 0067).
 func (r *SubscriptionPaymentRepository) adminPaymentQueryParams(
-	ctx context.Context, filters application.AdminPaymentFilters,
-) (postgres.ListSubscriptionPaymentsAdminParams, error) {
+	filters application.AdminPaymentFilters,
+) postgres.ListSubscriptionPaymentsAdminParams {
 	params := postgres.ListSubscriptionPaymentsAdminParams{
 		Status:             filters.Status,
-		UserPhone:          filters.UserPhone,
+		UserEmail:          filters.UserEmail,
 		SubscriptionStatus: filters.SubscriptionStatus,
 		Sort:               filters.Sort,
 		Order:              filters.Order,
@@ -224,14 +224,7 @@ func (r *SubscriptionPaymentRepository) adminPaymentQueryParams(
 	if filters.UserID != nil {
 		params.UserID = pgtype.UUID{Bytes: *filters.UserID, Valid: true}
 	}
-	if filters.UserPhone != "" {
-		encrypted, err := r.enc.DeterministicEncrypt(ctx, filters.UserPhone)
-		if err != nil {
-			return params, fmt.Errorf("encrypt phone filter: %w", err)
-		}
-		params.UserPhoneEnc = encrypted
-	}
-	return params, nil
+	return params
 }
 
 // ListAdminPayments implements the admin payment listing (issue #254): every
@@ -240,15 +233,11 @@ func (r *SubscriptionPaymentRepository) adminPaymentQueryParams(
 func (r *SubscriptionPaymentRepository) ListAdminPayments(
 	ctx context.Context, filters application.AdminPaymentFilters,
 ) ([]application.AdminPaymentRow, int64, error) {
-	params, err := r.adminPaymentQueryParams(ctx, filters)
-	if err != nil {
-		return nil, 0, err
-	}
+	params := r.adminPaymentQueryParams(filters)
 	total, err := r.q().CountSubscriptionPaymentsAdmin(ctx, postgres.CountSubscriptionPaymentsAdminParams{
 		UserID:             params.UserID,
 		Status:             params.Status,
-		UserPhone:          params.UserPhone,
-		UserPhoneEnc:       params.UserPhoneEnc,
+		UserEmail:          params.UserEmail,
 		SubscriptionStatus: params.SubscriptionStatus,
 	})
 	if err != nil {
@@ -258,7 +247,7 @@ func (r *SubscriptionPaymentRepository) ListAdminPayments(
 	if err != nil {
 		return nil, 0, fmt.Errorf("list admin subscription payments: %w", err)
 	}
-	mapped, err := mapAdminPaymentRows(ctx, r, rows)
+	mapped, err := mapAdminPaymentRows(rows)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -283,18 +272,11 @@ func (r *SubscriptionPaymentRepository) GetAdminPayment(ctx context.Context, pay
 	if err != nil {
 		return application.AdminPaymentRow{}, err
 	}
-	phone, err := r.resolveUserPhone(ctx, row.UserPhone, row.UserPhoneEncrypted)
-	if err != nil {
-		return application.AdminPaymentRow{}, err
-	}
-	return application.AdminPaymentRow{Payment: payment, UserPhone: phone}, nil
+	return application.AdminPaymentRow{Payment: payment, UserEmail: row.UserEmail}, nil
 }
 
-// mapAdminPaymentRows maps the admin listing rows to the application shape,
-// decrypting the payer's phone where it is stored as ciphertext.
-func mapAdminPaymentRows(
-	ctx context.Context, r *SubscriptionPaymentRepository, rows []postgres.ListSubscriptionPaymentsAdminRow,
-) ([]application.AdminPaymentRow, error) {
+// mapAdminPaymentRows maps the admin listing rows to the application shape.
+func mapAdminPaymentRows(rows []postgres.ListSubscriptionPaymentsAdminRow) ([]application.AdminPaymentRow, error) {
 	result := make([]application.AdminPaymentRow, 0, len(rows))
 	for _, row := range rows {
 		payment, err := mapSubscriptionPaymentFromColumns(
@@ -306,29 +288,9 @@ func mapAdminPaymentRows(
 		if err != nil {
 			return nil, err
 		}
-		phone, err := r.resolveUserPhone(ctx, row.UserPhone, row.UserPhoneEncrypted)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, application.AdminPaymentRow{Payment: payment, UserPhone: phone})
+		result = append(result, application.AdminPaymentRow{Payment: payment, UserEmail: row.UserEmail})
 	}
 	return result, nil
-}
-
-// resolveUserPhone decrypts the payer's phone when it is stored as
-// ciphertext; a plaintext row (phone_encrypted = false) passes through.
-func (r *SubscriptionPaymentRepository) resolveUserPhone(ctx context.Context, phone string, encrypted bool) (string, error) {
-	if !encrypted {
-		return phone, nil
-	}
-	if r.enc == nil {
-		return "", errors.New("billing.SubscriptionPaymentRepository: encrypted phone cannot be resolved without an encryptor")
-	}
-	decrypted, err := r.enc.Decrypt(ctx, phone)
-	if err != nil {
-		return "", fmt.Errorf("decrypt phone: %w", err)
-	}
-	return decrypted, nil
 }
 
 // mapSubscriptionPaymentFromColumns maps the shared payment column set of the

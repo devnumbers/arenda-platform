@@ -23,8 +23,6 @@ paths:
                 $ref: '#/components/schemas/SendCodeResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '409':
-          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '500':
@@ -53,8 +51,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '500':
@@ -236,58 +232,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-  /me/phone/send-code:
-    post:
-      operationId: sendPhoneChangeCode
-      security:
-        - sessionCookie: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SendPhoneChangeCodeRequest'
-      responses:
-        '204':
-          description: Code sent
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-  /me/phone/change:
-    post:
-      operationId: changePhone
-      security:
-        - sessionCookie: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ChangePhoneRequest'
-      responses:
-        '200':
-          description: Phone changed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
   /me/email/send-code:
     post:
       operationId: sendEmailChangeCode
@@ -4050,10 +3994,10 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/SubscriptionPaymentStatus'
-        - name: user_phone
+        - name: user_email
           in: query
           required: false
-          description: Exact match on the user's phone number.
+          description: Exact case-insensitive match on the user's email address.
           schema:
             type: string
         - name: subscription_status
@@ -4211,14 +4155,12 @@ paths:
             type: integer
             default: 0
             minimum: 0
-        - name: phone
-          in: query
-          required: false
-          schema:
-            type: string
         - name: email
           in: query
           required: false
+          description: >-
+            Case-insensitive substring search over the email address. A missing
+            or empty value disables the filter.
           schema:
             type: string
         - name: role
@@ -5696,12 +5638,15 @@ components:
     SendCodeRequest:
       type: object
       required:
-        - phone
+        - email
       properties:
-        phone:
-          type: string
         email:
           type: string
+          description: >-
+            The canonical email address the code is delivered to. Login and
+            registration are one flow (ADR 0067): a code to an address the
+            platform does not know yet creates the account when the code
+            verifies. The response does not reveal whether an account exists.
 
     SendCodeResponse:
       type: object
@@ -5710,7 +5655,7 @@ components:
       properties:
         sent:
           type: boolean
-          description: Whether a code was sent (false = email step required)
+          description: Whether a code was sent
         retryAfter:
           type: integer
           description: Seconds before another code can be requested
@@ -5718,13 +5663,12 @@ components:
     VerifyCodeRequest:
       type: object
       required:
-        - phone
+        - email
         - code
       properties:
-        phone:
-          type: string
         email:
           type: string
+          description: The same canonical address the code was delivered to.
         code:
           type: string
           minLength: 6
@@ -5741,13 +5685,11 @@ components:
 
     MeResponse:
       type: object
-      required: [id, phone, role]
+      required: [id, role]
       properties:
         id:
           type: string
           format: uuid
-        phone:
-          type: string
         role:
           type: string
           enum: [owner, admin]
@@ -5846,28 +5788,6 @@ components:
           nullable: true
           maxLength: 64
           description: IANA timezone identifier, e.g. Europe/Moscow.
-
-    SendPhoneChangeCodeRequest:
-      type: object
-      required: [phone]
-      properties:
-        phone:
-          type: string
-          example: '+79990001122'
-
-    ChangePhoneRequest:
-      type: object
-      required: [phone, code]
-      properties:
-        phone:
-          type: string
-          example: '+79990001122'
-        code:
-          type: string
-          minLength: 6
-          maxLength: 6
-          pattern: '^\d{6}$'
-          example: '123456'
 
     VerifyCurrentEmailRequest:
       type: object
@@ -6278,7 +6198,7 @@ components:
 
     AdminSubscriptionPayment:
       type: object
-      required: [id, tariff, period, amountKopecks, status, provider, userId, userPhone, createdAt, updatedAt]
+      required: [id, tariff, period, amountKopecks, status, provider, userId, userEmail, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6297,8 +6217,9 @@ components:
         userId:
           type: string
           format: uuid
-        userPhone:
+        userEmail:
           type: string
+          description: The owner's canonical email address.
         refundedAmountKopecks:
           type: integer
           format: int64
@@ -6428,16 +6349,13 @@ components:
 
     AdminUser:
       type: object
-      required: [id, phone, role, createdAt, updatedAt]
+      required: [id, email, role, createdAt, updatedAt]
       properties:
         id:
           type: string
           format: uuid
-        phone:
-          type: string
         email:
           type: string
-          nullable: true
         role:
           type: string
           enum: [owner, admin]
@@ -6496,7 +6414,7 @@ components:
 
     AdminProperty:
       type: object
-      required: [id, ownerId, ownerPhone, name, type, address, attributes, status, createdAt, updatedAt]
+      required: [id, ownerId, ownerEmail, name, type, address, attributes, status, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6504,8 +6422,9 @@ components:
         ownerId:
           type: string
           format: uuid
-        ownerPhone:
+        ownerEmail:
           type: string
+          description: The owner's canonical email address.
         name:
           type: string
         type:
@@ -6638,12 +6557,12 @@ components:
 
     AdminStatsRecentUser:
       type: object
-      required: [id, phone, createdAt]
+      required: [id, email, createdAt]
       properties:
         id:
           type: string
           format: uuid
-        phone:
+        email:
           type: string
         name:
           type: string
@@ -6657,7 +6576,7 @@ components:
 
     AdminStatsRecentPayment:
       type: object
-      required: [id, userId, userPhone, amountKopecks, status, createdAt]
+      required: [id, userId, userEmail, amountKopecks, status, createdAt]
       properties:
         id:
           type: string
@@ -6665,7 +6584,7 @@ components:
         userId:
           type: string
           format: uuid
-        userPhone:
+        userEmail:
           type: string
         amountKopecks:
           type: integer

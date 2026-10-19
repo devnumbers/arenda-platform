@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// seedSharingUser creates a user by phone, returning the id.
-func seedSharingUser(t *testing.T, ctx context.Context, repo *UserRepository, phone string) uuid.UUID {
+// seedSharingUser creates a user from an email local part, returning the id.
+func seedSharingUser(t *testing.T, ctx context.Context, repo *UserRepository, local string) uuid.UUID {
 	t.Helper()
-	return seedUser(t, ctx, repo, phone, phone+"@example.com").ID
+	return seedUser(t, ctx, repo, local+"@example.com").ID
 }
 
 // seedSharingProperty inserts an owned property row.
@@ -51,7 +51,7 @@ func TestUserRepository_ShareReadableProperty_Matrix(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := context.Background()
-	repo := NewUserRepository(pool, noopEncryptor(t))
+	repo := NewUserRepository(pool)
 
 	const (
 		active    = "active"

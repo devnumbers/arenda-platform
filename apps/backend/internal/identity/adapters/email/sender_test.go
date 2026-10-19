@@ -70,15 +70,6 @@ func (s *fakeMailerSender) Send(_ context.Context, msg mailer.Message) error {
 	return s.err
 }
 
-func mustPhone(t *testing.T, raw string) domain.Phone {
-	t.Helper()
-	phone, err := domain.NewPhone(raw)
-	if err != nil {
-		t.Fatalf("parse phone: %v", err)
-	}
-	return phone
-}
-
 func mustEmail(t *testing.T, raw string) domain.Email {
 	t.Helper()
 	email, err := domain.NewEmail(raw)
@@ -141,13 +132,6 @@ func TestSender_Send_LetterForPurposeAndStep(t *testing.T) {
 			wantSubject:  "Код для входа в Рентли",
 		},
 		{
-			name:         "phone change code to the current email",
-			purpose:      domain.LoginCodePurposePhoneChange,
-			step:         domain.LoginCodeStepCurrentEmail,
-			wantTemplate: "phone_change_code",
-			wantSubject:  "Код для смены телефона в Рентли",
-		},
-		{
 			name:         "email change code to the current address",
 			purpose:      domain.LoginCodePurposeEmailChange,
 			step:         domain.LoginCodeStepCurrentEmail,
@@ -165,13 +149,12 @@ func TestSender_Send_LetterForPurposeAndStep(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			phone := mustPhone(t, "+79160005000")
 			emailAddr := mustEmail(t, "owner@example.com")
 			renderer := &fakeRenderer{plain: "plain body 123456", html: "<p>html body 123456</p>"}
 			sender := &fakeMailerSender{}
 			s := NewSender(sender, renderer)
 
-			if err := s.Send(t.Context(), phone, emailAddr, "123456", tc.purpose, tc.step); err != nil {
+			if err := s.Send(t.Context(), emailAddr, "123456", tc.purpose, tc.step); err != nil {
 				t.Fatalf("Send error = %v", err)
 			}
 
@@ -199,19 +182,18 @@ func TestSender_Send_UnknownPurposeStepPairFails(t *testing.T) {
 		step    domain.LoginCodeStep
 	}{
 		{name: "login to the new address", purpose: domain.LoginCodePurposeLogin, step: domain.LoginCodeStepNewEmail},
-		{name: "phone change to the new address", purpose: domain.LoginCodePurposePhoneChange, step: domain.LoginCodeStepNewEmail},
+		{name: "empty purpose", purpose: "", step: domain.LoginCodeStepCurrentEmail},
 		{name: "empty step", purpose: domain.LoginCodePurposeLogin, step: ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			phone := mustPhone(t, "+79160005001")
 			emailAddr := mustEmail(t, "owner@example.com")
 			renderer := &fakeRenderer{plain: "plain", html: "html"}
 			sender := &fakeMailerSender{}
 			s := NewSender(sender, renderer)
 
-			err := s.Send(t.Context(), phone, emailAddr, "123456", tc.purpose, tc.step)
+			err := s.Send(t.Context(), emailAddr, "123456", tc.purpose, tc.step)
 			if err == nil {
 				t.Fatal("Send error = nil, want unknown-pair failure")
 			}
@@ -250,12 +232,6 @@ func TestSender_Send_RealTemplates_CarryRequiredBlocks(t *testing.T) {
 			wantOperation: "Вы запросили код для входа в Рентли",
 		},
 		{
-			name:          "phone change code",
-			purpose:       domain.LoginCodePurposePhoneChange,
-			step:          domain.LoginCodeStepCurrentEmail,
-			wantOperation: "Вы запросили смену телефона в Рентли",
-		},
-		{
 			name:          "email change code to the current address",
 			purpose:       domain.LoginCodePurposeEmailChange,
 			step:          domain.LoginCodeStepCurrentEmail,
@@ -271,12 +247,11 @@ func TestSender_Send_RealTemplates_CarryRequiredBlocks(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			phone := mustPhone(t, "+79160005002")
 			emailAddr := mustEmail(t, "letters@example.com")
 			sender := &fakeMailerSender{}
 			s := NewSender(sender, renderer)
 
-			if err := s.Send(t.Context(), phone, emailAddr, "123456", tc.purpose, tc.step); err != nil {
+			if err := s.Send(t.Context(), emailAddr, "123456", tc.purpose, tc.step); err != nil {
 				t.Fatalf("Send error = %v", err)
 			}
 
@@ -309,14 +284,13 @@ func TestSender_Send_RealTemplates_CarryRequiredBlocks(t *testing.T) {
 
 func TestSender_Send_RenderErrorIsWrapped(t *testing.T) {
 	t.Parallel()
-	phone := mustPhone(t, "+79160005003")
 	emailAddr := mustEmail(t, "owner@example.com")
 
 	renderErr := errors.New("template not found")
 	renderer := &fakeRenderer{err: renderErr}
 	s := NewSender(&fakeMailerSender{}, renderer)
 
-	err := s.Send(t.Context(), phone, emailAddr, "123456", domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail)
+	err := s.Send(t.Context(), emailAddr, "123456", domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail)
 	if !errors.Is(err, renderErr) {
 		t.Fatalf("Send error = %v, want wrap of renderErr", err)
 	}
@@ -324,7 +298,6 @@ func TestSender_Send_RenderErrorIsWrapped(t *testing.T) {
 
 func TestSender_Send_SenderErrorIsWrapped(t *testing.T) {
 	t.Parallel()
-	phone := mustPhone(t, "+79160005004")
 	emailAddr := mustEmail(t, "owner@example.com")
 
 	sendErr := errors.New("smtp refused")
@@ -332,7 +305,7 @@ func TestSender_Send_SenderErrorIsWrapped(t *testing.T) {
 	sender := &fakeMailerSender{err: sendErr}
 	s := NewSender(sender, renderer)
 
-	err := s.Send(t.Context(), phone, emailAddr, "123456", domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail)
+	err := s.Send(t.Context(), emailAddr, "123456", domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail)
 	if !errors.Is(err, sendErr) {
 		t.Fatalf("Send error = %v, want wrap of sendErr", err)
 	}

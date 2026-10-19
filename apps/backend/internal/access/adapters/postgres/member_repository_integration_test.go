@@ -71,13 +71,13 @@ func createAccessTestUser(t *testing.T, ctx context.Context, q *genpostgres.Quer
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	// The phone must be unique per call: deriving it from the uuid timestamp
+	// The email must be unique per call: deriving it from the uuid timestamp
 	// collides for users created within the same millisecond (V7 timestamps
 	// have millisecond precision), and CreateUser's ON CONFLICT DO NOTHING
 	// then returns no rows. Deriving from the uuid's random tail avoids that.
 	_, err = q.CreateUser(ctx, genpostgres.CreateUserParams{
 		ID:    pgUUID(id),
-		Phone: fmt.Sprintf("+7999%07d", binary.BigEndian.Uint32(id[12:])%10000000),
+		Email: fmt.Sprintf("access%07d@example.com", binary.BigEndian.Uint32(id[12:])%10000000),
 		Role:  "owner",
 	})
 	if err != nil {

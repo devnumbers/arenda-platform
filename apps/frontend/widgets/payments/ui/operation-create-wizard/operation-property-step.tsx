@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import { type JSX } from 'react';
 import { BoldHome, RadioFalse, RadioTrue } from '@/shared/assets/icons';
-import { Button, CircleIcon, Skeleton } from '@/shared/ui/design';
+import { Button, CircleIcon, CirclePhoto, Skeleton } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
 import { filterEditableProperties, propertyTypeIcons, type PropertyType } from '@/entities/property';
 
@@ -67,9 +67,8 @@ function ObjectRowButton({
   readonly onCheck: () => void;
 }): JSX.Element {
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
-  // Битое фото (404 стрима) откатывается к глифу — канон #1275 (#1286).
-  const [photoBroken, setPhotoBroken] = useState(false);
-
+  // Механика показа (битое фото — канон #1275/#1286, гард, ожидание) —
+  // примитив CirclePhoto (#1423); строки выбора — ленивая подача.
   const Glyph = type !== undefined ? propertyTypeIcons[type] : undefined;
   return (
     <button
@@ -77,21 +76,20 @@ function ObjectRowButton({
       role="radio"
       aria-checked={checked}
       onClick={onCheck}
-      className="flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80"
+      className="pressable flex w-full cursor-pointer items-center gap-3 py-3 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
     >
       <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-        {photoUrl !== undefined && !photoBroken ? (
-          <img
-              src={photoUrl}
-              alt=""
-              className="h-full w-full object-cover"
-              onError={() => setPhotoBroken(true)}
-            />
-        ) : Glyph !== undefined ? (
-          <Glyph className="h-6 w-6 text-content-tertiary" />
-        ) : (
-          <BoldHome className="h-6 w-6 text-content-tertiary" />
-        )}
+        <CirclePhoto
+          photoUrl={photoUrl}
+          loading="lazy"
+          glyph={
+            Glyph !== undefined ? (
+              <Glyph className="h-6 w-6 text-content-tertiary" />
+            ) : (
+              <BoldHome className="h-6 w-6 text-content-tertiary" />
+            )
+          }
+        />
       </CircleIcon>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">{title}</span>

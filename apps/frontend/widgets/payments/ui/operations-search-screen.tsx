@@ -83,10 +83,14 @@ export function OperationsSearchScreen({
   const emptyQuery = value.trim() === '';
   // Скелетон — только пока данных нет вовсе (первый запрос): правка запроса
   // держит прежние результаты (keepPreviousData) и не дёргает экран; ошибка
-  // без данных показывает карточку повтора, не скелетон.
+  // без данных показывает карточку повтора, не скелетон. Пустые прежние
+  // результаты держать нельзя (лгут о летящем запросе, план 029 #1442) —
+  // пока запрос текущего критерия летит и показывать нечего, скелетон.
   const pending =
     !emptyQuery
-    && (listQuery.data === undefined || summaryQuery.data === undefined)
+    && (listQuery.data === undefined
+      || summaryQuery.data === undefined
+      || (listQuery.isFetching && operations.length === 0))
     && !listQuery.isError
     && !summaryQuery.isError;
   const showResults = !emptyQuery && !pending && !listQuery.isError;

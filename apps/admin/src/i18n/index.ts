@@ -8,7 +8,6 @@ const customMessages = {
       name: 'Пользователь |||| Пользователи',
       fields: {
         id: 'ID',
-        phone: 'Телефон',
         email: 'Email',
         role: 'Роль',
         subscriptionStatus: 'Статус подписки',
@@ -29,8 +28,8 @@ const customMessages = {
         id: 'ID',
         user_id: 'Пользователь',
         userId: 'Пользователь',
-        userPhone: 'Телефон пользователя',
-        user_phone: 'Телефон пользователя',
+        userEmail: 'Email пользователя',
+        user_email: 'Email пользователя',
         status: 'Статус',
         amountKopecks: 'Сумма, ₽',
         refundedAmountKopecks: 'Возвращено, ₽',

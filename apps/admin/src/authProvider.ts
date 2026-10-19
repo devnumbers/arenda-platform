@@ -1,5 +1,4 @@
 import { type AuthProvider, fetchUtils } from 'react-admin';
-import { normalizePhone } from './phone';
 
 const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? '/api';
 
@@ -8,7 +7,6 @@ interface MeResponse {
   role: string;
   email?: string;
   full_name?: string;
-  phone?: string;
 }
 
 // Граница типизирована (админ-трек II, #392): fetchUtils.fetchJson отдаёт
@@ -66,35 +64,36 @@ const fetchMe = async (): Promise<MeResponse> => {
 // на fetch вне граничных файлов): LoginPage не ходит в сеть сам.
 interface AdminAuthProvider extends AuthProvider {
   /** Шаг «отправить код подтверждения» экрана входа (POST /auth/send). */
-  sendLoginCode: (payload: { phone: string; email: string }) => Promise<void>;
+  sendLoginCode: (payload: { email: string }) => Promise<void>;
 }
 
 // Полезная нагрузка POST /auth/verify из экрана входа: интерфейс AuthProvider
 // типизирует login(params: any) — граница сужает параметры сама.
+// Вход = регистрация (ADR 0067): адрес канонизирует бэкенд, граница
+// отправляет только обрезанное значение — оба шага (send и verify) одинаково.
 interface LoginParams {
-  phone?: string;
   email?: string;
   code?: string;
 }
 
 export const authProvider: AdminAuthProvider = {
-  sendLoginCode: async ({ phone, email }) => {
+  sendLoginCode: async ({ email }) => {
     try {
       await httpClient(`${API_PREFIX}/auth/send`, {
         method: 'POST',
-        body: JSON.stringify({ phone, email }),
+        body: JSON.stringify({ email: String(email ?? '').trim() }),
       });
     } catch (error) {
       throw new Error(messageOf(error, 'Не удалось отправить код'));
     }
   },
 
-  login: async ({ phone, email, code }: LoginParams) => {
-    const normalizedPhone = normalizePhone(String(phone ?? ''));
+  login: async ({ email, code }: LoginParams) => {
+    const trimmedEmail = String(email ?? '').trim();
     try {
       await httpClient(`${API_PREFIX}/auth/verify`, {
         method: 'POST',
-        body: JSON.stringify({ phone: normalizedPhone, email, code }),
+        body: JSON.stringify({ email: trimmedEmail, code }),
       });
     } catch (error) {
       throw new Error(messageOf(error, 'Не удалось подтвердить код'));
@@ -148,7 +147,7 @@ export const authProvider: AdminAuthProvider = {
     const me = await fetchMe();
     return {
       id: me.id,
-      fullName: me.full_name ?? me.email ?? me.phone ?? me.id,
+      fullName: me.full_name ?? me.email ?? me.id,
       avatar: undefined,
     };
   },

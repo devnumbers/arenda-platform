@@ -1,4 +1,4 @@
 // Минимальный публичный API среза (FSD: экспортируется только то, что
 // реально потребляется); конфигурация движка импортируется напрямую
 // (тесты) — shared-модули сами точки входа.
-export { SnapRail } from "./snap-rail";
+export { SnapRail, SNAP_TILE_CLASSES } from "./snap-rail";

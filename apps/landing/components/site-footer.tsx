@@ -24,10 +24,9 @@ export function SiteFooter() {
           <Logo className="h-14 w-auto" />
         </Link>
         <div className="flex flex-col gap-2.5 desk:flex-row desk:flex-wrap desk:items-center desk:gap-[9px]">
-          {/* TODO(владелец): точный хэндл Telegram-канала — плейсхолдер t.me/rentlee */}
           <LandingLink
             variant="gray"
-            href="https://t.me/rentlee"
+            href="https://t.me/smirnowwwivan"
             target="_blank"
             rel="noopener noreferrer"
           >

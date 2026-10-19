@@ -149,7 +149,8 @@ const buildListQuery = (resource: string, params: GetListParams): string => {
 
   // Отбрасываем sort/order вне whitelist'а ресурса: бэкенд валидирует sort
   // и отвечает 400, а в URL списков у пользователей могли остаться старые
-  // значения (sort=id, sort=phone). Без sort бэкенд применит свой дефолт.
+  // значения (sort=id из эпохи до серверной сортировки). Без sort бэкенд
+  // применит свой дефолт.
   if (sort?.field && sortableFieldsByResource[resource]?.includes(sort.field)) {
     query.set('sort', sort.field);
     query.set('order', sort.order === 'ASC' ? 'asc' : 'desc');

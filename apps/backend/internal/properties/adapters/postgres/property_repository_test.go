@@ -65,11 +65,11 @@ func createTestOwner(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	// users.phone (the flake #168 predicted). Value-unique phones keep the
 	// fixture parallel-safe (the same fix as waves #374/#375; the sibling
 	// createContactPolicyTestUser derives its phone the same way).
-	phone := fmt.Sprintf("+7000%07d", binary.BigEndian.Uint32(id[12:])%10000000)
+	email := fmt.Sprintf("prop%07d@example.com", binary.BigEndian.Uint32(id[12:])%10000000)
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO users (id, phone, role) VALUES ($1, $2, 'owner')`,
-		id, phone,
+		`INSERT INTO users (id, email, role) VALUES ($1, $2, 'owner')`,
+		id, email,
 	); err != nil {
 		t.Fatalf("insert test owner: %v", err)
 	}

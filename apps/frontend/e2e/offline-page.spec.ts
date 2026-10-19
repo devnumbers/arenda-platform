@@ -12,10 +12,10 @@ test('офлайн-страница: заголовок, кнопки, подд�
   await expect(page.getByRole('heading', { name: 'Нет соединения' })).toBeVisible();
   await expect(page.getByText('Проверьте подключение к интернету и попробуйте снова')).toBeVisible();
 
-  // «Обратиться в поддержку» — внешняя ссылка на Telegram; адрес — заглушка
-  // из shared/config/support.ts (владелец заменит).
+  // «Обратиться в поддержку» — внешняя ссылка на Telegram; адрес — из
+  // shared/config/support.ts.
   const telegram = page.getByRole('link', { name: 'Обратиться в поддержку' });
-  await expect(telegram).toHaveAttribute('href', 'https://t.me/swirnowwwivan');
+  await expect(telegram).toHaveAttribute('href', 'https://t.me/smirnowwwivan');
   await expect(telegram).toHaveAttribute('target', '_blank');
 
   // «Обновить страницу» перезагружает документ: маркер текущего окна после

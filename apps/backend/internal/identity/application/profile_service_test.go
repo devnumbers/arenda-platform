@@ -52,17 +52,19 @@ func newProfileHarness(t *testing.T) *profileHarness {
 	return &profileHarness{fakeStores: stores, svc: svc, audit: audit, photos: photos, checker: checker}
 }
 
+// seedProfileUserEmail is the address of the user seedProfileUser creates,
+// reused by the tests that need the row's key in the fake repo.
+const seedProfileUserEmail = "owner@example.com"
+
 // seedProfileUser creates a verified owner in the fake user repo and returns it.
 func seedProfileUser(t *testing.T, users *fakeUserRepo) domain.User {
 	t.Helper()
-	phone := mustPhone(t, "+79160000001")
-	user, err := domain.NewOwner(phone)
+	user, err := domain.NewOwner(mustEmail(t, seedProfileUserEmail))
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	user.Email = new(mustEmail(t, "owner@example.com"))
 	user.EmailVerifiedAt = &testNow
-	users.byPhone[phone.String()] = user
+	users.byEmail[seedProfileUserEmail] = user
 	return user
 }
 
@@ -206,7 +208,7 @@ func TestProfileService_UsesRunInTx(t *testing.T) {
 	seedProfileUser(t, users.fakeUserRepo)
 
 	if _, err := svc.UpdateProfile(context.Background(),
-		users.fakeUserRepo.byPhone["+79160000001"].ID, UpdateProfileCommand{Name: new("Ivan")}); err != nil {
+		users.fakeUserRepo.byEmail[seedProfileUserEmail].ID, UpdateProfileCommand{Name: new("Ivan")}); err != nil {
 		t.Fatalf("UpdateProfile error = %v", err)
 	}
 	if users.withTxCalls != 1 {
@@ -231,7 +233,7 @@ func TestProfileService_Me_ReadsOutsideTx(t *testing.T) {
 	if got.ID != user.ID {
 		t.Fatalf("Me user ID = %s, want %s", got.ID, user.ID)
 	}
-	if h.beginner.begun != 0 {
-		t.Errorf("tx begun = %d, want 0 for a read", h.beginner.begun)
+	if h.beginner.open != 0 {
+		t.Errorf("tx begun = %d, want 0 for a read", h.beginner.open)
 	}
 }

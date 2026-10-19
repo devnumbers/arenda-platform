@@ -8,6 +8,7 @@ import {
   paymentReminderOptionLabel,
 } from '@/entities/payment';
 import { cn } from '@/shared/lib/cn';
+import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import {
   Button,
   Checkbox,
@@ -213,6 +214,11 @@ export function PaymentDayPicker({
   readonly onClose: () => void;
   readonly onConfirm: (paymentDay: RentalPaymentDay | undefined) => void;
 }): JSX.Element {
+  // Лок фона: поверхность непрозрачно накрывает ленту — жест у края
+  // внутренней ленты не должен уезжать в цепочку скролла страницы
+  // (канон useBodyScrollLock, решение владельца 2026-10-13; конвенция
+  // слоёв — тикет #1417).
+  useBodyScrollLock();
   const [draftDay, setDraftDay] = useState<number | undefined>(
     typeof initial === 'number' ? initial : undefined,
   );
@@ -249,8 +255,11 @@ export function PaymentDayPicker({
       >
         <TopNavTitle title="Выберите день" />
       </TopNav>
-      <PageContent className="relative flex h-[calc(100dvh-72px)] flex-col pb-0">
-        <div className="flex-1 min-h-0 overflow-y-auto pb-6">
+      {/* tablet:mt-[72px] — компенсация закреплённого TopNav (канон
+          CalendarDatePicker): на планшете/ПК бар фиксируется и выпадает
+          из потока поверхности, без него контент уезжает под хедер. */}
+      <PageContent className="relative flex h-[calc(100dvh-72px)] flex-col pb-0 tablet:mt-[72px]">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain [scrollbar-width:none] pb-6">
           <div className="pt-6">
             <MonthDaysGrid
               days={30}

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type JSX,
@@ -22,6 +23,7 @@ import {
 import { isNearEnd, isNearStart } from './wheel-edge';
 import { shouldTickRow, tickRow } from './wheel-haptics';
 import { rollDurationMs, rollEase } from './wheel-roll';
+import { planWheelSync } from './wheel-sync';
 
 /** Колесо-«крутилка» дизайн-слоя (редизайн 2026-09-04 по решению
  * владельца, Figma 1539-82659): вертикальный список с нативным скроллом
@@ -69,6 +71,23 @@ import { rollDurationMs, rollEase } from './wheel-roll';
 const WHEEL_ROW_HEIGHT = 48;
 /** Пауза тишины скролла, после которой ряд под полосой считается выбранным. */
 const SETTLE_TIMEOUT_MS = 150;
+
+// Синк позиционирует ленту до пейнта (план 049): коррекция после пейнта
+// закрашивала чужой кадр (WebKit не держит позицию приписки до пейнта).
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+/** Мгновенная запись позиции с подавлением снапа на один кадр: чужой
+ * реснап (WebKit промахивается на соседние ряды или не реснапится вовсе
+ * после приписки рядов — план 049, репро 17.10) не должен перебить
+ * запись. Возврат снапа следующим кадром реснапится по уже выровненной
+ * позиции — стабильно. */
+function writeScrollTopLocked(list: HTMLUListElement, top: number): void {
+  list.style.scrollSnapType = 'none';
+  list.scrollTop = top;
+  requestAnimationFrame(() => {
+    list.style.scrollSnapType = '';
+  });
+}
 
 /** Ряд ленты под полосой для текущего scrollTop (с клампом в ленту). */
 function rowFromScrollTop(list: HTMLUListElement, maxRow: number): number {
@@ -135,10 +154,10 @@ function WheelRow({
       style={{ height: WHEEL_ROW_HEIGHT }}
       className={cn(
         // Единый кегль всех рядов (Figma 1539-82659): выбранный
-        // темнеет, остальные серые — без каскада размеров. active —
-        // мгновенный отклик на тап по ряду (канон Apple §1): тот же
-        // токен, что у вторичной Button.
-        'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-xl leading-6 text-content-secondary transition-colors active:bg-surface-muted-active',
+        // темнеет, остальные серые — без каскада размеров. Подсветка
+        // нажатия ряда (active:bg) отклонена владельцем 16.10 (карта
+        // #1437): отклик ряда — только полоса выбора и цвет текста.
+        'flex shrink-0 cursor-pointer snap-center items-center justify-center font-sans text-xl leading-6 text-content-secondary transition-colors',
         dark && 'text-content',
       )}
     >
@@ -175,6 +194,10 @@ export function WheelPicker({
   // Верхний край сообщил о себе (isNearStart), но приписка ждёт паузы —
   // у settle-таймера (см. handleScroll).
   const pendingStartRef = useRef(false);
+  // Доращивка назад произошла с прошлого синка: settle-коммит года мог
+  // совпасть с ней одним рендером — синк обязан ставить позицию напрямую,
+  // а не роллом (план 049: ролл катил ~19 000px через века).
+  const startGrewRef = useRef(false);
   // Форма ленты на прошлом прогоне синхронизации: первый ряд отличает
   // приписку в начало (onNearStart) от прочих изменений; valueIndex —
   // рост ленты от смены значения.
@@ -242,53 +265,32 @@ export function WheelPicker({
   // докручивают нужный ряд в центр; после собственного скролла человека
   // ничего не дёргается — позиция уже совпадает с целевой. Актуальный
   // индекс для типографики приходит из событий скролла этого прокрута.
-  // Рост ленты (onNearEnd/onNearStart у концов без границы) значением не
-  // является: ряды дописаны, а позиция скролла уже правильная — синк здесь
-  // дёргал колесо smooth-скроллом обратно к выбранному ряду посреди
-  // инерции (дёрганье и откат при прокрутке года в будущее, жалоба
-  // владельца 13.10 на пикере создания платежа). Поэтому синк живёт
-  // только для реальной смены значения и для ре-анкора кольца при смене
-  // длины цикла; приписка в начало ленты (нелинейный рост назад)
-  // компенсируется самим браузером: scroll-snap реснапится к тому же
-  // элементу ленты, что был выбран, — приписанные сверху ряды он
-  // учитывает при layout, до пейнта. Ручной сдвиг scrollTop здесь был
-  // вторым слагаемым: суммы двух корректировок уводили колесо в кламп
-  // последнего ряда при разблокировке месяцев года (приписка 9 рядов
-  // вперёд обрезанной ленты [текущий..декабрь] — колесо показывало
-  // декабрь и плавно возвращалось к выбранному месяцу; #1429, замер:
-  // 0 → 528 → плавный спуск к 432).
+  // Рост ленты значением не является, но приписка рядов СВЕРХУ (доращивка
+  // назад, перекройка месяцев года) сдвигает ряд значения: позицию
+  // возвращает сам колесо, и до пейнта (план 049) — прежняя ставка на
+  // «реснап до пейнта» работала только на Chromium: WebKit промахивается
+  // реснапом на соседние ряды (ноябрь вместо октября при разблокировке
+  // месяцев; #1429) или не реснапится вовсе (~13 кадров год на 400
+  // раньше после доращивки), а post-paint-коррекция закрашивала чужой
+  // кадр, и при доращивке, совпавшей со сменой значения, катила роллом
+  // ~19 000px. Что делать — решает planWheelSync (wheel-sync.ts):
+  // перекройка и доращивка — мгновенная установка до пейнта (с
+  // подавлением снапа на кадр — чужой реснап не перебивает запись),
+  // ролл остаётся только обычной докрутке значения (клавиатура,
+  // внешний выбор).
   // В loop первая установка садится на якорную копию (середина ленты —
   // максимальный запас пробега в обе стороны), дальше — ближайший
   // представитель значения; смена длины цикла — ре-анкор на якорную
   // копию: прежняя позиция мерялась чужой лентой.
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const list = listRef.current;
     if (list === null) return;
     const prevValue = prevValueRef.current;
     prevValueRef.current = value;
     const syncFrom = syncFromRef.current;
     syncFromRef.current = valueIndex;
-    if (!loop && syncFrom !== null && syncFrom === valueIndex) {
-      return;
-    }
-    // Лента перекроена без смены значения (разблокировка/блокировка
-    // месяцев года при переключении года: [текущий..декабрь] ↔ полная
-    // лента) — значение то же, его ряд в ленте другой. Браузер к моменту
-    // эффекта уже поправил позицию: реснапом к выбранному элементу или
-    // зажимом о новый максимум ленты; исход гонки не важен — ставим
-    // колесо на ряд значения напрямую. Это идемпотентно после реснапа и
-    // лечит зажим: иначе зажатая позиция (декабрь в хвосте обрезанной
-    // ленты) доезжала плавным скроллом до выбранного ряда — обратная
-    // сторона #1429 («скролится с декабря по октябрь», интервально:
-    // реснап выигрывает гонку не всегда).
-    if (
-      !loop &&
-      prevValue === value &&
-      Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== valueIndex
-    ) {
-      cancelRoll();
-      list.scrollTop = valueIndex * WHEEL_ROW_HEIGHT;
-    }
+    const grewAtStart = startGrewRef.current;
+    startGrewRef.current = false;
     const maxRow = loop ? loopRowCount(items.length) - 1 : items.length - 1;
     let targetRow = valueIndex;
     if (loop) {
@@ -305,12 +307,28 @@ export function WheelPicker({
       // Лента переезжает под новую длину — фиксируем её до следующей
       // синхронизации, чтобы та знала, откуда ре-анкориться.
       loopLengthRef.current = items.length;
-    }
-    if (Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== targetRow) {
-      if (instantRef.current) {
-        list.scrollTop = targetRow * WHEEL_ROW_HEIGHT;
-      } else {
-        rollTo(list, targetRow * WHEEL_ROW_HEIGHT);
+      if (Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== targetRow) {
+        if (instantRef.current) {
+          writeScrollTopLocked(list, targetRow * WHEEL_ROW_HEIGHT);
+        } else {
+          rollTo(list, targetRow * WHEEL_ROW_HEIGHT);
+        }
+      }
+    } else {
+      const plan = planWheelSync({
+        instant: instantRef.current,
+        syncFrom,
+        valueIndex,
+        valueChanged: prevValue !== value,
+        grewAtStart,
+      });
+      if (plan !== 'skip' && Math.round(list.scrollTop / WHEEL_ROW_HEIGHT) !== targetRow) {
+        if (plan === 'direct') {
+          cancelRoll();
+          writeScrollTopLocked(list, targetRow * WHEEL_ROW_HEIGHT);
+        } else {
+          rollTo(list, targetRow * WHEEL_ROW_HEIGHT);
+        }
       }
     }
     instantRef.current = false;
@@ -378,6 +396,9 @@ export function WheelPicker({
     settleTimerRef.current = window.setTimeout(() => {
       if (pendingStartRef.current) {
         pendingStartRef.current = false;
+        // Флаг для синк-эффекта: приписка сверху сдвинула ряд значения —
+        // позиция ставится напрямую, не роллом (план 049).
+        startGrewRef.current = true;
         onNearStart?.();
       }
       commitIndex(loop ? modRows(row, items.length) : row);

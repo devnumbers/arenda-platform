@@ -1,16 +1,23 @@
 import type { Page } from '@playwright/test';
-import { openCabinetWithSeededSession, expect, SEEDED_GARAGE_PROPERTY_ID, test } from './fixtures';
+import {
+  openCabinetWithSeededSession,
+  expect,
+  SEEDED_APARTMENT_PROPERTY_ID,
+  SEEDED_GARAGE_PROPERTY_ID,
+  test,
+} from './fixtures';
 
-// Каркас-шелл страницы (карта #862, тикет #865 + доработка 25.09 по
-// макетам 1185-40815/40811/40814 + хром-фикс 25.09): колонка контента
-// центрируется во всём вьюпорте на любом ярусе; полноэкранные поверхности
-// пикеров начинаются на границе сайдбара (меню видно), их колонки легают
-// с колонками страниц; хром ПК не исчезает под открытой поверхностью —
-// крылья рисует поверхность, пилюли остаются, сайдбар кликабелен; нижняя
-// панель на ПК — колонка 560 (углы свободны, пилюли не глушатся никогда —
-// «хром ПК постоянен», решение 25.09, правка #561); планшетные шапки
-// подэкранов — слоты у краёв вьюпорта; TabBar глушится нижними панелями
-// на мобайле и планшете;
+// Каркас-шелл страницы (карта #862, тикет #865; канон восстановлен планом
+// 047 после регресса тотального сноса 046): колонка контента центрируется
+// во всём вьюпорте на любом ярусе; полноэкранные поверхности начинаются на
+// границе сайдбара (меню видно и кликабельно, 25.09/#865), их колонки
+// легают с колонками страниц; открытая МОДАЛКА опускает хром под скрим
+// (точечное правило плана 047 — лечение бага 16.10: сайдбар пробивал
+// скрим колесного шита над поверхностью); нижняя панель на ПК — колонка
+// 560 (углы свободны, пилюли не глушатся никогда — «хром ПК постоянен»,
+// решение 25.09, правка #561); планшетные шапки подэкранов — слоты у
+// краёв вьюпорта; TabBar глушится нижними панелями на мобайле и планшете;
+// мобильное меню «Ещё» — без изменений (указание владельца 16.10);
 // ноль дёрганья шапок хабов. Геометрия меряется bounding-box'ами —
 // вердикт живьём остаётся за /ui-walkthrough, спека держит регресс-гейт
 // на трёх ярусах (мобайл 375 / планшет 768 / ПК 1440).
@@ -83,7 +90,8 @@ test('ПК: пикер периода не накрывает сайдбар, к
     const column = dialog.querySelector('.max-w-column');
     const c = column?.getBoundingClientRect();
     // Белый лист поверхности — псевдоэлемент .fullscreen-surface::before:
-    // на ПК он начинается на границе сайдбара, меню остаётся видимым.
+    // на ПК он начинается на границе сайдбара (решение 25.09/#865,
+    // возвращено планом 047 после регресса тотального сноса 046).
     const sheetLeft = getComputedStyle(dialog, '::before').left;
     return {
       sheetLeft,
@@ -97,9 +105,10 @@ test('ПК: пикер периода не накрывает сайдбар, к
   expect(Math.abs((geometry.pickerColumnLeft ?? 0) - pageColumn.left)).toBeLessThanOrEqual(2);
 
   // Хром ПК не исчезает под открытой поверхностью (решение владельца
-  // 25.09, доработка #865): шапку с крыльями рисует сама поверхность,
-  // пилюли остаются смонтированными, шит панели пикера — колонка 560
-  // (углы свободны), клик над сайдбаром ловит пункт меню.
+  // 25.09, доработка #865, возвращено планом 047): шапку с крыльями
+  // рисует сама поверхность, пилюли остаются смонтированными, шит панели
+  // пикера — колонка 560 (углы свободны), клик над сайдбаром ловит
+  // пункт меню.
   const chrome = await page.evaluate(() => {
     const dialog = document.querySelector('[role="dialog"][aria-label="Выберите период"]');
     const sheet = dialog?.querySelector('.fixed.inset-x-0.bottom-0');
@@ -135,6 +144,47 @@ test('ПК: пикер периода не накрывает сайдбар, к
   await page.getByRole('link', { name: 'Платежи' }).click();
   await expect(surface).not.toBeVisible();
   await expect(page).toHaveURL(/\/payments$/);
+});
+
+test('ПК: модалка над поверхностью опускает хром под скрим (план 047)', async ({
+  page,
+  seededUser,
+}) => {
+  // Баг владельца 16.10 (скриншот пикера даты на /operations/new): колесный
+  // шит месяца/года открыт над полноэкранной поверхностью, а сайдбар и
+  // пилюли пробивали скрим — хром, поднятый над поверхностью до z-60
+  // (#865), бил оверлей модалки (z-50). Точечное лечение плана 047:
+  // пока открыт оверлей модалки, хром спускается к z-30 — точка над
+  // сайдбаром ловит скрим, не пункт меню. Поверхность без модалки меню
+  // не прячет (тест выше).
+  await openCabinetWithSeededSession(page, seededUser);
+  await page.setViewportSize(PC);
+  await page.goto('/operations/new');
+  // Визард открывается шагом суммы; дата — второй шаг («Выберите дату»).
+  await page.getByRole('textbox', { name: 'Сумма' }).fill('1000');
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  const monthChip = page.getByRole('button', {
+    name: /^(Январь|Февраль|Март|Апрель|Май|Июнь|Июль|Август|Сентябрь|Октябрь|Ноябрь|Декабрь) \d{4}$/,
+  });
+  await expect(monthChip).toBeVisible();
+
+  await monthChip.click();
+  const wheelSheet = page.getByRole('dialog', { name: 'Месяц и год' });
+  await expect(wheelSheet).toBeVisible();
+
+  const hit = await page.evaluate(() => {
+    const target = document.elementFromPoint(110, 300);
+    return {
+      inSidebar:
+        target instanceof HTMLElement
+          ? target.closest('nav[aria-label="Основная навигация"]') !== null
+          : false,
+      inOverlay:
+        target instanceof HTMLElement ? target.closest('.modal-overlay') !== null : false,
+    };
+  });
+  expect(hit.inSidebar, 'сайдбар пробивает скрим модалки').toBe(false);
+  expect(hit.inOverlay, 'точка над сайдбаром ловит оверлей модалки').toBe(true);
 });
 
 test('ПК: нижняя панель страницы — колонка 560, пилюли не глушатся никогда', async ({ page, seededUser }) => {
@@ -286,6 +336,32 @@ test('кнопка «Настройки» истории — над видимы
     const settingsBox = await settings.boundingBox();
     const tabBox = await tabbar.boundingBox();
     expect((settingsBox?.y ?? 0) + (settingsBox?.height ?? 0)).toBeLessThanOrEqual((tabBox?.y ?? 0) + 2);
+  }
+});
+
+// Полноэкранный пикер дня оплаты аренды (#530/#532): на планшете и ПК TopNav
+// внутри поверхности фиксируется (tablet:fixed) и выпадает из её потока —
+// без компенсации tablet:mt-[72px] (канон CalendarDatePicker) контент
+// поверхности уезжает под бар. Мобайл держит хедер в потоке — зазор там
+// структурный.
+test('пикер дня оплаты: календарь не заезжает под закреплённый хедер (мобайл, планшет, ПК)', async ({ page, seededUser }) => {
+  await openCabinetWithSeededSession(page, seededUser);
+
+  for (const viewport of [MOBILE, TABLET, PC]) {
+    await page.setViewportSize(viewport);
+    await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/rentals/new`);
+    await expect(page.getByRole('heading', { name: 'Цена и число оплаты' })).toBeVisible();
+    await page.getByRole('button', { name: 'День оплаты: Выбрать день' }).click();
+    const picker = page.getByRole('dialog', { name: 'Выбор дня оплаты' });
+    await expect(picker).toBeVisible();
+
+    const gap = await picker.evaluate((dialog) => {
+      const header = dialog.querySelector('header');
+      const grid = dialog.querySelector('.grid.grid-cols-7');
+      if (!header || !grid) throw new Error('хедер или грид дней пикера не найден');
+      return grid.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+    });
+    expect(gap).toBeGreaterThanOrEqual(-1);
   }
 });
 

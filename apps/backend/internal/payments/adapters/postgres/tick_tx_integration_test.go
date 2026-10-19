@@ -48,10 +48,10 @@ func newTickTxHarness(t *testing.T, tz string) *tickTxHarness {
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("tick%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := pool.Exec(context.Background(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, $4)`,
-		owner, phone, actor.RoleOwner, tz,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, $4)`,
+		owner, email, actor.RoleOwner, tz,
 	); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}

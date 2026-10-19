@@ -89,10 +89,11 @@ test.describe('жизненный цикл контакта', () => {
     await expect(page.getByText('Контакт', { exact: true })).toBeVisible();
     await expect(page.getByText('сантехник', { exact: true })).toBeVisible();
 
-    // Правка тапом по карточке «Информация» (#1333, карта #1332: правка
-    // переехала из кебаба, за кебабом — только удаление): роль меняется,
-    // сохранение возвращает на деталку.
-    await page.getByRole('link', { name: 'Информация' }).click();
+    // Правка через кебаб шапки (решение владельца 18.10: правка вернулась
+    // в меню и стала единственным входом — тап по карточке «Информация»
+    // больше не правит): роль меняется, сохранение возвращает на деталку.
+    await page.getByRole('button', { name: 'Меню контакта' }).click();
+    await page.getByRole('menuitem', { name: 'Изменить контакт' }).click();
     await expect(page.getByText('Изменить контакт', { exact: true })).toBeVisible();
     await page.getByRole('textbox', { name: 'Роль' }).fill(updatedRole);
     // Нижняя полноширинная кнопка; exact отсекает шапочное «Сохранить изменения».
@@ -110,17 +111,15 @@ test.describe('жизненный цикл контакта', () => {
     await page.getByText('+7 (993) 123-12-12', { exact: true }).click();
     await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}$/);
     await expect(page.getByRole('button', { name: 'Скопировано', exact: true })).toBeVisible();
-    // Правка остаётся на тапе по заголовку карточки.
-    await page.getByRole('link', { name: 'Информация' }).click();
-    await expect(page.getByText('Изменить контакт', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Назад' }).click();
-    await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]{36}$/);
+    // Карточка «Информация» больше не ссылка: правка — единственным входом
+    // через кебаб (решение владельца 18.10).
+    await expect(page.getByRole('link', { name: 'Информация' })).toHaveCount(0);
 
-    // Удаление через кебаб с подтверждением; кебаб — только удаление
-    // (#1333): пункта «Изменить» у него больше нет. Возврат на список
+    // Удаление через кебаб с подтверждением; в меню рядом с «Удалить» —
+    // «Изменить контакт» (решение владельца 18.10). Возврат на список
     // без карточки.
     await page.getByRole('button', { name: 'Меню контакта' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Изменить' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Изменить контакт' })).toBeVisible();
     await page.getByRole('menuitem', { name: 'Удалить' }).click();
     await expect(page.getByText('Удалить контакт?')).toBeVisible();
     await page.getByRole('button', { name: 'Удалить', exact: true }).click();

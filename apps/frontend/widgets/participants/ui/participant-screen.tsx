@@ -128,6 +128,7 @@ export function ParticipantScreen({
             <ErrorCard
               title="Не удалось загрузить участника"
               onRetry={() => void participantQuery.refetch()}
+              loading={participantQuery.isFetching}
               className="mt-6"
             />
           )

@@ -29,10 +29,9 @@ const contactChangedMaxAttempts = 5
 // instant are captured at change time: for an email change the recipient is
 // the OLD address, and ChangedAt is what the letter announces.
 type ContactChangedArgs struct {
-	// ChangeKind is the application.ContactChangeKind value ("email_changed"
-	// or "phone_changed") — the letter's template and subject selector.
-	// Named not Kind: the river.JobArgs interface claims Kind() for the job
-	// kind itself.
+	// ChangeKind is the application.ContactChangeKind value ("email_changed")
+	// — the letter's template and subject selector. Named not Kind: the
+	// river.JobArgs interface claims Kind() for the job kind itself.
 	ChangeKind string    `json:"change_kind"`
 	UserID     uuid.UUID `json:"user_id"`
 	Recipient  string    `json:"recipient"`

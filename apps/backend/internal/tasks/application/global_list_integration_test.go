@@ -68,10 +68,10 @@ func (h *tasksHarness) seedSecondOwner(
 	if err != nil {
 		t.Fatalf("new owner id: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", time.Now().UnixNano()%10000000000)
+	email := fmt.Sprintf("%010d@example.com", time.Now().UnixNano()%10000000000)
 	if _, err := h.pool.Exec(h.ctx(),
-		`INSERT INTO users (id, phone, role, timezone) VALUES ($1, $2, $3, $4)`,
-		ownerID, phone, actor.RoleOwner, tz,
+		`INSERT INTO users (id, email, role, timezone) VALUES ($1, $2, $3, $4)`,
+		ownerID, email, actor.RoleOwner, tz,
 	); err != nil {
 		t.Fatalf("seed second owner: %v", err)
 	}

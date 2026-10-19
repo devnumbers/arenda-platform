@@ -444,6 +444,7 @@ export function PropertyParticipantsScreen({
             <ErrorCard
               title="Не удалось загрузить участников"
               onRetry={() => void membersQuery.refetch()}
+              loading={membersQuery.isFetching}
               className="mt-6"
             />
           )
@@ -569,10 +570,10 @@ function PropertyParticipantRowView({
     <div
       {...activatorProps}
       className={cn(
-        'group/row flex w-full items-center gap-3 py-3 text-left outline-none',
-        'transition-opacity focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        'pressable group/row flex w-full items-center gap-3 py-3 text-left outline-none',
+        'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         onSelect !== undefined
-          ? 'cursor-pointer hover:opacity-80 active:opacity-80'
+          ? 'cursor-pointer hover:opacity-80'
           : 'cursor-default',
       )}
     >

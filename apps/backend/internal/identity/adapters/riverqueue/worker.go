@@ -17,14 +17,11 @@ import (
 // Compile-time check that the worker satisfies River's worker contract.
 var _ river.Worker[ContactChangedArgs] = (*ContactChangedWorker)(nil)
 
-// Subjects of the two change letters. Like the code letters' subjects
+// Subject of the change letter. Like the code letters' subjects
 // (issue #1204), the subject names what happened — and, being a
 // notification-only letter, carries no code and no link to act through
 // (research #1201 §5).
-const (
-	phoneChangeDoneSubject = "Телефон в Рентли изменён"
-	emailChangeDoneSubject = "Email в Рентли изменён"
-)
+const emailChangeDoneSubject = "Email в Рентли изменён"
 
 // changeLetter is the presentation shape of one change letter: the template
 // rendered through the shared layout and the fact-naming subject.
@@ -37,8 +34,6 @@ type changeLetter struct {
 // letter is a programming error and cancels the job loudly.
 func letterFor(kind application.ContactChangeKind) (changeLetter, error) {
 	switch kind {
-	case application.ContactChangedPhone:
-		return changeLetter{template: "phone_change_done", subject: phoneChangeDoneSubject}, nil
 	case application.ContactChangedEmail:
 		return changeLetter{template: "email_change_done", subject: emailChangeDoneSubject}, nil
 	default:

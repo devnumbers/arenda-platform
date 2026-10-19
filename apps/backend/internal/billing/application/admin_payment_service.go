@@ -529,7 +529,7 @@ func normalizeAdminPaymentFilters(filters AdminPaymentFilters) (AdminPaymentFilt
 	default:
 		return filters, fmt.Errorf("%w: unknown subscription status %q", ErrInvalidFilter, filters.SubscriptionStatus)
 	}
-	filters.UserPhone = strings.TrimSpace(filters.UserPhone)
+	filters.UserEmail = strings.TrimSpace(filters.UserEmail)
 	return filters, nil
 }
 
@@ -578,7 +578,7 @@ func (s *PaymentService) ListAdminPayments(
 		if !ok {
 			return nil, 0, fmt.Errorf("payment %s references unknown tariff %s", row.Payment.ID, row.Payment.TariffID)
 		}
-		views = append(views, AdminSubscriptionPaymentView{Payment: row.Payment, Tariff: tariff, UserPhone: row.UserPhone})
+		views = append(views, AdminSubscriptionPaymentView{Payment: row.Payment, Tariff: tariff, UserEmail: row.UserEmail})
 	}
 	return views, total, nil
 }
@@ -604,5 +604,5 @@ func (s *PaymentService) GetAdminPayment(ctx context.Context, paymentID uuid.UUI
 		}
 		return AdminSubscriptionPaymentView{}, fmt.Errorf("get payment tariff: %w", err)
 	}
-	return AdminSubscriptionPaymentView{Payment: row.Payment, Tariff: tariff, UserPhone: row.UserPhone}, nil
+	return AdminSubscriptionPaymentView{Payment: row.Payment, Tariff: tariff, UserEmail: row.UserEmail}, nil
 }

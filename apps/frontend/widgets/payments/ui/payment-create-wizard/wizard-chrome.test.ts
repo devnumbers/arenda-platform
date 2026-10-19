@@ -105,7 +105,7 @@ describe('WizardDirectionSegment — общий сегмент «Расход/Д
     expect(radios.map((el) => el.props['aria-checked'])).toEqual([true, false]);
   });
 
-  it('выбранный — белая пилюля с тенью, невыбранный — вторичный текст', () => {
+  it('выбранный — белая пилюля с тенью, невыбранный — вторичный текст с шагами hover/active трека', () => {
     const segment = WizardDirectionSegment({
       type: 'income',
       onTypeChange: NOOP,
@@ -114,7 +114,12 @@ describe('WizardDirectionSegment — общий сегмент «Расход/Д
     const expense = tree(segment).find((el) => el.props.children === 'Расход');
     const income = tree(segment).find((el) => el.props.children === 'Доход');
     expect(String(expense?.props.className)).toContain('text-content-secondary');
-    expect(String(expense?.props.className)).not.toContain('bg-surface');
+    // Без базовой заливки: ни сплошного bg-surface, ни bg-primary — только
+    // hover/active-шаги трека (радио-диалект ParticipantRoleSegmented).
+    expect(String(expense?.props.className)).not.toMatch(/(^|\s)bg-surface(\s|$)/);
+    expect(String(expense?.props.className)).not.toContain('bg-primary');
+    expect(String(expense?.props.className)).toContain('hover:bg-surface-muted-hover');
+    expect(String(expense?.props.className)).toContain('active:bg-surface-muted-active');
     expect(String(income?.props.className)).toContain('bg-surface');
     expect(String(income?.props.className)).toContain('shadow-');
   });

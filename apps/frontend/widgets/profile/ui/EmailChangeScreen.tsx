@@ -37,8 +37,9 @@ type Step = 'code-current' | 'new-email' | 'code-new' | 'success';
  * Экран «Смена почты» (карта #723, тикеты #722/#733; Figma
  * LnnLyFL5u1DWIYPGLzWW0X — 2235-104553 код текущей, 2235-104805/104954
  * ввод новой пустой/заполненный, 2235-105106 код новой, 2343-51004
- * ошибка кода/истёкший таймер, 105223 успех). Канон — PhoneChangeScreen,
- * состояния /me и успех — общий MeFlowScreen. Четыре шага одного маршрута
+ * ошибка кода/истёкший таймер, 105223 успех). Канон шага кода —
+ * use-code-step/ResendCodeTile (карта #733), состояния /me и успех —
+ * общий MeFlowScreen. Четыре шага одного маршрута
  * /profile/account/email, протокол #1202 (серверная проверка шага 1):
  *  - «code-current» — код на текущий адрес отправляется автоматически при
  *    входе на экран (шаг «Подтвердите текущую почту» в макете — первый);
@@ -47,18 +48,23 @@ type Step = 'code-current' | 'new-email' | 'code-new' | 'success';
  *    неверного кода — inline в поле, как на канонном шаге кода. Resend —
  *    плитка с таймером 60 с (повторный useEmailChangeSendCode). «Назад»
  *    и крест закрывают экран.
- *  - «new-email» — «Введите новую почту», поле с крестом-очисткой;
- *    «Продолжить» disabled до валидного адреса; same-as-current —
- *    клиентская ошибка. Здесь же уходит request-new-email-code (грант
- *    из шага 1 + адрес, #1202): адрес привязывается к гранту, код уходит
- *    на новый адрес; ошибки — тост из detail бэка.
+ *  - «new-email» — «Введите новую почту» с подписью ставок (#1531, ADR 0067:
+ *    почта — единственный способ входа, после смены вход по новому адресу),
+ *    поле с крестом-очисткой; «Продолжить» disabled до валидного адреса;
+ *    same-as-current — клиентская ошибка. Здесь же уходит
+ *    request-new-email-code (грант из шага 1 + адрес, #1202): адрес
+ *    привязывается к гранту, код уходит на новый адрес; ошибки — тост из
+ *    detail бэка.
  *  - «code-new» — «Подтвердите новую почту» с новым адресом в подзаголовке;
  *    resend — плитка с таймером, повторная доставка по живому гранту
  *    (`useResendEmailCode`, бэк #732): код шага 1 verify-current сжигает,
  *    прежний обход «Назад → Продолжить» серверно сломан.
- *  - «success» — «Новая электронная почта <адрес>» (макет 105223),
- *    шит «Хорошо» на аккаунт.
- * Шапка «Смена почты» на всех шагах. Поле шага получает программный фокус
+ *  - «success» — «Новая электронная почта <адрес>» (макет 105223) с
+ *    подписью «Вход в аккаунт теперь по этому адресу» (#1531: адрес —
+ *    единственный логин, ADR 0067), шит «Хорошо» на аккаунт.
+ * Шапка «Смена почты» на всех шагах (пользовательский голос «почта» — как
+ * на шагах входа; доменный канон «Смена email», UI-copy exception в
+ * глоссарии identity). Поле шага получает программный фокус
  * на монтировании и смене шага. Ошибки: 401 verify-мутаций (verify-current
  * шага «code-current», changeEmail шага «code-new») — inline в error-проп
  * поля (макет 2343-51004), ввод сбрасывает; 401 request-new-email-code
@@ -259,6 +265,7 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
     return (
       <MeFlowSuccessScreen
         message={`Новая электронная почта ${normalizedNewEmail}`}
+        subtitle="Вход в аккаунт теперь по этому адресу"
         onClose={onClose}
       />
     );
@@ -304,6 +311,10 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Код"
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
+              autoCapitalize="none"
+              autoCorrect="off"
+              enterKeyHint="done"
               value={currentCodeStep.value}
               onChange={currentCodeStep.handleChange}
               onClear={currentCodeStep.clear}
@@ -325,15 +336,24 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
       {isNewEmailStep && (
         <PageContent className="px-6">
           <form id={formId} onSubmit={handleNewEmailSubmit} className="flex flex-col gap-4">
-            <h1 className="m-0 text-xl font-semibold leading-6 text-content">
-              Введите новую почту
-            </h1>
+            <div className="flex flex-col gap-2">
+              <h1 className="m-0 text-xl font-semibold leading-6 text-content">
+                Введите новую почту
+              </h1>
+              {/* Ставки смены (#1531, ADR 0067): адрес — единственный логин,
+               * подпись стоит перед решением, а не после. */}
+              <p className="m-0 text-sm leading-4 text-content-secondary">
+                Почта — ваш единственный способ входа в аккаунт. После смены
+                вход будет по новому адресу.
+              </p>
+            </div>
             <TextField
               variant="titleIn"
               title="Электронная почта"
               type="email"
               inputMode="email"
               autoComplete="email"
+              enterKeyHint="done"
               value={newEmail}
               onChange={handleNewEmailChange}
               onClear={handleNewEmailClear}
@@ -360,6 +380,10 @@ function EmailChangeFlow({ me, onClose }: MeFlowProps): JSX.Element {
               title="Код"
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
+              autoCapitalize="none"
+              autoCorrect="off"
+              enterKeyHint="done"
               value={newCodeStep.value}
               onChange={newCodeStep.handleChange}
               onClear={newCodeStep.clear}

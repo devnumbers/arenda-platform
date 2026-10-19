@@ -4,10 +4,10 @@ import { type JSX, useState } from 'react';
 import { Support } from '@/shared/assets/icons';
 import { Button, HeaderLogo, SupportModal } from '@/shared/ui/design';
 
-/** Шапка шага входа — общий хром трёх шагов (телефон #763, почта #764,
- * код #765; сведение копирайта — находка pre-merge карты #761). Колонка
- * с зазором 8: лого-вектор 112×28 — канон HeaderLogo; заголовок H1 28/32;
- * подпись 16/18 secondary. */
+/** Шапка шага входа — общий хром шагов почты #764 и кода #765 (с ADR 0067
+ * #1529 поток двухшаговый; сведение копирайта — находка pre-merge карты
+ * #761). Колонка с зазором 8: лого-вектор 112×28 — канон HeaderLogo;
+ * заголовок H1 28/32; подпись 16/18 secondary. */
 export function StepHeader({
     title,
     subtitle,

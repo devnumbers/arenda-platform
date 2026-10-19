@@ -55,12 +55,12 @@ func createOwnerFixture(t *testing.T, ctx context.Context, q *genpostgres.Querie
 	if err != nil {
 		t.Fatalf("new uuid: %v", err)
 	}
-	// The phone must be unique per call — derived from the uuid's random tail
+	// The email must be unique per call — derived from the uuid's random tail
 	// (the access fixtures' recipe: V7 timestamps collide within a
 	// millisecond, ON CONFLICT DO NOTHING then returns no rows).
 	_, err = q.CreateUser(ctx, genpostgres.CreateUserParams{
 		ID:    pgtype.UUID{Bytes: id, Valid: true},
-		Phone: fmt.Sprintf("+7999%07d", binary.BigEndian.Uint32(id[12:])%10000000),
+		Email: fmt.Sprintf("idem%07d@example.com", binary.BigEndian.Uint32(id[12:])%10000000),
 		Role:  "owner",
 	})
 	if err != nil {

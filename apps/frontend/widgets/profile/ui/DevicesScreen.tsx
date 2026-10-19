@@ -215,8 +215,8 @@ export function DevicesScreen(): JSX.Element {
               type="button"
               onClick={() => setOthersSheetOpen(true)}
               className={cn(
-                'flex w-full cursor-pointer items-center gap-[18px] px-[22px] text-left outline-none',
-                'transition-opacity hover:opacity-80 active:opacity-80',
+                'pressable flex w-full cursor-pointer items-center gap-[18px] px-[22px] text-left outline-none',
+                'hover:opacity-80',
                 'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
               )}
             >

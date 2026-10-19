@@ -37,8 +37,18 @@ func newSessionsHarness() *sessionsHarness {
 // seedSession stores a session for userID and returns its id.
 func (h *sessionsHarness) seedSession(userID uuid.UUID, hash string) uuid.UUID {
 	id := uuid.Must(uuid.NewV7())
-	h.repo.sessions[hash] = domain.Session{ID: id, UserID: userID, TokenHash: hash}
+	h.repo.sessions[id] = domain.Session{ID: id, UserID: userID, TokenHash: hash}
 	return id
+}
+
+// sessionByHash reports whether a session carrying the token hash is stored.
+func (h *sessionsHarness) sessionByHash(hash string) bool {
+	for _, s := range h.repo.sessions {
+		if s.TokenHash == hash {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSessionsService_List_MarksCurrentSession(t *testing.T) {
@@ -72,7 +82,7 @@ func TestSessionsService_List_GracePreviousHashStillCurrent(t *testing.T) {
 	userID := uuid.Must(uuid.NewV7())
 	previousHash := fakeHasher{}.HashToken("stale-cookie")
 	currentID := uuid.Must(uuid.NewV7())
-	h.repo.sessions["rotated-canonical"] = domain.Session{
+	h.repo.sessions[currentID] = domain.Session{
 		ID:                currentID,
 		UserID:            userID,
 		TokenHash:         "rotated-canonical",
@@ -100,7 +110,7 @@ func TestSessionsService_Revoke_CurrentByPreviousHashRejected(t *testing.T) {
 	userID := uuid.Must(uuid.NewV7())
 	previousHash := fakeHasher{}.HashToken("stale-cookie")
 	currentID := uuid.Must(uuid.NewV7())
-	h.repo.sessions["rotated-canonical"] = domain.Session{
+	h.repo.sessions[currentID] = domain.Session{
 		ID:                currentID,
 		UserID:            userID,
 		TokenHash:         "rotated-canonical",
@@ -129,10 +139,10 @@ func TestSessionsService_Revoke_RemovesOwnForeignSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Revoke error = %v", err)
 	}
-	if _, ok := h.repo.sessions["target-hash"]; ok {
+	if _, ok := h.repo.sessions[targetID]; ok {
 		t.Fatal("target session still stored after revoke")
 	}
-	if _, ok := h.repo.sessions[fakeHasher{}.HashToken("current-token")]; !ok {
+	if !h.sessionByHash(fakeHasher{}.HashToken("current-token")) {
 		t.Fatal("current session was removed by a single-session revoke")
 	}
 	if len(h.audit.entries) != 1 {
@@ -164,7 +174,7 @@ func TestSessionsService_Revoke_CurrentSessionRejected(t *testing.T) {
 	if !errors.Is(err, ErrCurrentSession) {
 		t.Fatalf("Revoke error = %v, want ErrCurrentSession", err)
 	}
-	if _, ok := h.repo.sessions[fakeHasher{}.HashToken("current-token")]; !ok {
+	if _, ok := h.repo.sessions[currentID]; !ok {
 		t.Fatal("current session was removed")
 	}
 	if len(h.audit.entries) != 0 {
@@ -186,7 +196,7 @@ func TestSessionsService_Revoke_UnknownOrForeignSessionNotFound(t *testing.T) {
 	if err := h.svc.Revoke(context.Background(), userID, foreignID, "current-token", actor); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Revoke(foreign) error = %v, want ErrNotFound (ownership hidden)", err)
 	}
-	if _, ok := h.repo.sessions["foreign-hash"]; !ok {
+	if _, ok := h.repo.sessions[foreignID]; !ok {
 		t.Fatal("foreign session was removed")
 	}
 	if len(h.audit.entries) != 0 {
@@ -198,7 +208,7 @@ func TestSessionsService_RevokeOthers_KeepsCurrentAndCounts(t *testing.T) {
 	t.Parallel()
 	h := newSessionsHarness()
 	userID := uuid.Must(uuid.NewV7())
-	h.seedSession(userID, fakeHasher{}.HashToken("current-token"))
+	currentID := h.seedSession(userID, fakeHasher{}.HashToken("current-token"))
 	h.seedSession(userID, "other-1")
 	h.seedSession(userID, "other-2")
 	actor := auditdomain.Actor{ID: userID, Role: auditdomain.ActorRoleOwner}
@@ -210,7 +220,7 @@ func TestSessionsService_RevokeOthers_KeepsCurrentAndCounts(t *testing.T) {
 	if removed != 2 {
 		t.Fatalf("removed = %d, want 2", removed)
 	}
-	if _, ok := h.repo.sessions[fakeHasher{}.HashToken("current-token")]; !ok {
+	if _, ok := h.repo.sessions[currentID]; !ok {
 		t.Fatal("current session was removed by revoke-others")
 	}
 	if len(h.audit.entries) != 1 {

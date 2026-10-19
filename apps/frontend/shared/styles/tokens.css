@@ -55,7 +55,8 @@
   /* Form controls. Must be ≥16px: iOS Safari auto-zooms the page on focus
      when an <input>/<textarea> has font-size < 16px. See layout.tsx —
      maximumScale is intentionally omitted for WCAG 1.4.4, so the font-size
-     guard is what prevents the zoom. */
+     guard is what prevents the zoom. Consumed by the base-layer floor in
+     globals.css (component utilities may override it per-layer). */
   --font-size-input: 1rem;
   --line-height-input: 1.25rem;
 
@@ -102,14 +103,21 @@
   --dl-duration-fast: 250ms;
   --dl-duration-move: 350ms;
 
-  /* Длительности модалки (keyframes modal-* в globals.css). Значения —
-     прежние литералы, поднятые в токены (#1349): 400/220 сознательно вне
-     шкалы 250/350 — смена требует фил-чека владельца; reduced-motion
-     укорачивает через media-блок globals.css (класс-хук .modal-surface). */
-  --motion-modal-overlay-in: 350ms;
-  --motion-modal-overlay-out: 250ms;
-  --motion-modal-card-in: 400ms;
-  --motion-modal-card-out: 220ms;
+  /* Модальные поверхности (аудит #1418, план 012): пары вход/выход на
+     поверхность. Шит — решение 22.09 «mimic iOS's Sheet» (440/330),
+     карточка и оверлей — действующие значения модалки (400/220 и 350/250;
+     400/220 сознательно вне шкалы 250/350 — смена требует фил-чека
+     владельца). Единый источник: правка тайминга поверхности = правка
+     одного токена. reduced-motion укорачивает media-блоком globals.css
+     (классы .modal-card/.modal-overlay, [data-vaul-drawer]). */
+  --dl-duration-sheet-in: 440ms;
+  --dl-duration-sheet-out: 330ms;
+  --dl-duration-modal-card-in: 400ms;
+  --dl-duration-modal-card-out: 220ms;
+  --dl-duration-modal-overlay-in: 350ms;
+  --dl-duration-modal-overlay-out: 250ms;
+  /* Ускоряющийся уход шита с экрана — вторая кривая дома (решение 22.09). */
+  --dl-ease-exit: cubic-bezier(0.32, 0, 0.67, 0);
 
   /* Канон realtime-оживания значения (тикет #880, решение владельца 25.09
      по прототипу #879): dim → hold на перечитывание → blur-кроссфейд +

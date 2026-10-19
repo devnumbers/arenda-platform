@@ -23,7 +23,6 @@ import { ROUTES } from '@/shared/config/routes';
 import { hardReplace } from '@/shared/lib/navigation';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
-import { formatPhoneDisplay } from '@/shared/lib/phone';
 import { notify } from '@/shared/lib/notifications';
 import { getProfileDisplayName } from '../lib/profile-display';
 import { ProfileAvatar } from './profile-avatar';
@@ -66,8 +65,8 @@ function HubRowButton({
     <div
       {...activatorProps}
       className={cn(
-        'flex w-full cursor-pointer items-center px-3 py-1 text-left outline-none',
-        'transition-opacity hover:opacity-80 active:opacity-80',
+        'pressable flex w-full cursor-pointer items-center px-3 py-1 text-left outline-none',
+        'hover:opacity-80',
         'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
       )}
     >
@@ -96,7 +95,7 @@ function SkeletonHubRow(): JSX.Element {
   );
 }
 
-function ProfileHubSkeleton(): JSX.Element {
+export function ProfileHubSkeleton(): JSX.Element {
   return (
     <div role="status" aria-label="Загрузка профиля" className="flex flex-col gap-8 px-6 pb-6">
       <div className="flex flex-col items-center gap-4">
@@ -121,7 +120,8 @@ function ProfileHubSkeleton(): JSX.Element {
 /** Хаб профиля в новом дизайне (тикет #592, карта #591; Figma 1903-38340
  * плейсхолдер / 1786-31288 заполненный): аватар 96 — фото профиля либо
  * BoldUser (фото возвращено тикетом #1230, ADR 0065; бастер кэша выдачи),
- * имя + телефон, серый контейнер со строками
+ * имя + почта (идентификатор аккаунта, ADR 0067; телефонная строка
+ * снесена #1530), серый контейнер со строками
  * «Аккаунт / Тариф / Уведомления / Устройства / Информация / Выйти».
  * Строки «Участники» нет (#1165): хаб «Совместный доступ» входит только
  * из навигации. «Устройства» — карта #724 (мок
@@ -173,7 +173,11 @@ export function ProfileHub(): JSX.Element {
           <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">
             {getProfileDisplayName(me)}
           </h1>
-          <p className="m-0 text-sm text-content-tertiary">{formatPhoneDisplay(me.phone)}</p>
+          {/* Email — идентификатор аккаунта (ADR 0067, тикет #1530):
+           * телефонная строка снесена вместе с полем. */}
+          {me.email !== null && (
+            <p className="m-0 text-sm text-content-tertiary">{me.email}</p>
+          )}
         </div>
       </div>
       <div className="flex flex-col rounded-3xl bg-surface-muted py-2">

@@ -29,7 +29,7 @@ export function NotificationRow({
     <button
       type="button"
       onClick={() => onOpen(notification)}
-      className={`flex w-full cursor-pointer items-start gap-4 py-4 pl-6 pr-4 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary active:opacity-80 ${
+      className={`pressable flex w-full cursor-pointer items-start gap-4 py-4 pl-6 pr-4 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary ${
         unread ? '' : 'opacity-60'
       }`}
     >

@@ -32,9 +32,9 @@ func (r *ContactResolver) Resolve(ctx context.Context, scope uuid.UUID) (applica
 		}
 		return application.Contact{}, fmt.Errorf("resolve contact: %w", err)
 	}
-	if !email.Valid || email.String == "" {
+	if email == "" {
 		return application.Contact{}, application.ErrNoContact
 	}
 
-	return application.Contact{Email: email.String}, nil
+	return application.Contact{Email: email}, nil
 }

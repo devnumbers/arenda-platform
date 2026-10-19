@@ -39,9 +39,19 @@ Adding a new slice: user scenario → feature; domain model shared across scenar
 
 - Все мутации — через `useGuardedMutation` (`features/<name>/api/hooks.ts`): синхронный лок закрывает окно до перерисовки; `mutate` дропает вызов в полёте, `mutateAsync` — join. Прямой `useMutation` вне features-хууков и реализации `useGuardedMutation` запрещён гейтом `no-restricted-imports` (#1120; гейт #1146, реестр: `docs/agents/tooling.md`).
 - Кнопка глохнет на всё время мутации: инвариант канон-кнопок `disabled === true || loading` (ADR 0050 «loading дизейблит»); явный `disabled` только добавляет причину гашения, но не отменяет loading — антипаттерн `disabled ?? loading` запрещён (#1119, #1099). Для `asChild`-ссылок гашение невозможно — осознанная граница канона.
-- В проп `loading` подставляется только `isPending` мутации; `isFetching` и фоновые рефетчи кнопки не гасят (#1114).
+- В проп `loading` подставляется только `isPending` мутации; `isFetching` и фоновые рефетчи кнопки не гасят (#1114). Граница: retry-кнопка в error-состоянии глохнет на фетч самого повтора (`isFetching` того запроса) — это «работа этой кнопки в полёте», а не чужой фоновый рефетч (модель #1420, DESIGN.md §8).
 - Creation-мутации шлют `Idempotency-Key` (UUID на логическую попытку); бекенд бронирует ключ — реплей и ретрай дают тот же результат (#1121, #1122).
 - e2e на мутирующих поверхностях: два `click()` одним evaluate-таском + счётчик запросов (route-мок) + SQL-правда «ровно одна строка» (#1113). Канон-спека: `e2e/double-submit-guard.spec.ts`.
+
+## User photos
+
+Пользовательские фото (объекты, профиль, контакты) — same-origin стриминг бэка (ADR 0065); дизайн-канон кругов — `DESIGN.md` §10 «Пользовательские фото». Инженерные правила (#1423):
+
+- Отображение — только примитив `CirclePhoto` (`shared/ui/design`): глиф-подложка, onLoad-проявление, гард пустого пути, `decoding="async"`; `next/image` для них запрещён (ADR 0065). Чистое решение показа — `circlePhotoView`, юнит-тесты — на нём (vitest без DOM).
+- Слои: чистые хелперы — `shared/lib/photo.ts` (кап 5 МиБ, бастер, data-URL); stage-правила слотов — `features/<slice>/lib/photo.ts`; рендер — слоты `widgets/*/ui/*-photo-slot.tsx`. Нового фото-слоя в другом месте не заводить.
+- Загрузка — только `uploadFile` (`shared/api/upload`, XHR с `onProgress`); `fetch`/`apiClient` для файлов запрещены (fetch не отдаёт upload-progress). Прогресс экран пишет в стейт и отдаёт слоту (`progress` → `PhotoProgressRing`); DELETE без кольца.
+- Бастер `?v=N` — клиентский счётчик react-query (`photoBuster`-ключи): пишут только фото-мутации (`bump*PhotoBuster`), читают `use*PhotoBuster`. **Инвариант**: `<img>` не перемонтируется при мутации — свап `src` на живом элементе (анти-мигание, старый кадр до декода нового); `key={version}` запрещён.
+- Retry: staged-слоты (объект/контакт) держат stage при провале — повтор кнопкой сохранения; autosave-профиль держит файл (`MePhotoStage.failed`) — ретрай «Повторить» в тосте (action-канон `NotificationAction`) или тапом по кругу (`onRetry`).
 
 ## Forms
 
@@ -85,7 +95,7 @@ Column width rule (решение владельца 26.09, аудит #870): th
 Unit tests are pure-logic only — vitest runs in a node environment with no DOM, no testing-library, no msw. This is the standard, not a gap:
 
 - Colocated `*.test.ts` next to the module. Priority targets: wire serializers and DTO→entity mappers (shape assertions with `toStrictEqual`), pure `lib/` and `shared/lib` modules (navigation, pwa, formatting).
-- Components and API calls are not unit-tested; UI behavior is covered by Playwright e2e. Narrow exception (2026-09-30, `shared/ui/design/button.test.ts`; 02.10 — also `shared/ui/design/user-button.test.ts`; 12.10 — also `features/auth/ui/phone-step/phone-step.test.ts`, `features/auth/ui/email-step/email-step.test.ts`; 12.10 — also `shared/ui/design/me-suffix.test.ts`; same day, #1333 — `widgets/contacts/ui/contact-section-card.test.ts`, `contact-detail-header.test.ts`, `contact-kebab-menu.test.ts`, and — same day, #1335 — `widgets/property-detail/ui/PropertyContactsBlock.test.ts`; 17.10 — also `shared/ui/design/list-row.test.ts`): a stateless component may be called as a function and its React element tree inspected — no render, no DOM, no testing-library, same node-env canon.
+- Components and API calls are not unit-tested; UI behavior is covered by Playwright e2e. Narrow exception (2026-09-30, `shared/ui/design/button.test.ts`; 02.10 — also `shared/ui/design/user-button.test.ts`; 12.10 — also `features/auth/ui/phone-step/phone-step.test.ts`, `features/auth/ui/email-step/email-step.test.ts`; 12.10 — also `shared/ui/design/me-suffix.test.ts`; same day, #1333 — `widgets/contacts/ui/contact-section-card.test.ts`, `contact-detail-header.test.ts`, `contact-kebab-menu.test.ts`, and — same day, #1335 — `widgets/property-detail/ui/PropertyContactsBlock.test.ts`; #1442 — also `shared/ui/design/error-card.test.ts`, `shared/ui/design/infinite-query-tail.test.ts`; 17.10 — also `shared/ui/design/list-row.test.ts`; 19.10, #1531 — `widgets/profile/ui/me-flow-screen.test.ts`): a stateless component may be called as a function and its React element tree inspected — no render, no DOM, no testing-library, same node-env canon.
 
 ## Quality bar
 
@@ -147,7 +157,7 @@ Judgement calls for the Standards axis, not violations. Read each as *what it is
 - **Synchronous `searchParams`** — reading the Next 16 promise directly. → `await` it in the server page and pass parsed initial props into the client widget.
 - **Скелетон не паритетен контенту** — скелетон обязан зеркалить финальный лейаут блок-в-блок (высоты, бейджи, ряды действий) по DESIGN.md §7; в скелетонах не ветвиться по состоянию, недоступному при загрузке (роль/права) (#604, #607, #871, #875). → приёмка парой кадров loading→loaded без сдвига (CLS).
 - **EmptyState на isPending** — пустое состояние и скрытие служебных чипов — только по подтверждённой пустоте; шапки, тулбары и хром рендерятся вне фазы загрузки (#605, #872). → различать isPending и пустоту.
-- **Скелетон на in-place обновлении** — поиск/фильтры/табы держат прежнюю выдачу (`keepPreviousData`); скелетон — только холодный вход (#876). → удалить скелетон из переходов фильтров.
+- **Скелетон на in-place обновлении** — поиск/фильтры/табы держат прежнюю выдачу (`keepPreviousData`); скелетон — только холодный вход (#876). Аменд #1442 (план 029): держать можно только **непустые** прежние результаты — пустой удержанный ответ лжёт о летящем запросе, скелетон при `isFetching` с пустой выдачей каноничен (расширение политики тихого удержания `operations-feed-gate`). → удалить скелетон из переходов фильтров; проверять, что прежний ответ непуст.
 - **Оверлей-контейнер глотает клики** — fixed/absolute обёртки получают `pointer-events-none`, интерактивные дети — `pointer-events-auto` («пилюли не глушатся никогда», DESIGN.md §14) (#876). → pointer-events на обёртку/детей.
 - **Асинхронная проба сдвигает макет** — браузерные пробы (push-статус) читаются через `useSyncExternalStore` со скелетоном до probeSettled; гидрация без CLS (#877). → useSyncExternalStore + скелетон слота.
 - **Запись параметра затирает чужие** — URL-состояние (фильтры, поиск, сортировка) пишется только поверх текущих адресов (`useUrlParams`, свои ключи); дефолтные значения в URL не пишутся, возврат к дефолту удаляет параметр (set-or-delete); сборка адреса — через канон `buildUrlWithParams` («пустой query — голый pathname»), чистое ядро в shared/lib без next/navigation (#541, #785, #792). → писать только свои ключи поверх текущих.

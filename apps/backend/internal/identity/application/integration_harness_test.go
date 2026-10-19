@@ -48,7 +48,6 @@ type captureSender struct {
 }
 
 type sentLoginCode struct {
-	phone   domain.Phone
 	email   domain.Email
 	code    string
 	purpose domain.LoginCodePurpose
@@ -57,13 +56,12 @@ type sentLoginCode struct {
 
 func (s *captureSender) Send(
 	_ context.Context,
-	phone domain.Phone,
 	email domain.Email,
 	code string,
 	purpose domain.LoginCodePurpose,
 	step domain.LoginCodeStep,
 ) error {
-	s.codes = append(s.codes, sentLoginCode{phone: phone, email: email, code: code, purpose: purpose, step: step})
+	s.codes = append(s.codes, sentLoginCode{email: email, code: code, purpose: purpose, step: step})
 	return nil
 }
 
@@ -112,13 +110,12 @@ func (c *captureContactNotifierTx) ScheduleChanged(_ context.Context, event iden
 
 // integrationHarness wires every identity service to real PostgreSQL
 // repositories through a postgres-backed Unit-of-Work, sharing one fake clock,
-// one noop encryptor, and capture fakes for the email sender, event publisher,
-// services. Each test builds a fresh harness over a clean
-// (private template-cloned) database via testdb.Setup.
+// and capture fakes for the email sender, event publisher, services. Each test
+// builds a fresh harness over a clean (private template-cloned) database via
+// testdb.Setup.
 type integrationHarness struct {
 	t         *testing.T
 	pool      *pgxpool.Pool
-	enc       encryption.Encryptor
 	clock     *mutableClock
 	sender    *captureSender
 	publisher *capturePublisher
@@ -132,7 +129,6 @@ type integrationHarness struct {
 	audit    auditapp.Recorder
 
 	auth       *identityapp.AuthenticationService
-	phone      *identityapp.PhoneChangeService
 	email      *identityapp.EmailChangeService
 	profile    *identityapp.ProfileService
 	logout     *identityapp.LogoutService
@@ -146,7 +142,7 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	t.Helper()
 
 	pool := testdb.Setup(t)
-	enc, err := encryption.NewEncryptor("")
+	hasher, err := encryption.NewEncryptor("")
 	if err != nil {
 		t.Fatalf("create noop encryptor: %v", err)
 	}
@@ -156,10 +152,10 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	publisher := &capturePublisher{}
 	logger := slog.New(slog.DiscardHandler)
 
-	users := postgres.NewUserRepository(pool, enc)
-	codes := postgres.NewLoginCodeRepository(pool, enc)
-	attempts := postgres.NewAttemptRepository(pool, enc)
-	sessions := postgres.NewSessionRepository(pool, enc)
+	users := postgres.NewUserRepository(pool)
+	codes := postgres.NewLoginCodeRepository(pool)
+	attempts := postgres.NewAttemptRepository(pool)
+	sessions := postgres.NewSessionRepository(pool)
 	grants := postgres.NewEmailChangeGrantRepository(pool)
 	uow := pgdb.NewUoW(pool, logger)
 	auditWriter := auditpg.NewWriter(pool)
@@ -171,17 +167,16 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 	loginCodes := identityapp.NewLoginCodeService(factory, identityapp.LoginCodeServiceConfig{
 		CodeSender: sender,
 		Clock:      clk,
-		Hasher:     enc,
+		Hasher:     hasher,
 		Logger:     logger,
 	})
 	sessionSvc := identityapp.NewSessionService(factory, identityapp.SessionServiceConfig{
-		Hasher: enc,
+		Hasher: hasher,
 	})
 
 	return &integrationHarness{
 		t:         t,
 		pool:      pool,
-		enc:       enc,
 		clock:     clk,
 		sender:    sender,
 		publisher: publisher,
@@ -200,21 +195,16 @@ func newIntegrationHarness(t *testing.T) *integrationHarness {
 			Clock:      clk,
 			Logger:     logger,
 		}),
-		phone: identityapp.NewPhoneChangeService(factory, identityapp.PhoneChangeServiceConfig{
-			LoginCodes: loginCodes,
-			Clock:      clk,
-			Logger:     logger,
-		}),
 		email: identityapp.NewEmailChangeService(factory, identityapp.EmailChangeServiceConfig{
 			LoginCodes: loginCodes,
 			Clock:      clk,
-			Hasher:     enc,
+			Hasher:     hasher,
 			Logger:     logger,
 		}),
 		profile: identityapp.NewProfileService(factory, objectstorage.NewFakeStorage(),
 			staticSharedChecker(false), slog.New(slog.DiscardHandler)),
 		logout: identityapp.NewLogoutService(factory, identityapp.LogoutServiceConfig{
-			Hasher: enc,
+			Hasher: hasher,
 			Logger: slog.New(slog.DiscardHandler),
 		}),
 		sessionsvc: sessionSvc,
@@ -227,26 +217,16 @@ func (h *integrationHarness) ctx() context.Context { return context.Background()
 // openSecondSession logs the user in a second time and returns the fresh raw
 // token — the "other device" of the session-retention tests: a contact change
 // must leave it alive (решение #1380).
-func (h *integrationHarness) openSecondSession(t *testing.T, phone domain.Phone, email domain.Email) string {
+func (h *integrationHarness) openSecondSession(t *testing.T, email domain.Email) string {
 	t.Helper()
-	if err := h.auth.SendCode(h.ctx(), phone, email, domain.LoginCodePurposeLogin); err != nil {
+	if err := h.auth.SendCode(h.ctx(), email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode for second session: %v", err)
 	}
-	raw, _, err := h.auth.VerifyCode(h.ctx(), phone, &email, h.sender.lastCode(t), nil, identityapp.DeviceContext{})
+	raw, _, err := h.auth.VerifyCode(h.ctx(), email, h.sender.lastCode(t), nil, identityapp.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode for second session: %v", err)
 	}
 	return raw.Token
-}
-
-// mustPhone parses a raw phone, failing the test on error.
-func mustPhone(t *testing.T, raw string) domain.Phone {
-	t.Helper()
-	phone, err := domain.NewPhone(raw)
-	if err != nil {
-		t.Fatalf("parse phone %q: %v", raw, err)
-	}
-	return phone
 }
 
 // mustEmail parses a raw email, failing the test on error.
@@ -260,16 +240,16 @@ func mustEmail(t *testing.T, raw string) domain.Email {
 }
 
 // registerAndLogin is a convenience that drives the full send → verify happy
-// path for a brand-new phone+email and returns the raw session token and user.
+// path for a brand-new address and returns the raw session token and user.
 // It fails the test if any step errors.
-func (h *integrationHarness) registerAndLogin(t *testing.T, phone domain.Phone, email domain.Email) (string, domain.User) {
+func (h *integrationHarness) registerAndLogin(t *testing.T, email domain.Email) (string, domain.User) {
 	t.Helper()
 	ctx := h.ctx()
-	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+	if err := h.auth.SendCode(ctx, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode: %v", err)
 	}
 	code := h.sender.lastCode(t)
-	raw, user, err := h.auth.VerifyCode(ctx, phone, &email, code, nil, identityapp.DeviceContext{})
+	raw, user, err := h.auth.VerifyCode(ctx, email, code, nil, identityapp.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode: %v", err)
 	}
@@ -293,12 +273,12 @@ func (h *integrationHarness) countSessionsForUser(t *testing.T, userID uuid.UUID
 	return n
 }
 
-// countFailedAttempts returns the recorded failure count for a phone, or 0 when
-// no attempt window row exists yet. It reads through the real AttemptRepository
-// so the assertion uses the same mapping the services rely on.
-func (h *integrationHarness) countFailedAttempts(t *testing.T, phone domain.Phone) int {
+// countFailedAttempts returns the recorded failure count for an address, or 0
+// when no attempt window row exists yet. It reads through the real
+// AttemptRepository so the assertion uses the same mapping the services rely on.
+func (h *integrationHarness) countFailedAttempts(t *testing.T, email domain.Email) int {
 	t.Helper()
-	window, err := h.attempts.GetByPhone(h.ctx(), phone)
+	window, err := h.attempts.GetByEmail(h.ctx(), email)
 	if err != nil {
 		if errors.Is(err, identityapp.ErrNotFound) {
 			return 0
@@ -325,14 +305,13 @@ func (h *integrationHarness) auditActionExists(t *testing.T, action string) bool
 // seedVerifiedUser inserts a verified owner directly through the user repository
 // so a test can exercise the login (not registration) path. The email is marked
 // verified at the harness's current fake-clock time.
-func (h *integrationHarness) seedVerifiedUser(t *testing.T, phone domain.Phone, email domain.Email) domain.User {
+func (h *integrationHarness) seedVerifiedUser(t *testing.T, email domain.Email) domain.User {
 	t.Helper()
 	ctx := h.ctx()
-	user, err := domain.NewOwner(phone)
+	user, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("new owner: %v", err)
 	}
-	user.Email = &email
 	now := h.clock.Now()
 	user.EmailVerifiedAt = &now
 	created, err := h.users.Create(ctx, user)
@@ -342,14 +321,15 @@ func (h *integrationHarness) seedVerifiedUser(t *testing.T, phone domain.Phone, 
 	return created
 }
 
-// userIDForPhone resolves the user ID for a phone, failing the test if the row
-// is absent. It is a convenience for tests that need the user ID after seeding.
-func (h *integrationHarness) userIDForPhone(t *testing.T, phone domain.Phone) uuid.UUID {
+// userIDForEmail resolves the user ID for an address, failing the test if the
+// row is absent. It is a convenience for tests that need the user ID after
+// seeding.
+func (h *integrationHarness) userIDForEmail(t *testing.T, email domain.Email) uuid.UUID {
 	t.Helper()
 	ctx := h.ctx()
-	user, err := h.users.GetByPhone(ctx, phone)
+	user, err := h.users.GetByEmail(ctx, email)
 	if err != nil {
-		t.Fatalf("GetByPhone %s: %v", phone, err)
+		t.Fatalf("GetByEmail %s: %v", email, err)
 	}
 	return user.ID
 }

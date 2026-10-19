@@ -16,28 +16,27 @@ import (
 )
 
 // latestLoginCodeQuery is the SQL produced by sqlc for
-// GetLatestLoginCodeByPhoneAndEmailAndPurpose (see identity.sql.go), with
-// line breaks added for lll — SQL is whitespace-insensitive. It is duplicated
-// here as a string because sqlc emits it as an unexported const and EXPLAIN
-// needs a literal. If the query text drifts, the matching sqlc const
-// (getLatestLoginCodeByPhoneAndEmailAndPurpose) must be updated too.
-const latestLoginCodeQuery = `SELECT id, user_id, phone, email, code_hash, expires_at, used, created_at, purpose,
-phone_encrypted FROM login_codes
-WHERE phone = $1 AND email = $2 AND purpose = $3 AND used = false AND expires_at > $4
+// GetLatestLoginCodeByEmailAndPurpose (see identity.sql.go), with line breaks
+// added for lll — SQL is whitespace-insensitive. It is duplicated here as a
+// string because sqlc emits it as an unexported const and EXPLAIN needs a
+// literal. If the query text drifts, the matching sqlc const
+// (getLatestLoginCodeByEmailAndPurpose) must be updated too.
+const latestLoginCodeQuery = `SELECT id, user_id, email, code_hash, expires_at, used, created_at, purpose FROM login_codes
+WHERE email = $1 AND purpose = $2 AND used = false AND expires_at > $3
 ORDER BY created_at DESC
 LIMIT 1
 FOR UPDATE`
 
 // TestLoginCodeQueryPlan_IndexUsageForGetLatest is a diagnostic test (issue #224)
-// that runs EXPLAIN ANALYZE against the GetLatestLoginCodeByPhoneAndEmailAndPurpose
+// that runs EXPLAIN ANALYZE against the GetLatestLoginCodeByEmailAndPurpose
 // query to verify whether PostgreSQL uses the partial unique index
 // idx_login_codes_unique_unused for the read path.
 //
-// The index was created by migration 000063 (phone, COALESCE(email, empty), purpose)
-// WHERE used=false, primarily for CreateLoginCode's ON CONFLICT upsert. The read query
-// filters on the raw email column (email = $2), and PostgreSQL cannot match a
-// raw-column equality to an expression-index column — so email falls into Filter, not
-// Index Cond. But the phone+purpose prefix still narrows the scan efficiently.
+// The index was recreated by migration 000162 as (email, purpose) WHERE
+// used=false — the email-only identity shape (ADR 0067) — primarily for
+// CreateLoginCode's ON CONFLICT upsert. Both index columns are raw table
+// columns, so the read query's email and purpose equalities match them
+// directly; only the TTL predicate (expires_at > $3) falls outside the index.
 //
 // The test seeds a production-realistic volume of login_codes (a large used historical
 // trail plus a few hundred unused active codes) and asserts the default planner
@@ -49,30 +48,29 @@ func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
 	ctx := t.Context()
 
 	const (
-		targetPhone   = "+79160000200"
 		targetEmail   = "target@example.com"
 		targetPurpose = "login"
 	)
 
 	now := time.Now().UTC()
 
-	// Seed the target row: an unused, non-expired code for the target tuple.
-	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetPhone, targetEmail, targetPurpose,
+	// Seed the target row: an unused, non-expired code for the target pair.
+	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetEmail, targetPurpose,
 		false, now.Add(5*time.Minute), now.Add(-1*time.Minute))
 
-	// Same phone, different purpose — should not match the target query but lives
-	// in the same partial-index partition.
-	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetPhone, targetEmail, "phone_change",
+	// Same email, different purpose — should not match the target query but lives
+	// in the same partial-index partition (the (email, purpose) pair stays unique).
+	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetEmail, "email_change",
 		false, now.Add(5*time.Minute), now.Add(-30*time.Second))
-	// Same phone+email+purpose, but already used — excluded by the partial predicate.
+	// Same email+purpose, but already used — excluded by the partial predicate.
 	// A used+expired row cannot coexist with an unused one under the partial unique
 	// index, so this also exercises the expires_at filter indirectly.
-	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetPhone, targetEmail, targetPurpose,
+	seedLoginCodeRow(t, pool, uuid.Must(uuid.NewV7()), targetEmail, targetPurpose,
 		true, now.Add(-1*time.Hour), now.Add(-2*time.Hour))
 
 	// Seed enough rows so the planner treats the table as non-trivial and prefers
 	// an index over a sequential scan. Used rows bloat the heap (audit trail); unused
-	// rows populate the partial index. Distinct phones avoid unique collisions.
+	// rows populate the partial index. Distinct emails avoid unique collisions.
 	bulkSeedLoginCodes(t, pool, 10000, true, now)
 	bulkSeedLoginCodes(t, pool, 500, false, now)
 
@@ -81,7 +79,7 @@ func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
 		t.Fatalf("ANALYZE login_codes: %v", err)
 	}
 
-	args := []any{targetPhone, targetEmail, targetPurpose, now}
+	args := []any{targetEmail, targetPurpose, now}
 
 	// Default plan: what the planner actually chooses at this volume.
 	plan := explainPlanRows(t, pool, latestLoginCodeQuery, args)
@@ -92,10 +90,11 @@ func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
 			"the read query regressed to a non-index scan:\n%s", plan)
 	}
 
-	// Forced index (enable_seqscan=off): confirm the expression-index column
-	// (COALESCE(email, '')) cannot serve the email predicate — email appears
-	// in Filter, not Index Cond. This documents *why* the prefix is phone+purpose only.
-	t.Run("forced_index_reveals_email_filter", func(t *testing.T) {
+	// Forced index (enable_seqscan=off): confirm the index cond covers the full
+	// (email, purpose) equality pair — both are raw index columns — while the
+	// TTL predicate stays a post-scan Filter. This documents *why* the index
+	// serves the read path: only expires_at falls outside it.
+	t.Run("forced_index_reveals_expires_at_filter", func(t *testing.T) {
 		t.Parallel()
 		conn, err := pool.Acquire(ctx)
 		if err != nil {
@@ -112,12 +111,19 @@ func TestLoginCodeQueryPlan_IndexUsageForGetLatest(t *testing.T) {
 		if !planUsesIndex(forced, "idx_login_codes_unique_unused") {
 			t.Errorf("forced plan does not use idx_login_codes_unique_unused:\n%s", forced)
 		}
-		// The email must be a post-scan Filter, never an Index Cond, because the
-		// index column is COALESCE(email, '') and cannot match a raw email = $2 equality.
-		if strings.Contains(forced, "Index Cond:") &&
-			strings.Contains(extractIndexCond(forced), "email") {
-			t.Errorf("email appeared in Index Cond — unexpected; the index column is "+
-				"COALESCE(email, ...) so email should only be a Filter:\n%s", forced)
+		indexCond := extractIndexCond(forced)
+		// Both equality predicates must be served by the index: email and
+		// purpose are raw columns of idx_login_codes_unique_unused.
+		for _, col := range []string{"email", "purpose"} {
+			if !strings.Contains(indexCond, col) {
+				t.Errorf("index cond = %q, want %s matched by the index:\n%s", indexCond, col, forced)
+			}
+		}
+		// The TTL predicate must remain a Filter, never an Index Cond: the
+		// index carries no expires_at column.
+		if strings.Contains(indexCond, "expires_at") {
+			t.Errorf("expires_at appeared in Index Cond — unexpected; the index is "+
+				"(email, purpose) so the TTL predicate should only be a Filter:\n%s", forced)
 		}
 	})
 }
@@ -154,21 +160,21 @@ func extractIndexCond(plan string) string {
 }
 
 // seedLoginCodeRow inserts a raw login_codes row for diagnostic purposes. Unlike
-// the repository Save path, this bypasses encryption so EXPLAIN sees real column
-// values — which is exactly what index matching depends on.
+// the repository Save path, this writes the columns directly so EXPLAIN sees
+// real column values — which is exactly what index matching depends on.
 func seedLoginCodeRow(
 	t *testing.T,
 	pool *pgxpool.Pool,
 	id uuid.UUID,
-	phone, email, purpose string,
+	email, purpose string,
 	used bool,
 	expiresAt, createdAt time.Time,
 ) {
 	t.Helper()
 	_, err := pool.Exec(t.Context(), `
-INSERT INTO login_codes (id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)
-`, id, phone, email, "diaghash", expiresAt, used, createdAt, purpose)
+INSERT INTO login_codes (id, email, code_hash, expires_at, used, created_at, purpose)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`, id, email, "diaghash", expiresAt, used, createdAt, purpose)
 	if err != nil {
 		t.Fatalf("seed login_codes row: %v", err)
 	}
@@ -176,27 +182,27 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)
 
 // bulkSeedLoginCodes inserts n login_codes rows in batches. When usedRows is true,
 // it seeds used+expired rows (historical noise outside the partial index); when
-// false, it seeds unused+non-expired rows with distinct phones (inside the partial
-// index). Distinct phones avoid collisions on the partial unique index.
+// false, it seeds unused+non-expired rows with distinct emails (inside the partial
+// index). Distinct emails avoid collisions on the partial unique index.
 func bulkSeedLoginCodes(t *testing.T, pool *pgxpool.Pool, n int, usedRows bool, now time.Time) {
 	t.Helper()
 	ctx := t.Context()
 
-	// Prefix encodes row kind to avoid phone collisions between the used and unused
-	// batches (both iterate from 0).
-	phonePrefix := 10
+	// Prefix encodes row kind to avoid email collisions between the used and
+	// unused batches (both iterate from 0).
+	emailPrefix := "bulk-used"
 	if !usedRows {
-		phonePrefix = 30
+		emailPrefix = "bulk-unused"
 	}
 
 	const batchSize = 500
 	for offset := range n / batchSize {
 		var sb strings.Builder
-		sb.WriteString("INSERT INTO login_codes (id, phone, email, code_hash, expires_at, used, created_at, purpose, phone_encrypted) VALUES ")
-		args := make([]any, 0, batchSize*9)
+		sb.WriteString("INSERT INTO login_codes (id, email, code_hash, expires_at, used, created_at, purpose) VALUES ")
+		args := make([]any, 0, batchSize*7)
 		for j := range batchSize {
 			global := offset*batchSize + j
-			phone := fmt.Sprintf("+7916%02d%07d", phonePrefix, global)
+			email := fmt.Sprintf("%s%07d@example.com", emailPrefix, global)
 			expiresAt := now.Add(5 * time.Minute)
 			createdAt := now.Add(-time.Duration(global+1) * time.Second)
 			if usedRows {
@@ -207,15 +213,15 @@ func bulkSeedLoginCodes(t *testing.T, pool *pgxpool.Pool, n int, usedRows bool, 
 				createdAt = now.Add(-time.Duration(global+1) * time.Hour)
 			}
 			args = append(args,
-				uuid.Must(uuid.NewV7()), phone, "bulk@example.com", "bulkhash",
-				expiresAt, usedRows, createdAt, "login", false,
+				uuid.Must(uuid.NewV7()), email, "bulkhash",
+				expiresAt, usedRows, createdAt, "login",
 			)
 			if j > 0 {
 				sb.WriteByte(',')
 			}
-			base := j * 9
-			if _, err := fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-				base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9); err != nil {
+			base := j * 7
+			if _, err := fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+				base+1, base+2, base+3, base+4, base+5, base+6, base+7); err != nil {
 				t.Fatalf("append placeholder row %d: %v", j, err)
 			}
 		}

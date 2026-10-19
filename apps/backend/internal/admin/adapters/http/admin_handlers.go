@@ -48,7 +48,6 @@ func (h *AdminHandlers) ListAdminUsers(w http.ResponseWriter, r *http.Request, p
 	filters := adminapp.AdminUserFilters{Limit: 20, Offset: 0}
 	httpsupport.OptInt(&filters.Limit, params.Limit)
 	httpsupport.OptInt(&filters.Offset, params.Offset)
-	httpsupport.OptString(&filters.Phone, params.Phone)
 	httpsupport.OptString(&filters.Email, params.Email)
 	httpsupport.OptString(&filters.Role, params.Role)
 	httpsupport.OptString(&filters.SubscriptionStatus, params.SubscriptionStatus)
@@ -263,7 +262,7 @@ func adminAuditLogResponse(view adminapp.AdminAuditLogView) openapi.AdminAuditLo
 func adminUserResponse(view adminapp.AdminUserView) openapi.AdminUser {
 	resp := openapi.AdminUser{
 		Id:        view.ID,
-		Phone:     view.Phone,
+		Email:     view.Email,
 		Role:      openapi.AdminUserRole(view.Role),
 		CreatedAt: view.CreatedAt,
 		UpdatedAt: view.UpdatedAt,
@@ -276,9 +275,6 @@ func adminUserResponse(view adminapp.AdminUserView) openapi.AdminUser {
 	}
 	if view.Patronymic != nil {
 		resp.Patronymic = view.Patronymic
-	}
-	if view.Email != nil {
-		resp.Email = view.Email
 	}
 	if view.SubscriptionStatus != "" {
 		status := openapi.SubscriptionStatus(view.SubscriptionStatus)
@@ -306,7 +302,7 @@ func adminPropertyResponse(view adminapp.AdminPropertyView) openapi.AdminPropert
 	resp := openapi.AdminProperty{
 		Id:         view.ID,
 		OwnerId:    view.OwnerID,
-		OwnerPhone: view.OwnerPhone,
+		OwnerEmail: view.OwnerEmail,
 		Name:       view.Name,
 		Type:       openapi.PropertyType(view.Type),
 		Address:    view.Address,
@@ -344,7 +340,7 @@ func adminStatsResponse(view adminapp.AdminStatsView) openapi.AdminStats {
 	for _, u := range view.RecentUsers {
 		item := openapi.AdminStatsRecentUser{
 			Id:        u.ID,
-			Phone:     u.Phone,
+			Email:     u.Email,
 			CreatedAt: u.CreatedAt,
 		}
 		if u.Name != nil {
@@ -361,7 +357,7 @@ func adminStatsResponse(view adminapp.AdminStatsView) openapi.AdminStats {
 		recentPayments = append(recentPayments, openapi.AdminStatsRecentPayment{
 			Id:            p.ID,
 			UserId:        p.UserID,
-			UserPhone:     p.UserPhone,
+			UserEmail:     p.UserEmail,
 			AmountKopecks: p.AmountKopecks,
 			Status:        openapi.SubscriptionPaymentStatus(p.Status),
 			CreatedAt:     p.CreatedAt,

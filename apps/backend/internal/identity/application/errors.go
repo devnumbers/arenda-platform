@@ -3,14 +3,13 @@ package application
 import "errors"
 
 var (
-	ErrNotFound                = errors.New("not found")
-	ErrUserBlocked             = errors.New("user is temporarily blocked")
-	ErrCodeSentTooRecently     = errors.New("code sent too recently")
-	ErrPhoneAlreadyTaken       = errors.New("phone already taken")
-	ErrPhoneUnchanged          = errors.New("new phone must differ from current phone")
-	ErrEmailAlreadyTaken       = errors.New("email already taken")
-	ErrEmailUnchanged          = errors.New("new email must differ from current email")
-	ErrEmailDoesNotMatch       = errors.New("email does not match the phone number")
+	ErrNotFound            = errors.New("not found")
+	ErrUserBlocked         = errors.New("user is temporarily blocked")
+	ErrCodeSentTooRecently = errors.New("code sent too recently")
+	ErrEmailAlreadyTaken   = errors.New("email already taken")
+	ErrEmailUnchanged      = errors.New("new email must differ from current email")
+	// ErrEmailChangeGrantInvalid reports the one-time grant of the email-change
+	// protocol is invalid, expired, or already used (#721).
 	ErrEmailChangeGrantInvalid = errors.New("email change grant is invalid, expired, or already used")
 	// ErrEmailChangeBudgetExhausted reports the per-user hourly budget on code
 	// sends to NEW addresses is spent (decision #720-3).
@@ -20,7 +19,7 @@ var (
 	// initiators (#1210, OWASP per-account anti-flood).
 	ErrRecipientSendLimitExceeded = errors.New("recipient code send limit is exhausted")
 	// ErrInitiatorSendLimitExceeded reports the authenticated user's hourly
-	// cap on code sends they initiate — phone and email change — is
+	// cap on code sends they initiate in the email-change flow is
 	// spent (#1210).
 	ErrInitiatorSendLimitExceeded = errors.New("initiator code send limit is exhausted")
 	// ErrCurrentSession reports the requested session revocation targets the

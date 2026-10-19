@@ -99,7 +99,7 @@ export function SuspendedReasonSheet({
                 onClick={leaveProperty}
                 disabled={leave.isPending}
                 data-testid="suspended-leave"
-                className="flex w-full cursor-pointer items-center gap-3 px-1 py-1 text-left outline-none transition-opacity hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:opacity-80 disabled:cursor-default disabled:opacity-60"
+                className="pressable flex w-full cursor-pointer items-center gap-3 px-1 py-1 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-default disabled:opacity-60"
               >
                 <Exit className="h-6 w-6 shrink-0 text-error" aria-hidden />
                 <span className="text-base font-medium leading-[18px] text-error">

@@ -69,31 +69,6 @@ export function projectStopPoint(
  * pull-math (`railRubberBandOffset`) — отдельных локальных копий нет. */
 
 /**
- * Snap-цель доезда: ближайшая к идеальной точке snap-позиция. Проекция за
- * границами контента клампится к крайней точке (за краем тяги нет — конец
- * ленты, как у нативного скролла). Вход не обязан быть отсортирован;
- * ничья разрешается нижней точкой.
- */
-export function pickSnapTarget(
-  idealPx: number,
-  snapPointsPx: ReadonlyArray<number>,
-): number | null {
-  if (snapPointsPx.length === 0) return null;
-  const sorted = [...snapPointsPx].sort((a, b) => a - b);
-  const clamped = Math.min(
-    Math.max(idealPx, sorted[0] as number),
-    sorted[sorted.length - 1] as number,
-  );
-  let nearest = sorted[0] as number;
-  for (const point of sorted) {
-    if (Math.abs(point - clamped) < Math.abs(nearest - clamped)) {
-      nearest = point;
-    }
-  }
-  return nearest;
-}
-
-/**
  * Гвард старта горизонтального drag-жеста: горизонталь должна доминировать
  * по смещению (|dx| > |dy|) и превысить порог — иначе жест это клик или
  * вертикальный скролл страницы.
@@ -117,13 +92,15 @@ export const SETTLE_MAX_MS = 1200;
  * UIScrollView: декелерация в цель, никогда не через неё (отскок живёт
  * только в резинке у краёв). Замкнутая форма:
  * `disp(t) = (d₀ + (v₀ + ω·d₀)·t)·e^(−ω·t)`, где начальная скорость
- * подписана и зажата критической линией демпфирования: скорость к цели
- * `v_toward = min(|v₀|, ω·|d₀|)`. Ниже линии доезд стартует со скоростью
- * пальца (velocity handoff, без излома); на линии — чистый экспоненциальный
- * спад с максимальной скоростью без перелёта. Зажим отличает это от
- * «спринга с поданной абсолютной скоростью»: |v₀| > ω·|d₀| перелетал бы
- * цель (а при броске из телепортных шагов автоматизации — улетал бы на
- * тысячи px).
+ * подписана и направлена к цели. Собственная частота — АДАПТИВНАЯ:
+ * `ω = max(ω_base, |v₀|/|d₀|)` поднимает линию критического демпфирования
+ * до скорости жеста, поэтому доезд всегда стартует СО скоростью отпускания
+ * (velocity handoff без излома, apple-design §5). Прежний зажим скорости
+ * вниз до ω_base·|d₀| обрывал короткие флики между соседними снапами
+ * кирпичной стеной: палец отпускали на 2500px/s, а доезд стартовал с
+ * 785px/s (решение владельца 18.10 — «слишком резкий»). Перелёта нет
+ * и теперь: b = v₀ + ω·d₀ ≥ 0 при ω ≥ |v₀|/|d₀| — кривая декелерирует В
+ * цель и никогда не через неё.
  *
  * Возвращает длительность (момент, когда |disp| ≤ SETTLE_REST_PX, шаг
  * поиска 8мс, кап SETTLE_MAX_MS) и нормированную кривую для
@@ -141,10 +118,12 @@ export function criticalSettle(
     return { durationMs: 0, ease: (t) => t };
   }
   const toward = -Math.sign(d0) * velocityPxPerS; // >0 — движение к цели
-  const vToward = Math.min(Math.max(toward, 0), omega * Math.abs(d0));
+  const vToward = Math.max(toward, 0);
+  const omegaEff = Math.max(omega, vToward / Math.abs(d0));
   const v0Real = -Math.sign(d0) * vToward;
-  const b = v0Real + omega * d0;
-  const disp = (tSec: number): number => (d0 + b * tSec) * Math.exp(-omega * tSec);
+  const b = v0Real + omegaEff * d0;
+  const disp = (tSec: number): number =>
+    (d0 + b * tSec) * Math.exp(-omegaEff * tSec);
   const stepSec = 0.008;
   let durationSec = 0;
   while (durationSec < SETTLE_MAX_MS / 1000) {

@@ -301,32 +301,79 @@
     --default-transition-duration: var(--dl-duration-fast);
     --default-transition-timing-function: var(--dl-ease);
     --ease-apple: var(--dl-ease);
+    /* Скелетон-пульс на кривой дома (аудит #1418, план 014): единственный
+       регулярный keyframe-дефолт Tailwind шёл с чужой кривой (0.4, 0.6, 1)
+       мимо токен-канона. Длительность 2s и opacity-природа — без изменений;
+       reduced-motion не укорачивает: это бесконечный индикатор статуса,
+       укорачивание дало бы строб (решение #1349). */
+    --animate-pulse: pulse 2s var(--dl-ease) infinite;
 }
 
-/* Адаптивная модалка-шелл (дизайн-слой): узкие экраны — нижний шит
-   (выезд снизу), широкие (≥ tablet) — центрированная модалка
-   (масштаб + проявление). Имена переключаются медиа-запросом. */
-@keyframes modal-overlay-in {
-    from {
+/* Модалка-карточка ≥768px: переход-модель шита «Еще» (решение 22.09),
+   перенесённая на Radix Dialog (аудит #1418, план 012): закрытие
+   разворачивается из текущей позиции, повторное открытие посреди exit
+   доезжает, а не рестартует. Стражи Presence — без визуального эффекта,
+   на кастомном свойстве, имена in/out разные — Presence ждёт animationend
+   при смене data-state. Классы .modal-overlay/.modal-card несут и
+   десктопная модалка, и SuccessPopup, и мобильный оверлей vaul-пути. */
+@keyframes modal-presence-in {
+    from { --modal-presence: 0; }
+    to   { --modal-presence: 1; }
+}
+
+@keyframes modal-presence-out {
+    from { --modal-presence: 0; }
+    to   { --modal-presence: 1; }
+}
+
+.modal-overlay[data-state='open'] {
+    animation: modal-presence-in var(--dl-duration-modal-overlay-in) linear;
+    opacity: 1;
+    transition: opacity var(--dl-duration-modal-overlay-in) var(--dl-ease);
+}
+
+@starting-style {
+    .modal-overlay[data-state='open'] {
         opacity: 0;
     }
+}
 
-    to {
-        opacity: 1;
+.modal-overlay[data-state='closed'] {
+    animation: modal-presence-out var(--dl-duration-modal-overlay-out) linear;
+    opacity: 0;
+    transition: opacity var(--dl-duration-modal-overlay-out) var(--dl-ease);
+}
+
+.modal-card[data-state='open'] {
+    animation: modal-presence-in var(--dl-duration-modal-card-in) linear;
+    opacity: 1;
+    transform: scale(1);
+    transition:
+        transform var(--dl-duration-modal-card-in) var(--dl-ease),
+        opacity var(--dl-duration-modal-card-in) var(--dl-ease);
+}
+
+@starting-style {
+    .modal-card[data-state='open'] {
+        opacity: 0;
+        transform: scale(0.95);
     }
 }
 
-@keyframes modal-sheet-in {
-    from {
-        transform: translateY(100%);
-    }
-
-    to {
-        transform: translateY(0);
-    }
+.modal-card[data-state='closed'] {
+    animation: modal-presence-out var(--dl-duration-modal-card-out) linear;
+    opacity: 0;
+    transform: scale(0.95);
+    transition:
+        transform var(--dl-duration-modal-card-out) var(--dl-ease),
+        opacity var(--dl-duration-modal-card-out) var(--dl-ease);
 }
 
-@keyframes modal-card-in {
+/* Дропдаун-меню (аудит #1418): свой кейфрейм вместо modal-card-in —
+   скейл 0.95 от ТОЧКИ ТРИГГЕРА (origin ставит Radix в переменную
+   --radix-dropdown-menu-content-transform-origin). Длительности — бюджет
+   дропдаунов канона: вход 150ms, выход 120ms, обе на --dl-ease. */
+@keyframes menu-in {
     from {
         opacity: 0;
         transform: scale(0.95);
@@ -338,27 +385,7 @@
     }
 }
 
-@keyframes modal-overlay-out {
-    from {
-        opacity: 1;
-    }
-
-    to {
-        opacity: 0;
-    }
-}
-
-@keyframes modal-sheet-out {
-    from {
-        transform: translateY(0);
-    }
-
-    to {
-        transform: translateY(100%);
-    }
-}
-
-@keyframes modal-card-out {
+@keyframes menu-out {
     from {
         opacity: 1;
         transform: scale(1);
@@ -366,7 +393,7 @@
 
     to {
         opacity: 0;
-        transform: scale(0.95);
+        transform: scale(0.97);
     }
 }
 
@@ -384,26 +411,44 @@
     }
 }
 
-/* Сворачиваемая секция дизайн-слоя (#499): раскрытие/скрытие по высоте
-   контента — переменную ведёт Radix Collapsible. */
-@keyframes collapsible-down {
-    from {
-        height: 0;
-    }
+/* Сворачиваемая секция дизайн-слоя (#499; аудит #1418): grid-rows 0fr→1fr
+   + opacity на transition (канон #620, как tariff-faq) — без высотных
+   keyframes: ре-клик посреди закрытия разворачивает секцию из текущей
+   позиции. Стражи Presence — по модели шита «Еще» (без визуального
+   эффекта, имена in/out разные — Presence ждёт animationend). */
+@keyframes collapsible-presence-in {
+    from { --collapsible-presence: 0; }
+    to   { --collapsible-presence: 1; }
+}
 
-    to {
-        height: var(--radix-collapsible-content-height);
+@keyframes collapsible-presence-out {
+    from { --collapsible-presence: 0; }
+    to   { --collapsible-presence: 1; }
+}
+
+.collapsible-content[data-state='open'] {
+    animation: collapsible-presence-in 200ms linear;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition:
+        grid-template-rows 200ms var(--dl-ease),
+        opacity 200ms var(--dl-ease);
+}
+
+@starting-style {
+    .collapsible-content[data-state='open'] {
+        grid-template-rows: 0fr;
+        opacity: 0;
     }
 }
 
-@keyframes collapsible-up {
-    from {
-        height: var(--radix-collapsible-content-height);
-    }
-
-    to {
-        height: 0;
-    }
+.collapsible-content[data-state='closed'] {
+    animation: collapsible-presence-out 150ms linear;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-rows 150ms var(--dl-ease),
+        opacity 150ms var(--dl-ease);
 }
 
 /* Шит «Еще» TabBar (Figma 1721:57140, #560). Motion-модель 2026-09-22 —
@@ -414,8 +459,9 @@
    (z-50, над оверлеем z-40 — бар не темнеет и кликабелен в любой фазе).
    Тайминги — по образцу системных шитов iOS: пружина без отскока
    (критическое затухание, UISpringTimingParameters dampingRatio 1.0),
-   выезд 440ms на cubic-bezier(0.32,0.72,0,1) — задокументированный
-   «mimic iOS's Sheet», закрытие 330ms (ускоряющийся уход с экрана),
+   выезд на --dl-duration-sheet-in/--dl-ease — задокументированный
+   «mimic iOS's Sheet» (440ms, решение 22.09), закрытие 330ms
+   (--dl-duration-sheet-out на ускоряющемся уходе --dl-ease-exit),
    затемнение гаснет синхронно листу. Движение листа и оверлея ведёт
    transition по transform/opacity; data-state=closed разворачивает его
    из текущей позиции, @starting-style задаёт старт выезда без keyframes.
@@ -459,9 +505,9 @@
    (slideFromBottom/slideToBottom) гарантированно перебит нашими
    стражами Presence. */
 .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'] {
-    animation: more-sheet-presence-in 440ms linear;
+    animation: more-sheet-presence-in var(--dl-duration-sheet-in) linear;
     transform: translateY(0);
-    transition: transform 440ms cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform var(--dl-duration-sheet-in) var(--dl-ease);
 }
 
 @starting-style {
@@ -471,18 +517,18 @@
 }
 
 .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'] {
-    animation: more-sheet-presence-out 330ms linear;
+    animation: more-sheet-presence-out var(--dl-duration-sheet-out) linear;
     transform: translateY(100%);
-    transition: transform 330ms cubic-bezier(0.32, 0, 0.67, 0);
+    transition: transform var(--dl-duration-sheet-out) var(--dl-ease-exit);
 }
 
 /* Бэкдроп — свой div внутри портала (в non-modal vaul рендерит Overlay
    как null), data-state ведёт MoreSheet из пропа open; селекторы без
    vaul-атрибутов — injected-правила vaul на элемент не попадают. */
 .more-sheet-backdrop[data-state='open'] {
-    animation: more-sheet-presence-in 440ms linear;
+    animation: more-sheet-presence-in var(--dl-duration-sheet-in) linear;
     opacity: 1;
-    transition: opacity 440ms cubic-bezier(0.32, 0.72, 0, 1);
+    transition: opacity var(--dl-duration-sheet-in) var(--dl-ease);
 }
 
 @starting-style {
@@ -492,18 +538,34 @@
 }
 
 .more-sheet-backdrop[data-state='closed'] {
-    animation: more-sheet-presence-out 330ms linear;
+    animation: more-sheet-presence-out var(--dl-duration-sheet-out) linear;
     opacity: 0;
-    transition: opacity 330ms cubic-bezier(0.32, 0, 0.67, 0);
+    transition: opacity var(--dl-duration-sheet-out) var(--dl-ease-exit);
+}
+
+/* Мобильная модалка (vaul Drawer, modal.tsx <768px): вендорный дефолт 0.5s
+   выровнен по шиту «Еще» (решение 22.09, токены плана 012). Специфичность
+   0,2,0 бьёт базу vaul [data-vaul-drawer] 0,1,0 независимо от порядка
+   бандла; правила .more-sheet-* (0,5,0) по-прежнему старше — шит «Еще»
+   не задет. Drag не тронут: vaul двигает шит inline-стилями с
+   transition:none, keyframes играют только на вход/выход без жеста. */
+[data-vaul-drawer][data-state='open'] {
+    animation-duration: var(--dl-duration-sheet-in);
+}
+
+[data-vaul-drawer][data-state='closed'] {
+    animation-duration: var(--dl-duration-sheet-out);
 }
 
 /* Компакт-бар хаба (решение владельца 2026-09-09, Figma 1603-93157 →
-   1733-93740): видимость управляется прогрессом прокрутки --hub-collapse
-   (0..1 — пишет HubCollapseAnchor на :root). Только opacity/transform —
-   без reflow; CSS-переходов нет, плавность даёт сам скролл. Класс
+   1733-93740): видимость управляется прогрессом прокрутки, который
+   HubCollapseAnchor пишет прямыми style-записями в
+   .hub-compact/.hub-compact-bar (аудит #1418, план 011: переменная на
+   :root каждый кадр инвалидирует всё дерево). Ниже — rest-состояние
+   (прогресс 0); CSS-переходов нет, плавность даёт сам скролл. Класс
    hub-collapse-on включает pointer-events, когда компакт уже виден. */
 .hub-compact {
-    opacity: var(--hub-collapse, 0);
+    opacity: 0;
     pointer-events: none;
 }
 
@@ -513,26 +575,36 @@
 
 /* Мобильный клон компакт-бара выезжает сверху вместе с прогрессом. */
 .hub-compact-bar {
-    transform: translateY(calc((1 - var(--hub-collapse, 0)) * -100%));
+    transform: translateY(-100%);
 }
 
-/* ПК-каркас (макеты 1185-40815/1185-40811, решение владельца 25.09 —
-   доработка тикета #865): колонка контента центрируется во всём вьюпорте
-   на любом ярусе; полноэкранная поверхность (.fullscreen-surface: пикеры,
-   визарды-оверлеи, шит фильтров) кладёт свой БЕЛЫЙ ЛИСТ только правее
-   сайдбара — меню остаётся видимым (решение владельца: пикеры не
-   накрывают боковое меню), а сам диалог занимает весь вьюпорт, поэтому
-   ВСЕ его колонки — и in-flow, и fixed-бары — центрируются по вьюпорту и
-   лежат точно на колонках страниц: открытие пикера не сдвигает контент.
-   Белые полосы баров поверх листа над/под зоной сайдбара (шапка 0..72,
-   низ ниже меню) ложат на пустой белый фон — видимая геометрия не
-   меняется. Граница 1024px в media query дублирует токен
-   --breakpoint-desktop вручную — CSS не читает переменные в условии
-   запроса; при переносе брейкпоинта править оба места. Диалог обязан
-   быть без собственного фона (лист рисует ::before); сам лист лежит
-   на z-index:-1 внутри stacking-контекста поверхности (fixed + z-50) —
-   красится под всеми детьми, какими бы они ни были, но контекст не
-   покидает, поэтому страница за поверхностью по-прежнему накрыта. */
+/* Пресс-отклик интерактива дизайн-слоя (аудит #1418; канон правлен
+   владельцем 16.10, карта #1437): нажатие подтверждается только цветовым
+   шагом — opacity/прозрачность/фон/граница/кольцо на
+   --dl-duration-fast. Сжатие scale(0.97) из плана 007 отклонено
+   владельцем, трансформа в каноне нет. */
+.pressable {
+    transition:
+        opacity var(--dl-duration-fast) var(--dl-ease),
+        background-color var(--dl-duration-fast) var(--dl-ease),
+        border-color var(--dl-duration-fast) var(--dl-ease),
+        color var(--dl-duration-fast) var(--dl-ease),
+        box-shadow var(--dl-duration-fast) var(--dl-ease);
+}
+
+/* ПК-каркас (макеты 1185-40815/1185-40811; решение владельца 25.09 —
+   доработка тикета #865, возвращено планом 047 после регресса
+   тотального сноса 046: поверхность-страница с календарём прятала меню
+   на весь экран): полноэкранная поверхность (.fullscreen-surface:
+   пикеры, визарды-оверлеи, шит фильтров) кладёт свой БЕЛЫЙ ЛИСТ только
+   правее сайдбара — меню остаётся видимым, а сам диалог занимает весь
+   вьюпорт, поэтому ВСЕ его колонки — и in-flow, и fixed-бары —
+   центрируются по вьюпорту и лежат точно на колонках страниц: открытие
+   пикера не сдвигает контент. Диалог обязан быть без собственного фона
+   (лист рисует ::before); сам лист лежит на z-index:-1 внутри
+   stacking-контекста поверхности (fixed + z-50) — красится под всеми
+   детьми, какими бы они ни были, но контекст не покидает, поэтому
+   страница за поверхностью по-прежнему накрыта. */
 .fullscreen-surface::before {
     content: '';
     position: fixed;
@@ -548,51 +620,30 @@
 }
 
 /* Хром ПК (.desktop-chrome: сайдбар, пилюли) остаётся кликабельным при
-   открытой полноэкранной поверхности: сама поверхность (z-50) накрывает
-   вьюпорт целиком, и её прозрачные зоны над сайдбаром и в нижних углах
-   перехватывают клики. Пока поверхность в дереве, хром поднимается над
-   ней — «меню видно и кликабельно» (§1) и пилюли не исчезают (решение
-   владельца 25.09, доработка #865). :has() реагирует на DOM сам —
-   монтирование/размонтирование поверхностей не требует провайдеров.
-   Правило неслоёное — бьёт утилиты z-30 из @layer независимо от
-   специфичности. */
+   открытой полноэкранной поверхности (решение владельца 25.09,
+   доработка #865, возвращено планом 047): хром поднимается над ней —
+   «меню видно и кликабельно» (§1), пилюли не исчезают. :has() реагирует
+   на DOM сам — монтирование/размонтирование поверхностей не требует
+   провайдеров. Правило неслоёное — бьёт утилиты z-30 из @layer
+   независимо от специфичности. */
 @media (min-width: 1024px) {
     body:has(.fullscreen-surface) .desktop-chrome {
         z-index: 60;
     }
 }
 
-/* Модалка отодвигает фон (канон apple-design §12: модальная задача —
-   скрим + push back, как у iOS sheet presentation; решение владельца
-   14.10): пока открыт любой Modal, оболочка экранов (.screen-shell в
-   ScreenLayout) уходит вглубь — масштаб 0.96, сдвиг вниз 8px, углы 16px.
-   Крючок — .modal-overlay на оверлеях Dialog и vaul-Drawer в modal.tsx;
-   сама модалка рендерится в портале вне оболочки и не масштабируется.
-   Шит «Ещё» (.more-sheet-*) и полноэкранные поверхности
-   (.fullscreen-surface) триггером не являются — их решения о хроме
-   (22.09 — бар над листом; #865 — хром над поверхностью) не трогаются.
-   Закрытие — фон возвращается тем же путём (§7): data-state оверлея
-   гаснет в момент старта анимации выхода. transform на оболочке делает
-   её содержащим блоком fixed-хрома — сайдбар, пилюли и TabBar уходят
-   вглубь вместе с контентом. Radius анимируется вместе с transform;
-   overflow: hidden не анимируется, но при радиусе ~0 на старте клип
-   незаметен. */
-.screen-shell {
-    transition:
-        transform 400ms var(--dl-ease),
-        border-radius 400ms var(--dl-ease);
-}
-
-body:has(.modal-overlay[data-state='open']) .screen-shell {
-    transform: translateY(8px) scale(0.96);
-    border-radius: 16px;
-    overflow: hidden;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .screen-shell {
-        transition-duration: 150ms;
-    }
+/* Модальный спуск (план 047, решение владельца 16.10 — лечение бага
+   «сайдбар пробивает скрим колесного шита над поверхностью»; точечный
+   вариант (а) вместо тотального сноса 046): пока открыт любой Modal,
+   хром опускается к базовому z-30 — под скримом оверлея (z-50),
+   некликабелен. Специичность .modal-overlay[data-state='open'] выше
+   .fullscreen-surface — правило бьёт подъём выше без source-order
+   трюков. Крючок — .modal-overlay на оверлеях Dialog и vaul-Drawer в
+   modal.tsx: накрывает модалки и над страницами, и над поверхностями.
+   Подъём выше остаётся для поверхностей без модалок — меню ПК живо на
+   экранах-поверхностях («Выберите дату», визарды). */
+body:has(.modal-overlay[data-state='open']) .desktop-chrome {
+    z-index: 30;
 }
 
 /* prefers-reduced-motion: анимацию не выключаем, а укорачиваем до ~150ms,
@@ -602,12 +653,44 @@ body:has(.modal-overlay[data-state='open']) .screen-shell {
     .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'],
     .more-sheet-drawer[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'],
     .more-sheet-backdrop[data-state='open'],
-    .more-sheet-backdrop[data-state='closed'],
-    /* Модалки design-слоя (класс-хук .modal-surface): keyframes-въезды
-       карточки/оверлея и vaul-переход мобильного шита укорачиваются как у
-       «Еще» — канон §8 «укорачиваем, не отключаем» (#1349). */
-    .modal-surface[data-state='open'],
-    .modal-surface[data-state='closed'] {
+    .more-sheet-backdrop[data-state='closed'] {
+        animation-duration: 150ms;
+        transition-duration: 150ms;
+    }
+}
+
+/* Дропдаун-меню (аудит #1418, план 009): вход 150ms и так в бюджете,
+   выход 120ms укорачивается до канонных 150ms. */
+@media (prefers-reduced-motion: reduce) {
+    [data-radix-dropdown-menu-content] {
+        animation-duration: 150ms;
+    }
+}
+
+/* Сворачиваемая секция (план 013): Presence-стражи и переход укорачиваются
+   до канонных 150ms — движение grid-rows+opacity остаётся. */
+@media (prefers-reduced-motion: reduce) {
+    .collapsible-content[data-state='open'],
+    .collapsible-content[data-state='closed'] {
+        animation-duration: 150ms;
+        transition-duration: 150ms;
+    }
+}
+
+/* Модальные поверхности (план 012): vaul-шит мобильной модалки и
+   transition-модель карточки/оверлея укорачиваются до канонных 150ms
+   (стратегия §8 «укорачиваем, не отключаем»; у vaul в инжектируемом CSS
+   reduced-ветки нет). */
+@media (prefers-reduced-motion: reduce) {
+    [data-vaul-drawer][data-state='open'],
+    [data-vaul-drawer][data-state='closed'] {
+        animation-duration: 150ms;
+    }
+
+    .modal-overlay[data-state='open'],
+    .modal-overlay[data-state='closed'],
+    .modal-card[data-state='open'],
+    .modal-card[data-state='closed'] {
         animation-duration: 150ms;
         transition-duration: 150ms;
     }
@@ -1070,6 +1153,17 @@ body > * {
         font-size: 100%;
         line-height: 1.15;
         margin: 0;
+    }
+
+    /* Флоор 16px нативных контролов (канон mobile-native §4; тикет #1421):
+       iOS зумит страницу при фокусе в инпуте <16px и не отъезжает на блюре.
+       Источник значения — --font-size-input (tokens.css); поля с явными
+       утилитами его переопределяют по слою, флоор ловит только контролы без
+       явного кегля. */
+    input,
+    select,
+    textarea {
+        font-size: var(--font-size-input);
     }
 
     /* Курсор-пойнтер активным кнопкам (#1395): Tailwind v4 убрал pointer

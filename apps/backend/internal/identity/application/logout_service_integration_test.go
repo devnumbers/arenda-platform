@@ -16,16 +16,15 @@ import (
 func TestLogoutIntegration_ByToken(t *testing.T) {
 	t.Parallel()
 	h := newIntegrationHarness(t)
-	phone := mustPhone(t, "+79160000300")
 	email := mustEmail(t, "logout1@example.com")
-	token1, user := h.registerAndLogin(t, phone, email)
+	token1, user := h.registerAndLogin(t, email)
 	ctx := h.ctx()
 
 	// Issue a second session so we can prove Logout only removes the target.
-	if err := h.auth.SendCode(ctx, phone, email, domain.LoginCodePurposeLogin); err != nil {
+	if err := h.auth.SendCode(ctx, email, domain.LoginCodePurposeLogin); err != nil {
 		t.Fatalf("SendCode second session: %v", err)
 	}
-	token2Raw, _, err := h.auth.VerifyCode(ctx, phone, &email, h.sender.lastCode(t), nil, application.DeviceContext{})
+	token2Raw, _, err := h.auth.VerifyCode(ctx, email, h.sender.lastCode(t), nil, application.DeviceContext{})
 	if err != nil {
 		t.Fatalf("VerifyCode second session: %v", err)
 	}

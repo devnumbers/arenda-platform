@@ -14,7 +14,6 @@ import {
   Key,
   LockSmall,
   SmallArrowDown,
-  SmallArrowUp,
   Team,
   TimeHistory,
   TrashBin,
@@ -47,10 +46,12 @@ import {
 import { dateToIsoLocal, type IsoRange } from '@/shared/lib/calendar';
 import { cn } from '@/shared/lib/cn';
 import { OWN_USER_NAME_SUFFIX } from '@/shared/lib/display-name';
+import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import {
   Button,
   CalendarRangePicker,
   Checkbox,
+  CirclePhoto,
   ErrorCard,
   fullscreenSurfaceClass,
   IconButton,
@@ -224,28 +225,22 @@ export type HistoryFiltersSheetProps = {
 
 /** Аватар участника в строке шита фильтров (решение #1286): фото профиля
  * 36, иначе — и при битом фото (404 стрима, отозванный доступ) — заглушка
- * BoldUser. */
+ * BoldUser. Механика показа — примитив CirclePhoto (#1423); строки шита —
+ * ленивая подача. */
 function ParticipantFilterAvatar({ photoUrl }: { readonly photoUrl?: string | null }): JSX.Element {
-  const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
   return (
     <span
       aria-hidden
       className={cn(
         'ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-pill bg-white',
-        showPhoto && 'overflow-hidden',
+        photoUrl != null && photoUrl !== '' && 'overflow-hidden',
       )}
     >
-      {showPhoto ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : (
-        <BoldUser className="h-4 w-4" aria-hidden />
-      )}
+      <CirclePhoto
+        photoUrl={photoUrl}
+        loading="lazy"
+        glyph={<BoldUser className="h-4 w-4" />}
+      />
     </span>
   );
 }
@@ -259,6 +254,11 @@ export function HistoryFiltersSheet({
   pinnedParticipantId,
   pinnedPropertyId,
 }: HistoryFiltersSheetProps): JSX.Element {
+  // Лок фона: поверхность непрозрачно накрывает ленту — жест у края
+  // внутренней ленты не должен уезжать в цепочку скролла страницы
+  // (канон useBodyScrollLock, решение владельца 2026-10-13; конвенция
+  // слоёв — тикет #1417).
+  useBodyScrollLock();
   const [draft, setDraft] = useState<HistoryFilters>(() => applied);
   // Раскрытие групп — локально, свёрнуто по умолчанию (аннотация макета
   // 2177-60527: страница открывается свёрнутой).
@@ -379,7 +379,7 @@ export function HistoryFiltersSheet({
         <TopNavTitle title={title} />
       </TopNav>
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-width:none]">
         <div className="mx-auto w-full max-w-column px-6 pb-[136px] pt-6 tablet:mt-[72px]">
           {optionsQuery.isPending ? (
             <HistoryFiltersSheetSkeleton />
@@ -449,6 +449,7 @@ export function HistoryFiltersSheet({
                 <ErrorCard
                   title="Не удалось загрузить фильтры"
                   onRetry={() => void optionsQuery.refetch()}
+                  loading={optionsQuery.isFetching}
                 />
               ) : (
                 <>
@@ -598,7 +599,7 @@ function FilterGroupCard({
         </label>
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-center py-4 pl-2 pr-5 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary"
+          className="pressable flex min-w-0 flex-1 cursor-pointer items-center py-4 pl-2 pr-5 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
           onClick={onToggleExpanded}
           aria-expanded={expanded}
         >
@@ -608,15 +609,26 @@ function FilterGroupCard({
           <span className="shrink-0 text-[13px] font-medium leading-[15px] text-content-tertiary">
             {count}/{rows.length}
           </span>
-          {expanded ? (
-            <SmallArrowUp className="ml-1 h-6 w-6 shrink-0" aria-hidden />
-          ) : (
-            <SmallArrowDown className="ml-1 h-6 w-6 shrink-0" aria-hidden />
-          )}
+          <SmallArrowDown
+            className={cn(
+              'ml-1 h-6 w-6 shrink-0 text-content-tertiary transition-transform duration-200 ease-apple',
+              expanded && 'rotate-180',
+            )}
+            aria-hidden
+          />
         </button>
       </div>
-      {expanded && (
-        <div className="pb-1">
+      {/* Раскрытие группы — канон 0fr→1fr + opacity (тариф-faq #620,
+          тайминги дизайн-слоя 200/150): контент всегда в DOM, свёрнутый
+          выводится из tab-порядка inert'ом, шеврон проворачивается. */}
+      <div
+        inert={!expanded}
+        className={cn(
+          'grid transition-[grid-template-rows,opacity] ease-apple',
+          expanded ? 'opacity-100 [grid-template-rows:1fr] duration-200' : 'opacity-0 [grid-template-rows:0fr] duration-150',
+        )}
+      >
+        <div className="overflow-hidden pb-1">
           {sections.map((section, sectionIndex) => (
             <Fragment key={section.title ?? `section-${sectionIndex}`}>
               {section.title !== undefined && (
@@ -639,7 +651,7 @@ function FilterGroupCard({
             </Fragment>
           ))}
         </div>
-      )}
+      </div>
     </section>
   );
 }

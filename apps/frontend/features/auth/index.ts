@@ -7,4 +7,3 @@ export { useSendCooldown } from './lib/use-send-cooldown';
 export { CodeStep } from './ui/code-step/CodeStep';
 export { EmailStep } from './ui/email-step';
 export { LoginShell } from './ui/login-shell/LoginShell';
-export { PhoneStep } from './ui/phone-step/PhoneStep';

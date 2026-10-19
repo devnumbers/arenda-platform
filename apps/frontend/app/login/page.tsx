@@ -3,9 +3,8 @@
 import {type JSX, useRef, useState} from "react";
 import {notify} from "@/shared/lib/notifications";
 import {type ApiError} from "@/shared/api/errors";
-import {CodeStep, EmailStep, LoginShell, PhoneStep, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
+import {CodeStep, EmailStep, LoginShell, deviceTimezone, useSendCode, useVerifyCode} from "@/features/auth";
 import {isEmailValid} from "@/shared/lib/email";
-import {normalizePhone, isPhoneValid} from "@/shared/lib/phone";
 import {safeInternalPath} from "@/shared/lib/safe-internal-path";
 import {useSendCooldown} from "@/features/auth";
 import {useLoginDraft} from "@/features/auth";
@@ -31,8 +30,8 @@ export default function LoginPage(): JSX.Element {
     // Единственное горло всех отправок кода (#1099): реф режет второй клик из
     // окна до перерисовки, isPending догашивает окно между settled и самой
     // перерисовкой; жизненный цикл рефа (set до mutate, сброс в onSettled)
-    // живёт здесь в одном месте. Один реф на все три обработчика: шаги
-    // телефона/почты и resend не пересекаются — это разные шаги черновика.
+    // живёт здесь в одном месте. Один реф на оба обработчика: шаг почты и
+    // resend не пересекаются — это разные шаги черновика.
     const startSendOnce = (...[variables, callbacks]: Parameters<typeof sendCode.mutate>): void => {
         if (sendInFlightRef.current || sendCode.isPending) {
             return;
@@ -54,36 +53,17 @@ export default function LoginPage(): JSX.Element {
         notify.scenarios.auth.loginError({description: error.detail});
     };
 
-    const handleSendPhone = (formattedPhone: string) => {
-        if (!isPhoneValid(formattedPhone)) {
-            return;
-        }
-
-        startSendOnce({phone: normalizePhone(formattedPhone)}, {
-            onSuccess: (data) => {
-                if (data.sent) {
-                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                    setDraft((prev) => ({...prev, phone: formattedPhone, email: "", step: "code"}));
-                } else {
-                    setDraft((prev) => ({...prev, phone: formattedPhone, step: "email"}));
-                }
-            },
-            onError: handleSendCodeError,
-        });
-    };
-
     const handleSendEmail = () => {
         const trimmedEmail = draft.email.trim();
-        if (!isEmailValid(trimmedEmail) || !isPhoneValid(draft.phone)) {
+        if (!isEmailValid(trimmedEmail)) {
             return;
         }
 
-        startSendOnce({phone: normalizePhone(draft.phone), email: trimmedEmail}, {
+        // Ответ не раскрывает существование аккаунта (анти-enumeration,
+        // research #1526): бэк всегда отвечает sent:true, вход = регистрация
+        // (ADR 0067) — единственный путь ведёт на шаг кода.
+        startSendOnce({email: trimmedEmail}, {
             onSuccess: (data) => {
-                if (!data.sent) {
-                    setDraft((prev) => ({...prev, step: "email"}));
-                    return;
-                }
                 recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
                 setDraft((prev) => ({...prev, step: "code"}));
             },
@@ -101,7 +81,7 @@ export default function LoginPage(): JSX.Element {
 
     const handleVerifyCode = (value: string) => {
         const trimmedEmail = draft.email.trim();
-        if (value.length !== 6 || !isPhoneValid(draft.phone) || verifyCode.isPending) {
+        if (value.length !== 6 || !isEmailValid(trimmedEmail) || verifyCode.isPending) {
             return;
         }
 
@@ -109,10 +89,9 @@ export default function LoginPage(): JSX.Element {
         // верификацией, бэк применяет её только при создании аккаунта. Когда
         // браузер не отдал зону — поле не отправляется.
         const timezone = deviceTimezone();
-        const base = {phone: normalizePhone(draft.phone), code: value, ...(timezone && {timezone})};
 
         verifyCode.mutate(
-            trimmedEmail ? {...base, email: trimmedEmail} : base,
+            {email: trimmedEmail, code: value, ...(timezone && {timezone})},
             {
                 onSuccess: () => {
                     const target = safeInternalPath(new URLSearchParams(window.location.search).get("from")) ?? "/properties";
@@ -125,10 +104,10 @@ export default function LoginPage(): JSX.Element {
                 onError: (error) => {
                     // Неверный код (401) — инлайн в поле по макету 2349:67624
                     // (resend-канон #733: 401 verify — не тост; текст макета
-                    // «Неверный код», деталь бэка «Неверный телефон, почта или
-                    // код» не встаёт в поле). Блокировка (429 — окно попыток
-                    // 15/30 мин, бан, лимит) — понятный текст бэка тоже инлайн,
-                    // чтобы не исчезал. Остальное — тост сценария.
+                    // «Неверный код», деталь бэка «Неверная почта или код» не
+                    // встаёт в поле). Блокировка (429 — окно попыток 15/30 мин,
+                    // бан, лимит) — понятный текст бэка тоже инлайн, чтобы не
+                    // исчезал. Остальное — тост сценария.
                     if (error.status === 401 || error.status === 429) {
                         setVerifyError(error.status === 401 ? "Неверный код" : error.detail);
                         return;
@@ -144,54 +123,31 @@ export default function LoginPage(): JSX.Element {
         setVerifyError(null);
     };
 
-    // Стрелка ← — на предыдущий шаг: почта, если она была, иначе телефон
-    // (макеты #765). Черновик кода и ошибка живут только на шаге кода.
-    // Пока верификация в полёте, уход со шага закрыт — иначе её onSuccess
-    // утащил бы пользователя в кабинет с чужого шага.
+    // Стрелка ← код-шага — на шаг почты (макеты #765). Черновик кода и
+    // ошибка живут только на шаге кода. Пока верификация в полёте, уход со
+    // шага закрыт — иначе её onSuccess утащил бы пользователя в кабинет
+    // с чужого шага.
     const handleCodeBack = () => {
         if (verifyCode.isPending) {
             return;
         }
         handleCodeClear();
-        setDraft((prev) => ({...prev, step: prev.email.trim() ? "email" : "phone"}));
-    };
-
-    // Стрелка ← шага почты — на телефон (канон владельца #1101; в макетах
-    // почты 2349:67698/67820 стрелки нет — добавлена словом владельца).
-    // Черновик почты сохраняется: возврат — чаще всего правка телефона,
-    // стирать набранную почту — сюрприз; чужой зарегистрированный номер
-    // смывает её сам (sent:true-ветка handleSendPhone). Пока отправка в
-    // полёте, уход закрыт — иначе её onSuccess утащил бы пользователя на
-    // шаг кода уже с телефона (тот же гард, что у шага кода).
-    const handleEmailBack = () => {
-        if (sendCode.isPending) {
-            return;
-        }
-        setDraft((prev) => ({...prev, step: "phone"}));
+        setDraft((prev) => ({...prev, step: "email"}));
     };
 
     const handleResend = () => {
         const trimmedEmail = draft.email.trim();
-        if (!isPhoneValid(draft.phone) || verifyCode.isPending) {
+        if (!isEmailValid(trimmedEmail) || verifyCode.isPending) {
             return;
         }
 
-        startSendOnce(
-            trimmedEmail
-                ? {phone: normalizePhone(draft.phone), email: trimmedEmail}
-                : {phone: normalizePhone(draft.phone)},
-            {
-                onSuccess: (data) => {
-                    if (!data.sent) {
-                        setDraft((prev) => ({...prev, step: "email"}));
-                        return;
-                    }
-                    recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
-                    handleCodeClear();
-                },
-                onError: handleSendCodeError,
+        startSendOnce({email: trimmedEmail}, {
+            onSuccess: (data) => {
+                recordSendWithRemainingSeconds(data.retryAfter ?? RESEND_TIMEOUT);
+                handleCodeClear();
             },
-        );
+            onError: handleSendCodeError,
+        });
     };
 
     // Крестик — выход на лендинг (#1103, слово владельца): сайт всегда
@@ -204,25 +160,12 @@ export default function LoginPage(): JSX.Element {
         hardReplace("/");
     };
 
-    // Шаги телефона и почты — редизайн по макетам Рентли (карта #761,
-    // тикеты #763/#764), шаг кода — #765. Все три шага живут на LoginShell.
-    if (draft.step === "phone") {
-        return (
-            <LoginShell onClose={handleClose} hideClose={isStandalone}>
-                <PhoneStep
-                    phone={draft.phone}
-                    onPhoneChange={(phone) => setDraft((prev) => ({...prev, phone}))}
-                    onSendPhone={handleSendPhone}
-                    isLoading={sendCode.isPending}
-                    resendTimer={resendTimer}
-                />
-            </LoginShell>
-        );
-    }
-
+    // Шаг почты — вход в поток (ADR 0067, #1529): вход = регистрация одним
+    // потоком «email → код», прежний телефонный шаг снесён, стрелки ← у
+    // первого шага нет. Шаг кода — #765. Оба шага живут на LoginShell.
     if (draft.step === "email") {
         return (
-            <LoginShell onClose={handleClose} onBack={handleEmailBack} hideClose={isStandalone}>
+            <LoginShell onClose={handleClose} hideClose={isStandalone}>
                 <EmailStep
                     email={draft.email}
                     onEmailChange={(email) => setDraft((prev) => ({...prev, email}))}

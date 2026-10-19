@@ -55,8 +55,8 @@ func TestHistoryPerfProbe(t *testing.T) {
 	// для не-владельца — отсекает 39/40 объектов сида.
 	member := uuid.Must(uuid.NewV7())
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO users (id, phone, role, name, surname, email, timezone)
-		 VALUES ($1, '+70000000001', 'owner', 'Пётр', 'Участников', 'member@example.com', 'UTC')`, member,
+		`INSERT INTO users (id, email, role, name, surname, timezone)
+		 VALUES ($1, 'member@example.com', 'owner', 'Пётр', 'Участников', 'UTC')`, member,
 	); err != nil {
 		t.Fatalf("seed member: %v", err)
 	}
@@ -176,8 +176,8 @@ func seedPerfJournal(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 
 	owner := uuid.Must(uuid.NewV7())
 	if _, err := pool.Exec(t.Context(),
-		`INSERT INTO users (id, phone, role, name, surname, email, timezone)
-		 VALUES ($1, '+70000000000', 'owner', 'Иван', 'Иванов', 'ivan@example.com', 'UTC')`, owner,
+		`INSERT INTO users (id, email, role, name, surname, timezone)
+		 VALUES ($1, 'ivan@example.com', 'owner', 'Иван', 'Иванов', 'UTC')`, owner,
 	); err != nil {
 		t.Fatalf("seed owner: %v", err)
 	}
@@ -189,11 +189,11 @@ func seedPerfJournal(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 		t.Fatalf("seed properties: %v", err)
 	}
 	if _, err := pool.Exec(t.Context(),
-		`INSERT INTO users (id, phone, role, name, surname, email, timezone)
-		 SELECT uuidv7(), '+7999' || lpad(g::text, 7, '0'), 'owner',
+		`INSERT INTO users (id, email, role, name, surname, timezone)
+		 SELECT uuidv7(), 'perf-user' || g || '@example.com', 'owner',
 		        (ARRAY['Пётр','Анна','Олег','Мария','Борис'])[1 + g % 5],
 		        (ARRAY['Петров','Сидорова','Кузнецов','Ленина','Смирнов'])[1 + g % 5],
-		        'user' || g || '@example.com', 'UTC'
+		        'UTC'
 		 FROM generate_series(1, 25) g`,
 	); err != nil {
 		t.Fatalf("seed actors: %v", err)

@@ -112,8 +112,7 @@ func NewEmailChangeService(
 	}
 }
 
-// SendCurrentEmailCode implements step 1: a code to the current email. A user
-// without an email is refused up front — the flow has nowhere to deliver. On
+// SendCurrentEmailCode implements step 1: a code to the current email. On
 // success the current address is marked verified: a code delivered to it is
 // itself the proof of ownership (decision #720-6), even if the flow is
 // abandoned here.
@@ -122,13 +121,9 @@ func (s *EmailChangeService) SendCurrentEmailCode(ctx context.Context, userID uu
 	if err != nil {
 		return fmt.Errorf("get user: %w", err)
 	}
-	email, err := userEmail(user)
-	if err != nil {
-		return err
-	}
 
 	if err := s.loginCodes.Send(
-		ctx, user.Phone, email, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepCurrentEmail, &user.ID,
+		ctx, *user.Email, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepCurrentEmail, &user.ID,
 	); err != nil {
 		return err
 	}
@@ -145,14 +140,14 @@ func (s *EmailChangeService) SendCurrentEmailCode(ctx context.Context, userID uu
 // step 3). No delivery happens here.
 //
 // A verification failure rolls back, then a separate short runInTx records the
-// failed attempt into the phone's window so rate-limiting survives the
-// rollback — the same recovery PhoneChangeService and AuthenticationService use.
+// failed attempt into the address's window so rate-limiting survives the
+// rollback — the same recovery AuthenticationService uses.
 func (s *EmailChangeService) VerifyCurrentEmail(
 	ctx context.Context,
 	userID uuid.UUID,
 	code string,
 ) (string, error) {
-	var phone domain.Phone
+	var currentEmail domain.Email
 	var grantToken string
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
@@ -160,13 +155,9 @@ func (s *EmailChangeService) VerifyCurrentEmail(
 		if err != nil {
 			return fmt.Errorf("get user: %w", err)
 		}
-		phone = user.Phone
-		currentEmail, err := userEmail(user)
-		if err != nil {
-			return err
-		}
+		currentEmail = *user.Email
 
-		loginCode, err := s.loginCodes.Verify(ctx, stores, user.Phone, currentEmail, domain.LoginCodePurposeEmailChange, code)
+		loginCode, err := s.loginCodes.Verify(ctx, stores, currentEmail, domain.LoginCodePurposeEmailChange, code)
 		if err != nil {
 			return err
 		}
@@ -183,7 +174,7 @@ func (s *EmailChangeService) VerifyCurrentEmail(
 	})
 
 	if errors.Is(err, domain.ErrLoginCodeInvalid) {
-		finalErr := s.recordVerifyFailure(ctx, phone, userID)
+		finalErr := s.recordVerifyFailure(ctx, userID, currentEmail)
 		return "", finalErr
 	}
 	if err != nil {
@@ -212,8 +203,6 @@ func (s *EmailChangeService) RequestNewEmailCode(
 	grantToken string,
 	newEmail domain.Email,
 ) error {
-	var phone domain.Phone
-
 	// Transaction 1: the grant gate plus the address binding. The grant may
 	// still be addressless — binding one is this step's whole point.
 	if err := s.runInTx(ctx, func(stores *txStores) error {
@@ -221,18 +210,13 @@ func (s *EmailChangeService) RequestNewEmailCode(
 		if err != nil {
 			return fmt.Errorf("get user: %w", err)
 		}
-		phone = user.Phone
 
 		grant, err := s.liveGrant(ctx, stores, userID, grantToken)
 		if err != nil {
 			return err
 		}
 
-		currentEmail, err := userEmail(user)
-		if err != nil {
-			return err
-		}
-		if err := s.checkNewEmailFree(ctx, stores, user.ID, currentEmail, newEmail); err != nil {
+		if err := s.checkNewEmailFree(ctx, stores, user.ID, *user.Email, newEmail); err != nil {
 			return err
 		}
 
@@ -265,14 +249,14 @@ func (s *EmailChangeService) RequestNewEmailCode(
 			return ErrEmailChangeBudgetExhausted
 		}
 
-		issued, plaintextCode, err = s.loginCodes.IssueInTx(ctx, stores, phone, newEmail, domain.LoginCodePurposeEmailChange, &user.ID)
+		issued, plaintextCode, err = s.loginCodes.IssueInTx(ctx, stores, newEmail, domain.LoginCodePurposeEmailChange, &user.ID)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 
-	return s.loginCodes.Deliver(ctx, phone, newEmail, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepNewEmail, issued, plaintextCode)
+	return s.loginCodes.Deliver(ctx, newEmail, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepNewEmail, issued, plaintextCode)
 }
 
 // ChangeEmail implements the final step: verify the code sent to the new
@@ -284,8 +268,8 @@ func (s *EmailChangeService) RequestNewEmailCode(
 // addressless one (step 2 just passed, step 3 never ran) is the same "start
 // over" refusal (#1202).
 //
-// Sessions are not touched (решение #1380, разворот #1207 — the same rule the
-// phone change follows, overriding the #1207 force-logout), and the change
+// Sessions are not touched (решение #1380, разворот #1207): a contact change
+// is not a security event for already-authenticated devices. The change
 // letter is scheduled in this same transaction: the old address learns the
 // change the moment it commits, or not at all.
 func (s *EmailChangeService) ChangeEmail(
@@ -294,31 +278,25 @@ func (s *EmailChangeService) ChangeEmail(
 	code, grantToken string,
 ) (domain.User, error) {
 	var updated domain.User
-	var phone domain.Phone
-	var oldEmail domain.Email
+	var boundEmail domain.Email
 
 	err := s.runInTx(ctx, func(stores *txStores) error {
 		user, err := stores.users.GetByIDForUpdate(ctx, userID)
 		if err != nil {
 			return fmt.Errorf("get user: %w", err)
 		}
-		phone = user.Phone
 
 		grant, err := s.liveBoundGrant(ctx, stores, userID, grantToken)
 		if err != nil {
 			return err
 		}
+		boundEmail = *grant.Email
 
-		currentEmail, err := userEmail(user)
-		if err != nil {
-			return err
-		}
-		oldEmail = currentEmail
-		if err := s.checkNewEmailFree(ctx, stores, user.ID, currentEmail, *grant.Email); err != nil {
+		if err := s.checkNewEmailFree(ctx, stores, user.ID, *user.Email, *grant.Email); err != nil {
 			return err
 		}
 
-		loginCode, err := s.loginCodes.Verify(ctx, stores, user.Phone, *grant.Email, domain.LoginCodePurposeEmailChange, code)
+		loginCode, err := s.loginCodes.Verify(ctx, stores, *grant.Email, domain.LoginCodePurposeEmailChange, code)
 		if err != nil {
 			return err
 		}
@@ -351,7 +329,7 @@ func (s *EmailChangeService) ChangeEmail(
 		if err := stores.notifier.ScheduleChanged(ctx, ContactChangedEvent{
 			Kind:      ContactChangedEmail,
 			UserID:    userID,
-			Recipient: oldEmail,
+			Recipient: *user.Email,
 			ChangedAt: s.clock.Now(),
 		}); err != nil {
 			return fmt.Errorf("schedule change letter: %w", err)
@@ -360,7 +338,7 @@ func (s *EmailChangeService) ChangeEmail(
 	})
 
 	if errors.Is(err, domain.ErrLoginCodeInvalid) {
-		finalErr := s.recordVerifyFailure(ctx, phone, userID)
+		finalErr := s.recordVerifyFailure(ctx, userID, boundEmail)
 		return domain.User{}, finalErr
 	}
 	if err != nil {
@@ -385,7 +363,6 @@ func (s *EmailChangeService) ChangeEmail(
 // at the final step. The grant itself survives — the change consumes it. No
 // audit: resend changes no state.
 func (s *EmailChangeService) ResendNewEmailCode(ctx context.Context, userID uuid.UUID, grantToken string) error {
-	var phone domain.Phone
 	var issued domain.LoginCode
 	var plaintextCode string
 
@@ -394,18 +371,13 @@ func (s *EmailChangeService) ResendNewEmailCode(ctx context.Context, userID uuid
 		if err != nil {
 			return fmt.Errorf("get user: %w", err)
 		}
-		phone = user.Phone
 
 		grant, err := s.liveBoundGrant(ctx, stores, userID, grantToken)
 		if err != nil {
 			return err
 		}
 
-		currentEmail, err := userEmail(user)
-		if err != nil {
-			return err
-		}
-		if err := s.checkNewEmailFree(ctx, stores, user.ID, currentEmail, *grant.Email); err != nil {
+		if err := s.checkNewEmailFree(ctx, stores, user.ID, *user.Email, *grant.Email); err != nil {
 			return err
 		}
 
@@ -413,7 +385,7 @@ func (s *EmailChangeService) ResendNewEmailCode(ctx context.Context, userID uuid
 			return ErrEmailChangeBudgetExhausted
 		}
 
-		issued, plaintextCode, err = s.loginCodes.IssueInTx(ctx, stores, phone, *grant.Email, domain.LoginCodePurposeEmailChange, &user.ID)
+		issued, plaintextCode, err = s.loginCodes.IssueInTx(ctx, stores, *grant.Email, domain.LoginCodePurposeEmailChange, &user.ID)
 		return err
 	})
 	if err != nil {
@@ -421,7 +393,7 @@ func (s *EmailChangeService) ResendNewEmailCode(ctx context.Context, userID uuid
 	}
 
 	return s.loginCodes.Deliver(
-		ctx, phone, issued.Email, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepNewEmail, issued, plaintextCode,
+		ctx, issued.Email, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepNewEmail, issued, plaintextCode,
 	)
 }
 
@@ -515,18 +487,19 @@ func (s *EmailChangeService) liveBoundGrant(
 	return grant, nil
 }
 
-// recordVerifyFailure records a failed verification attempt into the phone's
-// window plus the failure audit in a short transaction that survives the
-// rolled-back success path — the recovery wrapper PhoneChangeService uses,
-// specialized to the email-change audit action.
-func (s *EmailChangeService) recordVerifyFailure(ctx context.Context, phone domain.Phone, userID uuid.UUID) error {
+// recordVerifyFailure records a failed verification attempt into the
+// address's window plus the failure audit in a short transaction that survives
+// the rolled-back success path — the recovery wrapper of the email-change
+// audit action. The attempt window has no user column (000162 — the key is the
+// canonical email), so the actor travels on the audit entry only.
+func (s *EmailChangeService) recordVerifyFailure(ctx context.Context, userID uuid.UUID, email domain.Email) error {
 	finalErr := domain.ErrLoginCodeInvalid
 	auditEntry := auditdomain.Entry{
 		ActorID:   &userID,
 		ActorRole: auditdomain.ActorRoleOwner,
 		Action:    auditdomain.ActionAuthEmailChangeFailed,
 	}
-	if recErr := s.loginCodes.RecordFailureAndAudit(ctx, phone, userID, auditEntry, &finalErr); recErr != nil {
+	if recErr := s.loginCodes.RecordFailureAndAudit(ctx, email, auditEntry, &finalErr); recErr != nil {
 		s.logger.ErrorContext(ctx, "failed to record email-change failed attempt", slog.String("error", sanitize.Error(recErr)))
 	}
 	return finalErr

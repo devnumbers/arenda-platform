@@ -176,7 +176,7 @@ function ChoiceCard({
     <button
       type="button"
       onClick={onSelect}
-      className="flex cursor-pointer flex-col gap-4 rounded-card bg-surface-muted p-4 text-left outline-none transition-opacity focus-visible:ring-4 focus-visible:ring-primary hover:opacity-80 active:opacity-80"
+      className="pressable flex cursor-pointer flex-col gap-4 rounded-card bg-surface-muted p-4 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary hover:opacity-80"
     >
       {/* priority — как в EmptyState: иллюстрация внутри открывающегося
           шита, ленивую загрузку наблюдатель вьюпорта может пропустить.

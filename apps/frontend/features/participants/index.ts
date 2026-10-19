@@ -1,6 +1,7 @@
 export {
   fetchParticipant,
   participantQueryOptions,
+  participantsListQueryOptions,
 } from './api/queries';
 export {
   useParticipantsList,

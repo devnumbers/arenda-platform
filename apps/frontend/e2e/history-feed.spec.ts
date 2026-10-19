@@ -389,7 +389,7 @@ test('короткая лента прижата к низу вьюпорта �
   await expect(page.getByText('Сегодня', { exact: true })).toBeVisible();
 
   // Страница ровно вьюпорт: узел контента ScreenLayout — flex-1 от
-  // min-h-screen оболочки, лента с flex-1 тянется до нижнего края на
+  // min-h-dvh оболочки, лента с flex-1 тянется до нижнего края на
   // всех ярусах (высота шапки и safe-area учитываются сами). Иначе —
   // не якорь.
   const metrics = await page.evaluate(() => ({
@@ -568,15 +568,13 @@ test('безымянный актёр: живые ноги дают «Польз
 
   // Зарегистрированный юзер без имени: канон карты #1105 («Имя Фамилия»,
   // иначе «Пользователь» — аменд #1123, телефон больше не фолбэк)
-  // собирает бекенд одним швом display_name (#1106).
-  // Телефон сидится плейнтекстом при phone_encrypted = false —
-  // decryptPhone читает как есть, шифрование нужно только логину.
+  // собирает бекенд одним швом display_name (#1106); телефон из схемы
+  // и фолбэка ушёл совсем (ADR 0067, миграция 000162).
   const NAMELESS_ID = '16111111-1111-4111-8111-111111111171';
-  const NAMELESS_PHONE = '+79137654327';
   const NAMELESS_EMAIL = 'e2e-nameless-history@example.com';
   await execE2eSql(
-    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
-      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', FALSE, 'UTC') ` +
+    `INSERT INTO users (id, role, name, surname, email, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', 'owner', NULL, NULL, '${NAMELESS_EMAIL}', 'UTC') ` +
       `ON CONFLICT (id) DO NOTHING`,
   );
   try {

@@ -91,7 +91,7 @@ export function RentalContactPickerScreen({
       </TopNav>
 
       <PageContent>
-        {contactsQuery.isPending ? (
+        {(contactsQuery.isPending || (contactsQuery.isFetching && contacts.length === 0)) ? (
           /* Каркас списка строк на время первой порции (паритет скелетонов
            * #607; SearchField в шапке уже показывает активность). */
           <div aria-hidden className="flex flex-col px-6">
@@ -100,7 +100,7 @@ export function RentalContactPickerScreen({
             ))}
           </div>
         ) : contactsQuery.isError ? (
-          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} />
+          <ContactsErrorCard onRetry={() => void contactsQuery.refetch()} loading={contactsQuery.isFetching} />
         ) : contacts.length === 0 ? (
           <ContactsNoResults />
         ) : (

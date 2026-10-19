@@ -52,7 +52,7 @@ export function OperationsSummaryCard({
       type="button"
       onClick={onOpen}
       aria-label={openLabel}
-      className="min-w-0 flex-1 cursor-pointer rounded-card bg-surface-muted px-6 pb-6 pt-5 text-left outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+      className="pressable min-w-0 flex-1 cursor-pointer rounded-card bg-surface-muted px-6 pb-6 pt-5 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
     >
       {body}
     </button>

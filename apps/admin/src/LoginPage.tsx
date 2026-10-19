@@ -9,7 +9,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { formatPhoneInput, isValidPhone, normalizePhone } from './phone';
+import { isEmailValid } from './lib/email';
 import { authProvider } from './authProvider';
 
 export const LoginPage = () => {
@@ -17,18 +17,27 @@ export const LoginPage = () => {
   const notify = useNotify();
 
   const [step, setStep] = useState<'send' | 'verify'>('send');
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isPhoneValid = isValidPhone(phone);
+  const isEmailFormValid = isEmailValid(email.trim());
+
+  // Обрезанный адрес либо inline-ошибка в форме: оба шага (отправка кода и
+  // вход) валидируются одинаково, каноническую форму придаёт бэкенд.
+  const validatedEmail = (): string | null => {
+    const trimmedEmail = email.trim();
+    if (!isEmailValid(trimmedEmail)) {
+      setError('Введите корректный email');
+      return null;
+    }
+    return trimmedEmail;
+  };
 
   const handleSendCode = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalizedPhone = normalizePhone(phone);
-    if (!isPhoneValid) {
-      setError('Введите корректный номер телефона');
+    const trimmedEmail = validatedEmail();
+    if (trimmedEmail === null) {
       return;
     }
 
@@ -36,7 +45,7 @@ export const LoginPage = () => {
     setError(null);
 
     try {
-      await authProvider.sendLoginCode({ phone: normalizedPhone, email });
+      await authProvider.sendLoginCode({ email: trimmedEmail });
 
       setStep('verify');
       notify('Код подтверждения отправлен на email', { type: 'success' });
@@ -49,9 +58,8 @@ export const LoginPage = () => {
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalizedPhone = normalizePhone(phone);
-    if (!isPhoneValid) {
-      setError('Введите корректный номер телефона');
+    const trimmedEmail = validatedEmail();
+    if (trimmedEmail === null) {
       return;
     }
 
@@ -59,7 +67,7 @@ export const LoginPage = () => {
     setError(null);
 
     try {
-      await login({ phone: normalizedPhone, email, code }, '/');
+      await login({ email: trimmedEmail, code }, '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка входа');
     } finally {
@@ -94,22 +102,11 @@ export const LoginPage = () => {
                 margin="normal"
                 required
                 fullWidth
-                label="Телефон"
-                name="phone"
-                autoComplete="tel"
-                autoFocus
-                placeholder="+7 (000) 000-00-00"
-                value={phone}
-                onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-              />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
                 label="Email"
                 name="email"
                 type="email"
                 autoComplete="email"
+                autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -118,7 +115,7 @@ export const LoginPage = () => {
                 fullWidth
                 variant="contained"
                 sx={{ mt: 3, mb: 2 }}
-                disabled={loading || !isPhoneValid || !email}
+                disabled={loading || !isEmailFormValid}
               >
                 Отправить код
               </Button>

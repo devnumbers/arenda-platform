@@ -20,8 +20,12 @@ import {
     SPRING_STIFFNESS,
     createVelocityTracker,
     flickTriggersRefresh,
+    interceptedByInnerScroller,
+    resolveGestureIntent,
     rubberBandOffset,
     spinnerReveal,
+    type GestureIntent,
+    type OverflowReading,
 } from './pull-math';
 import styles from './PullToRefresh.module.css';
 
@@ -65,6 +69,25 @@ import styles from './PullToRefresh.module.css';
  * desktop sidebar and pills) is `position: fixed` and deliberately stays
  * put — exactly like native apps, where the status bar and tab bar do not
  * move.
+ *
+ * Gesture gating (owner decisions 19.10.2026, ADR 0031): the gesture owns
+ * the DOCUMENT surface only — a pull never starts from an inner scroller,
+ * a sheet, a picker or the fixed chrome:
+ *
+ * - Target gate: the touch must land inside the content node, and no
+ *   element between it and the content node may be a scroll container
+ *   (`interceptedByInnerScroller`) — the calendar feed, wizard feed and
+ *   every other inner ribbon per the scroll-isolation convention keep
+ *   their gestures to themselves.
+ * - While a modal surface holds the body scroll lock (`overflow-y: hidden`
+ *   on body — useBodyScrollLock), the gesture never starts: dragging under
+ *   an open surface is not a page pull.
+ * - Direction lock: vertical intent commits only after ~10px of dominant
+ *   vertical travel (`resolveGestureIntent`); a horizontal-dominant drag —
+ *   snap-rails, swipes — is a dead gesture, and an upward turn ends the
+ *   gesture for real (a new touch must re-check the gates). Before the
+ *   lock no transform is written, so zigzag scrolling on a page never
+ *   feeds the pull.
  */
 
 /** Hard cap on how long the spinner can stay up, regardless of fetch state. */
@@ -102,6 +125,10 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
     // bind once and are never recreated mid-gesture (a recreated listener
     // would miss the in-flight `touchmove` stream).
     const startYRef = useRef<number | null>(null);
+    const startXRef = useRef<number | null>(null);
+    // Разрешённое направление текущего жеста: до гистерезиса ~10px —
+    // undecided, вертикаль открывает тягу, горизонталь убивает жест.
+    const intentRef = useRef<GestureIntent>('undecided');
     const viewportRef = useRef<number>(0);
     const trackingRef = useRef(false);
     const phaseRef = useRef<Phase>(phase);
@@ -163,6 +190,12 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         const el = spinnerRef.current;
         if (el === null) return;
         spinnerFadeRef.current?.cancel();
+        // Отменённый/мёртвый жест без проявленного спиннера: инлайн-стилей
+        // нет и класс .refreshing не держится — гасить нечего, а пин '1'
+        // вспыхнул бы на 250 мс (класс держит opacity: 0). Тихий выход.
+        if (el.style.opacity === '' && phaseRef.current !== 'refreshing') {
+            return;
+        }
         // Pin the currently visible opacity inline BEFORE the `.refreshing`
         // class drops, or the base class would cut it to 0 first.
         if (el.style.opacity === '') {
@@ -238,6 +271,20 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         setOverscrollGuard(false);
     }, [fadeSpinnerOut, setOverscrollGuard]);
 
+    /** Жест кончается мимо решения отпускания (горизонтальная доминанта,
+     *  разворот тяги вверх): слежение гасится, визуал снимается — новый
+     *  жест перепроверит все гейты. В фазе refreshing визуал не трогаем:
+     *  контент стоит на пине, спиннер принадлежит refresh'у. */
+    const killGesture = useCallback((): void => {
+        trackingRef.current = false;
+        startYRef.current = null;
+        if (phaseRef.current === 'refreshing') return;
+        stopAnimation();
+        applyContentTransform(0);
+        applySpinnerReveal(0);
+        reset();
+    }, [applyContentTransform, applySpinnerReveal, reset, stopAnimation]);
+
     // Resolve the spinner once fetches settle OR the deadline elapses.
     useEffect(() => {
         if (phase !== 'refreshing') return;
@@ -284,11 +331,38 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             if (phaseRef.current === 'refreshing') return;
             // Gesture begins only when the page is pinned to the top.
             if (window.scrollY > 0) return;
+            // Цель касания — Element (реальный жест даёт элемент старта;
+            // без него цели нет и жеста нет).
+            const target = touch.target;
+            if (!(target instanceof Element)) return;
+            // Открыта модальная поверхность (лок фона useBodyScrollLock
+            // держит hidden на body) — жест под ней не наш.
+            if (getComputedStyle(document.body).overflowY === 'hidden') return;
+            // Гейт цели: касание обязано начаться внутри content-узла, и
+            // между целью и узлом не должно быть внутреннего скроллера —
+            // лента календаря, визард, шиты тянут себя, а не страницу.
+            if (!contentRef.current?.contains(target)) return;
+            const overflows: OverflowReading[] = [];
+            for (
+                let el: Element | null = target;
+                el !== null && el !== contentRef.current;
+                el = el.parentElement
+            ) {
+                const cs = getComputedStyle(el);
+                overflows.push({ x: cs.overflowX, y: cs.overflowY });
+            }
+            if (interceptedByInnerScroller(overflows)) return;
             stopAnimation();
             // A spinner fade-out from the previous refresh may still be
             // running — a new pull owns the inline styles from here.
             spinnerFadeRef.current?.cancel();
             startYRef.current = touch.clientY;
+            startXRef.current = touch.clientX;
+            intentRef.current = 'undecided';
+            // Тяга нового жеста не наследует прошлую: stale pullRef после
+            // прерванной armed-тяги доводил бы тап без движения до
+            // refresh'а через flickTriggersRefresh(pullRef, 0).
+            pullRef.current = 0;
             viewportRef.current = window.innerHeight;
             velocity.reset();
             trackingRef.current = true;
@@ -298,16 +372,29 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
         const onTouchMove = (event: TouchEvent): void => {
             if (!trackingRef.current || startYRef.current === null) return;
             const touch = event.touches[0];
-            if (touch === undefined) return;
+            if (touch === undefined || startXRef.current === null) return;
+            const deltaX = touch.clientX - startXRef.current;
             const deltaY = touch.clientY - startYRef.current;
-            // Downward pull is positive. An upward drag aborts tracking.
-            if (deltaY <= 0) {
-                if (phaseRef.current !== 'refreshing') {
-                    stopAnimation();
-                    applyContentTransform(0);
-                    applySpinnerReveal(0);
-                    reset();
+
+            // Направление решается один раз, после гистерезиса ~10px: до
+            // него ни трансформа, ни preventDefault — обычный скролл живёт
+            // своей жизнью.
+            if (intentRef.current === 'undecided') {
+                const intent = resolveGestureIntent(deltaX, deltaY);
+                if (intent === 'undecided') return;
+                if (intent === 'horizontal') {
+                    // Мёртвый жест: свайп карусели/чипов не тянет контент.
+                    killGesture();
+                    return;
                 }
+                intentRef.current = 'vertical';
+            }
+
+            // Downward pull is positive. An upward turn ends the gesture
+            // for real: зигзаг скролла (вниз прочитать — назад наверх) не
+            // кормит тягу — новое касание перепроверит все гейты.
+            if (deltaY <= 0) {
+                killGesture();
                 return;
             }
 
@@ -370,7 +457,7 @@ export function PullToRefresh({ contentRef }: PullToRefreshProps): JSX.Element |
             window.removeEventListener('touchend', onTouchEnd);
             window.removeEventListener('touchcancel', onTouchCancel);
         };
-    }, [isActive, applyContentTransform, applySpinnerReveal, beginRefresh, reset, setOverscrollGuard, springTo, stopAnimation]);
+    }, [contentRef, isActive, applyContentTransform, applySpinnerReveal, beginRefresh, killGesture, reset, setOverscrollGuard, springTo, stopAnimation]);
 
     // Clean up the inline transform, running animation and overscroll guard
     // if the component unmounts mid-gesture.

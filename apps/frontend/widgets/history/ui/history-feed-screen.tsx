@@ -27,6 +27,7 @@ import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import {
   Button,
   ErrorCard,
+  CirclePhoto,
   InfiniteQueryHead,
   IconButton,
   MeSuffix,
@@ -53,7 +54,7 @@ const FRESH_VISIBLE_MS = 2600;
 /** Канон строки-ссылки (хаб «Совместный доступ»): подложка hover/active
  * не меняется, только прозрачность; фокус-ринг с клавиатуры. */
 const HEADER_LINK =
-  'flex min-w-0 items-center gap-2 rounded-m outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary';
+  'pressable flex min-w-0 items-center gap-2 rounded-m outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary';
 
 /**
  * Экран «История действий» (карта #704, тикеты #709+#710; макеты
@@ -90,7 +91,7 @@ const HEADER_LINK =
  * Пока лента не заполняет вьюпорт, она прижата к нижнему краю — как
  * свежее сообщение в мессенджере (решение владельца 24.09): при живых
  * записях PageContent несёт flex-1 + justify-end — узел контента
- * ScreenLayout уже flex-1 от min-h-screen оболочки, поэтому лента тянется
+ * ScreenLayout уже flex-1 от min-h-dvh оболочки, поэтому лента тянется
  * ровно до нижнего края на всех ярусах (высота шапки и safe-area
  * учитываются сами, без констант); pending-кадр прижат так же — контент
  * встаёт на место скелетона без сдвига (#1281, фолбэк Suspense-границы —
@@ -497,7 +498,7 @@ export function HistoryFeedScreen({
       {/* Якорь низа (решение владельца 24.09): при живых записях лента
         * прижата к нижнему краю вьюпорта, пока не заполняет его, — как
         * свежее сообщение в мессенджере. Механизм — flex-1 от узла
-        * контента ScreenLayout (уже flex-1 от min-h-screen), точный низ
+        * контента ScreenLayout (уже flex-1 от min-h-dvh), точный низ
         * на всех ярусах без констант; pending-кадр прижат так же, чтобы
         * пришедший контент встал на место скелетона без сдвига (#1281);
         * пустые состояния (ниже) — не «сообщения», без якоря. */}
@@ -520,7 +521,7 @@ export function HistoryFeedScreen({
             * (§7). */
           historyFeedSkeleton(propertyId)
         ) : feedQuery.isError ? (
-          <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} className="mt-6" />
+          <ErrorCard title="Не удалось загрузить историю" onRetry={() => void feedQuery.refetch()} loading={feedQuery.isFetching} className="mt-6" />
         ) : entries.length === 0 ? (
           searching || !isDefaultHistoryFilters(filters) ? (
             /* Без совпадений — серая строка без иллюстрации (макет
@@ -620,7 +621,7 @@ export function HistoryFeedScreen({
           <button
             type="button"
             onClick={scrollToFresh}
-            className="pointer-events-auto flex items-center gap-1.5 rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)] outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+            className="pressable pointer-events-auto flex items-center gap-1.5 rounded-pill bg-white px-3.5 py-2 text-xs leading-[15px] text-content shadow-[0_8px_24px_rgba(0,0,0,0.12)] outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
           >
             <ArrowDown className="h-4 w-4" aria-hidden />
             Есть новые
@@ -757,30 +758,23 @@ function PropertyHeaderContent({
  * ссылка на страницу участника, без — статичная шапка. Свой актёр
  * подписан серым суффиксом «(Вы)» — канон шита фильтров (#710). */
 /** Аватар актёра в шапке группы ленты (решение #1286): фото профиля 24,
- * иначе — и при битом фото (404 стрима) — заглушка BoldUser. Гард '' —
- * канон UserAvatar: легаси-бэк мог отдать пустую строку вместо null, а
- * <img src=""> не стреляет onError в WebKit — без него круг без глифа. */
+ * иначе — и при битом фото (404 стрима) — заглушка BoldUser. Механика
+ * «глиф под фото + onLoad» и гард '' — примитив CirclePhoto (#1423);
+ * лента — ленивая подача, аватары за экраном не запрашиваются. */
 function ActorFeedAvatar({ photoUrl }: { readonly photoUrl: string | null }): JSX.Element {
-  const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
   return (
     <span
       aria-hidden
       className={cn(
         'flex h-6 w-6 shrink-0 items-center justify-center rounded-pill bg-white',
-        showPhoto && 'overflow-hidden',
+        photoUrl != null && photoUrl !== '' && 'overflow-hidden',
       )}
     >
-      {showPhoto ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : (
-        <BoldUser className="h-3.5 w-3.5" aria-hidden />
-      )}
+      <CirclePhoto
+        photoUrl={photoUrl}
+        loading="lazy"
+        glyph={<BoldUser className="h-3.5 w-3.5" />}
+      />
     </span>
   );
 }

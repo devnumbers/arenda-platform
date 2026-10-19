@@ -197,8 +197,8 @@ ON CONFLICT (name) DO NOTHING`)
 	}
 }
 
-// seedUserCounter disambiguates seeded phones: two uuidv7 ids minted in the
-// same millisecond would otherwise collide on users_phone_key.
+// seedUserCounter disambiguates seeded emails: users.email is NOT NULL UNIQUE
+// (users_email_lowercase_unique), so every seeded user needs its own address.
 var seedUserCounter atomic.Int64
 
 // seedUser inserts a users row (the subscriptions FK target) and returns its id.
@@ -215,9 +215,9 @@ func (h *integrationHarness) seedUserWithRole(role actor.Role) uuid.UUID {
 	if err != nil {
 		h.t.Fatalf("new uuid: %v", err)
 	}
-	phone := fmt.Sprintf("+7999%010d", seedUserCounter.Add(1)%10000000000)
+	email := fmt.Sprintf("payer%d@example.com", seedUserCounter.Add(1))
 	if _, err := h.pool.Exec(h.ctx(),
-		"INSERT INTO users (id, phone, role) VALUES ($1, $2, $3)", id, phone, role,
+		"INSERT INTO users (id, email, role) VALUES ($1, $2, $3)", id, email, role,
 	); err != nil {
 		h.t.Fatalf("seed user: %v", err)
 	}

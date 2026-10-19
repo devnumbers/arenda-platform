@@ -3,7 +3,10 @@ import { cn } from '@/shared/lib/cn';
 
 /** Чип-кнопка дизайн-слоя (Figma 709:15742): пилюля radius 100 на сером
  * фоне с иконками 24×24 и текстом 14/16; выбранное состояние (Enable) —
- * синяя заливка с белым текстом, aria-pressed у кнопки. */
+ * синяя заливка с белым текстом, aria-pressed у кнопки. Шаги hover/active
+ * выбранного — первичные (как у primaryFill), идут после серых базовых:
+ * tailwind-merge оставляет последние классы — выбранный чип при наведении
+ * не теряет синюю заливку. */
 export type ChipButtonProps = ComponentProps<'button'> & {
   readonly leadingIcon?: ReactNode;
   readonly trailingIcon?: ReactNode;
@@ -24,10 +27,10 @@ export function ChipButton({
       type={type}
       aria-pressed={selected}
       className={cn(
-        'inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-pill bg-surface-muted px-5 font-sans text-sm font-medium text-content outline-none transition-colors',
+        'pressable inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-pill bg-surface-muted px-5 font-sans text-sm font-medium text-content outline-none hover:bg-surface-muted-hover active:bg-surface-muted-active',
         'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         'disabled:pointer-events-none disabled:opacity-50',
-        selected && 'bg-primary text-white',
+        selected && 'bg-primary text-white hover:bg-primary-hover active:bg-primary-active',
         className,
       )}
       {...props}

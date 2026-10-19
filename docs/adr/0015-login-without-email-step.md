@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Superseded by ADR 0067 (email-only login): the email-first flow below kept the
+phone as the account identifier with the email as a stored delivery address;
+the phone is now removed from Identity and the email itself is the identifier.
+Previously: Accepted.
 
 ## Context
 

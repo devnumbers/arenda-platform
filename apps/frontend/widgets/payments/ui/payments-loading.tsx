@@ -39,7 +39,7 @@ export function PaymentsLoading(): JSX.Element {
         mobileWings
         collapse={{
           title: 'Платежи',
-          search: { href: ROUTES.paymentsSearch, label: 'Найти платёж' },
+          search: { href: ROUTES.paymentsSearch, label: 'Найти платеж' },
         }}
       />
 
@@ -50,13 +50,15 @@ export function PaymentsLoading(): JSX.Element {
           </div>
         </HubCollapseAnchor>
 
-        <div className="flex flex-col gap-6 px-6 pt-4">
+        <div className="flex flex-col gap-6 px-6 pt-4" data-testid="payments-loading">
           <PaymentsSearchPill onOpenSearch={() => {}} />
 
           <PaymentsGlobalSectionSkeleton />
           <PaymentsGlobalSectionSkeleton />
           <PaymentsGlobalSectionSkeleton />
-          <PaymentsGlobalSectionSkeleton />
+          {/* Четвёртая секция хаба — «Платежи объектов»: плитки 118
+           * (без блока суммы, макет 1036:39585). */}
+          <PaymentsGlobalSectionSkeleton tileClassName="h-[118px]" />
         </div>
       </PageContent>
     </>

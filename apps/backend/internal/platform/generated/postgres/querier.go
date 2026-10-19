@@ -252,7 +252,7 @@ type Querier interface {
 	// until fewer than the batch limit rows remain, so repeated runs are safe.
 	DeleteExpiredCardBindingSessions(ctx context.Context, arg DeleteExpiredCardBindingSessionsParams) (int64, error)
 	DeleteExpiredLoginCodesBatch(ctx context.Context, arg DeleteExpiredLoginCodesBatchParams) (int64, error)
-	DeleteExpiredLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteExpiredLoginCodesByPhoneAndEmailParams) error
+	DeleteExpiredLoginCodesByEmailAndPurpose(ctx context.Context, arg DeleteExpiredLoginCodesByEmailAndPurposeParams) error
 	DeleteExpiredSessionsBatch(ctx context.Context, arg DeleteExpiredSessionsBatchParams) (int64, error)
 	// Future-planned rebuild in one statement: remove every future planned
 	// operation of the rule except the single allowed one. A NULL keep removes
@@ -263,10 +263,8 @@ type Querier interface {
 	// task of the rule except the single allowed one. A NULL keep removes them
 	// all — an undated rule keeps no dated future (stale rows from rule edits).
 	DeleteFutureTasksExcept(ctx context.Context, arg DeleteFutureTasksExceptParams) (int64, error)
-	DeleteLoginAttemptByPhone(ctx context.Context, phone string) error
-	DeleteLoginAttemptsByUserID(ctx context.Context, userID pgtype.UUID) error
+	DeleteLoginAttemptByEmail(ctx context.Context, email string) error
 	DeleteLoginCodeByID(ctx context.Context, id pgtype.UUID) error
-	DeleteLoginCodesByUserID(ctx context.Context, userID pgtype.UUID) error
 	// Soft-deletes one feed row («удалить», решение #737): the row stays with
 	// its deleted_at, the feed and the unread counter stop seeing it. Rows
 	// matched = 0 means already deleted, read-status aside — the caller maps
@@ -343,7 +341,7 @@ type Querier interface {
 	// rows with rule_id set to NULL by the FK; the uncompleted tasks are
 	// physically removed by DeleteRuleUncompleted before this runs.
 	DeleteTaskRule(ctx context.Context, arg DeleteTaskRuleParams) error
-	DeleteUnusedLoginCodesByPhoneAndEmail(ctx context.Context, arg DeleteUnusedLoginCodesByPhoneAndEmailParams) error
+	DeleteUnusedLoginCodesByEmailAndPurpose(ctx context.Context, arg DeleteUnusedLoginCodesByEmailAndPurposeParams) error
 	// The create-time app check for invariant №12 (одна незавершённая на
 	// объекте): run inside the transaction under the property lock; the partial
 	// unique index backstops the race.
@@ -377,18 +375,16 @@ type Querier interface {
 	// falls back without inserting.
 	GetEmailPreferences(ctx context.Context, userID pgtype.UUID) (GetEmailPreferencesRow, error)
 	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error)
-	// GetLatestLoginCodeByPhoneAndEmailAndPurpose reads the newest non-expired unused
-	// login code for a (phone, email, purpose) tuple. It is served by the partial unique
-	// index idx_login_codes_unique_unused (phone, COALESCE(email, empty-string), purpose)
-	// WHERE used=false created by migration 000063 — the same index that backs
-	// CreateLoginCode's ON CONFLICT upsert. The index serves both writes and reads; no
-	// separate read index is needed (issue #224, EXPLAIN-verified: at production scale
-	// the planner chooses an index scan over this index; email falls into Filter, not
-	// Index Cond, because the index column is COALESCE(email, ...) and cannot match a raw
-	// email=$2 equality, but the phone+purpose prefix narrows the scan efficiently).
-	GetLatestLoginCodeByPhoneAndEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByPhoneAndEmailAndPurposeParams) (GetLatestLoginCodeByPhoneAndEmailAndPurposeRow, error)
-	GetLoginAttemptByPhone(ctx context.Context, phone string) (LoginAttempt, error)
-	GetLoginAttemptByPhoneForUpdate(ctx context.Context, phone string) (LoginAttempt, error)
+	// GetLatestLoginCodeByEmailAndPurpose reads the newest non-expired unused
+	// login code for an (email, purpose) pair. It is served by the partial unique
+	// index idx_login_codes_unique_unused (email, purpose) WHERE used=false created
+	// by migration 000162 — the same index that backs CreateLoginCode's ON CONFLICT
+	// upsert. The index serves both writes and reads; no separate read index is
+	// needed (issue #224, EXPLAIN-verified for the predecessor form: the planner
+	// chooses an index scan over this index).
+	GetLatestLoginCodeByEmailAndPurpose(ctx context.Context, arg GetLatestLoginCodeByEmailAndPurposeParams) (GetLatestLoginCodeByEmailAndPurposeRow, error)
+	GetLoginAttemptByEmail(ctx context.Context, email string) (GetLoginAttemptByEmailRow, error)
+	GetLoginAttemptByEmailForUpdate(ctx context.Context, email string) (GetLoginAttemptByEmailForUpdateRow, error)
 	GetMaxMemberRoleByOwner(ctx context.Context, arg GetMaxMemberRoleByOwnerParams) (int32, error)
 	// One feed row by id for the delivery jobs (#740): a job reloads the
 	// committed row (recipient, texts, payload) instead of carrying content in
@@ -620,9 +616,7 @@ type Querier interface {
 	GetUserByEmailForUpdate(ctx context.Context, dollar_1 string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error)
-	GetUserByPhone(ctx context.Context, phone string) (User, error)
-	GetUserByPhoneForUpdate(ctx context.Context, phone string) (User, error)
-	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (pgtype.Text, error)
+	GetVerifiedEmailByUserID(ctx context.Context, id pgtype.UUID) (string, error)
 	// IncrementLoginAttempt atomically increments the failure counter on the
 	// existing row, so concurrent upserts cannot lose an increment (issue #215).
 	// failures carries the delta to add; first_failure_at is intentionally left
@@ -1275,10 +1269,9 @@ type Querier interface {
 	// cleaner retention (a week) after expires_at, and GetSessionByTokenHash
 	// already refuses them — the list must not show them as active either.
 	ListSessionsByUserID(ctx context.Context, arg ListSessionsByUserIDParams) ([]ListSessionsByUserIDRow, error)
-	// Admin payment views (issue #254). The phone filter matches the stored
-	// ciphertext (deterministic encryption) or the plaintext of a not-yet-
-	// encrypted row, mirroring ListUsersAdmin; user input is never interpolated
-	// into SQL — sort/order map to columns through fixed CASE arms.
+	// Admin payment views (issue #254). The email filter is an exact
+	// case-insensitive match on the canonical address; user input is never
+	// interpolated into SQL — sort/order map to columns through fixed CASE arms.
 	ListSubscriptionPaymentsAdmin(ctx context.Context, arg ListSubscriptionPaymentsAdminParams) ([]ListSubscriptionPaymentsAdminRow, error)
 	// The reconciliation batch of the payment phases (issues #252, #254): pending
 	// payments stale enough that a webhook is presumed lost, and payments stuck in
@@ -1685,7 +1678,6 @@ type Querier interface {
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEmailVerifiedParams) (User, error)
 	UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserEmailVerifiedAtParams) (User, error)
-	UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) (User, error)
 	// PUT /notification-preferences is a full replacement of the four flags
 	// (канон #738).
 	UpsertEmailPreferences(ctx context.Context, arg UpsertEmailPreferencesParams) (int64, error)

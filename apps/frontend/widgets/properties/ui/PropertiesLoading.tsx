@@ -1,7 +1,9 @@
 'use client';
 
 import type { JSX } from 'react';
-import { Skeleton, skeletonBlockClass, skeletonRowWidths, type SkeletonRowWidths } from '@/shared/ui/design';
+import { Add, SmallArrowDown, SortingSmallBig } from '@/shared/assets/icons';
+import { Skeleton, skeletonBlockClass, skeletonRowWidths, type SkeletonRowWidths, Button, HubCollapseAnchor, HubTitle, IconButton, PageContent, SearchPill, TopNav } from '@/shared/ui/design';
+import { SORT_FIELD_CHIP_LABEL } from '../lib/property-sort';
 
 /**
  * Скелетон списка «Объектов» — хаба и архива (канон Skeleton, DESIGN.md
@@ -10,7 +12,8 @@ import { Skeleton, skeletonBlockClass, skeletonRowWidths, type SkeletonRowWidths
  * круг над текстом (зазор 24), 561+ — круг слева вровень (зазор 16),
  * шеврон у правого верхнего края. Блоки внутри серой карточки — тон muted
  * (`bg-surface-muted-hover`), ширины строк — детерминированный цикл
- * `skeletonRowWidths`.
+ * `skeletonRowWidths`. Живёт внутри настоящего хрома живой страницы
+ * (ветка isLoading) — хром несёт PropertiesHubLoading.
  */
 function PropertyCardSkeleton({ widths }: { readonly widths: SkeletonRowWidths }): JSX.Element {
   const muted = skeletonBlockClass('muted');
@@ -37,5 +40,61 @@ export function PropertiesLoading(): JSX.Element {
         <PropertyCardSkeleton key={index} widths={rowWidths} />
       ))}
     </div>
+  );
+}
+
+/**
+ * Полный кадр холодной загрузки хаба (план 044, карта #1437): хром экрана
+ * — вне фазы загрузки (§7, прецедент TasksLoading) — шапка с «крыльями»,
+ * строка заголовка с «+» в покое, пилюля поиска и кнопка-чип сортировки в
+ * покое (без PickerMenu — интерактивный экран подменяет их без сдвига),
+ * карточки-скелетоны в ритме живого экрана (px-6 pt-4, поиск → чипы →
+ * список по 24). Fallback Suspense-границы route-страницы: кадр холодной
+ * загрузки неотличим от pending-состояния живого экрана — резолв данных
+ * не двигает ни один пиксель.
+ */
+export function PropertiesHubLoading(): JSX.Element {
+  return (
+    <>
+      <TopNav
+        mobileWings
+        collapse={{
+          title: 'Объекты',
+          trailing: <IconButton icon={<Add />} label="Создать объект" />,
+        }}
+      />
+
+      <PageContent>
+        <HubCollapseAnchor>
+          <div className="flex h-8 items-center justify-between pr-3.5">
+            <HubTitle>Объекты</HubTitle>
+            <IconButton icon={<Add />} label="Создать объект" />
+          </div>
+        </HubCollapseAnchor>
+
+        <div className="flex flex-col px-6 pt-4">
+          <SearchPill
+            testId="properties-search-pill"
+            label="Найти объект"
+            onOpenSearch={() => {}}
+          />
+
+          <div className="mt-6">
+            <Button
+              variant="secondary"
+              size="small"
+              leadingIcon={<SortingSmallBig />}
+              trailingIcon={<SmallArrowDown />}
+            >
+              {SORT_FIELD_CHIP_LABEL.name}
+            </Button>
+          </div>
+
+          <div className="mt-6">
+            <PropertiesLoading />
+          </div>
+        </div>
+      </PageContent>
+    </>
   );
 }

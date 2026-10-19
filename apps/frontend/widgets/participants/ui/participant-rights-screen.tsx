@@ -197,6 +197,7 @@ export function ParticipantRightsScreen({
         <ErrorCard
           title="Не удалось загрузить участника"
           onRetry={() => void participantQuery.refetch()}
+          loading={participantQuery.isFetching}
           className="mt-6"
         />
       );
@@ -211,6 +212,7 @@ export function ParticipantRightsScreen({
         <ErrorCard
           title="Не удалось загрузить права участника"
           onRetry={() => void membersQuery.refetch()}
+          loading={membersQuery.isFetching}
           className="mt-6"
         />
       );

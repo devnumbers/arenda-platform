@@ -22,13 +22,13 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/actor"
 )
 
-func seedUser(t *testing.T, pool *pgxpool.Pool, name, surname, phone, email string) uuid.UUID {
+func seedUser(t *testing.T, pool *pgxpool.Pool, name, surname, email string) uuid.UUID {
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
 	if _, err := pool.Exec(t.Context(),
-		`INSERT INTO users (id, phone, role, name, surname, email, timezone)
-		 VALUES ($1, $2, $3, $4, $5, $6, 'Europe/Moscow')`,
-		id, phone, actor.RoleOwner, name, surname, email,
+		`INSERT INTO users (id, email, role, name, surname, timezone)
+		 VALUES ($1, $2, $3, $4, $5, 'Europe/Moscow')`,
+		id, email, actor.RoleOwner, name, surname,
 	); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
@@ -86,7 +86,7 @@ func journalRows(t *testing.T, pool *pgxpool.Pool, propertyID uuid.UUID) int {
 func TestStore_InsertRoundTrip(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000001", "ivan@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
 	property := seedProperty(t, pool, owner)
 
 	recordEntry(t, pool, owner, property)
@@ -148,7 +148,7 @@ func TestStore_InsertRoundTrip(t *testing.T) {
 func TestStore_DeletedPropertyCascades(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000002", "ivan2@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan2@example.com")
 	property := seedProperty(t, pool, owner)
 	recordEntry(t, pool, owner, property)
 
@@ -163,8 +163,8 @@ func TestStore_DeletedPropertyCascades(t *testing.T) {
 func TestStore_DeletedUserNullsActorButKeepsSnapshots(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000003", "ivan3@example.com")
-	member := seedUser(t, pool, "Мария", "Петрова", "+79990000004", "maria@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan3@example.com")
+	member := seedUser(t, pool, "Мария", "Петрова", "maria@example.com")
 	property := seedProperty(t, pool, owner)
 	seedMembership(t, pool, property, member)
 
@@ -201,8 +201,8 @@ func TestStore_DeletedUserNullsActorButKeepsSnapshots(t *testing.T) {
 func TestStore_SurvivesMemberRevokeAndLeave(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
-	owner := seedUser(t, pool, "Иван", "Иванов", "+79990000004", "ivan4@example.com")
-	member := seedUser(t, pool, "Пётр", "Сидоров", "+79990000005", "petr@example.com")
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan4@example.com")
+	member := seedUser(t, pool, "Пётр", "Сидоров", "petr@example.com")
 	property := seedProperty(t, pool, owner)
 	membership := seedMembership(t, pool, property, member)
 
@@ -239,7 +239,7 @@ func TestStore_ActorSnapshotAnonymousLabelFallback(t *testing.T) {
 	// A user without name/surname: the display name degrades to the
 	// anonymous label «Пользователь» (the access canon, one place — карта
 	// #1105, аменд #1123).
-	anon := seedUser(t, pool, "", "", "+79991234567", "")
+	anon := seedUser(t, pool, "", "", "")
 	snap, err := historypg.NewActorStore(pool).Snapshot(context.Background(), anon)
 	if err != nil {
 		t.Fatalf("Snapshot: %v", err)

@@ -27,6 +27,7 @@ import {
 import type { GlobalPayment, PaymentDueItem } from "@/entities/payment";
 import type { PropertyType } from "@/entities/property";
 import { dueDaysLabel, PaymentCardButton } from "@/entities/payment";
+import { SNAP_TILE_CLASSES } from "@/shared/ui/snap-rail";
 import {
   Button,
   EmptyState,
@@ -71,14 +72,16 @@ const SECTION_CARDS_LIMIT = 4;
  * «Платежи объектов». Заголовок с шевроном открывает страницу категории,
  * замыкающая карточка «Все …» ведёт туда же и видна от трёх карточек
  * секции (решение владельца #1339, единообразно для всех секций).
- * Карточки платежей — канон PaymentCardButton (168.5, горизонтальная
+ * Карточки платежей — канон PaymentCardButton (fluid-плитка: 2 карточки на
+ * мобайл-ярусе, 3 на планшете/ПК, решение владельца 18.10; горизонтальная
  * лента): иконка категории, сумма, дата-«Ближайший» (просто дата графика,
- * без статуса; у просроченных — «N дней» красным и красный (!) на иконке;
+ * без статуса; у просроченных — «N дней» красным, сумма чёрная — макеты
+ * 1041:51110/1043:52256, 18.10 — и красный (!) на иконке;
  * у «На оплату» — метка «Сегодня/Завтра/Через N дней» синим, 1036:37525).
  * Пустая секция — карточка-плейсхолдер с 3D-иллюстрацией из Figma. Совсем
  * без объектов — глобальное пустое состояние с CTA «Добавить объект».
- * Поиск — пилюля «Найти платёж» на страницу поиска (#581); иконка-слайдеры
- * справа — декор макета, не кликается.
+ * Поиск — пилюля «Найти платеж» на страницу поиска (#581; написание по
+ * макетам 18.10).
  * «+» создания (макет 3226-75059) — в ряду заголовка и в правом слоте
  * компакт-бара; видна, когда в книге есть хоть один объект с правом правки
  * (#703), на глобальной пустоте скрыта — действие там CTA состояния.
@@ -181,7 +184,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
         mobileWings
         collapse={{
           title: "Платежи",
-          search: { href: ROUTES.paymentsSearch, label: "Найти платёж" },
+          search: { href: ROUTES.paymentsSearch, label: "Найти платеж" },
           trailing: showAdd ? addButtonCompact : undefined,
         }}
       />
@@ -342,9 +345,10 @@ export function PaymentsGlobalScreen(): JSX.Element {
 }
 
 /** Пилюля поиска платежей (879:9683) — адаптер канона SearchPill: подпись
- * «Найти платёж», тап открывает страницу поиска (#581). Декор-слайдеры
- * справа снесены (решение владельца 01.10): мёртвый элемент без действия,
- * пилюля кликается целиком. Экспорт для route-loading (#609). */
+ * «Найти платеж» (написание по макетам 18.10), тап открывает страницу
+ * поиска (#581). Декор-слайдеры справа снесены (решение владельца 01.10):
+ * мёртвый элемент без действия, пилюля кликается целиком. Экспорт для
+ * route-loading (#609). */
 export function PaymentsSearchPill({
   onOpenSearch,
 }: {
@@ -353,7 +357,7 @@ export function PaymentsSearchPill({
   return (
     <SearchPill
       onOpenSearch={onOpenSearch}
-      label="Найти платёж"
+      label="Найти платеж"
       testId="payments-search-pill"
     />
   );
@@ -380,7 +384,7 @@ function PaymentsGlobalSection({
         <button
           type="button"
           onClick={onOpen}
-          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none transition-opacity hover:opacity-80 active:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+          className="pressable flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
         >
           {title}
           <SmallArrowDown
@@ -394,13 +398,12 @@ function PaymentsGlobalSection({
   );
 }
 
-/** Лента секции хаба: канонный SnapRail (нативный тач + drag-прокси мыши
- * #1349, механика — DESIGN.md §8 «Drag горизонтальных snap-лент») с bleed
- * на мобайл-ярусе (≤560): `-mx-6` гасит собственный `px-6` обёртки хаба
- * (легитимный inner -mx против контейнерного паддинга, «Column width
- * rule»), `px-6` держит карточки на визуальной линии 24, а
- * `scroll-padding-inline: 24px` делает линию 24 линией снапа нативного
- * скролла и drag-прокси. */
+/** Лента секции хаба: канонный SnapRail (нативный тач + drag-прокси мыши,
+ * без снапа — решение владельца 19.10; механика — DESIGN.md §8 «Drag
+ * горизонтальных лент») с bleed на мобайл-ярусе (≤560): `-mx-6` гасит
+ * собственный `px-6` обёртки хаба (легитимный inner -mx против
+ * контейнерного паддинга, «Column width rule»), `px-6` держит карточки на
+ * визуальной линии 24. */
 function SectionRail({
   testId,
   children,
@@ -411,7 +414,7 @@ function SectionRail({
   return (
     <SnapRail
       testId={testId}
-      className="max-tablet:-mx-6 max-tablet:px-6 max-tablet:[scroll-padding-inline:24px]"
+      className="max-tablet:-mx-6 max-tablet:px-6"
     >
       {children}
     </SnapRail>
@@ -735,17 +738,26 @@ function PaymentsGlobalEmpty({
 /** Секция-заглушка хаба «Платежи» (#605): каркас PaymentsGlobalSection —
  * заголовок и лента плиток-карточек на время загрузки. Ряд плиток несёт
  * тот же bleed ≤560, что и живая лента (SectionRail), — на мобайл-ярусе
- * данные занимают место скелетона без сдвига в край (#1349). Плитка 137px —
- * точная высота живой PaymentCardButton (паритет #605: данные занимают
- * место скелетона без сдвига; 16+44+12+30+4+15+16, двухстрочный заголовок).
- * Экспорт для route-loading (#609). */
-export function PaymentsGlobalSectionSkeleton(): JSX.Element {
+ * данные занимают место скелетона без сдвига в край (#1349). Плитки —
+ * fluid, как живая PaymentCardButton (2 на мобайл-ярусе, 3 на
+ * планшете/ПК, решение владельца 18.10); высота — худший случай контента
+ * секции (паритет #605): платёжные 137 (двухстрочный заголовок,
+ * 16+44+12+30+4+15+16), «Платежи объектов» — 118 (без блока суммы, макет
+ * 1036:39585). Экспорт для route-loading (#609). */
+export function PaymentsGlobalSectionSkeleton({
+  tileClassName = "h-[137px]",
+}: {
+  /** Высота плиток секции: 137 — платёжные (худший случай контента),
+   * 118 — «Платежи объектов» (без блока суммы, макет 1036:39585). */
+  readonly tileClassName?: string;
+} = {}): JSX.Element {
+  const tile = `${tileClassName} ${SNAP_TILE_CLASSES} shrink-0`;
   return (
     <section className="flex flex-col gap-4" aria-hidden>
       <Skeleton className="h-6 w-40" />
       <div className="flex gap-2 max-tablet:-mx-6 max-tablet:px-6">
-        <Skeleton className="h-[137px] w-[168.5px] shrink-0" />
-        <Skeleton className="h-[137px] w-[168.5px] shrink-0" />
+        <Skeleton className={tile} />
+        <Skeleton className={tile} />
       </div>
     </section>
   );

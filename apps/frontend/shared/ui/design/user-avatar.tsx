@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, type ComponentProps, type JSX } from 'react';
+import { type ComponentProps, type JSX } from 'react';
 import { cn } from '@/shared/lib/cn';
 import { BoldUser } from '@/shared/assets/icons';
+import { CirclePhoto } from './circle-photo';
 import { CircleIcon } from './circle-icon';
 
 export type UserAvatarProps = Omit<ComponentProps<'span'>, 'children'> & {
@@ -16,6 +17,9 @@ export type UserAvatarProps = Omit<ComponentProps<'span'>, 'children'> & {
   /** Подложка круга (CircleIcon): white — строки на белом, muted — на
    * серых карточках. */
   readonly variant?: 'white' | 'muted';
+  /** Ленивая подача (#1423/035). Дефолт — по размеру: row (ряды списков
+   * и лент) — lazy, hero шапок — eager; проп перекрывает дефолт. */
+  readonly loading?: 'lazy';
 };
 
 const SIZE_BOX: Record<NonNullable<UserAvatarProps['size']>, string> = {
@@ -40,13 +44,17 @@ export function UserAvatar({
   photoUrl,
   size = 'row',
   variant = 'white',
+  loading,
   className,
   ...props
 }: UserAvatarProps): JSX.Element {
-  // Битое фото живёт до размонтирования: строки списков кейуются по id,
-  // повторная загрузка фото меняет ETag, не путь.
-  const [photoBroken, setPhotoBroken] = useState(false);
-  const showPhoto = photoUrl != null && photoUrl !== '' && !photoBroken;
+  // Битое фото живёт до размонтирования (внутри CirclePhoto): строки
+  // списков кейуются по id, повторная загрузка фото меняет ETag, не путь.
+  // Клип включается по факту фото; после onError глиф остаётся в том же
+  // круге — класс на отображение не влияет.
+  const showPhoto = photoUrl != null && photoUrl !== '';
+  // Ленивая подача по размеру (#1423/035): жадный — только hero шапок.
+  const effectiveLoading = loading ?? (size === 'hero' ? undefined : 'lazy');
 
   return (
     <CircleIcon
@@ -55,16 +63,11 @@ export function UserAvatar({
       className={cn(SIZE_BOX[size], showPhoto && 'overflow-hidden rounded-full', className)}
       {...props}
     >
-      {showPhoto ? (
-        <img
-          src={photoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : (
-        <BoldUser className={SIZE_GLYPH[size]} />
-      )}
+      <CirclePhoto
+        photoUrl={photoUrl}
+        loading={effectiveLoading}
+        glyph={<BoldUser className={SIZE_GLYPH[size]} />}
+      />
     </CircleIcon>
   );
 }

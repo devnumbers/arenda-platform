@@ -52,10 +52,9 @@ func (h *loginCodeHarness) stores(ctx context.Context) (*txStores, error) {
 func TestLoginCodeService_Send_IssuesPersistsAndDelivers(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
 
-	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
+	if err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 	if len(h.codes.codes) != 1 {
@@ -80,14 +79,13 @@ func TestLoginCodeService_Send_IssuesPersistsAndDelivers(t *testing.T) {
 func TestLoginCodeService_Send_ThrottlesWithinMinInterval(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000002")
 	email := mustEmail(t, "owner@example.com")
 
-	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
+	if err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("first Send error = %v", err)
 	}
 	// A second send at the same clock time is throttled.
-	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
+	err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
 	if !errors.Is(err, ErrCodeSentTooRecently) {
 		t.Fatalf("second Send error = %v, want ErrCodeSentTooRecently", err)
 	}
@@ -99,7 +97,6 @@ func TestLoginCodeService_Send_ThrottlesWithinMinInterval(t *testing.T) {
 func TestLoginCodeService_Send_RejectsWhenBlocked(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000003")
 	email := mustEmail(t, "owner@example.com")
 
 	// Seed a blocked attempt window — the persisted state after MaxLoginFailures
@@ -109,9 +106,9 @@ func TestLoginCodeService_Send_RejectsWhenBlocked(t *testing.T) {
 		FirstFailureAt: testNow,
 		LastFailureAt:  testNow,
 	}
-	h.attempts.windows[phone.String()] = window
+	h.attempts.windows[email.String()] = window
 
-	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
+	err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
 	if !errors.Is(err, ErrUserBlocked) {
 		t.Fatalf("Send error = %v, want ErrUserBlocked", err)
 	}
@@ -123,11 +120,10 @@ func TestLoginCodeService_Send_RejectsWhenBlocked(t *testing.T) {
 func TestLoginCodeService_Verify_AcceptsValidCode(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000004")
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
-	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
+	if err := h.svc.Send(ctx, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 	plaintext := h.sender.sent[0].code
@@ -136,23 +132,22 @@ func TestLoginCodeService_Verify_AcceptsValidCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	loginCode, err := h.svc.Verify(ctx, stores, phone, email, domain.LoginCodePurposeLogin, plaintext)
+	loginCode, err := h.svc.Verify(ctx, stores, email, domain.LoginCodePurposeLogin, plaintext)
 	if err != nil {
 		t.Fatalf("Verify error = %v", err)
 	}
-	if loginCode.Phone != phone {
-		t.Fatalf("returned code phone = %s, want %s", loginCode.Phone, phone)
+	if loginCode.Email != email {
+		t.Fatalf("returned code email = %s, want %s", loginCode.Email, email)
 	}
 }
 
 func TestLoginCodeService_Verify_RejectsInvalidCode(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000005")
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
-	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
+	if err := h.svc.Send(ctx, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 
@@ -160,13 +155,13 @@ func TestLoginCodeService_Verify_RejectsInvalidCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	_, err = h.svc.Verify(ctx, stores, phone, email, domain.LoginCodePurposeLogin, "000000")
+	_, err = h.svc.Verify(ctx, stores, email, domain.LoginCodePurposeLogin, "000000")
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("Verify error = %v, want ErrLoginCodeInvalid", err)
 	}
 	// Verify does NOT record the failure (the success-path tx would roll it
 	// back); the orchestrator records it via RecordFailure in a separate tx.
-	if _, ok := h.attempts.windows[phone.String()]; ok {
+	if _, ok := h.attempts.windows[email.String()]; ok {
 		t.Fatal("attempt window must not be created by Verify alone")
 	}
 }
@@ -174,7 +169,6 @@ func TestLoginCodeService_Verify_RejectsInvalidCode(t *testing.T) {
 func TestLoginCodeService_Verify_MissingCode(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000006")
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
@@ -182,7 +176,7 @@ func TestLoginCodeService_Verify_MissingCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	_, err = h.svc.Verify(ctx, stores, phone, email, domain.LoginCodePurposeLogin, "123456")
+	_, err = h.svc.Verify(ctx, stores, email, domain.LoginCodePurposeLogin, "123456")
 	if !errors.Is(err, domain.ErrLoginCodeInvalid) {
 		t.Fatalf("Verify error = %v, want ErrLoginCodeInvalid", err)
 	}
@@ -191,11 +185,10 @@ func TestLoginCodeService_Verify_MissingCode(t *testing.T) {
 func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000007")
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
-	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
+	if err := h.svc.Send(ctx, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
 	plaintext := h.sender.sent[0].code
@@ -207,13 +200,13 @@ func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
 		FirstFailureAt: testNow,
 		LastFailureAt:  testNow,
 	}
-	h.attempts.windows[phone.String()] = window
+	h.attempts.windows[email.String()] = window
 
 	stores, err := h.stores(ctx)
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	_, err = h.svc.Verify(ctx, stores, phone, email, domain.LoginCodePurposeLogin, plaintext)
+	_, err = h.svc.Verify(ctx, stores, email, domain.LoginCodePurposeLogin, plaintext)
 	if !errors.Is(err, ErrUserBlocked) {
 		t.Fatalf("Verify error = %v, want ErrUserBlocked", err)
 	}
@@ -222,17 +215,17 @@ func TestLoginCodeService_Verify_RejectsWhenBlocked(t *testing.T) {
 func TestLoginCodeService_RecordFailure_IncrementsWindow(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000008")
+	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
 	stores, err := h.stores(ctx)
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	if err := h.svc.RecordFailure(ctx, stores, phone, uuid.Nil); err != nil {
+	if err := h.svc.RecordFailure(ctx, stores, email); err != nil {
 		t.Fatalf("RecordFailure error = %v", err)
 	}
-	window, ok := h.attempts.windows[phone.String()]
+	window, ok := h.attempts.windows[email.String()]
 	if !ok {
 		t.Fatal("attempt window not created")
 	}
@@ -244,7 +237,7 @@ func TestLoginCodeService_RecordFailure_IncrementsWindow(t *testing.T) {
 func TestLoginCodeService_RecordFailure_ReachesTooManyAttempts(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarness()
-	phone := mustPhone(t, "+79150000009")
+	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
 	var lastErr error
@@ -253,45 +246,18 @@ func TestLoginCodeService_RecordFailure_ReachesTooManyAttempts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("begin tx: %v", err)
 		}
-		lastErr = h.svc.RecordFailure(ctx, stores, phone, uuid.Nil)
+		lastErr = h.svc.RecordFailure(ctx, stores, email)
 	}
 	if !errors.Is(lastErr, domain.ErrTooManyAttempts) {
 		t.Fatalf("last RecordFailure error = %v, want ErrTooManyAttempts", lastErr)
 	}
-	window, ok := h.attempts.windows[phone.String()]
+	window, ok := h.attempts.windows[email.String()]
 	if !ok {
 		t.Fatal("attempt window not created")
 	}
 	if window.Failures != domain.MaxLoginFailures {
 		t.Fatalf("window failures = %d, want %d", window.Failures, domain.MaxLoginFailures)
 	}
-}
-
-func TestUserEmail(t *testing.T) {
-	t.Parallel()
-
-	email := mustEmail(t, "owner@example.com")
-
-	t.Run("user with email returns it", func(t *testing.T) {
-		t.Parallel()
-		u := domain.User{Email: &email}
-		got, err := userEmail(u)
-		if err != nil {
-			t.Fatalf("userEmail error = %v", err)
-		}
-		if got != email {
-			t.Fatalf("userEmail = %s, want %s", got, email)
-		}
-	})
-
-	t.Run("user without email returns ErrEmailDoesNotMatch", func(t *testing.T) {
-		t.Parallel()
-		u := domain.User{}
-		_, err := userEmail(u)
-		if !errors.Is(err, ErrEmailDoesNotMatch) {
-			t.Fatalf("userEmail error = %v, want ErrEmailDoesNotMatch", err)
-		}
-	})
 }
 
 func TestGenerateCode(t *testing.T) {
@@ -396,10 +362,9 @@ func newLoginCodeHarnessWithLimits(
 func TestLoginCodeService_Send_RecipientLimitRefusesIssue(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarnessWithLimits(func(domain.Email) bool { return false }, nil)
-	phone := mustPhone(t, "+79150000011")
 	email := mustEmail(t, "owner@example.com")
 
-	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
+	err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
 	if !errors.Is(err, ErrRecipientSendLimitExceeded) {
 		t.Fatalf("Send error = %v, want ErrRecipientSendLimitExceeded", err)
 	}
@@ -424,19 +389,18 @@ func TestLoginCodeService_Send_RecipientLimitKeepsInFlightCode(t *testing.T) {
 		Logger:             discardLogger(),
 		AllowRecipientSend: recipient.check,
 	})
-	phone := mustPhone(t, "+79150000012")
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
-	if err := svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
+	if err := svc.Send(ctx, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("first Send error = %v", err)
 	}
 	// The in-flight code survives a refused re-issuance — the same contract
-	// the triple throttle holds ("rejected without invalidating the in-flight
+	// the pair throttle holds ("rejected without invalidating the in-flight
 	// code"), so the guard check must run before the unused-code cleanup.
 	recipient.allow = false
 	clk.now = testNow.Add(minSendInterval + time.Second)
-	err := svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
+	err := svc.Send(ctx, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
 	if !errors.Is(err, ErrRecipientSendLimitExceeded) {
 		t.Fatalf("second Send error = %v, want ErrRecipientSendLimitExceeded", err)
 	}
@@ -452,13 +416,12 @@ func TestLoginCodeService_Send_LimitNotConsultedWhenThrottled(t *testing.T) {
 	t.Parallel()
 	recipient := &recordingLimit[domain.Email]{allow: true}
 	h := newLoginCodeHarnessWithLimits(recipient.check, nil)
-	phone := mustPhone(t, "+79150000013")
 	email := mustEmail(t, "owner@example.com")
 
-	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
+	if err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("first Send error = %v", err)
 	}
-	err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
+	err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil)
 	if !errors.Is(err, ErrCodeSentTooRecently) {
 		t.Fatalf("second Send error = %v, want ErrCodeSentTooRecently", err)
 	}
@@ -469,19 +432,20 @@ func TestLoginCodeService_Send_LimitNotConsultedWhenThrottled(t *testing.T) {
 	}
 }
 
-func TestLoginCodeService_Send_InitiatorLimitRefusesChangePurposes(t *testing.T) {
+// TestLoginCodeService_Send_InitiatorLimitRefusesEmailChange pins the initiator
+// cap to the one flow that has an authenticated initiator (#1210): the
+// email-change purpose. Login codes never consult it — their user is the code's
+// subject, not an initiator.
+func TestLoginCodeService_Send_InitiatorLimitRefusesEmailChange(t *testing.T) {
 	t.Parallel()
 	initiator := &recordingLimit[uuid.UUID]{allow: false}
 	h := newLoginCodeHarnessWithLimits(nil, initiator.check)
 	userID := uuid.Must(uuid.NewV7())
+	email := mustEmail(t, "owner@example.com")
 
-	for _, purpose := range []domain.LoginCodePurpose{domain.LoginCodePurposePhoneChange, domain.LoginCodePurposeEmailChange} {
-		phone := mustPhone(t, "+79150000014")
-		email := mustEmail(t, "owner@example.com")
-		err := h.svc.Send(t.Context(), phone, email, purpose, domain.LoginCodeStepCurrentEmail, &userID)
-		if !errors.Is(err, ErrInitiatorSendLimitExceeded) {
-			t.Fatalf("Send(%s) error = %v, want ErrInitiatorSendLimitExceeded", purpose, err)
-		}
+	err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeEmailChange, domain.LoginCodeStepCurrentEmail, &userID)
+	if !errors.Is(err, ErrInitiatorSendLimitExceeded) {
+		t.Fatalf("Send(email_change) error = %v, want ErrInitiatorSendLimitExceeded", err)
 	}
 	if len(h.codes.codes) != 0 {
 		t.Fatalf("codes persisted = %d, want 0 when the initiator limit refuses", len(h.codes.codes))
@@ -489,23 +453,22 @@ func TestLoginCodeService_Send_InitiatorLimitRefusesChangePurposes(t *testing.T)
 	if len(h.sender.sent) != 0 {
 		t.Fatalf("sender calls = %d, want 0 when the initiator limit refuses", len(h.sender.sent))
 	}
-	if len(initiator.calls) != 2 {
-		t.Fatalf("initiator limit consulted %d times, want 2 (once per change purpose)", len(initiator.calls))
+	if len(initiator.calls) != 1 {
+		t.Fatalf("initiator limit consulted %d times, want 1 (once for the change purpose)", len(initiator.calls))
 	}
 }
 
 func TestLoginCodeService_Send_InitiatorLimitSkipsLogin(t *testing.T) {
 	t.Parallel()
 	// The login code's user is the subject, not the initiator: the flow is
-	// unauthenticated, and counting it would let whoever knows the phone spend
+	// unauthenticated, and counting it would let whoever knows the address spend
 	// the account's own budget (#1210).
 	initiator := &recordingLimit[uuid.UUID]{allow: false}
 	h := newLoginCodeHarnessWithLimits(nil, initiator.check)
 	userID := uuid.Must(uuid.NewV7())
-	phone := mustPhone(t, "+79150000015")
 	email := mustEmail(t, "owner@example.com")
 
-	if err := h.svc.Send(t.Context(), phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, &userID); err != nil {
+	if err := h.svc.Send(t.Context(), email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, &userID); err != nil {
 		t.Fatalf("Send error = %v, want nil — login never consults the initiator limit", err)
 	}
 	if len(initiator.calls) != 0 {
@@ -521,8 +484,8 @@ func TestLoginCodeService_Send_RecipientCheckedBeforeInitiator(t *testing.T) {
 	userID := uuid.Must(uuid.NewV7())
 
 	err := h.svc.Send(
-		t.Context(), mustPhone(t, "+79150000016"), mustEmail(t, "owner@example.com"),
-		domain.LoginCodePurposePhoneChange, domain.LoginCodeStepCurrentEmail, &userID,
+		t.Context(), mustEmail(t, "owner@example.com"),
+		domain.LoginCodePurposeEmailChange, domain.LoginCodeStepCurrentEmail, &userID,
 	)
 	if !errors.Is(err, ErrRecipientSendLimitExceeded) {
 		t.Fatalf("Send error = %v, want ErrRecipientSendLimitExceeded", err)
@@ -538,21 +501,20 @@ func TestLoginCodeService_Send_RecipientCheckedBeforeInitiator(t *testing.T) {
 func TestLoginCodeService_Send_ReissueDoesNotResetAttemptWindow(t *testing.T) {
 	t.Parallel()
 	h := newLoginCodeHarnessWithLimits(func(domain.Email) bool { return true }, func(uuid.UUID) bool { return true })
-	phone := mustPhone(t, "+79150000017")
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
 	// A window carrying 13 failures from attempts on earlier codes.
-	h.attempts.windows[phone.String()] = domain.AttemptWindow{
+	h.attempts.windows[email.String()] = domain.AttemptWindow{
 		Failures:       13,
 		FirstFailureAt: testNow,
 		LastFailureAt:  testNow,
 	}
 
-	if err := h.svc.Send(ctx, phone, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
+	if err := h.svc.Send(ctx, email, domain.LoginCodePurposeLogin, domain.LoginCodeStepCurrentEmail, nil); err != nil {
 		t.Fatalf("Send error = %v", err)
 	}
-	window := h.attempts.windows[phone.String()]
+	window := h.attempts.windows[email.String()]
 	if window.Failures != 13 || !window.FirstFailureAt.Equal(testNow) {
 		t.Fatalf("window after reissue = %+v, want 13 failures at %v — reissue must not reset the count", window, testNow)
 	}
@@ -563,14 +525,14 @@ func TestLoginCodeService_Send_ReissueDoesNotResetAttemptWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	if err := h.svc.RecordFailure(ctx, stores, phone, uuid.Nil); err != nil {
+	if err := h.svc.RecordFailure(ctx, stores, email); err != nil {
 		t.Fatalf("first failure after reissue error = %v", err)
 	}
-	err = h.svc.RecordFailure(ctx, stores, phone, uuid.Nil)
+	err = h.svc.RecordFailure(ctx, stores, email)
 	if !errors.Is(err, domain.ErrTooManyAttempts) {
 		t.Fatalf("second failure after reissue error = %v, want ErrTooManyAttempts at the 15th total", err)
 	}
-	if blocked := h.attempts.windows[phone.String()]; !blocked.Blocked(testNow) {
+	if blocked := h.attempts.windows[email.String()]; !blocked.Blocked(testNow) {
 		t.Fatal("window must be blocked at 15 total failures across the reissue")
 	}
 }

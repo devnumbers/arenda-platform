@@ -123,6 +123,8 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
   // Фото-мутации сабмита в полёте — сохранение глушится целиком (один
   // photo_key у объекта, параллельные загрузка и удаление недопустимы).
   const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
+  // Проценты XHR-выгрузки (план 036) — кольцо слота; null — загрузки нет.
+  const [photoProgress, setPhotoProgress] = useState<number | null>(null);
 
   // Название необязательно (#1001): очищенное при сохранении
   // регенерирует бэк из типа.
@@ -233,6 +235,7 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
             photoUrl={property.photoUrl}
             stage={photoStage}
             busy={photoBusy}
+            progress={photoProgress}
             type={draft.type}
             onFileChosen={handlePhotoFile}
             onRemove={handlePhotoRemove}
@@ -358,7 +361,7 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
     const photoWork: Promise<boolean> | null =
       photoStage?.kind === 'file'
         ? uploadPhoto
-            .mutateAsync({ id: propertyId, file: photoStage.file })
+            .mutateAsync({ id: propertyId, file: photoStage.file, onProgress: setPhotoProgress })
             .then(
               () => true,
               (error: unknown) => {
@@ -382,6 +385,8 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
       fieldsWork ?? Promise.resolve(true),
       photoWork ?? Promise.resolve(true),
     ]);
+
+    setPhotoProgress(null);
 
     if (photoSaved && photoStage !== null) {
       setPhotoStage(null);

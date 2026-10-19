@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/domain"
-	"github.com/nambers/arenda-planform/apps/backend/internal/platform/encryption"
 	pgen "github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
 )
@@ -52,12 +51,11 @@ func deleteBatched(
 func notFound(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
 
 // repoBase is embedded by every identity repository. It owns the database
-// handle and encryptor, exposes a sqlc Queries accessor (q), and centralizes the
+// handle, exposes a sqlc Queries accessor (q), and centralizes the
 // transaction type-assertion (withTxDB) so each repository's WithTx stays a
 // thin wrapper that only selects its own concrete application.*Repository type.
 type repoBase struct {
-	db  pgen.DBTX
-	enc encryption.Encryptor
+	db pgen.DBTX
 }
 
 func (r *repoBase) q() *pgen.Queries { return pgen.New(r.db) }
@@ -76,7 +74,6 @@ func assertTxDB(tx transaction.Tx) (pgen.DBTX, error) {
 // the single mapping target for every sqlc row that carries user data.
 type userRow struct {
 	ID               pgtype.UUID
-	Phone            string
 	Role             string
 	Name             pgtype.Text
 	Surname          pgtype.Text
@@ -84,7 +81,6 @@ type userRow struct {
 	Email            pgtype.Text
 	EmailVerifiedAt  pgtype.Timestamptz
 	Timezone         string
-	PhoneEncrypted   bool
 	PhotoKey         pgtype.Text
 	PhotoContentType pgtype.Text
 }
@@ -95,15 +91,13 @@ type userSourceFromUser pgen.User
 func (s userSourceFromUser) toUserRow() userRow {
 	return userRow{
 		ID:               s.ID,
-		Phone:            s.Phone,
 		Role:             s.Role,
 		Name:             s.Name,
 		Surname:          s.Surname,
 		Patronymic:       s.Patronymic,
-		Email:            s.Email,
+		Email:            pgtype.Text{String: s.Email, Valid: true},
 		EmailVerifiedAt:  s.EmailVerifiedAt,
 		Timezone:         s.Timezone,
-		PhoneEncrypted:   s.PhoneEncrypted,
 		PhotoKey:         s.PhotoKey,
 		PhotoContentType: s.PhotoContentType,
 	}
@@ -115,15 +109,13 @@ type userSourceFromCreateUser pgen.CreateUserRow
 func (s userSourceFromCreateUser) toUserRow() userRow {
 	return userRow{
 		ID:              s.ID,
-		Phone:           s.Phone,
 		Role:            s.Role,
 		Name:            s.Name,
 		Surname:         s.Surname,
 		Patronymic:      s.Patronymic,
-		Email:           s.Email,
+		Email:           pgtype.Text{String: s.Email, Valid: true},
 		EmailVerifiedAt: s.EmailVerifiedAt,
 		Timezone:        s.Timezone,
-		PhoneEncrypted:  s.PhoneEncrypted,
 	}
 }
 
@@ -134,37 +126,30 @@ type userSourceFromSession pgen.GetSessionByTokenHashRow
 func (s userSourceFromSession) toUserRow() userRow {
 	return userRow{
 		ID:              s.UserID,
-		Phone:           s.Phone,
 		Role:            s.Role,
 		Name:            s.Name,
 		Surname:         s.Surname,
 		Patronymic:      s.Patronymic,
-		Email:           s.Email,
+		Email:           pgtype.Text{String: s.Email, Valid: true},
 		EmailVerifiedAt: s.EmailVerifiedAt,
 		Timezone:        s.Timezone,
-		PhoneEncrypted:  s.PhoneEncrypted,
 	}
 }
 
-// decryptPhoneField decrypts a stored phone (when encrypted) and parses it
-// into a domain.Phone. Shared by mapUser and mapLoginCode so the
-// decrypt+NewPhone sequence is not duplicated.
-func decryptPhoneField(ctx context.Context, enc encryption.Encryptor, phone string, encrypted bool) (domain.Phone, error) {
-	decrypted, err := decryptPhone(ctx, enc, phone, encrypted)
-	if err != nil {
-		return domain.Phone{}, err
+// emailToText dereferences the domain email for a NOT NULL column. A nil is a
+// domain invariant violation the database rejects loudly (NOT NULL), so the
+// empty string is the correct poison value here.
+func emailToText(e *domain.Email) string {
+	if e == nil {
+		return ""
 	}
-	parsed, err := domain.NewPhone(decrypted)
-	if err != nil {
-		return domain.Phone{}, fmt.Errorf("invalid phone from DB: %w", err)
-	}
-	return parsed, nil
+	return e.String()
 }
 
-// parseEmailField parses a nullable stored email into a domain.Email value and
-// reports whether a non-empty email was present. A NULL or empty string yields
-// a zero domain.Email and present=false. Shared by mapUser and mapLoginCode so
-// the nil-safe EmailFrom sequence is not duplicated.
+// parseEmailField parses a stored email into a domain.Email value and reports
+// whether a non-empty email was present. An empty string yields a zero
+// domain.Email and present=false. Shared by mapUser and mapLoginCode so the
+// nil-safe EmailFrom sequence is not duplicated.
 func parseEmailField(email pgtype.Text) (domain.Email, bool, error) {
 	if !email.Valid || email.String == "" {
 		return domain.Email{}, false, nil

@@ -14,6 +14,7 @@ import {
 import { Drawer } from 'vaul';
 import { Cancel } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { useFocusRestore, focusRestoreContentProps } from './focus-restore';
 import { IconButton } from './icon-button';
 import { SheetDragHandle } from './sheet-drag-handle';
 
@@ -25,8 +26,11 @@ import { SheetDragHandle } from './sheet-drag-handle';
  * (Drawer поверх Radix — стандартный Drawer стека shadcn/ui): настоящий
  * drag с инерцией, закрытие свайпом вниз, ручка Drag Handle (Figma
  * 847:11295). Тайминги — на единой кривой --dl-ease (решение 2026-08-26):
- * вход шита 450ms / карточки 400ms с мягким хвостом, выходы короче
- * (280/220ms), фон 350/250ms — по характеру системных модалок Apple
+ * вход шита 440ms (`--dl-duration-sheet-in`), карточки 400ms, оверлей
+ * 350ms; выходы 330/220/250ms; движение — переход-модель шита «Еще»
+ * (глобс-классы .modal-card/.modal-overlay, решение 22.09, план 012):
+ * закрытие разворачивается из текущей позиции, «закрыл-открыл» не
+ * рестартует. По характеру системных модалок Apple
  * (HIG Motion: движение короткое, сглаженное на обоих концах).
  * Заголовок обязателен (a11y: контент ссылается на Title); стиль —
  * Mobile/Heading/H3/600 (20/24 SemiBold). Крестик закрытия (showClose) —
@@ -113,6 +117,12 @@ export function ModalContent({
   titleSrOnly = false,
 }: ModalContentProps): JSX.Element {
   const isDesktop = useIsDesktop();
+  // Возврат фокуса на хозяина без :focus-visible-кольца (контракт
+  // «никогда», решение владельца 19.10) — на обеих канвах: Radix
+  // composeEventHandlers вызывает наш onCloseAutoFocus раньше дефолта,
+  // vaul оборачивает наш onOpenAutoFocus (захват успевает до его
+  // preventDefault).
+  const restore = focusRestoreContentProps(useFocusRestore());
   const titleBlock = titleSrOnly ? (
     <DialogTitle className="sr-only">{title}</DialogTitle>
   ) : (
@@ -150,13 +160,10 @@ export function ModalContent({
       <DialogPortal>
         <DialogOverlay
           className={cn(
-            // modal-overlay — крючок для push-back фона в globals.css
-            // (body:has(.modal-overlay[data-state='open']) .screen-shell):
-            // оболочка приложения отодвигается вглубь, пока открыт любой
-            // Modal (канон apple-design §12). Решение владельца 14.10.
+            // modal-overlay — единый носитель стиля оверлея Modal
+            // (скрим bg-overlay поверх статичного фона; push-back оболочки
+            // отклонён владельцем 16.10, план 043).
             'modal-overlay fixed inset-0 z-50 bg-overlay',
-            'data-[state=open]:animate-[modal-overlay-in_350ms_var(--dl-ease)]',
-            'data-[state=closed]:animate-[modal-overlay-out_250ms_var(--dl-ease)]',
           )}
         />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
@@ -168,11 +175,10 @@ export function ModalContent({
               // потребителя — последним (tailwind-merge отдаёт приоритет
               // последнему); «канва последней» верна только для мобильного
               // Drawer-блока ниже.
-              'relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
-              'data-[state=open]:animate-[modal-card-in_400ms_var(--dl-ease)]',
-              'data-[state=closed]:animate-[modal-card-out_220ms_var(--dl-ease)]',
+              'modal-card relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
               className,
             )}
+            {...restore}
           >
             {body}
           </DialogContent>
@@ -185,12 +191,10 @@ export function ModalContent({
     <Drawer.Portal>
       <Drawer.Overlay
         className={cn(
-          // modal-overlay — крючок push-back фона, как у десктопного
-          // оверлея выше: vaul-путь тоже отодвигает оболочку (канон
-          // apple-design §12, решение владельца 14.10).
+          // modal-overlay — тот же носитель стиля, что у десктопного
+          // оверлея выше: vaul-путь рисует тот же скрим поверх статичного
+          // фона.
           'modal-overlay fixed inset-0 z-50 bg-overlay',
-          'data-[state=open]:animate-[modal-overlay-in_350ms_var(--dl-ease)]',
-          'data-[state=closed]:animate-[modal-overlay-out_250ms_var(--dl-ease)]',
         )}
       />
       <Drawer.Content
@@ -205,6 +209,7 @@ export function ModalContent({
           // кривой cubic-bezier(0.32,0.72,0,1)) — скоординировано с drag.
           'fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-white font-sans outline-none',
         )}
+        {...restore}
       >
         {body}
       </Drawer.Content>

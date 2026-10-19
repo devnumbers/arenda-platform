@@ -133,7 +133,10 @@ export function ParticipantsListScreen({
 
   const participants = participantsQuery.data ?? [];
   const listPending = isPaid && subscriptionResolved && participantsQuery.isPending;
-  const listError = isPaid && participantsQuery.isError;
+  // Гард «данных нет» (§7, политика ошибки перечитывания #1422): ключ
+  // /participants константный — провал перечитывания при удержанных
+  // данных контент не подменяет, ErrorCard только первичному провалу.
+  const listError = isPaid && participantsQuery.isError && participantsQuery.data === undefined;
   const hasParticipants = !listPending && !listError && participants.length > 0;
   // Пилюля поиска: с данными и в фазах загрузки (гейт подписки, сам
   // список) — контент встаёт на её место без сдвига (паритет чипа
@@ -273,6 +276,7 @@ export function ParticipantsListScreen({
           <ErrorCard
             title="Не удалось загрузить участников"
             onRetry={() => void participantsQuery.refetch()}
+            loading={participantsQuery.isFetching}
             className="mt-6"
           />
         ) : participants.length === 0 ? (

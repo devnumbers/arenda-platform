@@ -1,2 +1,2 @@
-export { fetchSubscription, subscriptionQueryOptions } from './api/queries';
+export { fetchSubscription, subscriptionQueryOptions, type Subscription } from './api/queries';
 export { usePaidTariff, useSubscription } from './api/hooks';

@@ -11,8 +11,6 @@ import { test as base, expect, type Locator, type Page, type TestInfo } from '@p
 // and the backend log the fake email sender writes login codes to.
 
 export interface SeededUser {
-  /** Phone digits without the +7 prefix, as typed into the login field. */
-  readonly phoneDigits: string;
   readonly email: string;
   /** Raw session token; its hash sits in the seeded sessions row. */
   readonly sessionToken: string;
@@ -35,7 +33,6 @@ export const test = base
   .extend<{ seededUser: SeededUser }>({
     seededUser: async ({}, use) => {
       await use({
-        phoneDigits: requiredEnv('E2E_USER_PHONE'),
         email: requiredEnv('E2E_USER_EMAIL'),
         sessionToken: requiredEnv('E2E_SESSION_TOKEN'),
         backendLogPath: requiredEnv('E2E_BACKEND_LOG'),
@@ -405,7 +402,7 @@ export async function extractLoginCode(user: SeededUser): Promise<string> {
  * shared «Код подтверждения: NNNNNN» anchor. The per-case letters (#1204)
  * differ by subject on the same line, so an optional subject picks one
  * operation's letter — a login code to the same address must not be
- * mistaken for a phone-change code.
+ * mistaken for an email-change code.
  */
 function codePatternFor(email: string, subject?: string): RegExp {
   const escape = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -428,8 +425,8 @@ export async function countCodesSentTo(user: SeededUser, email: string, subject?
 /**
  * Extracts the last code emailed to the given address, but only once at
  * least minCount + 1 sends are in the log — the caller snapshots the count
- * before triggering the send. All identity codes (login, phone change,
- * email change #722) share the fake sender and the log format; the optional
+ * before triggering the send. All identity codes (login, email change
+ * #722) share the fake sender and the log format; the optional
  * subject narrows the match to one operation's letter (#1204).
  */
 export async function extractCodeSentTo(
@@ -537,9 +534,10 @@ export async function pickCalendarDay(page: Page, date: Date): Promise<void> {
 }
 
 /**
- * Full login through the real UI: phone step → code step (the code comes
+ * Full login through the real UI: email step → code step (the code comes
  * from the backend log) → redirect into the cabinet. Ends on /properties
- * with the list heading visible.
+ * with the list heading visible. Login and registration are one flow
+ * (ADR 0067): the seeded address verifies into the seeded account.
  *
  * `beforeVerify` runs after the code step renders and before the code is
  * typed in (auth.spec #1098 plants its live-document marker there).
@@ -552,8 +550,8 @@ export async function loginViaUi(
   await page.goto('/login');
   // The design-layer TextField (titleIn) exposes the floating label as the
   // accessible name, so locators go by role+name.
-  await page.getByRole('textbox', { name: 'Телефон' }).fill(user.phoneDigits);
-  await page.getByRole('button', { name: 'Войти' }).click();
+  await page.getByRole('textbox', { name: 'Электронная почта' }).fill(user.email);
+  await page.getByRole('button', { name: 'Получить код' }).click();
 
   await expect(page.getByRole('heading', { name: 'Введите код' })).toBeVisible();
   if (beforeVerify) {

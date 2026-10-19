@@ -134,13 +134,8 @@ test.describe('гард корневого скроллбара: ноль сдв
     await page.getByRole('button', { name: 'Поддержка' }).click();
     const dialog = page.getByRole('dialog', { name: 'Связаться с нами' });
     await expect(dialog).toBeVisible();
-    // Push-back оболочки (решение владельца 14.10, канон apple-design §12)
-    // нарочно двигает .screen-shell, пока открыт любой Modal, — это фича,
-    // а не сдвиг скроллбара. Гард проверяет компенсацию гюттера, поэтому
-    // на время замера трансформ фичи гасится.
-    await page.addStyleTag({
-      content: '.screen-shell { transform: none !important; transition: none !important; }',
-    });
+    // Фон под модалкой статичен (push-back оболочки вырезан, план 043,
+    // решение владельца 16.10): гард меряет чистую компенсацию гюттера.
     await expectLockedWithoutShift(page, xBefore);
 
     await page.keyboard.press('Escape');

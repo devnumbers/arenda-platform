@@ -49,7 +49,6 @@ func TestLetterFor(t *testing.T) {
 		wantTemplate string
 		wantSubject  string
 	}{
-		{application.ContactChangedPhone, "phone_change_done", "Телефон в Рентли изменён"},
 		{application.ContactChangedEmail, "email_change_done", "Email в Рентли изменён"},
 	}
 	for _, tc := range tests {
@@ -140,7 +139,11 @@ func newLetterTestEnv(t *testing.T) *letterTestEnv {
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
 	}
-	user, err := domain.NewOwner(mustPhone(t))
+	email, err := domain.NewEmail("owner@example.com")
+	if err != nil {
+		t.Fatalf("parse email: %v", err)
+	}
+	user, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -182,29 +185,6 @@ func assertSingleLetter(t *testing.T, sender *captureSender, recipient, subject 
 	if msg.HTMLBody == "" {
 		t.Fatal("html body is empty")
 	}
-}
-
-func TestContactChangedWorker_PhoneLetterCarriesRequiredBlocks(t *testing.T) {
-	t.Parallel()
-	env := newLetterTestEnv(t)
-
-	err := env.worker.Work(context.Background(), &river.Job[ContactChangedArgs]{
-		Args: ContactChangedArgs{
-			ChangeKind: string(application.ContactChangedPhone),
-			UserID:     env.users.user.ID,
-			Recipient:  letterRecipient,
-			ChangedAt:  env.changedAt,
-		},
-	})
-	if err != nil {
-		t.Fatalf("Work: %v", err)
-	}
-	assertSingleLetter(t, env.sender, letterRecipient, "Телефон в Рентли изменён", []string{
-		"Телефон для входа в ваш аккаунт Рентли изменён 7 октября 2026 г. в 14:30 (МСК)",
-		"Если это были вы — ничего делать не нужно.",
-		"Если это были не вы: войти по прежнему номеру больше нельзя.",
-		"hello@rentlee.ru",
-	})
 }
 
 func TestContactChangedWorker_EmailLetterCarriesRequiredBlocks(t *testing.T) {
@@ -253,7 +233,7 @@ func TestContactChangedWorker_VanishedUserCancelsJob(t *testing.T) {
 
 	err := env.worker.Work(context.Background(), &river.Job[ContactChangedArgs]{
 		Args: ContactChangedArgs{
-			ChangeKind: string(application.ContactChangedPhone),
+			ChangeKind: string(application.ContactChangedEmail),
 			UserID:     uuid.Must(uuid.NewV7()),
 			Recipient:  letterRecipient,
 			ChangedAt:  env.changedAt,
@@ -276,7 +256,7 @@ func TestContactChangedWorker_SMTPFailureReturnsErrorForRetry(t *testing.T) {
 
 	err := env.worker.Work(context.Background(), &river.Job[ContactChangedArgs]{
 		Args: ContactChangedArgs{
-			ChangeKind: string(application.ContactChangedPhone),
+			ChangeKind: string(application.ContactChangedEmail),
 			UserID:     env.users.user.ID,
 			Recipient:  letterRecipient,
 			ChangedAt:  env.changedAt,
@@ -285,14 +265,4 @@ func TestContactChangedWorker_SMTPFailureReturnsErrorForRetry(t *testing.T) {
 	if !errors.Is(err, sendErr) {
 		t.Fatalf("error = %v, want the smtp failure wrapped for retry", err)
 	}
-}
-
-// mustPhone parses the tests' fixed owner phone.
-func mustPhone(t *testing.T) domain.Phone {
-	t.Helper()
-	phone, err := domain.NewPhone("+79160000700")
-	if err != nil {
-		t.Fatalf("parse phone: %v", err)
-	}
-	return phone
 }

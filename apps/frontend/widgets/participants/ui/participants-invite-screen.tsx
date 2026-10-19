@@ -7,6 +7,7 @@ import { Cancel, SmallArrowDown } from '@/shared/assets/icons';
 import { goBack } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
+import { useBodyScrollLock } from '@/shared/lib/hooks/useBodyScrollLock';
 import { pluralize } from '@/shared/lib/pluralize';
 import {
   allInvitedProperties,
@@ -100,6 +101,7 @@ export function ParticipantsInviteScreen(): JSX.Element {
       <ErrorCard
         title="Не удалось загрузить объекты"
         onRetry={() => void propertiesQuery.refetch()}
+        loading={propertiesQuery.isFetching}
         className="mt-6"
       />
     );
@@ -248,6 +250,11 @@ function InviteObjectsPicker({
   readonly onClose: () => void;
   readonly onConfirm: (selection: ReadonlySet<string>) => void;
 }): JSX.Element {
+  // Лок фона: поверхность непрозрачно накрывает ленту — жест у края
+  // внутренней ленты не должен уезжать в цепочку скролла страницы
+  // (канон useBodyScrollLock, решение владельца 2026-10-13; конвенция
+  // слоёв — тикет #1417).
+  useBodyScrollLock();
   const [draft, setDraft] = useState<ReadonlySet<string>>(initialSelection);
 
   const optionIds = options.map((option) => option.id);
@@ -284,7 +291,7 @@ function InviteObjectsPicker({
       {/* На десктопе TopNav зафиксирован над экраном (tablet:fixed) —
        * контент встаёт под ним на высоту шапки (канон CalendarDatePicker
        * #500); на мобайле шапка в потоке и отступ не нужен. */}
-      <div className="relative min-h-0 flex-1 overflow-y-auto tablet:mt-[72px]">
+      <div className="relative min-h-0 flex-1 overflow-y-auto tablet:mt-[72px] overscroll-y-contain [scrollbar-width:none]">
         <div className="mx-auto w-full max-w-column pb-[136px]">
           {/* Ряды с боковым отступом 24px по макету 2008-46627. */}
           <div className="flex flex-col px-6 pt-2">

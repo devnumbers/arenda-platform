@@ -15,14 +15,13 @@ import { readPhotoDataUrl } from '@/shared/lib/photo';
 import type { User } from '@/entities/user';
 import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
-import { formatPhoneDisplay } from '@/shared/lib/phone';
 import { notify } from '@/shared/lib/notifications';
 import { formatTimezoneLabel } from '../lib/timezone';
 import { profileFieldPatch, type ProfileTextField } from '../lib/profile-edit';
 import { ProfilePhotoSlot } from './profile-photo-slot';
 
 /** Серый бокс поля (как у канонных TextField/PickerField): строка-поле
- * «Телефон», «Электронная почта» и «Часовой пояс» экрана (Figma 1789-99036 —
+ * «Электронная почта» и «Часовой пояс» экрана (Figma 1789-99036 —
  * Input Field 1218:53539 Title Out с иконкой в хвосте). */
 const fieldBoxClass = cn(
   'flex h-14 w-full items-center rounded-button bg-surface-muted py-0 pl-[18px] pr-2',
@@ -34,9 +33,9 @@ function FieldTitle({ children }: { readonly children: string }): JSX.Element {
   );
 }
 
-/** Хвост-иконка строки-поля (зона 44): тёмный глиф text-content — как у
- * «Телефона» (решение владельца 11.09.2026 — только цвет, форма и зона
- * прежние). */
+/** Хвост-иконка строки-поля (зона 44): тёмный глиф text-content — как
+ * постановлено для строк-полей экрана (решение владельца 11.09.2026 —
+ * только цвет, форма и зона прежние). */
 function FieldTailIcon({ children }: { readonly children: JSX.Element }): JSX.Element {
   return (
     <span
@@ -48,11 +47,11 @@ function FieldTailIcon({ children }: { readonly children: JSX.Element }): JSX.El
   );
 }
 
-/** Строка-поле, ведущая на флоу смены: «Телефон» (Figma 1789-99037,
- * переработка #595) — на /profile/account/phone, «Электронная почта»
+/** Строка-поле, ведущая на флоу смены: «Электронная почта»
  * (Figma 1789-99036, тикет #722) — на подтверждаемый флоу
  * /profile/account/email (карта #723; инлайн-редактирование снесено:
- * PATCH /me почту больше не принимает, #720 Q1). Значение +
+ * PATCH /me почту больше не принимает, #720 Q1). Телефонная строка снесена
+ * (ADR 0067, тикет #1530). Значение +
  * SmallArrowRight; хвост без зоны 44 — тёмный глиф text-content, прижат
  * к краю бокса (решение владельца 10.09.2026). Пустое значение — серым
  * «Не указана». */
@@ -96,7 +95,7 @@ function NavFieldRow({
 
 /** Строка «Часовой пояс» (Figma 1789-99036): значение + SmallArrowDown.
  * Вся строка — одна ссылка на пикер часового пояса (#594, Figma
- * 1869-70821); глиф тёмный, как у «Телефона» (решение владельца
+ * 1869-70821); глиф тёмный, как у строк-полей (решение владельца
  * 11.09.2026 — только цвет, зона 44 и форма прежние). */
 function TimezoneFieldRow({ label }: { readonly label: string }): JSX.Element {
   return (
@@ -139,7 +138,7 @@ function AccountScreenSkeleton(): JSX.Element {
           <Skeleton className="h-14 w-full rounded-button" />
           <Skeleton className="h-14 w-full rounded-button" />
         </div>
-        {['w-20', 'w-40', 'w-28'].map((width) => (
+        {['w-40', 'w-28'].map((width) => (
           <div key={width} className="flex flex-col gap-2">
             <Skeleton className={cn('h-5', width)} />
             <Skeleton className="h-14 w-full rounded-button" />
@@ -163,14 +162,38 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
   const [patronymic, setPatronymic] = useState(me.patronymic ?? '');
   // Фото применяется сразу (решение владельца: экран автосейв-формы,
   // «при изменении фото оно сразу должно меняться» — пересмотр
-  // стейдж-канона #1228 для этого экрана). Stage — только превью летящей
-  // загрузки (data URL, CSP img-src 'self' data:, ADR 0065): ответ гасит
-  // его, отказ возвращает круг к серверному состоянию с тостом (ретрай —
-  // повторный выбор).
+  // стейдж-канона #1228 для этого экрана). Stage — превью выбранного
+  // файла (data URL, CSP img-src 'self' data:, ADR 0065); успех гасит
+  // его, провал ДЕРЖИТ файл (план 037): «Повторить» в тосте — первый
+  // потребитель action-канона — или тап по кругу досылают тот же файл,
+  // замена — пикер.
   const [photoStage, setPhotoStage] = useState<MePhotoStage | null>(null);
+  // Проценты XHR-выгрузки (план 036) — кольцо слота; null — загрузки нет.
+  const [photoProgress, setPhotoProgress] = useState<number | null>(null);
   // Фото-мутация в полёте — управление слота глушится (одна картинка на
   // профиль, параллельные загрузка и удаление недопустимы).
   const photoBusy = uploadPhoto.isPending || deletePhoto.isPending;
+
+  const uploadProfilePhoto = (file: File): void => {
+    uploadPhoto.mutate(
+      { file, onProgress: setPhotoProgress },
+      {
+        onSuccess: () => {
+          setPhotoStage(null);
+          setPhotoProgress(null);
+        },
+        onError: (error) => {
+          setPhotoProgress(null);
+          // Файл переживает провал (план 037): stage помечается failed,
+          // круг зовёт повтор; замена файла — новый выбор через пикер.
+          setPhotoStage((prev) => (prev?.kind === 'file' ? { ...prev, failed: true } : prev));
+          notify.scenarios.profile.photoUpdateError(error, {
+            action: { label: 'Повторить', onPress: () => uploadProfilePhoto(file) },
+          });
+        },
+      },
+    );
+  };
 
   const handlePhotoFile = (file: File): void => {
     void readPhotoDataUrl(file).then((previewUrl) => {
@@ -179,14 +202,15 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
       if (previewUrl !== null) {
         setPhotoStage({ kind: 'file', file, previewUrl });
       }
-      uploadPhoto.mutate(file, {
-        onSuccess: () => setPhotoStage(null),
-        onError: (error) => {
-          setPhotoStage(null);
-          notify.scenarios.profile.photoUpdateError(error);
-        },
-      });
+      uploadProfilePhoto(file);
     });
+  };
+
+  /** Повтор провалившейся загрузки тем же файлом (тап по кругу). */
+  const retryPhotoUpload = (): void => {
+    if (photoStage?.kind === 'file') {
+      uploadProfilePhoto(photoStage.file);
+    }
   };
 
   const handlePhotoRemove = (): void => {
@@ -234,8 +258,10 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
           photoUrl={me.photoUrl}
           stage={photoStage}
           busy={photoBusy}
+          progress={photoProgress}
           onFileChosen={handlePhotoFile}
           onRemove={handlePhotoRemove}
+          onRetry={retryPhotoUpload}
         />
       </div>
       <div className="flex flex-col gap-8">
@@ -276,11 +302,6 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
           />
         </section>
         <NavFieldRow
-          title="Телефон"
-          href={ROUTES.profileChangePhone}
-          value={formatPhoneDisplay(me.phone)}
-        />
-        <NavFieldRow
           title="Электронная почта"
           href={ROUTES.profileChangeEmail}
           value={me.email}
@@ -297,10 +318,10 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
  * экран автосейв-формы, решение владельца «при изменении фото оно сразу
  * должно меняться»; превью — только на время полёта),
  * поля имени (titleIn) с автосохранением PATCH /me по blur/очистке —
- * макет без кнопки «Сохранить», телефон строкой на /profile/account/phone,
- * почта строкой на флоу смены /profile/account/email (#722 — инлайн-правка
- * снесена, PATCH /me почту не принимает), часовой пояс строкой на пикер
- * /profile/account/timezone (#594). Поглотил
+ * макет без кнопки «Сохранить», почта строкой на флоу смены
+ * /profile/account/email (#722 — инлайн-правка снесена, PATCH /me почту
+ * не принимает; телефонная строка снесена — ADR 0067, тикет #1530),
+ * часовой пояс строкой на пикер /profile/account/timezone (#594). Поглотил
  * легаси PersonalDataForm (/profile/personal снесён) и AccountOverview.
  * Тихий автосейв браузерной зоны снесён (#451): колонка users.timezone
  * NOT NULL DEFAULT 'Europe/Moscow' делала условие «если пусто» всегда

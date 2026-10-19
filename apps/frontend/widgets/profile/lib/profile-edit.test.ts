@@ -4,7 +4,6 @@ import { profileFieldPatch } from './profile-edit';
 
 const me: User = {
   id: 'u1',
-  phone: '79990000000',
   role: 'owner',
   name: 'Даниил',
   surname: null,

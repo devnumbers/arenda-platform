@@ -1,6 +1,7 @@
 import { queryOptions, type UseQueryOptions } from '@tanstack/react-query';
 import { apiClient, type ApiTransport } from '@/shared/api/client';
 import type { ApiError } from '@/shared/api/errors';
+import { uploadFile } from '@/shared/api/upload';
 import type { components } from '@/shared/api/dto';
 import { propertyKeys } from '@/shared/api/query-keys';
 import type { IsoDate } from '@/shared/lib/calendar';
@@ -119,17 +120,18 @@ export function propertyDetailQueryOptions({
 
 /** Загрузка/замена фото объекта — POST /properties/{id}/photo multipart-
  * формой с полем `file` (ADR 0065); ответ — обновлённый объект с новым
- * photoUrl, валидация и EXIF-стриж на бэкенде. */
-export async function uploadPropertyPhoto(
-  { id, file }: { readonly id: string; readonly file: File },
-  transport: ApiTransport = apiClient,
-): Promise<Property> {
-  const body = new FormData();
-  body.append('file', file);
-  const response = await transport<PropertyResponse>(`/properties/${id}/photo`, {
-    method: 'POST',
-    body,
-  });
+ * photoUrl, валидация и EXIF-стриж на бэкенде. Транспорт — XHR-выгрузка
+ * с onprogress (план 036): fetch не отдаёт upload-progress. */
+export async function uploadPropertyPhoto({
+  id,
+  file,
+  onProgress,
+}: {
+  readonly id: string;
+  readonly file: File;
+  readonly onProgress?: (percent: number) => void;
+}): Promise<Property> {
+  const response = await uploadFile<PropertyResponse>(`/properties/${id}/photo`, file, onProgress);
   return mapPropertyResponse(response);
 }
 

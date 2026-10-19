@@ -160,7 +160,7 @@ function FaqEntry({
         aria-expanded={expanded}
         onClick={onToggle}
         className={cn(
-          'flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-3 text-left font-sans outline-none',
+          'pressable flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-3 text-left font-sans outline-none hover:opacity-80',
           'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-card',
         )}
       >
@@ -168,7 +168,7 @@ function FaqEntry({
         <SmallArrowDown
           aria-hidden
           className={cn(
-            'shrink-0 text-content-tertiary transition-transform duration-300 ease-out',
+            'shrink-0 text-content-tertiary transition-transform duration-300 ease-out motion-reduce:duration-150',
             expanded && 'rotate-180',
           )}
         />
@@ -180,7 +180,7 @@ function FaqEntry({
       <div
         inert={!expanded}
         className={cn(
-          'grid transition-[grid-template-rows,opacity] duration-300 ease-out',
+          'grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:duration-150',
           expanded ? 'opacity-100 [grid-template-rows:1fr]' : 'opacity-0 [grid-template-rows:0fr]',
         )}
       >

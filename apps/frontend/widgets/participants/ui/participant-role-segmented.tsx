@@ -58,7 +58,10 @@ export function ParticipantRoleSegmented({
               disabled && 'cursor-default opacity-60',
               selected
                 ? 'bg-surface text-content shadow-[0_2px_8px_rgba(0,0,0,0.16)]'
-                : 'text-content-secondary',
+                // Радио-диалект цветовых шагов: невыбранный сегмент темнеет
+                // шагами трека (hover/active), выбранный — как активный пункт
+                // навигации, шагов не имеет.
+                : 'text-content-secondary hover:bg-surface-muted-hover active:bg-surface-muted-active',
             )}
           >
             {option.label}

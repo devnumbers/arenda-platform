@@ -41,7 +41,6 @@ func (h *sessionHarness) stores(ctx context.Context) (*txStores, error) {
 func TestSessionService_Issue_CreatesNewUserAndSession(t *testing.T) {
 	t.Parallel()
 	h := newSessionHarness()
-	phone := mustPhone(t, "+79150000001")
 	email := mustEmail(t, "owner@example.com")
 	ctx := t.Context()
 
@@ -50,7 +49,7 @@ func TestSessionService_Issue_CreatesNewUserAndSession(t *testing.T) {
 		t.Fatalf("stores: %v", err)
 	}
 
-	raw, user, isNew, err := h.svc.Issue(ctx, stores, phone, email, DeviceContext{}, testNow)
+	raw, user, isNew, err := h.svc.Issue(ctx, stores, email, DeviceContext{}, testNow)
 	if err != nil {
 		t.Fatalf("Issue error = %v", err)
 	}
@@ -77,9 +76,8 @@ func TestSessionService_Issue_CreatesNewUserAndSession(t *testing.T) {
 func TestSessionService_Issue_ExistingUserReturnsNewFalse(t *testing.T) {
 	t.Parallel()
 	h := newSessionHarness()
-	phone := mustPhone(t, "+79150000002")
 	email := mustEmail(t, "owner@example.com")
-	existing := h.seedSessionUser(t, phone, &email)
+	existing := h.seedSessionUser(t, email)
 	ctx := t.Context()
 
 	stores, err := h.stores(ctx)
@@ -87,7 +85,7 @@ func TestSessionService_Issue_ExistingUserReturnsNewFalse(t *testing.T) {
 		t.Fatalf("stores: %v", err)
 	}
 
-	raw, user, isNew, err := h.svc.Issue(ctx, stores, phone, email, DeviceContext{}, testNow)
+	raw, user, isNew, err := h.svc.Issue(ctx, stores, email, DeviceContext{}, testNow)
 	if err != nil {
 		t.Fatalf("Issue error = %v", err)
 	}
@@ -108,16 +106,14 @@ func TestSessionService_Issue_ExistingUserReturnsNewFalse(t *testing.T) {
 func TestSessionService_Issue_VerifiesEmailWhenUnverified(t *testing.T) {
 	t.Parallel()
 	h := newSessionHarness()
-	phone := mustPhone(t, "+79150000003")
 	email := mustEmail(t, "owner@example.com")
 	// Seed a user whose email is present but unverified.
-	user, err := domain.NewOwner(phone)
+	user, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	user.Email = &email
 	// EmailVerifiedAt left nil on purpose.
-	h.users.byPhone[phone.String()] = user
+	h.users.byEmail[email.String()] = user
 	ctx := t.Context()
 
 	stores, err := h.stores(ctx)
@@ -125,7 +121,7 @@ func TestSessionService_Issue_VerifiesEmailWhenUnverified(t *testing.T) {
 		t.Fatalf("stores: %v", err)
 	}
 
-	_, got, isNew, err := h.svc.Issue(ctx, stores, phone, email, DeviceContext{}, testNow)
+	_, got, isNew, err := h.svc.Issue(ctx, stores, email, DeviceContext{}, testNow)
 	if err != nil {
 		t.Fatalf("Issue error = %v", err)
 	}
@@ -137,17 +133,14 @@ func TestSessionService_Issue_VerifiesEmailWhenUnverified(t *testing.T) {
 	}
 }
 
-func (h *sessionHarness) seedSessionUser(t *testing.T, phone domain.Phone, email *domain.Email) domain.User {
+func (h *sessionHarness) seedSessionUser(t *testing.T, email domain.Email) domain.User {
 	t.Helper()
-	user, err := domain.NewOwner(phone)
+	user, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	user.Email = email
-	if email != nil {
-		user.EmailVerifiedAt = &testNow
-	}
-	h.users.byPhone[phone.String()] = user
+	user.EmailVerifiedAt = &testNow
+	h.users.byEmail[email.String()] = user
 	return user
 }
 

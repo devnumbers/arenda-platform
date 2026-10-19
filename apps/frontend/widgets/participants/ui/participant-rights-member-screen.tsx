@@ -97,6 +97,7 @@ export function ParticipantRightsMemberScreen({
         <ErrorCard
           title="Не удалось загрузить права участника"
           onRetry={() => void memberQuery.refetch()}
+          loading={memberQuery.isFetching}
           className="mt-6"
         />
       ) : propertyQuery.isPending ? (

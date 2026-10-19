@@ -4,27 +4,24 @@
 --
 -- Ids are fixed so the seed is reproducible; :token_hash is the per-run
 -- HMAC-SHA256 of the raw session token the orchestrator hands to Playwright
--- (E2E_SESSION_TOKEN), and :phone_det is the deterministic phone ciphertext
--- (users.phone is searched by DeterministicEncrypt output, not plaintext —
--- both come from e2e-crypto.mjs with the same ENCRYPTION_KEY the backend
--- runs with). Statements are idempotent (ON CONFLICT DO NOTHING / UPDATE)
--- so re-seeding a non-reset database does not fail.
+-- (E2E_SESSION_TOKEN) — it comes from e2e-crypto.mjs with the same
+-- ENCRYPTION_KEY the backend runs with. Statements are idempotent
+-- (ON CONFLICT DO NOTHING / UPDATE) so re-seeding a non-reset database does
+-- not fail.
 --
--- The user has a known phone + email, so the /login UI goes straight from
--- the phone step to the code step (the code lands in the backend log via
--- the fake email sender), and the pre-authenticated session row lets screen
--- tests skip the login flow entirely.
+-- Login is email-only (ADR 0067): the code for the known address lands in
+-- the backend log via the fake email sender, and the pre-authenticated
+-- session row lets screen tests skip the login flow entirely.
 
 -- Календарь владельца (ADR 0048: «сегодня» сервера = users.timezone) — UTC,
 -- в одну линию с timezoneId браузера под Playwright (#796): иначе в
 -- полуночном окне 00:00–03:00 МСК валидация «дата не в прошлом» отбивает
 -- 400 на создание аренды/платежа из визардов, у которых префилл — «сегодня».
-INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone)
-VALUES ('11111111-1111-4111-8111-111111111111', :'phone_det', 'owner', 'Иван', 'Иванов', 'e2e@example.com', TRUE, 'UTC')
+INSERT INTO users (id, email, role, name, surname, email_verified_at, timezone)
+VALUES ('11111111-1111-4111-8111-111111111111', 'e2e@example.com', 'owner', 'Иван', 'Иванов', now(), 'UTC')
 ON CONFLICT (id) DO UPDATE
-SET phone = EXCLUDED.phone,
-    phone_encrypted = TRUE,
-    email = EXCLUDED.email,
+SET email = EXCLUDED.email,
+    email_verified_at = EXCLUDED.email_verified_at,
     name = EXCLUDED.name,
     surname = EXCLUDED.surname,
     timezone = EXCLUDED.timezone;
@@ -60,15 +57,14 @@ ON CONFLICT (id) DO NOTHING;
 -- Совместный доступ к квартире (#467): полный доступ (правит без удаления)
 -- и смотрящий (экран правки недоступен). Собственные сессии — те же
 -- pre-authenticated cookie-токены оркестратора.
-INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone)
+INSERT INTO users (id, email, role, name, surname, email_verified_at, timezone)
 VALUES
-    ('12111111-1111-4111-8111-111111111121', :'member_phone_det', 'owner', 'Мария', 'Петрова', 'e2e-member@example.com', TRUE, 'UTC'),
-    ('13111111-1111-4111-8111-111111111131', :'viewer_phone_det', 'owner', 'Сергей', 'Сидоров', 'e2e-viewer@example.com', TRUE, 'UTC'),
-    ('14111111-1111-4111-8111-111111111141', :'limited_phone_det', 'owner', 'Анна', 'Лимитова', 'e2e-limited@example.com', TRUE, 'UTC')
+    ('12111111-1111-4111-8111-111111111121', 'e2e-member@example.com', 'owner', 'Мария', 'Петрова', now(), 'UTC'),
+    ('13111111-1111-4111-8111-111111111131', 'e2e-viewer@example.com', 'owner', 'Сергей', 'Сидоров', now(), 'UTC'),
+    ('14111111-1111-4111-8111-111111111141', 'e2e-limited@example.com', 'owner', 'Анна', 'Лимитова', now(), 'UTC')
 ON CONFLICT (id) DO UPDATE
-SET phone = EXCLUDED.phone,
-    phone_encrypted = TRUE,
-    email = EXCLUDED.email,
+SET email = EXCLUDED.email,
+    email_verified_at = EXCLUDED.email_verified_at,
     name = EXCLUDED.name,
     surname = EXCLUDED.surname,
     timezone = EXCLUDED.timezone;

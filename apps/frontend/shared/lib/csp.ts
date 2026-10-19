@@ -10,7 +10,15 @@
  * она меняет обе полисы разом.
  */
 
-/** Общие директивы обеих полис; источник истины для новых origin'ов. */
+/** Общие директивы обеих полис; источник истины для новых origin'ов.
+ *
+ * upgrade-insecure-requests опускается при
+ * E2E_OMIT_UPGRADE_INSECURE=1 (раннер e2e проекта webkit, план 049):
+ * против http-стека стенда WebKit эскалирует по директиве все
+ * подресурсы на https и страница остаётся без CSS/JS. На https-проде
+ * директива инертна (всё и так https), прод env не ставит — webkit-прогон
+ * эмулирует https-контекст прод-страницы; CSP-комплаенс покрыт на
+ * chromium. */
 export const CSP_BASE_DIRECTIVES = [
   "default-src 'self'",
   "img-src 'self' data:",
@@ -20,7 +28,9 @@ export const CSP_BASE_DIRECTIVES = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  'upgrade-insecure-requests',
+  ...(process.env.E2E_OMIT_UPGRADE_INSECURE === '1'
+    ? []
+    : ['upgrade-insecure-requests']),
 ] as const;
 
 /** Nonce per request: base64 of a random UUID, the Next.js guide recipe. */

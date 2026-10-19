@@ -2,10 +2,12 @@
 
 ## Status
 
-Accepted — encryption implemented (migration 000048); the original "deferred"
-decision is superseded by the write-time encryption described below. A residual
-risk is accepted: legacy plaintext rows created before encryption are never
-re-encrypted (no startup backfill).
+Superseded by ADR 0067 (email-only login): the phone — and with it the entire
+phone-encryption mechanism — is removed from Identity. Previously: Accepted —
+encryption implemented (migration 000048); the original "deferred" decision was
+superseded by the write-time encryption described below. A residual risk was
+accepted: legacy plaintext rows created before encryption are never re-encrypted
+(no startup backfill).
 
 ## Context
 

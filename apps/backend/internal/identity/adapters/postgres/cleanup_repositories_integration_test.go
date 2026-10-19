@@ -14,22 +14,17 @@ import (
 )
 
 // seedUser creates and persists one owner so child rows satisfy foreign keys.
-func seedUser(t *testing.T, ctx context.Context, poolRepo *UserRepository, phoneRaw, emailRaw string) domain.User {
+func seedUser(t *testing.T, ctx context.Context, poolRepo *UserRepository, emailRaw string) domain.User {
 	t.Helper()
-	phone, err := domain.NewPhone(phoneRaw)
-	if err != nil {
-		t.Fatalf("new phone: %v", err)
-	}
 	email, err := domain.NewEmail(emailRaw)
 	if err != nil {
 		t.Fatalf("new email: %v", err)
 	}
-	user, err := domain.NewOwner(phone)
+	user, err := domain.NewOwner(email)
 	if err != nil {
 		t.Fatalf("new owner: %v", err)
 	}
 	now := time.Now().UTC()
-	user.Email = &email
 	user.EmailVerifiedAt = &now
 	created, err := poolRepo.Create(ctx, user)
 	if err != nil {
@@ -45,18 +40,17 @@ func TestCleanupRepositories_DeleteCounts(t *testing.T) {
 	t.Parallel()
 	pool := testdb.Setup(t)
 	ctx := context.Background()
-	enc := noopEncryptor(t)
 	now := time.Now().UTC()
 
-	user := seedUser(t, ctx, NewUserRepository(pool, enc), "+79990001142", "cleanup-counts@example.com")
+	user := seedUser(t, ctx, NewUserRepository(pool), "cleanup-counts@example.com")
 
-	sessions := NewSessionRepository(pool, enc)
-	codes := NewLoginCodeRepository(pool, enc)
-	attempts := NewAttemptRepository(pool, enc)
+	sessions := NewSessionRepository(pool)
+	codes := NewLoginCodeRepository(pool)
+	attempts := NewAttemptRepository(pool)
 
 	seedCleanupSessions(t, ctx, pool, user.ID, now)
 	seedCleanupLoginCodes(t, ctx, pool, codes, user.ID, now)
-	seedCleanupAttemptWindows(t, ctx, attempts, user.ID, now)
+	seedCleanupAttemptWindows(t, ctx, attempts, now)
 
 	assertSessionDeleteCounts(t, ctx, sessions, now)
 	assertCodeDeleteCount(t, ctx, codes, now)
@@ -89,8 +83,8 @@ func seedCleanupSessions(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	insertSession(now.Add(24 * time.Hour))
 }
 
-// seedCleanupLoginCodes stores one expired login code (phone A) and one live
-// code (phone B). The expired code is seeded with direct SQL for the same
+// seedCleanupLoginCodes stores one expired login code (address A) and one live
+// code (address B). The expired code is seeded with direct SQL for the same
 // reason as the sessions above: Save pins created_at to the DB now() while
 // expiry comes from the domain object, and chk_login_codes_expires_after_created
 // forbids a code created already expired — only time passing makes a code
@@ -104,14 +98,6 @@ func seedCleanupLoginCodes(
 	now time.Time,
 ) {
 	t.Helper()
-	expiredPhone, err := domain.NewPhone("+79990001143")
-	if err != nil {
-		t.Fatalf("new expired phone: %v", err)
-	}
-	livePhone, err := domain.NewPhone("+79990001144")
-	if err != nil {
-		t.Fatalf("new live phone: %v", err)
-	}
 	expiredEmail, err := domain.NewEmail("expired-code@example.com")
 	if err != nil {
 		t.Fatalf("new expired email: %v", err)
@@ -125,14 +111,14 @@ func seedCleanupLoginCodes(
 		t.Fatalf("new expired code id: %v", err)
 	}
 	_, err = pool.Exec(ctx,
-		`INSERT INTO login_codes (id, user_id, phone, email, code_hash, purpose, expires_at, used, created_at, phone_encrypted)
-		 VALUES ($1, $2, $3, $4, $5, 'login', $6, false, $7, false)`,
-		expiredCodeID, userID, expiredPhone.String(), expiredEmail.String(), "expiredhash",
+		`INSERT INTO login_codes (id, user_id, email, code_hash, purpose, expires_at, used, created_at)
+		 VALUES ($1, $2, $3, $4, 'login', $5, false, $6)`,
+		expiredCodeID, userID, expiredEmail.String(), "expiredhash",
 		now.Add(-2*time.Hour), now.Add(-35*24*time.Hour))
 	if err != nil {
 		t.Fatalf("insert expired code: %v", err)
 	}
-	if err := codes.Save(ctx, mustLoginCode(t, livePhone, liveEmail, "livehash", &userID, now)); err != nil {
+	if err := codes.Save(ctx, mustLoginCode(t, liveEmail, "livehash", &userID, now)); err != nil {
 		t.Fatalf("save live code: %v", err)
 	}
 }
@@ -143,24 +129,23 @@ func seedCleanupAttemptWindows(
 	t *testing.T,
 	ctx context.Context,
 	attempts *AttemptRepository,
-	userID uuid.UUID,
 	now time.Time,
 ) {
 	t.Helper()
-	stalePhone, err := domain.NewPhone("+79990001145")
+	staleEmail, err := domain.NewEmail("stale-attempts@example.com")
 	if err != nil {
-		t.Fatalf("new stale phone: %v", err)
+		t.Fatalf("new stale email: %v", err)
 	}
-	freshPhone, err := domain.NewPhone("+79990001146")
+	freshEmail, err := domain.NewEmail("fresh-attempts@example.com")
 	if err != nil {
-		t.Fatalf("new fresh phone: %v", err)
+		t.Fatalf("new fresh email: %v", err)
 	}
 	staleWindow := domain.AttemptWindow{Failures: 1, FirstFailureAt: now.Add(-2 * time.Hour), LastFailureAt: now.Add(-time.Hour)}
 	freshWindow := domain.AttemptWindow{Failures: 1, FirstFailureAt: now.Add(-time.Minute), LastFailureAt: now}
-	if err := attempts.Save(ctx, stalePhone, userID, staleWindow, 0); err != nil {
+	if err := attempts.Save(ctx, staleEmail, staleWindow, 0); err != nil {
 		t.Fatalf("save stale attempt: %v", err)
 	}
-	if err := attempts.Save(ctx, freshPhone, userID, freshWindow, 0); err != nil {
+	if err := attempts.Save(ctx, freshEmail, freshWindow, 0); err != nil {
 		t.Fatalf("save fresh attempt: %v", err)
 	}
 }
@@ -208,14 +193,13 @@ func assertAttemptDeleteCount(t *testing.T, ctx context.Context, attempts *Attem
 
 func mustLoginCode(
 	t *testing.T,
-	phone domain.Phone,
 	email domain.Email,
 	codeHash string,
 	userID *uuid.UUID,
 	createdAt time.Time,
 ) domain.LoginCode {
 	t.Helper()
-	code, err := domain.NewLoginCode(phone, email, codeHash, domain.LoginCodePurposeLogin, userID, createdAt)
+	code, err := domain.NewLoginCode(email, codeHash, domain.LoginCodePurposeLogin, userID, createdAt)
 	if err != nil {
 		t.Fatalf("new login code: %v", err)
 	}

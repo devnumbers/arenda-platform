@@ -125,6 +125,7 @@ export function ParticipantInviteScreen({
         <ErrorCard
           title="Не удалось загрузить участника"
           onRetry={() => void participantQuery.refetch()}
+          loading={participantQuery.isFetching}
           className="mt-6"
         />
       );
@@ -133,6 +134,7 @@ export function ParticipantInviteScreen({
       <ErrorCard
         title="Не удалось загрузить объекты"
         onRetry={() => void propertiesQuery.refetch()}
+        loading={propertiesQuery.isFetching}
         className="mt-6"
       />
     );

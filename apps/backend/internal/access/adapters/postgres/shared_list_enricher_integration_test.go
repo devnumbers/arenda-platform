@@ -27,7 +27,7 @@ func (f *accessLifecycleFixture) addNamedUserWithEmail(t *testing.T, name, surna
 		Name:            pgtype.Text{String: name, Valid: true},
 		Surname:         pgtype.Text{String: surname, Valid: true},
 		Patronymic:      pgtype.Text{},
-		Email:           pgtype.Text{String: email, Valid: true},
+		Email:           email,
 		EmailVerifiedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		Timezone:        "UTC",
 	})

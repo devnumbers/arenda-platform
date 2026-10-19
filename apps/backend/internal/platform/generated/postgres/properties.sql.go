@@ -325,27 +325,26 @@ func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property
 }
 
 const getPropertyByIDAdmin = `-- name: GetPropertyByIDAdmin :one
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.email AS owner_email
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE p.id = $1
 `
 
 type GetPropertyByIDAdminRow struct {
-	ID                  pgtype.UUID        `json:"id"`
-	OwnerID             pgtype.UUID        `json:"owner_id"`
-	Name                string             `json:"name"`
-	Type                string             `json:"type"`
-	Address             string             `json:"address"`
-	Description         pgtype.Text        `json:"description"`
-	Status              string             `json:"status"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	Attributes          []byte             `json:"attributes"`
-	PhotoKey            pgtype.Text        `json:"photo_key"`
-	PhotoContentType    pgtype.Text        `json:"photo_content_type"`
-	OwnerPhone          string             `json:"owner_phone"`
-	OwnerPhoneEncrypted bool               `json:"owner_phone_encrypted"`
+	ID               pgtype.UUID        `json:"id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Name             string             `json:"name"`
+	Type             string             `json:"type"`
+	Address          string             `json:"address"`
+	Description      pgtype.Text        `json:"description"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Attributes       []byte             `json:"attributes"`
+	PhotoKey         pgtype.Text        `json:"photo_key"`
+	PhotoContentType pgtype.Text        `json:"photo_content_type"`
+	OwnerEmail       string             `json:"owner_email"`
 }
 
 func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (GetPropertyByIDAdminRow, error) {
@@ -364,8 +363,7 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
-		&i.OwnerPhone,
-		&i.OwnerPhoneEncrypted,
+		&i.OwnerEmail,
 	)
 	return i, err
 }
@@ -596,7 +594,7 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 }
 
 const listPropertiesAdmin = `-- name: ListPropertiesAdmin :many
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.phone AS owner_phone, u.phone_encrypted AS owner_phone_encrypted
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.email AS owner_email
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE ($1::uuid IS NULL OR p.owner_id = $1::uuid)
@@ -627,20 +625,19 @@ type ListPropertiesAdminParams struct {
 }
 
 type ListPropertiesAdminRow struct {
-	ID                  pgtype.UUID        `json:"id"`
-	OwnerID             pgtype.UUID        `json:"owner_id"`
-	Name                string             `json:"name"`
-	Type                string             `json:"type"`
-	Address             string             `json:"address"`
-	Description         pgtype.Text        `json:"description"`
-	Status              string             `json:"status"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	Attributes          []byte             `json:"attributes"`
-	PhotoKey            pgtype.Text        `json:"photo_key"`
-	PhotoContentType    pgtype.Text        `json:"photo_content_type"`
-	OwnerPhone          string             `json:"owner_phone"`
-	OwnerPhoneEncrypted bool               `json:"owner_phone_encrypted"`
+	ID               pgtype.UUID        `json:"id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	Name             string             `json:"name"`
+	Type             string             `json:"type"`
+	Address          string             `json:"address"`
+	Description      pgtype.Text        `json:"description"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Attributes       []byte             `json:"attributes"`
+	PhotoKey         pgtype.Text        `json:"photo_key"`
+	PhotoContentType pgtype.Text        `json:"photo_content_type"`
+	OwnerEmail       string             `json:"owner_email"`
 }
 
 func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdminParams) ([]ListPropertiesAdminRow, error) {
@@ -673,8 +670,7 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 			&i.Attributes,
 			&i.PhotoKey,
 			&i.PhotoContentType,
-			&i.OwnerPhone,
-			&i.OwnerPhoneEncrypted,
+			&i.OwnerEmail,
 		); err != nil {
 			return nil, err
 		}

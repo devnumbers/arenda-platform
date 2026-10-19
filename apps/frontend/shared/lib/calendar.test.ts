@@ -24,8 +24,11 @@ import {
   listCalendarMonths,
   booleanRunSegments,
   calendarDayDisabled,
+  calendarFeedGrowth,
+  calendarFeedWindow,
   calendarPastFloor,
-  calendarSingleFeedWindow,
+  CALENDAR_FEED_APPEND_THRESHOLD_PX,
+  CALENDAR_FEED_PREPEND_THRESHOLD_PX,
   type CalendarMonthRef,
   pickIsoRange,
   rangeFeedWindow,
@@ -206,25 +209,31 @@ describe('calendar: выбор диапазона (пикер периода о�
   });
 });
 
-describe('calendar: окно ленты пикера диапазона', () => {
-  it('свежий период — от 5 месяцев назад до 2 месяцев вперёд от текущего', () => {
+describe('calendar: окно ленты пикера диапазона (план 054 — низ жёсткий, верх бесконечен)', () => {
+  it('свежий период — от месяца начала минус месяц до пары приглушённых за «сегодня»', () => {
     expect(rangeFeedWindow({ from: '2026-09-01', to: '2026-09-30' }, '2026-09-19')).toEqual({
-      first: { year: 2026, month0: 3 },
-      last: { year: 2026, month0: 10 },
+      first: { year: 2025, month0: 9 },
+      count: 14,
+      startEdge: null,
+      forwardEdge: { year: 2026, month0: 10 },
     });
   });
 
-  it('глубокий период — старт от его начала минус месяц (глубже дорисуется скроллом)', () => {
+  it('глубокий период — низ окна у его начала, глубже дорастёт prepend\'ом', () => {
     expect(rangeFeedWindow({ from: '2024-03-10', to: '2024-03-25' }, '2026-09-19')).toEqual({
       first: { year: 2024, month0: 1 },
-      last: { year: 2026, month0: 10 },
+      count: 34,
+      startEdge: null,
+      forwardEdge: { year: 2026, month0: 10 },
     });
   });
 
-  it('пустой выбор (#670) — контекст пяти месяцев назад, преселекта нет', () => {
+  it('пустой выбор (#670) — стартовый запас назад без преселекта', () => {
     expect(rangeFeedWindow(null, '2026-09-19')).toEqual({
-      first: { year: 2026, month0: 3 },
-      last: { year: 2026, month0: 10 },
+      first: { year: 2025, month0: 9 },
+      count: 14,
+      startEdge: null,
+      forwardEdge: { year: 2026, month0: 10 },
     });
   });
 });
@@ -395,50 +404,205 @@ describe('calendar: «сегодня» в поясе профиля (#1394)', ()
   });
 });
 
-describe('calendar: окно ленты одиночного пикера (решение 13.10, #1394)', () => {
+describe('calendar: окно ленты одиночного пикера (план 054 — Т-Банк: низ будущее, верх прошлое)', () => {
   const october2026: CalendarMonthRef = { year: 2026, month0: 9 };
 
-  it('стартует порцией дорисовки раньше старта — прокрутка вверх работает сразу', () => {
-    const window = calendarSingleFeedWindow({
-      feedStart: october2026,
+  it('дефолт (пол = сегодня): оба края жёсткие, ровно +2 приглушённых за «сегодня»', () => {
+    const window = calendarFeedWindow({
       anchorMonth: october2026,
-      maxDate: '2026-10-13',
+      todayMonth: october2026,
+      pastFloorMonth: october2026,
+      maxDateMonth: undefined,
     });
-    expect(window.first).toEqual({ year: 2026, month0: 3 });
+    expect(window.startEdge).toEqual({ year: 2026, month0: 7 });
+    expect(window.forwardEdge).toBeNull();
+    expect(window.first).toEqual({ year: 2026, month0: 7 });
+    expect(window.count).toBe(5);
+  });
+
+  it('завершение аренды (#805: minDate + maxDate): края у пола и у «сегодня»', () => {
+    const window = calendarFeedWindow({
+      anchorMonth: { year: 2026, month0: 5 },
+      todayMonth: october2026,
+      pastFloorMonth: { year: 2026, month0: 5 },
+      maxDateMonth: october2026,
+    });
+    expect(window.startEdge).toEqual({ year: 2026, month0: 3 });
     expect(window.forwardEdge).toEqual({ year: 2026, month0: 11 });
     expect(window.count).toBe(9);
   });
 
-  it('закрытое будущее при глубоком якоре — окно покрывает якорь и край', () => {
-    const window = calendarSingleFeedWindow({
-      feedStart: { year: 2024, month0: 0 },
-      anchorMonth: { year: 2024, month0: 3 },
-      maxDate: '2026-10-13',
-    });
-    expect(window.first).toEqual({ year: 2023, month0: 6 });
-    expect(window.forwardEdge).toEqual({ year: 2026, month0: 11 });
-    expect(window.count).toBe(42);
-  });
-
-  it('открытое будущее (maxDate не задан) — края нет, лента годом от якоря', () => {
-    const window = calendarSingleFeedWindow({
-      feedStart: october2026,
+  it('без пола (#1393, операции задним числом): верх бесконечен, старт — запас 12 до якоря', () => {
+    const window = calendarFeedWindow({
       anchorMonth: october2026,
-      maxDate: undefined,
+      todayMonth: october2026,
+      maxDateMonth: undefined,
     });
-    expect(window.first).toEqual({ year: 2026, month0: 3 });
+    expect(window.startEdge).toBeNull();
     expect(window.forwardEdge).toBeNull();
-    expect(window.count).toBe(12);
+    expect(window.first).toEqual({ year: 2025, month0: 9 });
+    expect(window.count).toBe(15);
   });
 
-  it('якорь-значение в прошлом (правка #502) тоже получает содержимое выше', () => {
-    const window = calendarSingleFeedWindow({
-      feedStart: { year: 2020, month0: 2 },
-      anchorMonth: { year: 2020, month0: 2 },
-      maxDate: undefined,
+  it('начало аренды (пол = сегодня, будущее открыто): верх жёсткий, низ бесконечен', () => {
+    const window = calendarFeedWindow({
+      anchorMonth: october2026,
+      todayMonth: october2026,
+      pastFloorMonth: october2026,
+      maxDateMonth: undefined,
     });
-    expect(window.first).toEqual({ year: 2019, month0: 8 });
+    expect(window.startEdge).toEqual({ year: 2026, month0: 7 });
     expect(window.forwardEdge).toBeNull();
-    expect(window.count).toBe(12);
+  });
+
+  it('якорь-значение в прошлом при правке (#502): запас уходит от якоря через границу года', () => {
+    const window = calendarFeedWindow({
+      anchorMonth: { year: 2020, month0: 2 },
+      todayMonth: october2026,
+      maxDateMonth: undefined,
+    });
+    expect(window.first).toEqual({ year: 2019, month0: 2 });
+    expect(window.count).toBe(94);
+  });
+});
+
+describe('calendar: автомат дорисовки ленты (план 055 — цепной рост, стена не держит)', () => {
+  // Телефонный вьюпорт из репро 19.10 (390×844, лента пикера).
+  const CLIENT = 630;
+  // Короткая лента дефолтного пикера платежа: пол = «сегодня» (верх
+  // жёсткий), будущее открыто — 5 месяцев ≈ 1786px, обе зоны на ней
+  // перекрываются (регресс e2e визарда платежа, прогон 19.10).
+  const SHORT_MONTHS = 5;
+
+  const growth = (args: {
+    readonly st: number;
+    readonly months?: number;
+    readonly startEdgeOpen: boolean;
+    readonly forwardEdgeOpen: boolean;
+    readonly inflight: 'none' | 'prepend' | 'append';
+    readonly trigger: 'scroll' | 'touch' | 'wheel';
+    readonly direction: 'up' | 'down' | null;
+  }) =>
+    calendarFeedGrowth({
+      scrollTop: args.st,
+      clientHeight: CLIENT,
+      scrollHeight: (args.months ?? 60) * 330 + 136,
+      startEdgeOpen: args.startEdgeOpen,
+      forwardEdgeOpen: args.forwardEdgeOpen,
+      inflight: args.inflight,
+      trigger: args.trigger,
+      direction: args.direction,
+    });
+
+  it('scroll вверх в зоне prepend при открытом верхе — порция', () => {
+    expect(
+      growth({ st: 2500, startEdgeOpen: true, forwardEdgeOpen: false, inflight: 'none', trigger: 'scroll', direction: 'up' }),
+    ).toBe('prepend');
+  });
+
+  it('гейт «в полёте»: пока порция не закоммичена, новых решений нет', () => {
+    const base = { st: 2500, months: 60, startEdgeOpen: true, forwardEdgeOpen: false };
+    expect(growth({ ...base, inflight: 'prepend', trigger: 'scroll', direction: 'up' })).toBe('none');
+    expect(growth({ st: 19000, months: 60, startEdgeOpen: false, forwardEdgeOpen: true, inflight: 'append', trigger: 'scroll', direction: 'down' })).toBe('none');
+  });
+
+  it('цепочка продолжается после коммита, не выходя из зоны (смерть гистерезиса 054)', () => {
+    // Репро 19.10: инерция съедает буфер быстрее дорисовки — scrollTop
+    // остаётся в зоне; направление у инерции постоянно, поэтому после
+    // коммита окна следующее событие растит снова.
+    const inZone = { st: 2500, months: 60, startEdgeOpen: true, forwardEdgeOpen: false };
+    expect(growth({ ...inZone, inflight: 'none', trigger: 'scroll', direction: 'up' })).toBe('prepend');
+    expect(growth({ ...inZone, inflight: 'prepend', trigger: 'scroll', direction: 'up' })).toBe('none');
+    expect(growth({ ...inZone, inflight: 'none', trigger: 'scroll', direction: 'up' })).toBe('prepend');
+  });
+
+  it('стена (scrollTop = 0): касание восстанавливает ленту — направление не нужно', () => {
+    // Репро 19.10: у упора scroll-событий не бывает вовсе — жест остаётся
+    // единственным триггером восстановления.
+    expect(
+      growth({ st: 0, startEdgeOpen: true, forwardEdgeOpen: false, inflight: 'none', trigger: 'touch', direction: null }),
+    ).toBe('prepend');
+  });
+
+  it('колесо вверх у стены открывает верхнюю, колесо вниз у нижней — нижнюю', () => {
+    expect(
+      growth({ st: 0, startEdgeOpen: true, forwardEdgeOpen: true, inflight: 'none', trigger: 'wheel', direction: 'up' }),
+    ).toBe('prepend');
+    // 60 месяцев ≈ 19936px; низ стены = 19936 − 630.
+    expect(
+      growth({ st: 60 * 330 + 136 - CLIENT, months: 60, startEdgeOpen: true, forwardEdgeOpen: true, inflight: 'none', trigger: 'wheel', direction: 'down' }),
+    ).toBe('append');
+  });
+
+  it('жёсткий верх инертен у стены даже с открытым низом (регресс визарда платежа)', () => {
+    // Дефолтный пикер платежа: пол = «сегодня», будущее открыто, лента
+    // короткая — зоны перекрываются. Скролл/жест вверх у верхней стены не
+    // имеют права тронуть НИЖНЮЮ сторону.
+    const short = { months: SHORT_MONTHS, startEdgeOpen: false, forwardEdgeOpen: true, inflight: 'none' as const };
+    expect(growth({ ...short, st: 0, trigger: 'scroll', direction: 'up' })).toBe('none');
+    expect(growth({ ...short, st: 0, trigger: 'touch', direction: null })).toBe('none');
+    expect(growth({ ...short, st: 0, trigger: 'wheel', direction: 'up' })).toBe('none');
+  });
+
+  it('append у нижнего края — scroll вниз в зоне, симметрично с гейтом', () => {
+    const atEnd = { st: 19000, months: 60, startEdgeOpen: false, forwardEdgeOpen: true };
+    expect(growth({ ...atEnd, inflight: 'none', trigger: 'scroll', direction: 'down' })).toBe('append');
+    expect(growth({ ...atEnd, inflight: 'append', trigger: 'scroll', direction: 'down' })).toBe('none');
+    expect(growth({ ...atEnd, inflight: 'none', trigger: 'scroll', direction: 'down' })).toBe('append');
+  });
+
+  it('жёсткий низ не растёт', () => {
+    expect(
+      growth({ st: 19000, months: 60, startEdgeOpen: false, forwardEdgeOpen: false, inflight: 'none', trigger: 'scroll', direction: 'down' }),
+    ).toBe('none');
+  });
+
+  it('вдали от краёв роста нет — в обе стороны', () => {
+    expect(
+      growth({ st: 10000, months: 90, startEdgeOpen: true, forwardEdgeOpen: true, inflight: 'none', trigger: 'scroll', direction: 'up' }),
+    ).toBe('none');
+    expect(
+      growth({ st: 10000, months: 90, startEdgeOpen: true, forwardEdgeOpen: true, inflight: 'none', trigger: 'scroll', direction: 'down' }),
+    ).toBe('none');
+  });
+
+  it('границы зон включительны (≤ 3000 prepend, ≥ ш−1500 append)', () => {
+    expect(
+      calendarFeedGrowth({
+        scrollTop: CALENDAR_FEED_PREPEND_THRESHOLD_PX,
+        clientHeight: CLIENT,
+        scrollHeight: 60 * 330 + 136,
+        startEdgeOpen: true,
+        forwardEdgeOpen: false,
+        inflight: 'none',
+        trigger: 'scroll',
+        direction: 'up',
+      }),
+    ).toBe('prepend');
+    const sh = 60 * 330 + 136;
+    expect(
+      calendarFeedGrowth({
+        scrollTop: sh - CALENDAR_FEED_APPEND_THRESHOLD_PX - CLIENT,
+        clientHeight: CLIENT,
+        scrollHeight: sh,
+        startEdgeOpen: false,
+        forwardEdgeOpen: true,
+        inflight: 'none',
+        trigger: 'scroll',
+        direction: 'down',
+      }),
+    ).toBe('append');
+  });
+
+  it('маленькая лента, оба края открыты, касание на верхней стене — верх', () => {
+    expect(
+      growth({ st: 0, months: 3, startEdgeOpen: true, forwardEdgeOpen: true, inflight: 'none', trigger: 'touch', direction: null }),
+    ).toBe('prepend');
+  });
+
+  it('без дельты (direction null) scroll ничего не решает', () => {
+    expect(
+      growth({ st: 2500, startEdgeOpen: true, forwardEdgeOpen: true, inflight: 'none', trigger: 'scroll', direction: null }),
+    ).toBe('none');
   });
 });

@@ -156,10 +156,11 @@ test('чужие карточки: ряд владельца — имя, у бе
   const MARIA_MEMBER_ID = '99999999-9999-4999-8999-999999999971';
   const NAMELESS_MEMBER_ID = '99999999-9999-4999-8999-999999999972';
   await execE2eSql(
-    // Телефон безымянного сидится плейнтекстом при phone_encrypted = false
-    // (паттерн #1107): decryptPhone читает как есть.
-    `INSERT INTO users (id, phone, role, name, surname, email, phone_encrypted, timezone) ` +
-      `VALUES ('${NAMELESS_ID}', '${NAMELESS_PHONE}', 'owner', NULL, NULL, 'e2e-nameless-cards@example.com', FALSE, 'UTC') ` +
+    // Телефона в схеме больше нет (ADR 0067, миграция 000162); пин
+    // «телефона в ряду нет» (аменд #1123) остаётся страховкой от
+    // остаточных масок.
+    `INSERT INTO users (id, role, name, surname, email, timezone) ` +
+      `VALUES ('${NAMELESS_ID}', 'owner', NULL, NULL, 'e2e-nameless-cards@example.com', 'UTC') ` +
       `ON CONFLICT (id) DO NOTHING; ` +
       `INSERT INTO properties (id, owner_id, name, type, address, status) VALUES ` +
       `('${MARIA_PROPERTY_ID}', '12111111-1111-4111-8111-111111111121', 'Офис у Марии', 'office', 'Москва, ул. Обручева, 9', 'active'), ` +
@@ -200,47 +201,54 @@ test('чужие карточки: ряд владельца — имя, у бе
 });
 
 test('без подписки (404 /subscription): кнопки создания живые, ведут на интерстишал лимита #768/#1469', async ({ page, seededUser }) => {
-  // Состояние сид-Марии из обхода #760 воспроизводим перехватом: до фикса
-  // 404 держал react-query в вечном pending, и кнопки создания хаба были
-  // disabled навсегда.
-  await page.route('**/api/subscription', (route) =>
-    route.fulfill({
-      status: 404,
-      contentType: 'application/problem+json',
-      body: JSON.stringify({ code: 'not_found', detail: 'Подписка не найдена' }),
-    }),
-  );
-  await openCabinetWithSeededSession(page, seededUser);
-  await page.goto('/properties');
+  // Состояние сид-Марии из обхода #760 («подписки нет») воспроизводим в БД
+  // с восстановлением в finally (канон participants-list): серверный
+  // префетч хаба (§15, план 026 #1442) выносит фетч подписки из браузера —
+  // сетевой перехват 404 до него больше не доходит (прецедент
+  // history-filters: ветка под перехватом недостижима).
+  const OWNER_SUBSCRIPTION_ID = '99999999-9999-4999-8999-999999999901';
+  await execE2eSql(`DELETE FROM user_subscriptions WHERE id = '${OWNER_SUBSCRIPTION_ID}'`);
+  try {
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/properties');
 
-  // Список рисуется, «+» шапки не disabled и носит защитную подписку
-  // (canAdd=false при «подписки нет» — тот же путь, что лимит тарифа).
-  await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
-  const headerAdd = page.getByTestId('properties-create');
-  await expect(headerAdd).toBeVisible();
-  await expect(headerAdd).toBeEnabled();
-  await expect(headerAdd).toHaveAttribute(
-    'aria-label',
-    'Достигнут лимит объектов по тарифу — сменить тариф',
-  );
+    // Список рисуется, «+» шапки не disabled и носит защитную подписку
+    // (canAdd=false при «подписки нет» — тот же путь, что лимит тарифа).
+    await expect(page.getByRole('heading', { name: 'Объекты', exact: true })).toBeVisible();
+    const headerAdd = page.getByTestId('properties-create');
+    await expect(headerAdd).toBeVisible();
+    await expect(headerAdd).toBeEnabled();
+    await expect(headerAdd).toHaveAttribute(
+      'aria-label',
+      'Достигнут лимит объектов по тарифу — сменить тариф',
+    );
 
-  // Тап ведёт на интерстишал «Превышен лимит объектов» (#1469) вместо
-  // мгновенного редиректа на выбор тарифа: подписки нет — читается как
-  // basic, текст называет оба платных тарифа.
-  await headerAdd.click();
-  await expect(page).toHaveURL(/\/profile\/tariff\/property-limit$/);
-  await expect(page.getByRole('heading', { name: 'Превышен лимит объектов' })).toBeVisible();
-  await expect(
-    page.getByText('Повысьте тариф до «Про» или «Бизнес», чтобы добавить больше объектов'),
-  ).toBeVisible();
+    // Тап ведёт на интерстишал «Превышен лимит объектов» (#1469) вместо
+    // мгновенного редиректа на выбор тарифа: подписки нет — читается как
+    // basic, текст называет оба платных тарифа.
+    await headerAdd.click();
+    await expect(page).toHaveURL(/\/profile\/tariff\/property-limit$/);
+    await expect(page.getByRole('heading', { name: 'Превышен лимит объектов' })).toBeVisible();
+    await expect(
+      page.getByText('Повысьте тариф до «Про» или «Бизнес», чтобы добавить больше объектов'),
+    ).toBeVisible();
 
-  // Защитный путь продолжается с интерстишала: «Выбрать тариф» ведёт на
-  // смену тарифа, где пикер рисуется (фолбэк «подписки нет ≡ базовый»),
-  // а не ошибка загрузки.
-  await page.getByRole('button', { name: 'Выбрать тариф' }).click();
-  await expect(page).toHaveURL(/\/profile\/tariff\/change$/);
-  const tariffRadio = page.getByRole('radiogroup', { name: 'Тариф' });
-  await expect(tariffRadio.getByText('Базовый', { exact: true })).toBeVisible();
-  await expect(page.getByText('Текущий', { exact: true })).toBeVisible();
-  await expect(page.getByText('Не удалось загрузить данные тарифов')).toHaveCount(0);
+    // Защитный путь продолжается с интерстишала: «Выбрать тариф» ведёт на
+    // смену тарифа, где пикер рисуется (фолбэк «подписки нет ≡ базовый»),
+    // а не ошибка загрузки.
+    await page.getByRole('button', { name: 'Выбрать тариф' }).click();
+    await expect(page).toHaveURL(/\/profile\/tariff\/change$/);
+    const tariffRadio = page.getByRole('radiogroup', { name: 'Тариф' });
+    await expect(tariffRadio.getByText('Базовый', { exact: true })).toBeVisible();
+    await expect(page.getByText('Текущий', { exact: true })).toBeVisible();
+    await expect(page.getByText('Не удалось загрузить данные тарифов')).toHaveCount(0);
+  } finally {
+    await execE2eSql(
+      `INSERT INTO user_subscriptions (id, user_id, tariff_id, source, status, current_period)
+       VALUES ('${OWNER_SUBSCRIPTION_ID}', '11111111-1111-4111-8111-111111111111',
+               (SELECT id FROM tariffs WHERE name = 'pro'), 'service', 'active', 'month')
+       ON CONFLICT (id) DO UPDATE
+       SET tariff_id = EXCLUDED.tariff_id, status = EXCLUDED.status, current_period = EXCLUDED.current_period`,
+    );
+  }
 });
