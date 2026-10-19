@@ -13,6 +13,7 @@ import {
 import { Cancel, StatusIconGood } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { outcomeHaptic } from './action-haptics';
+import { focusRestoreContentProps, useFocusRestore } from './focus-restore';
 import { IconButton } from './icon-button';
 
 /**
@@ -36,6 +37,10 @@ export type SuccessPopupProps = {
 };
 
 export function SuccessPopup({ open, onOpenChange, message }: SuccessPopupProps): JSX.Element {
+  // У попапа нет DialogTrigger — дефолт Radix фокус после закрытия не
+  // возвращает вовсе (triggerRef пуст); безкольцевой возврат ложится на
+  // захваченного при открытии хозяина (контракт «никогда», 19.10).
+  const restore = focusRestoreContentProps(useFocusRestore());
   useEffect(() => {
     if (open) {
       outcomeHaptic('success');
@@ -50,6 +55,7 @@ export function SuccessPopup({ open, onOpenChange, message }: SuccessPopupProps)
             className={cn(
               'modal-card relative w-full max-w-[400px] rounded-sheet bg-white p-6 font-sans shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] outline-none',
             )}
+            {...restore}
           >
             <div className="flex flex-col items-center gap-2">
               <StatusIconGood className="h-12 w-12" />

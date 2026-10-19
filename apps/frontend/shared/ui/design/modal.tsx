@@ -14,6 +14,7 @@ import {
 import { Drawer } from 'vaul';
 import { Cancel } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
+import { useFocusRestore, focusRestoreContentProps } from './focus-restore';
 import { IconButton } from './icon-button';
 import { SheetDragHandle } from './sheet-drag-handle';
 
@@ -116,6 +117,12 @@ export function ModalContent({
   titleSrOnly = false,
 }: ModalContentProps): JSX.Element {
   const isDesktop = useIsDesktop();
+  // Возврат фокуса на хозяина без :focus-visible-кольца (контракт
+  // «никогда», решение владельца 19.10) — на обеих канвах: Radix
+  // composeEventHandlers вызывает наш onCloseAutoFocus раньше дефолта,
+  // vaul оборачивает наш onOpenAutoFocus (захват успевает до его
+  // preventDefault).
+  const restore = focusRestoreContentProps(useFocusRestore());
   const titleBlock = titleSrOnly ? (
     <DialogTitle className="sr-only">{title}</DialogTitle>
   ) : (
@@ -171,6 +178,7 @@ export function ModalContent({
               'modal-card relative flex max-h-[92dvh] w-full max-w-[520px] flex-col rounded-sheet bg-white font-sans outline-none',
               className,
             )}
+            {...restore}
           >
             {body}
           </DialogContent>
@@ -201,6 +209,7 @@ export function ModalContent({
           // кривой cubic-bezier(0.32,0.72,0,1)) — скоординировано с drag.
           'fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full flex-col rounded-t-sheet bg-white font-sans outline-none',
         )}
+        {...restore}
       >
         {body}
       </Drawer.Content>

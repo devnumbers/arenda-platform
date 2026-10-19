@@ -1,6 +1,16 @@
 'use client';
 
-import { useRef, type ComponentProps, type JSX, type ReactNode } from 'react';
+import {
+  createContext,
+  forwardRef,
+  useContext,
+  useRef,
+  type ComponentProps,
+  type JSX,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import {
   Content,
   Item,
@@ -9,6 +19,7 @@ import {
   Trigger,
 } from '@radix-ui/react-dropdown-menu';
 import { cn } from '@/shared/lib/cn';
+import { useFocusRestore, type FocusRestore } from './focus-restore';
 
 /** Меню-кебаб дизайн-слоя (карта #497, Figma 1535-77633 — меню списка
  * задач) — dropdown на Radix: белая карточка radius 24 с тенью, пункты —
@@ -17,13 +28,57 @@ import { cn } from '@/shared/lib/cn';
  * выравниванием по правому краю (кебаб у правого края экрана), вылет за
  * вьюпорт гасит collision-детект Радикса. Типобезопасно повторяет API
  * примитива: Menu (Root) / MenuTrigger / MenuContent / MenuItem. */
-export const Menu = Root;
-export const MenuTrigger = Trigger;
+
+/** Пара capture/restore одного цикла меню, общая для триггера и
+ * контента. DropdownMenu не экспортирует onOpenAutoFocus, а к закрытию
+ * активный элемент — уже пункт меню, поэтому хозяин пинится на самом
+ * триггере, в момент его события: currentTarget — детерминированный
+ * триггер (фокус на него браузер ставит дефолт-действием позже
+ * pointerdown'а), а entry-focus внутрь контента Radix делает уже после.
+ * Без провайдера (Trigger/Content вне Menu) хендлеры деградируют к
+ * прежнему поведению — null-безопасно. */
+const MenuFocusRestoreContext = createContext<FocusRestore | null>(null);
+
+export function Menu({ children, ...props }: ComponentProps<typeof Root>): JSX.Element {
+  const restore = useFocusRestore();
+  return (
+    <MenuFocusRestoreContext.Provider value={restore}>
+      <Root {...props}>{children}</Root>
+    </MenuFocusRestoreContext.Provider>
+  );
+}
+
+export const MenuTrigger = forwardRef<HTMLButtonElement, ComponentProps<typeof Trigger>>(
+  function MenuTrigger({ onPointerDown, onKeyDown, ...props }, forwardedRef) {
+    const restore = useContext(MenuFocusRestoreContext);
+    return (
+      <Trigger
+        {...props}
+        ref={forwardedRef}
+        onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+          restore?.capture(event.currentTarget);
+          onPointerDown?.(event);
+        }}
+        onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
+          restore?.capture(event.currentTarget);
+          onKeyDown?.(event);
+        }}
+      />
+    );
+  },
+);
 
 export type MenuContentProps = ComponentProps<typeof Content>;
 
-export function MenuContent({ className, sideOffset = 4, align = 'end', ...props }: MenuContentProps): JSX.Element {
+export function MenuContent({
+  className,
+  sideOffset = 4,
+  align = 'end',
+  onCloseAutoFocus,
+  ...props
+}: MenuContentProps): JSX.Element {
   const contentRef = useRef<HTMLDivElement>(null);
+  const restore = useContext(MenuFocusRestoreContext);
   return (
     <Portal>
       <Content
@@ -56,6 +111,14 @@ export function MenuContent({ className, sideOffset = 4, align = 'end', ...props
           ) {
             event.preventDefault();
           }
+        }}
+        onCloseAutoFocus={(event) => {
+          // Потребитель раньше, безкольцевой возврат после: наш
+          // preventDefault гасит дефолтный triggerRef.focus() Radix —
+          // именно он и рисует залипшее кольцо (контракт «никогда»,
+          // решение владельца 19.10).
+          onCloseAutoFocus?.(event);
+          restore?.restore(event);
         }}
         {...props}
       />
