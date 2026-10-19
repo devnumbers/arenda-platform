@@ -398,13 +398,12 @@ function PaymentsGlobalSection({
   );
 }
 
-/** Лента секции хаба: канонный SnapRail (нативный тач + drag-прокси мыши
- * #1349, механика — DESIGN.md §8 «Drag горизонтальных snap-лент») с bleed
- * на мобайл-ярусе (≤560): `-mx-6` гасит собственный `px-6` обёртки хаба
- * (легитимный inner -mx против контейнерного паддинга, «Column width
- * rule»), `px-6` держит карточки на визуальной линии 24, а
- * `scroll-padding-inline: 24px` делает линию 24 линией снапа нативного
- * скролла и drag-прокси. */
+/** Лента секции хаба: канонный SnapRail (нативный тач + drag-прокси мыши,
+ * без снапа — решение владельца 19.10; механика — DESIGN.md §8 «Drag
+ * горизонтальных лент») с bleed на мобайл-ярусе (≤560): `-mx-6` гасит
+ * собственный `px-6` обёртки хаба (легитимный inner -mx против
+ * контейнерного паддинга, «Column width rule»), `px-6` держит карточки на
+ * визуальной линии 24. */
 function SectionRail({
   testId,
   children,
@@ -415,7 +414,7 @@ function SectionRail({
   return (
     <SnapRail
       testId={testId}
-      className="max-tablet:-mx-6 max-tablet:px-6 max-tablet:[scroll-padding-inline:24px]"
+      className="max-tablet:-mx-6 max-tablet:px-6"
     >
       {children}
     </SnapRail>

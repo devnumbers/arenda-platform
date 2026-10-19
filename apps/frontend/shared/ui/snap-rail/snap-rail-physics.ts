@@ -69,31 +69,6 @@ export function projectStopPoint(
  * pull-math (`railRubberBandOffset`) — отдельных локальных копий нет. */
 
 /**
- * Snap-цель доезда: ближайшая к идеальной точке snap-позиция. Проекция за
- * границами контента клампится к крайней точке (за краем тяги нет — конец
- * ленты, как у нативного скролла). Вход не обязан быть отсортирован;
- * ничья разрешается нижней точкой.
- */
-export function pickSnapTarget(
-  idealPx: number,
-  snapPointsPx: ReadonlyArray<number>,
-): number | null {
-  if (snapPointsPx.length === 0) return null;
-  const sorted = [...snapPointsPx].sort((a, b) => a - b);
-  const clamped = Math.min(
-    Math.max(idealPx, sorted[0] as number),
-    sorted[sorted.length - 1] as number,
-  );
-  let nearest = sorted[0] as number;
-  for (const point of sorted) {
-    if (Math.abs(point - clamped) < Math.abs(nearest - clamped)) {
-      nearest = point;
-    }
-  }
-  return nearest;
-}
-
-/**
  * Гвард старта горизонтального drag-жеста: горизонталь должна доминировать
  * по смещению (|dx| > |dy|) и превысить порог — иначе жест это клик или
  * вертикальный скролл страницы.

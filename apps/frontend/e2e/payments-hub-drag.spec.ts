@@ -7,14 +7,15 @@ import {
 } from './fixtures';
 
 // Drag секций хаба «Платежи» — нативный тач + drag-прокси мыши/пера
-// (тикет #1349, решение владельца 14.10 — возврат с Embla; канон механики —
-// DESIGN.md §8 «Drag горизонтальных snap-лент»). Проверяется контракт,
-// важный е2е: мышь тащит ленту (scrollLeft), отпускание — доезд к ближайшей
-// snap-точке проекции остановки, у краёв — резинка (трансформ контента) и
-// возврат в границы, bleed ≤560 держит карточки и снап-линию на 24
-// (scroll-padding), клик живёт до порога 8px, тач-тап нативный, свайп
-// пальцем скроллит нативно (touch-action pan-x), плитки fluid: 2 на
-// мобилке, 3 на планшете/ПК (решение владельца 18.10).
+// (#1349; без снапа — решение владельца 19.10 «магнитность убрать, пусть
+// просто скроллится»; канон механики — DESIGN.md §8 «Drag горизонтальных
+// лент»). Проверяется контракт, важный е2е: мышь тащит ленту (scrollLeft),
+// отпускание из покоя НЕ магнитит ленту к краю, отпускание с velocity —
+// инерционный доезд по проекции остановки в пределах диапазона, у краёв —
+// резинка (поле последней карточки / трансформ) и возврат в границы,
+// bleed ≤560 держит карточки на линии 24, клик живёт до порога 8px,
+// тач-тап нативный, свайп пальцем скроллит нативно (touch-action pan-x),
+// плитки fluid: 2 на мобилке, 3 на планшете/ПК (решение владельца 18.10).
 
 /** Лента «Платежей объектов»: 3 объекта + «Показать все» = 4 карточки
  * (fluid ≥165px + gap 8) ≈ 685px — переполняет и колонку 512, и мобильный
@@ -81,54 +82,29 @@ const waitForSettle = async (page: Page): Promise<void> => {
     .toBe(true);
 };
 
-/** Список snap-целей scrollLeft и текущий scrollLeft: зеркало механики
- * прокси (collectSnapPoints — это контракт): снап карточки = её offsetLeft
- * минус offsetLeft контейнера, краевой снап клампится в достижимый
- * диапазон [0, максимум] с субпиксельным эпсилоном (дробные ширины
- * fluid-плиток ставят вторую карточку ровно на максимум — целый кламп
- * scrollWidth−clientWidth уводил финальную запись мимо снап-позиции, и
- * Chrome реснапил ленту к первой карточке; см. хук). Замер на offsetLeft —
- * трансформ-резинка лэйаут не двигает, точки верны в любой момент. */
-const snapStateOf = (
-  rail: Locator,
-): Promise<{ scroll: number; snaps: number[] }> =>
+/** Достижимый максимум scrollLeft (дробный, по rect последней карточки —
+ * зеркало baseMaxScrollLeft прокси). */
+const maxScrollOf = (rail: Locator): Promise<number> =>
   rail.evaluate((element) => {
     const content = element.firstElementChild as HTMLElement;
-    const contentLeft = content.offsetLeft;
     const last = [...content.children].at(-1) as HTMLElement | undefined;
     const extent =
       last !== undefined
         ? last.getBoundingClientRect().right -
           content.getBoundingClientRect().left
         : content.scrollWidth;
-    const paddingLeft = Number.parseFloat(getComputedStyle(element).paddingLeft) || 0;
-    const maxScrollLeft = Math.max(paddingLeft + extent, element.clientWidth) - element.clientWidth;
-    const snaps = [...content.children].map((card) => {
-      const point = (card as HTMLElement).offsetLeft - contentLeft;
-      const clamped =
-        point > maxScrollLeft && point - maxScrollLeft > 1 ? maxScrollLeft : point;
-      return Math.max(clamped, 0);
-    });
-    return { scroll: element.scrollLeft, snaps };
+    const paddingLeft =
+      Number.parseFloat(getComputedStyle(element).paddingLeft) || 0;
+    return (
+      Math.max(paddingLeft + extent, element.clientWidth) -
+      element.clientWidth
+    );
   });
-
-/** Остановилась ли лента в ближайшей snap-точке (±1.5px: offsetLeft
- * округляется до целого). */
-async function expectSettledAtSnap(rail: Locator): Promise<void> {
-  const { scroll, snaps } = await snapStateOf(rail);
-  const nearest = snaps.reduce((best, snap) =>
-    Math.abs(snap - scroll) < Math.abs(best - scroll) ? snap : best,
-  );
-  expect(
-    Math.abs(scroll - nearest),
-    `лента встала в ${scroll}, ближайшая snap-точка ${nearest} (все: ${JSON.stringify(snaps)})`,
-  ).toBeLessThanOrEqual(1.5);
-}
 
 test.describe('drag секций хаба — десктоп-мышь (нативный скролл + прокси)', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test('мышь тащит ленту, отпускание — доезд к ближайшей snap-точке', async ({
+  test('отпускание из покоя не магнитит ленту к краю (без снапа, 19.10)', async ({
     page,
     seededUser,
   }) => {
@@ -148,14 +124,52 @@ test.describe('drag секций хаба — десктоп-мышь (нати�
     // Жест идёт: лента следует за мышью (scrollLeft уехал вправо).
     await expect.poll(() => scrollLeftOf(rail)).toBeGreaterThan(50);
     await page.mouse.move(x - 150, y, { steps: 4 });
-    // Пауза гасит скорость броска: отпускание из покоя — доезд к снапу,
-    // ближайшему к точке отпускания (детерминированный mid-снап).
+    // Пауза гасит скорость: отпускание из покоя — лента ОСТАЁТСЯ у точки
+    // отпускания. Магнит к началу (регресс 19.10: Chrome реснапил ленту
+    // к запомненной цели при переподключении снапа) — запрет.
     await page.waitForTimeout(150);
+    const atRelease = await scrollLeftOf(rail);
     await page.mouse.up();
 
     await waitForSettle(page);
-    await expectSettledAtSnap(rail);
-    expect(await scrollLeftOf(rail)).toBeGreaterThan(0);
+    const settled = await scrollLeftOf(rail);
+    expect(
+      Math.abs(settled - atRelease),
+      `отпустили в ${atRelease}, осела в ${settled} — магнит к краю`,
+    ).toBeLessThanOrEqual(4);
+    expect(settled).toBeGreaterThan(50);
+  });
+
+  test('отпускание с velocity — инерционный доезд по проекции', async ({
+    page,
+    seededUser,
+  }) => {
+    await openHub(page, seededUser);
+    const rail = page.getByTestId(RAIL);
+    await rail.scrollIntoViewIfNeeded();
+    const box = await boxOrThrow(rail, 'лента');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+
+    await expect.poll(() => scrollLeftOf(rail)).toBe(0);
+
+    // Резкий короткий флик: отпускание в движении — инерция увозит ленту
+    // дальше точки отпускания (проекция остановки d=0.998) и осаживает
+    // её в пределах диапазона, без привязки к карточным линиям.
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x - 60, y, { steps: 2 });
+    const atRelease = await scrollLeftOf(rail);
+    await page.mouse.up();
+
+    await waitForSettle(page);
+    const settled = await scrollLeftOf(rail);
+    expect(
+      settled,
+      `отпустили в ${atRelease}, инерция не увезла (${settled})`,
+    ).toBeGreaterThan(atRelease + 20);
+    const max = await maxScrollOf(rail);
+    expect(settled).toBeLessThanOrEqual(max + 1.5);
   });
 
   test('drag до порога не съедает клик по карточке', async ({
@@ -274,7 +288,6 @@ test.describe('drag секций хаба — десктоп-мышь (нати�
     await page.mouse.move(x - 400, y, { steps: 5 });
     await page.mouse.up();
     await waitForSettle(page);
-    const endScroll = await scrollLeftOf(rail);
 
     // Тянем дальше влево (за правый край контента): scrollLeft стоит на
     // границе, резинка играет трансформом контента — 60px жеста дают
@@ -292,9 +305,10 @@ test.describe('drag секций хаба — десктоп-мышь (нати�
     ).toBeGreaterThan(10);
     expect(stretched).toBeLessThan(55);
     expect(await rubberOf(rail), 'после отпускания резинка вернулась в 0').toBe(0);
+    const max = await maxScrollOf(rail);
     expect(
-      Math.abs((await scrollLeftOf(rail)) - endScroll),
-      'после отпускания лента вернулась в конечный снап',
+      Math.abs((await scrollLeftOf(rail)) - max),
+      'после отпускания лента вернулась в правую границу',
     ).toBeLessThanOrEqual(1.5);
 
     // Конец ленты без пустот: последняя карточка вровень с краем вьюпорта.
@@ -315,7 +329,7 @@ test.describe('drag секций хаба — десктоп-мышь (нати�
 test.describe('bleed лент на мобайл-ярусе (≤560)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('лента в край вьюпорта, карточки и snap — на линии 24', async ({
+  test('лента в край вьюпорта, карточки — на визуальной линии 24', async ({
     page,
     seededUser,
   }) => {
@@ -329,17 +343,14 @@ test.describe('bleed лент на мобайл-ярусе (≤560)', () => {
 
     const geometry = await rail.evaluate((element) => ({
       paddingLeft: getComputedStyle(element).paddingLeft,
-      scrollPaddingLeft: getComputedStyle(element).scrollPaddingLeft,
       firstCardX: element.firstElementChild?.getBoundingClientRect().left ?? null,
     }));
     expect(geometry.paddingLeft).toBe('24px');
-    // scroll-padding — линия снапа нативного скролла и drag-прокси.
-    expect(geometry.scrollPaddingLeft).toBe('24px');
     // В покое (scroll 0) первая карточка стоит на визуальной линии 24.
     expect(geometry.firstCardX).toBeCloseTo(24, 0);
   });
 
-  test('drag мышью на узком вьюпорте доезжает до снапа с bleed-паддингом', async ({
+  test('drag мышью на узком вьюпорте: отпускание из покоя остаётся у точки (bleed)', async ({
     page,
     seededUser,
   }) => {
@@ -353,15 +364,19 @@ test.describe('bleed лент на мобайл-ярусе (≤560)', () => {
     await page.mouse.move(x, y);
     await page.mouse.down();
     await page.mouse.move(x - 140, y, { steps: 8 });
-    // Пауза гасит скорость: доезд к снапу у точки отпускания.
+    // Пауза гасит скорость: отпускание из покоя — лента остаётся у точки.
     await page.waitForTimeout(150);
+    const atRelease = await scrollLeftOf(rail);
     await page.mouse.up();
     await waitForSettle(page);
 
-    // Снап-линия = scroll-padding 24; список снапов включает краевой
-    // (конец ленты без пустот).
-    await expectSettledAtSnap(rail);
-    // Осевшая карточка стоит ровно на линии 24 (bleed-паддинг = снап-линия).
+    const settled = await scrollLeftOf(rail);
+    expect(
+      Math.abs(settled - atRelease),
+      `отпустили в ${atRelease}, осела в ${settled}`,
+    ).toBeLessThanOrEqual(4);
+    // Bleed жив: осевшая карточка в пределах видимости (не улетела за
+    // край вьюпорта) — на линии 24 или правее, свободно.
     const visibleCardX = await rail.evaluate((element) => {
       const content = element.firstElementChild as HTMLElement;
       const lefts = [...content.children].map(
@@ -370,8 +385,7 @@ test.describe('bleed лент на мобайл-ярусе (≤560)', () => {
       const visible = lefts.filter((left) => left > -1);
       return visible.length > 0 ? Math.min(...visible) : null;
     });
-    expect(visibleCardX, 'осевшая карточка на линии 24 (не на краю)').toBeGreaterThanOrEqual(22);
-    expect(visibleCardX, 'осевшая карточка на линии 24').toBeLessThanOrEqual(25.5);
+    expect(visibleCardX, 'после жеста карточка видна').toBeGreaterThanOrEqual(-1);
   });
 });
 
@@ -523,17 +537,15 @@ test.describe('fluid-ширины плиток (решение владельц�
   });
 });
 
-test.describe('prefers-reduced-motion — докат к ближайшему снапу', () => {
+test.describe('prefers-reduced-motion — без инерционной проекции', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test('бросок с скоростью оседает в соседнем снапе, а не в проекции остановки', async ({
+  test('бросок остаётся у точки отпускания (без проекции и магнита)', async ({
     page,
     seededUser,
   }) => {
-    // Reduced-motion отключает инерционную проекцию: отпускание с velocity
-    // даёт докат к СОСЕДНЕМУ снапу (ближайшему к точке отпускания);
-    // регрессия к проекции уехала бы к снапу у проекции остановки
-    // (здесь — краевому, дальше на ~10px) — ассерт ниже это различает.
+    // Reduced-motion отключает инерционную проекцию: лента остаётся у
+    // пальца; никакого магнита к карточным линиям или краю (19.10).
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await openHub(page, seededUser);
     const rail = page.getByTestId(RAIL);
@@ -545,18 +557,16 @@ test.describe('prefers-reduced-motion — докат к ближайшему с�
     await page.mouse.move(x, y);
     await page.mouse.down();
     await page.mouse.move(x - 150, y, { steps: 2 });
+    await page.waitForTimeout(150);
+    const atRelease = await scrollLeftOf(rail);
     await page.mouse.up();
 
     await waitForSettle(page);
-    const { scroll, snaps } = await snapStateOf(rail);
-    const adjacentSnap = snaps.at(1);
-    if (adjacentSnap === undefined) {
-      throw new Error('в ленте меньше двух snap-точек');
-    }
+    const settled = await scrollLeftOf(rail);
     expect(
-      Math.abs(scroll - adjacentSnap),
-      `бросок осел в ${scroll}, соседний снап ${adjacentSnap} (все: ${JSON.stringify(snaps)})`,
-    ).toBeLessThanOrEqual(1.5);
-    expect(scroll).toBeGreaterThan(0);
+      Math.abs(settled - atRelease),
+      `отпустили в ${atRelease}, осела в ${settled}`,
+    ).toBeLessThanOrEqual(4);
+    expect(settled).toBeGreaterThan(0);
   });
 });

@@ -9,7 +9,6 @@ import {
   SETTLE_MAX_MS,
   criticalSettle,
   isHorizontalDrag,
-  pickSnapTarget,
   projectStopPoint,
   railRubberBandOffset,
 } from "./snap-rail-physics";
@@ -30,29 +29,6 @@ describe("projectStopPoint — проекция остановки scrollViewWil
 
   it("нулевая скорость оставляет точку на месте", () => {
     expect(projectStopPoint(321, 0)).toBe(321);
-  });
-});
-
-describe("pickSnapTarget — ближайшая к проекции snap-точка", () => {
-  it("выбирает ближайшую точку к идеальной позиции", () => {
-    expect(pickSnapTarget(240, [0, 176.5, 353, 529.5])).toBe(176.5);
-  });
-
-  it("проекция за границами контента клампится к крайней точке", () => {
-    expect(pickSnapTarget(-500, [0, 176.5, 353])).toBe(0);
-    expect(pickSnapTarget(9999, [0, 176.5, 353])).toBe(353);
-  });
-
-  it("вход не обязан быть отсортирован", () => {
-    expect(pickSnapTarget(340, [353, 0, 176.5])).toBe(353);
-  });
-
-  it("ничья разрешается нижней точкой", () => {
-    expect(pickSnapTarget(88, [0, 176])).toBe(0);
-  });
-
-  it("пустой список точек даёт null", () => {
-    expect(pickSnapTarget(100, [])).toBeNull();
   });
 });
 

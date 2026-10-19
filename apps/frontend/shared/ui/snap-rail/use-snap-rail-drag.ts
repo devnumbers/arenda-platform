@@ -18,31 +18,31 @@ import type { VelocityTracker } from "@/shared/ui/pull-to-refresh/pull-math";
 import {
   criticalSettle,
   isHorizontalDrag,
-  pickSnapTarget,
   projectStopPoint,
 } from "./snap-rail-physics";
 
 /** Зеркало кривой дома --dl-ease (tokens.css) для reduced-motion-доката:
  * JS-аниматор не читает var(), дубликат вынужденный (прецедент LiveValue). */
 const DL_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
-/** Reduced-motion: жест — управление (не гасится), докат к ближайшему снапу
+/** Reduced-motion: жест — управление (не гасится), гашение резинки
  * укорачивается до 150мс (канон §8 «укорачиваем, не отключаем»). Единица —
  * секунды (format `animate` motion). */
 const REDUCED_SETTLE_S = 0.15;
 
 /**
- * Drag-прокси мыши/пера поверх нативного горизонтального snap-скролла
- * (#1349; решение владельца 14.10 — возврат с Embla, физика по эталону
- * Apple; канон — DESIGN.md §8).
+ * Drag-прокси мыши/пера поверх нативного горизонтального свободного
+ * скролла (#1349; физика по эталону Apple; канон — DESIGN.md §8; снапа
+ * нет — решение владельца 19.10 «магнитность убрать, пусть просто
+ * скроллится», supersedes proximity 18.10 и mandatory 14.10).
  *
  * Контракт: `scrollLeft` ленты следует за указателем 1:1; скорость
  * считается по RAW-позиции (без клампа краёв — скорость живёт и в вязнущей
- * резинке); на отпускании цель проецируется заранее (projectStopPoint,
- * d=0.998 — веб-аналог `scrollViewWillEndDragging`) и доезжается критическим
- * демпфированием без перелёта со стартом от скорости отпускания
- * (criticalSettle: velocity handoff, адаптивная ω ≥ |v|/|d| — доезд
- * стартует с пальца без «кирпичной стены» на коротких фликах,
- * apple-design §5; решение владельца 18.10 — «слишком резкий»).
+ * резинке); на отпускании точка остановки проецируется заранее
+ * (projectStopPoint, d=0.998 — веб-аналог `scrollViewWillEndDragging`) —
+ * БЕЗ привязки к карточным линиям — и доезжается критическим демпфированием
+ * без перелёта со стартом от скорости отпускания (criticalSettle: velocity
+ * handoff, адаптивная ω ≥ |v|/|d| — доезд стартует с пальца без
+ * «кирпичной стены», apple-design §5).
  *
  * Резинка у краёв: за правый край диапазон расширяется настоящим полем
  * контента (scrollLeft уходит за обычный максимум нативно, гэп после
@@ -54,12 +54,10 @@ const REDUCED_SETTLE_S = 0.15;
  * пружинит обратно, как UIScrollView (решение владельца 18.10 — «не
  * липкий у края»). Velocity считается по RAW-позиции (без клампа) —
  * живёт и в вязнущей резинке. У тача резинка нативная — тач в код не
- * заходит вовсе (гвард `pointerType`), momentum/bounce/снап браузера
- * (`snap-proximity` канона — см. snap-rail.tsx) целы.
+ * заходит вовсе (гвард `pointerType`), momentum и резинка браузера целы.
  *
- * Сохранённые механики 94ba68fec (проверены живой приёмкой 12/12): snap
- * выключается на время жеста и восстанавливается строго после доезда;
- * клик живёт до порога, после реального drag первый click гасится
+ * Сохранённые механики 94ba68fec (проверены живой приёмкой 12/12): клик
+ * живёт до порога, после реального drag первый click гасится
  * capture-фазой; pointercancel (native drag, жест ОС) — мгновенный возврат
  * snap; колесо/новый pointerdown гасят бегущий доезд; RTL ленты жестом не
  * обслуживаются (приложение LTR). Выделение текста реальным вводом гасится
@@ -111,44 +109,6 @@ function baseMaxScrollLeft(rail: HTMLDivElement, shiftPx: number): number {
   );
 }
 
-/** Эпсилон субпиксельного клампа: точка снапа у самой границы (дробные
- * ширины fluid-плиток ставят вторую карточку ровно на максимум — 173.33 при
- * максимуме 173.33) не клампится вниз. Целый кламп ставил финальную запись
- * scrollLeft на 0.33px МИМО снап-позиции Chrome — переподключение
- * mandatory после доезда реснапило ленту к запомненной цели (первой
- * карточке): доезд доезжал, а восстановление snap уводило ленту в начало
- * (баг 18.10). */
-const SNAP_CLAMP_EPSILON_PX = 1;
-
-/** Snap-позиции детей в пространстве scrollLeft: карточки снапятся левым
- * краем на линию `scroll-padding-left` (bleed ≤560 держит 24px). Замер —
- * layout-разность offsetLeft'ов ребёнка и контента (общий offsetParent):
- * оба значения чисто лэйаут — пресс-скейл нажатой карточки (`.pressable`,
- * план 007) и трансформ-вылет резинки в геометрию не текут. Максимум —
- * дробный (baseMaxScrollLeft). Точки клампятся в достижимый диапазон с
- * субпиксельным эпсилоном: хвост ленты снапится к концу без пустот, как у
- * натива. */
-function collectSnapPoints(
-  rail: HTMLDivElement,
-  content: HTMLDivElement,
-  shiftPx: number,
-): number[] {
-  const style = getComputedStyle(rail);
-  const scrollPadding = Number.parseFloat(style.scrollPaddingLeft) || 0;
-  const railPaddingLeft = Number.parseFloat(style.paddingLeft) || 0;
-  const maxScrollLeft = baseMaxScrollLeft(rail, shiftPx);
-  return Array.from(content.children).map((child) => {
-    const layoutOffset =
-      (child as HTMLElement).offsetLeft - content.offsetLeft;
-    const point = railPaddingLeft + layoutOffset - scrollPadding;
-    const clamped =
-      point > maxScrollLeft && point - maxScrollLeft > SNAP_CLAMP_EPSILON_PX
-        ? maxScrollLeft
-        : point;
-    return Math.max(clamped, 0);
-  });
-}
-
 export function useSnapRailDrag(): SnapRailDragControls {
   // Ручная мемоизация (стандарт React Compiler): колбэки живут в нативных
   // window-слушателях, навешиваемых на pointerdown, — пересоздание замыканий
@@ -169,11 +129,10 @@ export function useSnapRailDrag(): SnapRailDragControls {
     reducedMotionRef.current = reducedMotion;
   }, [reducedMotion]);
 
-  // Off-switch snap'а на время жеста и возврат после доезда; курсор здесь
-  // же — один реставратор на все inline-стили жеста. user-select — тоже
-  // жест-стиль (#1436): подавление drag-select только на активном жесте.
-  const restoreSnap = useCallback((element: HTMLDivElement): void => {
-    element.style.scrollSnapType = "";
+  // Реставратор inline-стилей жеста (курсор, scroll-behavior для
+  // программных записей, user-select #1436). Снапа нет — переключать
+  // нечего, свободный скролл браузера не борется с записями scrollLeft.
+  const restoreGestureStyles = useCallback((element: HTMLDivElement): void => {
     element.style.scrollBehavior = "";
     element.style.cursor = "";
     element.style.userSelect = "";
@@ -237,83 +196,56 @@ export function useSnapRailDrag(): SnapRailDragControls {
     rubberAnimRef.current = null;
   }, []);
 
-  /** Доезд к snap-цели: проекция остановки по RAW-скорости (d=0.998),
-   * ближайшая к ней точка, критическое демпфирование без перелёта со
+  /** Доезд по проекции остановки: цель = проецированная точка, зажатая в
+   * достижимый диапазон, БЕЗ привязки к карточным линиям (снапа нет —
+   * решение владельца 19.10); критическое демпфирование без перелёта со
    * стартом от скорости отпускания (criticalSettle). Резинка (если жест
-   * отпущен за краем) возвращается в 0 параллельным докатом; snap
-   * восстанавливается, когда доедут оба. */
-  const settleToSnap = useCallback(
+   * отпущен за краем) возвращается параллельной пружиной с лёгким
+   * отскоком; стили жеста снимаются, когда доедут оба. */
+  const settleToProjection = useCallback(
     (velocityPxPerS: number): void => {
       const rail = railRef.current;
       if (rail === null) return;
-      const content = contentRef.current;
       // Текущий трансформ-вылет левой резинки — компенсация в rect-замере
       // (правая резинка поле-расширение, rect не двигает).
       const shiftPx =
         rubberRef.current < 0
           ? rubberBandOffset(-rubberRef.current, rail.clientWidth)
           : 0;
-      const snapPoints =
-        content !== null ? collectSnapPoints(rail, content, shiftPx) : [];
-      if (content === null || snapPoints.length === 0) {
-        clearRubber();
-        restoreSnap(rail);
-        return;
-      }
+      const maxScrollLeft = baseMaxScrollLeft(rail, shiftPx);
       const ideal = projectStopPoint(rawRef.current, velocityPxPerS);
-      const target = pickSnapTarget(ideal, snapPoints);
-      if (target === null) {
+      const target = Math.min(Math.max(ideal, 0), maxScrollLeft);
+      const finishSettle = (): void => {
+        stopAnimations();
         clearRubber();
-        restoreSnap(rail);
-        return;
-      }
+        restoreGestureStyles(rail);
+      };
       if (reducedMotionRef.current) {
-        // Канон §8: без инерционной проекции — короткий докат к БЛИЖАЙШЕМУ
-        // снапу (150мс), резинка гасится тем же докатом.
-        const nearest = pickSnapTarget(rail.scrollLeft, snapPoints);
-        const from = rail.scrollLeft;
+        // Канон §8 «укорачиваем, не отключаем»: без инерционной проекции —
+        // лента остаётся у пальца (записи не было — позиция уже на месте),
+        // резинка гасится коротким спадом.
+        rail.scrollLeft = Math.min(
+          Math.max(rail.scrollLeft, 0),
+          maxScrollLeft,
+        );
         const fromRubber = rubberRef.current;
-        if (nearest !== null && Math.abs(nearest - from) > 0.5) {
-          animate(from, nearest, {
-            duration: REDUCED_SETTLE_S,
-            ease: DL_EASE,
-            onUpdate: (latest) => {
-              rail.scrollLeft = latest;
-            },
-            onComplete: () => {
-              clearRubber();
-              restoreSnap(rail);
-            },
-          });
-          return;
-        }
         if (fromRubber !== 0) {
           animate(fromRubber, 0, {
             duration: REDUCED_SETTLE_S,
             ease: DL_EASE,
             onUpdate: (latest) => applyRubber(latest),
-            onComplete: () => {
-              clearRubber();
-              restoreSnap(rail);
-            },
+            onComplete: finishSettle,
           });
           return;
         }
-        if (nearest !== null) {
-          rail.scrollLeft = nearest;
-        }
-        clearRubber();
-        restoreSnap(rail);
+        finishSettle();
         return;
       }
       let done = 0;
       const bothComplete = (): void => {
         done += 1;
         if (done < 2) return;
-        scrollAnimRef.current = null;
-        rubberAnimRef.current = null;
-        clearRubber();
-        restoreSnap(rail);
+        finishSettle();
       };
       const scrollSettle = criticalSettle(rail.scrollLeft, target, velocityPxPerS);
       if (scrollSettle.durationMs === 0) {
@@ -333,9 +265,9 @@ export function useSnapRailDrag(): SnapRailDragControls {
       if (fromRubber !== 0) {
         // Возврат резинки — пружина с лёгким отскоком (damping ~0.8 —
         // таблица Apple для momentum-жестов; канон §8: отскок живёт только
-        // в резинке) и velocity handoff: пружина стартует со скоростью
-        // отпускания в сторону покоя. Короткий возврат из-под пальца
-        // критическим доездом читался резким спадом без «липкости» края.
+        // в резинке) и velocity handoff при броске к покою: пружина
+        // стартует со скоростью отпускания в сторону покоя (отпускание в
+        // натяг — старт от нуля, тяга наружу не борется с возвратом).
         const towardRubber = Math.max(
           -Math.sign(fromRubber) * velocityPxPerS,
           0,
@@ -352,7 +284,7 @@ export function useSnapRailDrag(): SnapRailDragControls {
         bothComplete();
       }
     },
-    [applyRubber, clearRubber, restoreSnap],
+    [applyRubber, clearRubber, restoreGestureStyles, stopAnimations],
   );
 
   /** Первый click после реального drag гасится (capture-фаза), затем
@@ -409,7 +341,6 @@ export function useSnapRailDrag(): SnapRailDragControls {
         if (!current.dragging) {
           if (!isHorizontalDrag(dx, dy)) return;
           current.dragging = true;
-          railElement.style.scrollSnapType = "none";
           railElement.style.scrollBehavior = "auto";
           railElement.style.cursor = "grabbing";
           // Подавление drag-select реального ввода (#1436): совместимые
@@ -454,17 +385,17 @@ export function useSnapRailDrag(): SnapRailDragControls {
         if (!ride) {
           stopAnimations();
           clearRubber();
-          restoreSnap(railElement);
+          restoreGestureStyles(railElement);
           return;
         }
-        // Клик (порог не взят) поверх остановленного доезда — не рывком, а
-        // коротким микродоездом к ближайшей точке (velocity 0).
+        // Клик (порог не взят) поверх остановленного доезда — лента
+        // остаётся у пальца, резинка гасится доездом к покою (velocity 0).
         if (!gesture.dragging) {
-          settleToSnap(0);
+          settleToProjection(0);
           return;
         }
         suppressNextClick(railElement);
-        settleToSnap(velocityPxPerS);
+        settleToProjection(velocityPxPerS);
       };
 
       const onUp = (up: globalThis.PointerEvent): void => {
@@ -494,15 +425,15 @@ export function useSnapRailDrag(): SnapRailDragControls {
         cleanupRef.current = () => {};
       };
     },
-    [applyRubber, clearRubber, restoreSnap, settleToSnap, stopAnimations, suppressNextClick],
+    [applyRubber, clearRubber, restoreGestureStyles, settleToProjection, stopAnimations, suppressNextClick],
   );
 
   const onDragStart = useCallback((event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault();
   }, []);
 
-  // Колесо/тачпад поверх бегущего доезда: гасим анимации, гасим резинку и
-  // возвращаем snap — нативный скролл колеса сам встанет в ближайшую точку.
+  // Колесо/тачпад поверх бегущего доезда: гасим анимации и резинку —
+  // нативный свободный скролл колеса продолжает жест.
   useEffect(() => {
     const rail = railRef.current;
     if (rail === null) return;
@@ -512,7 +443,7 @@ export function useSnapRailDrag(): SnapRailDragControls {
       }
       stopAnimations();
       clearRubber();
-      restoreSnap(rail);
+      restoreGestureStyles(rail);
     };
     rail.addEventListener("wheel", onWheel, { passive: true });
     return () => {
@@ -521,7 +452,7 @@ export function useSnapRailDrag(): SnapRailDragControls {
       stopAnimations();
       clearRubber();
     };
-  }, [clearRubber, restoreSnap, stopAnimations]);
+  }, [clearRubber, restoreGestureStyles, stopAnimations]);
 
   return { railRef, contentRef, onPointerDown, onDragStart };
 }
