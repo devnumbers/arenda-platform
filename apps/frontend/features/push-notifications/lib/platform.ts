@@ -14,9 +14,8 @@
 import { isStandaloneMode } from '@/shared/lib/pwa/standalone';
 export { isStandaloneMode };
 
-// iOS device detection moved to the shared layer (12.10.2026): the
-// pull-to-refresh gate in shared/ui needs it too (ADR 0031), and shared/ui
-// cannot import from a feature. Not re-exported: within this slice only
+// iOS device detection moved to the shared layer (12.10.2026). Not
+// re-exported: within this slice only
 // requiresInstallOnIos() consumes it, and the slice exports only what other
 // elements actually import.
 import { isIosDevice } from '@/shared/lib/pwa/ios';
