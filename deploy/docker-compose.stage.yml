@@ -31,7 +31,7 @@ services:
     ports:
       # Ручной доступ к БД стенда (DataGrip/psql) — только по SSH-туннелю:
       # бинд на loopback сервера, наружу порт не публикуется (решение
-      # владельца 01.10; prod-compose переменную не получает).
+      # владельца 01.10; прод получил такое же решение 19.10 — порт 25432).
       - "127.0.0.1:15432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-postgres}\""]
