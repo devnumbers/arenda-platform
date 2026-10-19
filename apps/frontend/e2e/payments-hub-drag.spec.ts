@@ -387,6 +387,51 @@ test.describe('bleed лент на мобайл-ярусе (≤560)', () => {
     });
     expect(visibleCardX, 'после жеста карточка видна').toBeGreaterThanOrEqual(-1);
   });
+
+  test('полный скролл — последняя карточка на стандартном отступе 24 (19.10)', async ({
+    page,
+    seededUser,
+  }) => {
+    await openHub(page, seededUser);
+    const rail = page.getByTestId(RAIL);
+    await rail.scrollIntoViewIfNeeded();
+
+    /** Зазор от правого края последней карточки до края вьюпорта, px. */
+    const endGapOf = () =>
+      rail.evaluate((element) => {
+        const content = element.firstElementChild as HTMLElement;
+        const last = [...content.children].at(-1) as HTMLElement | undefined;
+        if (last === undefined) {
+          throw new Error('в ленте нет карточек');
+        }
+        return (
+          element.getBoundingClientRect().right -
+          last.getBoundingClientRect().right
+        );
+      });
+
+    // Нативный путь (тач): доезд в конец диапазона браузера — последняя
+    // карточка встаёт на стандартный отступ страницы 24px (px-6), а не
+    // вплотную к краю экрана (решение владельца 19.10; хвост — канон
+    // SnapRail, телефонный ярус ≤560).
+    await rail.evaluate((element) => {
+      element.scrollLeft = element.scrollWidth;
+    });
+    await page.waitForTimeout(150);
+    expect(await endGapOf(), 'нативный доезд: хвостовой отступ 24').toBeCloseTo(24, 0);
+
+    // Прокси-путь (мышь): бросок за край из конца — возврат резинки
+    // садится на тот же максимум, хвост не съедается клампом прокси.
+    const box = await boxOrThrow(rail, 'лента');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x - 300, y, { steps: 5 });
+    await page.mouse.up();
+    await waitForSettle(page);
+    expect(await endGapOf(), 'доезд прокси: хвостовой отступ 24').toBeCloseTo(24, 0);
+  });
 });
 
 test.describe('тач — нативный скролл, тап жив', () => {

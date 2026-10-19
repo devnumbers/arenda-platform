@@ -90,12 +90,26 @@ type Gesture = {
   readonly tracker: VelocityTracker;
 };
 
+/** Хвостовой отступ последней плитки (канон SnapRail, телефонный ярус
+ * ≤560): after-псевдоэлемент контент-дива растит scrollWidth браузера, но
+ * в rect последней карточки не входит — добавляется явно (псевдо 16px +
+ * column-gap 8 = 24px, px-6). Без надбавки кламп прокси съедал бы хвост:
+ * мышь доезжала бы на 24px меньше нативного тача, и резинка заводилась
+ * раньше настоящего конца. Скрытое псевдо (выше 560) — display none, ноль. */
+function tailPadOf(content: HTMLElement | null): number {
+  if (content === null) return 0;
+  const after = getComputedStyle(content, "::after");
+  if (after.display === "none") return 0;
+  const gap = Number.parseFloat(getComputedStyle(content).columnGap) || 0;
+  return (Number.parseFloat(after.width) || 0) + gap;
+}
+
 /** Дробный максимум прокрутки без резинки: layout-ширина контента по rect
  * последней карточки (scrollWidth/offsetWidth — целые и режут дробные
  * ширины fluid-плиток: 4×165.33 дают extent 685.33, целый scrollWidth —
  * 685). rect текущий — активный трансформ-вылет ЛЕВОЙ резинки
  * компенсируется (shiftPx); правая резинка поле-расширение, rect не
- * двигает. */
+ * двигает. Хвостовой отступ после карточек — tailPadOf. */
 function baseMaxScrollLeft(rail: HTMLDivElement, shiftPx: number): number {
   const content = rail.firstElementChild as HTMLElement | null;
   const paddingLeft = Number.parseFloat(getComputedStyle(rail).paddingLeft) || 0;
@@ -105,7 +119,8 @@ function baseMaxScrollLeft(rail: HTMLDivElement, shiftPx: number): number {
       ? last.getBoundingClientRect().right - shiftPx - content.getBoundingClientRect().left
       : (content?.scrollWidth ?? rail.scrollWidth);
   return (
-    Math.max(paddingLeft + contentWidth, rail.clientWidth) - rail.clientWidth
+    Math.max(paddingLeft + contentWidth + tailPadOf(content), rail.clientWidth) -
+    rail.clientWidth
   );
 }
 
