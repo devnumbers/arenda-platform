@@ -130,12 +130,51 @@ describe("criticalSettle — доезд критическим демпфиро�
     expect(fast.durationMs).toBeLessThan(slow.durationMs);
   });
 
-  it("скорость выше критической линии зажимается — перелёта нет", () => {
-    // Телепортная скорость автоматизации (десятки тысяч px/s) должна дать
-    // тот же доезд, что и скорость на критической линии ω·|d0|.
+  it("кирпичной стены нет: короткий флик доезжает со скоростью жеста", () => {
+    // 50px до цели, флик 2500px/s: зажим скорости критической линией
+    // (ω·d0 = 785px/s = 31% скорости пальца) растягивал доезд в ~300мс —
+    // отпускание читалось «кирпичной стеной». Адаптивная ω (≥ |v|/|d0|)
+    // держит скорость жеста: доезд короткого флика — быстрый и гладкий.
+    const settle = criticalSettle(50, 0, -2500);
+    expect(settle.durationMs).toBeLessThan(150);
+  });
+
+  it("начальная скорость кривой = скорости отпускания (handoff без излома)", () => {
+    const d0 = 50;
+    const velocity = -2500;
+    const settle = criticalSettle(d0, 0, velocity);
+    const totalS = settle.durationMs / 1000;
+    const h = 0.001;
+    // Наклон нормированной кривой в начале → начальная скорость в px/s:
+    // slope(0)·|d0|/T должно равняться |v| (кривая стартует с пальца).
+    const slope =
+      (settle.ease(h) - settle.ease(0)) / h;
+    const initialPxPerS = (slope * d0) / totalS;
+    expect(initialPxPerS).toBeGreaterThan(2000);
+  });
+
+  it("сверхскорость не перелетает и не растягивает доезд", () => {
+    // Телепортная скорость автоматизации поднимает ω, а не зажимается:
+    // доезд мгновенный, монотонный, без выхода за цель.
+    const insane = criticalSettle(50, 0, -80000);
+    expect(insane.durationMs).toBeLessThan(50);
+    const remaining = (1 - insane.ease(1)) * 50;
+    expect(Math.abs(remaining)).toBeLessThanOrEqual(0.6);
+    let previous = 0;
+    for (let t = 0; t <= 1.0001; t += 0.01) {
+      const value = insane.ease(Math.min(t, 1));
+      expect(value).toBeGreaterThanOrEqual(previous - 0.001);
+      previous = value;
+    }
+  });
+
+  it("сверхскорость короче доезда на базовой критической линии", () => {
+    // Новый контракт вместо старого зажима: ω растёт до скорости жеста,
+    // поэтому сверхбыстрый бросок оседает быстрее, чем тот же бросок со
+    // скоростью ровно на базовой линии ω_base·|d0|.
     const insane = criticalSettle(186, 0, -80000);
     const critical = criticalSettle(186, 0, -(15.708 * 186));
-    expect(insane.durationMs).toBeCloseTo(critical.durationMs, 5);
+    expect(insane.durationMs).toBeLessThan(critical.durationMs);
   });
 
   it("кап длительности держит дальние докаты", () => {

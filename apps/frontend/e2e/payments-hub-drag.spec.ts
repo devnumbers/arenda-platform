@@ -12,10 +12,12 @@ import {
 // важный е2е: мышь тащит ленту (scrollLeft), отпускание — доезд к ближайшей
 // snap-точке проекции остановки, у краёв — резинка (трансформ контента) и
 // возврат в границы, bleed ≤560 держит карточки и снап-линию на 24
-// (scroll-padding), клик живёт до порога 8px, тач-тап нативный.
+// (scroll-padding), клик живёт до порога 8px, тач-тап нативный, свайп
+// пальцем скроллит нативно (touch-action pan-x), плитки fluid: 2 на
+// мобилке, 3 на планшете/ПК (решение владельца 18.10).
 
 /** Лента «Платежей объектов»: 3 объекта + «Показать все» = 4 карточки
- * (168.5px + gap 8) ≈ 698px — переполняет и колонку 512, и мобильный
+ * (fluid ≥165px + gap 8) ≈ 685px — переполняет и колонку 512, и мобильный
  * вьюпорт 390, т.е. скроллится на обоих ярусах. */
 const RAIL = 'payments-rail-objects';
 
@@ -41,12 +43,14 @@ async function boxOrThrow(
 const scrollLeftOf = (rail: Locator): Promise<number> =>
   rail.evaluate((element) => element.scrollLeft);
 
-/** Резинка за правым краем: поле-расширение контента, px (пустой инлайн —
+/** Резинка за правым краем: поле-расширение ПОСЛЕДНЕЙ КАРТОЧКИ (w-full
+ * контент-див прячет своё поле за торчащими детьми), px (пустой инлайн —
  * резинки нет). */
 const rubberOf = (rail: Locator): Promise<number> =>
   rail.evaluate((element) => {
-    const margin = (element.firstElementChild as HTMLElement | null)?.style
-      .marginRight;
+    const last = (element.firstElementChild as HTMLElement | null)
+      ?.lastElementChild as HTMLElement | null;
+    const margin = last?.style.marginRight;
     return margin === undefined || margin === ''
       ? 0
       : Number.parseFloat(margin);
@@ -80,23 +84,31 @@ const waitForSettle = async (page: Page): Promise<void> => {
 /** Список snap-целей scrollLeft и текущий scrollLeft: зеркало механики
  * прокси (collectSnapPoints — это контракт): снап карточки = её offsetLeft
  * минус offsetLeft контейнера, краевой снап клампится в достижимый
- * диапазон [0, scrollWidth − clientWidth] — конец ленты без пустот, как у
- * нативного скролла. Замер на offsetLeft — трансформ-резинка лэйаут не
- * двигает, точки верны в любой момент. */
+ * диапазон [0, максимум] с субпиксельным эпсилоном (дробные ширины
+ * fluid-плиток ставят вторую карточку ровно на максимум — целый кламп
+ * scrollWidth−clientWidth уводил финальную запись мимо снап-позиции, и
+ * Chrome реснапил ленту к первой карточке; см. хук). Замер на offsetLeft —
+ * трансформ-резинка лэйаут не двигает, точки верны в любой момент. */
 const snapStateOf = (
   rail: Locator,
 ): Promise<{ scroll: number; snaps: number[] }> =>
   rail.evaluate((element) => {
     const content = element.firstElementChild as HTMLElement;
     const contentLeft = content.offsetLeft;
-    const maxScrollLeft = element.scrollWidth - element.clientWidth;
-    const snaps = [...content.children].map(
-      (card) =>
-        Math.min(
-          Math.max((card as HTMLElement).offsetLeft - contentLeft, 0),
-          maxScrollLeft,
-        ),
-    );
+    const last = [...content.children].at(-1) as HTMLElement | undefined;
+    const extent =
+      last !== undefined
+        ? last.getBoundingClientRect().right -
+          content.getBoundingClientRect().left
+        : content.scrollWidth;
+    const paddingLeft = Number.parseFloat(getComputedStyle(element).paddingLeft) || 0;
+    const maxScrollLeft = Math.max(paddingLeft + extent, element.clientWidth) - element.clientWidth;
+    const snaps = [...content.children].map((card) => {
+      const point = (card as HTMLElement).offsetLeft - contentLeft;
+      const clamped =
+        point > maxScrollLeft && point - maxScrollLeft > 1 ? maxScrollLeft : point;
+      return Math.max(clamped, 0);
+    });
     return { scroll: element.scrollLeft, snaps };
   });
 
@@ -382,6 +394,132 @@ test.describe('тач — нативный скролл, тап жив', () => {
     // pointerType) — нативный скролл не гасит клик.
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
     await expect(page).toHaveURL(/\/properties\/[0-9a-f-]{36}\/payments$/);
+  });
+
+  test('свайп пальцем скроллит ленту нативно (touch-action pan-x)', async ({
+    page,
+    seededUser,
+  }) => {
+    // Регрессия 18.10: touch-action pan-y (по образцу JS-карусели, где
+    // горизонталь ведёт свой JS) глушит НАТИВНЫЙ горизонтальный скролл —
+    // на телефоне лента не двигалась вовсе (прокси тач не берёт). Контракт:
+    // pan-x разрешает браузеру вести горизонтальную ось — свайп пальцем
+    // скроллит нативно и оседает в snap-точке.
+    await openHub(page, seededUser);
+    const rail = page.getByTestId(RAIL);
+    await rail.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await page.mouse.move(195, 300);
+    await page.mouse.wheel(0, 200);
+    await page.waitForTimeout(300);
+    const box = await boxOrThrow(rail, 'лента');
+    const y = box.y + box.height / 2;
+    const startX = box.x + box.width / 2;
+
+    // Реальный тач-свайп: touchscreen API Playwright умеет только тап,
+    // жест собирается через CDP Input.dispatchTouchEvent.
+    const session = await page.context().newCDPSession(page);
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: startX, y }],
+    });
+    for (const dx of [20, 45, 75, 110, 150, 200]) {
+      await session.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: startX - dx, y }],
+      });
+      await page.waitForTimeout(16);
+    }
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+
+    await expect
+      .poll(() => scrollLeftOf(rail), { timeout: 5_000 })
+      .toBeGreaterThan(100);
+    // Proximity-канон (решение владельца 18.10): после нативного флика
+    // браузер волен остановить ленту У САМОЙ снап-точки (не строго на ней)
+    // — ассерт строгости снапа тут не применяется, его держит drag-прокси
+    // мыши. Достаточно того, что лента нативно уехала и успокоилась.
+    await waitForSettle(page);
+  });
+});
+
+test.describe('fluid-ширины плиток (решение владельца 18.10: 2 на мобилке, 3 на планшете/ПК)', () => {
+  const cardBoxes = (
+    rail: Locator,
+  ): Promise<ReadonlyArray<{ width: number; left: number; right: number }>> =>
+    rail.evaluate((element) =>
+      [...(element.firstElementChild as HTMLElement).children].map((card) => {
+        const box = card.getBoundingClientRect();
+        return { width: box.width, left: box.left, right: box.right };
+      }),
+    );
+  const railRightOf = (rail: Locator): Promise<number> =>
+    rail.evaluate((element) => element.getBoundingClientRect().right);
+
+  const fourOrThrow = (
+    cards: ReadonlyArray<{ width: number; left: number; right: number }>,
+  ): readonly [
+    { width: number; left: number; right: number },
+    { width: number; left: number; right: number },
+    { width: number; left: number; right: number },
+    { width: number; left: number; right: number },
+  ] => {
+    if (cards.length < 4) {
+      throw new Error(`в ленте ${cards.length} карточек, ожидалось 4`);
+    }
+    return cards as readonly [
+      { width: number; left: number; right: number },
+      { width: number; left: number; right: number },
+      { width: number; left: number; right: number },
+      { width: number; left: number; right: number },
+    ];
+  };
+
+  test.describe('мобилка 390', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('карточки (100%−8)/2 = 167px, в ряду две полных', async ({
+      page,
+      seededUser,
+    }) => {
+      await openHub(page, seededUser);
+      const rail = page.getByTestId(RAIL);
+      await rail.scrollIntoViewIfNeeded();
+      const [first, second, third] = fourOrThrow(await cardBoxes(rail));
+      // (390 − 2×24 паддинга bleed − 8 gap) / 2
+      expect(first.width).toBeCloseTo(167, 0);
+      expect(second.width).toBeCloseTo(167, 0);
+      // Вторая карточка вровень с контентным краем (24+167+8+167 = 366),
+      // третья выглядывает хвостом (peek), не обрезана посередине.
+      expect(second.right).toBeCloseTo(390 - 24, 0);
+      expect(third.left).toBeGreaterThan(366);
+      expect(third.left).toBeLessThan(390);
+    });
+  });
+
+  test.describe('планшет-ярус колонки 768 (561–1023)', () => {
+    test.use({ viewport: { width: 768, height: 1024 } });
+
+    test('карточки (100%−16)/3 ≈ 165.3px, в ряду три полных без обрезков', async ({
+      page,
+      seededUser,
+    }) => {
+      await openHub(page, seededUser);
+      const rail = page.getByTestId(RAIL);
+      await rail.scrollIntoViewIfNeeded();
+      const [first, , third, fourth] = fourOrThrow(await cardBoxes(rail));
+      const railRight = await railRightOf(rail);
+      // (512 − 2×8 gap) / 3 — колонка 560 минус боковые 24 обёртки хаба.
+      expect(first.width).toBeCloseTo(165.33, 0);
+      expect(third.width).toBeCloseTo(165.33, 0);
+      // Третья карточка вровень с правым краем колонки, четвёртая —
+      // целиком за клипом (никаких 6px обрезков четвёртой).
+      expect(third.right).toBeLessThanOrEqual(railRight + 1.5);
+      expect(fourth.left).toBeGreaterThanOrEqual(railRight + 4);
+    });
   });
 });
 

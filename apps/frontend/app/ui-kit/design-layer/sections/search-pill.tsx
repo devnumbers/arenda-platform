@@ -25,7 +25,7 @@ export function SearchPillSection(): JSX.Element {
             </p>
             <div className={styles.column} style={{ maxWidth: 560 }}>
                 <SearchPill
-                    label="Найти платёж"
+                    label="Найти платеж"
                     onOpenSearch={() => setLastAction('открыт поиск платежей')}
                     className="pr-4"
                     trailing={

@@ -1,10 +1,11 @@
 'use client';
 
 import type { JSX } from 'react';
-import { SnapRail } from '@/shared/ui/snap-rail';
+import { SnapRail, SNAP_TILE_CLASSES } from '@/shared/ui/snap-rail';
 import styles from '../../page.module.css';
 
-/** Демо-плитки ленты — габарит карточек платежей хаба (168.5×137). */
+/** Демо-плитки ленты — габарит карточек платежей хаба (fluid: 2 на
+ * мобайл-ярусе, 3 на планшете/ПК, 137 — высота худшего случая контента). */
 const DEMO_TILES = [
     'Избранное',
     'Просроченное',
@@ -28,8 +29,9 @@ export function SnapRailSection(): JSX.Element {
             <h3 className={styles.groupTitle}>SnapRail · нативный тач + drag-прокси</h3>
             <p className={styles.groupTitle}>
                 Перетащите ленту мышью: инерционный доезд к ближайшей snap-точке
-                (проекция остановки d=0.998, спринг damping 1.0 / response 0.4);
-                у краёв — резинка c=0.55 (сопротивление и мягкий возврат).
+                (проекция остановки d=0.998, критическое демпфирование без
+                перелёта, старт со скоростью жеста — адаптивная ω); у краёв —
+                резинка c=0.55 (сопротивление и пружинистый возврат).
                 Тач и трекпад — штатный нативный скролл браузера: страница
                 скроллится по вертикали, лента — по горизонтали. Смещение до
                 8px — клик по плитке. Линия снапа здесь — край вьюпорта
@@ -42,7 +44,7 @@ export function SnapRailSection(): JSX.Element {
                     {DEMO_TILES.map((tile) => (
                         <div
                             key={tile}
-                            className="flex h-[137px] w-[168.5px] shrink-0 cursor-pointer items-end rounded-card bg-surface-muted p-4 text-sm font-medium text-content"
+                            className={`flex h-[137px] shrink-0 cursor-pointer items-end rounded-card bg-surface-muted p-4 text-sm font-medium text-content ${SNAP_TILE_CLASSES}`}
                         >
                             {tile}
                         </div>

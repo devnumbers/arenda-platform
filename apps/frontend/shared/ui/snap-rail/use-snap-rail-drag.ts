@@ -40,17 +40,22 @@ const REDUCED_SETTLE_S = 0.15;
  * резинке); на отпускании цель проецируется заранее (projectStopPoint,
  * d=0.998 — веб-аналог `scrollViewWillEndDragging`) и доезжается критическим
  * демпфированием без перелёта со стартом от скорости отпускания
- * (criticalSettle: velocity handoff, зажатый критической линией —
- * apple-design §5).
+ * (criticalSettle: velocity handoff, адаптивная ω ≥ |v|/|d| — доезд
+ * стартует с пальца без «кирпичной стены» на коротких фликах,
+ * apple-design §5; решение владельца 18.10 — «слишком резкий»).
  *
  * Резинка у краёв: за правый край диапазон расширяется настоящим полем
  * контента (scrollLeft уходит за обычный максимум нативно, гэп после
  * карточек и есть резинка), за левый — трансформом контента (в LTR левое
- * переполнение в диапазон не входит); на отпускании поле гасится тем же
- * доездом scrollLeft, трансформ — параллельным спадом. Velocity считается
- * по RAW-позиции (без клампа) — живёт и в вязнущей резинке. У тача
- * резинка нативная — тач в код не заходит вовсе (гвард `pointerType`),
- * momentum/bounce/`scroll-snap-type: mandatory` браузера целы.
+ * переполнение в диапазон не входит); на отпускании поле гасится доездом
+ * scrollLeft, трансформ — параллельной пружиной с лёгким отскоком
+ * (damping ~0.8 — таблица Apple для momentum-жестов; канон §8 держит
+ * отскок только в резинке) и velocity handoff — край «липнет» к пальцу и
+ * пружинит обратно, как UIScrollView (решение владельца 18.10 — «не
+ * липкий у края»). Velocity считается по RAW-позиции (без клампа) —
+ * живёт и в вязнущей резинке. У тача резинка нативная — тач в код не
+ * заходит вовсе (гвард `pointerType`), momentum/bounce/снап браузера
+ * (`snap-proximity` канона — см. snap-rail.tsx) целы.
  *
  * Сохранённые механики 94ba68fec (проверены живой приёмкой 12/12): snap
  * выключается на время жеста и восстанавливается строго после доезда;
@@ -87,39 +92,60 @@ type Gesture = {
   readonly tracker: VelocityTracker;
 };
 
-/** Максимум прокрутки без резинки: из лэйаут-ширины контента —
- * content.scrollWidth не замечает ни трансформ-вылета, ни поле-расширения,
- * в отличие от rail.scrollWidth. */
-function baseMaxScrollLeft(rail: HTMLDivElement): number {
+/** Дробный максимум прокрутки без резинки: layout-ширина контента по rect
+ * последней карточки (scrollWidth/offsetWidth — целые и режут дробные
+ * ширины fluid-плиток: 4×165.33 дают extent 685.33, целый scrollWidth —
+ * 685). rect текущий — активный трансформ-вылет ЛЕВОЙ резинки
+ * компенсируется (shiftPx); правая резинка поле-расширение, rect не
+ * двигает. */
+function baseMaxScrollLeft(rail: HTMLDivElement, shiftPx: number): number {
   const content = rail.firstElementChild as HTMLElement | null;
   const paddingLeft = Number.parseFloat(getComputedStyle(rail).paddingLeft) || 0;
-  const contentWidth = content?.scrollWidth ?? rail.scrollWidth;
+  const last = content?.lastElementChild as HTMLElement | null;
+  const contentWidth =
+    content !== null && last !== null
+      ? last.getBoundingClientRect().right - shiftPx - content.getBoundingClientRect().left
+      : (content?.scrollWidth ?? rail.scrollWidth);
   return (
     Math.max(paddingLeft + contentWidth, rail.clientWidth) - rail.clientWidth
   );
 }
+
+/** Эпсилон субпиксельного клампа: точка снапа у самой границы (дробные
+ * ширины fluid-плиток ставят вторую карточку ровно на максимум — 173.33 при
+ * максимуме 173.33) не клампится вниз. Целый кламп ставил финальную запись
+ * scrollLeft на 0.33px МИМО снап-позиции Chrome — переподключение
+ * mandatory после доезда реснапило ленту к запомненной цели (первой
+ * карточке): доезд доезжал, а восстановление snap уводило ленту в начало
+ * (баг 18.10). */
+const SNAP_CLAMP_EPSILON_PX = 1;
 
 /** Snap-позиции детей в пространстве scrollLeft: карточки снапятся левым
  * краем на линию `scroll-padding-left` (bleed ≤560 держит 24px). Замер —
  * layout-разность offsetLeft'ов ребёнка и контента (общий offsetParent):
  * оба значения чисто лэйаут — пресс-скейл нажатой карточки (`.pressable`,
  * план 007) и трансформ-вылет резинки в геометрию не текут. Максимум —
- * из лэйаут-ширины контента (baseMaxScrollLeft). Точки клампятся в
- * достижимый диапазон: хвост ленты снапится к концу без пустот, как у
+ * дробный (baseMaxScrollLeft). Точки клампятся в достижимый диапазон с
+ * субпиксельным эпсилоном: хвост ленты снапится к концу без пустот, как у
  * натива. */
 function collectSnapPoints(
   rail: HTMLDivElement,
   content: HTMLDivElement,
+  shiftPx: number,
 ): number[] {
   const style = getComputedStyle(rail);
   const scrollPadding = Number.parseFloat(style.scrollPaddingLeft) || 0;
   const railPaddingLeft = Number.parseFloat(style.paddingLeft) || 0;
-  const maxScrollLeft = baseMaxScrollLeft(rail);
+  const maxScrollLeft = baseMaxScrollLeft(rail, shiftPx);
   return Array.from(content.children).map((child) => {
     const layoutOffset =
       (child as HTMLElement).offsetLeft - content.offsetLeft;
     const point = railPaddingLeft + layoutOffset - scrollPadding;
-    return Math.min(Math.max(point, 0), maxScrollLeft);
+    const clamped =
+      point > maxScrollLeft && point - maxScrollLeft > SNAP_CLAMP_EPSILON_PX
+        ? maxScrollLeft
+        : point;
+    return Math.max(clamped, 0);
   });
 }
 
@@ -159,37 +185,48 @@ export function useSnapRailDrag(): SnapRailDragControls {
     if (content !== null) {
       content.style.transform = "";
       content.style.marginRight = "";
+      const last = content.lastElementChild as HTMLElement | null;
+      if (last !== null) last.style.marginRight = "";
     }
   }, []);
 
   /** Резинка: вылет за край, px контента. Правый край расширяет диапазон
-   * прокрутки НАСТОЯЩИМ полем margin-right: scrollLeft уходит за обычный
-   * максимум нативно, гэп после контента и есть резинка; трансформ тут
+   * прокрутки НАСТОЯЩИМ полем margin-right НА ПОСЛЕДНЕЙ КАРТОЧКЕ: поле
+   * после карточек растит scrollWidth (он считается по детям) — scrollLeft
+   * уходит за обычный максимум нативно, гэп после ленты и есть резинка.
+   * (Поле на самом контент-диве работало, пока див был max-content; с
+   * w-full див уже 100% ширины, а карточки торчат из него — margin дива
+   * прячется за торчащими детьми и диапазон не расширяет: тянешь за край —
+   * лента стоит/уезжает от пальца, «не липкий край» 18.10.) Трансформ тут
    * ломал бы математику — Chrome считает трансформированные границы в
-   * scrollable overflow, сжимает scrollWidth и клампит scrollLeft
-   * (спираль «тянешь — а лента стоит»). Левый край — трансформ: в LTR
-   * левое переполнение в диапазон не входит, клампить нечему. Возврат —
-   * доезд scrollLeft к снапу (правый) и спад трансформа (левый). */
+   * scrollable overflow, сжимает scrollWidth и клампит scrollLeft (спираль
+   * «тянешь — а лента стоит»). Левый край — трансформ: в LTR левое
+   * переполнение в диапазон не входит, клампить нечему. Возврат — доезд
+   * scrollLeft к снапу (правый) и спад трансформа (левый). */
   const applyRubber = useCallback((overshootPx: number): void => {
     rubberRef.current = overshootPx;
     const content = contentRef.current;
     const rail = railRef.current;
     if (content === null || rail === null) return;
     const viewport = rail.clientWidth;
+    const last = content.lastElementChild as HTMLElement | null;
     if (overshootPx === 0 || viewport <= 0) {
       content.style.transform = "";
       content.style.marginRight = "";
+      if (last !== null) last.style.marginRight = "";
       return;
     }
     if (overshootPx > 0) {
       content.style.transform = "";
-      content.style.marginRight = `${rubberBandOffset(overshootPx, viewport)}px`;
+      if (last !== null) {
+        last.style.marginRight = `${rubberBandOffset(overshootPx, viewport)}px`;
+      }
       // Синхронный лэйаут: запись scrollLeft ниже должна клампиться уже
       // против расширенного максимума (только пока жест за краем).
       void rail.scrollWidth;
       return;
     }
-    content.style.marginRight = "";
+    if (last !== null) last.style.marginRight = "";
     content.style.transform = `translateX(${rubberBandOffset(-overshootPx, viewport)}px)`;
   }, []);
 
@@ -210,8 +247,14 @@ export function useSnapRailDrag(): SnapRailDragControls {
       const rail = railRef.current;
       if (rail === null) return;
       const content = contentRef.current;
+      // Текущий трансформ-вылет левой резинки — компенсация в rect-замере
+      // (правая резинка поле-расширение, rect не двигает).
+      const shiftPx =
+        rubberRef.current < 0
+          ? rubberBandOffset(-rubberRef.current, rail.clientWidth)
+          : 0;
       const snapPoints =
-        content !== null ? collectSnapPoints(rail, content) : [];
+        content !== null ? collectSnapPoints(rail, content, shiftPx) : [];
       if (content === null || snapPoints.length === 0) {
         clearRubber();
         restoreSnap(rail);
@@ -288,18 +331,23 @@ export function useSnapRailDrag(): SnapRailDragControls {
       }
       const fromRubber = rubberRef.current;
       if (fromRubber !== 0) {
-        const rubberSettle = criticalSettle(fromRubber, 0, velocityPxPerS);
-        if (rubberSettle.durationMs === 0) {
-          applyRubber(0);
-          bothComplete();
-        } else {
-          rubberAnimRef.current = animate(fromRubber, 0, {
-            duration: rubberSettle.durationMs / 1000,
-            ease: rubberSettle.ease,
-            onUpdate: (latest) => applyRubber(latest),
-            onComplete: bothComplete,
-          });
-        }
+        // Возврат резинки — пружина с лёгким отскоком (damping ~0.8 —
+        // таблица Apple для momentum-жестов; канон §8: отскок живёт только
+        // в резинке) и velocity handoff: пружина стартует со скоростью
+        // отпускания в сторону покоя. Короткий возврат из-под пальца
+        // критическим доездом читался резким спадом без «липкости» края.
+        const towardRubber = Math.max(
+          -Math.sign(fromRubber) * velocityPxPerS,
+          0,
+        );
+        rubberAnimRef.current = animate(fromRubber, 0, {
+          type: "spring",
+          bounce: 0.2,
+          duration: 0.4,
+          velocity: -Math.sign(fromRubber) * towardRubber,
+          onUpdate: (latest) => applyRubber(latest),
+          onComplete: bothComplete,
+        });
       } else {
         bothComplete();
       }
@@ -338,7 +386,7 @@ export function useSnapRailDrag(): SnapRailDragControls {
         startX: event.clientX,
         startY: event.clientY,
         startScrollLeft: rail.scrollLeft,
-        baseMax: baseMaxScrollLeft(rail),
+        baseMax: baseMaxScrollLeft(rail, 0),
         dragging: false,
         tracker: createVelocityTracker(),
       };
