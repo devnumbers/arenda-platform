@@ -38,6 +38,14 @@ type Querier interface {
 	// not-found: отменённая операция для всех чтений больше не существует.
 	CancelOperationByID(ctx context.Context, arg CancelOperationByIDParams) (int64, error)
 	CleanupExpiredIdempotencyKeys(ctx context.Context) (int64, error)
+	// The dangling-card-photo self-heal (ADR 0065): the storage no longer has
+	// the object the columns advertise (a fake-storage restart, a drifted
+	// bucket), so the key is cleared — but only while it is still the
+	// advertised one. A concurrent re-upload (a fresh key under the row lock)
+	// wins: 0 affected rows is the race verdict, the fresh photo must not be
+	// wiped by a reader that opened the dead object. The stream handler has
+	// already decided the 404 when it calls this.
+	ClearContactPhotoIfKey(ctx context.Context, arg ClearContactPhotoIfKeyParams) (int64, error)
 	// The favorites order save's full-replacement pass (ticket #576; the
 	// personal cutover #1308): the actor's favorites OUTSIDE the submitted list
 	// lose their positions — they fall to the end of the reading order («новое
@@ -48,6 +56,22 @@ type Querier interface {
 	// rule with its order intact (D16). '' keeps the empty list working (a save
 	// of nothing clears the whole visible personal order).
 	ClearGlobalPaymentFavoriteOrders(ctx context.Context, arg ClearGlobalPaymentFavoriteOrdersParams) (int64, error)
+	// The dangling-object-photo self-heal (ADR 0065): the storage no longer
+	// has the object the columns advertise (a fake-storage restart, a drifted
+	// bucket), so the key is cleared — but only while it is still the
+	// advertised one. A concurrent re-upload (a fresh key under the row lock)
+	// wins: 0 affected rows is the race verdict, the fresh photo must not be
+	// wiped by a reader that opened the dead object. The stream handler has
+	// already decided the 404 when it calls this.
+	ClearPropertyPhotoIfKey(ctx context.Context, arg ClearPropertyPhotoIfKeyParams) (int64, error)
+	// The dangling-photo self-heal (ADR 0065): the storage no longer has the
+	// object the columns advertise (a fake-storage restart, a drifted bucket),
+	// so the key is cleared — but only while it is still the advertised one.
+	// A concurrent re-upload (a fresh key under the row lock) wins: 0 affected
+	// rows is the race verdict, the fresh photo must not be wiped by a reader
+	// that opened the dead object. The stream handler has already decided the
+	// 404 when it calls this.
+	ClearUserPhotoIfKey(ctx context.Context, arg ClearUserPhotoIfKeyParams) (int64, error)
 	// Resume: close the open interval with today's date (the resume day is
 	// already outside the pause, [from, to)). The owner's resume closes any
 	// open pause — manual or system: while the property is archived the

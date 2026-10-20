@@ -143,6 +143,12 @@ type ContactStore interface {
 	// the book owner; existence and the edit capability are proven by the
 	// caller.
 	SetPhoto(ctx context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error)
+	// ClearPhotoIfKey repairs a dangling photo (ADR 0065): the storage has
+	// lost the advertised object, so the columns are cleared — but only
+	// while they still advertise the given key: a concurrent re-upload (a
+	// fresh key under the row lock) wins. The affected-row count is the
+	// race verdict.
+	ClearPhotoIfKey(ctx context.Context, id, ownerID uuid.UUID, key string) (int64, error)
 	WithTx(tx transaction.Tx) (ContactStore, error)
 }
 

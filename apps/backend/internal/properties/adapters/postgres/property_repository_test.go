@@ -586,3 +586,57 @@ func TestPropertyRepository_StudioTypeAccepted(t *testing.T) {
 		t.Errorf("type = %q, want studio", created.Type)
 	}
 }
+
+func TestPropertyRepository_ClearPhotoIfKey_Conditional(t *testing.T) {
+	t.Parallel()
+
+	pool := setupPropertiesIntegrationDB(t)
+	ctx := t.Context()
+	repo := NewPropertyRepository(pool)
+	ownerID := createTestOwner(t, pool)
+
+	property := sampleProperty(ownerID, domain.Attributes{})
+	created, err := repo.Create(ctx, ownerID, property)
+	if err != nil {
+		t.Fatalf("create property: %v", err)
+	}
+
+	key := "photos/" + uuid.Must(uuid.NewV7()).String() + ".jpg"
+	contentType := "image/jpeg"
+	if _, err := repo.SetPropertyPhoto(ctx, created.ID, ownerID, &key, &contentType); err != nil {
+		t.Fatalf("set photo: %v", err)
+	}
+
+	// A dead key that is no longer the advertised one clears nothing: the
+	// concurrent re-upload (a fresh key) wins the race.
+	rows, err := repo.ClearPhotoIfKey(ctx, created.ID, ownerID, "photos/dead-key.jpg")
+	if err != nil {
+		t.Fatalf("clear foreign key: %v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("foreign-key clear rows = %d, want 0", rows)
+	}
+	got, err := repo.GetByIDAndOwner(ctx, created.ID, ownerID)
+	if err != nil {
+		t.Fatalf("reload after foreign-key clear: %v", err)
+	}
+	if got.PhotoKey == nil || *got.PhotoKey != key {
+		t.Fatalf("photo key = %v, want the untouched %q", got.PhotoKey, key)
+	}
+
+	// The advertised key itself is cleared.
+	rows, err = repo.ClearPhotoIfKey(ctx, created.ID, ownerID, key)
+	if err != nil {
+		t.Fatalf("clear advertised key: %v", err)
+	}
+	if rows != 1 {
+		t.Fatalf("advertised-key clear rows = %d, want 1", rows)
+	}
+	got, err = repo.GetByIDAndOwner(ctx, created.ID, ownerID)
+	if err != nil {
+		t.Fatalf("reload after clear: %v", err)
+	}
+	if got.PhotoKey != nil || got.PhotoContentType != nil {
+		t.Fatalf("photo columns = (%v, %v), want cleared", got.PhotoKey, got.PhotoContentType)
+	}
+}

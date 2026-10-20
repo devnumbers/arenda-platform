@@ -268,6 +268,20 @@ SET photo_key = $2,
 WHERE id = $1
 RETURNING *;
 
+-- name: ClearUserPhotoIfKey :execrows
+-- The dangling-photo self-heal (ADR 0065): the storage no longer has the
+-- object the columns advertise (a fake-storage restart, a drifted bucket),
+-- so the key is cleared — but only while it is still the advertised one.
+-- A concurrent re-upload (a fresh key under the row lock) wins: 0 affected
+-- rows is the race verdict, the fresh photo must not be wiped by a reader
+-- that opened the dead object. The stream handler has already decided the
+-- 404 when it calls this.
+UPDATE users
+SET photo_key = NULL,
+    photo_content_type = NULL,
+    updated_at = now()
+WHERE id = $1 AND photo_key = $2;
+
 -- name: UsersShareReadableProperty :one
 -- The gate of the foreign profile-photo read (ADR 0065, решение владельца
 -- #1286 — «показ участникам»): the two users are connected when at least

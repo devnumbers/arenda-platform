@@ -354,6 +354,22 @@ func (r *PropertyRepository) SetPropertyPhoto(ctx context.Context, id, scope uui
 	return propertyFromRow(row), nil
 }
 
+// ClearPhotoIfKey repairs a dangling photo (ADR 0065): the columns are
+// cleared only while they still advertise the given key — a concurrent
+// re-upload (a fresh key under the row lock) wins. The affected-row count
+// is the race verdict: 0 rows means the key was already replaced.
+func (r *PropertyRepository) ClearPhotoIfKey(ctx context.Context, id, scope uuid.UUID, key string) (int64, error) {
+	rows, err := r.q().ClearPropertyPhotoIfKey(ctx, postgres.ClearPropertyPhotoIfKeyParams{
+		ID:       pgconv.UUIDToPgtype(id),
+		OwnerID:  pgconv.UUIDToPgtype(scope),
+		PhotoKey: pgconv.StringPtrToPgtype(&key),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("clear property photo %s: %w", id, err)
+	}
+	return rows, nil
+}
+
 func (r *PropertyRepository) Archive(ctx context.Context, id, scope uuid.UUID) error {
 	_, err := r.q().ArchiveProperty(ctx, postgres.ArchivePropertyParams{
 		ID:      pgconv.UUIDToPgtype(id),

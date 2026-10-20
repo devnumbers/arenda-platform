@@ -11,6 +11,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearContactPhotoIfKey = `-- name: ClearContactPhotoIfKey :execrows
+UPDATE contacts
+SET photo_key = NULL,
+    photo_content_type = NULL
+WHERE id = $1 AND owner_id = $2 AND photo_key = $3
+`
+
+type ClearContactPhotoIfKeyParams struct {
+	ID       pgtype.UUID `json:"id"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
+	PhotoKey pgtype.Text `json:"photo_key"`
+}
+
+// The dangling-card-photo self-heal (ADR 0065): the storage no longer has
+// the object the columns advertise (a fake-storage restart, a drifted
+// bucket), so the key is cleared — but only while it is still the
+// advertised one. A concurrent re-upload (a fresh key under the row lock)
+// wins: 0 affected rows is the race verdict, the fresh photo must not be
+// wiped by a reader that opened the dead object. The stream handler has
+// already decided the 404 when it calls this.
+func (q *Queries) ClearContactPhotoIfKey(ctx context.Context, arg ClearContactPhotoIfKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearContactPhotoIfKey, arg.ID, arg.OwnerID, arg.PhotoKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countContactsAdmin = `-- name: CountContactsAdmin :one
 SELECT COUNT(*) FROM contacts
 WHERE property_id = $1

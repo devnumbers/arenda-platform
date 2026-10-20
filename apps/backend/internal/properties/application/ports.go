@@ -280,6 +280,12 @@ type PropertyRepository interface {
 	// 0065): nil clears the photo. The scope is the property's owner — the
 	// edit capability is resolved by the service's policy before the call.
 	SetPropertyPhoto(ctx context.Context, id, scope uuid.UUID, key, contentType *string) (domain.Property, error)
+	// ClearPhotoIfKey repairs a dangling photo (ADR 0065): the storage has
+	// lost the advertised object, so the columns are cleared — but only
+	// while they still advertise the given key: a concurrent re-upload (a
+	// fresh key under the row lock) wins. The affected-row count is the
+	// race verdict.
+	ClearPhotoIfKey(ctx context.Context, id, scope uuid.UUID, key string) (int64, error)
 	Archive(ctx context.Context, id, scope uuid.UUID) error
 	Unarchive(ctx context.Context, id, scope uuid.UUID) error
 	CountActiveByOwner(ctx context.Context, scope uuid.UUID) (int, error)

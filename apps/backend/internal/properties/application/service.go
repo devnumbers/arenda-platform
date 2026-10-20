@@ -1889,6 +1889,14 @@ func (s *PropertyService) OpenPropertyPhoto(
 	body, size, contentType, err = s.photoStorage.Open(ctx, *property.PhotoKey)
 	if err != nil {
 		if errors.Is(err, storageshared.ErrNotFound) {
+			// The columns advertise an object the storage no longer has: the
+			// dangling key is healed so the object stops promising a photo
+			// the stream will never deliver. The conditional clear spares a
+			// concurrent re-upload; this viewer still gets the honest
+			// ErrPhotoNotFound.
+			if _, healErr := s.repo.ClearPhotoIfKey(ctx, id, property.OwnerID, *property.PhotoKey); healErr != nil {
+				return nil, 0, "", "", fmt.Errorf("heal dangling property photo: %w", healErr)
+			}
 			return nil, 0, "", "", ErrPhotoNotFound
 		}
 		return nil, 0, "", "", fmt.Errorf("open property photo: %w", err)

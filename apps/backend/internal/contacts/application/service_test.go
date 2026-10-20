@@ -130,6 +130,22 @@ func (s *fakeContactStore) SetPhoto(_ context.Context, id, ownerID uuid.UUID, ke
 	return c, nil
 }
 
+// ClearPhotoIfKey mirrors the conditional UPDATE: only the still-advertised
+// key is cleared, a concurrently replaced key survives untouched.
+func (s *fakeContactStore) ClearPhotoIfKey(_ context.Context, id, ownerID uuid.UUID, key string) (int64, error) {
+	c, ok := s.byID[id]
+	if !ok || c.OwnerID != ownerID {
+		return 0, ErrNotFound
+	}
+	if c.PhotoKey == nil || *c.PhotoKey != key {
+		return 0, nil
+	}
+	c.PhotoKey = nil
+	c.PhotoContentType = nil
+	s.byID[id] = c
+	return 1, nil
+}
+
 func (s *fakeContactStore) WithTx(transaction.Tx) (ContactStore, error) { return s, nil }
 
 // fakePropertyStore resolves the canned owner of each property.

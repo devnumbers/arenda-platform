@@ -12,6 +12,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearUserPhotoIfKey = `-- name: ClearUserPhotoIfKey :execrows
+UPDATE users
+SET photo_key = NULL,
+    photo_content_type = NULL,
+    updated_at = now()
+WHERE id = $1 AND photo_key = $2
+`
+
+type ClearUserPhotoIfKeyParams struct {
+	ID       pgtype.UUID `json:"id"`
+	PhotoKey pgtype.Text `json:"photo_key"`
+}
+
+// The dangling-photo self-heal (ADR 0065): the storage no longer has the
+// object the columns advertise (a fake-storage restart, a drifted bucket),
+// so the key is cleared — but only while it is still the advertised one.
+// A concurrent re-upload (a fresh key under the row lock) wins: 0 affected
+// rows is the race verdict, the fresh photo must not be wiped by a reader
+// that opened the dead object. The stream handler has already decided the
+// 404 when it calls this.
+func (q *Queries) ClearUserPhotoIfKey(ctx context.Context, arg ClearUserPhotoIfKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearUserPhotoIfKey, arg.ID, arg.PhotoKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countNewUsersLast30dAdmin = `-- name: CountNewUsersLast30dAdmin :one
 SELECT COUNT(*) FROM users
 WHERE created_at >= now() - interval '30 days'

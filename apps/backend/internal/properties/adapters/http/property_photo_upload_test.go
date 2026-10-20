@@ -95,6 +95,10 @@ func (r *photoWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key
 	return r.property, nil
 }
 
+func (r *photoWireRepo) ClearPhotoIfKey(context.Context, uuid.UUID, uuid.UUID, string) (int64, error) {
+	return 0, nil
+}
+
 func (r *photoWireRepo) Archive(context.Context, uuid.UUID, uuid.UUID) error   { return nil }
 func (r *photoWireRepo) Unarchive(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (r *photoWireRepo) CountActiveByOwner(context.Context, uuid.UUID) (int, error) {
