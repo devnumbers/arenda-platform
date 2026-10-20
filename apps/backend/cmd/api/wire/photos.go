@@ -34,6 +34,14 @@ func WirePhotoStorage(ctx context.Context, p platformDeps) (storageshared.PhotoS
 		return s3Storage, nil
 	}
 
+	// The fake keeps photos in memory only: in a strict env (stage,
+	// production) that means every upload dies with the process while the
+	// DB keys keep pointing into the bucket — warn loudly, the drift must
+	// not survive unnoticed (прод-инцидент 20.10: ENV_FILE оставил fake).
+	if p.Cfg.AppEnv != "local" && p.Cfg.AppEnv != "dev" {
+		p.Logger.WarnContext(ctx, "photo storage is the in-memory fake: photos are lost on restart",
+			"provider", "fake", "env", p.Cfg.AppEnv)
+	}
 	p.Logger.InfoContext(ctx, "photo storage initialized", "provider", "fake")
 	return objectstorage.NewFakeStorage(), nil
 }

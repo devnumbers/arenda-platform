@@ -9,6 +9,12 @@
 // embedded payload (OWASP file-upload guidance); webp is not decoded at all
 // (the Go toolchain cannot encode webp) — its RIFF EXIF/XMP chunks are cut
 // and the container rebuilt.
+//
+// The orientation the EXIF described is baked into the pixels — the strip
+// removes the tag, and a photo stored with its sensor raster would display
+// sideways or mirrored everywhere. JPEG and PNG get their pixels rewritten
+// here; a rotated webp keeps a minimal EXIF chunk carrying nothing but the
+// orientation tag, the only entry its viewer needs.
 package photo
 
 import (
@@ -139,7 +145,9 @@ func newTooLargeError(size, limit int64) error {
 
 // stripJPEG re-encodes the image: EXIF/GPS live in APP1 markers a re-encode
 // never carries. DecodeConfig first — the pixel bound must fire before a
-// full decode allocates.
+// full decode allocates. The orientation is read from the original bytes
+// and baked into the pixels before the re-encode: the tag dies with the
+// strip, so the correction it described must not.
 func stripJPEG(data []byte, lim limits) ([]byte, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
@@ -153,14 +161,15 @@ func stripJPEG(data []byte, lim limits) ([]byte, error) {
 		return nil, fmt.Errorf("%w: broken jpeg: %w", ErrUnsupportedFormat, err)
 	}
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
+	if err := jpeg.Encode(&buf, applyOrientation(img, jpegEXIFOrientation(data)), &jpeg.Options{Quality: jpegQuality}); err != nil {
 		return nil, fmt.Errorf("re-encode jpeg: %w", err)
 	}
 	return buf.Bytes(), nil
 }
 
 // stripPNG re-encodes the image: lossless for the pixels, but ancillary
-// chunks (tEXt, eXIf, iCCP) do not survive.
+// chunks (tEXt, eXIf, iCCP) do not survive. An eXIf orientation is baked
+// into the pixels for the same reason as the jpeg one.
 func stripPNG(data []byte, lim limits) ([]byte, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
@@ -174,7 +183,7 @@ func stripPNG(data []byte, lim limits) ([]byte, error) {
 		return nil, fmt.Errorf("%w: broken png: %w", ErrUnsupportedFormat, err)
 	}
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	if err := png.Encode(&buf, applyOrientation(img, pngEXIFOrientation(data))); err != nil {
 		return nil, fmt.Errorf("re-encode png: %w", err)
 	}
 	return buf.Bytes(), nil
@@ -188,8 +197,11 @@ func newPixelBombError(cfg image.Config, lim limits) error {
 // webpHeaderLen is the fixed RIFF container head: fourcc + size + "WEBP".
 const webpHeaderLen = 12
 
-// stripWebP cuts the EXIF and XMP RIFF chunks without decoding (ADR 0065:
-// webp travels verbatim) and rebuilds the container with the new size.
+// stripWebP cuts the XMP RIFF chunk and rewrites the EXIF one without
+// decoding (ADR 0065: webp travels verbatim — the Go toolchain cannot
+// re-encode webp pixels). A rotated webp keeps a minimal EXIF chunk with
+// only the orientation tag, the one entry the viewer needs to display it
+// upright; every other entry of the original blob dies with the chunk.
 // Chunks are top-level: EXIF metadata only exists in the extended format
 // next to VP8X; a simple lossy/lossless webp carries none and passes
 // through byte-identical.
@@ -208,16 +220,19 @@ func stripWebP(data []byte) ([]byte, error) {
 		if end > int64(len(data)) {
 			return nil, fmt.Errorf("%w: broken webp: chunk %q overruns the container", ErrUnsupportedFormat, fourcc)
 		}
-		if fourcc != "EXIF" && fourcc != "XMP " {
-			chunk := data[pos:end]
-			if _, err := out.Write(chunk); err != nil {
-				return nil, fmt.Errorf("keep webp chunk: %w", err)
-			}
-			if size%2 == 1 && end < int64(len(data)) {
-				// The odd-chunk pad byte travels with its chunk.
-				if _, err := out.Write(data[end : end+1]); err != nil {
-					return nil, fmt.Errorf("keep webp pad byte: %w", err)
+		switch {
+		case fourcc == "EXIF":
+			// A rotated webp keeps a minimal orientation-only chunk; an
+			// upright one loses its EXIF entirely, as before the
+			// orientation handling existed.
+			if o := webpEXIFOrientation(data[pos+8 : end]); o >= 2 {
+				if err := writeWebPChunk(&out, "EXIF", orientationEXIF(o)); err != nil {
+					return nil, fmt.Errorf("rewrite webp exif chunk: %w", err)
 				}
+			}
+		case fourcc != "XMP ":
+			if err := copyWebPChunk(&out, data, pos, end, size); err != nil {
+				return nil, err
 			}
 		}
 		pos = end + size%2
@@ -234,4 +249,45 @@ func stripWebP(data []byte) ([]byte, error) {
 	}
 	binary.LittleEndian.PutUint32(out.Bytes()[4:8], uint32(riffSize))
 	return out.Bytes(), nil
+}
+
+// copyWebPChunk carries one untouched chunk into out, its odd-length
+// padding byte included.
+func copyWebPChunk(out *bytes.Buffer, data []byte, pos, end, size int64) error {
+	if _, err := out.Write(data[pos:end]); err != nil {
+		return fmt.Errorf("keep webp chunk: %w", err)
+	}
+	if size%2 == 1 && end < int64(len(data)) {
+		if _, err := out.Write(data[end : end+1]); err != nil {
+			return fmt.Errorf("keep webp pad byte: %w", err)
+		}
+	}
+	return nil
+}
+
+// writeWebPChunk writes one RIFF chunk: fourcc + size + payload + the
+// odd-length padding byte the RIFF spec mandates.
+func writeWebPChunk(out *bytes.Buffer, fourcc string, payload []byte) error {
+	if _, err := out.WriteString(fourcc); err != nil {
+		return err
+	}
+	payloadSize := len(payload)
+	if payloadSize > math.MaxUint32 {
+		return fmt.Errorf("webp chunk %q payload size %d out of bounds", fourcc, payloadSize)
+	}
+	var size [4]byte
+	// The narrowing above is bounded by the explicit comparison (gosec).
+	binary.LittleEndian.PutUint32(size[:], uint32(payloadSize))
+	if _, err := out.Write(size[:]); err != nil {
+		return err
+	}
+	if _, err := out.Write(payload); err != nil {
+		return err
+	}
+	if len(payload)%2 == 1 {
+		if err := out.WriteByte(0); err != nil {
+			return err
+		}
+	}
+	return nil
 }
