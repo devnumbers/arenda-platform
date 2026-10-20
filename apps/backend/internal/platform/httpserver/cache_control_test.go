@@ -26,11 +26,11 @@ func TestNoStoreCache_DefaultHeader(t *testing.T) {
 }
 
 // Хендлер, который хочет кэширование, перекрывает дефолт: фото-эндпоинты
-// (ADR 0065) ставят свой private, max-age=300 — Set поверх Set выигрывает.
+// (ADR 0065) ставят свой immutable-заголовок — Set поверх Set выигрывает.
 func TestNoStoreCache_HandlerOverrides(t *testing.T) {
 	t.Parallel()
 	handler := noStoreCache()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Cache-Control", "private, max-age=300")
+		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -38,7 +38,7 @@ func TestNoStoreCache_HandlerOverrides(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, r)
 
-	if got := rr.Header().Get("Cache-Control"); got != "private, max-age=300" {
+	if got := rr.Header().Get("Cache-Control"); got != "private, max-age=31536000, immutable" {
 		t.Fatalf("Cache-Control = %q, want the photo override", got)
 	}
 }

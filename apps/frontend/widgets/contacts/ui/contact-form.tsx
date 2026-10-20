@@ -29,7 +29,6 @@ const NOTE_MAX = 1024;
  */
 export function ContactForm({
   form,
-  contactId,
   photoUrl,
   photoStage,
   photoBusy,
@@ -43,8 +42,6 @@ export function ContactForm({
   onSubmit,
 }: {
   readonly form: ContactFormFields;
-  /** uuid карточки — на создании ещё нет (бастер слота тогда не нужен). */
-  readonly contactId?: string;
   /** Серверное фото карточки; на создании карточки нет — null. */
   readonly photoUrl?: string | null;
   /** Незавершённое изменение фото из черновика экрана (ContactPhotoStage). */
@@ -90,7 +87,6 @@ export function ContactForm({
        * либо фото; бейдж-корзина и ссылка по канону 1299:51572/73. */}
       <div className="flex justify-center">
         <ContactPhotoSlot
-          contactId={contactId}
           photoUrl={photoUrl}
           stage={photoStage}
           busy={photoBusy}

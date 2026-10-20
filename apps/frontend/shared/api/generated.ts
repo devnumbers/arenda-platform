@@ -2349,7 +2349,7 @@ export interface components {
             email?: string | null;
             /** @description IANA timezone identifier, e.g. Europe/Moscow. */
             timezone?: string | null;
-            /** @description The profile photo's same-origin streaming path (ADR 0065): /api/me/photo, served with the session cookie; null when the profile has no photo. Only the owner reads it. */
+            /** @description The profile photo's same-origin streaming path (ADR 0065): /api/me/photo with the key's cache version as ?v= (a replaced photo is a new URL — the browser never serves previous bytes), served with the session cookie; null when the profile has no photo. Only the owner reads it. */
             photoUrl?: string | null;
             subscription?: components["schemas"]["Subscription"];
         };
@@ -2728,7 +2728,7 @@ export interface components {
             description?: string | null;
             attributes: components["schemas"]["PropertyAttributes"];
             status: components["schemas"]["PropertyStatus"];
-            /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo; null when the object has no photo. */
+            /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo with the key's cache version as ?v= (a replaced photo is a new URL); null when the object has no photo. */
             photoUrl?: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -2958,7 +2958,7 @@ export interface components {
             propertyId?: string | null;
             /** @description The display name of the bound property; null for an unbound card. A list projection only — the card read resolves the property by its id. */
             propertyName?: string | null;
-            /** @description The card photo's same-origin streaming path (ADR 0065): /api/contacts/{id}/photo, served with the session cookie; null when the card has no photo. */
+            /** @description The card photo's same-origin streaming path (ADR 0065): /api/contacts/{id}/photo with the key's cache version as ?v= (a replaced photo is a new URL), served with the session cookie; null when the card has no photo. */
             photoUrl?: string | null;
             firstName: string;
             lastName: string;
@@ -3339,7 +3339,7 @@ export interface components {
              * @description The actor's personal pin (ticket #577, the personal cutover #1307): null — not pinned by this actor, a moment — pinned since then. The cards order the pinned first — the actor's own order, never another participant's.
              */
             pinnedAt: string | null;
-            /** @description The card avatar's photo — the object's first (oldest) photo (ticket #582); with the private photos (ADR 0065) one image per object, streamed by the backend; null when the object has no photo. */
+            /** @description The object card's photo avatar (ticket #582); with the private photos (ADR 0065) one image per object, streamed by the backend, the key's cache version riding as ?v=; null when the object has no photo. */
             photoUrl: string | null;
             /** @description The «Автоплатежи» group — the object's auto-pay rules. */
             autoPayRules: components["schemas"]["PaymentObjectKey"][];
@@ -4605,7 +4605,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The profile photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. Only the owner reads it; showing the avatar to other users is a separate decision outside this contract. */
+            /** @description The profile photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private + immutable (the bytes are immutable per key; the DTO photoUrl carries the key's version as ?v=), ETag is the key hash — a matching If-None-Match answers 304 without a storage read. Only the owner reads it; showing the avatar to other users is a separate decision outside this contract. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4689,7 +4689,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The profile photo bytes, streamed by the backend (ADR 0065; решение владельца #1286 — то самое «показ участникам» из ADR 0065): читает сам пользователь и каждый, с кем их связывает хотя бы один объект, читаемый обеими сторонами (ADR 0028, derived read, симметрично). Нет связи или нет фото — один и тот же 404: существование фото не раскрывается. Cookie-auth, Cache-Control private, ETag — хеш ключа: совпавший If-None-Match отвечает 304 без чтения хранилища. */
+            /** @description The profile photo bytes, streamed by the backend (ADR 0065; решение владельца #1286 — то самое «показ участникам» из ADR 0065): читает сам пользователь и каждый, с кем их связывает хотя бы один объект, читаемый обеими сторонами (ADR 0028, derived read, симметрично). Нет связи или нет фото — один и тот же 404: существование фото не раскрывается. Cookie-auth, Cache-Control private + immutable (байты неизменны по ключу, photoUrl несёт версию ключа как ?v=), ETag — хеш ключа: совпавший If-None-Match отвечает 304 без чтения хранилища. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5175,7 +5175,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The property photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. */
+            /** @description The property photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private + immutable (the bytes are immutable per key; the DTO photoUrl carries the key's version as ?v=), ETag is the key hash — a matching If-None-Match answers 304 without a storage read. */
             200: {
                 headers: {
                     [name: string]: unknown;

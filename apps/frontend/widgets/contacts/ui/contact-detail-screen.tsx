@@ -9,15 +9,10 @@ import { notify } from '@/shared/lib/notifications';
 import { type Contact } from '@/entities/contact';
 import type { Property } from '@/entities/property';
 import { propertyPermissions, propertyTypeIcons } from '@/entities/property';
-import {
-  useContact,
-  useContactPhotoBuster,
-  useDeleteContact,
-} from '@/features/contacts';
-import { useProperty, usePropertyPhotoBuster } from '@/features/properties';
+import { useContact, useDeleteContact } from '@/features/contacts';
+import { useProperty } from '@/features/properties';
 import { useCopiedHint } from '@/shared/lib/hooks/use-copied-hint';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
-import { photoDisplayUrl } from '@/shared/lib/photo';
 import { ConfirmDialog, CirclePhoto, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { contactInfoView, type ContactValueRow } from '../lib/contact-detail-model';
 import { ContactDetailHeader } from './contact-detail-header';
@@ -151,24 +146,12 @@ function ContactCardBody({
   const boundPropertyId = contact.propertyId;
   // Выборка из статичного реестра, не вызов: react-hooks/static-components.
   const BoundPropertyGlyph = boundProperty !== undefined ? propertyTypeIcons[boundProperty.type] : undefined;
-  // Бастер кэша выдачи (тикет #1229, ADR 0065): правка фото возвращает
-  // на карточку с тем же путём выдачи — без ?v=N <img> показал бы прежние
-  // байты из кэша браузера до 5 минут.
-  const photoBuster = useContactPhotoBuster(contact.id);
-  const photoUrl =
-    contact.photoUrl !== undefined
-      ? photoDisplayUrl(contact.photoUrl, photoBuster)
-      : null;
-  // Бастер фото привязанного объекта (тикет #1423, ADR 0065): правка фото
-  // объектным слотом тоже возвращает на карточку контакта; до фикса фото
-  // объекта рисовалось сырым <img> без onError и бастера — единственный
-  // отход от канона #1275/#1229.
-  const boundPhotoBuster = usePropertyPhotoBuster(boundPropertyId ?? '');
+  // URL выдачи версионирован бэком (?v= по ключу, ADR 0065): правка фото
+  // несёт новый photoUrl — <img> перезапрашивает байты без клиентского
+  // бастера.
+  const photoUrl = contact.photoUrl ?? null;
   const boundPhoto = boundProperty?.photoUrl;
-  const boundPhotoUrl =
-    boundPhoto != null && boundPhoto !== ''
-      ? photoDisplayUrl(boundPhoto, boundPhotoBuster)
-      : null;
+  const boundPhotoUrl = boundPhoto != null && boundPhoto !== '' ? boundPhoto : null;
 
   return (
     <div className="flex flex-col px-6 pb-8">

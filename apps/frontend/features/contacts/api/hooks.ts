@@ -186,9 +186,9 @@ export function useDeleteContact(
 /**
  * Загрузка/замена фото карточки (ADR 0065, тикет #1229): ответ несёт
  * обновлённый контакт — он сразу становится детальным кэшем (фото видно
- * без рефетча), книга инвалидается как обычная мутация карточки. Бастер
- * photoBuster инкрементится рядом: путь выдачи не меняется, без него
- * <img> показал бы прежние байты из кэша браузера (private, max-age=300).
+ * без рефетча), книга инвалидается как обычная мутация карточки. Путь
+ * выдачи версионирован бэком (?v= по ключу): ответ с новым фото несёт
+ * новый photoUrl — <img> перезапрашивает байты без клиентского бастера.
  * onProgress — проценты XHR-выгрузки (план 036), экран пишет их в стейт
  * кольца слота.
  */
@@ -202,7 +202,6 @@ export function useUploadContactPhoto(): UseMutationResult<
     mutationFn: ({ id, file, onProgress }) => uploadContactPhoto({ id, file, onProgress }),
     onSuccess: (contact, { id }) => {
       queryClient.setQueryData(contactKeys.detail(id), contact);
-      bumpContactPhotoBuster(queryClient, id);
       void queryClient.invalidateQueries({ queryKey: contactKeys.all });
     },
   });
@@ -210,9 +209,7 @@ export function useUploadContactPhoto(): UseMutationResult<
 
 /**
  * Удаление фото карточки (ADR 0065): 204 без тела — деталь патчится
- * локально (photoUrl без фото) и инвалидается вместе с книгой; бастер
- * инкрементится, чтобы повторная загрузка в окно кэша выдачи перечитала
- * байты.
+ * локально (photoUrl без фото) и инвалидается вместе с книгой.
  */
 export function useDeleteContactPhoto(): UseMutationResult<
   void,
@@ -226,37 +223,7 @@ export function useDeleteContactPhoto(): UseMutationResult<
       queryClient.setQueryData<Contact>(contactKeys.detail(id), (prev) =>
         prev === undefined ? prev : { ...prev, photoUrl: undefined },
       );
-      bumpContactPhotoBuster(queryClient, id);
       void queryClient.invalidateQueries({ queryKey: contactKeys.all });
     },
   });
-}
-
-/** Инкремент бастера кэша выдачи (см. contactKeys.photoBuster) — общая
- * точка фото-мутаций: одна запись, все читатели перерисовывают src. */
-function bumpContactPhotoBuster(
-  queryClient: ReturnType<typeof useQueryClient>,
-  id: string,
-): void {
-  queryClient.setQueryData<number>(
-    contactKeys.photoBuster(id),
-    (version = 0) => version + 1,
-  );
-}
-
-/**
- * Текущий бастер кэша выдачи фото карточки (тикет #1229): чтение из кэша
- * без сети — пишут только фото-мутации (bumpContactPhotoBuster), ноль до
- * первой мутации сессии. Подписка реактивна: слот и карточка
- * перерисовывают src вместе с любым инкрементом.
- */
-export function useContactPhotoBuster(contactId: string): number {
-  const { data } = useQuery({
-    queryKey: contactKeys.photoBuster(contactId),
-    queryFn: () => 0,
-    enabled: false,
-    initialData: 0,
-    staleTime: Infinity,
-  });
-  return data;
 }

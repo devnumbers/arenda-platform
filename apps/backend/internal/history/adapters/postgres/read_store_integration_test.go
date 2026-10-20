@@ -28,6 +28,7 @@ import (
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/database/testdb"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // kindPayment is the wire's payment kind — the filters test's constant.
@@ -1315,8 +1316,13 @@ func TestReadStore_FilterOptionsObjects(t *testing.T) {
 	if len(opts.Objects) != 1 || opts.Objects[0].ID != property {
 		t.Fatalf("objects: want only the visible one, got %+v", opts.Objects)
 	}
-	if opts.Objects[0].PhotoURL != "/api/properties/"+property.String()+"/photo" {
-		t.Fatalf("photo avatar: want the streaming path, got %q", opts.Objects[0].PhotoURL)
+	// SQL собирает путь вместе с версией ключа: вывод Postgres (sha256 в
+	// запросе) обязан совпадать с выводом Go-хелпера — они вместе держат
+	// версионный кэш выдачи (ADR 0065).
+	wantPhoto := storageshared.VersionedPhotoURL("/api/properties/"+property.String()+"/photo",
+		"photos/01987654-3210-7abc-9def-0123456789ab.jpg")
+	if opts.Objects[0].PhotoURL != wantPhoto {
+		t.Fatalf("photo avatar: want the versioned streaming path %q, got %q", wantPhoto, opts.Objects[0].PhotoURL)
 	}
 }
 
@@ -1562,4 +1568,42 @@ func assertLegacyRowLegs(t *testing.T, legacyRow domain.FeedEntry) {
 	if legacyRow.ActorName != ghostActorName {
 		t.Errorf("anonymized snapshot = %q, want «%s» to survive", legacyRow.ActorName, ghostActorName)
 	}
+}
+
+// TestReadStore_ParticipantPhotoVersionMatchesGo pins the SQL↔Go agreement
+// for the ACTOR user-photo path (ADR 0065 аменд 2026-10-20): the SQL composes
+// /api/users/{id}/photo?v=<sha256(key)[:16]> — its output must equal the
+// Go helper's, otherwise the immutable cache serves stale actor avatars.
+func TestReadStore_ParticipantPhotoVersionMatchesGo(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Setup(t)
+	owner := seedUser(t, pool, "Иван", "Иванов", "ivan@example.com")
+	member := seedUser(t, pool, "Пётр", "Петров", "petr@example.com")
+	property := seedProperty(t, pool, owner)
+	seedMembership(t, pool, property, member)
+
+	photoKey := "photos/01987654-3210-7abc-9def-0123456789ab.jpg"
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE users SET photo_key = $2, photo_content_type = 'image/jpeg' WHERE id = $1`,
+		member, photoKey,
+	); err != nil {
+		t.Fatalf("seed member photo: %v", err)
+	}
+
+	svc := newReadStack(pool)
+	opts, err := svc.Filters(t.Context(), owner, nil)
+	if err != nil {
+		t.Fatalf("filters: %v", err)
+	}
+	for _, p := range opts.Participants {
+		if p.ID != member {
+			continue
+		}
+		want := storageshared.VersionedPhotoURL("/api/users/"+member.String()+"/photo", photoKey)
+		if p.PhotoURL != want {
+			t.Fatalf("participant photo: want %q, got %q", want, p.PhotoURL)
+		}
+		return
+	}
+	t.Fatalf("member not among participants: %+v", opts.Participants)
 }

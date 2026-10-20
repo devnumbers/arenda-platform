@@ -19,6 +19,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/generated/postgres"
 	propertiesdomain "github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/clock"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // AdminRepository implements the admin application ports using generated SQLC queries.
@@ -230,12 +231,13 @@ func (r *AdminRepository) propertyViewFromRow(row postgres.ListPropertiesAdminRo
 
 // adminPropertyPhotoURL is the property photo's same-origin streaming path
 // (ADR 0065); empty without a photo. The storage key never leaves the
-// backend — the admin sees the photo through the same streaming endpoint.
+// backend — the admin sees the photo through the same streaming endpoint;
+// the key's version rides as ?v= so a replaced photo is a new URL.
 func adminPropertyPhotoURL(propertyID uuid.UUID, key pgtype.Text) string {
 	if !key.Valid {
 		return ""
 	}
-	return "/api/properties/" + propertyID.String() + "/photo"
+	return storageshared.VersionedPhotoURL("/api/properties/"+propertyID.String()+"/photo", key.String)
 }
 
 // ListContacts implements ContactRepository.ListContacts: the property's

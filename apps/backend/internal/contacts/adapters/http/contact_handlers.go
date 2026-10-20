@@ -19,6 +19,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -346,12 +347,13 @@ func contactResponse(c domain.Contact) openapi.ContactResponse {
 
 // contactPhotoURL is the card photo's same-origin streaming path (ADR 0065):
 // nil without a photo. The path is contract-fixed; the photo bytes are
-// served by GET /api/contacts/{id}/photo.
+// served by GET /api/contacts/{id}/photo, and the key's version rides as
+// ?v= so a replaced photo is a new URL.
 func contactPhotoURL(c domain.Contact) *string {
 	if c.PhotoKey == nil {
 		return nil
 	}
-	path := fmt.Sprintf("/api/contacts/%s/photo", c.ID)
+	path := storageshared.VersionedPhotoURL(fmt.Sprintf("/api/contacts/%s/photo", c.ID), *c.PhotoKey)
 	return &path
 }
 

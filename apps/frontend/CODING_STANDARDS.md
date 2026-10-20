@@ -47,10 +47,10 @@ Adding a new slice: user scenario → feature; domain model shared across scenar
 
 Пользовательские фото (объекты, профиль, контакты) — same-origin стриминг бэка (ADR 0065); дизайн-канон кругов — `DESIGN.md` §10 «Пользовательские фото». Инженерные правила (#1423):
 
-- Отображение — только примитив `CirclePhoto` (`shared/ui/design`): глиф-подложка, onLoad-проявление, гард пустого пути, `decoding="async"`; `next/image` для них запрещён (ADR 0065). Чистое решение показа — `circlePhotoView`, юнит-тесты — на нём (vitest без DOM).
-- Слои: чистые хелперы — `shared/lib/photo.ts` (кап 5 МиБ, бастер, data-URL); stage-правила слотов — `features/<slice>/lib/photo.ts`; рендер — слоты `widgets/*/ui/*-photo-slot.tsx`. Нового фото-слоя в другом месте не заводить.
+- Отображение — только примитив `CirclePhoto` (`shared/ui/design`): глиф-подложка, проявление по готовности (onLoad + ref-проверка `complete` — кэш immutable-выдачи может завершиться до навески слушателя), один ретрай с нонсом `&r=N` на первую ошибку, гард пустого пути, `decoding="async"`; `next/image` для них запрещён (ADR 0065). Чистое решение показа — `circlePhotoView`, юнит-тесты — на нём (vitest без DOM).
+- Слои: чистые хелперы — `shared/lib/photo.ts` (кап 5 МиБ, data-URL); stage-правила слотов — `features/<slice>/lib/photo.ts`; рендер — слоты `widgets/*/ui/*-photo-slot.tsx`. Нового фото-слоя в другом месте не заводить.
 - Загрузка — только `uploadFile` (`shared/api/upload`, XHR с `onProgress`); `fetch`/`apiClient` для файлов запрещены (fetch не отдаёт upload-progress). Прогресс экран пишет в стейт и отдаёт слоту (`progress` → `PhotoProgressRing`); DELETE без кольца.
-- Бастер `?v=N` — клиентский счётчик react-query (`photoBuster`-ключи): пишут только фото-мутации (`bump*PhotoBuster`), читают `use*PhotoBuster`. **Инвариант**: `<img>` не перемонтируется при мутации — свап `src` на живом элементе (анти-мигание, старый кадр до декода нового); `key={version}` запрещён.
+- Версия кэша — **серверная**: `photoUrl` приходит с бэка уже с `?v=<sha256(ключа)[:16]>` (аменд ADR 0065 2026-10-20) — замена фото = новый UUID-ключ = новый URL, выдача отвечает `immutable`; клиентский счётчик бастера снесён, фронт URL не строит. **Инвариант**: `<img>` не перемонтируется при мутации — свап `src` на живом элементе (анти-мигание, старый кадр до декода нового); `key={version}` запрещён.
 - Retry: staged-слоты (объект/контакт) держат stage при провале — повтор кнопкой сохранения; autosave-профиль держит файл (`MePhotoStage.failed`) — ретрай «Повторить» в тосте (action-канон `NotificationAction`) или тапом по кругу (`onRetry`).
 
 ## Forms

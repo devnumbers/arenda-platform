@@ -123,10 +123,12 @@ paths:
         '200':
           description: >
             The profile photo bytes, streamed by the backend (ADR 0065):
-            cookie-auth, Cache-Control private, ETag is the key hash — a
-            matching If-None-Match answers 304 without a storage read. Only
-            the owner reads it; showing the avatar to other users is a
-            separate decision outside this contract.
+            cookie-auth, Cache-Control private + immutable (the bytes are
+            immutable per key; the DTO photoUrl carries the key's version as
+            ?v=), ETag is the key hash — a matching If-None-Match answers 304
+            without a storage read. Only the owner reads it; showing the
+            avatar to other users is a separate decision outside this
+            contract.
           content:
             image/jpeg:
               schema:
@@ -211,8 +213,9 @@ paths:
             хотя бы один объект, читаемый обеими сторонами (ADR 0028,
             derived read, симметрично). Нет связи или нет фото — один и тот
             же 404: существование фото не раскрывается. Cookie-auth,
-            Cache-Control private, ETag — хеш ключа: совпавший
-            If-None-Match отвечает 304 без чтения хранилища.
+            Cache-Control private + immutable (байты неизменны по ключу,
+            photoUrl несёт версию ключа как ?v=), ETag — хеш ключа:
+            совпавший If-None-Match отвечает 304 без чтения хранилища.
           content:
             image/jpeg:
               schema:
@@ -669,8 +672,10 @@ paths:
         '200':
           description: >
             The property photo bytes, streamed by the backend (ADR 0065):
-            cookie-auth, Cache-Control private, ETag is the key hash — a
-            matching If-None-Match answers 304 without a storage read.
+            cookie-auth, Cache-Control private + immutable (the bytes are
+            immutable per key; the DTO photoUrl carries the key's version as
+            ?v=), ETag is the key hash — a matching If-None-Match answers 304
+            without a storage read.
           content:
             image/jpeg:
               schema:
@@ -5714,8 +5719,10 @@ components:
           nullable: true
           description: >
             The profile photo's same-origin streaming path (ADR 0065):
-            /api/me/photo, served with the session cookie; null when the
-            profile has no photo. Only the owner reads it.
+            /api/me/photo with the key's cache version as ?v= (a replaced
+            photo is a new URL — the browser never serves previous bytes),
+            served with the session cookie; null when the profile has no
+            photo. Only the owner reads it.
         subscription:
           $ref: '#/components/schemas/Subscription'
           nullable: true
@@ -6443,7 +6450,9 @@ components:
           nullable: true
           description: >
             The property photo's same-origin streaming path (ADR 0065):
-            /api/properties/{id}/photo; null when the object has no photo.
+            /api/properties/{id}/photo with the key's cache version as ?v=
+            (a replaced photo is a new URL); null when the object has no
+            photo.
         createdAt:
           type: string
           format: date-time
@@ -6982,8 +6991,9 @@ components:
           nullable: true
           description: >
             The card photo's same-origin streaming path (ADR 0065):
-            /api/contacts/{id}/photo, served with the session cookie;
-            null when the card has no photo.
+            /api/contacts/{id}/photo with the key's cache version as ?v=
+            (a replaced photo is a new URL), served with the session
+            cookie; null when the card has no photo.
         firstName:
           type: string
         lastName:
@@ -7778,10 +7788,10 @@ components:
           type: string
           nullable: true
           description: >
-            The card avatar's photo — the object's first (oldest) photo
-            (ticket #582); with the private photos (ADR 0065) one image per
-            object, streamed by the backend; null when the object has no
-            photo.
+            The object card's photo avatar (ticket #582); with the private
+            photos (ADR 0065) one image per object, streamed by the backend,
+            the key's cache version riding as ?v=; null when the object has
+            no photo.
         autoPayRules:
           type: array
           description: The «Автоплатежи» group — the object's auto-pay rules.

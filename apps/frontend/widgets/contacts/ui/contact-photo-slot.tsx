@@ -4,7 +4,7 @@ import { useRef, useState, type ChangeEvent, type JSX } from 'react';
 import { notify } from '@/shared/lib/notifications';
 import { BoldUser } from '@/shared/assets/icons';
 import { PHOTO_FILE_TOO_LARGE_MESSAGE, photoFileTooLarge } from '@/shared/lib/photo';
-import { type ContactPhotoStage, contactPhotoDisplay, useContactPhotoBuster } from '@/features/contacts';
+import { type ContactPhotoStage, contactPhotoDisplay } from '@/features/contacts';
 import { Button, circleIconRing, CirclePhoto, ConfirmDialog, PhotoProgressRing, PhotoRemoveBadge } from '@/shared/ui/design';
 
 /**
@@ -13,7 +13,7 @@ import { Button, circleIconRing, CirclePhoto, ConfirmDialog, PhotoProgressRing, 
  * BoldUser либо фото. Управляемый и без сети: изменение фото живёт в
  * черновике формы (stage, ContactPhotoStage — решения владельца 08.10 с
  * #1228), что показывать, решает contactPhotoDisplay (staged-превью →
- * серверное фото с бастером → глиф), а применяют изменение кнопки
+ * серверное фото, URL версионирован бэком → глиф), а применяют изменение кнопки
  * сохранения экрана — onFileChosen и onRemove только переставляют stage,
  * уход без сохранения сервер не трогает. Круг — настоящая кнопка
  * (aria-label, клавиатура): без фото открывает пикер, с фото — замену.
@@ -33,9 +33,6 @@ const PHOTO_BUTTON_CLASS =
   'pressable flex cursor-pointer rounded-full outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none';
 
 export type ContactPhotoSlotProps = {
-  /** uuid карточки; на создании карточки ещё нет — бастер читается по
-   * пустому ключу (никогда не инкрементится, превью живёт в stage). */
-  readonly contactId?: string;
   /** same-origin стриминговый путь выдачи (ADR 0065), null/undefined — фото нет. */
   readonly photoUrl?: string | null;
   /** Незавершённое изменение фото из черновика экрана (см. выше). */
@@ -51,7 +48,6 @@ export type ContactPhotoSlotProps = {
 };
 
 export function ContactPhotoSlot({
-  contactId = '',
   photoUrl,
   stage,
   busy,
@@ -59,15 +55,13 @@ export function ContactPhotoSlot({
   onFileChosen,
   onRemove,
 }: ContactPhotoSlotProps): JSX.Element {
-  // Бастер читается по id (на создании — пустой ключ, не инкрементится);
-  // механика показа (битое фото → заглушка, гард '', ожидание) — примитив
+  // Механика показа (битое фото → заглушка, гард '', ожидание) — примитив
   // CirclePhoto (#1423); при битом фото круг с кантом остаётся — канон
   // UserAvatar/профильного слота.
-  const photoBuster = useContactPhotoBuster(contactId);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayUrl = contactPhotoDisplay(photoUrl ?? null, photoBuster, stage);
+  const displayUrl = contactPhotoDisplay(photoUrl ?? null, stage);
   const hasPhoto = displayUrl !== null;
 
   const openPicker = (): void => {

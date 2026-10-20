@@ -44,6 +44,11 @@ const (
 	senderSMTP     = "smtp"
 )
 
+// ProviderFile is the disk-backed photo storage provider of the local
+// development (PHOTO_STORAGE_PROVIDER=file, ADR 0065 аменд 2026-10-20);
+// exported — the wire branches on it when constructing the adapter.
+const ProviderFile = "file"
+
 // FAKE_AUTOCONFIRM values (issue #663): auto completes fake payments and card
 // bindings on the GET bank-return and redirects into the frontend; off is the
 // manual mode with POST-only confirmation endpoints plus the fail endpoint.
@@ -103,15 +108,19 @@ type Config struct {
 	PhotoStorageSecretKey               string
 	PhotoStorageProvider                string
 	PhotoStorageS3Enabled               bool
-	EmailSender                         string
-	EmailTemplatesDir                   string
-	SMTPHost                            string
-	SMTPPort                            string
-	SMTPUser                            string
-	SMTPPass                            string
-	SMTPFrom                            string
-	SMTPFromName                        string
-	SMTPTimeout                         time.Duration
+	// PhotoStorageFileDir is the object root of the disk-backed file
+	// provider (PHOTO_STORAGE_FILE_DIR): local development storage that
+	// survives backend restarts, unlike the in-memory fake.
+	PhotoStorageFileDir string
+	EmailSender         string
+	EmailTemplatesDir   string
+	SMTPHost            string
+	SMTPPort            string
+	SMTPUser            string
+	SMTPPass            string
+	SMTPFrom            string
+	SMTPFromName        string
+	SMTPTimeout         time.Duration
 	// FeedbackEmail is the mailbox for the public landing feedback form
 	// (POST /feedback, карта #1010). Optional: when unset, the endpoint
 	// answers 503 and the rest of the product keeps working.
@@ -1011,6 +1020,15 @@ func (c *Config) loadPhotoStorage() error {
 	switch c.PhotoStorageProvider {
 	case providerFake:
 		c.PhotoStorageS3Enabled = false
+	case ProviderFile:
+		// The disk-backed provider of the local development (ADR 0065):
+		// objects survive restarts, unlike the in-memory fake. The dir
+		// defaults beside the backend working directory.
+		c.PhotoStorageS3Enabled = false
+		c.PhotoStorageFileDir = os.Getenv("PHOTO_STORAGE_FILE_DIR")
+		if c.PhotoStorageFileDir == "" {
+			c.PhotoStorageFileDir = ".photo-storage"
+		}
 	case "s3":
 		if !s3Complete {
 			return fmt.Errorf(
@@ -1021,7 +1039,7 @@ func (c *Config) loadPhotoStorage() error {
 		}
 		c.PhotoStorageS3Enabled = true
 	default:
-		return fmt.Errorf("invalid PHOTO_STORAGE_PROVIDER %q: must be fake or s3", c.PhotoStorageProvider)
+		return fmt.Errorf("invalid PHOTO_STORAGE_PROVIDER %q: must be fake, file or s3", c.PhotoStorageProvider)
 	}
 	return nil
 }

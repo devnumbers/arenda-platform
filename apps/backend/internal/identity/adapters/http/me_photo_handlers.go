@@ -57,7 +57,7 @@ func (h *AuthHandlers) servePhoto(w http.ResponseWriter, r *http.Request, viewer
 	// stays honest.
 	etag := storageshared.ETagOf(key)
 	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("Cache-Control", httpsupport.PhotoCacheControl)
 	if httpsupport.ETagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return

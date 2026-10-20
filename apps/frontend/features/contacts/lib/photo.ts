@@ -1,11 +1,10 @@
 /**
  * Клиентские хелперы фото контакта (ADR 0065, тикет #1229): слоеное
  * правило показа с незавершённым изменением черновика формы — зеркало
- * фото-механики объекта (#1228, решение владельца 08.10). Кап файла и
- * бастер кэша выдачи — общие хелперы shared/lib/photo.
+ * фото-механики объекта (#1228, решение владельца 08.10). Кап файла —
+ * общий хелпер shared/lib/photo; бастер кэша выдачи снесён: photoUrl
+ * приходит с бэка уже с версией ключа (?v=).
  */
-
-import { photoDisplayUrl } from '@/shared/lib/photo';
 
 /**
  * Незавершённое изменение фото в черновике формы: применяется кнопками
@@ -23,11 +22,11 @@ export type ContactPhotoStage =
 /**
  * Что показывать в круге: staged-превью (замена/загрузка ещё не
  * применены), ничто (staged-удаление поверх живого серверного фото)
- * либо серверное фото с бастером. null — BoldUser-плейсхолдер.
+ * либо серверное фото (URL уже версионирован бэком). null —
+ * BoldUser-плейсхолдер.
  */
 export function contactPhotoDisplay(
   serverPhotoUrl: string | null,
-  buster: number,
   stage: ContactPhotoStage | null,
 ): string | null {
   if (stage?.kind === 'file') {
@@ -36,7 +35,7 @@ export function contactPhotoDisplay(
   if (stage?.kind === 'remove') {
     return null;
   }
-  return serverPhotoUrl !== null ? photoDisplayUrl(serverPhotoUrl, buster) : null;
+  return serverPhotoUrl;
 }
 
 /**

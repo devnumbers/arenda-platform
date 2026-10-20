@@ -40,7 +40,7 @@ func TestParticipantService_ParticipantCarriesPhotoUrl(t *testing.T) {
 	if pending == nil {
 		t.Fatal("pending participant not found")
 	}
-	if !strings.HasSuffix(registered.PhotoURL, "/api/users/"+f.u1.String()+"/photo") {
+	if !strings.HasPrefix(registered.PhotoURL, "/api/users/"+f.u1.String()+"/photo") {
 		t.Fatalf("registered photoUrl = %q, want the /users streaming path", registered.PhotoURL)
 	}
 	if pending.PhotoURL != "" {

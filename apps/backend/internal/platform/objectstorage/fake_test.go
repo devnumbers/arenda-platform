@@ -34,7 +34,7 @@ func TestFakeStorage_PutOpenRoundtrip(t *testing.T) {
 	t.Parallel()
 
 	s := NewFakeStorage()
-	err := s.Put(t.Context(), "photos/a.jpg", strings.NewReader("jpeg-bytes"), "image/jpeg", int64(len("jpeg-bytes")))
+	err := s.Put(t.Context(), "photos/a.jpg", strings.NewReader("jpeg-bytes"), testJPEGContentType, int64(len("jpeg-bytes")))
 	if err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestFakeStorage_PutOpenRoundtrip(t *testing.T) {
 	if size != int64(len("jpeg-bytes")) {
 		t.Errorf("size = %d, want %d", size, len("jpeg-bytes"))
 	}
-	if ct != "image/jpeg" {
+	if ct != testJPEGContentType {
 		t.Errorf("content-type = %q, want image/jpeg", ct)
 	}
 }
@@ -93,7 +93,7 @@ func TestFakeStorage_Delete(t *testing.T) {
 	t.Run("removes the object", func(t *testing.T) {
 		t.Parallel()
 		s := NewFakeStorage()
-		if err := s.Put(t.Context(), "photos/a.jpg", strings.NewReader("x"), "image/jpeg", 1); err != nil {
+		if err := s.Put(t.Context(), "photos/a.jpg", strings.NewReader("x"), testJPEGContentType, 1); err != nil {
 			t.Fatalf("put: %v", err)
 		}
 		if err := s.Delete(t.Context(), "photos/a.jpg"); err != nil {
@@ -122,7 +122,7 @@ func TestFakeStorage_Object(t *testing.T) {
 	t.Parallel()
 
 	s := NewFakeStorage()
-	if err := s.Put(t.Context(), "photos/a.jpg", strings.NewReader("bytes"), "image/jpeg", 5); err != nil {
+	if err := s.Put(t.Context(), "photos/a.jpg", strings.NewReader("bytes"), testJPEGContentType, 5); err != nil {
 		t.Fatalf("put: %v", err)
 	}
 	obj, ok := s.Object("photos/a.jpg")

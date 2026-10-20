@@ -161,7 +161,7 @@ func securityHeaders(secure bool) func(http.Handler) http.Handler {
 // showing in the properties hub after the leave because the SPA refetch was
 // served from cache. Handlers that want caching override the header after
 // the middleware — the private photo endpoints (ADR 0065) set their own
-// private, max-age=300 + ETag.
+// immutable private policy + ETag (httpsupport.PhotoCacheControl).
 func noStoreCache() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

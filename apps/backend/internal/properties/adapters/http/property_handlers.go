@@ -524,7 +524,7 @@ func (h *PropertyHandlers) GetPropertyPhoto(w http.ResponseWriter, r *http.Reque
 	// stays honest.
 	etag := storageshared.ETagOf(key)
 	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("Cache-Control", httpsupport.PhotoCacheControl)
 	if httpsupport.ETagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -675,12 +675,13 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 
 // propertyPhotoURL is the object photo's same-origin streaming path
 // (ADR 0065): nil without a photo. The path is contract-fixed; the photo
-// bytes themselves are served by GET /api/properties/{id}/photo.
+// bytes themselves are served by GET /api/properties/{id}/photo, and the
+// key's version rides as ?v= so a replaced photo is a new URL.
 func propertyPhotoURL(property domain.Property) *string {
 	if property.PhotoKey == nil {
 		return nil
 	}
-	path := fmt.Sprintf("/api/properties/%s/photo", property.ID)
+	path := storageshared.VersionedPhotoURL(fmt.Sprintf("/api/properties/%s/photo", property.ID), *property.PhotoKey)
 	return &path
 }
 

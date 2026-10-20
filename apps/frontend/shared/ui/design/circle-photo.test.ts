@@ -56,3 +56,41 @@ describe('circlePhotoView — что показывает круг фото', ()
     }
   });
 });
+
+describe('circlePhotoView — ретрай транзиентной ошибки (ADR 0065)', () => {
+  it('ретрай нулевой — src как пришёл (версия уже в URL от бэка)', () => {
+    const view = circlePhotoView('/api/me/photo?v=abc', {
+      photoBroken: false,
+      photoReady: false,
+      retryNonce: 0,
+    });
+    expect(view.imgSrc).toBe('/api/me/photo?v=abc');
+  });
+
+  it('первая ошибка — src с ретрай-нонсом в хвосте существующего query', () => {
+    const view = circlePhotoView('/api/me/photo?v=abc', {
+      photoBroken: false,
+      photoReady: false,
+      retryNonce: 1,
+    });
+    expect(view.imgSrc).toBe('/api/me/photo?v=abc&r=1');
+  });
+
+  it('ретрай на URL без query — нонс единственным параметром', () => {
+    const view = circlePhotoView('/api/me/photo', {
+      photoBroken: false,
+      photoReady: false,
+      retryNonce: 2,
+    });
+    expect(view.imgSrc).toBe('/api/me/photo?r=2');
+  });
+
+  it('битое после ретрая — глиф, нонс не рисуется', () => {
+    const view = circlePhotoView('/api/me/photo?v=abc', {
+      photoBroken: true,
+      photoReady: true,
+      retryNonce: 1,
+    });
+    expect(view.imgSrc).toBeNull();
+  });
+});
