@@ -4,6 +4,7 @@ import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
+import { goBack } from "@/shared/lib/navigation";
 import { buildUrlWithParams } from "@/shared/lib/url-params";
 import { OPERATIONS_FEED_SORT, type PaymentOperationScope } from "@/shared/api/query-keys";
 import { summaryBarSegments } from "@/features/payment-categories";
@@ -162,11 +163,13 @@ export function OperationsOfTypeScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            // Назад — на главный список операций с текущими фильтрами
-            // (период и категории переживают переход — решение владельца,
-            // #472), а не по истории браузера.
+            // Назад — по истории браузера (решение владельца 21.10, замена
+            // структурного push'а #472): запись списка под направлением несёт
+            // те же фильтры. Фолбэк — список с текущими фильтрами при прямом
+            // заходе без истории.
             onClick={() =>
-              router.push(
+              goBack(
+                router,
                 operationsFiltersHref(
                   ROUTES.propertyOperations(propertyId),
                   filters,
