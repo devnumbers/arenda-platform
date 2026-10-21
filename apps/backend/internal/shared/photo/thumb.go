@@ -169,12 +169,20 @@ func ServeOrMaterializeThumb(
 		// tells the caller to serve the body it already holds.
 		return nil, 0, false, nil
 	}
+	// The consumed paths close the full body at return, best-effort: the
+	// response bytes never depend on a close outcome (the thumb is already
+	// read, or the body is fully in memory). The undecorable path above
+	// returns first, so the caller keeps the open body there.
+	defer func() {
+		if cerr := full.Close(); cerr != nil {
+			log.WarnContext(ctx, "failed to close photo main body",
+				slog.String("key", mainKey), slog.String("error", cerr.Error()))
+		}
+	}()
 	if tb, ts, _, err := store.Open(ctx, ThumbKeyOf(mainKey)); err == nil {
-		_ = full.Close() //nolint:errcheck // the consumed main body's close cannot change the served thumb
 		return tb, ts, true, nil
 	}
 	data, err := io.ReadAll(full)
-	_ = full.Close() //nolint:errcheck // ditto — the bytes are already in memory
 	if err != nil {
 		return nil, 0, false, fmt.Errorf("read photo: %w", err)
 	}
