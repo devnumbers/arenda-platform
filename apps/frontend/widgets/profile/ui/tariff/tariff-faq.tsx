@@ -127,7 +127,7 @@ export function TariffFaq(): JSX.Element {
 
   return (
     <section className="rounded-card bg-surface-muted pb-3">
-      <h2 className="m-0 px-6 pt-6 text-lg font-semibold leading-6 text-content">
+      <h2 className="m-0 px-6 pt-6 pb-4 text-lg font-semibold leading-6 text-content">
         Частые вопросы
       </h2>
       <div>
