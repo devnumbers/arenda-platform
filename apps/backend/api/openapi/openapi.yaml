@@ -119,6 +119,18 @@ paths:
       operationId: getMePhoto
       security:
         - sessionCookie: []
+
+      parameters:
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [thumb]
+          description: >
+            Requests the ≤320px thumbnail variant (ADR 0065). Uploads without
+            a thumbnail (legacy objects, webp, within-bound images) honestly
+            serve the full object under the main key's ETag.
       responses:
         '200':
           description: >
@@ -126,9 +138,11 @@ paths:
             cookie-auth, Cache-Control private + immutable (the bytes are
             immutable per key; the DTO photoUrl carries the key's version as
             ?v=), ETag is the key hash — a matching If-None-Match answers 304
-            without a storage read. Only the owner reads it; showing the
-            avatar to other users is a separate decision outside this
-            contract.
+            without a storage read. `?size=thumb` streams the ≤320px
+            thumbnail (avatars render small; an upload without a thumb
+            honestly falls back to the full object). Only the owner reads it;
+            showing the avatar to other users is a separate decision outside
+            this contract.
           content:
             image/jpeg:
               schema:
@@ -204,6 +218,18 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [thumb]
+          description: >
+            Requests the ≤320px thumbnail variant (ADR 0065). Uploads without
+            a thumbnail (legacy objects, webp, within-bound images) honestly
+            serve the full object under the main key's ETag.
+
+
       responses:
         '200':
           description: >
@@ -668,6 +694,18 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [thumb]
+          description: >
+            Requests the ≤320px thumbnail variant (ADR 0065). Uploads without
+            a thumbnail (legacy objects, webp, within-bound images) honestly
+            serve the full object under the main key's ETag.
+
+
       responses:
         '200':
           description: >
@@ -675,7 +713,9 @@ paths:
             cookie-auth, Cache-Control private + immutable (the bytes are
             immutable per key; the DTO photoUrl carries the key's version as
             ?v=), ETag is the key hash — a matching If-None-Match answers 304
-            without a storage read.
+            without a storage read. `?size=thumb` streams the ≤320px
+            thumbnail (an upload without a thumb honestly falls back to the
+            full object).
           content:
             image/jpeg:
               schema:
@@ -877,12 +917,28 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [thumb]
+          description: >
+            Requests the ≤320px thumbnail variant (ADR 0065). Uploads without
+            a thumbnail (legacy objects, webp, within-bound images) honestly
+            serve the full object under the main key's ETag.
+
+
       responses:
         '200':
           description: >
             The contact card photo bytes, streamed by the backend (ADR 0065):
-            cookie-auth, Cache-Control private, ETag is the key hash — a
-            matching If-None-Match answers 304 without a storage read. Access
+            cookie-auth, Cache-Control private + immutable (the bytes are
+            immutable per key; the DTO photoUrl carries the key's version as
+            ?v=), ETag is the key hash — a matching If-None-Match answers 304
+            without a storage read. `?size=thumb` streams the ≤320px
+            thumbnail (an upload without a thumb honestly falls back to the
+            full object). Access
             follows the card (ADR 0054): a bound card is readable by the
             property's viewers, an unbound one by the book owner only.
           content:

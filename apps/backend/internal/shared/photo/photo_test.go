@@ -16,6 +16,10 @@ import (
 	"github.com/google/uuid"
 )
 
+// testThumbFormat pins the decoded format name of thumbnail assertions
+// (goconst: the literal repeats across the thumb tests).
+const testThumbFormat = "jpeg"
+
 // defaultTestLimits mirrors defaultLimits: the real caps.
 func defaultTestLimits() limits {
 	return limits{maxUploadSize: MaxSize, maxObjectSize: MaxSize, maxPixels: MaxPixels}
@@ -558,5 +562,72 @@ func TestNewKey(t *testing.T) {
 
 	if _, err := NewKey("image/gif"); err == nil {
 		t.Error("unknown content type must not mint a key")
+	}
+}
+
+// TestProcess_BuildsThumbForJPEG pins the thumbnail generation (ADR 0065,
+// тикет миниатюр): a jpeg upload lands with a decodable jpeg thumb whose
+// long edge fits ThumbMaxEdge; a within-bound upload and a webp (no decode
+// in the toolchain) carry no thumb — the serve path falls back to the full
+// object for those.
+func TestProcess_BuildsThumbForJPEG(t *testing.T) {
+	t.Parallel()
+	big := mustJPEG(t, 1200, 900)
+	p, err := Process(big)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if len(p.Thumb) == 0 {
+		t.Fatal("thumb missing for a large jpeg upload")
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(p.Thumb))
+	if err != nil {
+		t.Fatalf("thumb does not decode: %v", err)
+	}
+	if format != testThumbFormat {
+		t.Fatalf("thumb format = %q, want jpeg", format)
+	}
+	if max(cfg.Width, cfg.Height) != ThumbMaxEdge {
+		t.Fatalf("thumb long edge = %d, want %d", max(cfg.Width, cfg.Height), ThumbMaxEdge)
+	}
+}
+
+func TestProcess_WithinBoundUploadNeedsNoThumb(t *testing.T) {
+	t.Parallel()
+	small := mustJPEG(t, 200, 100)
+	p, err := Process(small)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if p.Thumb != nil {
+		t.Fatalf("within-bound upload grew a thumb (%d bytes), want none", len(p.Thumb))
+	}
+}
+
+func TestProcess_WebPCarriesNoThumb(t *testing.T) {
+	t.Parallel()
+	webp := riffWebp(t, webpVP8X(t), webpChunk(t, "VP8L", []byte{0x2F, 0x00, 0x00, 0x00}))
+	p, err := Process(webp)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if p.Thumb != nil {
+		t.Fatalf("webp grew a thumb (%d bytes), want none", len(p.Thumb))
+	}
+}
+
+func TestProcess_PNGThumbIsJPEG(t *testing.T) {
+	t.Parallel()
+	src := mustPNG(t, 1000, 600)
+	p, err := Process(src)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(p.Thumb))
+	if err != nil {
+		t.Fatalf("thumb does not decode: %v", err)
+	}
+	if format != "jpeg" || max(cfg.Width, cfg.Height) != ThumbMaxEdge {
+		t.Fatalf("thumb = %s %dx%d, want %s capped at %d", format, cfg.Width, cfg.Height, testThumbFormat, ThumbMaxEdge)
 	}
 }

@@ -1379,12 +1379,19 @@ func (s *PropertyService) recoverSlotsAfterDelete(
 	return recovered, nil
 }
 
-// cleanupPropertyPhoto removes the property's photo object from storage
-// after the commit; failures are logged as orphans, never propagated.
+// cleanupPropertyPhoto removes the property's photo object — and its
+// thumbnail — from storage after the commit; failures are logged as orphans,
+// never propagated. Deleting an absent object succeeds on the port.
 func (s *PropertyService) cleanupPropertyPhoto(ctx context.Context, key string) {
 	if err := s.photoStorage.Delete(ctx, key); err != nil {
 		s.logger.ErrorContext(ctx, "failed to delete property photo from storage",
 			slog.String("key", key),
+			slog.String("error", sanitizeError(err)),
+		)
+	}
+	if err := s.photoStorage.Delete(ctx, photo.ThumbKeyOf(key)); err != nil {
+		s.logger.ErrorContext(ctx, "failed to delete property photo thumb from storage",
+			slog.String("key", photo.ThumbKeyOf(key)),
 			slog.String("error", sanitizeError(err)),
 		)
 	}
@@ -1862,8 +1869,12 @@ func (s *PropertyService) PhotoDescriptor(ctx context.Context, actor, id uuid.UU
 // OpenPropertyPhoto opens the object photo (ADR 0065): the body, its byte
 // size, the stored content type and the key (the ETag source). A column key
 // without an object is an orphan — the honest ErrPhotoNotFound.
+// The wantThumb flag asks for the thumbnail variant (тикет миниатюр):
+// the derived _t object serves when it exists; a pre-thumb upload
+// materializes its thumb lazily on this request; a webp (undecodable in
+// the Go toolchain) falls back to the full object under the main key.
 func (s *PropertyService) OpenPropertyPhoto(
-	ctx context.Context, actor, id uuid.UUID,
+	ctx context.Context, actor, id uuid.UUID, wantThumb bool,
 ) (body io.ReadCloser, size int64, contentType, key string, err error) {
 	// One policy resolution and one row read: the descriptor path already
 	// gated the actor, this repeat covers the 200 path end to end.
@@ -1886,6 +1897,10 @@ func (s *PropertyService) OpenPropertyPhoto(
 	if property.PhotoKey == nil {
 		return nil, 0, "", "", ErrPhotoNotFound
 	}
+
+	// The main object decides whether the photo exists at all: the heal runs
+	// on its loss regardless of the requested size, and a stray thumbnail
+	// never keeps a zombie photo alive.
 	body, size, contentType, err = s.photoStorage.Open(ctx, *property.PhotoKey)
 	if err != nil {
 		if errors.Is(err, storageshared.ErrNotFound) {
@@ -1893,13 +1908,43 @@ func (s *PropertyService) OpenPropertyPhoto(
 			// dangling key is healed so the object stops promising a photo
 			// the stream will never deliver. The conditional clear spares a
 			// concurrent re-upload; this viewer still gets the honest
-			// ErrPhotoNotFound.
+			// ErrPhotoNotFound. The stray thumbnail dies with it.
 			if _, healErr := s.repo.ClearPhotoIfKey(ctx, id, property.OwnerID, *property.PhotoKey); healErr != nil {
 				return nil, 0, "", "", fmt.Errorf("heal dangling property photo: %w", healErr)
+			}
+			// The stray thumb's removal is best-effort: the key is already
+			// healed, a failed delete just logs an orphan.
+			if delErr := s.photoStorage.Delete(ctx, photo.ThumbKeyOf(*property.PhotoKey)); delErr != nil {
+				s.logger.WarnContext(ctx, "failed to delete stray property photo thumb",
+					slog.String("key", photo.ThumbKeyOf(*property.PhotoKey)),
+					slog.String("error", sanitizeError(delErr)),
+				)
 			}
 			return nil, 0, "", "", ErrPhotoNotFound
 		}
 		return nil, 0, "", "", fmt.Errorf("open property photo: %w", err)
+	}
+
+	if !wantThumb {
+		return body, size, contentType, *property.PhotoKey, nil
+	}
+
+	// The thumb variant (тикет миниатюр): the stored thumb serves as is; a
+	// pre-thumb upload materializes its thumb from the full bytes right
+	// here — generated once, stored for every later request. An undecodable
+	// format (webp) honestly falls back to the full object under the main
+	// key.
+	tb, ts, isThumb, err := photo.ServeOrMaterializeThumb(
+		ctx, s.photoStorage, *property.PhotoKey, derefString(property.PhotoContentType), body, s.logger)
+	if err != nil {
+		return nil, 0, "", "", fmt.Errorf("serve property photo thumb: %w", err)
+	}
+	if isThumb {
+		return tb, ts, photo.ContentTypeJPEG, photo.ThumbKeyOf(*property.PhotoKey), nil
+	}
+	if tb != nil {
+		// No thumb possible: the helper re-wrapped and serves the full bytes.
+		return tb, ts, contentType, *property.PhotoKey, nil
 	}
 	return body, size, contentType, *property.PhotoKey, nil
 }
@@ -1937,6 +1982,23 @@ func (s *PropertyService) SetPropertyPhoto(
 
 		if err := s.photoStorage.Put(ctx, key, bytes.NewReader(processed.Data), processed.ContentType, processed.Size); err != nil {
 			return fmt.Errorf("put property photo: %w", err)
+		}
+		// The thumbnail rides with the upload (тикет миниатюр): one more
+		// object, same lifetime as the main key. An upload without a thumb
+		// (within-bound, webp) stores nothing extra — the serve path falls
+		// back to the full object.
+		if processed.Thumb != nil {
+			// The thumb is an optimization, not a correctness step: a failed
+			// Put must not fail the upload — the serve path falls back to the
+			// full object and the next thumb request materializes lazily.
+			thumbKey := photo.ThumbKeyOf(key)
+			thumb := bytes.NewReader(processed.Thumb)
+			if err := s.photoStorage.Put(ctx, thumbKey, thumb, photo.ContentTypeJPEG, int64(len(processed.Thumb))); err != nil {
+				s.logger.WarnContext(ctx, "failed to store property photo thumb",
+					slog.String("key", thumbKey),
+					slog.String("error", sanitizeError(err)),
+				)
+			}
 		}
 
 		property, err = stores.repo.SetPropertyPhoto(ctx, propertyID, property.OwnerID, &key, &processed.ContentType)

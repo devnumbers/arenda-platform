@@ -79,3 +79,10 @@ func WritePhotoProcessError(w http.ResponseWriter, r *http.Request, err error) {
 			Problem(r.Context(), "Bad request", "Поддерживаются только изображения JPEG, PNG и WebP"))
 	}
 }
+
+// PhotoThumbRequested reports whether the request asks for the thumbnail
+// variant of the photo stream (?size=thumb, ADR 0065 тикет миниатюр).
+// Anything else — the full object, as before the parameter existed.
+func PhotoThumbRequested(r *http.Request) bool {
+	return r.URL.Query().Get("size") == "thumb"
+}

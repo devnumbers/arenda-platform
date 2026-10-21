@@ -25,7 +25,7 @@ func TestProfileService_OpenPhoto_HealsDanglingKey(t *testing.T) {
 	// The object vanishes behind the backend's back.
 	require.NoError(t, h.photos.Delete(context.Background(), *user.PhotoKey))
 
-	opened, err := h.svc.OpenPhoto(context.Background(), user.ID, user.ID)
+	opened, err := h.svc.OpenPhoto(context.Background(), user.ID, user.ID, false)
 	require.ErrorIs(t, err, ErrPhotoNotFound)
 	require.Nil(t, opened.Body)
 
@@ -62,7 +62,7 @@ func TestProfileService_OpenPhoto_TransientErrorSparesTheKey(t *testing.T) {
 
 	// A storage outage is not a lost object: the columns must keep
 	// advertising the photo, the viewer gets the 500-shaped failure.
-	_, err := h.svc.OpenPhoto(context.Background(), user.ID, user.ID)
+	_, err := h.svc.OpenPhoto(context.Background(), user.ID, user.ID, false)
 	require.Error(t, err)
 	require.NotErrorIs(t, err, ErrPhotoNotFound)
 

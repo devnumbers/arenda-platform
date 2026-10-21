@@ -71,11 +71,15 @@ var (
 const photoUploadFieldName = "file"
 
 // Processed is a normalized upload: the stripped bytes, their sniffed
-// content type (the value stored alongside the object key) and the size.
+// content type (the value stored alongside the object key), the size and
+// the ready-to-store thumbnail (nil when there is none — a within-bound
+// upload, or a webp the toolchain cannot decode; the serve path falls back
+// to the full object). The thumb is always an opaque jpeg.
 type Processed struct {
 	Data        []byte
 	ContentType string
 	Size        int64
+	Thumb       []byte
 }
 
 // limits carries the knobs the tests shrink; Process runs the production
@@ -108,19 +112,22 @@ func process(data []byte, lim limits) (Processed, error) {
 
 	contentType := http.DetectContentType(data)
 	var out []byte
+	var decoded image.Image
 	switch contentType {
 	case ContentTypeJPEG:
 		stripped, err := stripJPEG(data, lim)
 		if err != nil {
 			return Processed{}, err
 		}
-		out = stripped
+		out = stripped.data
+		decoded = stripped.decoded
 	case ContentTypePNG:
 		stripped, err := stripPNG(data, lim)
 		if err != nil {
 			return Processed{}, err
 		}
-		out = stripped
+		out = stripped.data
+		decoded = stripped.decoded
 	case ContentTypeWebP:
 		stripped, err := stripWebP(data)
 		if err != nil {
@@ -136,11 +143,32 @@ func process(data []byte, lim limits) (Processed, error) {
 	if int64(len(out)) > lim.maxObjectSize {
 		return Processed{}, newTooLargeError(int64(len(out)), lim.maxObjectSize)
 	}
-	return Processed{Data: out, ContentType: contentType, Size: int64(len(out))}, nil
+	// The thumb builds from the already-decoded, already-upright pixels —
+	// the strip pass did the decode, the orientation is baked. A second
+	// decode of the re-encoded bytes would be pure waste.
+	var thumb []byte
+	if decoded != nil {
+		if small := downscaleArea(decoded, ThumbMaxEdge); small != nil {
+			var buf bytes.Buffer
+			if err := jpeg.Encode(&buf, small, &jpeg.Options{Quality: jpegQuality}); err != nil {
+				return Processed{}, fmt.Errorf("encode thumb: %w", err)
+			}
+			thumb = buf.Bytes()
+		}
+	}
+	return Processed{Data: out, ContentType: contentType, Size: int64(len(out)), Thumb: thumb}, nil
 }
 
 func newTooLargeError(size, limit int64) error {
 	return fmt.Errorf("%w: file size %d exceeds %d bytes", ErrTooLarge, size, limit)
+}
+
+// strippedImage is one decode pass's outcome: the re-encoded bytes and the
+// very image they encode (the oriented pixels) — the thumbnail builds from
+// it without a second decode.
+type strippedImage struct {
+	data    []byte
+	decoded image.Image
 }
 
 // stripJPEG re-encodes the image: EXIF/GPS live in APP1 markers a re-encode
@@ -148,45 +176,47 @@ func newTooLargeError(size, limit int64) error {
 // full decode allocates. The orientation is read from the original bytes
 // and baked into the pixels before the re-encode: the tag dies with the
 // strip, so the correction it described must not.
-func stripJPEG(data []byte, lim limits) ([]byte, error) {
+func stripJPEG(data []byte, lim limits) (strippedImage, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("%w: broken jpeg: %w", ErrUnsupportedFormat, err)
+		return strippedImage{}, fmt.Errorf("%w: broken jpeg: %w", ErrUnsupportedFormat, err)
 	}
 	if cfg.Width*cfg.Height > lim.maxPixels {
-		return nil, newPixelBombError(cfg, lim)
+		return strippedImage{}, newPixelBombError(cfg, lim)
 	}
 	img, err := jpeg.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("%w: broken jpeg: %w", ErrUnsupportedFormat, err)
+		return strippedImage{}, fmt.Errorf("%w: broken jpeg: %w", ErrUnsupportedFormat, err)
 	}
+	oriented := applyOrientation(img, jpegEXIFOrientation(data))
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, applyOrientation(img, jpegEXIFOrientation(data)), &jpeg.Options{Quality: jpegQuality}); err != nil {
-		return nil, fmt.Errorf("re-encode jpeg: %w", err)
+	if err := jpeg.Encode(&buf, oriented, &jpeg.Options{Quality: jpegQuality}); err != nil {
+		return strippedImage{}, fmt.Errorf("re-encode jpeg: %w", err)
 	}
-	return buf.Bytes(), nil
+	return strippedImage{data: buf.Bytes(), decoded: oriented}, nil
 }
 
 // stripPNG re-encodes the image: lossless for the pixels, but ancillary
 // chunks (tEXt, eXIf, iCCP) do not survive. An eXIf orientation is baked
 // into the pixels for the same reason as the jpeg one.
-func stripPNG(data []byte, lim limits) ([]byte, error) {
+func stripPNG(data []byte, lim limits) (strippedImage, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("%w: broken png: %w", ErrUnsupportedFormat, err)
+		return strippedImage{}, fmt.Errorf("%w: broken png: %w", ErrUnsupportedFormat, err)
 	}
 	if cfg.Width*cfg.Height > lim.maxPixels {
-		return nil, newPixelBombError(cfg, lim)
+		return strippedImage{}, newPixelBombError(cfg, lim)
 	}
 	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("%w: broken png: %w", ErrUnsupportedFormat, err)
+		return strippedImage{}, fmt.Errorf("%w: broken png: %w", ErrUnsupportedFormat, err)
 	}
+	oriented := applyOrientation(img, pngEXIFOrientation(data))
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, applyOrientation(img, pngEXIFOrientation(data))); err != nil {
-		return nil, fmt.Errorf("re-encode png: %w", err)
+	if err := png.Encode(&buf, oriented); err != nil {
+		return strippedImage{}, fmt.Errorf("re-encode png: %w", err)
 	}
-	return buf.Bytes(), nil
+	return strippedImage{data: buf.Bytes(), decoded: oriented}, nil
 }
 
 func newPixelBombError(cfg image.Config, lim limits) error {

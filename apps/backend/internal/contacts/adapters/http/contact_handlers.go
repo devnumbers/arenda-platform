@@ -33,7 +33,9 @@ type ContactManager interface {
 	UpdateContact(ctx context.Context, actor, id uuid.UUID, cmd application.UpdateContactCommand) (domain.Contact, error)
 	DeleteContact(ctx context.Context, actor, id uuid.UUID) error
 	PhotoDescriptor(ctx context.Context, actor, id uuid.UUID) (key, contentType string, err error)
-	OpenContactPhoto(ctx context.Context, actor, id uuid.UUID) (body io.ReadCloser, size int64, contentType, key string, err error)
+	OpenContactPhoto(ctx context.Context, actor, id uuid.UUID, wantThumb bool) (
+		body io.ReadCloser, size int64, contentType, key string, err error,
+	)
 	SetContactPhoto(ctx context.Context, actor, id uuid.UUID, processed photo.Processed) (domain.Contact, error)
 	DeleteContactPhoto(ctx context.Context, actor, id uuid.UUID) (domain.Contact, error)
 }

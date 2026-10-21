@@ -51,6 +51,7 @@ Adding a new slice: user scenario → feature; domain model shared across scenar
 - Слои: чистые хелперы — `shared/lib/photo.ts` (кап 5 МиБ, data-URL); stage-правила слотов — `features/<slice>/lib/photo.ts`; рендер — слоты `widgets/*/ui/*-photo-slot.tsx`. Нового фото-слоя в другом месте не заводить.
 - Загрузка — только `uploadFile` (`shared/api/upload`, XHR с `onProgress`); `fetch`/`apiClient` для файлов запрещены (fetch не отдаёт upload-progress). Прогресс экран пишет в стейт и отдаёт слоту (`progress` → `PhotoProgressRing`); DELETE без кольца.
 - Версия кэша — **серверная**: `photoUrl` приходит с бэка уже с `?v=<sha256(ключа)[:16]>` (аменд ADR 0065 2026-10-20) — замена фото = новый UUID-ключ = новый URL, выдача отвечает `immutable`; клиентский счётчик бастера снесён, фронт URL не строит. **Инвариант**: `<img>` не перемонтируется при мутации — свап `src` на живом элементе (анти-мигание, старый кадр до декода нового); `key={version}` запрещён.
+- Размер выдачи — **thumb по умолчанию**: `CirclePhoto` всегда запрашивает `&size=thumb` (аменд ADR 0065 2026-10-21, круг ≤320px-варианта; фронт больше ничего не дописывает — полный объект живёт за тем же стримом без параметра, крупный просмотр, если появится, ходит мимо примитива).
 - Retry: staged-слоты (объект/контакт) держат stage при провале — повтор кнопкой сохранения; autosave-профиль держит файл (`MePhotoStage.failed`) — ретрай «Повторить» в тосте (action-канон `NotificationAction`) или тапом по кругу (`onRetry`).
 
 ## Forms

@@ -739,9 +739,13 @@ func (s *ContactService) PhotoDescriptor(ctx context.Context, actor, contactID u
 
 // OpenContactPhoto opens the card photo (ADR 0065): the body, its byte
 // size, the stored content type and the key (the ETag source). A column key
-// without an object is an orphan — the honest ErrPhotoNotFound.
+// without an object is an orphan — the honest ErrPhotoNotFound. The
+// wantThumb flag asks for the thumbnail variant (тикет миниатюр): the
+// derived _t object serves when it exists; a pre-thumb upload materializes
+// its thumb lazily on this request; a webp (undecodable in the Go
+// toolchain) falls back to the full object under the main key.
 func (s *ContactService) OpenContactPhoto(
-	ctx context.Context, actor, contactID uuid.UUID,
+	ctx context.Context, actor, contactID uuid.UUID, wantThumb bool,
 ) (body io.ReadCloser, size int64, contentType, key string, err error) {
 	// One authorization and one row read end to end (the descriptor path
 	// already gated the actor; this repeat covers the 200 path).
@@ -755,6 +759,9 @@ func (s *ContactService) OpenContactPhoto(
 	if contact.PhotoKey == nil {
 		return nil, 0, "", "", ErrPhotoNotFound
 	}
+	// The main object decides whether the photo exists at all: the heal runs
+	// on its loss regardless of the requested size, and a stray thumbnail
+	// never keeps a zombie photo alive.
 	body, size, contentType, err = s.photos.Open(ctx, *contact.PhotoKey)
 	if err != nil {
 		if errors.Is(err, storageshared.ErrNotFound) {
@@ -762,13 +769,36 @@ func (s *ContactService) OpenContactPhoto(
 			// dangling key is healed so the book stops promising a photo the
 			// stream will never deliver. The conditional clear spares a
 			// concurrent re-upload; this viewer still gets the honest
-			// ErrPhotoNotFound.
+			// ErrPhotoNotFound. The stray thumbnail dies with it.
 			if _, healErr := s.contacts.ClearPhotoIfKey(ctx, contactID, contact.OwnerID, *contact.PhotoKey); healErr != nil {
 				return nil, 0, "", "", fmt.Errorf("heal dangling contact photo: %w", healErr)
+			}
+			// The stray thumb's removal is best-effort: the key is already
+			// healed, a failed delete just logs an orphan.
+			if delErr := s.photos.Delete(ctx, photo.ThumbKeyOf(*contact.PhotoKey)); delErr != nil {
+				s.logger.WarnContext(ctx, "failed to delete stray contact photo thumb",
+					slog.String("key", photo.ThumbKeyOf(*contact.PhotoKey)),
+					slog.String("error", delErr.Error()),
+				)
 			}
 			return nil, 0, "", "", ErrPhotoNotFound
 		}
 		return nil, 0, "", "", fmt.Errorf("open contact photo: %w", err)
+	}
+	if !wantThumb {
+		return body, size, contentType, *contact.PhotoKey, nil
+	}
+	tb, ts, isThumb, err := photo.ServeOrMaterializeThumb(
+		ctx, s.photos, *contact.PhotoKey, derefContactString(contact.PhotoContentType), body, s.logger)
+	if err != nil {
+		return nil, 0, "", "", fmt.Errorf("serve contact photo thumb: %w", err)
+	}
+	if isThumb {
+		return tb, ts, photo.ContentTypeJPEG, photo.ThumbKeyOf(*contact.PhotoKey), nil
+	}
+	if tb != nil {
+		// No thumb possible: the helper re-wrapped and serves the full bytes.
+		return tb, ts, contentType, *contact.PhotoKey, nil
 	}
 	return body, size, contentType, *contact.PhotoKey, nil
 }
@@ -812,6 +842,23 @@ func (s *ContactService) SetContactPhoto(
 
 		if err := s.photos.Put(ctx, key, bytes.NewReader(processed.Data), processed.ContentType, processed.Size); err != nil {
 			return fmt.Errorf("put contact photo: %w", err)
+		}
+		// The thumbnail rides with the upload (тикет миниатюр): one more
+		// object, same lifetime as the main key. An upload without a thumb
+		// (within-bound, webp) stores nothing extra — the serve path falls
+		// back to the full object.
+		if processed.Thumb != nil {
+			// The thumb is an optimization, not a correctness step: a failed
+			// Put must not fail the upload — the serve path falls back to the
+			// full object and the next thumb request materializes lazily.
+			thumbKey := photo.ThumbKeyOf(key)
+			thumb := bytes.NewReader(processed.Thumb)
+			if err := s.photos.Put(ctx, thumbKey, thumb, photo.ContentTypeJPEG, int64(len(processed.Thumb))); err != nil {
+				s.logger.WarnContext(ctx, "failed to store contact photo thumb",
+					slog.String("key", thumbKey),
+					slog.String("error", err.Error()),
+				)
+			}
 		}
 
 		updated, err = stores.contacts.SetPhoto(ctx, contact.ID, contact.OwnerID, &key, &processed.ContentType)
@@ -911,11 +958,18 @@ func (s *ContactService) DeleteContactPhoto(ctx context.Context, actor, contactI
 }
 
 // cleanupPhoto removes an object best-effort: a failure is logged as an
-// orphan — it never fails the mutation that already committed.
+// orphan — it never fails the mutation that already committed. The derived
+// _t thumbnail of the removed key deletes alongside it.
 func (s *ContactService) cleanupPhoto(ctx context.Context, key string) {
 	if err := s.photos.Delete(ctx, key); err != nil {
 		s.logger.WarnContext(ctx, "failed to delete contact photo from storage",
 			slog.String("key", key),
+			slog.String("error", err.Error()),
+		)
+	}
+	if err := s.photos.Delete(ctx, photo.ThumbKeyOf(key)); err != nil {
+		s.logger.WarnContext(ctx, "failed to delete contact photo thumb from storage",
+			slog.String("key", photo.ThumbKeyOf(key)),
 			slog.String("error", err.Error()),
 		)
 	}

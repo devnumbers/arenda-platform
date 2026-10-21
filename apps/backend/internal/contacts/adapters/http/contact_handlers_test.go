@@ -86,7 +86,7 @@ func (f *fakeContactManager) PhotoDescriptor(
 }
 
 func (f *fakeContactManager) OpenContactPhoto(
-	ctx context.Context, actor, id uuid.UUID,
+	ctx context.Context, actor, id uuid.UUID, _ bool,
 ) (body io.ReadCloser, size int64, contentType, key string, err error) {
 	if f.openPhoto == nil {
 		return nil, 0, "", "", errors.New("unexpected OpenContactPhoto call")
@@ -500,7 +500,7 @@ func TestGetContactPhoto_NoPhoto(t *testing.T) {
 	actor := uuid.Must(uuid.NewV7())
 
 	w := httptest.NewRecorder()
-	h.GetContactPhoto(w, contactRequest(t, http.MethodGet, actor, ""), uuid.Must(uuid.NewV7()))
+	h.GetContactPhoto(w, contactRequest(t, http.MethodGet, actor, ""), uuid.Must(uuid.NewV7()), openapi.GetContactPhotoParams{})
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404: %s", w.Code, w.Body.String())

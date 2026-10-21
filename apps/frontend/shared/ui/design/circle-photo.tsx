@@ -27,8 +27,13 @@ export function circlePhotoView(
   if (photoUrl == null || photoUrl === '' || flags.photoBroken) {
     return { imgSrc: null, imgHidden: false };
   }
+  // Круг — всегда мал (≤96 CSS px): запрашивается thumbnail-вариант выдачи
+  // (?size=thumb, ADR 0065 тикет миниатюр), полный объект живёт за тем же
+  // стримом без параметра — крупный просмотр, если появится, не проходит
+  // через этот примитив.
+  const thumbSrc = `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}size=thumb`;
   const retryNonce = flags.retryNonce ?? 0;
-  const imgSrc = retryNonce > 0 ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}r=${retryNonce}` : photoUrl;
+  const imgSrc = retryNonce > 0 ? `${thumbSrc}&r=${retryNonce}` : thumbSrc;
   return { imgSrc, imgHidden: !flags.photoReady };
 }
 

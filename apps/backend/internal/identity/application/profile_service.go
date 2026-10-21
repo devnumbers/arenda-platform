@@ -151,8 +151,12 @@ type OpenedPhoto struct {
 
 // OpenPhoto opens the profile photo object (ADR 0065). The viewer is gated
 // by checkPhotoAccess (решение #1286). A column key without an object is an
-// orphan — the honest ErrPhotoNotFound.
-func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UUID) (OpenedPhoto, error) {
+// orphan — the honest ErrPhotoNotFound. The wantThumb flag asks for the
+// thumbnail variant (тикет миниатюр): the derived _t object serves when it
+// exists; a pre-thumb upload materializes its thumb lazily on this request;
+// a webp (undecodable in the Go toolchain) falls back to the full object
+// under the main key.
+func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UUID, wantThumb bool) (OpenedPhoto, error) {
 	if err := s.checkPhotoAccess(ctx, viewerID, userID); err != nil {
 		return OpenedPhoto{}, err
 	}
@@ -163,6 +167,9 @@ func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UU
 	if user.PhotoKey == nil {
 		return OpenedPhoto{}, ErrPhotoNotFound
 	}
+	// The main object decides whether the photo exists at all: the heal runs
+	// on its loss regardless of the requested size, and a stray thumbnail
+	// never keeps a zombie photo alive.
 	body, size, contentType, err := s.photos.Open(ctx, *user.PhotoKey)
 	if err != nil {
 		if errors.Is(err, storageshared.ErrNotFound) {
@@ -170,13 +177,37 @@ func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UU
 			// fake-storage restart, a drifted bucket): the dangling key is
 			// healed so /me stops promising a photo the stream will never
 			// deliver. The conditional clear spares a concurrent re-upload;
-			// this viewer still gets the honest ErrPhotoNotFound.
+			// this viewer still gets the honest ErrPhotoNotFound. The stray
+			// thumbnail dies with it.
 			if _, healErr := s.users.ClearPhotoIfKey(ctx, userID, *user.PhotoKey); healErr != nil {
 				return OpenedPhoto{}, fmt.Errorf("heal dangling profile photo: %w", healErr)
+			}
+			// The stray thumb's removal is best-effort: the key is already
+			// healed, a failed delete just logs an orphan (the next upload
+			// mints a fresh key, this one never comes back).
+			if delErr := s.photos.Delete(ctx, photo.ThumbKeyOf(*user.PhotoKey)); delErr != nil {
+				s.logger.WarnContext(ctx, "failed to delete stray profile photo thumb",
+					slog.String("key", photo.ThumbKeyOf(*user.PhotoKey)),
+					slog.String("error", delErr.Error()),
+				)
 			}
 			return OpenedPhoto{}, ErrPhotoNotFound
 		}
 		return OpenedPhoto{}, fmt.Errorf("open profile photo: %w", err)
+	}
+	if !wantThumb {
+		return OpenedPhoto{Body: body, Size: size, ContentType: contentType, Key: *user.PhotoKey}, nil
+	}
+	tb, ts, isThumb, err := photo.ServeOrMaterializeThumb(ctx, s.photos, *user.PhotoKey, derefString(user.PhotoContentType), body, s.logger)
+	if err != nil {
+		return OpenedPhoto{}, fmt.Errorf("serve profile photo thumb: %w", err)
+	}
+	if isThumb {
+		return OpenedPhoto{Body: tb, Size: ts, ContentType: photo.ContentTypeJPEG, Key: photo.ThumbKeyOf(*user.PhotoKey)}, nil
+	}
+	if tb != nil {
+		// No thumb possible: the helper re-wrapped and serves the full bytes.
+		return OpenedPhoto{Body: tb, Size: ts, ContentType: contentType, Key: *user.PhotoKey}, nil
 	}
 	return OpenedPhoto{Body: body, Size: size, ContentType: contentType, Key: *user.PhotoKey}, nil
 }
@@ -205,6 +236,23 @@ func (s *ProfileService) SetProfilePhoto(ctx context.Context, userID uuid.UUID, 
 
 		if err := s.photos.Put(ctx, key, bytes.NewReader(processed.Data), processed.ContentType, processed.Size); err != nil {
 			return fmt.Errorf("put profile photo: %w", err)
+		}
+		// The thumbnail rides with the upload (тикет миниатюр): one more
+		// object, same lifetime as the main key. An upload without a thumb
+		// (within-bound, webp) stores nothing extra — the serve path falls
+		// back to the full object.
+		if processed.Thumb != nil {
+			// The thumb is an optimization, not a correctness step: a failed
+			// Put must not fail the upload — the serve path falls back to the
+			// full object and the next thumb request materializes lazily.
+			thumbKey := photo.ThumbKeyOf(key)
+			thumb := bytes.NewReader(processed.Thumb)
+			if err := s.photos.Put(ctx, thumbKey, thumb, photo.ContentTypeJPEG, int64(len(processed.Thumb))); err != nil {
+				s.logger.WarnContext(ctx, "failed to store profile photo thumb",
+					slog.String("key", thumbKey),
+					slog.String("error", err.Error()),
+				)
+			}
 		}
 
 		updated, err = stores.users.SetPhoto(ctx, userID, &key, &processed.ContentType)
@@ -280,11 +328,18 @@ func (s *ProfileService) DeleteProfilePhoto(ctx context.Context, userID uuid.UUI
 }
 
 // cleanupPhoto removes an object best-effort: a failure is logged as an
-// orphan — it never fails the mutation that already committed.
+// orphan — it never fails the mutation that already committed. The derived
+// _t thumbnail of the removed key deletes alongside it.
 func (s *ProfileService) cleanupPhoto(ctx context.Context, key string) {
 	if err := s.photos.Delete(ctx, key); err != nil {
 		s.logger.WarnContext(ctx, "failed to delete profile photo from storage",
 			slog.String("key", key),
+			slog.String("error", err.Error()),
+		)
+	}
+	if err := s.photos.Delete(ctx, photo.ThumbKeyOf(key)); err != nil {
+		s.logger.WarnContext(ctx, "failed to delete profile photo thumb from storage",
+			slog.String("key", photo.ThumbKeyOf(key)),
 			slog.String("error", err.Error()),
 		)
 	}

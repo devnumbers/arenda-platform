@@ -14,21 +14,21 @@ describe('circlePhotoView — что показывает круг фото', ()
     expect(circlePhotoView('', { photoBroken: false, photoReady: false }).imgSrc).toBeNull();
   });
 
-  it('фото есть, onLoad ещё не стрелял — img скрыт (глиф-подложка в ожидании)', () => {
-    const view = circlePhotoView('/api/properties/p1/photo', {
+  it('фото есть, onLoad ещё не стрелял — img скрыт (глиф-подложка в ожидании); запрашивается thumb', () => {
+    const view = circlePhotoView('/api/properties/p1/photo?v=abc', {
       photoBroken: false,
       photoReady: false,
     });
-    expect(view.imgSrc).toBe('/api/properties/p1/photo');
+    expect(view.imgSrc).toBe('/api/properties/p1/photo?v=abc&size=thumb');
     expect(view.imgHidden).toBe(true);
   });
 
   it('onLoad стрелял — img показан', () => {
-    const view = circlePhotoView('/api/properties/p1/photo', {
+    const view = circlePhotoView('/api/properties/p1/photo?v=abc', {
       photoBroken: false,
       photoReady: true,
     });
-    expect(view.imgSrc).toBe('/api/properties/p1/photo');
+    expect(view.imgSrc).toBe('/api/properties/p1/photo?v=abc&size=thumb');
     expect(view.imgHidden).toBe(false);
   });
 
@@ -58,13 +58,13 @@ describe('circlePhotoView — что показывает круг фото', ()
 });
 
 describe('circlePhotoView — ретрай транзиентной ошибки (ADR 0065)', () => {
-  it('ретрай нулевой — src как пришёл (версия уже в URL от бэка)', () => {
+  it('ретрай нулевой — thumb поверх версионного URL от бэка', () => {
     const view = circlePhotoView('/api/me/photo?v=abc', {
       photoBroken: false,
       photoReady: false,
       retryNonce: 0,
     });
-    expect(view.imgSrc).toBe('/api/me/photo?v=abc');
+    expect(view.imgSrc).toBe('/api/me/photo?v=abc&size=thumb');
   });
 
   it('первая ошибка — src с ретрай-нонсом в хвосте существующего query', () => {
@@ -73,16 +73,16 @@ describe('circlePhotoView — ретрай транзиентной ошибки
       photoReady: false,
       retryNonce: 1,
     });
-    expect(view.imgSrc).toBe('/api/me/photo?v=abc&r=1');
+    expect(view.imgSrc).toBe('/api/me/photo?v=abc&size=thumb&r=1');
   });
 
-  it('ретрай на URL без query — нонс единственным параметром', () => {
+  it('ретрай на URL без query — нонс последним параметром', () => {
     const view = circlePhotoView('/api/me/photo', {
       photoBroken: false,
       photoReady: false,
       retryNonce: 2,
     });
-    expect(view.imgSrc).toBe('/api/me/photo?r=2');
+    expect(view.imgSrc).toBe('/api/me/photo?size=thumb&r=2');
   });
 
   it('битое после ретрая — глиф, нонс не рисуется', () => {
