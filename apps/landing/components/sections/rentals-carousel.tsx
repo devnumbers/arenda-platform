@@ -44,7 +44,7 @@ const CARDS: Card[] = [
   {
     title: "Отмечайте оплату аренды",
     text: "Покажем, сколько дней до оплаты и вовремя напомним",
-    textSmall: true,
+    textSmall: false,
     img: rentalCalendar,
     alt: "Экран оплаты аренды в Рентли",
     imgWidth: 240,
@@ -62,7 +62,7 @@ const CARDS: Card[] = [
   {
     title: "Отслеживайте сроки договора",
     text: "Напомним, когда договор будет подходить к концу",
-    textSmall: true,
+    textSmall: false,
     img: rentalContract,
     alt: "Экран договора аренды в Рентли",
     imgWidth: 240,

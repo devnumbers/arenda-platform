@@ -12,39 +12,40 @@ import (
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/identity/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // GetMePhoto implements GET /me/photo.
-func (h *AuthHandlers) GetMePhoto(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandlers) GetMePhoto(w http.ResponseWriter, r *http.Request, params openapi.GetMePhotoParams) {
 	userID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
 			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
-	h.servePhoto(w, r, userID, userID)
+	h.servePhoto(w, r, userID, userID, params.Size != nil && *params.Size == openapi.GetMePhotoParamsSizeThumb)
 }
 
 // GetUserPhoto implements GET /users/{userId}/photo (решение #1286): the
 // session's user reads the target's photo when the two share a readable
 // property; otherwise the same 404 as a missing photo.
-func (h *AuthHandlers) GetUserPhoto(w http.ResponseWriter, r *http.Request, userID openapi_types.UUID) {
+func (h *AuthHandlers) GetUserPhoto(w http.ResponseWriter, r *http.Request, userID openapi_types.UUID, params openapi.GetUserPhotoParams) {
 	viewerID, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
 			httpsupport.Problem(r.Context(), "Unauthorized", "Требуется авторизация"))
 		return
 	}
-	h.servePhoto(w, r, viewerID, userID)
+	h.servePhoto(w, r, viewerID, userID, params.Size != nil && *params.Size == openapi.GetUserPhotoParamsSizeThumb)
 }
 
 // servePhoto streams one profile photo (ADR 0065): descriptor first — the
 // ETag is the storage key's hash, so a matching If-None-Match answers 304
 // without opening the object — then the gated open.
-func (h *AuthHandlers) servePhoto(w http.ResponseWriter, r *http.Request, viewerID, userID uuid.UUID) {
+func (h *AuthHandlers) servePhoto(w http.ResponseWriter, r *http.Request, viewerID, userID uuid.UUID, wantThumb bool) {
 	// The descriptor first: the ETag is the storage key's hash, so a matching
 	// If-None-Match answers 304 without opening the object (ADR 0065).
 	key, _, err := h.profilePhoto.PhotoDescriptor(r.Context(), viewerID, userID)
@@ -54,8 +55,13 @@ func (h *AuthHandlers) servePhoto(w http.ResponseWriter, r *http.Request, viewer
 	}
 	// The validator and the cache policy travel with every answer — the 200
 	// carries them so the client can revalidate, the 304 so the cached copy
-	// stays honest.
+	// stays honest. The thumb's ETag derives from the main key: the thumb
+	// bytes are a deterministic function of it, so the 304 never lies even
+	// when the thumb object itself needs re-materialization.
 	etag := storageshared.ETagOf(key)
+	if wantThumb {
+		etag = photo.ThumbETagOf(key)
+	}
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", httpsupport.PhotoCacheControl)
 	if httpsupport.ETagMatches(r.Header.Get("If-None-Match"), etag) {
@@ -63,12 +69,18 @@ func (h *AuthHandlers) servePhoto(w http.ResponseWriter, r *http.Request, viewer
 		return
 	}
 
-	opened, err := h.profilePhoto.OpenPhoto(r.Context(), viewerID, userID)
+	opened, err := h.profilePhoto.OpenPhoto(r.Context(), viewerID, userID, wantThumb)
 	if err != nil {
 		h.writePhotoError(w, r, err)
 		return
 	}
 	defer httpsupport.ClosePhotoBody(r, opened.Body)
+
+	// The honest fallback (no thumb possible — webp) served the full object:
+	// its ETag must name the bytes that went out.
+	if wantThumb && opened.Key != photo.ThumbKeyOf(key) {
+		w.Header().Set("ETag", storageshared.ETagOf(opened.Key))
+	}
 
 	httpsupport.WritePhotoBytes(w, r, opened.ContentType, opened.Size, opened.Body)
 }

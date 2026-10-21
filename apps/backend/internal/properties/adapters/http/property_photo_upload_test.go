@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	propertiesapp "github.com/nambers/arenda-planform/apps/backend/internal/properties/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/properties/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
@@ -117,10 +118,17 @@ func (r *photoWireRepo) Delete(context.Context, uuid.UUID, uuid.UUID) error { re
 
 func (r *photoWireRepo) WithTx(transaction.Tx) propertiesapp.PropertyRepository { return r }
 
-// photoWireStorage records the storage traffic of the wire tests.
+// testWireJPEGType pins the wire jpeg content type of the photo wire tests
+// (goconst: the literal repeats across fixtures and assertions).
+const testWireJPEGType = "image/jpeg"
+
+// photoWireStorage records the storage traffic of the wire tests; the
+// noThumb flag plays the pre-thumb world (the derived _t key misses, the
+// main object serves — the honest fallback path).
 type photoWireStorage struct {
 	puts    []string
 	deletes []string
+	noThumb bool
 }
 
 func (s *photoWireStorage) Put(_ context.Context, key string, data io.Reader, _ string, _ int64) error {
@@ -133,10 +141,16 @@ func (s *photoWireStorage) Put(_ context.Context, key string, data io.Reader, _ 
 }
 
 func (s *photoWireStorage) Open(_ context.Context, key string) (body io.ReadCloser, size int64, contentType string, err error) {
+	if strings.Contains(key, "_t") {
+		if s.noThumb {
+			return nil, 0, "", storageshared.ErrNotFound
+		}
+		return io.NopCloser(strings.NewReader("thumb-bytes")), 11, testWireJPEGType, nil
+	}
 	if !strings.Contains(key, "with-photo") {
 		return nil, 0, "", storageshared.ErrNotFound
 	}
-	return io.NopCloser(strings.NewReader("jpeg-bytes")), 10, "image/jpeg", nil
+	return io.NopCloser(strings.NewReader("jpeg-bytes")), 10, testWireJPEGType, nil
 }
 
 func (s *photoWireStorage) Delete(_ context.Context, key string) error {
@@ -285,7 +299,7 @@ func TestPropertyPhotoGet_ServesAndCaches(t *testing.T) {
 		noPhotoRepo := &photoWireRepo{property: noPhoto}
 		noPhotoHandler := photoWireHandler(t, noPhotoRepo, storage)
 		rr := httptest.NewRecorder()
-		noPhotoHandler.GetPropertyPhoto(rr, photoGetRequest(t, target, ""), photoTestPropertyID())
+		noPhotoHandler.GetPropertyPhoto(rr, photoGetRequest(t, target, ""), photoTestPropertyID(), openapi.GetPropertyPhotoParams{})
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want 404", rr.Code)
 		}
@@ -295,7 +309,7 @@ func TestPropertyPhotoGet_ServesAndCaches(t *testing.T) {
 		t.Parallel()
 		etag := storageshared.ETagOf(key)
 		rr := httptest.NewRecorder()
-		handler.GetPropertyPhoto(rr, photoGetRequest(t, target, etag), photoTestPropertyID())
+		handler.GetPropertyPhoto(rr, photoGetRequest(t, target, etag), photoTestPropertyID(), openapi.GetPropertyPhotoParams{})
 		if rr.Code != http.StatusNotModified {
 			t.Fatalf("status = %d, want 304", rr.Code)
 		}
@@ -307,11 +321,11 @@ func TestPropertyPhotoGet_ServesAndCaches(t *testing.T) {
 	t.Run("200 streams the private bytes", func(t *testing.T) {
 		t.Parallel()
 		rr := httptest.NewRecorder()
-		handler.GetPropertyPhoto(rr, photoGetRequest(t, target, ""), photoTestPropertyID())
+		handler.GetPropertyPhoto(rr, photoGetRequest(t, target, ""), photoTestPropertyID(), openapi.GetPropertyPhotoParams{})
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200", rr.Code)
 		}
-		if got := rr.Header().Get("Content-Type"); got != "image/jpeg" {
+		if got := rr.Header().Get("Content-Type"); got != testWireJPEGType {
 			t.Errorf("content-type = %q, want image/jpeg", got)
 		}
 		if got := rr.Header().Get("Cache-Control"); got != "private, max-age=31536000, immutable" {
@@ -330,3 +344,76 @@ var (
 	_ propertiesapp.PropertyRepository = (*photoWireRepo)(nil)
 	_ storageshared.PhotoStorage       = (*photoWireStorage)(nil)
 )
+
+// TestPropertyPhotoGet_ServesThumb pins the ?size=thumb wire contract (ADR
+// 0065, тикет миниатюр): the thumb streams under the thumb ETag — derived
+// storage-free from the main key, so the 304 never opens storage — and the
+// honest fallback (no thumb materializable) carries the main key's ETag,
+// naming the bytes that actually went out.
+func TestPropertyPhotoGet_ServesThumb(t *testing.T) {
+	t.Parallel()
+
+	key := "photos/01987654-3210-7abc-9def-0123456789ab-with-photo.jpg"
+	property := domain.Property{
+		ID:      photoTestPropertyID(),
+		Name:    "Test",
+		Address: "Test Address",
+		Type:    domain.PropertyTypeApartment,
+		Status:  domain.PropertyStatusActive,
+	}
+	property.PhotoKey = &key
+	jpegType := photo.ContentTypeJPEG
+	property.PhotoContentType = &jpegType
+	repo := &photoWireRepo{property: property}
+	handler := photoWireHandler(t, repo, &photoWireStorage{})
+
+	target := "/api/properties/" + photoTestPropertyID().String() + "/photo"
+
+	t.Run("200 streams the thumb under the thumb etag", func(t *testing.T) {
+		t.Parallel()
+		rr := httptest.NewRecorder()
+		thumbParams := openapi.GetPropertyPhotoParams{Size: new(openapi.GetPropertyPhotoParamsSizeThumb)}
+		handler.GetPropertyPhoto(rr, photoGetRequest(t, target, ""), photoTestPropertyID(), thumbParams)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rr.Code)
+		}
+		if got := rr.Header().Get("ETag"); got != photo.ThumbETagOf(key) {
+			t.Errorf("etag = %q, want the thumb key hash", got)
+		}
+		if got := rr.Header().Get("Content-Type"); got != testWireJPEGType {
+			t.Errorf("content-type = %q, want image/jpeg", got)
+		}
+		if !strings.Contains(rr.Body.String(), "thumb-bytes") {
+			t.Errorf("body = %q, want the thumb bytes", rr.Body.String())
+		}
+	})
+
+	t.Run("304 from the thumb etag without a storage read", func(t *testing.T) {
+		t.Parallel()
+		rr := httptest.NewRecorder()
+		thumbParams := openapi.GetPropertyPhotoParams{Size: new(openapi.GetPropertyPhotoParamsSizeThumb)}
+		handler.GetPropertyPhoto(rr, photoGetRequest(t, target, photo.ThumbETagOf(key)), photoTestPropertyID(), thumbParams)
+		if rr.Code != http.StatusNotModified {
+			t.Fatalf("status = %d, want 304", rr.Code)
+		}
+	})
+
+	t.Run("the honest fallback carries the main etag", func(t *testing.T) {
+		t.Parallel()
+		// The pre-thumb world: the derived key misses and the main bytes do
+		// not materialize (undecodable stub) — the full object serves, and
+		// its ETag must name those bytes.
+		noThumbHandler := photoWireHandler(t, repo, &photoWireStorage{noThumb: true})
+		rr := httptest.NewRecorder()
+		noThumbHandler.GetPropertyPhoto(rr, photoGetRequest(t, target+"?size=thumb", ""), photoTestPropertyID(), openapi.GetPropertyPhotoParams{})
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rr.Code)
+		}
+		if got := rr.Header().Get("ETag"); got != storageshared.ETagOf(key) {
+			t.Errorf("etag = %q, want the main key hash (the fallback bytes)", got)
+		}
+		if !strings.Contains(rr.Body.String(), "jpeg-bytes") {
+			t.Errorf("body = %q, want the full bytes", rr.Body.String())
+		}
+	})
+}

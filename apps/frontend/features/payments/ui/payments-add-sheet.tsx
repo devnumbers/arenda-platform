@@ -13,6 +13,7 @@ import {
 } from '../lib/use-payment-wizard-draft';
 import { paymentAddSheetState } from '../lib/payment-add-sheet-model';
 import { Button, Modal, ModalContent } from '@/shared/ui/design';
+import { pushPage } from '@/shared/lib/navigation';
 
 /**
  * Единый вход в создание платежа (спека #453, история 13): клик «Добавить»
@@ -89,7 +90,7 @@ export function PaymentsAddSheet({
   const state = paymentAddSheetState(loaded, latest, fixedType);
 
   const goWizard = (type: PaymentDraftType): void => {
-    router.push(ROUTES.propertyPaymentNew(propertyId, type));
+    pushPage(router, ROUTES.propertyPaymentNew(propertyId, type));
   };
 
   const handleOpenChange = (nextOpen: boolean): void => {

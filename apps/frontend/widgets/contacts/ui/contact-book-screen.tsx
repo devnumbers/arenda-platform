@@ -37,6 +37,7 @@ import {
   serializeContactBookSortToParams,
 } from '../lib/contact-book-model';
 import { ContactRowButton } from '@/entities/contact';
+import { pushPage } from '@/shared/lib/navigation';
 import {
   ContactsBookSkeleton,
   ContactsEmptyState,
@@ -118,7 +119,7 @@ export function ContactBookScreen({
       icon={<Add />}
       label="Добавить контакт"
       data-testid="contacts-create"
-      onClick={() => router.push(ROUTES.contactNew)}
+      onClick={() => pushPage(router, ROUTES.contactNew)}
     />
   );
   const addButtonCompact = (
@@ -126,7 +127,7 @@ export function ContactBookScreen({
       icon={<Add />}
       label="Добавить контакт"
       data-testid="contacts-create-compact"
-      onClick={() => router.push(ROUTES.contactNew)}
+      onClick={() => pushPage(router, ROUTES.contactNew)}
     />
   );
 
@@ -158,7 +159,7 @@ export function ContactBookScreen({
             <div className="mt-4 mb-6 px-6">
               {/* Пилюля поиска — чистый канон (макет 3226-74333: без «+»,
                * тикет #1238); на подтверждённой пустоте спрятана (#1004, §7). */}
-              <BookSearchPill onOpenSearch={() => router.push(ROUTES.contactSearch)} />
+              <BookSearchPill onOpenSearch={() => pushPage(router, ROUTES.contactSearch)} />
             </div>
           )}
         </HubCollapseAnchor>
@@ -183,7 +184,7 @@ export function ContactBookScreen({
         ) : (
           <>
             {contacts.length === 0 ? (
-              <ContactsEmptyState onAdd={() => router.push(ROUTES.contactNew)} />
+              <ContactsEmptyState onAdd={() => pushPage(router, ROUTES.contactNew)} />
             ) : (
               <>
                 <div className="mb-6 px-6">
@@ -210,7 +211,7 @@ export function ContactBookScreen({
                             contact={contact}
                             surface="muted"
                             subtitle={contactBookRowSubtitle(contact)}
-                            onSelect={() => router.push(ROUTES.contact(contact.id))}
+                            onSelect={() => pushPage(router, ROUTES.contact(contact.id))}
                           />
                         ))}
                       </div>

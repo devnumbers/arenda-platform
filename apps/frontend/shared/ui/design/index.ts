@@ -135,3 +135,7 @@ export {
   InfiniteQueryTail as InfiniteQueryHead,
   type InfiniteQueryTailQuery as InfiniteQueryHeadQuery,
 } from './infinite-query-tail';
+// Шторка плавных переходов между страницами (порт alterix-new): монтируется
+// один раз в ScreenLayout; каналы — pushPage/replacePage/goBack и клики
+// по ссылкам.
+export { PageTransitionOverlay } from './page-transition/page-transition-overlay';

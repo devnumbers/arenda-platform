@@ -5,7 +5,7 @@ import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, replacePage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { type IsoDate } from '@/entities/payment';
@@ -216,7 +216,7 @@ export function RentalCreateWizardFlow({
    * /properties/new, и goBack возвращал бы на создание объекта. Носитель
    * сессии чистится при размонтировании. */
   function closeCreated(): void {
-    router.replace(ROUTES.property(propertyId));
+    replacePage(router, ROUTES.property(propertyId));
   }
 
   /** Выход из визарда крестиком с шагов (решение владельца: бросил

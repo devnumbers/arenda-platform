@@ -504,7 +504,9 @@ func decodePinBody(w http.ResponseWriter, r *http.Request) (openapi.PinnedUpdate
 }
 
 // GetPropertyPhoto implements GET /api/properties/{propertyId}/photo.
-func (h *PropertyHandlers) GetPropertyPhoto(w http.ResponseWriter, r *http.Request, propertyID uuid.UUID) {
+func (h *PropertyHandlers) GetPropertyPhoto(
+	w http.ResponseWriter, r *http.Request, propertyID uuid.UUID, params openapi.GetPropertyPhotoParams,
+) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
@@ -519,10 +521,16 @@ func (h *PropertyHandlers) GetPropertyPhoto(w http.ResponseWriter, r *http.Reque
 		h.handlePropertyError(w, r, err)
 		return
 	}
-	// The validator and the cache policy travel with every answer — the 200
-	// carries them so the client can revalidate, the 304 so the cached copy
-	// stays honest.
+	// The thumb variant (тикет миниатюр): its ETag derives from the same key
+	// storage-free, and the honest fallback to the full object rewrites the
+	// ETag to the bytes actually served. The validator and the cache policy
+	// travel with every answer — the 200 carries them so the client can
+	// revalidate, the 304 so the cached copy stays honest.
+	wantThumb := params.Size != nil && *params.Size == openapi.GetPropertyPhotoParamsSizeThumb
 	etag := storageshared.ETagOf(key)
+	if wantThumb {
+		etag = photo.ThumbETagOf(key)
+	}
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", httpsupport.PhotoCacheControl)
 	if httpsupport.ETagMatches(r.Header.Get("If-None-Match"), etag) {
@@ -530,12 +538,16 @@ func (h *PropertyHandlers) GetPropertyPhoto(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	body, size, contentType, _, err := h.svc.OpenPropertyPhoto(r.Context(), actor, propertyID)
+	body, size, contentType, servedKey, err := h.svc.OpenPropertyPhoto(r.Context(), actor, propertyID, wantThumb)
 	if err != nil {
 		h.handlePropertyError(w, r, err)
 		return
 	}
 	defer httpsupport.ClosePhotoBody(r, body)
+
+	if wantThumb && servedKey != photo.ThumbKeyOf(key) {
+		w.Header().Set("ETag", storageshared.ETagOf(servedKey))
+	}
 
 	httpsupport.WritePhotoBytes(w, r, contentType, size, body)
 }

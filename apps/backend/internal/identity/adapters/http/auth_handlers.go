@@ -111,7 +111,7 @@ type Profiler interface {
 // ETag (the storage key hash) so a 304 is answered without a storage read.
 type ProfilePhotos interface {
 	PhotoDescriptor(ctx context.Context, viewerID, userID uuid.UUID) (key, contentType string, err error)
-	OpenPhoto(ctx context.Context, viewerID, userID uuid.UUID) (application.OpenedPhoto, error)
+	OpenPhoto(ctx context.Context, viewerID, userID uuid.UUID, wantThumb bool) (application.OpenedPhoto, error)
 	SetProfilePhoto(ctx context.Context, userID uuid.UUID, processed photo.Processed) (domain.User, error)
 	DeleteProfilePhoto(ctx context.Context, userID uuid.UUID) (domain.User, error)
 }

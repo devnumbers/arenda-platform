@@ -3,7 +3,7 @@
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { Add, Block, Info, Kebab, SmallArrowRight } from '@/shared/assets/icons';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
   ParticipantRowBadge,
@@ -94,7 +94,7 @@ export function ParticipantScreen({
                   <MenuItem
                     icon={<Add className="h-6 w-6" />}
                     onSelect={() =>
-                      router.push(ROUTES.participantInvite(participantId))
+                      pushPage(router, ROUTES.participantInvite(participantId))
                     }
                   >
                     Пригласить в объект
@@ -143,7 +143,7 @@ export function ParticipantScreen({
                   photoUrl={leg.photoUrl ?? undefined}
                   type={leg.type}
                   onSelect={() =>
-                    router.push(
+                    pushPage(router,
                       ROUTES.participantRights(participantId, leg.propertyId),
                     )
                   }

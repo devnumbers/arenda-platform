@@ -48,7 +48,7 @@ func TestProfileService_OpenPhoto_SelfSkipsAccessCheck(t *testing.T) {
 	h := newProfileHarness(t)
 	user := seedPhotoUser(t, h)
 
-	opened, err := h.svc.OpenPhoto(context.Background(), user.ID, user.ID)
+	opened, err := h.svc.OpenPhoto(context.Background(), user.ID, user.ID, false)
 	if err != nil {
 		t.Fatalf("OpenPhoto error = %v", err)
 	}
@@ -71,7 +71,7 @@ func TestProfileService_OpenPhoto_SharedObjectAllows(t *testing.T) {
 	h.checker.shared = true
 	viewer := uuid.Must(uuid.NewV7())
 
-	opened, err := h.svc.OpenPhoto(context.Background(), viewer, user.ID)
+	opened, err := h.svc.OpenPhoto(context.Background(), viewer, user.ID, false)
 	if err != nil {
 		t.Fatalf("OpenPhoto error = %v", err)
 	}
@@ -90,7 +90,7 @@ func TestProfileService_OpenPhoto_NoSharedObjectIsPhotoNotFound(t *testing.T) {
 	user := seedPhotoUser(t, h)
 	viewer := uuid.Must(uuid.NewV7())
 
-	_, err := h.svc.OpenPhoto(context.Background(), viewer, user.ID)
+	_, err := h.svc.OpenPhoto(context.Background(), viewer, user.ID, false)
 	if !errors.Is(err, ErrPhotoNotFound) {
 		t.Fatalf("OpenPhoto error = %v, want ErrPhotoNotFound", err)
 	}
@@ -107,7 +107,7 @@ func TestProfileService_OpenPhoto_CheckerFailureFailsClosed(t *testing.T) {
 	h.checker.err = checkerErr
 	viewer := uuid.Must(uuid.NewV7())
 
-	_, err := h.svc.OpenPhoto(context.Background(), viewer, user.ID)
+	_, err := h.svc.OpenPhoto(context.Background(), viewer, user.ID, false)
 	if !errors.Is(err, checkerErr) {
 		t.Fatalf("OpenPhoto error = %v, want wrap of %v", err, checkerErr)
 	}

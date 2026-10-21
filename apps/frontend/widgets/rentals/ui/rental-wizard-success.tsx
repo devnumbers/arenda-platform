@@ -8,6 +8,7 @@ import type { Rental } from '@/entities/rental';
 import { rentalSuccessCopy } from '@/features/rentals';
 import { Button, StatusIcon, StickyBottomBar } from '@/shared/ui/design';
 import { WizardBottomBar } from './wizard-chrome';
+import { replacePage } from '@/shared/lib/navigation';
 
 /**
  * Экран успеха визарда аренды (Figma 1371:63753 / 1419:27092): синий круг
@@ -70,7 +71,7 @@ export function RentalWizardSuccess({
           <Button
             variant="secondary"
             className="w-full"
-            onClick={() => router.replace(ROUTES.propertyRental(created.propertyId))}
+            onClick={() => replacePage(router, ROUTES.propertyRental(created.propertyId))}
           >
             Открыть аренду
           </Button>

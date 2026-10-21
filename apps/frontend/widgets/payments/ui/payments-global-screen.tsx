@@ -56,6 +56,7 @@ import {
   PaymentObjectAvatar,
   PaymentsStateCard,
 } from "./payments-sections";
+import { pushPage } from "@/shared/lib/navigation";
 
 /** Максимум карточек в ленте секции главного экрана (решение владельца
  * 09.09): четыре платежа, замыкающая «Все …» — пятая; остальное — на
@@ -135,7 +136,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
   const openAdd = (): void => {
     if (addTarget === null) return;
     if (addTarget.kind === "objects") {
-      router.push(ROUTES.paymentsObjects);
+      pushPage(router, ROUTES.paymentsObjects);
       return;
     }
     setAddSheetPropertyId(addTarget.propertyId);
@@ -149,7 +150,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
   };
 
   const openPayment = (payment: GlobalPayment): void =>
-    router.push(ROUTES.propertyPayment(payment.propertyId, payment.id));
+    pushPage(router, ROUTES.propertyPayment(payment.propertyId, payment.id));
 
   // Два экземпляра узла: у ряда заголовка свой testid — слоты TopNav
   // рендерят свой узел в трёх местах (крыло, инлайн-компакт, мобайл-клон),
@@ -202,12 +203,12 @@ export function PaymentsGlobalScreen(): JSX.Element {
 
         {globalEmpty ? (
           <PaymentsGlobalEmpty
-            onAddProperty={() => router.push(ROUTES.propertyNew)}
+            onAddProperty={() => pushPage(router, ROUTES.propertyNew)}
           />
         ) : (
           <div className="flex flex-col gap-6 px-6 pt-4">
             <PaymentsSearchPill
-              onOpenSearch={() => router.push(ROUTES.paymentsSearch)}
+              onOpenSearch={() => pushPage(router, ROUTES.paymentsSearch)}
             />
 
             {pending && (
@@ -240,7 +241,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                     <PaymentsGlobalSection
                       testId="payments-section-favorites"
                       title="Избранные"
-                      onOpen={() => router.push(ROUTES.paymentsFavorites)}
+                      onOpen={() => pushPage(router, ROUTES.paymentsFavorites)}
                     >
                       <FavoritesSectionBody
                         favorites={globalFavoritePayments(
@@ -249,7 +250,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                         favoriteCount={feedQuery.data?.favoriteCount ?? 0}
                         onSelectPayment={openPayment}
                         onOpenAll={() =>
-                          router.push(ROUTES.paymentsFavorites)
+                          pushPage(router, ROUTES.paymentsFavorites)
                         }
                       />
                     </PaymentsGlobalSection>
@@ -257,7 +258,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                     <PaymentsGlobalSection
                       testId="payments-section-overdue"
                       title="Просроченные"
-                      onOpen={() => router.push(ROUTES.paymentsOverdue)}
+                      onOpen={() => pushPage(router, ROUTES.paymentsOverdue)}
                     >
                       <OverdueSectionBody
                         overdue={globalOverduePayments(
@@ -267,19 +268,19 @@ export function PaymentsGlobalScreen(): JSX.Element {
                           feedQuery.data?.overdueOperationsCount ?? 0
                         }
                         onSelectOperation={(propertyId, operationId) =>
-                          router.push(
+                          pushPage(router,
                             ROUTES.propertyOperation(propertyId, operationId),
                           )
                         }
                         onSelectPayment={openPayment}
-                        onOpenAll={() => router.push(ROUTES.paymentsOverdue)}
+                        onOpenAll={() => pushPage(router, ROUTES.paymentsOverdue)}
                       />
                     </PaymentsGlobalSection>
 
                     <PaymentsGlobalSection
                       testId="payments-section-due"
                       title="На оплату"
-                      onOpen={() => router.push(ROUTES.paymentsDue)}
+                      onOpen={() => pushPage(router, ROUTES.paymentsDue)}
                     >
                       <DueSectionBody
                         due={(dueQuery.data?.items ?? []).slice(
@@ -290,21 +291,21 @@ export function PaymentsGlobalScreen(): JSX.Element {
                           feedQuery.data?.dueOperationsCount ?? 0
                         }
                         onSelectPayment={(item) =>
-                          router.push(
+                          pushPage(router,
                             ROUTES.propertyPayment(
                               item.propertyId,
                               item.paymentId,
                             ),
                           )
                         }
-                        onOpenAll={() => router.push(ROUTES.paymentsDue)}
+                        onOpenAll={() => pushPage(router, ROUTES.paymentsDue)}
                       />
                     </PaymentsGlobalSection>
 
                     <PaymentsGlobalSection
                       testId="payments-section-objects"
                       title="Платежи объектов"
-                      onOpen={() => router.push(ROUTES.paymentsObjects)}
+                      onOpen={() => pushPage(router, ROUTES.paymentsObjects)}
                     >
                       <ObjectsSectionBody
                         objects={objects
@@ -317,9 +318,9 @@ export function PaymentsGlobalScreen(): JSX.Element {
                           }))
                           .slice(0, SECTION_CARDS_LIMIT)}
                         onSelectObject={(propertyId) =>
-                          router.push(ROUTES.propertyPayments(propertyId))
+                          pushPage(router, ROUTES.propertyPayments(propertyId))
                         }
-                        onOpenAll={() => router.push(ROUTES.paymentsObjects)}
+                        onOpenAll={() => pushPage(router, ROUTES.paymentsObjects)}
                       />
                     </PaymentsGlobalSection>
                   </>

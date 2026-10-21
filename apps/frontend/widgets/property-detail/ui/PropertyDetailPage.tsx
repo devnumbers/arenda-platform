@@ -4,7 +4,7 @@ import {useParams, useRouter} from 'next/navigation';
 import type {JSX} from 'react';
 import React from 'react';
 import {notify} from '@/shared/lib/notifications';
-import {goBack} from '@/shared/lib/navigation';
+import {goBack, pushPage} from '@/shared/lib/navigation';
 import {ROUTES} from '@/shared/config/routes';
 import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import {
@@ -69,7 +69,7 @@ import {propertySectionCta} from '../lib/property-section-cta';
 import {operationsSectionTitle} from '../lib/operations-section';
 import {propertyDetailTasks} from '../lib/detail-tasks';
 import {propertyApartmentSummaryRows} from '../lib/apartment-summary';
-import {TopNav, TopNavTitle, PageContent, ConfirmDialog} from '@/shared/ui/design';
+import {TopNav, TopNavTitle, PageContent, ConfirmDialog, TopNavBackButton} from '@/shared/ui/design';
 import {PropertyMediaBlock} from './PropertyMediaBlock';
 import {
   PropertyRentalBlock,
@@ -88,7 +88,6 @@ import {
   PropertyStatusSheet,
 } from './PropertyDetailActions';
 import {PropertyDetailKebab} from './PropertyDetailKebab';
-import {PropertyDetailBackButton} from './PropertyDetailBackButton';
 import {PropertyAccessPill} from './PropertyAccessPill';
 import {PropertyArchivedPill} from './PropertyArchivedPill';
 import {propertyHeaderPills} from '../lib/property-header-pills';
@@ -455,7 +454,7 @@ export function PropertyDetailPage(): JSX.Element {
         // Ветка идущей аренды: в мастер итогов с меткой продолжения.
         setGuardedAction(null);
         requestRentalCompleteResume(id, action === 'archive' ? 'archive' : 'maintenance');
-        router.push(ROUTES.propertyRentalComplete(id));
+        pushPage(router, ROUTES.propertyRentalComplete(id));
     };
 
     const handleAction = (key: PropertyDetailActionKey) => {
@@ -486,13 +485,13 @@ export function PropertyDetailPage(): JSX.Element {
         }
         switch (key) {
             case 'about':
-                router.push(ROUTES.propertyAbout(id));
+                pushPage(router, ROUTES.propertyAbout(id));
                 break;
             case 'change-status':
                 setStatusSheetOpen(true);
                 break;
             case 'edit':
-                router.push(ROUTES.propertyEdit(id));
+                pushPage(router, ROUTES.propertyEdit(id));
                 break;
             case 'unpin':
                 setPin.mutate(
@@ -501,13 +500,13 @@ export function PropertyDetailPage(): JSX.Element {
                 );
                 break;
             case 'start-rental':
-                router.push(ROUTES.propertyRentalNew(id));
+                pushPage(router, ROUTES.propertyRentalNew(id));
                 break;
             case 'complete-rental':
                 // Единый путь завершения (#534, решение владельца
                 // 14.10.2026): мастер итогов — быстрого шита #627 больше
                 // нет.
-                router.push(ROUTES.propertyRentalComplete(id));
+                pushPage(router, ROUTES.propertyRentalComplete(id));
                 break;
             case 'delete-rental':
                 setDeleteRentalSheetOpen(true);
@@ -546,7 +545,7 @@ export function PropertyDetailPage(): JSX.Element {
                 // страницы (мигания нет); участник объекта пользуется
                 // страницей на любом тарифе («пригласили — значит
                 // пользуется», ADR 0064).
-                router.push(
+                pushPage(router,
                     sharingGateRedirect(permissions.canManageMembers, isPaid)
                     ?? ROUTES.propertyParticipants(id),
                 );
@@ -601,15 +600,15 @@ export function PropertyDetailPage(): JSX.Element {
     const status = property?.status;
 
     const sectionCTAs: Record<PropertyDetailSectionKey, (() => void) | undefined> = {
-        rental: () => router.push(ROUTES.propertyRentalNew(id)),
+        rental: () => pushPage(router, ROUTES.propertyRentalNew(id)),
         // Вход в создание платежа — через канонный шит с проверкой
         // черновика (#1066): раньше секция кидала straight в визард,
         // молча возобновляя черновик.
         payments: () => setPaymentsSheetOpen(true),
         operations: undefined,
-        contacts: () => router.push(ROUTES.propertyContactNew(id)),
-        tasks: () => router.push(ROUTES.propertyTaskCreate(id)),
-        about: () => router.push(ROUTES.propertyEdit(id)),
+        contacts: () => pushPage(router, ROUTES.propertyContactNew(id)),
+        tasks: () => pushPage(router, ROUTES.propertyTaskCreate(id)),
+        about: () => pushPage(router, ROUTES.propertyEdit(id)),
     };
 
     return (
@@ -619,7 +618,7 @@ export function PropertyDetailPage(): JSX.Element {
              * макет 3225-77427; прямых заходов режим «деталь = лендинг
              * таба» больше не создаёт). Кебаб — в trailing. */}
             <TopNav
-                leading={<PropertyDetailBackButton/>}
+                leading={<TopNavBackButton fallbackHref={ROUTES.properties} />}
                 trailing={
                     status !== undefined && propertyErrorKind === null ? (
                         <PropertyDetailKebab
@@ -701,13 +700,13 @@ export function PropertyDetailPage(): JSX.Element {
                                 ) : currentRental !== undefined ? (
                                     <PropertyRentalBlock
                                         rental={currentRental}
-                                        onExtend={() => router.push(ROUTES.propertyRentalExtend(id))}
+                                        onExtend={() => pushPage(router, ROUTES.propertyRentalExtend(id))}
                                         // Единый путь завершения — мастер итогов
                                         // (#534, решение владельца 14.10.2026);
                                         // смотрящему мастер честно откажет
                                         // (writeGate ADR 0053 §3, решение
                                         // ревью #627).
-                                        onComplete={() => router.push(ROUTES.propertyRentalComplete(id))}
+                                        onComplete={() => pushPage(router, ROUTES.propertyRentalComplete(id))}
                                     />
                                 ) : (
                                     <PropertySectionEmpty
@@ -775,7 +774,7 @@ export function PropertyDetailPage(): JSX.Element {
                                     tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
                                     contacts={propertyContacts}
                                     onOpenContact={(contactId) =>
-                                        router.push(ROUTES.propertyContact(id, contactId))
+                                        pushPage(router, ROUTES.propertyContact(id, contactId))
                                     }
                                 />
                             ) : (
@@ -824,7 +823,7 @@ export function PropertyDetailPage(): JSX.Element {
                                         }
                                         const ruleId = task.ruleId;
                                         return () =>
-                                            router.push(ROUTES.propertyTaskEdit(id, ruleId));
+                                            pushPage(router, ROUTES.propertyTaskEdit(id, ruleId));
                                     }}
                                 />
                             ) : (
@@ -960,7 +959,7 @@ export function PropertyDetailPage(): JSX.Element {
                         // удаление объекта остаётся ручным повтором после
                         // завершения (необратимое действие — свежий
                         // подтверждение за владельцем).
-                        router.push(ROUTES.propertyRentalComplete(id));
+                        pushPage(router, ROUTES.propertyRentalComplete(id));
                     }
                 }}
             />

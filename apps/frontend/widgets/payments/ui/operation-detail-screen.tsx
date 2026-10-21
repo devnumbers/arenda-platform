@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -385,7 +385,7 @@ export function OperationView({
             categoryIcon={<CategoryGlyph icon={liveCategory.icon} color={liveCategory.color} circleClass="h-11 w-11" glyphClass="h-6 w-6" />}
             title={liveTitle}
             subtitle="Платеж"
-            onSelect={() => router.push(ROUTES.propertyPayment(propertyId, operation.paymentId as string))}
+            onSelect={() => pushPage(router, ROUTES.propertyPayment(propertyId, operation.paymentId as string))}
           />
         )}
         <PaymentRowButton
@@ -396,7 +396,7 @@ export function OperationView({
           }
           title={propertyTitle !== '' ? propertyTitle : 'Объект'}
           subtitle="Объект"
-          onSelect={() => router.push(ROUTES.property(propertyId))}
+          onSelect={() => pushPage(router, ROUTES.property(propertyId))}
         />
       </OperationSection>
 
@@ -461,7 +461,7 @@ function OperationHero({
         {Icon !== undefined && <Icon className="h-13 w-13 text-white" aria-hidden />}
       </span>
       <div className="flex flex-col items-center gap-3">
-        <span className="text-xl leading-6 text-content">{operation.title}</span>
+        <span className="text-xl leading-6 text-content text-center text-balance">{operation.title}</span>
         <span
           className="flex items-center gap-1.5 rounded-pill py-0.5 pl-0.5 pr-3"
           style={{ backgroundColor: `${category.color}1A` }}

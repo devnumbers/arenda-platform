@@ -27,6 +27,7 @@ import {
   MenuTrigger,
 } from '@/shared/ui/design';
 import { WizardHeading } from './wizard-chrome';
+import { pushPage } from '@/shared/lib/navigation';
 
 /**
  * Шаг 4 «Контакт арендатора» (Figma 1855:63385 / 64129 / 64385): заголовок
@@ -86,24 +87,24 @@ export function ContactStep({
 
   const openPicker = (): void => {
     onSubRouteOpen();
-    router.push(ROUTES.propertyRentalNewContact(propertyId));
+    pushPage(router, ROUTES.propertyRentalNewContact(propertyId));
   };
 
   const openCreateBranch = (): void => {
     onSubRouteOpen();
-    router.push(
+    pushPage(router,
       `${ROUTES.propertyContactNew(propertyId)}?role=${encodeURIComponent('Арендатор')}&pick=rental`,
     );
   };
 
   const openContactCard = (contactId: string): void => {
     onSubRouteOpen();
-    router.push(ROUTES.propertyContact(propertyId, contactId));
+    pushPage(router, ROUTES.propertyContact(propertyId, contactId));
   };
 
   const openContactEdit = (contactId: string): void => {
     onSubRouteOpen();
-    router.push(ROUTES.propertyContactEdit(propertyId, contactId));
+    pushPage(router, ROUTES.propertyContactEdit(propertyId, contactId));
   };
 
   const handleDelete = (): void => {

@@ -28,6 +28,7 @@ import {
 } from "../lib/overdue-global-model";
 import { overdueDaysLine } from "../lib/payments-global-model";
 import { PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
+import { pushPage } from "@/shared/lib/navigation";
 
 /**
  * Экран «Просроченные платежи» (карта #573, тикет #580; вход — карточка
@@ -164,13 +165,13 @@ export function PaymentOverdueGlobalScreen({
                   }
                   onSelect={() =>
                     payment.oldestOverdueOperationId !== null
-                      ? router.push(
+                      ? pushPage(router,
                           ROUTES.propertyOperation(
                             payment.propertyId,
                             payment.oldestOverdueOperationId,
                           ),
                         )
-                      : router.push(
+                      : pushPage(router,
                           ROUTES.propertyPayment(payment.propertyId, payment.id),
                         )
                   }

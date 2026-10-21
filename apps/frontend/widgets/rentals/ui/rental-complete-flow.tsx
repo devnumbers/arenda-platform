@@ -41,6 +41,7 @@ import { MoneyField, PickerTriggerBox, WizardBottomBar } from './wizard-chrome';
 import { RentalSummaryContent } from './rental-summary-content';
 import { useContact } from '@/features/contacts';
 import { RentalSummarySkeleton } from './rental-skeletons';
+import { replacePage } from '@/shared/lib/navigation';
 
 /**
  * Поток мастера «Завершение аренды» (#534, клиентское состояние на одном
@@ -500,12 +501,12 @@ export function RentalCompleteFlow({
     // канон #1079): завершение открывается поверх визара создания аренды
     // (пуш «Завершить»), back выбрасывал на его шаг. Крестик финала —
     // тот же обработчик.
-    router.replace(ROUTES.property(rental.propertyId));
+    replacePage(router, ROUTES.property(rental.propertyId));
   }
 
   function openRental(): void {
     // Поток завершён — маршрут мастера заменяется завершённой детализацией
     // (#535; CODING_STANDARDS, Navigation).
-    router.replace(ROUTES.propertyRentalCompleted(rental.propertyId, rental.id));
+    replacePage(router, ROUTES.propertyRentalCompleted(rental.propertyId, rental.id));
   }
 }

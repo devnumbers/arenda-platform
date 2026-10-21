@@ -509,6 +509,40 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Шторка переходов между страницами: клиентская навигация на другую
+  // страницу идёт только через pushPage/replacePage/goBack
+  // (shared/lib/navigation) — прямые router.push/router.replace обходят
+  // шторку. no-restricted-properties, а не no-restricted-syntax: блоки
+  // syntax — «последнее слово» security-контура, файл-scoped блок рядом
+  // ослабил бы их; это правило независимо. Raw-вызовы легальны только в
+  // писателях URL-state той же страницы (use-url-params в shared/lib/hooks —
+  // вне скоупа блока), внутри самой shared/lib/navigation и в клик-канале
+  // самой шторки (shared/ui/design/page-transition).
+  {
+    files: [
+      "widgets/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
+      "features/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
+      "entities/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
+      "app/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
+    ],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "router",
+          property: "push",
+          message:
+            "Page navigation goes through pushPage(router, href) from @/shared/lib/navigation — raw router.push bypasses the page-transition curtain.",
+        },
+        {
+          object: "router",
+          property: "replace",
+          message:
+            "Page navigation goes through replacePage(router, href); URL-state writes of the same page go through useUrlParams().write — raw router.replace bypasses both (see CODING_STANDARDS, Navigation and browser history).",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

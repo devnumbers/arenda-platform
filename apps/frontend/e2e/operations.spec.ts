@@ -4,6 +4,7 @@ import {
   openCabinetWithSeededSession,
   SEEDED_APARTMENT_PROPERTY_ID,
   SEEDED_GARAGE_PROPERTY_ID,
+  SEEDED_PROPERTIES,
   test,
 } from './fixtures';
 
@@ -222,12 +223,21 @@ test.describe('экраны операций — сквозной флоу', () 
     await expect(page.getByRole('button', { name: 'Интернет' }).first()).toBeVisible();
   });
 
-  test('«Назад» ведёт на родительский экран, а не листает историю браузера', async ({
+  test('«Назад» ленты операций ходит по истории: период replace-ится, вверх — хаб и список', async ({
     page,
     seededUser,
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
-    await page.goto(APARTMENT_OPERATIONS_URL);
+    // Реальный путь пользователя: список → хаб → лента (не goto) —
+    // история «Назад» обязана совпадать с ним (решение владельца 21.10,
+    // замена структурных push'ей #472).
+    await page.goto('/properties');
+    await page
+      .getByRole('link', { name: `Открыть объект ${SEEDED_PROPERTIES[0]}` })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`));
+    await page.getByRole('link', { name: /Операции в/ }).click();
+    await expect(page).toHaveURL(new RegExp(`${APARTMENT_OPERATIONS_URL}$`));
 
     // Чип периода в дефолте «весь период» нейтральный («Период», #670),
     // с применённым выбором — диапазон; берём его как соседа стабильного
@@ -255,19 +265,21 @@ test.describe('экраны операций — сквозной флоу', () 
       await expect(page).toHaveURL(/\?from=/);
     };
 
-    // Период применён дважды: каждое применение replace-ит запись списка,
-    // поэтому в истории браузера лежат прежние периоды списка.
+    // Период применён дважды: пикер replace-ит запись списка (#670) —
+    // в истории не остаётся ни применений периода, ни прежних диапазонов.
     await applyRange(['5', '10']);
     await applyRange(['5', '15']);
 
-    // «Назад» — структурный переход на объект, а не на прошлый период.
+    // «Назад» ленты — по истории на хаб, мимо заменённых записей периода.
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(new RegExp(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}$`));
 
-    // С направления «Назад» — на главный список операций, без query.
-    await page.goto(`${APARTMENT_OPERATIONS_URL}/expense`);
+    // «Назад» хаба — по истории на список объектов.
     await page.getByRole('button', { name: 'Назад' }).click();
-    await expect(page).toHaveURL(new RegExp('/operations$'));
+    await expect(page).toHaveURL(/\/properties$/);
+    await expect(
+      page.getByRole('heading', { name: 'Объекты', exact: true }),
+    ).toBeVisible();
   });
 
   test('смена периода не подменяет страницу скелетоном — сумма и список на месте', async ({

@@ -4,6 +4,7 @@ import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
+import { goBack } from "@/shared/lib/navigation";
 import { buildUrlWithParams } from "@/shared/lib/url-params";
 import { OPERATIONS_FEED_SORT, type PaymentOperationScope } from "@/shared/api/query-keys";
 import { summaryBarSegments } from "@/features/payment-categories";
@@ -42,6 +43,7 @@ import {
   OperationsDateFeedSkeleton,
   OperationsSummarySkeleton,
 } from "./operations-skeletons";
+import { pushPage } from "@/shared/lib/navigation";
 
 /** Копия экрана по направлению (Figma 1863-35008 / 1863-35816): title —
  * шапка, label — карточка-сводка направления. */
@@ -129,7 +131,7 @@ export function OperationsOfTypeScreen({
   );
 
   const openOperation = (operation: PaymentOperation): void =>
-    router.push(ROUTES.propertyOperation(propertyId, operation.id));
+    pushPage(router, ROUTES.propertyOperation(propertyId, operation.id));
 
   const openCategories = (): void => {
     // Формат query — один хелпер с operationsFiltersHref (#472): знание
@@ -140,7 +142,7 @@ export function OperationsOfTypeScreen({
     const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
     params.set("type", type);
-    router.push(
+    pushPage(router,
       buildUrlWithParams(ROUTES.propertyOperationsCategories(propertyId), params),
     );
   };
@@ -162,11 +164,13 @@ export function OperationsOfTypeScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            // Назад — на главный список операций с текущими фильтрами
-            // (период и категории переживают переход — решение владельца,
-            // #472), а не по истории браузера.
+            // Назад — по истории браузера (решение владельца 21.10, замена
+            // структурного push'а #472): запись списка под направлением несёт
+            // те же фильтры. Фолбэк — список с текущими фильтрами при прямом
+            // заходе без истории.
             onClick={() =>
-              router.push(
+              goBack(
+                router,
                 operationsFiltersHref(
                   ROUTES.propertyOperations(propertyId),
                   filters,
@@ -182,14 +186,14 @@ export function OperationsOfTypeScreen({
                 icon={<Search />}
                 label="Поиск операций"
                 onClick={() =>
-                  router.push(ROUTES.propertyOperationsSearch(propertyId))
+                  pushPage(router, ROUTES.propertyOperationsSearch(propertyId))
                 }
               />
               {canMutate && (
                 <IconButton
                   icon={<Add />}
                   label="Добавить операцию"
-                  onClick={() => router.push(newOperationHref)}
+                  onClick={() => pushPage(router, newOperationHref)}
                 />
               )}
             </>
@@ -204,7 +208,7 @@ export function OperationsOfTypeScreen({
           <OperationsNeverHad
             action={
               canMutate ? (
-                <Button size="small" radius="m" onClick={() => router.push(newOperationHref)}>
+                <Button size="small" radius="m" onClick={() => pushPage(router, newOperationHref)}>
                   Добавить операцию
                 </Button>
               ) : undefined

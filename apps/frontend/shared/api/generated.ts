@@ -4598,14 +4598,17 @@ export interface operations {
     };
     getMePhoto: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Requests the ≤320px thumbnail variant (ADR 0065). Uploads without a thumbnail (legacy objects, webp, within-bound images) honestly serve the full object under the main key's ETag. */
+                size?: "thumb";
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The profile photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private + immutable (the bytes are immutable per key; the DTO photoUrl carries the key's version as ?v=), ETag is the key hash — a matching If-None-Match answers 304 without a storage read. Only the owner reads it; showing the avatar to other users is a separate decision outside this contract. */
+            /** @description The profile photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private + immutable (the bytes are immutable per key; the DTO photoUrl carries the key's version as ?v=), ETag is the key hash — a matching If-None-Match answers 304 without a storage read. `?size=thumb` streams the ≤320px thumbnail (avatars render small; an upload without a thumb honestly falls back to the full object). Only the owner reads it; showing the avatar to other users is a separate decision outside this contract. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4680,7 +4683,10 @@ export interface operations {
     };
     getUserPhoto: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Requests the ≤320px thumbnail variant (ADR 0065). Uploads without a thumbnail (legacy objects, webp, within-bound images) honestly serve the full object under the main key's ETag. */
+                size?: "thumb";
+            };
             header?: never;
             path: {
                 userId: string;
@@ -5166,7 +5172,10 @@ export interface operations {
     };
     getPropertyPhoto: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Requests the ≤320px thumbnail variant (ADR 0065). Uploads without a thumbnail (legacy objects, webp, within-bound images) honestly serve the full object under the main key's ETag. */
+                size?: "thumb";
+            };
             header?: never;
             path: {
                 propertyId: string;
@@ -5175,7 +5184,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The property photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private + immutable (the bytes are immutable per key; the DTO photoUrl carries the key's version as ?v=), ETag is the key hash — a matching If-None-Match answers 304 without a storage read. */
+            /** @description The property photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private + immutable (the bytes are immutable per key; the DTO photoUrl carries the key's version as ?v=), ETag is the key hash — a matching If-None-Match answers 304 without a storage read. `?size=thumb` streams the ≤320px thumbnail (an upload without a thumb honestly falls back to the full object). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5321,7 +5330,10 @@ export interface operations {
     };
     getContactPhoto: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Requests the ≤320px thumbnail variant (ADR 0065). Uploads without a thumbnail (legacy objects, webp, within-bound images) honestly serve the full object under the main key's ETag. */
+                size?: "thumb";
+            };
             header?: never;
             path: {
                 contactId: string;
@@ -5330,7 +5342,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The contact card photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private, ETag is the key hash — a matching If-None-Match answers 304 without a storage read. Access follows the card (ADR 0054): a bound card is readable by the property's viewers, an unbound one by the book owner only. */
+            /** @description The contact card photo bytes, streamed by the backend (ADR 0065): cookie-auth, Cache-Control private + immutable (the bytes are immutable per key; the DTO photoUrl carries the key's version as ?v=), ETag is the key hash — a matching If-None-Match answers 304 without a storage read. `?size=thumb` streams the ≤320px thumbnail (an upload without a thumb honestly falls back to the full object). Access follows the card (ADR 0054): a bound card is readable by the property's viewers, an unbound one by the book owner only. */
             200: {
                 headers: {
                     [name: string]: unknown;

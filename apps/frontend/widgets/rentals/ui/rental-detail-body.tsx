@@ -7,7 +7,7 @@ import { Calendar, Check, Edit, Key, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { formatPhoneDisplay } from '@/shared/lib/phone';
-import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack, pushPage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import {
   hasProgressCard,
@@ -101,7 +101,7 @@ export function RentalDetailBody({
   const openPayment =
     rentPaymentId === null
       ? undefined
-      : () => router.push(ROUTES.propertyPayment(propertyId, rentPaymentId));
+      : () => pushPage(router, ROUTES.propertyPayment(propertyId, rentPaymentId));
 
   // Круглая тройка макета (1550:93664, решение #802 23.09): «Завершить» —
   // только у «идёт» (машина #987: у upcoming завершения не существует,
@@ -164,14 +164,14 @@ export function RentalDetailBody({
                   variant="secondary"
                   icon={<Key />}
                   caption={<>Завершить<br />аренду</>}
-                  onClick={() => router.push(ROUTES.propertyRentalComplete(propertyId))}
+                  onClick={() => pushPage(router, ROUTES.propertyRentalComplete(propertyId))}
                 />
               )}
               <RoundActionButton
                 variant="secondary"
                 icon={<Calendar />}
                 caption={<>Продлить<br />аренду</>}
-                onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
+                onClick={() => pushPage(router, ROUTES.propertyRentalExtend(propertyId))}
               />
               {nextPayment !== null && (
                 <RoundActionButton
@@ -181,7 +181,7 @@ export function RentalDetailBody({
                   onClick={() =>
                     // С собой — ?returnTo= этой страницы (#1072): закрытие
                     // success операции вернёт на аренду, не на правило.
-                    router.push(
+                    pushPage(router,
                       buildReturnUrl(
                         ROUTES.propertyOperation(propertyId, nextPayment.operationId),
                         { returnTo: ROUTES.propertyRental(propertyId) },
@@ -251,7 +251,7 @@ export function RentalDetailBody({
           <RentalGroup
             title="Условия аренды"
             contentGap="gap-4"
-            onOpen={() => router.push(ROUTES.propertyRentalTerms(propertyId))}
+            onOpen={() => pushPage(router, ROUTES.propertyRentalTerms(propertyId))}
             openLabel="Открыть условия аренды"
           >
             <TermRows rows={rentalTeaserRows(rental)} />
@@ -261,14 +261,14 @@ export function RentalDetailBody({
             <RentalGroup
               title="Арендатор"
               className="pb-4"
-              onOpen={() => router.push(ROUTES.propertyContact(propertyId, tenant.contactId))}
+              onOpen={() => pushPage(router, ROUTES.propertyContact(propertyId, tenant.contactId))}
               openLabel="Открыть карточку арендатора"
             >
               <TenantRow
                 tenantName={rentalTenantTitle(tenant)}
                 phone={formatPhoneDisplay(tenant.phone)}
                 photoUrl={tenantContactQuery.data?.photoUrl}
-                onSelect={() => router.push(ROUTES.propertyContact(propertyId, tenant.contactId))}
+                onSelect={() => pushPage(router, ROUTES.propertyContact(propertyId, tenant.contactId))}
               />
             </RentalGroup>
           )}
@@ -287,13 +287,13 @@ export function RentalDetailBody({
                 <ManageRow
                   icon={<Edit className="h-6 w-6 text-content" />}
                   label="Редактировать аренду"
-                  onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
+                  onClick={() => pushPage(router, ROUTES.propertyRentalTermsEdit(propertyId))}
                 />
                 {actionState.kind === 'active' && (
                   <ManageRow
                     icon={<Key className="h-6 w-6 text-content" />}
                     label="Завершить аренду"
-                    onClick={() => router.push(ROUTES.propertyRentalComplete(propertyId))}
+                    onClick={() => pushPage(router, ROUTES.propertyRentalComplete(propertyId))}
                   />
                 )}
                 {isUpcoming && (
@@ -306,7 +306,7 @@ export function RentalDetailBody({
                 <ManageRow
                   icon={<Calendar className="h-6 w-6 text-content" />}
                   label="Продлить аренду"
-                  onClick={() => router.push(ROUTES.propertyRentalExtend(propertyId))}
+                  onClick={() => pushPage(router, ROUTES.propertyRentalExtend(propertyId))}
                 />
               </div>
             </RentalGroup>
@@ -319,7 +319,7 @@ export function RentalDetailBody({
           {(canMutate || hasCompletedRentals) && (
             <button
               type="button"
-              onClick={() => router.push(ROUTES.propertyRentalPast(propertyId))}
+              onClick={() => pushPage(router, ROUTES.propertyRentalPast(propertyId))}
               aria-label="Открыть прошлые аренды"
               className="pressable mx-6 flex h-14 cursor-pointer items-center justify-center rounded-card bg-surface-muted text-base leading-[18px] text-content outline-none hover:opacity-90 focus-visible:ring-4 focus-visible:ring-primary"
             >

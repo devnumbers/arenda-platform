@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/jpeg"
 	"io"
 	"strings"
 	"testing"
@@ -232,7 +234,7 @@ func TestPropertyService_OpenPropertyPhoto_Roundtrip(t *testing.T) {
 		t.Fatalf("set photo: %v", err)
 	}
 
-	body, size, contentType, key, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID)
+	body, size, contentType, key, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID, false)
 	if err != nil {
 		t.Fatalf("open photo: %v", err)
 	}
@@ -332,5 +334,191 @@ func TestPropertyService_PhotoDescriptor_SuspendedIsDistinguishable(t *testing.T
 
 	if _, _, err := svc.PhotoDescriptor(context.Background(), ownerID, property.ID); !errors.Is(err, ErrAccessSuspended) {
 		t.Fatalf("err = %v, want ErrAccessSuspended (the one distinguishable signal)", err)
+	}
+}
+
+// realJPEG renders a tiny but genuinely decodable jpeg — the lazy
+// materialization branches on decodability, so the seed must be a real one.
+func realJPEG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 1200, 900))
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		t.Fatalf("encode test jpeg: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// TestPropertyService_StoresAndServesThumb pins the thumbnail's life next to
+// the main object (ADR 0065, тикет миниатюр): the upload of a processed
+// upload carrying a thumb lands BOTH objects, and the thumb-requesting open
+// serves the thumb bytes under the thumb key.
+func TestPropertyService_StoresAndServesThumb(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	processed := smallJPEG(t)
+	processed.Thumb = []byte("thumb-bytes")
+	updated, err := svc.SetPropertyPhoto(context.Background(), ownerID, property.ID, processed)
+	if err != nil {
+		t.Fatalf("set photo: %v", err)
+	}
+
+	if len(storage.puts) != 2 {
+		t.Fatalf("storage puts = %v, want the main key and its thumb", storage.puts)
+	}
+	thumbKey := photo.ThumbKeyOf(*updated.PhotoKey)
+	if storage.objects[thumbKey] == nil {
+		t.Fatalf("thumb object %q missing, puts = %v", thumbKey, storage.puts)
+	}
+
+	body, size, contentType, servedKey, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID, true)
+	if err != nil {
+		t.Fatalf("open thumb: %v", err)
+	}
+	defer func() {
+		if closeErr := body.Close(); closeErr != nil {
+			t.Errorf("close body: %v", closeErr)
+		}
+	}()
+	data, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("read thumb: %v", err)
+	}
+	if servedKey != thumbKey {
+		t.Fatalf("served key = %q, want the thumb key", servedKey)
+	}
+	if string(data) != "thumb-bytes" || size != int64(len("thumb-bytes")) {
+		t.Fatalf("thumb body = %q (%d), want thumb-bytes", data, size)
+	}
+	if contentType != photo.ContentTypeJPEG {
+		t.Fatalf("thumb content type = %q, want image/jpeg", contentType)
+	}
+}
+
+// TestPropertyService_MaterializesThumbLazily covers the pre-thumb uploads:
+// an object in storage without a thumbnail gets one on the first
+// thumb-requesting open — the generated thumb is stored and served.
+func TestPropertyService_MaterializesThumbLazily(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	mainKey := "photos/01987654-3210-7abc-9def-0123456789ab.jpg"
+	property.PhotoKey = &mainKey
+	property.PhotoContentType = new(photo.ContentTypeJPEG)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	storage.objects[mainKey] = realJPEG(t)
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	body, _, contentType, servedKey, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID, true)
+	if err != nil {
+		t.Fatalf("open thumb: %v", err)
+	}
+	data, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	thumbKey := photo.ThumbKeyOf(mainKey)
+	if servedKey != thumbKey {
+		t.Fatalf("served key = %q, want the materialized thumb key", servedKey)
+	}
+	if contentType != photo.ContentTypeJPEG {
+		t.Fatalf("thumb content type = %q, want image/jpeg", contentType)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("served bytes do not decode: %v", err)
+	}
+	if max(cfg.Width, cfg.Height) != photo.ThumbMaxEdge {
+		t.Fatalf("thumb edge = %d, want %d", max(cfg.Width, cfg.Height), photo.ThumbMaxEdge)
+	}
+	if storage.objects[thumbKey] == nil {
+		t.Fatal("materialized thumb not stored for the next request")
+	}
+}
+
+// TestPropertyService_WebPFallsBackToFull pins the webp seam: the toolchain
+// cannot decode webp, so the thumb request honestly serves the full object.
+func TestPropertyService_WebPFallsBackToFull(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	mainKey := "photos/01987654-3210-7abc-9def-0123456789ac.webp"
+	property.PhotoKey = &mainKey
+	property.PhotoContentType = new(photo.ContentTypeWebP)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	storage.objects[mainKey] = []byte("webp-bytes")
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	body, _, _, servedKey, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID, true)
+	if err != nil {
+		t.Fatalf("open thumb: %v", err)
+	}
+	data, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if servedKey != mainKey || string(data) != "webp-bytes" {
+		t.Fatalf("fallback: key = %q body = %q, want the full object", servedKey, data)
+	}
+}
+
+// TestPropertyService_HealRemovesStrayThumbToo: a dangling main key heals
+// away and takes its (still present) thumbnail with it — no orphans.
+func TestPropertyService_HealRemovesStrayThumbToo(t *testing.T) {
+	t.Parallel()
+
+	ownerID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	property := photoTestProperty(ownerID)
+	mainKey := "photos/01987654-3210-7abc-9def-0123456789ad.jpg"
+	property.PhotoKey = &mainKey
+	property.PhotoContentType = new(photo.ContentTypeJPEG)
+	repo := newLockingFakePropertyRepo(property)
+	storage := newFakePropertyPhotoStorage()
+	storage.objects[photo.ThumbKeyOf(mainKey)] = []byte("stray-thumb")
+	svc := NewPropertyService(
+		repo,
+		storage,
+		newPropertyTestFactory(repo, nil),
+		fakePropertyClock{now: time.Now()},
+		testOwnerPolicy{},
+		nil,
+	)
+
+	if _, _, _, _, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID, true); !errors.Is(err, ErrPhotoNotFound) {
+		t.Fatalf("err = %v, want ErrPhotoNotFound", err)
+	}
+	if _, ok := storage.objects[photo.ThumbKeyOf(mainKey)]; ok {
+		t.Fatal("stray thumb survived the heal")
 	}
 }

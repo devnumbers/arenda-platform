@@ -3,7 +3,7 @@
 import { useState, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
-import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack, replacePage } from '@/shared/lib/navigation';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   globalOperationsFiltersParams,
@@ -87,7 +87,7 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
   const apply = (): void => {
     // Единая сериализация фильтров ленты поверх returnTo с сохранением его
     // query — buildReturnUrl мержит параметры без коллизии «?».
-    router.replace(
+    replacePage(router,
       buildReturnUrl(returnTo, globalOperationsFiltersParams({ ...filters, categories: draft })),
     );
   };

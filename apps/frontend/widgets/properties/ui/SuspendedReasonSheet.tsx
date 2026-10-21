@@ -8,6 +8,7 @@ import { BoldUser, Exit, Lock } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { notify } from '@/shared/lib/notifications';
 import { Button, Modal, ModalContent } from '@/shared/ui/design';
+import { pushPage } from '@/shared/lib/navigation';
 
 export type SuspendedReasonSheetProps = {
   readonly placeholder: SuspendedSharedProperty | null;
@@ -43,7 +44,7 @@ export function SuspendedReasonSheet({
 
   const chooseTariff = (): void => {
     onClose();
-    router.push(ROUTES.profileTariffChange);
+    pushPage(router, ROUTES.profileTariffChange);
   };
 
   return (

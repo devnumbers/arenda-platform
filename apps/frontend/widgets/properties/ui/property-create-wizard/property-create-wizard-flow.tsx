@@ -5,7 +5,7 @@ import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack, pushPage, replacePage } from '@/shared/lib/navigation';
 import {
   buildPropertyCreateCommand,
   propertyCreateStepReady,
@@ -84,7 +84,7 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
         <PageContent>
           <WizardSuccess
             created={created}
-            onAddRental={() => router.push(ROUTES.propertyRentalNew(created.id))}
+            onAddRental={() => pushPage(router, ROUTES.propertyRentalNew(created.id))}
             onOpen={openCreatedProperty}
           />
         </PageContent>
@@ -204,7 +204,7 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
     if (created === null) {
       return;
     }
-    router.replace(ROUTES.property(created.id));
+    replacePage(router, ROUTES.property(created.id));
   }
 
   function navigateBack(): void {
@@ -231,7 +231,7 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
       // Возврат в вызывающий флоу (например, будущего визарда операции):
       // успех пропускается, объект передаётся параметром propertyId.
       if (returnTo !== undefined) {
-        router.replace(buildReturnUrl(returnTo, { propertyId: property.id }));
+        replacePage(router, buildReturnUrl(returnTo, { propertyId: property.id }));
         return;
       }
       setCreated(property);
@@ -240,7 +240,7 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
       // (#1468) — интерстишал; незакодированный 402 и прочие ошибки —
       // прежняя генерик-ошибка (канон #1452).
       if (isPropertyLimitReachedError(error)) {
-        router.push(ROUTES.profileTariffPropertyLimit);
+        pushPage(router, ROUTES.profileTariffPropertyLimit);
         return;
       }
       setSubmitError(SUBMIT_ERROR_MESSAGE);

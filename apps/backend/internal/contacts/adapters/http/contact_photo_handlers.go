@@ -10,13 +10,16 @@ import (
 	"net/http"
 
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
+	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // GetContactPhoto implements GET /contacts/{contactId}/photo.
-func (h *ContactHandlers) GetContactPhoto(w http.ResponseWriter, r *http.Request, contactID openapi_types.UUID) {
+func (h *ContactHandlers) GetContactPhoto(
+	w http.ResponseWriter, r *http.Request, contactID openapi_types.UUID, params openapi.GetContactPhotoParams,
+) {
 	actor, ok := httpsupport.UserIDFromContext(r.Context())
 	if !ok {
 		httpsupport.WriteProblem(r.Context(), w, http.StatusUnauthorized,
@@ -31,10 +34,20 @@ func (h *ContactHandlers) GetContactPhoto(w http.ResponseWriter, r *http.Request
 		h.handleContactError(w, r, err)
 		return
 	}
+	// The thumb variant (тикет миниатюр): its ETag derives from the same key
+	// storage-free, and the honest fallback to the full object rewrites the
+	// ETag to the bytes actually served.
 	// The validator and the cache policy travel with every answer — the 200
 	// carries them so the client can revalidate, the 304 so the cached copy
 	// stays honest.
 	etag := storageshared.ETagOf(key)
+	wantThumb := params.Size != nil && *params.Size == openapi.GetContactPhotoParamsSizeThumb
+	// The thumb's ETag derives from the same key storage-free, and the
+	// honest fallback to the full object rewrites the ETag to the bytes
+	// actually served.
+	if wantThumb {
+		etag = photo.ThumbETagOf(key)
+	}
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", httpsupport.PhotoCacheControl)
 	if httpsupport.ETagMatches(r.Header.Get("If-None-Match"), etag) {
@@ -42,12 +55,16 @@ func (h *ContactHandlers) GetContactPhoto(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	body, size, contentType, _, err := h.svc.OpenContactPhoto(r.Context(), actor, contactID)
+	body, size, contentType, servedKey, err := h.svc.OpenContactPhoto(r.Context(), actor, contactID, wantThumb)
 	if err != nil {
 		h.handleContactError(w, r, err)
 		return
 	}
 	defer httpsupport.ClosePhotoBody(r, body)
+
+	if wantThumb && servedKey != photo.ThumbKeyOf(key) {
+		w.Header().Set("ETag", storageshared.ETagOf(servedKey))
+	}
 
 	httpsupport.WritePhotoBytes(w, r, contentType, size, body)
 }

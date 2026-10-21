@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type JSX } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Readed, Setting, TrashBin, VerticalMenu } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { notify } from '@/shared/lib/notifications';
@@ -31,6 +31,8 @@ import {
 import { NotificationRow } from './notification-row';
 import { NotificationsErrorCard, NotificationsFeedSkeleton } from './notifications-states';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
+import { pushPage } from '@/shared/lib/navigation';
+import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 
 /**
  * Экран «Уведомления» — центр уведомлений (карта #734; редизайн по макетам
@@ -58,7 +60,7 @@ export function NotificationsFeedScreen({
   readonly initialUnreadOnly?: boolean;
 }): JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
+  const { write } = useUrlParams();
 
   const [unreadOnly, setUnreadOnly] = useState(initialUnreadOnly);
   const feedQuery = useNotificationsFeed(unreadOnly);
@@ -73,10 +75,11 @@ export function NotificationsFeedScreen({
   const unreadCount = unreadCountQuery.data ?? 0;
 
   // Смена фильтра синхронно переписывает query строки (дефолт не пишется —
-  // конвенция «Состояние страницы в адресе», DESIGN.md §3).
+  // конвенция «Состояние страницы в адресе», DESIGN.md §3): канон
+  // useUrlParams — URL-state той же страницы, шторка перехода не едет.
   const setUnreadFilter = (next: boolean): void => {
     setUnreadOnly(next);
-    router.replace(next ? `${pathname}?unread=1` : pathname, { scroll: false });
+    write(next ? { unread: '1' } : {}, { own: ['unread'] });
   };
 
   const markAllRead = (): void => {
@@ -97,7 +100,7 @@ export function NotificationsFeedScreen({
   };
 
   const openNotification = (notification: Notification): void => {
-    router.push(ROUTES.notification(notification.id));
+    pushPage(router, ROUTES.notification(notification.id));
   };
 
   // Пустая лента без фильтра — «Нет уведомлений» (макет 3178-86086,
@@ -131,7 +134,7 @@ export function NotificationsFeedScreen({
         </MenuItem>
         <MenuItem
           icon={<Setting />}
-          onSelect={() => router.push(ROUTES.profileNotifications)}
+          onSelect={() => pushPage(router, ROUTES.profileNotifications)}
         >
           Настроить уведомления
         </MenuItem>
@@ -149,7 +152,7 @@ export function NotificationsFeedScreen({
     <IconButton
       icon={<Setting />}
       label="Настроить уведомления"
-      onClick={() => router.push(ROUTES.profileNotifications)}
+      onClick={() => pushPage(router, ROUTES.profileNotifications)}
     />
   ) : feedPending ? (
     undefined

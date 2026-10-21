@@ -1,12 +1,13 @@
 'use client';
 
-import { type JSX, type ReactNode } from 'react';
+import { type JSX, type ReactNode, Suspense } from 'react';
 import { useUnreadNotificationsCount } from '@/features/notifications';
 import { ServiceWorkerRegister } from '@/shared/lib/pwa/ServiceWorkerRegister';
 import { ServiceWorkerUpdater } from '@/shared/lib/pwa/ServiceWorkerUpdater';
 import {
   DesktopNavPills,
   DesktopSidebar,
+  PageTransitionOverlay,
   TabBar,
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
@@ -67,6 +68,11 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
             <PushPermissionGate />
             <NotificationStreamGate />
             <RealtimeStreamProvider />
+            {/* Шторка переходов под Suspense: useSearchParams внутри требует
+             * границы при статическом рендере (порт alterix-new). */}
+            <Suspense fallback={null}>
+              <PageTransitionOverlay />
+            </Suspense>
           </div>
         </TopNavUserProvider>
       </HubPrefetchProvider>

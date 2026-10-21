@@ -61,6 +61,7 @@ import { TasksStateCard } from './tasks-of-property-screen';
 import { taskSectionTone } from '@/features/tasks';
 import { sectionKey } from './tasks-section-utils';
 import { SortChip, sortPickerGroups } from './tasks-sort';
+import { pushPage } from '@/shared/lib/navigation';
 
 /**
  * Экран «Задачи» — глобальная лента (карта #518, тикет #523, Figma
@@ -198,17 +199,17 @@ export function TasksFeedScreen({
     }
     const ruleId = task.ruleId;
     if (task.propertyId === null) {
-      return () => router.push(ROUTES.taskEdit(ruleId));
+      return () => pushPage(router, ROUTES.taskEdit(ruleId));
     }
     const propertyId = task.propertyId;
-    return () => router.push(ROUTES.propertyTaskEdit(propertyId, ruleId));
+    return () => pushPage(router, ROUTES.propertyTaskEdit(propertyId, ruleId));
   };
 
   const createButton = (
     <IconButton
       icon={<Add />}
       label="Создать задачу"
-      onClick={() => router.push(ROUTES.taskCreate)}
+      onClick={() => pushPage(router, ROUTES.taskCreate)}
     />
   );
 
@@ -341,7 +342,7 @@ export function TasksFeedScreen({
               action={
                 // CTA пустого состояния — канон (3235-74057): «+» шапки
                 // на пустоте спрятан, создание остаётся здесь.
-                <Button size="small" radius="m" onClick={() => router.push(ROUTES.taskCreate)}>
+                <Button size="small" radius="m" onClick={() => pushPage(router, ROUTES.taskCreate)}>
                   Добавить задачу
                 </Button>
               }

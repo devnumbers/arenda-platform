@@ -17,7 +17,7 @@ import {
 import { BoldHome, BoldUser, Cancel, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonthTime } from '@/shared/lib/date-format';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { propertyTypeIcons, type PropertyType } from '@/entities/property';
 import {
@@ -114,7 +114,7 @@ export function NotificationDetailScreen({
             className="mx-0"
           />
         ) : (
-          <NotificationDetailBody detail={detail} onAction={(href) => router.push(href)} />
+          <NotificationDetailBody detail={detail} onAction={(href) => pushPage(router, href)} />
         )}
       </PageContent>
 

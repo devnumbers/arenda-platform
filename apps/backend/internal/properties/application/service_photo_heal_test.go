@@ -35,7 +35,7 @@ func TestPropertyService_OpenPropertyPhoto_HealsDanglingKey(t *testing.T) {
 	// The object vanishes behind the backend's back.
 	require.NoError(t, storage.Delete(context.Background(), *updated.PhotoKey))
 
-	body, size, _, key, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID)
+	body, size, _, key, err := svc.OpenPropertyPhoto(context.Background(), ownerID, property.ID, false)
 	require.ErrorIs(t, err, ErrPhotoNotFound)
 	require.Nil(t, body)
 	require.Zero(t, size)

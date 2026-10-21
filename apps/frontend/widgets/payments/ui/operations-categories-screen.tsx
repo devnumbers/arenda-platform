@@ -4,7 +4,7 @@ import { useState, type JSX } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, replacePage } from '@/shared/lib/navigation';
 import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import { buildUrlWithParams } from '@/shared/lib/url-params';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
@@ -115,7 +115,7 @@ export function OperationsCategoriesScreen({
     const query = new URLSearchParams(
       operationsFiltersParams({ period: filters.period, categories: draft }),
     );
-    router.replace(buildUrlWithParams(returnTo, query));
+    replacePage(router, buildUrlWithParams(returnTo, query));
   };
 
   return (

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Star } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { useInfiniteScroll } from '@/shared/lib/hooks/useInfiniteScroll';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -208,9 +208,9 @@ function ScheduleList({
   // материализованная — по id, проекция — вью без кнопки оплаты.
   const selectEntry = (entry: ScheduleEntry): void => {
     if (entry.kind === 'operation') {
-      router.push(ROUTES.propertyOperation(propertyId, entry.operation.id));
+      pushPage(router, ROUTES.propertyOperation(propertyId, entry.operation.id));
     } else {
-      router.push(ROUTES.propertyPaymentProjectedOperation(propertyId, paymentId, entry.date));
+      pushPage(router, ROUTES.propertyPaymentProjectedOperation(propertyId, paymentId, entry.date));
     }
   };
 

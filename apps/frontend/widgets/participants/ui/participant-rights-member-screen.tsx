@@ -22,6 +22,7 @@ import {
   RIGHTS_ROW_ACTION_CLASS,
 } from './participant-fragments';
 import { ParticipantRightsMemberSkeleton } from './participants-skeletons';
+import { pushPage } from '@/shared/lib/navigation';
 
 /**
  * Экран «Права участника» в member-режиме (решение владельца 12.10.2026,
@@ -160,7 +161,7 @@ export function ParticipantRightsMemberScreen({
           {actionsUserId !== undefined && (
             <button
               type="button"
-              onClick={() => router.push(ROUTES.historyMemberProperty(actionsUserId, propertyId))}
+              onClick={() => pushPage(router, ROUTES.historyMemberProperty(actionsUserId, propertyId))}
               className={RIGHTS_ROW_ACTION_CLASS}
               data-testid="participant-property-actions"
             >

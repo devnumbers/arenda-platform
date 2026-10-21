@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { formatDayMonthWithYear, type IsoDate } from '@/entities/payment';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { useProperty } from '@/features/properties';
@@ -91,7 +91,7 @@ export function ProjectedOperationScreen({
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => router.push(ROUTES.propertyPaymentSchedule(propertyId, paymentId))}
+                  onClick={() => pushPage(router, ROUTES.propertyPaymentSchedule(propertyId, paymentId))}
                 >
                   К графику
                 </Button>

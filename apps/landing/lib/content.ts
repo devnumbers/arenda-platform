@@ -14,7 +14,7 @@ export type Step = { text: string; image: StaticImageData; alt: string };
 
 export const STEPS: Step[] = [
   {
-    text: "Создайте аккаунт с помощью номера телефона и почты",
+    text: "Создайте аккаунт с помощью электронной почты",
     image: step1,
     alt: "Шаг 1 — регистрация в Рентли",
   },

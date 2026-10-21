@@ -17,7 +17,7 @@ import {
 import { ROUTES } from '@/shared/config/routes';
 import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import { formatMoneyKopecks } from '@/shared/lib/format-money';
-import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack, pushPage, replacePage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -182,7 +182,7 @@ export function PaymentDetailScreen({
           // когда платёж открыт «Посмотреть платеж» из экрана успеха
           // визарда — предыдущая запись истории не обязана быть списком.
           // Прецедент удаления через правку (#446, router.replace).
-          router.replace(ROUTES.propertyPayments(propertyId));
+          replacePage(router, ROUTES.propertyPayments(propertyId));
         }}
       />
     );
@@ -345,7 +345,7 @@ function PaymentDetailBody({
             title="Просроченные платежи"
             open={{
               label: 'Открыть полный список просроченных',
-              onOpen: () => router.push(ROUTES.propertyPaymentOverdue(propertyId, payment.id)),
+              onOpen: () => pushPage(router, ROUTES.propertyPaymentOverdue(propertyId, payment.id)),
             }}
             emptyHint={overduePreview.length > 0 ? undefined : 'У вас нет просроченных платежей'}
           >
@@ -355,7 +355,7 @@ function PaymentDetailBody({
                     key={operation.id}
                     operation={operation}
                     today={today}
-                    onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+                    onSelect={() => pushPage(router, ROUTES.propertyOperation(propertyId, operation.id))}
                   />
                 ))
               : null}
@@ -505,14 +505,14 @@ function PaymentActionsRow({
           <RoundActionButton
             icon={<Edit />}
             caption="Изменить"
-            onClick={() => router.push(ROUTES.propertyPaymentEdit(propertyId, payment.id))}
+            onClick={() => pushPage(router, ROUTES.propertyPaymentEdit(propertyId, payment.id))}
           />
         )}
         {actions.includes('editRental') && (
           <RoundActionButton
             icon={<Edit />}
             caption={<>Изменить<br />аренду</>}
-            onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
+            onClick={() => pushPage(router, ROUTES.propertyRentalTermsEdit(propertyId))}
           />
         )}
         {actions.includes('complete') && (
@@ -534,7 +534,7 @@ function PaymentActionsRow({
               if (payable != null) {
                 // С собой — ?returnTo= этой страницы (#1072): закрытие
                 // success операции вернёт сюда.
-                router.push(
+                pushPage(router,
                   buildReturnUrl(ROUTES.propertyOperation(propertyId, payable.id), {
                     returnTo: ROUTES.propertyPayment(propertyId, payment.id),
                   }),
@@ -669,7 +669,7 @@ function NextPaymentSection({
 
   // График — цель и заголовка-стрелки (#1194), и строки (решение #1073).
   const openSchedule = (): void =>
-    router.push(ROUTES.propertyPaymentSchedule(propertyId, payment.id));
+    pushPage(router, ROUTES.propertyPaymentSchedule(propertyId, payment.id));
 
   return (
     <PaymentsGroup
@@ -854,7 +854,7 @@ function HistorySection({
       title="История платежа"
       open={{
         label: 'Открыть историю платежа',
-        onOpen: () => router.push(ROUTES.propertyPaymentHistory(propertyId, paymentId)),
+        onOpen: () => pushPage(router, ROUTES.propertyPaymentHistory(propertyId, paymentId)),
       }}
       // Гейт подзаголовка внутри PaymentsGroup — children === null: без
       // paid-операций блок стоит с текстом пустого подэкрана (#1338).
@@ -866,7 +866,7 @@ function HistorySection({
               key={operation.id}
               operation={operation}
               today={today}
-              onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+              onSelect={() => pushPage(router, ROUTES.propertyOperation(propertyId, operation.id))}
             />
           ))
         : null}

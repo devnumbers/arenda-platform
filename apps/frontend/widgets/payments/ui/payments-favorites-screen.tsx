@@ -48,6 +48,7 @@ import {
   toggleFavoriteSelection,
 } from "../lib/favorites-edit-model";
 import { GlobalPaymentRuleIcon, PaymentsRowsSkeleton, PaymentsStateCard } from "./payments-sections";
+import { pushPage } from "@/shared/lib/navigation";
 
 /**
  * Экран «Избранные платежи» (карта #573, тикет #579; вход — карточка
@@ -327,7 +328,7 @@ export function PaymentFavoritesScreen(): JSX.Element {
                   amountKopecks={payment.amountKopecks}
                   description={nearestDateLine(payment)}
                   onSelect={() =>
-                    router.push(
+                    pushPage(router,
                       ROUTES.propertyPayment(payment.propertyId, payment.id),
                     )
                   }

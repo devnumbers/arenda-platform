@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import NextLink from 'next/link';
 import { cn } from '@/shared/lib/cn';
 import { Block, Info, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
   ParticipantRowBadge,
@@ -230,7 +230,7 @@ export function ParticipantRightsScreen({
         own={mutationPending || ownChangeLatch}
         onChangeRole={changeRole}
         onRevoke={() => setConfirmRevokeOpen(true)}
-        onOpenParticipant={() => router.push(ROUTES.participant(participantId))}
+        onOpenParticipant={() => pushPage(router, ROUTES.participant(participantId))}
       />
     );
   } else {
@@ -283,7 +283,7 @@ export function ParticipantRightsScreen({
           {actionsUserId !== undefined && (
             <button
               type="button"
-              onClick={() => router.push(ROUTES.historyMemberProperty(actionsUserId, propertyId))}
+              onClick={() => pushPage(router, ROUTES.historyMemberProperty(actionsUserId, propertyId))}
               className={RIGHTS_ROW_ACTION_CLASS}
               data-testid="participant-property-actions"
             >

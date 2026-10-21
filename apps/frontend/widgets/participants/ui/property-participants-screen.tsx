@@ -17,7 +17,7 @@ import { ROUTES } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { useMe } from '@/features/auth';
 import { useHistoryHasEntries } from '@/features/history';
@@ -306,12 +306,12 @@ export function PropertyParticipantsScreen({
     if (canManage) {
       const target = row.participantId;
       return !isArchived && !row.isOwner && !row.isMe && target !== undefined
-        ? () => router.push(ROUTES.participant(target))
+        ? () => pushPage(router, ROUTES.participant(target))
         : undefined;
     }
     const memberTarget = row.memberAddressId;
     return memberTarget !== undefined
-      ? () => router.push(ROUTES.propertyParticipantRights(propertyId, memberTarget))
+      ? () => pushPage(router, ROUTES.propertyParticipantRights(propertyId, memberTarget))
       : undefined;
   };
 
@@ -375,7 +375,7 @@ export function PropertyParticipantsScreen({
                       <MenuItem
                         icon={<TeamAdd className="h-6 w-6" />}
                         onSelect={() =>
-                          router.push(ROUTES.propertyParticipantsInvite(propertyId))
+                          pushPage(router, ROUTES.propertyParticipantsInvite(propertyId))
                         }
                       >
                         Пригласить участника
@@ -386,7 +386,7 @@ export function PropertyParticipantsScreen({
                      * пока живёт объект. */}
                     <MenuItem
                       icon={<TimeHistory className="h-6 w-6" />}
-                      onSelect={() => router.push(ROUTES.historyProperty(propertyId))}
+                      onSelect={() => pushPage(router, ROUTES.historyProperty(propertyId))}
                     >
                       История объекта
                     </MenuItem>
@@ -409,7 +409,7 @@ export function PropertyParticipantsScreen({
                 <IconButton
                   icon={<TimeHistory className="h-6 w-6" />}
                   label="История объекта"
-                  onClick={() => router.push(ROUTES.historyProperty(propertyId))}
+                  onClick={() => pushPage(router, ROUTES.historyProperty(propertyId))}
                 />
               </span>
             ) : undefined
@@ -465,7 +465,7 @@ export function PropertyParticipantsScreen({
         <StickyBottomBar aboveTabBar>
           <Button
             className="w-full"
-            onClick={() => router.push(ROUTES.propertyParticipantsInvite(propertyId))}
+            onClick={() => pushPage(router, ROUTES.propertyParticipantsInvite(propertyId))}
           >
             Пригласить участника
           </Button>
