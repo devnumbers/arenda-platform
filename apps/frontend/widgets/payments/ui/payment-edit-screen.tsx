@@ -16,7 +16,7 @@ import {
   kopecksToRublesString,
   parseRublesToKopecks,
 } from '@/shared/lib/format-money';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage, replacePage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -247,7 +247,7 @@ export function PaymentEditScreen({
                       size="small"
                       radius="m"
                       onClick={() =>
-                        router.push(
+                        pushPage(router,
                           managedRental.status === 'completed'
                             ? ROUTES.propertyRentalCompletedTerms(propertyId, managedRental.id)
                             : ROUTES.propertyRentalTerms(propertyId),
@@ -459,7 +459,7 @@ function PaymentEditForm({
       // Тост живёт в глобальном портале — виден уже на списке объекта;
       // replace: экран правки удалённого правила из истории уходит.
       notify.scenarios.payments.deleted();
-      router.replace(ROUTES.propertyPayments(propertyId));
+      replacePage(router, ROUTES.propertyPayments(propertyId));
     } catch (error) {
       notify.scenarios.payments.deleteError(error);
     }

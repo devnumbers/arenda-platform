@@ -11,6 +11,7 @@ import { getTariffLabel } from '@/entities/user';
 import { Undo } from '@/shared/assets/icons';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { ROUTES } from '@/shared/config/routes';
+import { pushPage } from '@/shared/lib/navigation';
 import {
   groupSubscriptionPaymentsByDate,
   paymentCardMask,
@@ -117,7 +118,7 @@ export function PaymentList(): JSX.Element {
                 amountKopecks={amount.amountKopecks}
                 signedAmount={amount.signedAmount}
                 valueClassName={amount.valueClassName}
-                onSelect={() => router.push(ROUTES.profilePaymentDetail(payment.id))}
+                onSelect={() => pushPage(router, ROUTES.profilePaymentDetail(payment.id))}
               />
             );
           })}

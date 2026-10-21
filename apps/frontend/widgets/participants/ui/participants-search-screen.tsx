@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import {
   filterParticipantsByQuery,
   ParticipantRowButton,
@@ -95,7 +95,7 @@ export function ParticipantsSearchScreen(): JSX.Element {
               <ParticipantRowButton
                 key={participant.id}
                 participant={participant}
-                onSelect={() => router.push(ROUTES.participant(participant.id))}
+                onSelect={() => pushPage(router, ROUTES.participant(participant.id))}
               />
             ))}
           </div>

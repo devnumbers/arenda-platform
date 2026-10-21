@@ -4,7 +4,7 @@ import { type JSX, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { dateToIsoLocal, type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import {
@@ -162,7 +162,7 @@ export function RentalHistoryScreen({
                           operation={operation}
                           today={dateToIsoLocal(new Date())}
                           onSelect={() =>
-                            router.push(ROUTES.propertyOperation(propertyId, operation.id))
+                            pushPage(router, ROUTES.propertyOperation(propertyId, operation.id))
                           }
                         />
                       ))}

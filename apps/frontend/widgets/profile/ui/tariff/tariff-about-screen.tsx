@@ -31,6 +31,7 @@ import { DisableGuardSheet } from './disable-guard-sheet';
 import { GracePlaque } from './grace-plaque';
 import { ResumeSuccessScreen } from './resume-success-screen';
 import { TariffAboutCard, TariffFeaturesCard } from './tariff-about-cards';
+import { pushPage } from '@/shared/lib/navigation';
 
 /** Экран «О тарифе» (#621, макеты 1918-73255 активен, 2036-84420 grace,
  * 1933-77851 отключён, 1929-76198 гард pending, 1934-78524 успех
@@ -92,7 +93,7 @@ function TariffAboutContent({
       setGuardOpen(true);
       return;
     }
-    router.push(ROUTES.profileTariffDisable);
+    pushPage(router, ROUTES.profileTariffDisable);
   };
 
   const handleResume = (): void => {

@@ -4,7 +4,7 @@ import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Copy } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { type Contact } from '@/entities/contact';
 import type { Property } from '@/entities/property';
@@ -99,7 +99,7 @@ export function ContactDetailScreen({
         trailing={
           canMutate ? (
             <ContactKebabMenu
-              onEdit={() => router.push(editHref)}
+              onEdit={() => pushPage(router, editHref)}
               onDelete={() => setDeleteConfirmOpen(true)}
             />
           ) : undefined

@@ -38,6 +38,7 @@ import { OperationsPeriodPickerDialog } from "./operations-period-picker";
 import { operationsFeedGate } from "../lib/operations-feed-gate";
 import { summaryBarSegments } from "@/features/payment-categories";
 import { OperationsSummaryCard } from "./operations-summary-card";
+import { pushPage } from "@/shared/lib/navigation";
 
 /**
  * Экран «Операции объекта» (#474, Figma 1492-41825): оплаченные операции
@@ -123,7 +124,7 @@ export function OperationsOfPropertyScreen({
   );
 
   const openOperation = (operation: { readonly id: string }): void =>
-    router.push(ROUTES.propertyOperation(propertyId, operation.id));
+    pushPage(router, ROUTES.propertyOperation(propertyId, operation.id));
 
   const openCategories = (): void => {
     // Формат query — один хелпер с operationsFiltersHref (#472): знание
@@ -131,7 +132,7 @@ export function OperationsOfPropertyScreen({
     // сборка адреса — тот же канон buildUrlWithParams (#792).
     const params = new URLSearchParams(operationsFiltersParams(filters));
     params.set("return", pathname);
-    router.push(
+    pushPage(router,
       buildUrlWithParams(ROUTES.propertyOperationsCategories(propertyId), params),
     );
   };
@@ -145,7 +146,7 @@ export function OperationsOfPropertyScreen({
             label="Назад"
             // Назад — на объект, а не по истории браузера: страница period
             // replace-ит список, и прежние периоды остаются в истории.
-            onClick={() => router.push(ROUTES.property(propertyId))}
+            onClick={() => pushPage(router, ROUTES.property(propertyId))}
           />
         }
         trailing={
@@ -158,7 +159,7 @@ export function OperationsOfPropertyScreen({
                 icon={<Search />}
                 label="Поиск операций"
                 onClick={() =>
-                  router.push(ROUTES.propertyOperationsSearch(propertyId))
+                  pushPage(router, ROUTES.propertyOperationsSearch(propertyId))
                 }
               />
               {canMutate && (
@@ -166,7 +167,7 @@ export function OperationsOfPropertyScreen({
                   icon={<Add />}
                   label="Добавить операцию"
                   onClick={() =>
-                    router.push(ROUTES.propertyOperationsNew(propertyId))
+                    pushPage(router, ROUTES.propertyOperationsNew(propertyId))
                   }
                 />
               )}
@@ -186,7 +187,7 @@ export function OperationsOfPropertyScreen({
                   size="small"
                   radius="m"
                   onClick={() =>
-                    router.push(ROUTES.propertyOperationsNew(propertyId))
+                    pushPage(router, ROUTES.propertyOperationsNew(propertyId))
                   }
                 >
                   Добавить операцию
@@ -255,7 +256,7 @@ export function OperationsOfPropertyScreen({
                         // Период и категории переживают переход на
                         // направление (решение владельца, #472).
                         onOpen={() =>
-                          router.push(
+                          pushPage(router,
                             operationsFiltersHref(
                               ROUTES.propertyOperationsExpense(propertyId),
                               filters,
@@ -272,7 +273,7 @@ export function OperationsOfPropertyScreen({
                         )}
                         openLabel="Открыть доходы объекта"
                         onOpen={() =>
-                          router.push(
+                          pushPage(router,
                             operationsFiltersHref(
                               ROUTES.propertyOperationsIncome(propertyId),
                               filters,

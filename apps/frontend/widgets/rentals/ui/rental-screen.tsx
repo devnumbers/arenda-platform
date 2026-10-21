@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { JSX } from 'react';
 import { ArrowLeft, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
 import { rentalActionState, useRentals, type RentalActionState } from '@/features/rentals';
@@ -70,7 +70,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
             <IconButton
               icon={<Edit />}
               label="Редактировать аренду"
-              onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
+              onClick={() => pushPage(router, ROUTES.propertyRentalTermsEdit(propertyId))}
             />
           ) : undefined
         }
@@ -122,7 +122,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
               {canAddRental && (
                 <Button
                   className="w-full"
-                  onClick={() => router.push(ROUTES.propertyRentalNew(propertyId))}
+                  onClick={() => pushPage(router, ROUTES.propertyRentalNew(propertyId))}
                 >
                   Добавить аренду
                 </Button>
@@ -131,7 +131,7 @@ export function RentalScreen({ propertyId }: { readonly propertyId: string }): J
                 <Button
                   variant="secondary"
                   className="w-full"
-                  onClick={() => router.push(ROUTES.propertyRentalPast(propertyId))}
+                  onClick={() => pushPage(router, ROUTES.propertyRentalPast(propertyId))}
                 >
                   Прошлые аренды
                 </Button>

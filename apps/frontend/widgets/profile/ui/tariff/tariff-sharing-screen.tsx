@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Button, StickyBottomBar } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { SHARING_TITLE, SHARING_UPGRADE_TEXT } from '@/widgets/profile/lib/tariff-sharing';
 
 /**
@@ -55,7 +55,7 @@ export function TariffSharingScreen(): JSX.Element {
 
       <StickyBottomBar>
         <div className="flex flex-col gap-2">
-          <Button onClick={() => router.push(ROUTES.profileTariffChange)}>
+          <Button onClick={() => pushPage(router, ROUTES.profileTariffChange)}>
             Выбрать тариф
           </Button>
           <Button variant="secondary" onClick={() => goBack(router, ROUTES.participants)}>

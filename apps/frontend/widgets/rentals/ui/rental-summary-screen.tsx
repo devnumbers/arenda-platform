@@ -4,7 +4,7 @@ import { useEffect, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, replacePage } from '@/shared/lib/navigation';
 import { useProperty } from '@/features/properties';
 import { useRentalSummary, useRentals } from '@/features/rentals';
 import {
@@ -50,7 +50,7 @@ export function RentalSummaryScreen({
 
   useEffect(() => {
     if (rentalsQuery.isSuccess && rental !== undefined && rental.status !== 'completed') {
-      router.replace(ROUTES.propertyRental(propertyId));
+      replacePage(router, ROUTES.propertyRental(propertyId));
     }
   }, [rentalsQuery.isSuccess, rental, router, propertyId]);
 

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Star } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
 import { useGlobalPaymentSearch, useGlobalPaymentSearchCategories } from '@/features/payments';
 import type { GlobalPayment } from '@/entities/payment';
@@ -104,7 +104,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
     setSelectedKey((current) => (current === key ? null : key));
 
   const openPayment = (payment: GlobalPayment): void =>
-    router.push(ROUTES.propertyPayment(payment.propertyId, payment.id));
+    pushPage(router, ROUTES.propertyPayment(payment.propertyId, payment.id));
 
   return (
     <>

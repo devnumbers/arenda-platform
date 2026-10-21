@@ -5,7 +5,7 @@ import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
   PaymentsAddSheet,
@@ -102,7 +102,7 @@ export function PaymentsCatalogScreen({
   const [draftSheetOpen, setDraftSheetOpen] = useState(false);
 
   const goWizard = (): void =>
-    router.push(ROUTES.propertyPaymentNew(propertyId, draftType));
+    pushPage(router, ROUTES.propertyPaymentNew(propertyId, draftType));
 
   return (
     <>
@@ -194,7 +194,7 @@ function OverdueList({
             today={today}
             variant="white"
             className="py-3"
-            onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+            onSelect={() => pushPage(router, ROUTES.propertyOperation(propertyId, operation.id))}
           />
         ))}
       </section>
@@ -259,7 +259,7 @@ function RulesList({
           today={today}
           variant="white"
           hasOverdue={overduePaymentIds.has(payment.id)}
-          onSelect={() => router.push(ROUTES.propertyPayment(propertyId, payment.id))}
+          onSelect={() => pushPage(router, ROUTES.propertyPayment(propertyId, payment.id))}
         />
       ))}
     </section>

@@ -45,6 +45,7 @@ import { TariffFaq } from './tariff-faq';
 import { FEATURE_IMAGES } from './tariff-about-cards';
 import { PendingPaymentCta } from './pending-payment-cta';
 import { ResumeSuccessScreen } from './resume-success-screen';
+import { pushPage, replacePage } from '@/shared/lib/navigation';
 
 /** Экран «Выбрать тариф» (#623, макеты 1919-74867 год, 1929-76367 месяц,
  * 1929-75957 pending) — редизайн TariffChangeForm на канон: сегмент
@@ -180,7 +181,7 @@ function TariffChangeContent({
 
         // Даунгрейд без оплаты применён отложенно — успех с датой.
         notify.scenarios.tariff.changed();
-        router.replace(ROUTES.profileTariffChangeSuccess);
+        replacePage(router, ROUTES.profileTariffChangeSuccess);
       })
       .catch((error: ApiError) => {
         notify.close(loadingToastId);
@@ -260,7 +261,7 @@ function TariffChangeContent({
               footer={footer}
               onConnect={handleConnect}
               onResume={handleResume}
-              onDisable={() => router.push(ROUTES.profileTariffDisable)}
+              onDisable={() => pushPage(router, ROUTES.profileTariffDisable)}
               onDowngrade={() => setDowngradeOpen(true)}
               loading={changeTariff.isPending}
               resuming={resume.isPending}

@@ -20,7 +20,7 @@ import {
 import { useLogout, useMe } from '@/features/auth';
 import { mePhotoDisplay } from '@/features/profile';
 import { ROUTES } from '@/shared/config/routes';
-import { hardReplace } from '@/shared/lib/navigation';
+import { hardReplace, pushPage } from '@/shared/lib/navigation';
 import { cn } from '@/shared/lib/cn';
 import { useKeyboardActivation } from '@/shared/lib/hooks/useKeyboardActivation';
 import { notify } from '@/shared/lib/notifications';
@@ -186,7 +186,7 @@ export function ProfileHub(): JSX.Element {
               key={row.href}
               title={row.title}
               Icon={row.Icon}
-              onSelect={() => router.push(row.href)}
+              onSelect={() => pushPage(router, row.href)}
             />
           ))}
         </nav>

@@ -690,6 +690,18 @@ h-137 оставлял объектным пустоту в середине); �
 
 ## 8. Motion, hover, focus
 
+- **Шторка переходов между страницами** (порт PageTransitionOverlay
+  alterix-new, монтаж — `ScreenLayout`): любой переход на другую страницу
+  (pushPage/replacePage/goBack и клики по same-origin ссылкам) заливает
+  экран листом цвета поверхности `--dl-surface`, навигация едет под ним,
+  по смене URL лист уходит. Тайминги — те же числа канона: покрытие
+  250ms (`--dl-duration-fast`), раскрытие 350ms (`--dl-duration-move`),
+  пауза покрытия 280ms, фолбэк 1800ms; reduced-motion укорачивает до
+  ~150ms. Браузерные Back/Forward без шторки (popstate не перехватить
+  до навигации); URL-state той же страницы (фильтры, `?query` —
+  `useUrlParams`) шторкой не едет. Канон навигации — CODING_STANDARDS
+  «Navigation and browser history».
+
 - Единая кривая `cubic-bezier(0.32, 0.72, 0, 1)` (`--dl-ease`): 250ms
   (`--dl-duration-fast`) цвета/фоны/границы, 350ms (`--dl-duration-move`)
   движение/трансформы, 300ms floating label TextField. Tailwind берёт дефолты

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { JSX } from 'react';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import {
   completedRentalsOf,
   pastRentalCardTitle,
@@ -75,7 +75,7 @@ export function RentalPastScreen({ propertyId }: { readonly propertyId: string }
               <PastRentalCard
                 key={rental.id}
                 rental={rental}
-                onOpen={() => router.push(ROUTES.propertyRentalCompleted(propertyId, rental.id))}
+                onOpen={() => pushPage(router, ROUTES.propertyRentalCompleted(propertyId, rental.id))}
               />
             ))}
           </div>

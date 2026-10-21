@@ -42,6 +42,7 @@ import {PropertiesEmptyState} from './PropertiesEmptyState';
 import {PropertiesLoading} from './PropertiesLoading';
 import {PropertiesErrorState} from './PropertiesErrorState';
 import styles from './PropertiesPage.module.css';
+import { pushPage } from '@/shared/lib/navigation';
 
 export type PropertiesPageProps = {
   readonly initialSort?: PropertySort;
@@ -147,7 +148,7 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
     // Исчерпанный конечный лимит (и «подписки нет», тот же canAdd=false) —
     // интерстишал «Превышен лимит объектов» (#1469) вместо мгновенного
     // редиректа на выбор тарифа; адаптивный текст экран разводит сам.
-    router.push(canAdd ? ROUTES.propertyNew : ROUTES.profileTariffPropertyLimit);
+    pushPage(router, canAdd ? ROUTES.propertyNew : ROUTES.profileTariffPropertyLimit);
   };
 
   const createLabel = canAdd
@@ -203,7 +204,7 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
         <SearchPill
           testId="properties-search-pill"
           label="Найти объект"
-          onOpenSearch={() => router.push(ROUTES.propertySearch)}
+          onOpenSearch={() => pushPage(router, ROUTES.propertySearch)}
         />
       )}
 
@@ -214,7 +215,7 @@ export function PropertiesPage({initialSort}: PropertiesPageProps): JSX.Element 
             onChange={changeSort}
             showChip={!isEmpty}
             showArchive={showArchive}
-            onOpenArchive={() => router.push(ROUTES.propertyArchive)}
+            onOpenArchive={() => pushPage(router, ROUTES.propertyArchive)}
           />
         </div>
       )}

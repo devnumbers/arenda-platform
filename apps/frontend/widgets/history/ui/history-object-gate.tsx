@@ -6,6 +6,7 @@ import { useProperty } from '@/features/properties';
 import { usePaidTariff } from '@/features/subscription';
 import { propertyPermissions } from '@/entities/property';
 import { sharingGateRedirect } from '@/shared/lib/paid-sections';
+import { replacePage } from '@/shared/lib/navigation';
 
 type HistoryObjectGateProps = {
   readonly propertyId: string;
@@ -40,7 +41,7 @@ export function HistoryObjectGate({
   );
   useEffect(() => {
     if (sharingRedirect !== null) {
-      router.replace(sharingRedirect);
+      replacePage(router, sharingRedirect);
     }
   }, [sharingRedirect, router]);
 

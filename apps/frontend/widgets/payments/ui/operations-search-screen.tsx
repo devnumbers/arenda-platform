@@ -24,6 +24,7 @@ import {
 import { OperationRow } from './operations-list';
 import { PaymentsHeading, PaymentsStateCard } from './payments-sections';
 import { SearchResultsSkeleton } from './operations-skeletons';
+import { pushPage } from '@/shared/lib/navigation';
 import {
   searchCategoryChips,
   searchListScope,
@@ -96,7 +97,7 @@ export function OperationsSearchScreen({
   const showResults = !emptyQuery && !pending && !listQuery.isError;
 
   const openOperation = (operation: { readonly id: string }): void =>
-    router.push(ROUTES.propertyOperation(propertyId, operation.id));
+    pushPage(router, ROUTES.propertyOperation(propertyId, operation.id));
 
   const toggleChip = (slug: string): void =>
     setSelectedSlug((current) => (current === slug ? null : slug));
@@ -110,7 +111,7 @@ export function OperationsSearchScreen({
             icon={<ArrowLeft />}
             label="Назад"
             // Назад — на главный список операций, не по истории браузера.
-            onClick={() => router.push(ROUTES.propertyOperations(propertyId))}
+            onClick={() => pushPage(router, ROUTES.propertyOperations(propertyId))}
           />
         }
       >

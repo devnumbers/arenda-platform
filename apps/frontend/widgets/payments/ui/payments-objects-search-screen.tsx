@@ -4,7 +4,7 @@ import { useEffect, useRef, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
 import { useGlobalPaymentObjects } from '@/features/payments';
 import {
@@ -62,7 +62,7 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
   const showResults = !emptyQuery && !pending && !objectsQuery.isError;
 
   const openObject = (propertyId: string): void =>
-    router.push(ROUTES.propertyPayments(propertyId));
+    pushPage(router, ROUTES.propertyPayments(propertyId));
 
   return (
     <>

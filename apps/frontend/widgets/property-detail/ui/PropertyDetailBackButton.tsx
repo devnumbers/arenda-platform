@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { IconButton } from '@/shared/ui/design';
+import { pushPage } from '@/shared/lib/navigation';
 
 /**
  * «Назад» хаба объекта — детерминированно на список объектов, не по
@@ -22,7 +23,7 @@ export function PropertyDetailBackButton(): JSX.Element {
     <IconButton
       icon={<ArrowLeft />}
       label="Назад"
-      onClick={() => router.push(ROUTES.properties)}
+      onClick={() => pushPage(router, ROUTES.properties)}
     />
   );
 }

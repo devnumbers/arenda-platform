@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Add, ArrowLeft, Search } from '@/shared/assets/icons';
 import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { type PaymentType } from '@/entities/payment';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import {
@@ -108,7 +108,7 @@ export function OperationsGlobalDirectionScreen({
   const openOperation = (operation: {
     readonly propertyId: string;
     readonly id: string;
-  }): void => router.push(ROUTES.propertyOperation(operation.propertyId, operation.id));
+  }): void => pushPage(router, ROUTES.propertyOperation(operation.propertyId, operation.id));
 
   // Визард с пресетом направления от точки входа (#571): с «Доходов» —
   // Доход, с «Расходов» — Расход (маршрут распознаёт ?type=).
@@ -139,13 +139,13 @@ export function OperationsGlobalDirectionScreen({
                 icon={<Search />}
                 label="Найти операцию"
                 onClick={() =>
-                  router.push(globalOperationsFiltersHref(ROUTES.operationsSearch, filters))
+                  pushPage(router, globalOperationsFiltersHref(ROUTES.operationsSearch, filters))
                 }
               />
               <IconButton
                 icon={<Add />}
                 label="Добавить операцию"
-                onClick={() => router.push(newOperationHref)}
+                onClick={() => pushPage(router, newOperationHref)}
               />
             </>
           )
@@ -158,7 +158,7 @@ export function OperationsGlobalDirectionScreen({
         {neverHad ? (
           <OperationsNeverHad
             action={
-              <Button size="small" radius="m" onClick={() => router.push(newOperationHref)}>
+              <Button size="small" radius="m" onClick={() => pushPage(router, newOperationHref)}>
                 Добавить операцию
               </Button>
             }
@@ -175,14 +175,14 @@ export function OperationsGlobalDirectionScreen({
               categoriesActive={filters.categories.length > 0}
               onOpenPeriod={() => setPeriodOpen(true)}
               onOpenProperties={() =>
-                router.push(
+                pushPage(router,
                   globalOperationsFiltersHref(ROUTES.operationsObjects, filters, {
                     return: selfRoute,
                   }),
                 )
               }
               onOpenCategories={() =>
-                router.push(
+                pushPage(router,
                   globalOperationsFiltersHref(ROUTES.operationsCategories, filters, {
                     return: selfRoute,
                     // Направление — в скоуп разбивки пикера (решение

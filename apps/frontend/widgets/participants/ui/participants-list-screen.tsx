@@ -42,6 +42,7 @@ import {
   serializeParticipantsListOrderToParams,
 } from '../lib/participants-list-model';
 import { ParticipantsListSkeleton } from './participants-list-skeletons';
+import { pushPage } from '@/shared/lib/navigation';
 
 /**
  * Раздел «Участники» — единая страница списка (D1–D4 #1313; Figma
@@ -161,13 +162,13 @@ export function ParticipantsListScreen({
       <MenuContent>
         <MenuItem
           icon={<TeamAdd className="h-6 w-6" />}
-          onSelect={() => router.push(ROUTES.participantsInvite)}
+          onSelect={() => pushPage(router, ROUTES.participantsInvite)}
         >
           Пригласить участника
         </MenuItem>
         <MenuItem
           icon={<TimeHistory className="h-6 w-6" />}
-          onSelect={() => router.push(ROUTES.history)}
+          onSelect={() => pushPage(router, ROUTES.history)}
         >
           История действий
         </MenuItem>
@@ -228,7 +229,7 @@ export function ParticipantsListScreen({
               <SearchPill
                 testId="participants-search-pill"
                 label="Найти участника"
-                onOpenSearch={() => router.push(ROUTES.participantsSearch)}
+                onOpenSearch={() => pushPage(router, ROUTES.participantsSearch)}
               />
             </div>
           )}
@@ -257,7 +258,7 @@ export function ParticipantsListScreen({
            * тарифа. */
           <SectionEmptyState
             ctaTestId="participants-upsell-cta"
-            onCta={() => router.push(ROUTES.profileTariffSharing)}
+            onCta={() => pushPage(router, ROUTES.profileTariffSharing)}
           />
         ) : listError ? (
           <ErrorCard
@@ -272,7 +273,7 @@ export function ParticipantsListScreen({
            * остаётся (без красного пункта). */
           <SectionEmptyState
             ctaTestId="participants-empty-cta"
-            onCta={() => router.push(ROUTES.participantsInvite)}
+            onCta={() => pushPage(router, ROUTES.participantsInvite)}
           />
         ) : (
           <>
@@ -284,7 +285,7 @@ export function ParticipantsListScreen({
                 <ParticipantRowButton
                   key={participant.id}
                   participant={participant}
-                  onSelect={() => router.push(ROUTES.participant(participant.id))}
+                  onSelect={() => pushPage(router, ROUTES.participant(participant.id))}
                 />
               ))}
             </div>

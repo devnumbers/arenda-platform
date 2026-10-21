@@ -34,6 +34,7 @@ import {
   PaymentsRowsSkeleton,
   PaymentsStateCard,
 } from "./payments-sections";
+import { pushPage } from "@/shared/lib/navigation";
 
 /**
  * Страница «Платежи на оплату» (тикет #1347; макеты 1036:40828 список,
@@ -147,7 +148,7 @@ export function PaymentsDueGlobalScreen({
                           key={item.operationId}
                           item={item}
                           onSelect={() =>
-                            router.push(
+                            pushPage(router,
                               ROUTES.propertyPayment(
                                 item.propertyId,
                                 item.paymentId,
