@@ -309,6 +309,21 @@
     --animate-pulse: pulse 2s var(--dl-ease) infinite;
 }
 
+/* Кроссфейд переходов между страницами (канон DESIGN.md §8, решения
+   владельца 21.10): основной движок — View Transitions API (Baseline
+   10.2025). Машина шторки (page-transition-machine.ts) стартует переход,
+   коммит URL открывает анимацию пары old/new — гаснут/проявляются
+   одновременно одним жестом --pt-crossfade-duration на кривой дома;
+   reduced-motion укорачивает сам токен (tokens.css). Пока страница
+   грузится, старый экран живёт без затемнения; предохранитель 600ms
+   накрывает его листом PageTransitionOverlay — тот же лист остаётся
+   фолбэком браузеров без VT (Safari < 18, Firefox < 144). */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: var(--pt-crossfade-duration);
+    animation-timing-function: var(--dl-ease);
+}
+
 /* Модалка-карточка ≥768px: переход-модель шита «Еще» (решение 22.09),
    перенесённая на Radix Dialog (аудит #1418, план 012): закрытие
    разворачивается из текущей позиции, повторное открытие посреди exit
