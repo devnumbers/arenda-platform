@@ -52,10 +52,17 @@ export function CookieBanner() {
             политикой конфиденциальности
           </Link>
         </p>
-        {/* Кнопка — инстанс лендинговой системы из макета (LandingButton
-            Size=Default): на мобайле на всю ширину под текстом, на планшете
-            и десктопе — справа от текста. */}
-        <LandingButton size="lg" className="w-full shrink-0 tab:w-auto" onClick={accept}>
+        {/* Кнопка — инстанс лендинговой системы из макета (LandingButton),
+            на мобайле на всю ширину под текстом, на планшете и десктопе —
+            справа от текста. Боковой паддинг 28px — решение владельца по
+            кадрам баннера (инстансы 117/124px = px-28); important-суффикс
+            обязателен: LandingButton склеивает классы без tailwind-merge,
+            и px-8 канона в стилях позже px-7 — простой класс бы проиграл. */}
+        <LandingButton
+          size="lg"
+          className="w-full shrink-0 px-7! tab:w-auto"
+          onClick={accept}
+        >
           Хорошо
         </LandingButton>
       </section>
