@@ -48,16 +48,21 @@ function tokenMs(name: string): number {
 }
 
 describe('Шторка переходов: стражи дрейфа', () => {
-  it('тайминги машины — значения токенов канона §8', () => {
-    expect(COVER_DURATION_MS).toBe(tokenMs('--dl-duration-fast'));
-    expect(REVEAL_DURATION_MS).toBe(tokenMs('--dl-duration-move'));
+  it('тайминги машины — значения собственных токенов шторки', () => {
+    expect(COVER_DURATION_MS).toBe(tokenMs('--pt-cover-duration'));
+    expect(REVEAL_DURATION_MS).toBe(tokenMs('--pt-reveal-duration'));
   });
 
-  it('лист собран на утилитах тех же токенов, reduced-motion ~150ms', () => {
-    expect(overlaySource).toContain('duration-(--dl-duration-move)');
-    expect(overlaySource).toContain('data-[phase=covering]:duration-(--dl-duration-fast)');
+  it('reduced-motion укорачивает шторку ниже обычного темпа', () => {
+    expect(tokenMs('--pt-cover-duration')).toBeGreaterThan(100);
+    expect(tokenMs('--pt-reveal-duration')).toBeGreaterThan(100);
+  });
+
+  it('лист собран на утилитах тех же токенов, reduced-motion короче', () => {
+    expect(overlaySource).toContain('duration-(--pt-reveal-duration)');
+    expect(overlaySource).toContain('data-[phase=covering]:duration-(--pt-cover-duration)');
     expect(overlaySource).toContain('ease-apple');
-    expect(overlaySource).toContain('motion-reduce:duration-150');
+    expect(overlaySource).toContain('motion-reduce:duration-100');
   });
 
   it('пауза покрытия больше покрытия — программный переход стартует по белому листу', () => {

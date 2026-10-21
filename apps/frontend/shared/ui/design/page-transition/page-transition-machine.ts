@@ -2,19 +2,19 @@ export type TransitionPhase = 'idle' | 'covering' | 'revealing';
 
 export type TransitionListener = (phase: TransitionPhase) => void;
 
-/** Тайминги канона DESIGN.md §8: покрытие --dl-duration-fast (250ms),
- * раскрытие --dl-duration-move (350ms). Пауза покрытия (280ms) — окно до
- * запуска навигации: у программных переходов лист успевает добрать
- * непрозрачность до full-cover, у кликов по ссылкам она же играет роль
- * страховки для «голых» якорей без Link (сам Link пушит немедленно и
- * ранняя смена URL отменяет отложенный пуш — см. notifyNavigable-гонку
- * в notifyNavigated). Порт alterix-new (260/280/520): числа канона
- * неотличимы на глаз. Значения должны совпадать с CSS-переменными в
- * page-transition-overlay.module.css — страж дрейфа сверяет их в
+/** Тайминги шторки — собственные токены --pt-cover-duration/--pt-reveal-duration
+ * в tokens.css (решение владельца 21.10, «как у Apple», агрессивный
+ * вариант ~350ms на цикл; порт alterix-new был 260/280/520). Пауза
+ * покрытия (130ms) — окно до запуска навигации: у программных переходов
+ * лист успевает добрать непрозрачность до full-cover, у кликов по
+ * ссылкам она же играет роль страховки для «голых» якорей без Link
+ * (сам Link пушит немедленно, и ранняя смена URL отменяет отложенный
+ * пуш — см. гонку в notifyNavigated). Значения обязаны совпадать с
+ * токенами tokens.css — страж дрейфа сверяет их в
  * page-transition-overlay.test.ts. */
-export const COVER_DURATION_MS = 250;
-export const COVER_DELAY_MS = 280;
-export const REVEAL_DURATION_MS = 350;
+export const COVER_DURATION_MS = 120;
+export const COVER_DELAY_MS = 130;
+export const REVEAL_DURATION_MS = 200;
 export const NAVIGATION_FALLBACK_MS = 1800;
 
 type Timer = ReturnType<typeof setTimeout>;

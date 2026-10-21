@@ -16,16 +16,17 @@ import { createPageTransitionMachine } from './page-transition-machine';
 const machine = createPageTransitionMachine();
 
 /* Лист — Tailwind-утилиты на токенах (канон design-слоя без CSS-модулей):
- * база — transition-opacity на --dl-duration-move, покрытие короче —
- * --dl-duration-fast, reduced-motion укорачивает до 150ms (§8); значения
- * обязаны совпадать с константами page-transition-machine.ts — страж
- * дрейфа сверяет их с tokens.css в page-transition-overlay.test.ts. */
+ * база — transition-opacity на --pt-reveal-duration, покрытие короче —
+ * --pt-cover-duration, reduced-motion укорачивает до 100ms (override в
+ * tokens.css); значения обязаны совпадать с константами
+ * page-transition-machine.ts — страж дрейфа сверяет их с tokens.css в
+ * page-transition-overlay.test.ts. */
 const OVERLAY_CLASS = [
   'fixed inset-0 z-[2147483000] bg-surface opacity-0 pointer-events-none',
-  'transition-opacity duration-(--dl-duration-move) ease-apple will-change-[opacity]',
-  'data-[phase=covering]:opacity-100 data-[phase=covering]:pointer-events-auto data-[phase=covering]:duration-(--dl-duration-fast)',
+  'transition-opacity duration-(--pt-reveal-duration) ease-apple will-change-[opacity]',
+  'data-[phase=covering]:opacity-100 data-[phase=covering]:pointer-events-auto data-[phase=covering]:duration-(--pt-cover-duration)',
   'data-[phase=revealing]:opacity-0 data-[phase=revealing]:pointer-events-auto',
-  'motion-reduce:duration-150 motion-reduce:data-[phase=covering]:duration-150',
+  'motion-reduce:duration-100 motion-reduce:data-[phase=covering]:duration-100',
 ].join(' ');
 
 /**
