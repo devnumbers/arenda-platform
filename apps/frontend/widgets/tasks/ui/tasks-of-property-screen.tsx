@@ -11,7 +11,7 @@ import {
   VerticalMenu,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
 import { useProperty } from '@/features/properties';
 import { propertyPermissions } from '@/entities/property';
@@ -135,7 +135,7 @@ export function TasksOfPropertyScreen({
       return undefined;
     }
     const ruleId = task.ruleId;
-    return () => router.push(ROUTES.propertyTaskEdit(propertyId, ruleId));
+    return () => pushPage(router, ROUTES.propertyTaskEdit(propertyId, ruleId));
   };
 
   return (
@@ -153,7 +153,7 @@ export function TasksOfPropertyScreen({
             <IconButton
               icon={<Add />}
               label="Создать задачу"
-              onClick={() => router.push(ROUTES.propertyTaskCreate(propertyId))}
+              onClick={() => pushPage(router, ROUTES.propertyTaskCreate(propertyId))}
             />
           ) : undefined
         }
@@ -235,7 +235,7 @@ export function TasksOfPropertyScreen({
         <StickyBottomBar>
           <Button
             className="w-full"
-            onClick={() => router.push(ROUTES.propertyTaskCreate(propertyId))}
+            onClick={() => pushPage(router, ROUTES.propertyTaskCreate(propertyId))}
           >
             Создать задачу
           </Button>

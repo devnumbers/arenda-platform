@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { buildReturnUrl, goBack } from '@/shared/lib/navigation';
+import { buildReturnUrl, goBack, pushPage } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
 import { formatDayMonthWithYear } from '@/entities/payment';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
@@ -99,7 +99,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
   const openOperation = (operation: {
     readonly propertyId: string;
     readonly id: string;
-  }): void => router.push(ROUTES.propertyOperation(operation.propertyId, operation.id));
+  }): void => pushPage(router, ROUTES.propertyOperation(operation.propertyId, operation.id));
 
   const toggleChip = (slug: string): void =>
     setSelectedSlug((current) => (current === slug ? null : slug));

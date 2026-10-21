@@ -16,6 +16,7 @@ import {Edit} from '@/shared/assets/icons';
 import {Button} from '@/shared/ui/design';
 import {propertySectionImages} from '../lib/property-sections';
 import {PropertySectionCard} from './PropertySectionCard';
+import { pushPage } from '@/shared/lib/navigation';
 
 type DataField = {
     readonly label: string;
@@ -78,7 +79,7 @@ export function PropertyAboutScreen(): JSX.Element {
                     <IconButton
                         icon={<Edit className="h-6 w-6"/>}
                         label="Редактировать объект"
-                        onClick={() => router.push(ROUTES.propertyEdit(id))}
+                        onClick={() => pushPage(router, ROUTES.propertyEdit(id))}
                     />
                 ) : undefined
             }
@@ -145,7 +146,7 @@ export function PropertyAboutScreen(): JSX.Element {
                             <Button
                                 variant="primary"
                                 className="mt-6"
-                                onClick={() => router.push(ROUTES.propertyEdit(id))}
+                                onClick={() => pushPage(router, ROUTES.propertyEdit(id))}
                             >
                                 Добавить
                             </Button>

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { CONTACTS_SEARCH_DEBOUNCE_MS, useContactBook } from '@/features/contacts';
 import {
@@ -95,7 +95,7 @@ export function ContactBookSearchScreen(): JSX.Element {
                 contact={contact}
                 surface="white"
                 subtitle={contactBookRowSubtitle(contact)}
-                onSelect={() => router.push(ROUTES.contact(contact.id))}
+                onSelect={() => pushPage(router, ROUTES.contact(contact.id))}
               />
             ))}
             <InfiniteQueryTail query={contactsQuery} />

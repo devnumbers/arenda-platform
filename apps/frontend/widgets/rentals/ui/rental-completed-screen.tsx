@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, Key, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage, replacePage } from '@/shared/lib/navigation';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import type { IsoDate } from '@/shared/lib/calendar';
 import { notify } from '@/shared/lib/notifications';
@@ -67,7 +67,7 @@ export function RentalCompletedScreen({
   // Незавершённая аренда по прямой ссылке — её экраном остаётся /rentals.
   useEffect(() => {
     if (rentalsQuery.isSuccess && rental !== undefined && rental.status !== 'completed') {
-      router.replace(ROUTES.propertyRental(propertyId));
+      replacePage(router, ROUTES.propertyRental(propertyId));
     }
   }, [rentalsQuery.isSuccess, rental, router, propertyId]);
 
@@ -158,7 +158,7 @@ function RentalCompletedBody({
   const openContact =
     tenant === null
       ? undefined
-      : () => router.push(ROUTES.propertyContact(propertyId, tenant.contactId));
+      : () => pushPage(router, ROUTES.propertyContact(propertyId, tenant.contactId));
 
   return (
     <PageContent>
@@ -198,7 +198,7 @@ function RentalCompletedBody({
                 icon={<Key />}
                 caption="Посмотреть итоги"
                 onClick={() =>
-                  router.push(ROUTES.propertyRentalCompletedSummary(propertyId, rental.id))
+                  pushPage(router, ROUTES.propertyRentalCompletedSummary(propertyId, rental.id))
                 }
               />
             </div>
@@ -209,7 +209,7 @@ function RentalCompletedBody({
           <RentalGroup
             title="Условия аренды"
             contentGap="gap-4"
-            onOpen={() => router.push(ROUTES.propertyRentalCompletedTerms(propertyId, rental.id))}
+            onOpen={() => pushPage(router, ROUTES.propertyRentalCompletedTerms(propertyId, rental.id))}
             openLabel="Открыть условия аренды"
           >
             <TermRows rows={rentalTeaserRows(rental)} />
@@ -220,7 +220,7 @@ function RentalCompletedBody({
             className="pb-3"
             onOpen={
               operations.length > 0
-                ? () => router.push(ROUTES.propertyRentalCompletedHistory(propertyId, rental.id))
+                ? () => pushPage(router, ROUTES.propertyRentalCompletedHistory(propertyId, rental.id))
                 : undefined
             }
             openLabel="Открыть историю операций"
@@ -240,7 +240,7 @@ function RentalCompletedBody({
                     operation={operation}
                     today={rental.today}
                     onSelect={() =>
-                      router.push(ROUTES.propertyOperation(propertyId, operation.id))
+                      pushPage(router, ROUTES.propertyOperation(propertyId, operation.id))
                     }
                   />
                 ))}

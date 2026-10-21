@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { JSX } from 'react';
 import { ArrowLeft, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { currentRentalOf, rentalCommentText, rentalTermsRows, useRentals } from '@/features/rentals';
 import { Button, EmptyState, IconButton, PageContent, TopNav, TopNavTitle } from '@/shared/ui/design';
 import { RentalTermsCardSkeleton } from './rental-skeletons';
@@ -54,7 +54,7 @@ export function RentalTermsScreen({
             <IconButton
               icon={<Edit />}
               label="Изменить условия"
-              onClick={() => router.push(ROUTES.propertyRentalTermsEdit(propertyId))}
+              onClick={() => pushPage(router, ROUTES.propertyRentalTermsEdit(propertyId))}
             />
           )
         }

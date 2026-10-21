@@ -12,7 +12,7 @@ import {
 import { billingKeys } from '@/shared/api/query-keys';
 import { formatDate } from '@/shared/lib/format-date';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, replacePage } from '@/shared/lib/navigation';
 import { isPaymentFormExpired } from '../lib/payment-history-model';
 import { TariffSuccessScreen } from './tariff/tariff-success-screen';
 
@@ -73,7 +73,7 @@ export function TariffChangeSuccess(): JSX.Element {
       title: 'Оплата не прошла',
       descriptions: ['Попробуйте сменить тариф ещё раз'],
       action: (
-        <Button onClick={() => router.replace(ROUTES.profileTariffChange)}>
+        <Button onClick={() => replacePage(router, ROUTES.profileTariffChange)}>
           Попробовать снова
         </Button>
       ),

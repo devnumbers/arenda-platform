@@ -12,7 +12,7 @@ import {
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { OPERATIONS_FEED_SORT } from '@/shared/api/query-keys';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
@@ -159,7 +159,7 @@ export function PaymentHistoryScreen({
                 <MenuItem
                   icon={<Edit className="h-6 w-6" />}
                   onSelect={() =>
-                    router.push(ROUTES.propertyPaymentEdit(propertyId, paymentId))}
+                    pushPage(router, ROUTES.propertyPaymentEdit(propertyId, paymentId))}
                 >
                   Изменить платеж
                 </MenuItem>
@@ -225,7 +225,7 @@ export function PaymentHistoryScreen({
                             key={item.operation.id}
                             operation={item.operation}
                             onSelect={() =>
-                              router.push(
+                              pushPage(router,
                                 ROUTES.propertyOperation(propertyId, item.operation.id),
                               )}
                           />

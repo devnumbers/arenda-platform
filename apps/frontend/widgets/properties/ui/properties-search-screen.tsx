@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { usePropertiesSearch } from '@/features/properties';
 import { PropertyAvatar } from '@/entities/property';
@@ -121,7 +121,7 @@ export function PropertiesSearchScreen(): JSX.Element {
                 }
                 title={property.name}
                 subtitle={property.address}
-                onSelect={() => router.push(ROUTES.property(property.id))}
+                onSelect={() => pushPage(router, ROUTES.property(property.id))}
               />
             ))}
             {/* Хвост порций (#633): sentinel + индикатор догрузки. */}

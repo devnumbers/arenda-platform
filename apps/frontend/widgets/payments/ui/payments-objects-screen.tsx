@@ -38,6 +38,7 @@ import {
   PaymentObjectAvatar,
   PaymentsStateCard,
 } from "./payments-sections";
+import { pushPage } from "@/shared/lib/navigation";
 
 /**
  * Страница «Объекты» — ленд секции «Платежи объектов» (карта #573, тикет
@@ -118,7 +119,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
             <IconButton
               icon={<Search />}
               label="Поиск объектов"
-              onClick={() => router.push(ROUTES.paymentsObjectsSearch)}
+              onClick={() => pushPage(router, ROUTES.paymentsObjectsSearch)}
             />
           )
         }
@@ -168,7 +169,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
                   title="Объектов пока нет"
                   description="Создайте объект, чтобы добавлять платежи"
                   action={
-                    <Button size="small" radius="m" onClick={() => router.push(ROUTES.propertyNew)}>
+                    <Button size="small" radius="m" onClick={() => pushPage(router, ROUTES.propertyNew)}>
                       Добавить объект
                     </Button>
                   }
@@ -183,7 +184,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
                     object={object}
                     paymentsById={paymentsById}
                     onSelect={() =>
-                      router.push(ROUTES.propertyPayments(object.propertyId))
+                      pushPage(router, ROUTES.propertyPayments(object.propertyId))
                     }
                   />
                 ))}
@@ -221,7 +222,7 @@ function PaymentsObjectsEmpty({
     ? () =>
         draft.hasDraft
           ? setSheetOpen(true)
-          : router.push(ROUTES.propertyPaymentNew(propertyId, "payment"))
+          : pushPage(router, ROUTES.propertyPaymentNew(propertyId, "payment"))
     : undefined;
 
   return (

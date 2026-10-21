@@ -16,6 +16,7 @@ import { successScreenCopy } from '@/features/payments';
 import type { PaymentDraftType } from '@/features/payments';
 import { firstOccurrencePreview } from '../../lib/first-occurrence';
 import { WizardBottomBar } from './wizard-chrome';
+import { pushPage } from '@/shared/lib/navigation';
 
 /**
  * Экран успеха визарда (Figma 835:19893; структура — канон успеха операций
@@ -109,7 +110,7 @@ export function WizardSuccess({
           <Button
             variant="secondary"
             className="w-full"
-            onClick={() => router.push(ROUTES.propertyPayment(propertyId, created.id))}
+            onClick={() => pushPage(router, ROUTES.propertyPayment(propertyId, created.id))}
           >
             Посмотреть платеж
           </Button>

@@ -8,6 +8,7 @@ import { ROUTES } from '@/shared/config/routes';
 import type { TariffName } from '@/entities/user';
 import { disableSuccessTitle } from '@/widgets/profile/lib/tariff-disable';
 import { TariffSuccessScreen } from './tariff-success-screen';
+import { replacePage } from '@/shared/lib/navigation';
 
 /** Полноэкранный успех отключения (#622, макет 1933-78038) на общем
  * каркасе TariffSuccessScreen: иконка Icon/Color/Cancel 64, заголовок
@@ -30,7 +31,7 @@ export function TariffDisableSuccessScreen({
       action={
         // replace, а не goBack: история несёт «О тарифе» → «Отключение»,
         // один назад вернул бы на «О тарифе», а не на главный «Тариф».
-        <Button onClick={() => router.replace(ROUTES.profileTariff)}>Хорошо</Button>
+        <Button onClick={() => replacePage(router, ROUTES.profileTariff)}>Хорошо</Button>
       }
     />
   );

@@ -4,7 +4,7 @@ import { type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { usePaymentOperationsPaged } from '@/features/payments';
 import {
@@ -108,7 +108,7 @@ export function PaymentOverdueScreen({
                         today={today}
                         variant="white"
                         className="py-3"
-                        onSelect={() => router.push(ROUTES.propertyOperation(propertyId, operation.id))}
+                        onSelect={() => pushPage(router, ROUTES.propertyOperation(propertyId, operation.id))}
                       />
                     ))}
                   </section>

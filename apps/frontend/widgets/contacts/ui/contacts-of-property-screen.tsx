@@ -11,7 +11,7 @@ import {
   SortingSmallBig,
 } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import { useDebounce } from '@/shared/lib/hooks/useDebounce';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 import {
@@ -196,7 +196,7 @@ export function ContactsOfPropertyScreen({
                 key={contact.id}
                 contact={contact}
                 surface="white"
-                onSelect={() => router.push(ROUTES.propertyContact(propertyId, contact.id))}
+                onSelect={() => pushPage(router, ROUTES.propertyContact(propertyId, contact.id))}
               />
             ))}
             {/* Хвост порций (#633): sentinel + индикатор догрузки — белые
@@ -222,7 +222,7 @@ export function ContactsOfPropertyScreen({
                         key={contact.id}
                         contact={contact}
                         surface="muted"
-                        onSelect={() => router.push(ROUTES.propertyContact(propertyId, contact.id))}
+                        onSelect={() => pushPage(router, ROUTES.propertyContact(propertyId, contact.id))}
                       />
                     ))}
                   </div>
@@ -238,7 +238,7 @@ export function ContactsOfPropertyScreen({
 
       {canMutate && !searchOpen && (
         <StickyBottomBar>
-          <Button className="w-full" onClick={() => router.push(ROUTES.propertyContactNew(propertyId))}>
+          <Button className="w-full" onClick={() => pushPage(router, ROUTES.propertyContactNew(propertyId))}>
             Добавить контакт
           </Button>
         </StickyBottomBar>

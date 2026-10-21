@@ -1,6 +1,6 @@
 import type {useRouter} from 'next/navigation';
 
-type AppRouter = ReturnType<typeof useRouter>;
+export type AppRouter = ReturnType<typeof useRouter>;
 
 /** Allow only internal absolute paths; reject protocol-relative, scheme and backslash tricks. */
 export function sanitizeReturnTo(value: string | undefined): string | undefined {
@@ -25,15 +25,56 @@ export function buildReturnUrl(returnTo: string, params: Record<string, string>)
     return qs ? `${path}?${qs}` : path;
 }
 
-export function goBack(router: AppRouter, fallbackHref: string): void {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-        // Native history.back() instead of router.back(): Next App Router's router.back()
-        // can be a no-op right after router.replace(). The router listens to popstate,
-        // so the rendered result is equivalent.
-        window.history.back();
+/** Канал шторки переходов между страницами: оверлей
+ * (shared/ui/design/page-transition) регистрирует обработчик при монтировании
+ * в ScreenLayout и снимает его при размонтировании. Пока обработчика нет
+ * (логин, лендинг, тесты), навигация прямая — ровно как до шторки. */
+export type PageTransitionHandler = (perform: () => void) => void;
+
+let pageTransitionHandler: PageTransitionHandler | null = null;
+
+export function registerPageTransitionHandler(handler: PageTransitionHandler | null): void {
+    pageTransitionHandler = handler;
+}
+
+function navigateUnderCurtain(perform: () => void): void {
+    if (pageTransitionHandler !== null) {
+        pageTransitionHandler(perform);
     } else {
-        router.replace(fallbackHref);
+        perform();
     }
+}
+
+/** Клиентская навигация на новую страницу — под шторкой перехода
+ * (канон «Navigation and browser history», вход в flow и обычная
+ * контентная навигация были router.push). */
+export function pushPage(router: AppRouter, href: string): void {
+    navigateUnderCurtain(() => {
+        router.push(href);
+    });
+}
+
+/** Замена текущего entry истории с шторкой (канон: завершение flow —
+ * «созданная сущность / другой раздел» был router.replace). Обновления
+ * URL-state той же страницы (фильтры, ?query) шторкой не едут — это не
+ * переход между страницами, там остаётся прямой router.replace. */
+export function replacePage(router: AppRouter, href: string): void {
+    navigateUnderCurtain(() => {
+        router.replace(href);
+    });
+}
+
+export function goBack(router: AppRouter, fallbackHref: string): void {
+    navigateUnderCurtain(() => {
+        if (typeof window !== 'undefined' && window.history.length > 1) {
+            // Native history.back() instead of router.back(): Next App Router's router.back()
+            // can be a no-op right after router.replace(). The router listens to popstate,
+            // so the rendered result is equivalent.
+            window.history.back();
+        } else {
+            router.replace(fallbackHref);
+        }
+    });
 }
 
 /**

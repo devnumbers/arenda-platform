@@ -30,6 +30,7 @@ import { OperationsGlobalPeriodPickerDialog } from "./operations-period-picker";
 import { OperationsSummaryCard } from "./operations-summary-card";
 import { operationsFeedGate } from "../lib/operations-feed-gate";
 import { summaryBarSegments } from "@/features/payment-categories";
+import { pushPage } from "@/shared/lib/navigation";
 
 /**
  * Экран «Операции» — глобальная лента по всем объектам (#541, макеты
@@ -109,7 +110,7 @@ export function OperationsGlobalScreen(): JSX.Element {
     readonly propertyId: string;
     readonly id: string;
   }): void =>
-    router.push(ROUTES.propertyOperation(operation.propertyId, operation.id));
+    pushPage(router, ROUTES.propertyOperation(operation.propertyId, operation.id));
 
   // «+» — в визард одиночной операции (#571, решение владельца 2026-09-08):
   // в ряду заголовка хаба и в правом слоте компакт-бара; в neverHad
@@ -118,7 +119,7 @@ export function OperationsGlobalScreen(): JSX.Element {
     <IconButton
       icon={<Add />}
       label="Добавить операцию"
-      onClick={() => router.push(ROUTES.operationsNew)}
+      onClick={() => pushPage(router, ROUTES.operationsNew)}
     />
   );
   const showAdd = !neverHad && canCreateSomewhere;
@@ -154,7 +155,7 @@ export function OperationsGlobalScreen(): JSX.Element {
               {/* Пилюля поиска (#543) — кнопка на отдельную страницу. */}
               <OperationsSearchPill
                 onOpenSearch={() =>
-                  router.push(
+                  pushPage(router,
                     globalOperationsFiltersHref(ROUTES.operationsSearch, filters),
                   )
                 }
@@ -167,7 +168,7 @@ export function OperationsGlobalScreen(): JSX.Element {
           <OperationsNeverHad
             action={
               canCreateSomewhere ? (
-                <Button size="small" radius="m" onClick={() => router.push(ROUTES.operationsNew)}>
+                <Button size="small" radius="m" onClick={() => pushPage(router, ROUTES.operationsNew)}>
                   Добавить операцию
                 </Button>
               ) : undefined
@@ -190,14 +191,14 @@ export function OperationsGlobalScreen(): JSX.Element {
               categoriesActive={filters.categories.length > 0}
               onOpenPeriod={() => setPeriodOpen(true)}
               onOpenProperties={() =>
-                router.push(
+                pushPage(router,
                   globalOperationsFiltersHref(ROUTES.operationsObjects, filters, {
                     return: ROUTES.operations,
                   }),
                 )
               }
               onOpenCategories={() =>
-                router.push(
+                pushPage(router,
                   globalOperationsFiltersHref(ROUTES.operationsCategories, filters, {
                     return: ROUTES.operations,
                   }),
@@ -246,7 +247,7 @@ export function OperationsGlobalScreen(): JSX.Element {
                         )}
                         openLabel="Открыть все расходы"
                         onOpen={() =>
-                          router.push(
+                          pushPage(router,
                             globalOperationsFiltersHref(ROUTES.operationsExpenses, filters, {
                               return: ROUTES.operations,
                             }),
@@ -262,7 +263,7 @@ export function OperationsGlobalScreen(): JSX.Element {
                         )}
                         openLabel="Открыть все доходы"
                         onOpen={() =>
-                          router.push(
+                          pushPage(router,
                             globalOperationsFiltersHref(ROUTES.operationsIncomes, filters, {
                               return: ROUTES.operations,
                             }),

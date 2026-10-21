@@ -5,7 +5,7 @@ import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
-import { goBack } from '@/shared/lib/navigation';
+import { goBack, pushPage } from '@/shared/lib/navigation';
 import {
   usePayments,
   usePropertyOverdueOperations,
@@ -98,7 +98,7 @@ export function PaymentsOfPropertyScreen({
   const canMutate = propertyPermissions(property).canEdit;
 
   const openPayment = (payment: Payment): void =>
-    router.push(ROUTES.propertyPayment(propertyId, payment.id));
+    pushPage(router, ROUTES.propertyPayment(propertyId, payment.id));
 
   return (
     <>
@@ -135,7 +135,7 @@ export function PaymentsOfPropertyScreen({
                 <PaymentsSection
                   testId="section-overdue"
                   title="Просроченные платежи"
-                  onOpen={() => router.push(ROUTES.propertyPaymentsOverdue(propertyId))}
+                  onOpen={() => pushPage(router, ROUTES.propertyPaymentsOverdue(propertyId))}
                   openLabel="Открыть просроченные платежи"
                   emptyHint={'У вас нет просроченных платежей'}
                 >
@@ -168,7 +168,7 @@ export function PaymentsOfPropertyScreen({
                             // Плашки операций кликабельны, как на остальных
                             // поверхностях: ведут на страницу операции.
                             onSelect={() =>
-                              router.push(ROUTES.propertyOperation(propertyId, operation.id))
+                              pushPage(router, ROUTES.propertyOperation(propertyId, operation.id))
                             }
                           />
                         );
@@ -187,7 +187,7 @@ export function PaymentsOfPropertyScreen({
                   <PaymentsSection
                     testId="section-payments"
                     title="Платежи"
-                    onOpen={() => router.push(ROUTES.propertyPaymentsAll(propertyId))}
+                    onOpen={() => pushPage(router, ROUTES.propertyPaymentsAll(propertyId))}
                     openLabel="Открыть все платежи"
                     emptyHint={'Напомним, когда нужно будет отметить оплату, вы вручную отметите платеж'}
                   >
@@ -207,7 +207,7 @@ export function PaymentsOfPropertyScreen({
                   <PaymentsSection
                     testId="section-auto"
                     title="Автоплатежи"
-                    onOpen={() => router.push(ROUTES.propertyPaymentsAuto(propertyId))}
+                    onOpen={() => pushPage(router, ROUTES.propertyPaymentsAuto(propertyId))}
                     openLabel="Открыть автоплатежи"
                     emptyHint={'Предупредим о платеже, потом автоматически отметим оплату'}
                   >
