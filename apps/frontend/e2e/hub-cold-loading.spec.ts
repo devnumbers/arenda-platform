@@ -53,6 +53,28 @@ async function readLog(page: Page): Promise<MarkerMap> {
   );
 }
 
+/** Журнал первого кадра хаба «Участники»: в момент первого появления
+ * кадра загрузки снимается, был ли в DOM уже <header> (шапка TopNav).
+ * Канон §7 — хром экрана рендерится вне фазы загрузки, поэтому в кадре
+ * стриминга шапка обязана быть; голый скелетон = регрессия (класс C9,
+ * «шапка прыгает»). */
+function firstFrameJournal(): void {
+  const log: MarkerMap = {};
+  (window as unknown as { __hubColdLog: MarkerMap }).__hubColdLog = log;
+  let frameSeen = false;
+  const observer = new MutationObserver(() => {
+    if (frameSeen) {
+      return;
+    }
+    if (document.querySelector('[data-testid="participants-list-loading"]') !== null) {
+      frameSeen = true;
+      log['participants-list-loading'] = true;
+      log['participants-header-in-first-frame'] = document.querySelector('header') !== null;
+    }
+  });
+  observer.observe(document, { childList: true, subtree: true });
+}
+
 test.describe('холодная загрузка детей хабов (план 045)', () => {
   test('«Платежи на оплату»: скелетон хаба «Платежи» не стримится', async ({
     page,
@@ -115,5 +137,33 @@ test.describe('холодная загрузка детей хабов (план
     // (тот же виджет), пустого окна быть не должно.
     const log = await readLog(page);
     expect(log['contacts-loading'], 'кадр загрузки хаба «Контакты» стримился').toBe(true);
+  });
+});
+
+test.describe('холодная загрузка хаба «Участники» (гард хрома §7)', () => {
+  test('кадр холодной загрузки несёт хром экрана — шапка стримится вместе со скелетоном', async ({
+    page,
+    seededUser,
+  }) => {
+    await openCabinetWithSessionToken(page, seededUser.sessionToken);
+    await page.addInitScript(firstFrameJournal);
+    await coldNetwork(page);
+
+    await page.goto(`${process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3010'}/participants`, {
+      waitUntil: 'commit',
+    });
+    await page.waitForLoadState('load');
+    await expect(page.getByText('Участники').first()).toBeVisible();
+
+    const log = await readLog(page);
+    // Кадр стримился (in-page fallback страницы — единственный кадр
+    // холодной загрузки хаба после сноса loading.tsx, план 045).
+    expect(log['participants-list-loading'], 'кадр загрузки хаба «Участники» стримился').toBe(true);
+    // Хром в первом кадре: в момент появления кадра загрузки шапка уже в
+    // DOM. Голый скелетон без TopNav = регрессия «шапка прыгает».
+    expect(
+      log['participants-header-in-first-frame'],
+      'шапка в первом кадре холодной загрузки /participants',
+    ).toBe(true);
   });
 });
