@@ -13,7 +13,6 @@ export {
   useDeleteContact,
   useUploadContactPhoto,
   useDeleteContactPhoto,
-  useContactPhotoBuster,
 } from './api/hooks';
 export type { ContactBookSort, ContactBookOrder } from './api/queries';
 export type { ContactsPageData } from './api/hooks';

@@ -6,11 +6,7 @@ import {
   PHOTO_FILE_TOO_LARGE_MESSAGE,
   photoFileTooLarge,
 } from '@/shared/lib/photo';
-import {
-  type PropertyPhotoStage,
-  propertyPhotoDisplay,
-  usePropertyPhotoBuster,
-} from '@/features/properties';
+import { type PropertyPhotoStage, propertyPhotoDisplay } from '@/features/properties';
 import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import { Button, circleIconRing, ConfirmDialog, PhotoProgressRing, PhotoRemoveBadge } from '@/shared/ui/design';
 
@@ -19,8 +15,8 @@ import { Button, circleIconRing, ConfirmDialog, PhotoProgressRing, PhotoRemoveBa
  * по типу (поверхность hero канона PropertyAvatar) либо фото. Управляемый
  * и без сети: изменение фото живёт в черновике формы (stage,
  * PropertyPhotoStage — решение владельца 08.10), что показывать, решает
- * propertyPhotoDisplay (staged-превью → серверное фото с бастером →
- * глиф), а применяют изменение кнопки сохранения экрана — onFileChosen и
+ * propertyPhotoDisplay (staged-превью → серверное фото, URL версионирован
+ * бэком → глиф), а применяют изменение кнопки сохранения экрана — onFileChosen и
  * onRemove только переставляют stage, увлечение без сохранения сервер не
  * трогает. Круг — настоящая кнопка (aria-label, клавиатура; решение
  * владельца 08.10): без фото открывает пикер, с фото — замену. Бейдж-
@@ -41,7 +37,6 @@ const PHOTO_BUTTON_CLASS =
   'pressable flex cursor-pointer rounded-full outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none';
 
 export type PropertyPhotoSlotProps = {
-  readonly propertyId: string;
   /** same-origin стриминговый путь выдачи (ADR 0065), null — фото нет. */
   readonly photoUrl?: string | null;
   /** Незавершённое изменение фото из черновика экрана (см. выше). */
@@ -59,7 +54,6 @@ export type PropertyPhotoSlotProps = {
 };
 
 export function PropertyPhotoSlot({
-  propertyId,
   photoUrl,
   stage,
   busy,
@@ -68,11 +62,10 @@ export function PropertyPhotoSlot({
   onFileChosen,
   onRemove,
 }: PropertyPhotoSlotProps): JSX.Element {
-  const photoBuster = usePropertyPhotoBuster(propertyId);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayUrl = propertyPhotoDisplay(photoUrl ?? null, photoBuster, stage);
+  const displayUrl = propertyPhotoDisplay(photoUrl ?? null, stage);
   const hasPhoto = displayUrl !== null;
 
   const openPicker = (): void => {

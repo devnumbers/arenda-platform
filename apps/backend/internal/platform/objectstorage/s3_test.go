@@ -39,7 +39,7 @@ func TestS3Storage_Put_RequestShape(t *testing.T) {
 
 	s := newTestS3(t, srv.URL)
 	err := s.Put(context.Background(), "photos/01987654-3210-7abc-9def-0123456789ab.jpg",
-		strings.NewReader("data"), "image/jpeg", int64(len("data")))
+		strings.NewReader("data"), testJPEGContentType, int64(len("data")))
 	if err != nil {
 		t.Fatalf("put failed: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestS3Storage_Put_RequestShape(t *testing.T) {
 	if gotPath != wantPath {
 		t.Errorf("path = %q, want %q", gotPath, wantPath)
 	}
-	if gotContentType != "image/jpeg" {
+	if gotContentType != testJPEGContentType {
 		t.Errorf("content-type = %q, want image/jpeg", gotContentType)
 	}
 	// ADR 0065: canned-ACL снят — бакет приватный, выдача только через бэкенд.
@@ -76,7 +76,7 @@ func TestS3Storage_Put_Error(t *testing.T) {
 	defer srv.Close()
 
 	s := newTestS3(t, srv.URL)
-	err := s.Put(context.Background(), "photos/key.jpg", strings.NewReader("data"), "image/jpeg", 4)
+	err := s.Put(context.Background(), "photos/key.jpg", strings.NewReader("data"), testJPEGContentType, 4)
 	if err == nil {
 		t.Fatal("expected error for 500 response")
 	}

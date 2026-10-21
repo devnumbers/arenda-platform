@@ -382,7 +382,6 @@ function ContactEditForm({
       <PageContent>
         <ContactForm
           form={form}
-          contactId={contact.id}
           photoUrl={contact.photoUrl}
           photoStage={photoStage}
           photoBusy={photoBusy}

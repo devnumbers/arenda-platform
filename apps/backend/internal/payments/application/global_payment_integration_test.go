@@ -23,6 +23,7 @@ import (
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
 	pgdb "github.com/nambers/arenda-planform/apps/backend/internal/platform/database/postgres"
 	rentalspg "github.com/nambers/arenda-planform/apps/backend/internal/rentals/adapters/postgres"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // dateOf renders a row's calendar date the way the assertions read it.
@@ -615,10 +616,13 @@ func TestListGlobalPaymentObjects_PhotoURL(t *testing.T) {
 	for _, card := range cards {
 		byName[card.Name] = card
 	}
-	want := "/api/properties/" + withPhoto.String() + "/photo"
+	// SQL-версия пути обязана совпасть с выводом Go-хелпера: вместе они
+	// держат версионный кэш выдачи (ADR 0065).
+	want := storageshared.VersionedPhotoURL("/api/properties/"+withPhoto.String()+"/photo",
+		"photos/01987654-3210-7abc-9def-0123456789ab.jpg")
 	withCard := byName["С фото"]
 	if withCard.PhotoURL == nil || *withCard.PhotoURL != want {
-		t.Errorf("С фото PhotoURL = %v, want the streaming path", withCard.PhotoURL)
+		t.Errorf("С фото PhotoURL = %v, want the versioned streaming path", withCard.PhotoURL)
 	}
 	if got := byName["Без фото"].PhotoURL; got != nil {
 		t.Errorf("Без фото PhotoURL = %v, want nil", got)

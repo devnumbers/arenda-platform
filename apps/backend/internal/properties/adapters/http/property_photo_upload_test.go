@@ -95,6 +95,10 @@ func (r *photoWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key
 	return r.property, nil
 }
 
+func (r *photoWireRepo) ClearPhotoIfKey(context.Context, uuid.UUID, uuid.UUID, string) (int64, error) {
+	return 0, nil
+}
+
 func (r *photoWireRepo) Archive(context.Context, uuid.UUID, uuid.UUID) error   { return nil }
 func (r *photoWireRepo) Unarchive(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (r *photoWireRepo) CountActiveByOwner(context.Context, uuid.UUID) (int, error) {
@@ -295,8 +299,8 @@ func TestPropertyPhotoGet_ServesAndCaches(t *testing.T) {
 		if rr.Code != http.StatusNotModified {
 			t.Fatalf("status = %d, want 304", rr.Code)
 		}
-		if got := rr.Header().Get("Cache-Control"); got != "private, max-age=300" {
-			t.Errorf("cache-control = %q, want private, max-age=300", got)
+		if got := rr.Header().Get("Cache-Control"); got != "private, max-age=31536000, immutable" {
+			t.Errorf("cache-control = %q, want the immutable photo policy", got)
 		}
 	})
 
@@ -310,8 +314,8 @@ func TestPropertyPhotoGet_ServesAndCaches(t *testing.T) {
 		if got := rr.Header().Get("Content-Type"); got != "image/jpeg" {
 			t.Errorf("content-type = %q, want image/jpeg", got)
 		}
-		if got := rr.Header().Get("Cache-Control"); got != "private, max-age=300" {
-			t.Errorf("cache-control = %q, want private, max-age=300", got)
+		if got := rr.Header().Get("Cache-Control"); got != "private, max-age=31536000, immutable" {
+			t.Errorf("cache-control = %q, want the immutable photo policy", got)
 		}
 		if got := rr.Header().Get("ETag"); got != storageshared.ETagOf(key) {
 			t.Errorf("etag = %q, want the key hash", got)

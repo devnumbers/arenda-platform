@@ -758,6 +758,14 @@ func (s *ContactService) OpenContactPhoto(
 	body, size, contentType, err = s.photos.Open(ctx, *contact.PhotoKey)
 	if err != nil {
 		if errors.Is(err, storageshared.ErrNotFound) {
+			// The columns advertise an object the storage no longer has: the
+			// dangling key is healed so the book stops promising a photo the
+			// stream will never deliver. The conditional clear spares a
+			// concurrent re-upload; this viewer still gets the honest
+			// ErrPhotoNotFound.
+			if _, healErr := s.contacts.ClearPhotoIfKey(ctx, contactID, contact.OwnerID, *contact.PhotoKey); healErr != nil {
+				return nil, 0, "", "", fmt.Errorf("heal dangling contact photo: %w", healErr)
+			}
 			return nil, 0, "", "", ErrPhotoNotFound
 		}
 		return nil, 0, "", "", fmt.Errorf("open contact photo: %w", err)

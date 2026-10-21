@@ -184,6 +184,10 @@ Push в GHCR из workflow идёт под встроенным `GITHUB_TOKEN` (
 - `PHOTO_STORAGE_PROVIDER=s3` включает REG.RU S3 и требует заполненные
   `REGRU_S3_*` значения. `REGRU_S3_*` также используются пайплайном для
   off-site копии дампов БД (endpoint/bucket/access/secret key).
+  Для локальной разработки есть `PHOTO_STORAGE_PROVIDER=file`
+  (диск, `PHOTO_STORAGE_FILE_DIR`, по умолчанию `.photo-storage/` в
+  `apps/backend`) — в отличие от in-memory `fake` объекты переживают
+  рестарт бэкенда (ADR 0065, аменд 2026-10-20); в stage/prod — только `s3`.
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — пара P-256 ключей (RFC 8292,
   base64url без padding) для идентификации application-сервера в Web Push.
   У stage и prod свои пары (проставляются в `ENV_FILE` соответствующего

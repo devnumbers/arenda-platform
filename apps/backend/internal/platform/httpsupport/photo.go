@@ -14,6 +14,13 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
 )
 
+// PhotoCacheControl is the serving cache policy of the photo streams
+// (ADR 0065): the bytes are immutable per key — a replacement mints a new
+// UUID key, and the DTO photoUrl carries the key's version as ?v= — so the
+// browser may keep the private (cookie-authed, never shared-cached) copy
+// for good and revalidate never; a changed ?v= is simply a different URL.
+const PhotoCacheControl = "private, max-age=31536000, immutable"
+
 // WritePhotoBytes sets the serving headers and streams the object: the
 // content type is the stored sniffed value, the length is the object's, the
 // cache policy is private (cookie-authed bytes never enter shared caches).
@@ -22,7 +29,7 @@ import (
 func WritePhotoBytes(w http.ResponseWriter, r *http.Request, contentType string, size int64, body io.Reader) {
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("Cache-Control", PhotoCacheControl)
 	if _, err := io.Copy(w, body); err != nil {
 		LoggerFromContext(r.Context()).WarnContext(r.Context(),
 			"failed to stream photo body", slog.String("error", SanitizeError(err)))

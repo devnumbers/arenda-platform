@@ -231,7 +231,6 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
               с полями; уход без сохранения сервер не трогает
               (решение владельца 08.10). */}
           <PropertyPhotoSlot
-            propertyId={propertyId}
             photoUrl={property.photoUrl}
             stage={photoStage}
             busy={photoBusy}

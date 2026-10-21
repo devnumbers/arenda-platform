@@ -257,6 +257,189 @@ func TestProcess_WebPWithoutExifPassesThrough(t *testing.T) {
 	}
 }
 
+// jpegWithOrientation builds the shape an Android phone camera produces:
+// an 8x4 JPEG (the left half black, the right half white) with a
+// well-formed EXIF APP1 whose IFD0 carries only the orientation tag.
+func jpegWithOrientation(t *testing.T, orientation int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 4))
+	for x := range 8 {
+		for y := range 4 {
+			if x < 4 {
+				img.Set(x, y, color.RGBA{R: 0, G: 0, B: 0, A: 255})
+			} else {
+				img.Set(x, y, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+			}
+		}
+	}
+	var base bytes.Buffer
+	if err := jpeg.Encode(&base, img, &jpeg.Options{Quality: 95}); err != nil {
+		t.Fatalf("encode jpeg: %v", err)
+	}
+
+	tiff := exifTIFF(t, orientation, false)
+	payload := append([]byte("Exif\x00\x00"), tiff...)
+	segLen := len(payload) + 2
+	if segLen > math.MaxUint16 {
+		t.Fatalf("fixture segment length %d out of bounds", segLen)
+		return nil
+	}
+	segment := []byte{0xFF, 0xE1, asByte(t, segLen>>8), asByte(t, segLen)}
+	out := append([]byte{}, base.Bytes()[:2]...)
+	out = append(out, segment...)
+	out = append(out, payload...)
+	return append(out, base.Bytes()[2:]...)
+}
+
+// exifTIFF builds a minimal well-formed TIFF: 8-byte header, one IFD0 entry
+// (the orientation tag, SHORT) and no next IFD. The bigEndian flag selects
+// the byte order (II little-endian in practice, MM for the tests).
+func exifTIFF(t *testing.T, orientation int, bigEndian bool) []byte {
+	t.Helper()
+	if orientation < 0 || orientation > math.MaxUint16 {
+		t.Fatalf("orientation %d out of bounds", orientation)
+		return nil
+	}
+	var order [2]byte
+	var put16 func(v int) []byte
+	var put32 func(v int) []byte
+	if bigEndian {
+		order = [2]byte{'M', 'M'}
+		put16 = func(v int) []byte { return []byte{asByte(t, v>>8), asByte(t, v&0xFF)} }
+		put32 = func(v int) []byte {
+			return []byte{asByte(t, v>>24), asByte(t, v>>16), asByte(t, v>>8), asByte(t, v&0xFF)}
+		}
+	} else {
+		order = [2]byte{'I', 'I'}
+		put16 = func(v int) []byte { return []byte{asByte(t, v&0xFF), asByte(t, v>>8)} }
+		put32 = func(v int) []byte {
+			return []byte{asByte(t, v&0xFF), asByte(t, v>>8), asByte(t, v>>16), asByte(t, v>>24)}
+		}
+	}
+
+	tiff := append([]byte{}, order[:]...)
+	tiff = append(tiff, put16(42)...)
+	tiff = append(tiff, put32(8)...) // First IFD offset.
+	tiff = append(tiff, put16(1)...) // One IFD0 entry.
+	// Tag 0x0112 (orientation), type 3 (SHORT), count 1, inline value.
+	tiff = append(tiff, put16(0x0112)...)
+	tiff = append(tiff, put16(3)...)
+	tiff = append(tiff, put32(1)...)
+	tiff = append(tiff, put16(orientation)...)
+	tiff = append(tiff, 0x00, 0x00)  // SHORT value padding to 4 bytes.
+	tiff = append(tiff, put32(0)...) // No next IFD.
+	return tiff
+}
+
+// decodeTiffJPEG decodes jpeg bytes and returns the 8-bit luma of a pixel —
+// enough to tell black from white in the orientation fixtures.
+func lumaAt(t *testing.T, data []byte, x, y int) int {
+	t.Helper()
+	img, err := jpeg.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("decode jpeg: %v", err)
+	}
+	r, g, b, _ := img.At(x, y).RGBA()
+	return int((r + g + b) / 3 >> 8)
+}
+
+func TestProcess_JPEGBakesOrientationRotate90CW(t *testing.T) {
+	t.Parallel()
+
+	// Orientation 6 = "rotate 90° CW to display": a portrait phone photo.
+	// The stored pixels must come out upright with no EXIF left to correct
+	// them — the raw left half travels to the top, dims swap 8x4 → 4x8.
+	got, err := Process(jpegWithOrientation(t, 6))
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	img, err := jpeg.Decode(bytes.NewReader(got.Data))
+	if err != nil {
+		t.Fatalf("output does not decode: %v", err)
+	}
+	if b := img.Bounds(); b.Dx() != 4 || b.Dy() != 8 {
+		t.Fatalf("dims = %dx%d, want 4x8", b.Dx(), b.Dy())
+	}
+	if l := lumaAt(t, got.Data, 2, 1); l > 64 {
+		t.Errorf("top pixel luma = %d, want dark (raw left half)", l)
+	}
+	if l := lumaAt(t, got.Data, 2, 6); l < 192 {
+		t.Errorf("bottom pixel luma = %d, want light (raw right half)", l)
+	}
+}
+
+func TestProcess_JPEGBakesOrientationMirrored(t *testing.T) {
+	t.Parallel()
+
+	// Orientation 2 = "mirrored horizontal": a front-camera selfie. The
+	// stored pixels must come out unmirrored, dims unchanged.
+	got, err := Process(jpegWithOrientation(t, 2))
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	img, err := jpeg.Decode(bytes.NewReader(got.Data))
+	if err != nil {
+		t.Fatalf("output does not decode: %v", err)
+	}
+	if b := img.Bounds(); b.Dx() != 8 || b.Dy() != 4 {
+		t.Fatalf("dims = %dx%d, want 8x4", b.Dx(), b.Dy())
+	}
+	if l := lumaAt(t, got.Data, 1, 2); l < 192 {
+		t.Errorf("left pixel luma = %d, want light (mirror of the raw right half)", l)
+	}
+	if l := lumaAt(t, got.Data, 6, 2); l > 64 {
+		t.Errorf("right pixel luma = %d, want dark (mirror of the raw left half)", l)
+	}
+}
+
+func TestProcess_JPEGOrientation1KeepsPixels(t *testing.T) {
+	t.Parallel()
+
+	// Orientation 1 carries no correction: the pixels must survive as-is.
+	got, err := Process(jpegWithOrientation(t, 1))
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if l := lumaAt(t, got.Data, 1, 2); l > 64 {
+		t.Errorf("left pixel luma = %d, want dark", l)
+	}
+	if l := lumaAt(t, got.Data, 6, 2); l < 192 {
+		t.Errorf("right pixel luma = %d, want light", l)
+	}
+}
+
+func TestProcess_JPEGBakedOrientationStillStripsExif(t *testing.T) {
+	t.Parallel()
+
+	// Baking the orientation must not resurrect metadata: the re-encode
+	// still carries no EXIF at all.
+	got, err := Process(jpegWithOrientation(t, 6))
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if bytes.Contains(got.Data, []byte("Exif\x00\x00")) {
+		t.Error("EXIF APP1 marker survived the orientation bake")
+	}
+}
+
+func TestProcess_JPEGBrokenExifIsNoOrientation(t *testing.T) {
+	t.Parallel()
+
+	// A malformed EXIF payload (the existing GPS-string fixture carries a
+	// TIFF header but no IFD) must not fail the upload nor shift pixels.
+	got, err := Process(jpegWithExif(t))
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	img, err := jpeg.Decode(bytes.NewReader(got.Data))
+	if err != nil {
+		t.Fatalf("output does not decode: %v", err)
+	}
+	if b := img.Bounds(); b.Dx() != 4 || b.Dy() != 4 {
+		t.Fatalf("dims = %v, want untouched 4x4", b)
+	}
+}
+
 func TestProcess_RejectsNonImages(t *testing.T) {
 	t.Parallel()
 

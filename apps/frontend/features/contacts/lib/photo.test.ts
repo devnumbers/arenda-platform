@@ -6,7 +6,8 @@ import {
 } from './photo';
 
 describe('contactPhotoDisplay — правило показа фото с незавершённым стейджем (канон #1228)', () => {
-  const serverUrl = '/api/contacts/c1/photo';
+  // URL выдачи версионирован бэком (?v= по ключу) — фронт не строит его.
+  const serverUrl = '/api/contacts/c1/photo?v=8fe0a9930afe3eabb4560c5db3f4da44';
   const stagedFile: ContactPhotoStage = {
     kind: 'file',
     file: new File([], 'new.png', { type: 'image/png' }),
@@ -14,27 +15,27 @@ describe('contactPhotoDisplay — правило показа фото с нез
   };
 
   it('staged-файл перекрывает серверное фото — в круге локальное превью', () => {
-    expect(contactPhotoDisplay(serverUrl, 3, stagedFile)).toBe(
+    expect(contactPhotoDisplay(serverUrl, stagedFile)).toBe(
       'data:image/png;base64,preview-1',
     );
   });
 
   it('staged-файл на карточке без фото — превью и без серверного пути', () => {
-    expect(contactPhotoDisplay(null, 0, stagedFile)).toBe(
+    expect(contactPhotoDisplay(null, stagedFile)).toBe(
       'data:image/png;base64,preview-1',
     );
   });
 
   it('staged-удаление прячет фото, даже пока серверное живо', () => {
-    expect(contactPhotoDisplay(serverUrl, 3, { kind: 'remove' })).toBeNull();
+    expect(contactPhotoDisplay(serverUrl, { kind: 'remove' })).toBeNull();
   });
 
-  it('без стейджа — серверное фото с бастером', () => {
-    expect(contactPhotoDisplay(serverUrl, 3, null)).toBe(`${serverUrl}?v=3`);
+  it('без стейджа — серверное фото как есть (версия уже в URL)', () => {
+    expect(contactPhotoDisplay(serverUrl, null)).toBe(serverUrl);
   });
 
   it('без стейджа и без серверного фото — глиф-плейсхолдер', () => {
-    expect(contactPhotoDisplay(null, 0, null)).toBeNull();
+    expect(contactPhotoDisplay(null, null)).toBeNull();
   });
 });
 

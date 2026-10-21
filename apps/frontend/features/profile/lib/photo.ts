@@ -5,10 +5,9 @@
  * должно меняться» — пересмотр стейдж-канона #1228 для этого экрана):
  * stage держит data-URL превью в круге (CSP `img-src 'self' data:`,
  * ADR 0065); успех гасит его, провал держит файл до ретрая (план 037).
- * Кап файла и бастер кэша выдачи — общие хелперы shared/lib/photo.
+ * Кап файла — общий хелпер shared/lib/photo; бастер кэша выдачи снесён:
+ * photoUrl приходит с бэка уже с версией ключа (?v=).
  */
-
-import { photoDisplayUrl } from '@/shared/lib/photo';
 
 /**
  * Загрузка фото профиля в круге: data-URL превью выбранного файла. Успех
@@ -26,16 +25,15 @@ export type MePhotoStage = {
 };
 
 /**
- * Что показывать в круге: превью летящей загрузки либо серверное фото с
- * бастером. null — глиф-плейсхолдер.
+ * Что показывать в круге: превью летящей загрузки либо серверное фото
+ * (URL уже версионирован бэком). null — глиф-плейсхолдер.
  */
 export function mePhotoDisplay(
   serverPhotoUrl: string | null,
-  buster: number,
   stage: MePhotoStage | null,
 ): string | null {
   if (stage?.kind === 'file') {
     return stage.previewUrl;
   }
-  return serverPhotoUrl !== null ? photoDisplayUrl(serverPhotoUrl, buster) : null;
+  return serverPhotoUrl;
 }

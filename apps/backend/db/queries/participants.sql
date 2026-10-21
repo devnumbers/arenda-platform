@@ -30,6 +30,7 @@
 SELECT p.id, p.owner_id, p.name AS title, p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS photo_path
 FROM properties p
 WHERE p.status <> 'archived'

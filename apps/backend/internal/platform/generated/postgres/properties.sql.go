@@ -105,6 +105,34 @@ func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams
 	return i, err
 }
 
+const clearPropertyPhotoIfKey = `-- name: ClearPropertyPhotoIfKey :execrows
+UPDATE properties
+SET photo_key = NULL,
+    photo_content_type = NULL
+WHERE id = $1 AND owner_id = $2 AND photo_key = $3
+`
+
+type ClearPropertyPhotoIfKeyParams struct {
+	ID       pgtype.UUID `json:"id"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
+	PhotoKey pgtype.Text `json:"photo_key"`
+}
+
+// The dangling-object-photo self-heal (ADR 0065): the storage no longer
+// has the object the columns advertise (a fake-storage restart, a drifted
+// bucket), so the key is cleared — but only while it is still the
+// advertised one. A concurrent re-upload (a fresh key under the row lock)
+// wins: 0 affected rows is the race verdict, the fresh photo must not be
+// wiped by a reader that opened the dead object. The stream handler has
+// already decided the 404 when it calls this.
+func (q *Queries) ClearPropertyPhotoIfKey(ctx context.Context, arg ClearPropertyPhotoIfKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearPropertyPhotoIfKey, arg.ID, arg.OwnerID, arg.PhotoKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActivePropertiesByOwner = `-- name: CountActivePropertiesByOwner :one
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND status IN ('active', 'maintenance')

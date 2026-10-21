@@ -72,6 +72,7 @@ const getAccessEventPropertyView = `-- name: GetAccessEventPropertyView :one
 SELECT p.name, p.address, p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo
 FROM properties p
 WHERE p.id = $1
@@ -262,6 +263,7 @@ SELECT pay.id AS payment_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
@@ -343,6 +345,7 @@ SELECT r.id AS rental_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        p.owner_id
 FROM rentals r
@@ -407,6 +410,7 @@ SELECT pay.id AS payment_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
@@ -486,6 +490,7 @@ SELECT pay.id AS payment_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
@@ -560,6 +565,7 @@ SELECT t.id AS task_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        t.rule_id,
        t.owner_id,
@@ -628,6 +634,7 @@ SELECT pay.id AS payment_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
@@ -846,6 +853,7 @@ SELECT pay.id AS payment_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
@@ -945,6 +953,7 @@ SELECT pay.id AS payment_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
@@ -1040,6 +1049,7 @@ SELECT pay.id AS payment_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
@@ -1132,6 +1142,7 @@ SELECT pay.id AS payment_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
@@ -1544,6 +1555,7 @@ SELECT r.id AS rental_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        p.owner_id
 FROM rentals r
@@ -1670,6 +1682,7 @@ SELECT t.id AS task_id,
        p.type AS property_type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
        t.rule_id,
        t.owner_id

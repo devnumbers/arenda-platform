@@ -1,11 +1,9 @@
 /**
  * Клиентские хелперы фото объекта (ADR 0065, тикет #1228): слоеное
- * правило показа с незавершённым изменением черновика формы. Кап файла
- * и бастер кэша выдачи — общие для сущностей, живут в shared/lib/photo.
+ * правило показа с незавершённым изменением черновика формы. Кап файла —
+ * общий для сущностей, живёт в shared/lib/photo; бастер кэша выдачи
+ * снесён: photoUrl приходит с бэка уже с версией ключа (?v=).
  */
-
-import { photoDisplayUrl } from '@/shared/lib/photo';
-
 /**
  * Незавершённое изменение фото в черновике формы (решение владельца
  * 08.10): фото применяется кнопками сохранения, а не сразу — stage
@@ -22,11 +20,11 @@ export type PropertyPhotoStage =
 /**
  * Что показывать в круге: staged-превью (замена/загрузка ещё не
  * применены), ничто (staged-удаление поверх живого серверного фото)
- * либо серверное фото с бастером. null — глиф-плейсхолдер.
+ * либо серверное фото (URL уже версионирован бэком). null —
+ * глиф-плейсхолдер.
  */
 export function propertyPhotoDisplay(
   serverPhotoUrl: string | null,
-  buster: number,
   stage: PropertyPhotoStage | null,
 ): string | null {
   if (stage?.kind === 'file') {
@@ -35,5 +33,5 @@ export function propertyPhotoDisplay(
   if (stage?.kind === 'remove') {
     return null;
   }
-  return serverPhotoUrl !== null ? photoDisplayUrl(serverPhotoUrl, buster) : null;
+  return serverPhotoUrl;
 }

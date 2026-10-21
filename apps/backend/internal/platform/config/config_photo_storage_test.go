@@ -74,3 +74,39 @@ func TestPhotoStorageProviderInvalid(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestPhotoStorageProviderFileLocal(t *testing.T) {
+	setRequiredLocalEnv(t)
+	clearPhotoStorageEnv(t)
+	t.Setenv("PHOTO_STORAGE_PROVIDER", ProviderFile)
+	t.Setenv("PHOTO_STORAGE_FILE_DIR", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg.PhotoStorageProvider != ProviderFile {
+		t.Fatalf("expected photo storage provider file, got %q", cfg.PhotoStorageProvider)
+	}
+	if cfg.PhotoStorageS3Enabled {
+		t.Fatal("expected S3 photo storage to be disabled")
+	}
+	if cfg.PhotoStorageFileDir == "" {
+		t.Fatal("expected a default file dir for provider=file")
+	}
+}
+
+func TestPhotoStorageProviderFileDirOverride(t *testing.T) {
+	setRequiredLocalEnv(t)
+	clearPhotoStorageEnv(t)
+	t.Setenv("PHOTO_STORAGE_PROVIDER", ProviderFile)
+	t.Setenv("PHOTO_STORAGE_FILE_DIR", "/tmp/arenda-photos-test")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg.PhotoStorageFileDir != "/tmp/arenda-photos-test" {
+		t.Fatalf("expected the env dir, got %q", cfg.PhotoStorageFileDir)
+	}
+}

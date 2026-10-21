@@ -4,7 +4,6 @@ export {
   useChangeEmail,
   useDeleteMePhoto,
   useEmailChangeSendCode,
-  useMePhotoBuster,
   useResendEmailCode,
   useLogoutOtherSessions,
   useRevokeSession,

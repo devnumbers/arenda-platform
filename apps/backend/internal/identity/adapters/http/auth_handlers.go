@@ -16,6 +16,7 @@ import (
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/requestctx"
 	"github.com/nambers/arenda-planform/apps/backend/internal/shared/photo"
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
 
 // MeEnricher augments a MeResponse with cross-cutting data (for example, the
@@ -624,12 +625,13 @@ func meResponse(user domain.User) openapi.MeResponse {
 
 // mePhotoURL is the profile photo's same-origin streaming path (ADR 0065):
 // nil without a photo. The self path is constant — /me is always the
-// session's own profile.
+// session's own profile; the key's version rides as ?v= so a replaced photo
+// is a new URL and no cache serves the previous bytes.
 func mePhotoURL(user domain.User) *string {
 	if user.PhotoKey == nil {
 		return nil
 	}
-	path := "/api/me/photo"
+	path := storageshared.VersionedPhotoURL("/api/me/photo", *user.PhotoKey)
 	return &path
 }
 

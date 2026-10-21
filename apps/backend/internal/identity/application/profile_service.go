@@ -166,6 +166,14 @@ func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UU
 	body, size, contentType, err := s.photos.Open(ctx, *user.PhotoKey)
 	if err != nil {
 		if errors.Is(err, storageshared.ErrNotFound) {
+			// The columns advertise an object the storage no longer has (a
+			// fake-storage restart, a drifted bucket): the dangling key is
+			// healed so /me stops promising a photo the stream will never
+			// deliver. The conditional clear spares a concurrent re-upload;
+			// this viewer still gets the honest ErrPhotoNotFound.
+			if _, healErr := s.users.ClearPhotoIfKey(ctx, userID, *user.PhotoKey); healErr != nil {
+				return OpenedPhoto{}, fmt.Errorf("heal dangling profile photo: %w", healErr)
+			}
 			return OpenedPhoto{}, ErrPhotoNotFound
 		}
 		return OpenedPhoto{}, fmt.Errorf("open profile photo: %w", err)

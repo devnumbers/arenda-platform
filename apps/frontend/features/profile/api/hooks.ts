@@ -181,19 +181,13 @@ export function useResendEmailCode(): UseMutationResult<
   });
 }
 
-/** Инкремент бастера кэша выдачи фото профиля (см. authKeys.photoBuster) —
- * общая точка фото-мутаций: одна запись, все читатели перерисовывают src. */
-function bumpMePhotoBuster(queryClient: ReturnType<typeof useQueryClient>): void {
-  queryClient.setQueryData<number>(authKeys.photoBuster(), (version = 0) => version + 1);
-}
-
 /**
  * Загрузка/замена фото профиля (ADR 0065, тикет #1230): POST /me/photo
  * multipart-формой с полем `file`; ответ несёт обновлённый MeResponse —
  * он сразу становится кэшем /me (фото видно на экране аккаунта и хабе без
- * рефетча). Бастер authKeys.photoBuster инкрементится рядом: путь выдачи
- * не меняется, без него <img> показал бы прежние байты из кэша браузера
- * (private, max-age=300). Полной инвалидации authKeys.all не нужно —
+ * рефетча). Путь выдачи версионирован бэком (?v= по ключу): ответ с новым
+ * фото несёт новый photoUrl — <img> перезапрашивает байты без
+ * клиентского бастера. Полной инвалидации authKeys.all не нужно —
  * ответ и есть свежий /me. Транспорт — XHR-выгрузка с onprogress
  * (план 036): fetch не отдаёт upload-progress; проценты экран пишет в
  * стейт кольца слота.
@@ -211,15 +205,13 @@ export function useUploadMePhoto(): UseMutationResult<
     },
     onSuccess: (user) => {
       queryClient.setQueryData(authKeys.me, user);
-      bumpMePhotoBuster(queryClient);
     },
   });
 }
 
 /**
  * Удаление фото профиля (ADR 0065): 204 без тела — /me патчится локально
- * (photoUrl без фото); бастер инкрементится, чтобы повторная загрузка в
- * окно кэша выдачи перечитала байты.
+ * (photoUrl без фото).
  */
 export function useDeleteMePhoto(): UseMutationResult<void, ApiError, void> {
   const queryClient = useQueryClient();
@@ -231,24 +223,6 @@ export function useDeleteMePhoto(): UseMutationResult<void, ApiError, void> {
       queryClient.setQueryData<User>(authKeys.me, (prev) =>
         prev === undefined ? prev : { ...prev, photoUrl: null },
       );
-      bumpMePhotoBuster(queryClient);
     },
   });
-}
-
-/**
- * Текущий бастер кэша выдачи фото профиля (тикет #1230): чтение из кэша
- * без сети — пишут только фото-мутации (bumpMePhotoBuster), ноль до первой
- * мутации сессии. Подписка реактивна: аватары перерисовывают src вместе с
- * любым инкрементом.
- */
-export function useMePhotoBuster(): number {
-  const { data } = useQuery({
-    queryKey: authKeys.photoBuster(),
-    queryFn: () => 0,
-    enabled: false,
-    initialData: 0,
-    staleTime: Infinity,
-  });
-  return data;
 }

@@ -6,7 +6,7 @@ import {
   PHOTO_FILE_TOO_LARGE_MESSAGE,
   photoFileTooLarge,
 } from '@/shared/lib/photo';
-import { type MePhotoStage, mePhotoDisplay, useMePhotoBuster } from '@/features/profile';
+import { type MePhotoStage, mePhotoDisplay } from '@/features/profile';
 import { Button, ConfirmDialog, PhotoProgressRing, PhotoRemoveBadge } from '@/shared/ui/design';
 import { ProfileAvatar } from './profile-avatar';
 
@@ -66,7 +66,6 @@ export function ProfilePhotoSlot({
   onRemove,
   onRetry,
 }: ProfilePhotoSlotProps): JSX.Element {
-  const photoBuster = useMePhotoBuster();
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const busyRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +80,7 @@ export function ProfilePhotoSlot({
     busyRef.current = busy;
   }, [busy, removeConfirmOpen]);
 
-  const displayUrl = mePhotoDisplay(photoUrl ?? null, photoBuster, stage);
+  const displayUrl = mePhotoDisplay(photoUrl ?? null, stage);
   const hasPhoto = displayUrl !== null;
   // Провал прошлой попытки (план 037): круг зовёт повтор, не пикер.
   const retrying = stage?.failed === true;

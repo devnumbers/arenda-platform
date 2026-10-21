@@ -222,3 +222,16 @@ SET photo_key = $3,
     photo_content_type = $4
 WHERE id = $1 AND owner_id = $2
 RETURNING *;
+
+-- name: ClearPropertyPhotoIfKey :execrows
+-- The dangling-object-photo self-heal (ADR 0065): the storage no longer
+-- has the object the columns advertise (a fake-storage restart, a drifted
+-- bucket), so the key is cleared — but only while it is still the
+-- advertised one. A concurrent re-upload (a fresh key under the row lock)
+-- wins: 0 affected rows is the race verdict, the fresh photo must not be
+-- wiped by a reader that opened the dead object. The stream handler has
+-- already decided the 404 when it calls this.
+UPDATE properties
+SET photo_key = NULL,
+    photo_content_type = NULL
+WHERE id = $1 AND owner_id = $2 AND photo_key = $3;

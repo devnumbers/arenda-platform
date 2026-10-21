@@ -36,11 +36,33 @@ type PhotoStorage interface {
 	Delete(ctx context.Context, key string) error
 }
 
+// keyHashHex is the shared derivation of the key's fingerprint (ADR 0065):
+// the first 16 bytes of the key's sha256, hex-encoded. The serving ETag and
+// the DTO cache version are two views of the same value.
+func keyHashHex(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:16])
+}
+
 // ETagOf returns the strong ETag of an object key (ADR 0065): the serving
 // handlers answer 304 from the key hash alone — replacement mints a new
 // UUID key, so a new key always means a new ETag and 304 never lies about
 // the bytes.
 func ETagOf(key string) string {
-	sum := sha256.Sum256([]byte(key))
-	return `"` + hex.EncodeToString(sum[:16]) + `"`
+	return `"` + keyHashHex(key) + `"`
+}
+
+// VersionOf returns the cache version of an object key (ADR 0065): the same
+// sha256 derivation as ETagOf, unquoted. The DTO photoUrl carries it as the
+// ?v= query — a replacement mints a new UUID key, so a new photo is a new
+// URL and the browser's cache never serves the previous bytes.
+func VersionOf(key string) string {
+	return keyHashHex(key)
+}
+
+// VersionedPhotoURL composes a contract-fixed streaming path with the
+// cache version of the object's key. A nil/empty key never reaches it —
+// the callers return null photoUrl without a photo.
+func VersionedPhotoURL(path, key string) string {
+	return path + "?v=" + VersionOf(key)
 }

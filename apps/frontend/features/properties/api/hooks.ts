@@ -298,9 +298,9 @@ export function useDeleteProperty(): UseMutationResult<void, ApiError, { id: str
 /**
  * Загрузка/замена фото объекта (ADR 0065, тикет #1228): ответ несёт
  * обновлённый объект — он сразу становится детальным кэшем (фото видно
- * без рефетча), список инвалидается как обычная мутация объекта. Бастер
- * photoBuster инкрементится рядом: путь выдачи не меняется, без него
- * <img> показал бы прежние байты из кэша браузера (private, max-age=300).
+ * без рефетча), список инвалидается как обычная мутация объекта. Путь
+ * выдачи версионирован бэком (?v= по ключу): ответ с новым фото несёт
+ * новый photoUrl — <img> перезапрашивает байты без клиентского бастера.
  * onProgress — проценты XHR-выгрузки (план 036), экран пишет их в стейт
  * кольца слота.
  */
@@ -314,7 +314,6 @@ export function useUploadPropertyPhoto(): UseMutationResult<
     mutationFn: ({ id, file, onProgress }) => uploadPropertyPhoto({ id, file, onProgress }),
     onSuccess: (property, { id }) => {
       queryClient.setQueryData(propertyKeys.detail(id), property);
-      bumpPhotoBuster(queryClient, id);
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
     },
   });
@@ -322,9 +321,7 @@ export function useUploadPropertyPhoto(): UseMutationResult<
 
 /**
  * Удаление фото объекта (ADR 0065): 204 без тела — деталь патчится
- * локально (photoUrl без фото) и инвалидается вместе со списком; бастер
- * инкрементится, чтобы повторная загрузка в окно кэша выдачи перечитала
- * байты.
+ * локально (photoUrl без фото) и инвалидается вместе со списком.
  */
 export function useDeletePropertyPhoto(): UseMutationResult<
   void,
@@ -338,32 +335,8 @@ export function useDeletePropertyPhoto(): UseMutationResult<
       queryClient.setQueryData<Property>(propertyKeys.detail(id), (prev) =>
         prev === undefined ? prev : { ...prev, photoUrl: null },
       );
-      bumpPhotoBuster(queryClient, id);
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });
     },
   });
-}
-
-/** Инкремент бастера кэша выдачи (см. propertyKeys.photoBuster) — общая
- * точка фото-мутаций: одна запись, все читатели перерисовывают src. */
-function bumpPhotoBuster(queryClient: ReturnType<typeof useQueryClient>, id: string): void {
-  queryClient.setQueryData<number>(propertyKeys.photoBuster(id), (version = 0) => version + 1);
-}
-
-/**
- * Текущий бастер кэша выдачи фото объекта (тикет #1228): чтение из кэша
- * без сети — пишут только фото-мутации (bumpPhotoBuster), ноль до первой
- * мутации сессии. Подписка реактивна: слот перерисовывает src вместе с
- * любым инкрементом.
- */
-export function usePropertyPhotoBuster(id: string): number {
-  const { data } = useQuery({
-    queryKey: propertyKeys.photoBuster(id),
-    queryFn: () => 0,
-    enabled: false,
-    initialData: 0,
-    staleTime: Infinity,
-  });
-  return data;
 }

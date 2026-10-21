@@ -165,6 +165,22 @@ func (r *fakeUserRepo) SetPhoto(ctx context.Context, id uuid.UUID, key, contentT
 	return u, nil
 }
 
+// ClearPhotoIfKey mirrors the conditional UPDATE: only the still-advertised
+// key is cleared, a concurrently replaced key survives untouched.
+func (r *fakeUserRepo) ClearPhotoIfKey(ctx context.Context, id uuid.UUID, key string) (int64, error) {
+	u, err := r.GetByID(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	if u.PhotoKey == nil || *u.PhotoKey != key {
+		return 0, nil
+	}
+	if _, err := r.SetPhoto(ctx, id, nil, nil); err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
 func (r *fakeUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }
 
 type fakeGrantRepo struct {
@@ -932,7 +948,11 @@ func (r *errorUserRepo) MarkEmailVerified(context.Context, uuid.UUID, time.Time)
 }
 
 func (r *errorUserRepo) SetPhoto(context.Context, uuid.UUID, *string, *string) (domain.User, error) {
-	return domain.User{}, nil
+	return domain.User{}, r.err
+}
+
+func (r *errorUserRepo) ClearPhotoIfKey(context.Context, uuid.UUID, string) (int64, error) {
+	return 0, r.err
 }
 
 func (r *errorUserRepo) WithTx(transaction.Tx) (UserRepository, error) { return r, nil }

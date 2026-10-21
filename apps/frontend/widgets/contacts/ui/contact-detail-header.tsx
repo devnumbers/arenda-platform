@@ -4,7 +4,7 @@ import { UserAvatar } from '@/shared/ui/design';
 
 export type ContactDetailHeaderProps = {
   readonly contact: Contact;
-  /** Путь выдачи фото с бастером кэша (#1229); null/undefined — фото нет. */
+  /** Версионированный путь выдачи фото (ADR 0065); null/undefined — фото нет. */
   readonly photoUrl: string | null | undefined;
 };
 

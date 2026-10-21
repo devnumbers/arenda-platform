@@ -152,6 +152,7 @@ SELECT p.id,
        -- an object without a photo would fail the scan. '' = no photo.
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
+                     || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS photo_url
 FROM properties p
 LEFT JOIN user_property_pins up

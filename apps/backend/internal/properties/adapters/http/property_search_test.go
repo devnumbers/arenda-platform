@@ -115,6 +115,10 @@ func (r *searchWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, ke
 	return domain.Property{}, nil
 }
 
+func (r *searchWireRepo) ClearPhotoIfKey(context.Context, uuid.UUID, uuid.UUID, string) (int64, error) {
+	return 0, nil
+}
+
 func (r *searchWireRepo) WithTx(_ transaction.Tx) propertiesapp.PropertyRepository { return r }
 
 const wireSearch = "кварт"

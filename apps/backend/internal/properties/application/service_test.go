@@ -83,6 +83,22 @@ func (r *lockingFakePropertyRepo) SetPropertyPhoto(_ context.Context, id, _ uuid
 	return p, nil
 }
 
+// ClearPhotoIfKey mirrors the conditional UPDATE: only the still-advertised
+// key is cleared, a concurrently replaced key survives untouched.
+func (r *lockingFakePropertyRepo) ClearPhotoIfKey(_ context.Context, id, _ uuid.UUID, key string) (int64, error) {
+	p, ok := r.data[id]
+	if !ok {
+		return 0, ErrNotFound
+	}
+	if p.PhotoKey == nil || *p.PhotoKey != key {
+		return 0, nil
+	}
+	p.PhotoKey = nil
+	p.PhotoContentType = nil
+	r.data[id] = p
+	return 1, nil
+}
+
 func (r *lockingFakePropertyRepo) Create(_ context.Context, _ uuid.UUID, property domain.Property) (domain.Property, error) {
 	r.data[property.ID] = property
 	return property, nil
@@ -724,6 +740,22 @@ func (r *fakePropertyRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, 
 	p.PhotoContentType = contentType
 	r.data[id] = p
 	return p, nil
+}
+
+// ClearPhotoIfKey is the conditional clear the dangling-photo heal calls:
+// only the still-advertised key is cleared, 0 rows is the race verdict.
+func (r *fakePropertyRepo) ClearPhotoIfKey(_ context.Context, id, _ uuid.UUID, key string) (int64, error) {
+	p, ok := r.data[id]
+	if !ok {
+		return 0, ErrNotFound
+	}
+	if p.PhotoKey == nil || *p.PhotoKey != key {
+		return 0, nil
+	}
+	p.PhotoKey = nil
+	p.PhotoContentType = nil
+	r.data[id] = p
+	return 1, nil
 }
 
 func (r *fakePropertyRepo) Archive(_ context.Context, id, _ uuid.UUID) error {

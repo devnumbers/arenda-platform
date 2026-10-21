@@ -18,7 +18,7 @@ import {
   Skeleton,
 } from '@/shared/ui/design';
 import { useLogout, useMe } from '@/features/auth';
-import { mePhotoDisplay, useMePhotoBuster } from '@/features/profile';
+import { mePhotoDisplay } from '@/features/profile';
 import { ROUTES } from '@/shared/config/routes';
 import { hardReplace } from '@/shared/lib/navigation';
 import { cn } from '@/shared/lib/cn';
@@ -119,8 +119,8 @@ export function ProfileHubSkeleton(): JSX.Element {
 
 /** Хаб профиля в новом дизайне (тикет #592, карта #591; Figma 1903-38340
  * плейсхолдер / 1786-31288 заполненный): аватар 96 — фото профиля либо
- * BoldUser (фото возвращено тикетом #1230, ADR 0065; бастер кэша выдачи),
- * имя + почта (идентификатор аккаунта, ADR 0067; телефонная строка
+ * BoldUser (фото возвращено тикетом #1230, ADR 0065; URL выдачи
+ * версионирован бэком), имя + почта (идентификатор аккаунта, ADR 0067; телефонная строка
  * снесена #1530), серый контейнер со строками
  * «Аккаунт / Тариф / Уведомления / Устройства / Информация / Выйти».
  * Строки «Участники» нет (#1165): хаб «Совместный доступ» входит только
@@ -133,7 +133,6 @@ export function ProfileHub(): JSX.Element {
   const router = useRouter();
   const { data: me, isError, refetch } = useMe();
   const logout = useLogout();
-  const photoBuster = useMePhotoBuster();
   const [logoutOpen, setLogoutOpen] = useState(false);
 
   const handleLogoutConfirm = (): void => {
@@ -168,7 +167,7 @@ export function ProfileHub(): JSX.Element {
   return (
     <div className="flex flex-col gap-8 px-6 pb-6">
       <div className="flex flex-col items-center gap-4">
-        <ProfileAvatar photoUrl={mePhotoDisplay(me.photoUrl, photoBuster, null)} />
+        <ProfileAvatar photoUrl={mePhotoDisplay(me.photoUrl, null)} />
         <div className="flex flex-col items-center gap-2">
           <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">
             {getProfileDisplayName(me)}
