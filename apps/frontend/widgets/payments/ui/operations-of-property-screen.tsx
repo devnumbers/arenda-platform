@@ -4,6 +4,7 @@ import { useState, type JSX } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Add, ArrowLeft, Search } from "@/shared/assets/icons";
 import { ROUTES } from "@/shared/config/routes";
+import { goBack } from "@/shared/lib/navigation";
 import { buildUrlWithParams } from "@/shared/lib/url-params";
 import { dateToIsoLocal } from "@/shared/lib/calendar";
 import { OPERATIONS_FEED_SORT, type PaymentOperationScope } from "@/shared/api/query-keys";
@@ -144,9 +145,11 @@ export function OperationsOfPropertyScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            // Назад — на объект, а не по истории браузера: страница period
-            // replace-ит список, и прежние периоды остаются в истории.
-            onClick={() => pushPage(router, ROUTES.property(propertyId))}
+            // Назад — по истории браузера (решение владельца 21.10, замена
+            // структурного push'а #472): применённый период replace-ит запись
+            // списка (#670) и в истории не остаётся. Фолбэк — на объект при
+            // прямом заходе без истории.
+            onClick={() => goBack(router, ROUTES.property(propertyId))}
           />
         }
         trailing={

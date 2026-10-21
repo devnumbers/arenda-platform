@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
+import { goBack } from '@/shared/lib/navigation';
 import { useSearchQueryState } from '@/shared/lib/hooks/useSearchQueryState';
 import { formatDayMonthWithYear } from '@/entities/payment';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
@@ -110,8 +111,10 @@ export function OperationsSearchScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            // Назад — на главный список операций, не по истории браузера.
-            onClick={() => pushPage(router, ROUTES.propertyOperations(propertyId))}
+            // Назад — по истории браузера (решение владельца 21.10, замена
+            // структурного push'а #472); фолбэк — список операций при прямом
+            // заходе без истории.
+            onClick={() => goBack(router, ROUTES.propertyOperations(propertyId))}
           />
         }
       >

@@ -6,17 +6,17 @@ import {
   test,
 } from './fixtures';
 
-// Стрелка «Назад» хаба объекта — регресс цикла навигации: вверх на хаб
-// ведут push'и (стрелка «Операций» объекта, #472, и строка «Объект» на
-// странице операции), и history.back() со страницы объекта разворачивал
-// обратно в ветку операций/платежей — список объектов оставался
-// недостижим, сколько ни жми. Хабовая стрелка детерминированна: всегда
-// ведёт на /properties, с какого места стека её ни нажми.
+// Стрелка «Назад» верхней цепочки ходит по истории браузера (решение
+// владельца 21.10 — замена структурных push'ей #472/#1374): «Назад»
+// возвращает туда, откуда пришли, и конечная цепочка
+// операция → операции → хаб → список проходима назад целиком —
+// дубликатов хаба в истории нет, рост стека на каждый клик «Назад»
+// вверх исчез.
 
 const APARTMENT = SEEDED_APARTMENT_PROPERTY_ID;
 const APARTMENT_NAME = SEEDED_PROPERTIES[0];
 
-test.describe('стрелка «Назад» хаба объекта', () => {
+test.describe('стрелка «Назад» верхней цепочки', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test('объект → операции → «Назад» → объект → «Назад» — список объектов', async ({
@@ -37,11 +37,11 @@ test.describe('стрелка «Назад» хаба объекта', () => {
       new RegExp(`/properties/${APARTMENT}/operations$`),
     );
 
-    // Стрелка «Операций» (#472) кладёт хаб в историю как новую запись.
+    // «Назад» ленты — по истории на хаб.
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT}$`));
 
-    // Регресс: здесь была history.back() — возврат в «Операции».
+    // «Назад» хаба — по истории на список объектов.
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(page).toHaveURL(/\/properties$/);
     await expect(
@@ -49,7 +49,7 @@ test.describe('стрелка «Назад» хаба объекта', () => {
     ).toBeVisible();
   });
 
-  test('операция → строка «Объект» → хаб → «Назад» — список объектов', async ({
+  test('операция → строка «Объект» → хаб → «Назад» — страница операции (источник)', async ({
     page,
     seededUser,
   }) => {
@@ -71,10 +71,18 @@ test.describe('стрелка «Назад» хаба объекта', () => {
       .click();
     await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT}$`));
 
+    // «Назад» хаба — по истории на источник: страницу операции, откуда
+    // пришли (решение владельца 21.10: честная история, список объектов
+    // остаётся достижимым следующими «Назад»).
     await page.getByRole('button', { name: 'Назад' }).click();
-    await expect(page).toHaveURL(/\/properties$/);
-    await expect(
-      page.getByRole('heading', { name: 'Объекты', exact: true }),
-    ).toBeVisible();
+    await expect(page).toHaveURL(
+      new RegExp(`/properties/${APARTMENT}/operations/[0-9a-f-]+$`),
+    );
+
+    // Дальше по истории — лента операций.
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/properties/${APARTMENT}/operations$`),
+    );
   });
 });
