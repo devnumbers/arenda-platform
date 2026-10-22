@@ -30,6 +30,7 @@ import {
   Button,
   CalendarDatePicker,
   ChipButton,
+  ConfirmDialog,
   IconButton,
   PageContent,
   StickyBottomBar,
@@ -72,12 +73,13 @@ type TaskRuleDeleteMutation = UseMutationResult<void, ApiError, void>;
  * / без объекта) не смешиваются (ADR 0052), общие — каркас и форма
  * (TaskEditBody + TaskEditForm), различия срезов — в обёртках ниже.
  *
- * Удаление правила — иконка TrashBin в правом слоте хедера (глоссарий
- * «Удалённое правило», #496): жёсткое, невыполненные вхождения сносятся,
- * журнал выполненных остаётся; без подтверждения — сразу (решение
- * владельца 2026-10-22). Контракт DELETE готов с правилного среза (#497)
- * — вью вызвал его первым. После удаления — тот же выход из потока, что
- * у «Закрыть»: goBack на список (канон удаления сущности).
+ * Удаление правила — красная иконка TrashBin в правом слоте хедера
+ * (глоссарий «Удалённое правило», #496): жёсткое, невыполненные вхождения
+ * сносятся, журнал выполненных остаётся; через подтверждение «Удалить
+ * задачу?» (решение владельца 2026-10-22, отказ от развилки «только эту /
+ * все будущие» тем же числом). Контракт DELETE готов с правилного среза
+ * (#497) — вью вызвал его первым. После удаления — тот же выход из
+ * потока, что у «Закрыть»: goBack на список (канон удаления сущности).
  */
 export function TaskEditScreen({
   propertyId,
@@ -178,9 +180,12 @@ export function TaskPropertylessEditScreen({
 
 /** Общий каркас экрана правки обоих срезов: хедер, состояния и монтаж
  * формы. Источники rule/today, мутации и выход из потока — из обёртки.
- * Удаление (иконка в правом слоте хедера) — без подтверждения: успех —
- * тост и тот же goBack, что у «Закрыть» (тост живёт в глобальном портале
- * и виден уже на списке); провал — error-тост, экран остаётся. */
+ * Удаление (корзина в правом слоте хедера) — через подтверждение
+ * «Удалить задачу?» (решение владельца 2026-10-22: отказ от Apple-развилки
+ * «только эту / все будущие», правило удаляется целиком): подтверждение —
+ * danger-кнопка канона деструктива; успех — тост и тот же goBack, что у
+ * «Закрыть» (тост живёт в глобальном портале и виден уже на списке);
+ * провал — error-тост, диалог остаётся открытым. */
 function TaskEditBody({
   ruleQuery,
   today,
@@ -202,6 +207,8 @@ function TaskEditBody({
   readonly failed: boolean;
   readonly onRetry: () => void;
 }): JSX.Element {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   const handleDelete = (): void => {
     remove.mutate(undefined, {
       onSuccess: () => {
@@ -227,9 +234,14 @@ function TaskEditBody({
             <IconButton
               icon={<TrashBin />}
               label="Удалить задачу"
+              variant="danger"
+              // Красной иконке — стандартный серый hover/active primary
+              // (сам вариант danger по макету фон не меняет; решение
+              // владельца 2026-10-22 — обычное выделение корзины).
+              className="hover:bg-surface-muted active:bg-surface-muted-hover"
               data-testid="task-edit-delete"
               disabled={remove.isPending}
-              onClick={handleDelete}
+              onClick={() => setDeleteOpen(true)}
             />
           ) : undefined
         }
@@ -258,6 +270,19 @@ function TaskEditBody({
           )}
         </div>
       </PageContent>
+
+      {formMounted && (
+        <ConfirmDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          title="Удалить задачу?"
+          cancelLabel="Отменить"
+          confirmLabel="Удалить задачу"
+          confirmVariant="danger"
+          pending={remove.isPending}
+          onConfirm={handleDelete}
+        />
+      )}
     </>
   );
 }

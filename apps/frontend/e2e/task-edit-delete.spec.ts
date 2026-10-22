@@ -11,12 +11,15 @@ import {
 } from './fixtures';
 
 // Удаление правила задачи со страницы «Изменить задачу» (#497 — первый вью
-// готового контракта DELETE): иконка корзины в правом слоте хедера, без
-// подтверждения — сразу (решение владельца 2026-10-22). Семантика —
-// глоссарий «Удалённое правило» (#496): жёсткое, невыполненные вхождения
-// сносятся, журнал выполненных остаётся (rule_id у строк обнуляется).
-// После удаления — goBack на список (канон удаления сущности), тост
-// «Задача удалена» живёт в глобальном портале и виден уже на списке.
+// готового контракта DELETE): красная корзина в правом слоте хедера
+// открывает подтверждение «Удалить задачу?» с кнопками «Отменить» /
+// «Удалить задачу» (решение владельца 2026-10-22: подтверждение вместо
+// мгновенного удаления; развилка «только эту / все будущие» отменена тем
+// же числом). Семантика — глоссарий «Удалённое правило» (#496): жёсткое,
+// невыполненные вхождения сносятся, журнал выполненных остаётся (rule_id
+// у строк обнуляется). После удаления — goBack на список (канон удаления
+// сущности), тост «Задача удалена» живёт в глобальном портале и виден
+// уже на списке.
 //
 // Правила одноразовые, создаются API-вызовом от живой сессии (канон
 // tasks-feed-empty-filter / payment-subscreens: сид не мутируем). Оба
@@ -46,6 +49,22 @@ async function openEditFromList(page: Page, title: string, ruleId: string): Prom
   await page.goto(`/properties/${APARTMENT}/tasks`);
   await page.getByText(title).click();
   await expect(page).toHaveURL(new RegExp(`/tasks/${ruleId}/edit$`));
+}
+
+/** Диалог подтверждения удаления: заголовок и пара кнопок контракта.
+ * Кнопки скоупятся ролью диалога: aria-label «Удалить задачу» есть и у
+ * корзины в хедере — плоский поиск ловил бы strict mode. */
+function deleteDialog(page: Page): {
+  readonly title: Locator;
+  readonly confirm: Locator;
+  readonly cancel: Locator;
+} {
+  const dialog = page.getByRole('dialog');
+  return {
+    title: dialog.getByText('Удалить задачу?'),
+    confirm: dialog.getByRole('button', { name: 'Удалить задачу' }),
+    cancel: dialog.getByRole('button', { name: 'Отменить' }),
+  };
 }
 
 /** Счётчик DELETE-запросов по подстроке URL — канон double-submit-guard. */
@@ -92,7 +111,7 @@ async function doubleClickInOneTask(button: Locator): Promise<void> {
 test.describe('удаление правила задачи — объектный срез', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('невыполненные сносятся, журнал выполненных остаётся; скриншот', async ({
+  test('подтверждение удаляет правило, журнал выполненных остаётся; скриншот', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -166,10 +185,21 @@ test.describe('удаление правила задачи — объектны
       await expect(journalRow).toBeVisible();
     }).toPass();
 
-    // Удаление невыполненного правила: корзина в хедере правки, без
-    // подтверждения; тост — уже на списке (goBack по истории).
+    // Удаление невыполненного правила: корзина в хедере правки открывает
+    // подтверждение; «Отмена» закрывает его, не снося ничего — экран правки
+    // остаётся (название здесь — значение инпута, правило живо).
     await openEditFromList(page, 'E2E удалить правило', uncompleted);
     await page.getByTestId('task-edit-delete').click();
+    const dialog = deleteDialog(page);
+    await expect(dialog.title).toBeVisible();
+    await dialog.cancel.click();
+    await expect(dialog.title).toHaveCount(0);
+    await expect(page.getByTestId('task-edit-delete')).toBeVisible();
+
+    // «Удалить задачу» подтверждает: тост — уже на списке (goBack по
+    // истории).
+    await page.getByTestId('task-edit-delete').click();
+    await deleteDialog(page).confirm.click();
     await expect(page.getByText('Задача удалена')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT}/tasks$`));
 
@@ -199,6 +229,7 @@ test.describe('удаление правила задачи — объектны
     // с обнулённым rule_id.
     await page.goto(`/properties/${APARTMENT}/tasks/${journalRule}/edit`);
     await page.getByTestId('task-edit-delete').click();
+    await deleteDialog(page).confirm.click();
     // DELETE уходит из onSuccess после ответа сервера — контракт добиваем
     // опросом, а не сном (канон устойчивых спек).
     await expect(async () => {
@@ -219,7 +250,7 @@ test.describe('удаление правила задачи — объектны
     expect(survived?.ruleId, 'rule_id у строки журнала обнулён').toBeNull();
   }
 
-  test('полный доступ удаляет (D9 #1309): корзина на месте, правило сносится', async ({
+  test('полный доступ удаляет (D9 #1309): корзина и подтверждение на месте', async ({
     page,
   }) => {
     await openCabinetWithSessionToken(page, seededMemberSessionToken());
@@ -235,6 +266,7 @@ test.describe('удаление правила задачи — объектны
       await openEditFromList(page, 'E2E правило участника', ruleId);
       await expect(page.getByTestId('task-edit-delete')).toBeVisible();
       await page.getByTestId('task-edit-delete').click();
+      await deleteDialog(page).confirm.click();
 
       await expect(page.getByText('Задача удалена')).toBeVisible();
       await expect(page).toHaveURL(new RegExp(`/properties/${APARTMENT}/tasks$`));
@@ -245,7 +277,7 @@ test.describe('удаление правила задачи — объектны
     }
   });
 
-  test('двойной клик по корзине одним таском — ровно один DELETE (#1113)', async ({
+  test('двойной клик по «Удалить задачу» в диалоге одним таском — ровно один DELETE (#1113)', async ({
     page,
     seededUser,
   }) => {
@@ -259,13 +291,15 @@ test.describe('удаление правила задачи — объектны
 
     try {
       await openEditFromList(page, 'E2E гард удаления', ruleId);
+      await page.getByTestId('task-edit-delete').click();
+      const confirm = deleteDialog(page).confirm;
+      await expect(confirm).toBeVisible();
 
-      // Мутация в полёте: кнопка глохнет (disabled), второй клик того же
+      // Мутация в полёте: кнопка глохнет (loading), второй клик того же
       // таска до перерисовки гардом useGuardedMutation дропается.
       const release = await holdLatency(page, 600);
-      const trash = page.getByTestId('task-edit-delete');
-      await doubleClickInOneTask(trash);
-      await expect(trash).toBeDisabled();
+      await doubleClickInOneTask(confirm);
+      await expect(confirm).toBeDisabled();
       await release();
 
       expect(deletes).toHaveLength(1);
@@ -279,7 +313,7 @@ test.describe('удаление правила задачи — объектны
 test.describe('удаление правила задачи — без объекта', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('плоский срез: из ленты в правку, удаление возвращает в ленту', async ({
+  test('плоский срез: из ленты в правку, подтверждение возвращает в ленту', async ({
     page,
     seededUser,
   }) => {
@@ -300,6 +334,7 @@ test.describe('удаление правила задачи — без объе�
       await expect(page).toHaveURL(new RegExp(`/tasks/${ruleId}/edit$`));
 
       await page.getByTestId('task-edit-delete').click();
+      await deleteDialog(page).confirm.click();
       await expect(page.getByText('Задача удалена')).toBeVisible();
 
       // Возврат в ленту по истории (вход честный), строка исчезла.
