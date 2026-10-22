@@ -49,10 +49,21 @@ describe('Инлайновая единица TextField — проп и разм
     );
   });
 
-  it('спан единицы: серый, в хвосте строки, декоративный, не сжимается', () => {
+  it('цвет единицы живёт на фокусе/значении, не статичный серый', () => {
     expect(textFieldSource).toContain(
-      'shrink-0 pl-1 text-base leading-[18px] text-content-secondary',
+      "unitTinted ? 'text-content' : 'text-content-secondary'",
     );
+  });
+
+  it('тёмная единица: фокус или непустое значение (аменда владельца 22.10)', () => {
+    expect(textFieldSource).toContain('const unitTinted = unitFocused || unitValue.length > 0;');
+    expect(textFieldSource).toContain('setUnitFocused(true)');
+    expect(textFieldSource).toContain('setUnitFocused(false)');
+  });
+
+  it('обработчики фокуса составлены с caller-обработчиками, не заменяют их', () => {
+    expect(textFieldSource).toContain('callerFocus?.(event)');
+    expect(textFieldSource).toContain('callerBlur?.(event)');
   });
 
   it('кнопка очистки прижата к правому краю (ml-auto)', () => {

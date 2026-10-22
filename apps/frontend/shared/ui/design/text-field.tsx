@@ -1,7 +1,7 @@
 'use client';
 
-import { useId, useLayoutEffect, useRef } from 'react';
-import type { ComponentProps, JSX, MouseEvent, ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
+import type { ComponentProps, FocusEvent, JSX, MouseEvent, ReactNode } from 'react';
 import { Cancel } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { IconButton } from './icon-button';
@@ -23,14 +23,16 @@ import { IconButton } from './icon-button';
  * onClear; остаётся в таб-порядке.
  * Инлайновая единица измерения (Figma 1218:54304 — характеристики,
  * 1270:46905 — арендная плата; решение владельца 2026-10-22; референс
- * поведения — инпут цены Яндекс.Аренды) — проп inlineSuffix, серый
- * декоративный текст (aria-hidden), который является частью строки
- * значения: следует за введённым текстом, у пустого поля стоит у левого
- * края. Механика без JS-замера: невидимый двойник текста (тот же value,
- * та же типографика, в потоке) занимает ровно ширину значения, инпут
- * лежит поверх абсолютом; спан единицы стоит в потоке следом. Клик по
- * пустой части бокса фокусирует инпут с кареткой в конце. Только для
- * однострочного поля и без плейсхолдера (плейсхолдер не помещается в
+ * поведения — инпут цены Яндекс.Аренды) — проп inlineSuffix, декоративный
+ * текст (aria-hidden), который является частью строки значения: следует
+ * за введённым текстом, у пустого поля стоит у левого края. Цвет
+ * (аменда владельца 2026-10-22): серый, пока поле пусто и не в фокусе;
+ * при фокусе или непустом значении — цветом значения. Механика без
+ * JS-замера: невидимый двойник текста (тот же value, та же типографика,
+ * в потоке) занимает ровно ширину значения, инпут лежит поверх
+ * абсолютом; спан единицы стоит в потоке следом. Клик по пустой части
+ * бокса фокусирует инпут с кареткой в конце. Только для однострочного
+ * поля и без плейсхолдера (плейсхолдер не помещается в
  * сжатый инпут); прежние каноны сняты: префикс-единица слева до ввода
  * (1218:54295) и правый статичный суффикс.
  * Многострочное поле (Figma 1227:58065 «Title Out Multi Lines») — textarea
@@ -58,8 +60,11 @@ type TextFieldBaseProps = {
    * счётчик «длина/лимит»; красным — при достижении лимита. */
   readonly maxLength?: number;
   readonly onClear?: () => void;
-  /** Инлайновая единица измерения (м², м, ₽): серый декоративный текст,
+  /** Инлайновая единица измерения (м², м, ₽): декоративный текст,
    * следующий за введённым значением; у пустого поля — у левого края.
+   * Цвет: серый (content-secondary), пока поле пусто и не в фокусе;
+   * при фокусе или непустом значении — цветом значения (content;
+   * аменда владельца 2026-10-22).
    * Только однострочные поля с инпутом в потоке (titleOut или без
    * заголовка; titleIn с плавающим лейблом не поддержан); плейсхолдер в
    * этом режиме игнорируется — сжатому инпуту некуда его класть
@@ -119,6 +124,10 @@ export function TextField({
     && (variant === 'titleOut' || title === undefined);
   const unitValue =
     typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+  // Цвет единицы (аменда владельца 2026-10-22): серый, пока поле пусто и
+  // не в фокусе; при фокусе или непустом значении — цветом значения.
+  const [unitFocused, setUnitFocused] = useState(false);
+  const unitTinted = unitFocused || unitValue.length > 0;
   const focusInlineUnit = (event: MouseEvent<HTMLDivElement>): void => {
     const input = event.currentTarget.querySelector<HTMLInputElement>('input');
     if (input === null || event.target === input) {
@@ -136,18 +145,36 @@ export function TextField({
   };
   // Общая анатомия однострочного инпута для обеих веток (обычной и
   // инлайновой единицы); в режиме единицы плейсхолдер игнорируется —
-  // сжатому до ширины текста инпуту некуда его класть.
-  const renderSingleLineInput = (inputClassName: string): JSX.Element => (
-    <input
-      id={inputId}
-      className={inputClassName}
-      disabled={disabled}
-      value={value}
-      placeholder={unitActive ? undefined : placeholder}
-      maxLength={maxLength}
-      {...(props as ComponentProps<'input'>)}
-    />
-  );
+  // сжатому до ширины текста инпуту некуда его класть. Фокус-обработчики
+  // единицы составлены с caller-обработчиками, не заменяют их.
+  const renderSingleLineInput = (inputClassName: string): JSX.Element => {
+    const { onFocus: callerFocus, onBlur: callerBlur, ...inputRest } =
+      props as ComponentProps<'input'>;
+    const focusProps = unitActive
+      ? {
+          onFocus: (event: FocusEvent<HTMLInputElement>) => {
+            callerFocus?.(event);
+            setUnitFocused(true);
+          },
+          onBlur: (event: FocusEvent<HTMLInputElement>) => {
+            callerBlur?.(event);
+            setUnitFocused(false);
+          },
+        }
+      : {};
+    return (
+      <input
+        id={inputId}
+        className={inputClassName}
+        disabled={disabled}
+        value={value}
+        placeholder={unitActive ? undefined : placeholder}
+        maxLength={maxLength}
+        {...inputRest}
+        {...focusProps}
+      />
+    );
+  };
   /** Заголовок с маркером обязательности — красная звёздочка следом. */
   const titleNode =
     title !== undefined && required ? (
@@ -284,7 +311,13 @@ export function TextField({
               renderSingleLineInput(input)
             )}
             {unitActive && (
-              <span aria-hidden className="shrink-0 pl-1 text-base leading-[18px] text-content-secondary">
+              <span
+                aria-hidden
+                className={cn(
+                  'shrink-0 pl-1 text-base leading-[18px]',
+                  unitTinted ? 'text-content' : 'text-content-secondary',
+                )}
+              >
                 {inlineSuffix}
               </span>
             )}
