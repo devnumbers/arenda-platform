@@ -2,6 +2,7 @@
 
 import { useState, type JSX, type ReactElement } from 'react';
 import { cn } from '@/shared/lib/cn';
+import { isPhotoThumbLoaded, markPhotoThumbLoaded, photoThumbKey } from './photo-session-cache';
 
 /** Флаги жизни фото в круге: битое (onError), готовое (onLoad) и номер
  * ретрай-попытки (0/undefined — её не было). */
@@ -31,7 +32,7 @@ export function circlePhotoView(
   // (?size=thumb, ADR 0065 тикет миниатюр), полный объект живёт за тем же
   // стримом без параметра — крупный просмотр, если появится, не проходит
   // через этот примитив.
-  const thumbSrc = `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}size=thumb`;
+  const thumbSrc = photoThumbKey(photoUrl);
   const retryNonce = flags.retryNonce ?? 0;
   const imgSrc = retryNonce > 0 ? `${thumbSrc}&r=${retryNonce}` : thumbSrc;
   return { imgSrc, imgHidden: !flags.photoReady };
@@ -46,8 +47,11 @@ export type CirclePhotoProps = {
   readonly glyph: ReactElement;
   /** Ленивая подача (#1423/035): ряды списков и лент — 'lazy' (аватары за
    * экраном не соревнуются с данными); hero-круги и фото-слоты — eager
-   * (дефолт, атрибут не пишется). Проводка атрибута — проводка рендера,
-   * проверяется экранной приёмкой и e2e (канон node-тестов). */
+   * (дефолт, атрибут не пишется). lazy обязателен для кругов, чьи близнецы
+   * бывают скрыты (display:none img с lazy не запрашивается — крыло шапки
+   * под PersistentNavWings, приёмка 22.10.2026). Проводка атрибута —
+   * проводка рендера, проверяется экранной приёмкой и e2e (канон
+   * node-тестов). */
   readonly loading?: 'lazy';
   /** Классы обёртки-круга (размер поверх родителя). */
   readonly className?: string;
@@ -72,10 +76,22 @@ export type CirclePhotoProps = {
  * (&r=N): транзиентный сбой (обрыв сети, 429) не прячет живое фото
  * навсегда; ошибка после ретрая — честный глиф (фолбэк #1275).
  * loading-атрибут — за вызывающим (ленивая подача рядов — план 035).
+ *
+ * Сессионный реестр загруженных фото (photo-session-cache, решение
+ * владельца 22.10.2026): перемонтирование круга при навигации (шапка
+ * рендерится каждым экраном) больше не проигрывает цикл «глиф → fade-in»
+ * для уже показанного фото — свежий экземпляр стартует с photoReady=true
+ * по реестру, img виден с первого рендера. Персистентное крыло ПК
+ * (PersistentNavWings) снимает сам перемонтаж шапки на десктопе; реестр
+ * закрывает мобайл, планшет и все прочие круги.
  */
 export function CirclePhoto({ photoUrl, glyph, loading, className }: CirclePhotoProps): JSX.Element {
   const [photoBroken, setPhotoBroken] = useState(false);
-  const [photoReady, setPhotoReady] = useState(false);
+  // Старт по реестру: фото уже показывалось в этой жизни страницы — img
+  // виден с первого рендера, без кадра с глифом и transition-opacity.
+  const [photoReady, setPhotoReady] = useState(
+    () => photoUrl != null && photoUrl !== '' && isPhotoThumbLoaded(photoUrl),
+  );
   const [retryNonce, setRetryNonce] = useState(0);
   // Ретрай и битость принадлежат одному URL (версионированному): новый
   // photoUrl — новая жизнь загрузки (ошибка старого фото не прячет
@@ -88,6 +104,15 @@ export function CirclePhoto({ photoUrl, glyph, loading, className }: CirclePhoto
     setPhotoBroken(false);
   }
   const view = circlePhotoView(photoUrl, { photoBroken, photoReady, retryNonce });
+
+  // Успех загрузки — и в стейт, и в сессионный реестр: следующий смонтированный
+  // круг с этим URL (после навигации) стартует сразу с видимым фото.
+  const markLoaded = (): void => {
+    if (photoUrl != null && photoUrl !== '') {
+      markPhotoThumbLoaded(photoUrl);
+    }
+    setPhotoReady(true);
+  };
 
   const failOrRetry = (): void => {
     if (retryNonce === 0) {
@@ -117,7 +142,7 @@ export function CirclePhoto({ photoUrl, glyph, loading, className }: CirclePhoto
             // и провал определяются фактом complete, а не только событием.
             if (node?.complete) {
               if (node.naturalWidth > 0) {
-                setPhotoReady(true);
+                markLoaded();
               } else {
                 failOrRetry();
               }
@@ -127,7 +152,7 @@ export function CirclePhoto({ photoUrl, glyph, loading, className }: CirclePhoto
             'absolute inset-0 h-full w-full object-cover transition-opacity',
             view.imgHidden ? 'opacity-0' : 'opacity-100',
           )}
-          onLoad={() => setPhotoReady(true)}
+          onLoad={markLoaded}
           onError={failOrRetry}
         />
       )}
