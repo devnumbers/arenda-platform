@@ -159,3 +159,49 @@ export function verdictFromOutcome(
       return { kind: 'flow-error' };
   }
 }
+
+/** Пуш-мутация в полёте (тикет #1546) — операция, запущенная кликом по
+ * пуш-тумблеру: флоу разрешения из мастера, флоу из категорийного тумблера
+ * без подписки или мастер-выключение (отписка браузера + идемпотентный
+ * DELETE). Категорийный PUT при живой подписке сюда не входит — он
+ * оптимистичен, исход виден на самом тумблере, фризинга и спиннера не
+ * даёт (перечисление операций в тикете исчерпывающее). */
+export type PushMutationFlight =
+  | { readonly kind: 'enable-flow-master' }
+  | {
+      readonly kind: 'enable-flow-category';
+      readonly category: NotificationSettingsCategory;
+    }
+  | { readonly kind: 'disable-master' };
+
+/** Тумблер, про который спрашивают правило фризинга: мастер или один
+ * категорийный. Email-колонка в правиле не участвует — не замораживается
+ * никакой пуш-мутацией (решение владельца 22.10, тикет #1546). */
+export type PushToggleTarget =
+  | { readonly kind: 'master' }
+  | { readonly kind: 'category'; readonly category: NotificationSettingsCategory };
+
+/** Правило фризинга (тикет #1546, решения владельца 22.10): флоу из
+ * мастера и мастер-выключение замораживают всю пуш-колонку (мастер + все
+ * категорийные), флоу из категорийного тумблера — только этот тумблер;
+ * мутации в полёте нет — ничего не задизейблено. На исход не смотрит:
+ * полёт снимается любым исходом (успех/красный слот/ошибка) на экране. */
+export function pushFlightFreezes(
+  flight: PushMutationFlight,
+  target: PushToggleTarget,
+): boolean {
+  if (flight.kind === 'enable-flow-category') {
+    return target.kind === 'category' && target.category === flight.category;
+  }
+  return true;
+}
+
+/** Фриз по всем полётам сразу: тумблер заморожен, пока его замораживает
+ * хоть одна летящая операция (ревью #1546 — полёты могут пересекаться:
+ * категорийный флоу висит на нативном окне, мастер кликабелен). */
+export function anyFlightFreezes(
+  flights: readonly PushMutationFlight[],
+  target: PushToggleTarget,
+): boolean {
+  return flights.some((flight) => pushFlightFreezes(flight, target));
+}
