@@ -17,9 +17,10 @@ import (
 // and the boundary's instant in the owner's timezone, the job's ScheduledAt.
 // The due leg's instant is the wall clock 10:00 of the operation date, the
 // reminder leg's — 10:00 of the operation date minus the rule's lead time
-// (карта #822), the overdue leg's — 22:00 of the day after (#1168, решение
-// владельца 06.10.2026 по гриллингу #1167: платёжные уведомления приходят
-// чётко в 10:00/22:00 настенного времени пояса, не в полночь).
+// (карта #822), the overdue leg's — 10:00 of the day after (решение
+// владельца 22.10.2026: платёжные уведомления приходят чётко в 10:00
+// настенного времени пояса, не в полночь; просрочка вечером 22:00 — до
+// 22.10.2026).
 type PaymentScheduleTarget struct {
 	PaymentID uuid.UUID
 	DueDate   time.Time
@@ -78,7 +79,7 @@ type PaymentScanSource interface {
 	// before the zone's today (решение #737, тип №3: 1-й день просрочки) —
 	// auto-pay rules included, the tick never backdates an auto charge
 	// (ADR 0049). The instant gate (#1168) holds yesterday's occurrences
-	// until their wall clock 22:00; a long-unpaid operation's boundary is
+	// until their wall clock 10:00; a long-unpaid operation's boundary is
 	// long past and stays sweeping (the persistent leg's semantics).
 	ListOverdueTargets(ctx context.Context, zone string, today, now time.Time) ([]PaymentScanTarget, error)
 	// ListActiveRecipients lists the user ids of the property's active
@@ -115,8 +116,8 @@ type PaymentScanSource interface {
 	// due leg.
 	ListScheduledDueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
 	// ListScheduledOverdueTargets lists the upcoming operations whose
-	// overdue boundary — the wall clock 22:00 of the day after the operation
-	// date in the owner's timezone (#1168) — falls in the window
+	// overdue boundary — the wall clock 10:00 of the day after the operation
+	// date in the owner's timezone — falls in the window
 	// (from, until]; the booking list of the overdue leg (issue #776),
 	// auto-pay rules included.
 	ListScheduledOverdueTargets(ctx context.Context, from, until time.Time) ([]PaymentScheduleTarget, error)
@@ -165,8 +166,8 @@ type PaymentBoundaryScheduler interface {
 	// timezone (#1168).
 	SchedulePaymentDue(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
 	// SchedulePaymentOverdue books the «Платёж просрочен» job at the
-	// boundary's instant: the wall clock 22:00 of the day after the
-	// operation date (#1168).
+	// boundary's instant: the wall clock 10:00 of the day after the
+	// operation date.
 	SchedulePaymentOverdue(ctx context.Context, paymentID uuid.UUID, date, fireAt time.Time) error
 	// SchedulePaymentReminder books the «Напоминание о платеже» job at the
 	// boundary's instant: the wall clock 10:00 of (operation date − lead
@@ -205,7 +206,7 @@ type PaymentBoundaryDeliverer interface {
 // #750): the hourly pass books the boundary jobs — the due leg's at the
 // wall clock 10:00 of the operation date, the reminder leg's at 10:00 of
 // the operation date minus the rule's lead time (карта #822), the overdue
-// leg's at 22:00 of the day after (#1168), each in the owner's timezone —
+// leg's at 10:00 of the day after, each in the owner's timezone —
 // and the zone sweep stays the
 // backstop for everything the jobs missed (a pass delayed past a boundary, a
 // booking window not reached yet, the retrospective after a downtime). The
@@ -237,7 +238,7 @@ func NewPaymentsPublisher(
 }
 
 // RunZoneScans is the hourly sweep: book the upcoming boundaries' jobs
-// first — every hour counts down to their 10:00/22:00 (#1168) — then sweep
+// first — every hour counts down to their 10:00 — then sweep
 // the zones,
 // publishing the zone's due, reminder and overdue targets. Failures are
 // isolated — a broken booking, zone or operation does not stop the rest;
@@ -257,7 +258,7 @@ func (p *PaymentsPublisher) RunZoneScans(ctx context.Context, now time.Time) err
 // boundaries fall into the horizon window — the due leg's ahead of the
 // operation date's 10:00, the reminder leg's ahead of the operation date
 // minus the rule's lead time (карта #822), the overdue leg's ahead of the
-// day after's 22:00 (#1168).
+// day after's 10:00.
 // A broken booking is isolated — the rest of the window books on.
 func (p *PaymentsPublisher) scheduleBoundaries(ctx context.Context, now time.Time) []error {
 	var errs []error
