@@ -23,6 +23,7 @@ SELECT pay.id,
        pay.end_date,
        pay.auto_pay,
        pay.notify_auto_paid,
+       pay.notify_email,
        pay.reminder_offset_days,
        pay.category_slug,
        pay.user_category_id,
@@ -49,6 +50,7 @@ SELECT pay.id,
        pay.end_date,
        pay.auto_pay,
        pay.notify_auto_paid,
+       pay.notify_email,
        pay.reminder_offset_days,
        pay.category_slug,
        pay.user_category_id,
@@ -69,12 +71,13 @@ ORDER BY pay.created_at, pay.id;
 -- this slice (user_category_id stays NULL). reminder_offset_days is the
 -- nullable reminder lead time (карта #822; NULL = напоминаний нет);
 -- notify_auto_paid — гейт события «Автоплатёж исполнен» (#1189, дефолт новых
--- false, макет 3214-72739).
+-- false, макет 3214-72739); notify_email — пер-платёжный гейт email-канала
+-- (#1553, дефолт true — присланное значение всегда явное: транспорта дефолт).
 INSERT INTO payments (
     id, owner_id, property_id, type, title, amount_kopecks, recurrence,
-    since, end_date, auto_pay, notify_auto_paid, reminder_offset_days, category_slug
+    since, end_date, auto_pay, notify_auto_paid, notify_email, reminder_offset_days, category_slug
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 
 -- name: UpdatePayment :exec
 -- Partial PATCH is resolved by the application layer; the statement always
@@ -89,9 +92,10 @@ SET type = $3,
     end_date = $7,
     auto_pay = $8,
     notify_auto_paid = $9,
-    reminder_offset_days = $10,
-    category_slug = $11,
-    title_is_manual = $12
+    notify_email = $10,
+    reminder_offset_days = $11,
+    category_slug = $12,
+    title_is_manual = $13
 WHERE id = $1 AND owner_id = $2;
 
 -- name: DeletePayment :execrows

@@ -7223,6 +7223,15 @@ components:
             Присылать ли событие «Автоплатёж исполнен» по правилу (#1189).
             Дефолт для новых — false («Не уведомлять», макет 3214-72739);
             явный null равен false.
+        notifyEmail:
+          type: boolean
+          default: true
+          description: >-
+            Персональная галочка отправки писем по платежу (карта #1551,
+            тикет #1553): получать ли письма по уведомлениям этого правила.
+            Дефолт для новых — true («включена»); глобальная настройка почты
+            профиля — мастер, выключенная гасит письма вовсе. Гейтится только
+            email: лента, тосты и push не трогаются.
         reminderOffsetDays:
           type: integer
           nullable: true
@@ -7279,6 +7288,13 @@ components:
             Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps
             the current value, null turns the «Автоплатёж исполнен» event off,
             true/false sets it.
+        notifyEmail:
+          type: boolean
+          nullable: true
+          description: >
+            Tri-state пер-платёжной галочки почты (#1553): omitted keeps the
+            current value, null turns this rule's email notifications off,
+            true/false sets them.
         reminderOffsetDays:
           type: integer
           nullable: true
@@ -7323,7 +7339,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, notifyAutoPaid, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, notifyAutoPaid, notifyEmail, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -7357,6 +7373,14 @@ components:
             false — правило автоплатежа гасится молча. Дефолт новых правил —
             false (макет 3214-72739); существующим автоплатежам проставлен
             true миграцией (без поведенческого регресса, #1186).
+        notifyEmail:
+          type: boolean
+          description: >-
+            The per-payment email toggle (карта #1551, тикет #1553): whether
+            this rule's notifications travel the email channel. Дефолт —
+            true («включена», существующим проставлен миграцией); глобальная
+            настройка почты профиля — мастер. Гейтится только email: лента,
+            тосты и push не трогаются.
         category:
           $ref: '#/components/schemas/CategoryView'
         reminderOffsetDays:

@@ -239,7 +239,7 @@ func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, 
 	}
 
 	var body openapi.PaymentUpdateRequest
-	endDateRaw, reminderRaw, notifyRaw, err := h.decodeUpdateBody(w, r, &body)
+	endDateRaw, reminderRaw, notifyRaw, notifyEmailRaw, err := h.decodeUpdateBody(w, r, &body)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "failed to decode update payment request",
 			slog.String("error", httpsupport.SanitizeError(err)))
@@ -248,7 +248,7 @@ func (h *PaymentHandlers) UpdatePayment(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	cmd, err := updateCommand(body, endDateRaw, reminderRaw, notifyRaw)
+	cmd, err := updateCommand(body, endDateRaw, reminderRaw, notifyRaw, notifyEmailRaw)
 	if err != nil {
 		h.handlePaymentError(w, r, err)
 		return
@@ -505,6 +505,10 @@ func createCommand(body openapi.PaymentCreateRequest) (application.CreatePayment
 	if body.NotifyAutoPaid != nil {
 		notifyAutoPaid = *body.NotifyAutoPaid
 	}
+	notifyEmail := true
+	if body.NotifyEmail != nil {
+		notifyEmail = *body.NotifyEmail
+	}
 	return application.CreatePaymentCommand{
 		Type:               domain.PaymentType(body.Type),
 		Title:              body.Title,
@@ -514,73 +518,94 @@ func createCommand(body openapi.PaymentCreateRequest) (application.CreatePayment
 		EndDate:            datePtrFromWire(body.EndDate),
 		AutoPay:            autoPay,
 		NotifyAutoPaid:     notifyAutoPaid,
+		NotifyEmail:        notifyEmail,
 		ReminderOffsetDays: reminderOffsetFromWire(body.ReminderOffsetDays),
 	}, nil
 }
 
 // decodeUpdateBody reads the update body once and decodes it two ways: the
 // strict contract decode (bounded, unknown fields rejected) and a shadow pass
-// that preserves the tri-state endDate, reminderOffsetDays and notifyAutoPaid.
-// The shadow exists because encoding/json collapses absent and null onto the
-// same nil pointer for every optional field, while a non-pointer
-// json.RawMessage receives the raw "null" bytes — that distinction is exactly
-// the PATCH semantics of the fields (omit keeps, null clears, a value sets).
+// that preserves the tri-state endDate, reminderOffsetDays, notifyAutoPaid
+// and notifyEmail. The shadow exists because encoding/json collapses absent
+// and null onto the same nil pointer for every optional field, while a
+// non-pointer json.RawMessage receives the raw "null" bytes — that
+// distinction is exactly the PATCH semantics of the fields (omit keeps, null
+// clears, a value sets).
 func (h *PaymentHandlers) decodeUpdateBody(
 	w http.ResponseWriter, r *http.Request, body *openapi.PaymentUpdateRequest,
-) (endDateRaw, reminderRaw, notifyRaw json.RawMessage, err error) {
+) (endDateRaw, reminderRaw, notifyRaw, notifyEmailRaw json.RawMessage, err error) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, httpsupport.MaxRequestBodySize))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var wire openapi.PaymentUpdateRequest
 	if err := dec.Decode(&wire); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	*body = wire
 	var shadow struct {
 		EndDate            json.RawMessage `json:"endDate"`
 		ReminderOffsetDays json.RawMessage `json:"reminderOffsetDays"`
 		NotifyAutoPaid     json.RawMessage `json:"notifyAutoPaid"`
+		NotifyEmail        json.RawMessage `json:"notifyEmail"`
 	}
 	if err := json.Unmarshal(raw, &shadow); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	// A nil raw message means omitted — no change; "null" and a value
 	// both arrive as bytes for their resolvers.
-	return shadow.EndDate, shadow.ReminderOffsetDays, shadow.NotifyAutoPaid, nil
+	return shadow.EndDate, shadow.ReminderOffsetDays, shadow.NotifyAutoPaid, shadow.NotifyEmail, nil
 }
 
-// updateCommand folds the PATCH body into the application command and
-// resolves the tri-state endDate, reminderOffsetDays and notifyAutoPaid from
-// their raw wire bytes: omitted keeps (nil raw), null clears, a value sets.
+// applyTriState resolves the four tri-state PATCH fields from their raw wire
+// bytes into the command: omitted keeps (nil raw), null clears, a value sets.
 // The contract rules live in the payment rule module (validateRule); the
 // transport only builds.
-func updateCommand(
-	body openapi.PaymentUpdateRequest, endDateRaw, reminderRaw, notifyRaw json.RawMessage,
-) (application.UpdatePaymentCommand, error) {
-	cmd := application.UpdatePaymentCommand{}
+func applyTriState(
+	cmd *application.UpdatePaymentCommand, endDateRaw, reminderRaw, notifyRaw, notifyEmailRaw json.RawMessage,
+) error {
 	if len(endDateRaw) > 0 {
 		endDate, err := endDateUpdateFromWire(endDateRaw)
 		if err != nil {
-			return application.UpdatePaymentCommand{}, err
+			return err
 		}
 		cmd.EndDate = endDate
 	}
 	if len(reminderRaw) > 0 {
 		reminder, err := reminderOffsetUpdateFromWire(reminderRaw)
 		if err != nil {
-			return application.UpdatePaymentCommand{}, err
+			return err
 		}
 		cmd.ReminderOffsetDays = reminder
 	}
 	if len(notifyRaw) > 0 {
-		notify, err := notifyAutoPaidUpdateFromWire(notifyRaw)
+		notify, err := boolFlagUpdateFromWire(notifyRaw)
 		if err != nil {
-			return application.UpdatePaymentCommand{}, err
+			return err
 		}
 		cmd.NotifyAutoPaid = notify
+	}
+	if len(notifyEmailRaw) > 0 {
+		notifyEmail, err := boolFlagUpdateFromWire(notifyEmailRaw)
+		if err != nil {
+			return err
+		}
+		cmd.NotifyEmail = notifyEmail
+	}
+	return nil
+}
+
+// updateCommand folds the PATCH body into the application command. The
+// contract rules live in the payment rule module (validateRule); the
+// transport only builds.
+func updateCommand(
+	body openapi.PaymentUpdateRequest, endDateRaw, reminderRaw, notifyRaw, notifyEmailRaw json.RawMessage,
+) (application.UpdatePaymentCommand, error) {
+	cmd := application.UpdatePaymentCommand{}
+	if err := applyTriState(&cmd, endDateRaw, reminderRaw, notifyRaw, notifyEmailRaw); err != nil {
+		return application.UpdatePaymentCommand{}, err
 	}
 	if body.Type != nil {
 		cmd.Type = new(domain.PaymentType(*body.Type))
@@ -709,10 +734,11 @@ func reminderOffsetUpdateFromWire(raw json.RawMessage) (*application.ReminderOff
 	return &application.ReminderOffsetUpdate{Value: &offset}, nil
 }
 
-// notifyAutoPaidUpdateFromWire resolves the tri-state notifyAutoPaid (#1189):
-// JSON null clears the «Автоплатёж исполнен» gate (false), a boolean sets it —
-// the same omit-keeps/null-clears/value-sets shape as the reminder tri-state.
-func notifyAutoPaidUpdateFromWire(raw json.RawMessage) (*bool, error) {
+// boolFlagUpdateFromWire resolves a tri-state boolean flag — the
+// notifyAutoPaid gate (#1189) and the notifyEmail toggle (#1553): JSON null
+// clears the flag (false), a boolean sets it — the same
+// omit-keeps/null-clears/value-sets shape as the reminder tri-state.
+func boolFlagUpdateFromWire(raw json.RawMessage) (*bool, error) {
 	present, isNull, trimmed := wireTriState(raw)
 	if !present {
 		return nil, application.ErrInvalidInput
@@ -774,6 +800,7 @@ func paymentResponse(p domain.Payment, isCompleted, isRentalManaged, isRentalCom
 		EndDate:            httpsupport.DatePtrToOpenAPI(p.EndDate),
 		AutoPay:            p.AutoPay,
 		NotifyAutoPaid:     p.NotifyAutoPaid,
+		NotifyEmail:        p.NotifyEmail,
 		Category:           categoryView(p.Category),
 		ReminderOffsetDays: reminderOffsetResponse(p.ReminderOffsetDays),
 		IsFavorite:         p.IsFavorite,

@@ -138,17 +138,21 @@ func (t *rentPaymentGatewayTx) Create(
 	}
 	category := rentCategorySlug
 	if err := t.payments.Create(ctx, paymentsdomain.Payment{
-		ID:                 id,
-		OwnerID:            seed.OwnerID,
-		PropertyID:         seed.PropertyID,
-		Type:               paymentsdomain.TypeIncome,
-		Title:              rentPaymentTitle,
-		AmountKopecks:      seed.AmountKopecks,
-		Recurrence:         recurrence,
-		Since:              seed.StartDate,
-		EndDate:            seed.PlannedEndDate,
-		AutoPay:            seed.AutoPay,
-		NotifyAutoPaid:     seed.NotifyAutoPaid,
+		ID:             id,
+		OwnerID:        seed.OwnerID,
+		PropertyID:     seed.PropertyID,
+		Type:           paymentsdomain.TypeIncome,
+		Title:          rentPaymentTitle,
+		AmountKopecks:  seed.AmountKopecks,
+		Recurrence:     recurrence,
+		Since:          seed.StartDate,
+		EndDate:        seed.PlannedEndDate,
+		AutoPay:        seed.AutoPay,
+		NotifyAutoPaid: seed.NotifyAutoPaid,
+		// Пер-платёжная почта включена безусловно (#1553): дефолт флага —
+		// «включена», нулевое значение домена молча выключило бы письма
+		// аренды; явный флаг в контрактах аренды прокидывает тикет #1555.
+		NotifyEmail:        true,
 		ReminderOffsetDays: seed.ReminderOffsetDays,
 		Category:           paymentsdomain.CategoryRef{Slug: &category},
 	}); err != nil {

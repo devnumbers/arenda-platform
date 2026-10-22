@@ -34,6 +34,7 @@ type paymentRowFields struct {
 	EndDate          pgtype.Date
 	AutoPay          bool
 	NotifyAutoPaid   bool
+	NotifyEmail      bool
 	ReminderOffset   pgtype.Int4
 	CategorySlug     pgtype.Text
 	UserCategoryID   pgtype.UUID
@@ -63,6 +64,7 @@ func paymentFieldsFromGetRow(row postgres.GetPaymentByIDRow) paymentRowFields {
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
 		NotifyAutoPaid:   row.NotifyAutoPaid,
+		NotifyEmail:      row.NotifyEmail,
 		ReminderOffset:   row.ReminderOffsetDays,
 		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
@@ -80,6 +82,7 @@ func paymentFieldsFromListRow(row postgres.ListPaymentsByPropertyRow) paymentRow
 		Title: row.Title, AmountKopecks: row.AmountKopecks, Recurrence: row.Recurrence,
 		Since: row.Since, EndDate: row.EndDate, AutoPay: row.AutoPay,
 		NotifyAutoPaid:   row.NotifyAutoPaid,
+		NotifyEmail:      row.NotifyEmail,
 		ReminderOffset:   row.ReminderOffsetDays,
 		CategorySlug:     row.CategorySlug,
 		UserCategoryID:   row.UserCategoryID,
@@ -110,6 +113,7 @@ func mapPaymentRow(row paymentRowFields) (domain.Payment, error) {
 		EndDate:        pgconv.DatePtrFromPgtype(row.EndDate),
 		AutoPay:        row.AutoPay,
 		NotifyAutoPaid: row.NotifyAutoPaid,
+		NotifyEmail:    row.NotifyEmail,
 		// The reminder lead time: a NULL column is no reminders (nil). The
 		// tick's rows do not select the column — the tick never reads it.
 		ReminderOffsetDays: pgconv.Int4ToPtr(row.ReminderOffset),

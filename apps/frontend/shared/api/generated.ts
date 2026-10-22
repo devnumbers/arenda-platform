@@ -3039,6 +3039,11 @@ export interface components {
              */
             notifyAutoPaid: boolean | null;
             /**
+             * @description Персональная галочка отправки писем по платежу (карта #1551, тикет #1553): получать ли письма по уведомлениям этого правила. Дефолт для новых — true («включена»); глобальная настройка почты профиля — мастер, выключенная гасит письма вовсе. Гейтится только email: лента, тосты и push не трогаются.
+             * @default true
+             */
+            notifyEmail: boolean;
+            /**
              * @description За сколько дней предупреждать о вхождении («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет (выбор опционален). Напоминание живёт независимо от autoPay. У правила с autoPay=true присланный оффсет при создании форсируется в null (решение владельца по гриллингу #1186: автоплатёжная форма reminder-пикер не показывает).
              * @enum {integer|null}
              */
@@ -3061,6 +3066,8 @@ export interface components {
             autoPay?: boolean;
             /** @description Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps the current value, null turns the «Автоплатёж исполнен» event off, true/false sets it. */
             notifyAutoPaid?: boolean | null;
+            /** @description Tri-state пер-платёжной галочки почты (#1553): omitted keeps the current value, null turns this rule's email notifications off, true/false sets them. */
+            notifyEmail?: boolean | null;
             /**
              * @description Tri-state lead time of the payment reminder («Напоминание о платеже»): omitted keeps the current value, null turns reminders off, 1/3/7 sets the lead time.
              * @enum {integer|null}
@@ -3101,6 +3108,8 @@ export interface components {
             autoPay: boolean;
             /** @description The per-payment gate of the «Автоплатёж исполнен» event (#1189): false — правило автоплатежа гасится молча. Дефолт новых правил — false (макет 3214-72739); существующим автоплатежам проставлен true миграцией (без поведенческого регресса, #1186). */
             notifyAutoPaid: boolean;
+            /** @description The per-payment email toggle (карта #1551, тикет #1553): whether this rule's notifications travel the email channel. Дефолт — true («включена», существующим проставлен миграцией); глобальная настройка почты профиля — мастер. Гейтится только email: лента, тосты и push не трогаются. */
+            notifyEmail: boolean;
             category: components["schemas"]["CategoryView"];
             /**
              * @description The payment reminder's lead time in days (карта #822); null — напоминаний нет. Живёт независимо от autoPay.

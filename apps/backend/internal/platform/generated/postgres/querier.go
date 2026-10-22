@@ -681,7 +681,8 @@ type Querier interface {
 	// this slice (user_category_id stays NULL). reminder_offset_days is the
 	// nullable reminder lead time (карта #822; NULL = напоминаний нет);
 	// notify_auto_paid — гейт события «Автоплатёж исполнен» (#1189, дефолт новых
-	// false, макет 3214-72739).
+	// false, макет 3214-72739); notify_email — пер-платёжный гейт email-канала
+	// (#1553, дефолт true — присланное значение всегда явное: транспорта дефолт).
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) error
 	// The payment change log queries (ADR 0065, ticket #1188): the append-only
 	// story of one rule's user edits. The insert runs inside the mutation

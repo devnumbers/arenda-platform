@@ -25,6 +25,9 @@ const paymentDto: PaymentDto = {
   // Контракт ответа с #1189; сущность Payment флаг не несёт — им живёт
   // only-уведомительный путь, маппер его не переносит.
   notifyAutoPaid: false,
+  // Контракт ответа с #1553; сущность Payment галочку не несёт — ряд почты
+  // на создании/правке читает её напрямую из ответа API (тикет #1556).
+  notifyEmail: true,
   category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
   isFavorite: false,
   isCompleted: false,
