@@ -76,6 +76,20 @@ describe('paymentObjectStacks — обрезка (решение владель�
     expect(stacks.map((stack) => stack.keys.length)).toEqual([4, 4]);
   });
 
+  it('стопки несут лимит группы: обе — 4, одна — 7 (видимость по ширине решает компонент)', () => {
+    const both = paymentObjectStacks(
+      makeObject({ autoPayRules: [key('a-1')], otherRules: [key('p-1')] }),
+      feedByCount(2),
+    );
+    expect(both.map((stack) => stack.limit)).toEqual([4, 4]);
+
+    const single = paymentObjectStacks(
+      makeObject({ otherRules: [key('p-1')] }),
+      feedByCount(1),
+    );
+    expect(single.map((stack) => stack.limit)).toEqual([7]);
+  });
+
   it('ровно четыре — без обрезки', () => {
     const object = makeObject({
       autoPayRules: [key('a-1'), key('a-2'), key('a-3'), key('a-4')],

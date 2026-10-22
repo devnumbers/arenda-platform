@@ -22,9 +22,7 @@ function paymentFixture(overrides: Partial<Payment> = {}): Payment {
 }
 
 describe('propertyPaymentGroups', () => {
-  it('обе группы — максимум 3 платежа в каждой (решение владельца 22.10)', () => {
-    // В полуколонке телефона 4-й круг не влезает в один ряд:
-    // невлезающие не показываются — максимум 3, один ряд на ширинах ≥ 360.
+  it('обе группы — потолок 4 в каждой; видимость по ширине решает компонент (решение владельца 22.10)', () => {
     const payments = [
       paymentFixture({ id: 'a1', autoPay: true }),
       paymentFixture({ id: 'a2', autoPay: true }),
@@ -39,8 +37,9 @@ describe('propertyPaymentGroups', () => {
     ];
     const groups = propertyPaymentGroups(payments, new Set(), '2026-10-22');
     expect(groups.map((group) => group.label)).toEqual(['Автоплатежи', 'Платежи']);
-    expect(groups[0]?.items.map((item) => item.payment.id)).toEqual(['a1', 'a2', 'a3']);
-    expect(groups[1]?.items.map((item) => item.payment.id)).toEqual(['p1', 'p2', 'p3']);
+    expect(groups[0]?.items.map((item) => item.payment.id)).toEqual(['a1', 'a2', 'a3', 'a4']);
+    expect(groups[1]?.items.map((item) => item.payment.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
+    expect(groups.map((group) => group.limit)).toEqual([4, 4]);
   });
 
   it('одна группа — максимум 7 платежей', () => {
@@ -50,6 +49,7 @@ describe('propertyPaymentGroups', () => {
     const groups = propertyPaymentGroups(payments, new Set(), '2026-09-11');
     expect(groups).toHaveLength(1);
     expect(groups[0]?.items).toHaveLength(7);
+    expect(groups[0]?.limit).toBe(7);
   });
 
   it('внутри группы просрочки первыми, затем по ближайшему вхождению', () => {
