@@ -182,7 +182,6 @@ function DueRow({
   const style = categoryStyle(item.category.source, item.category.slug);
   return (
     <PaymentRowButton
-      className="px-6"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} />}
       title={item.title}
       subtitle={item.propertyName}

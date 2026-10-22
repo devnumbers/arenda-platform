@@ -22,12 +22,13 @@ import {
 /** Приглушённый тон блоков внутри серых карточек (§7, skeletonBlockClass). */
 const MUTED = skeletonBlockClass('muted');
 
-/** Серая группа-заглушка: каркас PaymentsGroup — заголовок 20/24 (pt-6 pb-3)
- * и строки, снизу баланс 24; боковые поля экрана приносит секция (mx-6). */
+/** Серая группа-заглушка: каркас PaymentsGroup — заголовок 20/24 (pt-6 pb-2)
+ * и строки 24/12, снизу баланс 12; боковые поля экрана приносит секция
+ * (mx-6). */
 function SkeletonPaymentsGroup({ children }: { readonly children: ReactNode }): JSX.Element {
   return (
-    <section aria-hidden className="mx-6 rounded-card bg-surface-muted pb-6">
-      <div className="px-6 pb-3 pt-6">
+    <section aria-hidden className="mx-6 rounded-card bg-surface-muted pb-3">
+      <div className="px-6 pb-2 pt-6">
         <Skeleton className={`h-6 w-40 ${MUTED}`} />
       </div>
       <div className="flex flex-col">{children}</div>
@@ -85,7 +86,7 @@ export function PaymentDetailSkeleton(): JSX.Element {
 
       <div className="flex flex-col gap-4">
         <SkeletonPaymentsGroup>
-          <SkeletonListRow value tone="muted" className="px-3" />
+          <SkeletonListRow value tone="muted" className="px-3 py-3" />
         </SkeletonPaymentsGroup>
 
         <SkeletonPaymentsGroup>
@@ -96,7 +97,7 @@ export function PaymentDetailSkeleton(): JSX.Element {
               description
               tone="muted"
               widths={rowWidths}
-              className="px-3"
+              className="px-3 py-3"
             />
           ))}
         </SkeletonPaymentsGroup>
@@ -163,7 +164,8 @@ export function PaymentGroupedListSkeleton({
     <>
       {rowsPerGroup.map((rows, groupIndex) => (
         <section key={groupIndex} aria-hidden className="flex flex-col">
-          <Skeleton className="mx-6 h-6 w-24" />
+          {/* Верх 24 — паритет PaymentsHeading (канон Heading). */}
+          <Skeleton className="mx-6 mt-6 h-6 w-24" />
           {skeletonRowWidths(rows).map((rowWidths, index) => (
             <SkeletonListRow key={index} value widths={rowWidths} className="px-3 py-3" />
           ))}

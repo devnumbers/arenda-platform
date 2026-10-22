@@ -42,7 +42,7 @@ function TariffAvatar({ refunded }: { readonly refunded: boolean }): JSX.Element
 
 function HistorySkeleton(): JSX.Element {
   return (
-    <div className="flex flex-col gap-6" role="status" aria-label="Загружаем историю операций">
+    <div className="flex flex-col gap-2" role="status" aria-label="Загружаем историю операций">
       {[0, 1].map((group) => (
         <section key={group} className="flex flex-col">
           <Skeleton className="mx-6 mt-6 h-6 w-32" />
@@ -99,7 +99,7 @@ export function PaymentList(): JSX.Element {
   const groups = groupSubscriptionPaymentsByDate(payments, dateToIsoLocal(new Date()));
 
   return (
-    <div className="flex flex-col gap-6 pb-6" data-testid="payment-history-list">
+    <div className="flex flex-col gap-2 pb-6" data-testid="payment-history-list">
       {groups.map((group) => (
         <section key={group.date} className="flex flex-col">
           <h2 className="mx-0 mt-0 mb-2 px-6 pt-6 text-xl font-semibold leading-6 text-content">

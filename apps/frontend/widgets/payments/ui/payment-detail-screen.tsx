@@ -734,7 +734,6 @@ function NextPaymentRow({
   return (
     <PaymentRowButton
       variant="gray"
-      className="px-3 pb-2"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
       title={title}
       subtitle={subtitle}
@@ -891,7 +890,6 @@ function HistoryPreviewRow({
   return (
     <PaymentRowButton
       variant="gray"
-      className="px-3 pb-2"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
       title={operation.title}
       subtitle={formatDayMonthWithYear(operation.paidDate ?? operation.date, today)}
