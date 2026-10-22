@@ -24,6 +24,13 @@ export function historyFeedUrl(
   cursor: HistoryFeedPageParam | undefined,
   limit: number = HISTORY_PAGE_SIZE,
 ): string {
+  // Страница «Действия участника» (карта #1582): под-ресурс участника,
+  // скоуп (uuid юзера AND его текущие ноги) сервер выводит сам — группы
+  // скоупа в запрос не едут даже если затесались.
+  const base =
+    scope.participantId !== undefined
+      ? `/participants/${encodeURIComponent(scope.participantId)}/history`
+      : '/history';
   const query = new URLSearchParams();
   query.set('limit', String(limit));
   if (cursor?.before) {
@@ -44,7 +51,10 @@ export function historyFeedUrl(
   if (scope.kinds?.length) {
     query.set('kinds', scope.kinds.join(','));
   }
-  if (scope.actorIds?.length) {
+  // actor_ids странице не указ — актёра выводит резолвер скоупа; property_ids
+  // («Объекты» шита, аменда владельца 22.10.2026: «объекты опять же только
+  // те, в которые приглашён участник») сужает ноги пересечением на сервере.
+  if (scope.participantId === undefined && scope.actorIds?.length) {
     query.set('actor_ids', scope.actorIds.join(','));
   }
   if (scope.propertyIds?.length) {
@@ -53,7 +63,7 @@ export function historyFeedUrl(
   if (scope.q) {
     query.set('q', scope.q);
   }
-  return `/history?${query.toString()}`;
+  return `${base}?${query.toString()}`;
 }
 
 /** URL опций шита фильтров GET /history/filters (#708). property_ids

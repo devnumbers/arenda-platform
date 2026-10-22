@@ -377,6 +377,10 @@ export const notificationKeys = {
  * прибитые экраны «История объекта» (#840) и пары участник-в-объекте
  * (#841) доопределяют поля (пины actor_ids/property_ids; одиночный пин
  * человека #712 снят, #1361 — actor_ids живёт только в паре).
+ * participantId — страница «Действия участника» (карта #1582):
+ * под-ресурс GET /participants/{id}/history, скоуп (uuid юзера AND его
+ * текущие ноги) сервер выводит сам — идентификатор агрегата #693 (uuid
+ * юзера либо pending-почта).
  */
 export type HistoryFeedScope = {
   readonly dateFrom?: string;
@@ -385,6 +389,8 @@ export type HistoryFeedScope = {
   readonly kinds?: ReadonlyArray<string>;
   readonly actorIds?: ReadonlyArray<string>;
   readonly propertyIds?: ReadonlyArray<string>;
+  /** Страница «Действия участника» (карта #1582): агрегат-id участника. */
+  readonly participantId?: string;
   readonly q?: string;
 };
 
@@ -404,6 +410,7 @@ export const historyKeys = {
       scope.kinds?.join(',') ?? '',
       scope.actorIds?.join(',') ?? '',
       scope.propertyIds?.join(',') ?? '',
+      scope.participantId ?? '',
       scope.q ?? '',
     ] as const,
   /** Опции шита фильтров GET /history/filters (#708, экран #711): без

@@ -1248,6 +1248,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/participants/{participantId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница ленты «Действия участника» (двусторонний keyset, канон #597)
+         * @description Лента «Истории действий» одного участника по всем его текущим ногам
+         *     доступа (карта #1582, решение владельца 22.10.2026 — переработка
+         *     объектного deep-link: «страница истории действий участника (только
+         *     одного), где будут все объекты, к которым я добавил ему доступ»;
+         *     ADR 0061 §7). Скоуп выводит сервер, клиент не собирает комбинацию
+         *     фильтров: агрегат участника (#693) резолвится в скоупе читающего —
+         *     uuid юзера AND ноги агрегата (property_members ∪ invitations,
+         *     неархивные объекты, как у самой страницы участника); человек вне
+         *     скоупа — privacy-404 всего запроса (канон ленты задач #547).
+         *
+         *     У pending-приглашённого действий не бывает — actor_id журнала это
+         *     uuid юзера (ADR 0061 §3), страница отдаёт пустую ленту. Отозванная
+         *     нога уводит свои строки со страницы (скоуп — текущие ноги); строки
+         *     объектов вне скоупа читающего не покидают базу — предикат видимости
+         *     actor_can_read_property (000142).
+         *
+         *     Группа «Объекты» шита страницы (аменда владельца 22.10.2026:
+         *     «объекты опять же только те, в которые приглашён участник»):
+         *     property_ids сужает ленту пересечением с ногами агрегата —
+         *     перечисленный объект вне ног участника молча выпадает из скоупа
+         *     (не 404: скоуп страницы и так доказан читающему), выбор, не задевший
+         *     ни одной ноги, — пустая страница. Некорректный uuid — 400.
+         *
+         *     Ответ и постраничная механика — те же, что у GET /history:
+         *     двусторонний keyset по (created_at, id) DESC, before_cursor — в
+         *     прошлое, after_cursor — prepend свежих, оба сразу — 400; поиск q —
+         *     всегда-OR предикат prefix-FTS OR ILIKE-trgm (ресерч #839); счётчика
+         *     «найдено N» нет. Тарифный гейт — роль-осознанный (ADR 0064, ревизия
+         *     #1465): скоуп страницы — объекты читающего (он владелец ног), на
+         *     basic тарифе честный 402 tariff_required.
+         */
+        get: operations["getParticipantHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/history": {
         parameters: {
             query?: never;
@@ -3615,7 +3664,7 @@ export interface components {
              * @description The invitee email of a pending row; for a registered user, their email resolved for display (null when the user has none).
              */
             email?: string | null;
-            /** @description The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row (the email is the label). */
+            /** @description The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row — the screen draws the same anonymous label with the email as the subtitle (аменда владельца 22.10.2026, макет 3313-77128). */
             display_name?: string | null;
             /** @description The registered user's profile photo same-origin streaming path (ADR 0065; решение владельца #1286): /api/users/{userId}/photo, readable while the reader shares a readable property with the user; a revoked access answers 404 and the client falls back to the placeholder. Null for a pending row or a user without a photo. */
             photo_url?: string | null;
@@ -7107,6 +7156,51 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getParticipantHistory: {
+        parameters: {
+            query?: {
+                /** @description Непрозрачный курсор страницы СТАРШЕ ключа (продолжение ленты в прошлое, скролл вверх): берётся из next_cursor предыдущей страницы. Ключ keyset — (created_at, id); страница возобновляется строго после него. Отсутствие — лента читается с самых новых записей. Некорректный blob — 400; вместе с after_cursor передавать нельзя — 400. */
+                before_cursor?: components["parameters"]["HistoryBeforeCursor"];
+                /** @description Непрозрачный курсор страницы МОЛОЖЕ ключа (prepend новых записей, канон InfiniteQueryTail): берётся из prev_cursor страницы с самими свежими из уже загруженных записей. Порядок строк страницы — по-прежнему (created_at, id) DESC. Пустой ответ — новых записей нет. Вместе с before_cursor передавать нельзя — 400. */
+                after_cursor?: components["parameters"]["HistoryAfterCursor"];
+                /** @description Размер страницы (канон #597: 50 по умолчанию, 100 потолок). */
+                limit?: components["parameters"]["HistoryLimit"];
+                /** @description Включительная нижняя граница периода по created_at — календарная дата в 00:00:00 UTC (канон фильтра периода админ-аудита). */
+                date_from?: components["parameters"]["HistoryDateFrom"];
+                /** @description Включительная верхняя граница периода по created_at — матчингется как дата + 24ч без включения самой границы (канон фильтра периода админ-аудита). */
+                date_to?: components["parameters"]["HistoryDateTo"];
+                /** @description Фильтр по основным действиям — через запятую, одно или несколько из словаря (ADR 0061 §4). Неизвестное значение — 400. */
+                actions?: components["parameters"]["HistoryBaseActions"];
+                /** @description Фильтр по видам действий — через запятую, одно или несколько из семи групп словаря (ADR 0061 §4). Неизвестное значение — 400. */
+                kinds?: components["parameters"]["HistoryKinds"];
+                /** @description Выбор «Объектов» шита страницы (аменда владельца 22.10.2026: «объекты опять же только те, в которые приглашён участник») — uuid через запятую; сужает ленту пересечением с ногами агрегата. В отличие от GET /history, перечисленный объект вне ног участника НЕ 404 — он молча выпадает из скоупа (ноги уже доказаны читающему); выбор, не задевший ни одной ноги, — пустая страница. Некорректный uuid — 400. */
+                property_ids?: string;
+                /** @description Поисковая строка по журналу области чтения: ищет по тексту строки и снапшотам актёра (имя, почта) — «как в Telegram»: по началу слова (префикс), по фрагменту внутри слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE (ресерч #839, тикет #842). Пробелы по краям не участвуют; пустая строка — фильтра нет. Серверный бэкстоп: ввод 400 байт и больше — 400 (255 символа кириллицы потолок схемы превышают; практические поисковые вводы на порядок короче). */
+                q?: components["parameters"]["HistoryQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description A registered user's uuid or a pending invitee email. */
+                participantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница ленты */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryPageResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };

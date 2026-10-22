@@ -119,7 +119,7 @@ func run() error {
 	//      it (the same reason as the notifications feed above).
 	// The role-aware tariff gate (ADR 0064, ревизия #1465) rides the same
 	// billing module the middleware and the access use cases consume.
-	historyReadMod := wire.WireHistoryRead(p, billingMod)
+	historyReadMod := wire.WireHistoryRead(p, billingMod, accessMod.ParticipantService)
 
 	// 7. Properties: repos, subscription limiter, the property service and
 	//    the dadata suggester; the photo storage is the identity step's.

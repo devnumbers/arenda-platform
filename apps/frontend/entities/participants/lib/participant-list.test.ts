@@ -26,10 +26,12 @@ const pending = participant('invitee@example.com', undefined, 'invitee@example.c
 const nameless = participant('id-nameless', 'Пользователь', 'nameless@example.com');
 
 describe('sortParticipantsByName — чип-сортировка «Имя»', () => {
-  it('asc — русская коллация по титулу строки (у pending — почта)', () => {
+  it('asc — русская коллация по титулу строки (у pending титул «Пользователь», аменда 22.10.2026)', () => {
     const sorted = sortParticipantsByName([sergey, pending, maria], 'asc');
 
-    expect(sorted.map((p) => p.id)).toEqual(['id-maria', 'id-sergey', 'invitee@example.com']);
+    // «М» < «П» < «С»: pending сортируется анонимным титулом, как
+    // безымянный зарегистрированный.
+    expect(sorted.map((p) => p.id)).toEqual(['id-maria', 'invitee@example.com', 'id-sergey']);
   });
 
   it('desc — обратный порядок, исходный список не мутируется', () => {

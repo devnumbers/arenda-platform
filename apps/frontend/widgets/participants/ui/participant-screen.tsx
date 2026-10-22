@@ -2,12 +2,14 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Add, Block, Info, Kebab, SmallArrowRight } from '@/shared/assets/icons';
+import { Add, Block, Info, Kebab, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
 import { goBack, pushPage } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
   ParticipantRowBadge,
   participantLegBadge,
+  participantRowSubtitle,
+  participantRowTitle,
   participantStatusBadge,
   type Participant,
   type ParticipantPropertyLeg,
@@ -38,17 +40,24 @@ import { ParticipantScreenSkeleton } from './participants-skeletons';
  * Страница участника (карта #692, тикет #698; Figma 2008-81468): блок
  * «аватар — имя — почта — чип агрегат-статуса», список «Доступные объекты»
  * (Row Button с фото/домом, адресом из кэша /properties, бейджем роли ноги
- * и чевроном) и кебаб шапки: «Пригласить в объект» (#694, отдельный экран)
- * и «Отозвать доступ к объектам» (макет 2008-48318; ConfirmDialog 2008-82147
- * канона #629 — крупный заголовок, кнопки столбиком) → DELETE
- * /participants/{id} → goBack на список (источник), тост «Участник
- * удален» показывается в момент успеха (2008-83716; тост вместо
- * успех-попапа, решение владельца 19.10.2026).
+ * и чевроном) и кебаб шапки: «Пригласить в объект» (#694, отдельный экран),
+ * «История действий» (карта #1582, решение владельца 22.10.2026 в
+ * переработке: «страница истории действий участника (только одного), где
+ * будут все объекты, к которым я добавил ему доступ; чужих там объектов не
+ * будет» — отдельная лента /participants/{id}/history, скоуп «человек × его
+ * текущие ноги» выводит сервер) и «Отозвать доступ к объектам» (макет
+ * 2008-48318; ConfirmDialog 2008-82147 канона #629 — крупный заголовок,
+ * кнопки столбиком) → DELETE /participants/{id} → goBack на список
+ * (источник), тост «Участник удален» показывается в момент успеха
+ * (2008-83716; тост вместо успех-попапа, решение владельца 19.10.2026).
  *
- * Пункт кебаба «Действия участника» снят вместе с его страницей (решение
- * владельца 12.10.2026, #1361): глобальная лента по одному человеку
- * удалена, лента истории адресуется парами человек+объект (#841) или
- * объектом (#840).
+ * Пункт кебаба «Действия участника» снимался вместе с глобальной страницей
+ * (решение владельца 12.10.2026, #1361); возврат 22.10.2026 — НЕ его
+ * воскрешение: путь /history/participants/[id] остался за перманентным
+ * 308, пункт ведёт на под-ресурс страницы участника со скоупом ног
+ * (registered и pending: у pending лента честно пуста — ручных действий не
+ * бывает). Пункт живёт только при ногах (канон §7: входа в ленту без
+ * скоупа не бывает).
  *
  * Deep-link-политика (#693): человек вне скоупа читающего или уже отозван
  * — приватный 404 → «Участник не найден» по центру, кебаб скрыт (§7),
@@ -99,6 +108,21 @@ export function ParticipantScreen({
                   >
                     Пригласить в объект
                   </MenuItem>
+                  {/* Вход «Истории действий» — только при ногах (канон §7:
+                    * входа в ленту без скоупа не бывает); ноги есть у
+                    * всякого загруженного агрегата (контракт: хотя бы
+                    * одна). participant ненулевой по сужению kebabVisible
+                    * (загруженная шапка) — ветка внутри него. */}
+                  {participant.properties.length > 0 && (
+                    <MenuItem
+                      icon={<TimeHistory className="h-6 w-6" />}
+                      onSelect={() =>
+                        pushPage(router, ROUTES.participantHistory(participantId))
+                      }
+                    >
+                      История действий
+                    </MenuItem>
+                  )}
                   <MenuItem
                     icon={<Block className="h-6 w-6 text-error" />}
                     className="text-error"
@@ -186,14 +210,21 @@ export function ParticipantScreen({
  * H1 28/32 SemiBold, почта 14/16 — зазоры: аватар → блок 24, имя → почта
  * 8, блок → бейдж 24 + 6 внутреннего паддинга инстанса бейджа (pt-1.5);
  * всё по центру. Маржин h1 глобально снесён (#1402) — зазор тут явный
- * gap-2, легаси-плюс 18.76px больше не вспухает. У pending-участника
- * имени нет — почта уже титул. Бейдж — из двух статусных (D3 #1313):
- * «Аккаунт не создан» у pending, «Превышен лимит объектов» у suspended;
- * остальные без бейджа. */
+ * gap-2, легаси-плюс 18.76px больше не вспухает. Титул — серверный канон
+ * display_name, без имени (и у pending, у которого display_name на
+ * проводе нет) — «Пользователь», почта строкой под ним (аменда владельца
+ * 22.10.2026, макет 3313-77128 — #693 «the email is the label» для
+ * титула амендован). Бейдж — из двух статусных (D3 #1313): «Аккаунт не
+ * создан» у pending, «Превышен лимит объектов» у suspended; остальные
+ * без бейджа. */
 function ParticipantHeader({ participant }: { readonly participant: Participant }): JSX.Element {
-  const title = participant.displayName ?? participant.email ?? '';
-  const email =
-    participant.displayName !== undefined ? participant.email : undefined;
+  // Титул и почта — один канон с рядами списков (entities/participants:
+  // серверный display_name, без имени и у pending — «Пользователь»,
+  // почта строкой под ним; аменда владельца 22.10.2026, макет
+  // 3313-77128). Суффикс «(Вы)» своей строке здесь не нужен — шапка
+  // чужого агрегата, своей строки у хаба (владелец исключён, #693).
+  const title = participantRowTitle(participant);
+  const email = participantRowSubtitle(participant);
   const badge = participantStatusBadge(participant);
 
   return (

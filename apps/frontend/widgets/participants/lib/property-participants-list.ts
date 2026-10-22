@@ -6,7 +6,7 @@ import {
   sortByRuText,
   suspendedLimitBadge,
 } from '@/entities/participants';
-import { displayOwnUserName } from '@/shared/lib/display-name';
+import { displayOwnUserName, ANONYMOUS_USER_NAME } from '@/shared/lib/display-name';
 import { parseEnumParam } from '@/shared/lib/parse-enum-param';
 
 /** Иконка у почты в ряду (макет 1980-107096, решение владельца 13.10.2026
@@ -31,9 +31,10 @@ export type PropertyParticipantBadge = ReturnType<typeof accountNotCreatedBadge>
 
 /** Анонимный титул строки без имени (канон карты #1105): у безымянного
  * зарегистрированного его ставит бекенд в display_name, у pending-
- * приглашения display_name на проводе пуст — лейбл ставит VM. Экспорт
- * для D7-карточки «Права участника» (3298-75576) — тот же титул. */
-export const ANONYMOUS_TITLE = 'Пользователь';
+ * приглашения display_name на проводе пуст — лейбл ставит VM. Один
+ * источник с общим каноном (shared/lib/display-name); экспорт для D7-
+ * карточки «Права участника» (3298-75576) — тот же титул. */
+export const ANONYMOUS_TITLE = ANONYMOUS_USER_NAME;
 
 /** Значение чип-фильтра «Все роли» (макет 1980-109148). */
 export type PropertyParticipantRoleFilter = 'all' | Exclude<AccessRole, 'owner'>;
@@ -178,8 +179,9 @@ function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined
     // серверной строки (displayOwnUserName); нет имени — «Пользователь»
     // (даст на виде «Пользователь (Вы)»). Чужие —
     // серверный канон DisplayNameOf, фронт его не пересобирает; у
-    // pending юзера ещё нет («the email is the label», #693) — анонимный
-    // титул #1105 ставит VM. Суффикс «(Вы)» в базе не живёт — его серым
+    // pending юзера ещё нет (display_name на проводе пуст) — анонимный
+    // титул #1105 ставит VM (аменда владельца 22.10.2026: почта —
+    // подзаголовок, не титул). Суффикс «(Вы)» в базе не живёт — его серым
     // рисует MeSuffix (общий примитив, #1356).
     const title = isMe
       ? displayOwnUserName(reader.name ?? '')

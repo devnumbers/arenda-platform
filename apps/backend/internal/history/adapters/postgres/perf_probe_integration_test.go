@@ -41,7 +41,7 @@ func TestHistoryPerfProbe(t *testing.T) {
 	policy := accessapp.NewMembershipPolicy(accesspg.NewOwnerResolver(pool), accesspg.NewMembershipRepository(pool))
 	// Nil-гейт выключен: перф-проба измеряет стор и policy, тарифное
 	// измерение — юнит-тесты шва (конвенция опциональных зависимостей).
-	svc := historyapp.NewHistoryReadService(historypg.NewReadStore(pool), policy, nil)
+	svc := historyapp.NewHistoryReadService(historypg.NewReadStore(pool), policy, nil, nil)
 
 	// Скоупы пробы: один объект и один актёр из сида.
 	var propertyID, actorID uuid.UUID

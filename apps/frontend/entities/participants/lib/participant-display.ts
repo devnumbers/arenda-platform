@@ -1,5 +1,6 @@
 import type { Participant } from '../model/types';
 import type { ParticipantRowBadge } from './participant-badge';
+import { ANONYMOUS_USER_NAME } from '@/shared/lib/display-name';
 
 /** Чип статуса — общий ParticipantRowBadge (анатомия «Row Button Bage»,
  * Figma 2036:83107). */
@@ -23,18 +24,18 @@ export const accountNotCreatedBadge = (): ParticipantRowBadge => ({
   icon: 'lock',
 });
 
-/** Титул строки списка: имя; у pending-строки (имени нет) — почта
- * (контракт #693: «the email is the label»). */
+/** Титул строки списка: серверный канон display_name («Имя Фамилия»,
+ * без имени — «Пользователь», access.DisplayNameOf); у pending-агрегата
+ * display_name на проводе нет — тот же анонимный титул (аменда владельца
+ * 22.10.2026, макет 3313-77128: «Пользователь», почта подзаголовком —
+ * #693 «the email is the label» для титула амендован). */
 export function participantRowTitle(participant: Participant): string {
-  return participant.displayName ?? participant.email ?? '';
+  return participant.displayName ?? ANONYMOUS_USER_NAME;
 }
 
-/** Подзаголовок строки: почта; у pending-строки почта уже титул — дважды
- * не повторяется (макет 2036-82971: title + email-подзаголовок). */
+/** Подзаголовок строки: почта — у всякой строки, где она есть
+ * (макет 3313-77128: титул + email-подзаголовок, дважды не повторяется). */
 export function participantRowSubtitle(participant: Participant): string | undefined {
-  if (participant.displayName === undefined) {
-    return undefined;
-  }
   return participant.email;
 }
 
