@@ -141,7 +141,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
       <PageContent>
         {emptyQuery && (
           <EmptyState
-            imageSrc="/images/payments/operations-search.png"
+            imageSrc="/images/payments/operations-search.webp"
             className="pt-16 pb-16"
             description="Введите название операции, сумму, категорию"
           />
@@ -174,7 +174,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
         {showResults &&
           (operations.length === 0 ? (
             <EmptyState
-              imageSrc="/images/payments/operations-search.png"
+              imageSrc="/images/payments/operations-search.webp"
               className="pt-16 pb-16"
               description="Такой операции нет"
             />

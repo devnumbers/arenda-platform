@@ -127,7 +127,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
       <PageContent>
         {emptyQuery && (
           <EmptyState
-            imageSrc="/images/payments/payments-search.png"
+            imageSrc="/images/payments/payments-search.webp"
             className="pt-16 pb-16"
             description="Введите название платежа"
           />
@@ -161,7 +161,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
         {showResults &&
           (items.length === 0 ? (
             <EmptyState
-              imageSrc="/images/payments/payments-search.png"
+              imageSrc="/images/payments/payments-search.webp"
               className="pt-16 pb-16"
               description="Такого платежа нет"
             />

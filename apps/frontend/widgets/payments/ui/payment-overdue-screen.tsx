@@ -94,7 +94,7 @@ export function PaymentOverdueScreen({
                 // Иллюстрированное пустое состояние — как на общей странице
                 // просроченных (1043:60174, решение владельца).
                 <PaymentsEmptyState
-                  image="/images/payments/empty-payments.png"
+                  image="/images/payments/empty-payments.webp"
                   title="Нет просроченных платежей"
                   hint="Когда платеж просрочится, он будет здесь"
                 />

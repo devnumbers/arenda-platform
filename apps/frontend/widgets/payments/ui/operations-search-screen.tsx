@@ -210,10 +210,13 @@ function SearchStateView({ text }: { readonly text: string }): JSX.Element {
   return (
     <div className="flex flex-col items-center gap-4 py-16">
       <Image
-        src="/images/payments/operations-search.png"
+        src="/images/payments/operations-search.webp"
         alt=""
         width={128}
         height={128}
+        sizes="128px"
+        quality={90}
+        priority
         className="h-32 w-32"
       />
       <p className="max-w-[280px] text-center text-base leading-[18px] text-content-secondary">

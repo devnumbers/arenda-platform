@@ -165,7 +165,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
 
               {!pending && !error && objects.length === 0 && (
                 <EmptyState
-                  imageSrc="/images/payments/payments-empty.png"
+                  imageSrc="/images/payments/payments-empty.webp"
                   title="Объектов пока нет"
                   description="Создайте объект, чтобы добавлять платежи"
                   action={

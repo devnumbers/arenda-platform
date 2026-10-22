@@ -34,7 +34,7 @@ function TariffAvatar({ refunded }: { readonly refunded: boolean }): JSX.Element
       {refunded ? (
         <Undo className="h-6 w-6 text-content" />
       ) : (
-        <Image src="/images/tariff/tariff-avatar.png" alt="" width={28} height={28} />
+        <Image src="/images/tariff/tariff-avatar.webp" alt="" width={28} height={28} />
       )}
     </span>
   );

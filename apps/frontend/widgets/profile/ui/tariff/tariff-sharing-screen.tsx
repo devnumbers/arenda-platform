@@ -36,7 +36,7 @@ export function TariffSharingScreen(): JSX.Element {
       <div className="flex flex-col items-center">
         <div className="relative h-[148px] w-[148px]">
           <Image
-            src="/images/tariff/tariff-sharing.png"
+            src="/images/tariff/tariff-sharing.webp"
             alt=""
             width={172}
             height={180}

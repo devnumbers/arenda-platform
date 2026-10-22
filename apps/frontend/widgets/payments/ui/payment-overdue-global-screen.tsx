@@ -208,7 +208,7 @@ function OverdueEmpty(): JSX.Element {
       className="flex min-h-[calc(100dvh-216px)] flex-1 items-center justify-center"
     >
       <EmptyState
-        imageSrc="/images/payments/overdue-empty.png"
+        imageSrc="/images/payments/overdue-empty.webp"
         title="У вас нет просроченных платежей"
         description="Здесь будут платежи, которые не успели отметить вовремя"
         descriptionClassName="text-content"

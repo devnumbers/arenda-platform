@@ -133,7 +133,7 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
           ) : rows.length === 0 ? (
             // Пустая разбивка (Figma 1518-92530, #478) — канон EmptyState.
             <EmptyState
-              imageSrc="/images/payments/operations-categories.png"
+              imageSrc="/images/payments/operations-categories.webp"
               className="pt-16 pb-16"
               description="Категорий, по которым были операции в этот период не было. Попробуйте выбрать другой период"
             />

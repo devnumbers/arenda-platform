@@ -204,10 +204,13 @@ export function PaymentHistoryScreen({
                 // что у пустого блока страницы платежа (#1338).
                 <div className="flex flex-col items-center gap-4 pt-24">
                   <Image
-                    src="/images/payments/history-empty.png"
+                    src="/images/payments/history-empty.webp"
                     alt=""
                     width={128}
                     height={128}
+                    sizes="128px"
+                    quality={90}
+                    priority
                     className="h-32 w-32"
                   />
                   <p className="text-base leading-[18px] text-content">

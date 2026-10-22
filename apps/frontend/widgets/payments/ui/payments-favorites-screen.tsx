@@ -397,7 +397,7 @@ function FavoritesEmpty(): JSX.Element {
       className="flex min-h-[calc(100dvh-216px)] flex-1 items-center justify-center"
     >
       <EmptyState
-        imageSrc="/images/payments/favorites-empty.png"
+        imageSrc="/images/payments/favorites-empty.webp"
         title="Вы пока не добавляли платежи в избранное"
         description="Добавьте платеж в избранное и он появится здесь"
         descriptionClassName="text-content"

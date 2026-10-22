@@ -127,7 +127,7 @@ export function RentalDetailBody({
         <div className="flex flex-col items-center gap-4">
           {/* Ключ аренды 96 (1232:61491) — одна картинка для всех аренд. */}
           <Image
-            src="/images/rentals/rental-hero.png"
+            src="/images/rentals/rental-hero.webp"
             alt=""
             width={96}
             height={96}

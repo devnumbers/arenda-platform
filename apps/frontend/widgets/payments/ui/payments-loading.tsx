@@ -118,7 +118,7 @@ export function PaymentsObjectsSearchLoading(): JSX.Element {
 
       <PageContent>
         <EmptyState
-          imageSrc="/images/payments/payments-objects-search.png"
+          imageSrc="/images/payments/payments-objects-search.webp"
           className="pt-16 pb-16"
           description="Введите название или адрес объекта"
         />
@@ -140,7 +140,7 @@ export function PaymentsSearchLoading(): JSX.Element {
 
       <PageContent>
         <EmptyState
-          imageSrc="/images/payments/payments-search.png"
+          imageSrc="/images/payments/payments-search.webp"
           className="pt-16 pb-16"
           description="Введите название платежа"
         />

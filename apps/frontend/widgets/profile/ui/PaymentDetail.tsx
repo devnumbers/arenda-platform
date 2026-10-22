@@ -141,7 +141,7 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
       <div className="flex flex-col gap-6 py-6">
         <div className="flex flex-col items-center gap-6">
           <Image
-            src="/images/tariff/tariff-avatar.png"
+            src="/images/tariff/tariff-avatar.webp"
             alt=""
             width={128}
             height={128}

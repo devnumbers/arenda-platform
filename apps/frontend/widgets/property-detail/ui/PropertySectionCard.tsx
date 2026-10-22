@@ -108,7 +108,10 @@ export function PropertySectionEmpty({
   return (
     <div className="flex flex-col items-center px-12 py-6 text-center">
       {/* sizes: слот 64 CSS — на 3x-экранах srcset отдаёт даунскейл из
-       * источника вместо апскейла 128 (#1002); потолок задаёт источник. */}
+       * источника вместо апскейла 128 (#1002); потолок задаёт источник.
+       * priority — как в EmptyState: иллюстрация секционного «пусто»
+       * всегда above the fold (решение владельца 22.10.2026), ленивость
+       * откладывала запрос после уже случившейся загрузки данных. */}
       <Image
         src={imageSrc}
         alt=""
@@ -116,6 +119,7 @@ export function PropertySectionEmpty({
         height={64}
         sizes="64px"
         quality={90}
+        priority
         className="h-16 w-16"
       />
       <div className="mt-4 flex w-full flex-col items-center gap-6">

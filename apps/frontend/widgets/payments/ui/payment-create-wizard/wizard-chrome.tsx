@@ -64,7 +64,7 @@ export function CategorySearchHint({ text }: { readonly text: string }): JSX.Ele
   return (
     <div className="flex flex-col items-center gap-4 pt-16">
       <img
-        src="/images/payments/category-search.png"
+        src="/images/payments/category-search.webp"
         alt=""
         width={128}
         height={128}

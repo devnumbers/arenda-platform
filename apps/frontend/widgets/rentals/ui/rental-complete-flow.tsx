@@ -135,12 +135,16 @@ export function RentalCompleteFlow({
       />
         <PageContent>
           <div className="flex flex-col items-center gap-4 px-8 pt-16">
-            {/* Иллюстрация финала 128 (Figma 1433:61073). */}
+            {/* Иллюстрация финала 128 (Figma 1433:61073); priority —
+              * финальный экран above the fold (22.10.2026). */}
             <Image
-              src="/images/rentals/complete-done.png"
+              src="/images/rentals/complete-done.webp"
               alt=""
               width={128}
               height={128}
+              sizes="128px"
+              quality={90}
+              priority
               className="h-32 w-32"
               aria-hidden
             />
@@ -189,7 +193,7 @@ export function RentalCompleteFlow({
           <div className="flex flex-col items-center gap-8 px-12 pt-6">
             {/* Ключ аренды 96 — единая картинка (1232:61491). */}
             <Image
-              src="/images/rentals/rental-hero.png"
+              src="/images/rentals/rental-hero.webp"
               alt=""
               width={96}
               height={96}
@@ -337,10 +341,11 @@ export function RentalCompleteFlow({
             {!summaryRevealed && (
               <div className="flex min-[561px]:hidden flex-col">
                 <Image
-                  src="/images/rentals/complete-hero.png"
+                  src="/images/rentals/complete-hero.webp"
                   alt=""
                   width={1024}
                   height={1024}
+                  priority
                   className="h-auto w-full"
                   aria-hidden
                 />
@@ -360,7 +365,7 @@ export function RentalCompleteFlow({
                   ключ аренды 128, заголовок 40/44. */}
               <div className="hidden min-[561px]:flex flex-col items-center gap-12 px-6 pb-12 pt-6">
                 <Image
-                  src="/images/rentals/rental-hero.png"
+                  src="/images/rentals/rental-hero.webp"
                   alt=""
                   width={128}
                   height={128}
