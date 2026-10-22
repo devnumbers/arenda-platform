@@ -8,10 +8,11 @@ import { formatDayMonthWithYear, PaymentReminderPicker } from '@/entities/paymen
 import { useMe } from '@/features/auth';
 import {
   emailReminderCaption,
-  EmailNotificationsRow,
+  NotifyEmailRow,
+  PAYMENTS_EMAIL_CATEGORY,
 } from '@/features/notifications';
 import {
-  emailNotificationsRowDisabled,
+  emailNotificationsRowState,
   periodicityReady,
   type PaymentDraftType,
 } from '@/features/payments';
@@ -33,11 +34,11 @@ import { WizardHeading } from './wizard-chrome';
  *   в null, решение гриллинга #1186).
  *
  * Секция «Настройки» (без подзаголовка, по макету): тумблер «Уведомления
- * на почту» — общий EmailNotificationsRow (шоткат глобальной email-настройки
- * категории «Платежи и операции», канон #746; опечатки подписей макетов не
- * воспроизводятся, канон AutoPayRow); пер-платёжный выбор «не надо» гасит
- * весь ряд (emailNotificationsRowDisabled, решение владельца 22.10.2026)
- * и тумблер «Окончание платежа»
+ * на почту» — NotifyEmailRow, персональная галочка почты этого платежа
+ * (карта #1551, канон #1552): значение живёт в черновике (старт on),
+ * радио «не надо» гасит весь ряд (emailNotificationsRowDisabled, решение
+ * владельца 22.10.2026), глобальный мастер категории решает видимость
+ * ряда вовсе; и тумблер «Окончание платежа»
  * («Необязательно»): включённым открывает строку «Выбрать дату» (канон
  * Figma 843:8345), выключенным чистит выбранную дату.
  *
@@ -57,6 +58,9 @@ export type PaymentSettingsStepProps = {
   /** Флаг «уведомлять об автоплатеже»; undefined — «Не уведомлять» (дефолт). */
   readonly notifyAutoPaid: boolean | undefined;
   readonly onNotifyAutoPaidChange: (notifyAutoPaid: boolean | undefined) => void;
+  /** Запомненное значение свитча почты (карта #1551); не тронуто — on. */
+  readonly notifyEmail: boolean;
+  readonly onNotifyEmailChange: (notifyEmail: boolean) => void;
   readonly endDate: IsoDate | undefined;
   readonly onEndDateChange: (endDate: IsoDate | undefined) => void;
   readonly recurrence: Recurrence | undefined;
@@ -69,6 +73,8 @@ export function PaymentSettingsStep({
   onReminderOffsetDaysChange,
   notifyAutoPaid,
   onNotifyAutoPaidChange,
+  notifyEmail,
+  onNotifyEmailChange,
   endDate,
   onEndDateChange,
   recurrence,
@@ -94,6 +100,15 @@ export function PaymentSettingsStep({
       onEndDateChange(undefined);
     }
   };
+
+  // Гейт «не надо» (решение владельца 22.10.2026) и действующее значение
+  // свитча почты: заглушенный ряд показывает off, запомненное значение
+  // черновика не стирает (канон #1552).
+  const emailRow = emailNotificationsRowState(
+    draftType,
+    { reminderOffsetDays, notifyAutoPaid },
+    notifyEmail,
+  );
 
   return (
     <>
@@ -124,13 +139,13 @@ export function PaymentSettingsStep({
           заголовка — итого 40px от последней радио-строки. */}
       <StepSectionHeading title="Настройки" />
       <div className="flex flex-col pt-4">
-        <EmailNotificationsRow
+        <NotifyEmailRow
+          category={PAYMENTS_EMAIL_CATEGORY}
           title="Уведомления на почту"
           caption={emailReminderCaption('о платеже', email)}
-          disabled={emailNotificationsRowDisabled(draftType, {
-            reminderOffsetDays,
-            notifyAutoPaid,
-          })}
+          checked={emailRow.value}
+          onCheckedChange={onNotifyEmailChange}
+          disabled={emailRow.disabled}
         />
         <EndDateToggleRow checked={endDateOn} onToggle={toggleEndDate} />
         {endDateOn && (

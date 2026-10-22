@@ -35,6 +35,7 @@ function baseForm(overrides: Partial<PaymentEditForm> = {}): PaymentEditForm {
     endDate: undefined,
     reminderOffsetDays: undefined,
     notifyAutoPaid: false,
+    notifyEmail: true,
     ...overrides,
   };
 }
@@ -140,7 +141,9 @@ describe('buildPaymentUpdateCommand', () => {
         basePayment(),
         baseForm({ reminderOffsetDays: 3 }),
       );
-      expect(command).toEqual({ reminderOffsetDays: 3 });
+      // Оживление ряда почты («не надо» → «За 3 дня») везёт галочку:
+      // действующее on против заглушенного исходного (карта #1551).
+      expect(command).toEqual({ reminderOffsetDays: 3, notifyEmail: true });
     });
 
     it('тот же оффсет — опущен', () => {
@@ -162,7 +165,8 @@ describe('buildPaymentUpdateCommand', () => {
     it('«Не напоминать» у правила с напоминанием — null снимает его', () => {
       const payment = basePayment({ reminderOffsetDays: 7 });
       const command = buildPaymentUpdateCommand(payment, baseForm());
-      expect(command).toEqual({ reminderOffsetDays: null });
+      // Радио в «не надо» гасит и галочку почты (канон #1552).
+      expect(command).toEqual({ reminderOffsetDays: null, notifyEmail: false });
     });
 
     it('«Не напоминать» у правила без напоминания — опущено', () => {
@@ -174,7 +178,14 @@ describe('buildPaymentUpdateCommand', () => {
         basePayment(),
         baseForm({ amountKopecks: 400_000, reminderOffsetDays: 1 }),
       );
-      expect(command).toEqual({ amountKopecks: 400_000, reminderOffsetDays: 1 });
+      // Появление напоминания оживляет ряд почты: действующее значение
+      // (запомненное on) расходится с заглушенным исходным — булево в команде
+      // (карта #1551, сервер хранит тот же true — запись идемпотентна).
+      expect(command).toEqual({
+        amountKopecks: 400_000,
+        reminderOffsetDays: 1,
+        notifyEmail: true,
+      });
     });
   });
 
@@ -185,7 +196,10 @@ describe('buildPaymentUpdateCommand', () => {
         payment,
         baseForm({ notifyAutoPaid: true }),
       );
-      expect(command).toEqual({ notifyAutoPaid: true });
+      // Ряд почты оживает («Не уведомлять» → «Да») — галочка едёт действующим
+      // on против заглушенного исходного (карта #1551; сервер хранит тот же
+      // true — запись идемпотентна).
+      expect(command).toEqual({ notifyAutoPaid: true, notifyEmail: true });
     });
 
     it('у автоплатёжного правила «не уведомлять» едет false', () => {
@@ -194,7 +208,9 @@ describe('buildPaymentUpdateCommand', () => {
         payment,
         baseForm({ notifyAutoPaid: false }),
       );
-      expect(command).toEqual({ notifyAutoPaid: false });
+      // Радио в «Не уведомлять» гасит и ряд почты — off в команде
+      // (карта #1551, канон #1552: заглушенный ряд отправляет off).
+      expect(command).toEqual({ notifyAutoPaid: false, notifyEmail: false });
     });
 
     it('то же значение — опущено', () => {
@@ -208,6 +224,56 @@ describe('buildPaymentUpdateCommand', () => {
       const command = buildPaymentUpdateCommand(
         basePayment({ autoPay: false, notifyAutoPaid: false }),
         baseForm({ notifyAutoPaid: true }),
+      );
+      expect(command).toBeUndefined();
+    });
+  });
+
+  describe('персональная галочка почты (карта #1551, канон #1552)', () => {
+    it('переключённый свитч живого ряда едет булевым', () => {
+      const command = buildPaymentUpdateCommand(
+        basePayment({ reminderOffsetDays: 3, notifyEmail: true }),
+        baseForm({ reminderOffsetDays: 3, notifyEmail: false }),
+      );
+      expect(command).toEqual({ notifyEmail: false });
+    });
+
+    it('то же действующее значение — опущено', () => {
+      expect(
+        buildPaymentUpdateCommand(
+          basePayment({ reminderOffsetDays: 3, notifyEmail: true }),
+          baseForm({ reminderOffsetDays: 3 }),
+        ),
+      ).toBeUndefined();
+    });
+
+    it('снятие напоминания («не надо») гасит галочку в команде', () => {
+      const command = buildPaymentUpdateCommand(
+        basePayment({ reminderOffsetDays: 3, notifyEmail: true }),
+        baseForm(),
+      );
+      expect(command).toEqual({ reminderOffsetDays: null, notifyEmail: false });
+    });
+
+    it('правило уже «не надо» (бэкфилл true): нетронутая форма не пишет галочку', () => {
+      // Дифф по действующим значениям: исходная сторона тоже под гейтом —
+      // правка чужого поля не оборачивается тихой записью notify_email.
+      expect(buildPaymentUpdateCommand(basePayment(), baseForm())).toBeUndefined();
+    });
+
+    it('автоплатёж: перевод радио в «Не уведомлять» гасит галочку', () => {
+      const command = buildPaymentUpdateCommand(
+        basePayment({ autoPay: true, notifyAutoPaid: true, notifyEmail: true }),
+        baseForm({ notifyAutoPaid: false }),
+      );
+      expect(command).toEqual({ notifyAutoPaid: false, notifyEmail: false });
+    });
+
+    it('ряд скрыт мастером — галочка в команде не едёт (дифф без поля)', () => {
+      const command = buildPaymentUpdateCommand(
+        basePayment({ reminderOffsetDays: 3, notifyEmail: true }),
+        baseForm({ reminderOffsetDays: 3, notifyEmail: false }),
+        { notifyEmailRowVisible: false },
       );
       expect(command).toBeUndefined();
     });

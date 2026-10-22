@@ -36,13 +36,16 @@ import { useProperty } from '@/features/properties';
 import { useRentals } from '@/features/rentals';
 import {
   emailReminderCaption,
-  EmailNotificationsRow,
+  emailNotificationsRowVisible,
+  NotifyEmailRow,
+  PAYMENTS_EMAIL_CATEGORY,
+  useEmailNotificationPreferences,
 } from '@/features/notifications';
 import {
   buildPaymentUpdateCommand,
   branchKind,
   editFormReady,
-  emailNotificationsRowDisabled,
+  emailNotificationsRowState,
   formAfterRecurrenceChange,
   periodicityReady,
   recurrencesEqual,
@@ -118,9 +121,10 @@ import { CategorySearchHint, WizardDirectionSegment, WizardHeading } from './pay
  * флаг notifyAutoPaid (#1189), подписи шага 4 создания (#1193); радио
  * напоминания у автоплатежа нет (как на шаге 4, решение гриллинга
  * #1186). Регулярность — без «Один раз» (решение #449) с ветками дат;
- * `since` не редактируется. Ряд «Уведомления на почту» — общий
- * EmailNotificationsRow (шоткат глобальной email-настройки категории,
- * канон #746, подпись — как на шаге 4 создания); пер-платёжный выбор
+ * `since` не редактируется. Ряд «Уведомления на почту» — NotifyEmailRow:
+ * свитч = персональная галочка почты этого платежа (карта #1551), старт
+ * из notifyEmail правила, глобальный мастер категории решает видимость
+ * ряда, шоткат-запись матрицы снята (канон #1552); пер-платёжный выбор
  * «не надо» гасит весь ряд (emailNotificationsRowDisabled, решение
  * владельца 22.10.2026), состояние живое — переключил радио, ряд ожил.
  *
@@ -322,8 +326,9 @@ function EditingHeader({
 }
 
 /** Заголовок формы: значение предзаполнено правилом, пустой ввод заменяет
- * лейбл категории при сохранении (правила визарда #464). Напоминание
- * и флаг автоплатежа едут в форму целиком — дифф считает update-model. */
+ * лейбл категории при сохранении (правила визарда #464). Напоминание,
+ * флаг автоплатежа и галочка почты едут в форму целиком — дифф считает
+ * update-model; галочка стартует из notifyEmail правила (канон #1552). */
 function formFromPayment(payment: Payment): PaymentEditForm {
   return {
     type: payment.type,
@@ -334,6 +339,7 @@ function formFromPayment(payment: Payment): PaymentEditForm {
     endDate: payment.endDate,
     reminderOffsetDays: payment.reminderOffsetDays,
     notifyAutoPaid: payment.notifyAutoPaid,
+    notifyEmail: payment.notifyEmail,
   };
 }
 
@@ -358,11 +364,20 @@ function PaymentEditForm({
   const router = useRouter();
   const updatePayment = useUpdatePayment(propertyId, payment.id);
   const deletePayment = useDeletePayment(propertyId, payment.id);
-  // Ряд «Уведомления на почту» (макет 1127:32504) — общий EmailNotificationsRow:
-  // подпись с почтой пользователя, как на шаге 4 создания (#1193); гейт
-  // «не надо» — решение владельца 22.10.2026 (см. докстринг компонента).
+  // Ряд «Уведомления на почту» (макет 1127:32504) — NotifyEmailRow:
+  // подпись с почтой пользователя, как на шаге 4 создания (#1193); свитч —
+  // персональная галочка этого платежа (карта #1551, предзаполнение из
+  // notifyEmail правила), гейт «не надо» — решение владельца 22.10.2026.
+  // Мастер категории здесь только читается: общий предикат с компонентом
+  // ряда решает и видимость, и «едет ли notifyEmail в PATCH» (при off и
+  // сбое — дифф без поля, канон #1552).
   const meQuery = useMe();
   const email = meQuery.data?.email ?? null;
+  const emailMasterQuery = useEmailNotificationPreferences();
+  const emailRowVisible = emailNotificationsRowVisible(
+    emailMasterQuery.isPending,
+    emailMasterQuery.data?.[PAYMENTS_EMAIL_CATEGORY],
+  );
 
   const today: IsoDate = dateToIsoLocal(new Date());
   const resolveTitle = (slug: string): string | undefined =>
@@ -385,6 +400,18 @@ function PaymentEditForm({
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteOverdue, setDeleteOverdue] = useState(false);
+
+  // Гейт «не надо» для ряда почты: «Не напоминать» у ручного правила и
+  // «Не уведомлять» у автоплатёжного гасят весь ряд (22.10.2026); value —
+  // то же действующее значение, что уйдёт в PATCH.
+  const emailRow = emailNotificationsRowState(
+    payment.autoPay ? 'autopayment' : 'payment',
+    {
+      reminderOffsetDays: form.reminderOffsetDays,
+      notifyAutoPaid: form.notifyAutoPaid,
+    },
+    form.notifyEmail,
+  );
 
   // Выбор категории — отдельная страница на том же маршруте (как шаг 1
   // визарда): уход со страницы не теряет несохранённые правки формы.
@@ -437,7 +464,10 @@ function PaymentEditForm({
   const categoryChanged =
     form.categorySlug !== undefined && form.categorySlug !== payment.category.slug;
 
-  const command = buildPaymentUpdateCommand(payment, form, { resolveTitle });
+  const command = buildPaymentUpdateCommand(payment, form, {
+    resolveTitle,
+    notifyEmailRowVisible: emailRowVisible,
+  });
   const ready = editFormReady(form, payment.category.slug, resolveTitle);
   const canSave = ready && command !== undefined;
 
@@ -780,16 +810,13 @@ function PaymentEditForm({
           )}
         </div>
 
-        <EmailNotificationsRow
+        <NotifyEmailRow
+          category={PAYMENTS_EMAIL_CATEGORY}
           title="Уведомления на почту"
           caption={emailReminderCaption('о платеже', email)}
-          disabled={emailNotificationsRowDisabled(
-            payment.autoPay ? 'autopayment' : 'payment',
-            {
-              reminderOffsetDays: form.reminderOffsetDays,
-              notifyAutoPaid: form.notifyAutoPaid,
-            },
-          )}
+          checked={emailRow.value}
+          onCheckedChange={(notifyEmail) => update('notifyEmail', notifyEmail)}
+          disabled={emailRow.disabled}
         />
 
         {canDelete && (

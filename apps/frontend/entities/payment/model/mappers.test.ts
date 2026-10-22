@@ -25,8 +25,8 @@ const paymentDto: PaymentDto = {
   // Контракт ответа с #1189; сущность Payment флаг не несёт — им живёт
   // only-уведомительный путь, маппер его не переносит.
   notifyAutoPaid: false,
-  // Контракт ответа с #1553; сущность Payment галочку не несёт — ряд почты
-  // на создании/правке читает её напрямую из ответа API (тикет #1556).
+  // Контракт ответа с #1553; с тикета #1556 сущность несёт галочку —
+  // предзаполнение ряда почты на правке читает её из Payment.
   notifyEmail: true,
   category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
   isFavorite: false,
@@ -92,6 +92,12 @@ describe('mapPayment — DTO → entity', () => {
   it('notifyAutoPaid переносится как есть — гейт события «Автоплатёж исполнен» (#1189)', () => {
     expect(payment.notifyAutoPaid).toBe(false);
     expect(mapPayment({ ...paymentDto, notifyAutoPaid: true }).notifyAutoPaid).toBe(true);
+  });
+
+  it('notifyEmail переносится как есть — персональная галочка почты платежа (карта #1551)', () => {
+    // Предзаполнение ряда на правке читается из сущности (канон #1552).
+    expect(payment.notifyEmail).toBe(true);
+    expect(mapPayment({ ...paymentDto, notifyEmail: false }).notifyEmail).toBe(false);
   });
 
   it('интервалы пауз переименовываются в [from, to), открытая бессрочная без to', () => {

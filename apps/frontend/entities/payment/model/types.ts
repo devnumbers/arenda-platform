@@ -70,6 +70,11 @@ export type Payment = {
   /** Гейт события «Автоплатёж исполнен» (#1189): false — молчащее правило
    * не шлёт уведомление об автоплатеже. Значим только у autoPay-правил. */
   readonly notifyAutoPaid: boolean;
+  /** «Уведомление на почту» (карта #1551, тикет #1553): персональная
+   * галочка отправки писем этого платежа — гейтит email-канал доставки
+   * на шаге финальной фильтрации. Лента/SSE-тосты/push не трогаются;
+   * глобальная матрица профиля остаётся мастером (канон #1552). */
+  readonly notifyEmail: boolean;
   readonly category: PaymentCategoryView;
   readonly isFavorite: boolean;
   /** Завершённый платёж (CONTEXT.md): неоплаченных вхождений больше нет.
@@ -149,21 +154,28 @@ export type PaymentCreateCommand = {
    * автоплатёжная ветка и только явное «Да, уведомлять» — иначе поле
    * опускается, сервер ставит false (#1189). */
   readonly notifyAutoPaid?: boolean;
+  /** «Уведомление на почту» (карта #1551): персональная галочка почты
+   * этого платежа. Ряд скрыт мастером — поле опускается, сервер ставит
+   * дефолт true (#1553); видимый ряд едет действующим значением —
+   * гейт «не надо» отправляет off (канон #1552). */
+  readonly notifyEmail?: boolean;
 };
 
 /**
  * Частичная правка: опущенное поле остаётся без изменений; `endDate`
  * трисостоянен — опущен (сохранить), null (открыть срок), дата (назначить).
- * Напоминание и флаг «уведомлять об автоплатеже» тоже трисостоянны
- * (#1197, #1189): опущено (сохранить), null (снять), значение (назначить) —
- * форма правки знает действующее значение и шлёт его только при смене.
+ * Напоминание, флаг «уведомлять об автоплатеже» и галочка почты тоже
+ * трисостоянны (#1197, #1189, карта #1551): опущено (сохранить), null
+ * (снять), значение (назначить) — форма правки знает действующее значение
+ * и шлёт его только при смене.
  */
 export type PaymentUpdateCommand = Partial<
-  Omit<PaymentCreateCommand, 'endDate' | 'reminderOffsetDays' | 'notifyAutoPaid'>
+  Omit<PaymentCreateCommand, 'endDate' | 'reminderOffsetDays' | 'notifyAutoPaid' | 'notifyEmail'>
 > & {
   readonly endDate?: IsoDate | null;
   readonly reminderOffsetDays?: PaymentReminderOffset | null;
   readonly notifyAutoPaid?: boolean | null;
+  readonly notifyEmail?: boolean | null;
 };
 
 /**

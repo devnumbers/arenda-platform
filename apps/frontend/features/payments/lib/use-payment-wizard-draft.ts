@@ -40,6 +40,10 @@ export type PaymentWizardDraft = {
   /** «Уведомлять об автоплатеже» (шаг 4, ветка автоплатежа, #1193): хранится
    * только явное «Да, уведомлять» — «Не уведомлять» (дефолт) поля не пишет. */
   readonly notifyAutoPaid?: boolean;
+  /** «Уведомления на почту» (шаг 4, карта #1551): запомненное значение
+   * свитча; не тронуто — поле не пишет (ряд стартует с on, канон #1552).
+   * Хранится в обе стороны — выключенный свитч переживает перезагрузку. */
+  readonly notifyEmail?: boolean;
   /** Сумма в копейках, целая положительная (шаг 5). */
   readonly amountKopecks?: number;
   /** Последний шаг, на котором был пользователь — штамп каждого перехода
@@ -108,6 +112,7 @@ export function hasPaymentWizardDraftFields(draft: PaymentWizardDraft): boolean 
     || draft.endDate !== undefined
     || draft.reminderOffsetDays !== undefined
     || draft.notifyAutoPaid !== undefined
+    || draft.notifyEmail !== undefined
     || draft.amountKopecks !== undefined
   );
 }
@@ -216,6 +221,13 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
   }
   const notifyAutoPaid = record.notifyAutoPaid === true;
 
+  // Галочка почты (карта #1551): значима в обе стороны (выключенный свитч —
+  // «запоминание» канона #1552), небулево роняет черновик как чужой тип.
+  if (record.notifyEmail !== undefined && typeof record.notifyEmail !== 'boolean') {
+    return DEFAULT_DRAFT;
+  }
+  const notifyEmail = typeof record.notifyEmail === 'boolean' ? record.notifyEmail : undefined;
+
   const amountKopecks = isPositiveInt(record.amountKopecks) ? record.amountKopecks : undefined;
   if (record.amountKopecks !== undefined && amountKopecks === undefined) return DEFAULT_DRAFT;
 
@@ -236,6 +248,7 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ...(endDate !== undefined && { endDate }),
     ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
     ...(notifyAutoPaid && { notifyAutoPaid }),
+    ...(notifyEmail !== undefined && { notifyEmail }),
     ...(amountKopecks !== undefined && { amountKopecks }),
     ...(step !== undefined && { step }),
     ...(updatedAt !== undefined && { updatedAt }),

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { emailNotificationsRowDisabled } from './email-notifications-row';
+import {
+  emailNotificationsRowDisabled,
+  emailNotificationsRowState,
+  emailNotificationsRowValue,
+} from './email-notifications-row';
 
 /** Гейт ряда «Уведомления на почту» (решение владельца 22.10.2026):
  * пер-платёжный выбор «не надо» гасит весь ряд — уведомлений и
@@ -51,5 +55,44 @@ describe('emailNotificationsRowDisabled', () => {
         notifyAutoPaid: true,
       }),
     ).toBe(false);
+  });
+});
+
+/** Действующее значение ряда в двухуровневой модели (карта #1551, канон
+ * #1552, решение владельца 22.10.2026 «надо запоминать»): свитч —
+ * персональная галочка почты платежа; гейт («не надо») показывает и
+ * отправляет off, но запомненное значение формы не стирает — возврат
+ * радио в «да» возвращает его. */
+describe('emailNotificationsRowValue', () => {
+  it('гейт («не надо») показывает и отправляет off при любом запомненном', () => {
+    expect(emailNotificationsRowValue(true, true)).toBe(false);
+    expect(emailNotificationsRowValue(true, false)).toBe(false);
+  });
+
+  it('живой ряд показывает запомненное значение формы', () => {
+    expect(emailNotificationsRowValue(false, true)).toBe(true);
+    expect(emailNotificationsRowValue(false, false)).toBe(false);
+  });
+});
+
+/** Композит (гейт + значение) — форма, в которой ряд потребляют экраны
+ * и модели команд (карта #1551). */
+describe('emailNotificationsRowState', () => {
+  it('гейт отдаёт пару disabled + off при любом запомненном', () => {
+    expect(
+      emailNotificationsRowState('payment', { reminderOffsetDays: undefined, notifyAutoPaid: undefined }, true),
+    ).toStrictEqual({ disabled: true, value: false });
+    expect(
+      emailNotificationsRowState('autopayment', { reminderOffsetDays: undefined, notifyAutoPaid: undefined }, false),
+    ).toStrictEqual({ disabled: true, value: false });
+  });
+
+  it('живый ряд отдаёт disabled: false и запомненное значение', () => {
+    expect(
+      emailNotificationsRowState('payment', { reminderOffsetDays: 1, notifyAutoPaid: undefined }, false),
+    ).toStrictEqual({ disabled: false, value: false });
+    expect(
+      emailNotificationsRowState('autopayment', { reminderOffsetDays: undefined, notifyAutoPaid: true }, true),
+    ).toStrictEqual({ disabled: false, value: true });
   });
 });

@@ -79,6 +79,20 @@ describe('validatePaymentWizardDraft', () => {
     expect(validatePaymentWizardDraft({ notifyAutoPaid: 'да' })).toStrictEqual({});
   });
 
+  it('галочка почты: оба булевых значимы, небулево роняет черновик (карта #1551)', () => {
+    // Пользовательский выбор хранится в обе стороны: выключенный свитч
+    // («запоминание», канон #1552) обязан пережить перезагрузку.
+    expect(validatePaymentWizardDraft({ title: 'x', notifyEmail: false })).toStrictEqual({
+      title: 'x',
+      notifyEmail: false,
+    });
+    expect(validatePaymentWizardDraft({ title: 'x', notifyEmail: true })).toStrictEqual({
+      title: 'x',
+      notifyEmail: true,
+    });
+    expect(validatePaymentWizardDraft({ notifyEmail: 'нет' })).toStrictEqual({});
+  });
+
   it('пустые строки и неположительные суммы отбрасываются', () => {
     expect(validatePaymentWizardDraft({ title: '' })).toStrictEqual({});
     expect(validatePaymentWizardDraft({ amountKopecks: 0 })).toStrictEqual({});
@@ -125,6 +139,8 @@ describe('hasPaymentWizardDraftFields', () => {
     expect(hasPaymentWizardDraftFields({ endDate: '2027-01-31' })).toBe(true);
     expect(hasPaymentWizardDraftFields({ reminderOffsetDays: 7 })).toBe(true);
     expect(hasPaymentWizardDraftFields({ notifyAutoPaid: true })).toBe(true);
+    // Выключенная галочка почты — тоже пользовательский выбор (#1551).
+    expect(hasPaymentWizardDraftFields({ notifyEmail: false })).toBe(true);
   });
 
   it('служебный updatedAt сам по себе черновиком не считается', () => {

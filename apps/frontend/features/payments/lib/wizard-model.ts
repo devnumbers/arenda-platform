@@ -6,6 +6,9 @@ import type {
 } from '@/entities/payment';
 import { firstOccurrence } from '@/entities/payment';
 import { cmp, dateInMonth, isoYear } from '@/shared/lib/calendar';
+import {
+  emailNotificationsRowState,
+} from './email-notifications-row';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
 /**
@@ -253,6 +256,10 @@ export type CreateCommandOptions = {
    * пустым; резолвер передаёт слой каталога — модель визарда от него свободна.
    */
   readonly resolveTitle?: (categorySlug: string) => string | undefined;
+  /** Ряд почты виден (глобальный мастер категории on либо ещё грузится —
+   * решение не блокируем); false — мастер off, ряд скрыт и галочка в
+   * команду не едёт (дифф без поля, канон #1552). Дефолт — виден. */
+  readonly notifyEmailRowVisible?: boolean;
 };
 
 /** Команда создания из завершённого черновика; undefined — черновик неполон. */
@@ -270,6 +277,19 @@ export function buildPaymentCreateCommand(
       ? draft.title.trim()
       : options.resolveTitle?.(draft.categorySlug);
   if (title === undefined) return undefined;
+
+  // Персональная галочка почты (карта #1551, канон #1552): живой ряд едет
+  // значением черновика (не тронуто → on), гейт «не надо» отправляет off;
+  // скрытый мастером ряд поле не пишет — сервер ставит дефолт true (#1553).
+  const notifyEmailVisible = options.notifyEmailRowVisible !== false;
+  const notifyEmail = emailNotificationsRowState(
+    options.autoPay === true ? 'autopayment' : 'payment',
+    {
+      reminderOffsetDays: draft.reminderOffsetDays,
+      notifyAutoPaid: draft.notifyAutoPaid,
+    },
+    draft.notifyEmail ?? true,
+  ).value;
 
   return {
     type: effectivePaymentType(draft.type),
@@ -289,5 +309,6 @@ export function buildPaymentCreateCommand(
     // уведомлять», сервер ставит false (#1189).
     ...(options.autoPay === true
       && draft.notifyAutoPaid === true && { notifyAutoPaid: true }),
+    ...(notifyEmailVisible && { notifyEmail }),
   };
 }

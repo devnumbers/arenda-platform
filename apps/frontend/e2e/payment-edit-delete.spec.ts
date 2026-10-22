@@ -1,6 +1,7 @@
 import {
   captureScreen,
   expect,
+  mockEmailCategoryShortcut,
   monthlyDayOnOrAfter,
   openCabinetWithSessionToken,
   openCabinetWithSeededSession,
@@ -288,13 +289,17 @@ test.describe('экран правки платежа', () => {
     page,
     seededUser,
   }) => {
+    // Матрица мокается ради контракта «галочка почты не пишет глобальную
+    // матрицу» (карта #1551): PUT считается, ассерт в конце.
+    const { puts } = await mockEmailCategoryShortcut(page);
     await openCabinetWithSeededSession(page, seededUser);
     // Состояние «За 3 дня» — предустановка API-патчем (канон сидов мид-теста,
     // прецедент payment-subscreens): тест живёт и при единичном retry, когда
-    // предыдущий тест уже снял напоминание.
+    // предыдущий тест уже снял напоминание. Галочка включена — снятие
+    // напоминания обязано погасить и её (канон #1552).
     const ensured = await page.request.patch(
       `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
-      { data: { reminderOffsetDays: 3 } },
+      { data: { reminderOffsetDays: 3, notifyEmail: true } },
     );
     expect(ensured.ok(), 'предустановка напоминания').toBe(true);
 
@@ -321,9 +326,15 @@ test.describe('экран правки платежа', () => {
     const reread = await page.request.get(
       `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
     );
-    expect(
-      ((await reread.json()) as { reminderOffsetDays?: number | null }).reminderOffsetDays ?? null,
-    ).toBeNull();
+    const stored = (await reread.json()) as {
+      reminderOffsetDays?: number | null;
+      notifyEmail?: boolean;
+    };
+    expect(stored.reminderOffsetDays ?? null).toBeNull();
+    // Заглушенный ряд отправляет off: галочка погашена пер-платёжно,
+    // глобальная матрица не тронута (карта #1551, канон #1552).
+    expect(stored.notifyEmail).toBe(false);
+    expect(puts()).toBe(0);
   });
 
   test('автоплатёж: «Уведомлять об оплате» да/нет вместо пикера оффсета (#1189)', async ({
@@ -365,6 +376,92 @@ test.describe('экран правки платежа', () => {
     );
     expect(read.ok(), 'чтение платежа после правки').toBe(true);
     expect(((await read.json()) as { notifyAutoPaid: boolean }).notifyAutoPaid).toBe(true);
+  });
+
+  test('галочка почты — персональный флаг платежа: предзаполнение, PATCH, матрица не пишется (карта #1551)', async ({
+    page,
+    seededUser,
+  }) => {
+    const { puts } = await mockEmailCategoryShortcut(page);
+    await openCabinetWithSeededSession(page, seededUser);
+    // Предустановка API-патчем (канон сидов мид-теста): напоминание держит
+    // ряд живым, галочка сброшена — предзаполнение обязано прочитать false.
+    const ensured = await page.request.patch(
+      `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
+      { data: { reminderOffsetDays: 3, notifyEmail: false } },
+    );
+    expect(ensured.ok(), 'предустановка галочки').toBe(true);
+
+    await page.goto(URLS.insurance);
+    await page.getByRole('button', { name: 'Изменить' }).click();
+    await expect(page).toHaveURL(new RegExp(`/payments/[0-9a-f-]+/edit$`));
+
+    const toggle = page.getByRole('switch', { name: 'Уведомления на почту' });
+    // Ряд жив (напоминание стоит), свитч предзаполнен из правила (false).
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await stickySaveButton(page).click();
+    await expect(page.getByText('Изменения сохранены')).toBeVisible();
+
+    // Серверная истина: флаг пер-платёжный, глобальная матрица не тронута.
+    const reread = await page.request.get(
+      `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
+    );
+    expect(reread.ok(), 'перечитывание платежа').toBe(true);
+    expect(((await reread.json()) as { notifyEmail?: boolean }).notifyEmail).toBe(true);
+    expect(puts()).toBe(0);
+  });
+
+  test('мастер off на правке: ряд скрыт, PATCH не несёт notifyEmail (дифф без поля, карта #1551)', async ({
+    page,
+    seededUser,
+  }) => {
+    // Глобальный мастер off — ряда нет вовсе; сохранение правит только
+    // тронутое поле, галочка в команде не едёт (канон #1552).
+    await mockEmailCategoryShortcut(page, {
+      initial: { rental: true, payments_operations: false, tasks: true, shared_access: true },
+    });
+    await openCabinetWithSeededSession(page, seededUser);
+    // Тело PATCH читаем пассивным слушателем запросов: route-перехват с
+    // continue() ломает загрузку экрана (белая страница), а контракт
+    // «дифф без поля» требует именно тела команды.
+    const patchBodies: Array<Record<string, unknown>> = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'PATCH'
+        && /\/api\/properties\/[^/]+\/payments\/[^/]+$/.test(new URL(request.url()).pathname)
+      ) {
+        const body = request.postData();
+        if (body !== null) {
+          patchBodies.push(JSON.parse(body) as Record<string, unknown>);
+        }
+      }
+    });
+
+    await page.goto(URLS.insuranceEdit);
+    await expect(page.getByRole('switch', { name: 'Уведомления на почту' })).toHaveCount(0);
+
+    // Меняем сумму (предзаполнение не проверяем — правки мид-теста выше
+    // гоняют сеяные 320 000 коп) — сохранение уходит без галочки.
+    const amount = page.getByRole('textbox', { name: 'Сумма' });
+    await expect(amount).toBeVisible();
+    await amount.fill('777');
+    await stickySaveButton(page).click();
+    await expect(page.getByText('Изменения сохранены')).toBeVisible();
+
+    expect(patchBodies.length, 'один PATCH сохранения').toBe(1);
+    expect(patchBodies[0]?.amountKopecks).toBe(77_700);
+    expect(Object.hasOwn(patchBodies[0] ?? {}, 'notifyEmail')).toBe(false);
+
+    // Файл идёт по порядку: ролевой тест ниже ждёт сумму, оставленную
+    // мобильным тестом (4 000 ₽) — возвращаем её на место.
+    await page.request.patch(
+      `/api/properties/${PROPERTY}/payments/55555555-5555-4555-8555-555555555552`,
+      { data: { amountKopecks: 400_000 } },
+    );
   });
 
   test('выбор категории — отдельная страница, как в визарде', async ({
