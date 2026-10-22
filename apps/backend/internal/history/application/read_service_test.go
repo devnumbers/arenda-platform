@@ -58,8 +58,38 @@ func (f policyFake) RoleForProperty(_ context.Context, _, propertyID uuid.UUID) 
 func newReadServiceFake(rows []domain.FeedEntry, roles map[uuid.UUID]sharedpolicy.Role) (*HistoryReadService, *readerFake) {
 	reader := &readerFake{listRows: rows}
 	// Nil-гейт выключен — конвенция опциональных зависимостей пакета; тарифное
-	// измерение пинят отдельные тесты гейта ниже.
-	return NewHistoryReadService(reader, policyFake{roles: roles}, nil), reader
+	// измерение пинят отдельные тесты гейта ниже. Резолвер участников не
+	// вайрится — его поверхность пинят тесты ParticipantFeed.
+	return NewHistoryReadService(reader, policyFake{roles: roles}, nil, nil), reader
+}
+
+// scopesFake is the ParticipantScopeResolver test double: a fixed scope (or
+// error) plus the call counter — резолв участника происходит ровно один раз
+// на запрос, до доказательства скоупа и стора.
+type scopesFake struct {
+	scope  ParticipantScope
+	err    error
+	calls  int
+	called string
+}
+
+func (f *scopesFake) ResolveParticipantScope(_ context.Context, _ uuid.UUID, participantID string) (ParticipantScope, error) {
+	f.calls++
+	f.called = participantID
+	return f.scope, f.err
+}
+
+var _ ParticipantScopeResolver = (*scopesFake)(nil)
+
+// newParticipantFeedFake собирает сервис с резолвером участников и пустым
+// стором; роли применяются к ногам скоупа. Гейт — интерфейсный параметр:
+// нетипизированный nil честно выключает проверку (конвенция пакета).
+func newParticipantFeedFake(
+	scope ParticipantScope, roles map[uuid.UUID]sharedpolicy.Role, gate PaidSectionsGate,
+) (*HistoryReadService, *readerFake, *scopesFake) {
+	scopes := &scopesFake{scope: scope}
+	reader := &readerFake{}
+	return NewHistoryReadService(reader, policyFake{roles: roles}, gate, scopes), reader, scopes
 }
 
 // gateStub is the PaidSectionsGate test double: a fixed verdict plus the call
@@ -84,7 +114,7 @@ var _ PaidSectionsGate = (*gateStub)(nil)
 // empty.
 func newGatedReadServiceFake(roles map[uuid.UUID]sharedpolicy.Role, gate *gateStub) (*HistoryReadService, *readerFake) {
 	reader := &readerFake{}
-	return NewHistoryReadService(reader, policyFake{roles: roles}, gate), reader
+	return NewHistoryReadService(reader, policyFake{roles: roles}, gate, nil), reader
 }
 
 // encodeString builds a well-formed base64url blob that is not a cursor
@@ -314,7 +344,7 @@ func TestFiltersProvesScopeAndReturnsOptions(t *testing.T) {
 		participants: []domain.FilterParticipant{{ID: uuid.Must(uuid.NewV7()), Name: "Иван Иванов"}},
 		objects:      []domain.FilterObject{{ID: uuid.Must(uuid.NewV7()), Name: "Гараж"}},
 	}
-	svc := NewHistoryReadService(reader, policyFake{roles: roles}, nil)
+	svc := NewHistoryReadService(reader, policyFake{roles: roles}, nil, nil)
 
 	if _, err := svc.Filters(t.Context(), uuid.Must(uuid.NewV7()), []uuid.UUID{foreign}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign scope: want the privacy ErrNotFound, got %v", err)
@@ -501,7 +531,7 @@ func TestFiltersTariffScope(t *testing.T) {
 		objects:      []domain.FilterObject{{ID: uuid.Must(uuid.NewV7()), Name: "Гараж"}},
 	}
 	gate := &gateStub{allows: false}
-	svc := NewHistoryReadService(reader, policyFake{roles: roles}, gate)
+	svc := NewHistoryReadService(reader, policyFake{roles: roles}, gate, nil)
 	actor := uuid.Must(uuid.NewV7())
 
 	// Глобальная область шита и сужение на собственный объект — 402.
@@ -525,6 +555,149 @@ func TestFiltersTariffScope(t *testing.T) {
 	}
 	if gate.calls != 3 {
 		t.Errorf("gate calls = %d, want 3 — the two refusals and the passing scope", gate.calls)
+	}
+}
+
+// «Действия участника» (карта #1582, решение владельца 22.10.2026 —
+// переработка объектного deep-link): лента одного участника по всем его
+// текущим ногам. Резолюция #1583: скоуп выводит сервер (uuid юзера AND ноги
+// агрегата), pending — пустая страница (ручных действий не бывает, ADR 0061
+// §3), не в скоупе читающего — privacy-404, пустые ноги — пустая страница
+// без стора, тариф — тот же роль-осознанный гейт (владелец-читатель на
+// basic — 402).
+
+func TestParticipantFeedScopeTravelsToStore(t *testing.T) {
+	t.Parallel()
+
+	actor := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+	leg1, leg2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	roles := map[uuid.UUID]sharedpolicy.Role{
+		leg1: sharedpolicy.RoleOwner,
+		leg2: sharedpolicy.RoleOwner,
+	}
+	svc, reader, scopes := newParticipantFeedFake(
+		ParticipantScope{UserID: userID, PropertyIDs: []uuid.UUID{leg1, leg2}},
+		roles, nil,
+	)
+
+	_, err := svc.ParticipantFeed(t.Context(), actor, "12111111-1111-4111-8111-111111111121", FeedQuery{
+		BeforeCursor: encodeFeedCursor(CursorKey{CreatedAt: time.Unix(50, 0), ID: uuid.Must(uuid.NewV7())}),
+		Limit:        10,
+		Query:        "гараж",
+	})
+	if err != nil {
+		t.Fatalf("participant feed: %v", err)
+	}
+	if scopes.calls != 1 || scopes.called != "12111111-1111-4111-8111-111111111121" {
+		t.Fatalf("resolver calls = %d (%q), want one call with the page's id", scopes.calls, scopes.called)
+	}
+	got := reader.gotQuery
+	if got == nil {
+		t.Fatalf("the store must receive the scoped query")
+	}
+	if len(got.ActorIDs) != 1 || got.ActorIDs[0] != userID {
+		t.Fatalf("actor ids: %+v, want the participant's user uuid", got.ActorIDs)
+	}
+	if len(got.PropertyIDs) != 2 || got.PropertyIDs[0] != leg1 || got.PropertyIDs[1] != leg2 {
+		t.Fatalf("property ids: %+v, want the aggregate's legs in order", got.PropertyIDs)
+	}
+	if got.Limit != 10 || got.Search != "гараж" {
+		t.Fatalf("page params did not travel: limit %d, search %q", got.Limit, got.Search)
+	}
+}
+
+func TestParticipantFeedPendingIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Pending-приглашение: uuid юзера не существует, actor_id журнала —
+	// всегда uuid (ADR 0061 §3) — пустая страница без стора и без
+	// доказательств скоупа (доказывать нечего).
+	leg := uuid.Must(uuid.NewV7())
+	svc, reader, scopes := newParticipantFeedFake(
+		ParticipantScope{UserID: uuid.UUID{}, PropertyIDs: []uuid.UUID{leg}},
+		nil, nil,
+	)
+
+	page, err := svc.ParticipantFeed(t.Context(), uuid.Must(uuid.NewV7()), "pending@example.com", FeedQuery{})
+	if err != nil {
+		t.Fatalf("pending feed: %v", err)
+	}
+	if len(page.Items) != 0 || page.NextCursor != "" || page.PrevCursor != "" {
+		t.Fatalf("pending feed must be empty: %+v", page)
+	}
+	if scopes.calls != 1 {
+		t.Fatalf("resolver calls = %d, want one", scopes.calls)
+	}
+	if reader.gotQuery != nil {
+		t.Fatalf("the store must not be touched for a pending invitee")
+	}
+}
+
+func TestParticipantFeedNoLegsIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Оборонительный гард: агрегат с uuid, но без ног (контракт требует
+	// хотя бы одну) не превращается в глобальную ленту.
+	userID := uuid.Must(uuid.NewV7())
+	svc, reader, _ := newParticipantFeedFake(
+		ParticipantScope{UserID: userID, PropertyIDs: nil},
+		nil, nil,
+	)
+
+	page, err := svc.ParticipantFeed(t.Context(), uuid.Must(uuid.NewV7()), userID.String(), FeedQuery{})
+	if err != nil {
+		t.Fatalf("no-legs feed: %v", err)
+	}
+	if len(page.Items) != 0 || page.NextCursor != "" || page.PrevCursor != "" {
+		t.Fatalf("no-legs feed must be empty: %+v", page)
+	}
+	if reader.gotQuery != nil {
+		t.Fatalf("empty legs must not reach the store as a global feed")
+	}
+}
+
+func TestParticipantFeedForeignParticipantIsPrivacy404(t *testing.T) {
+	t.Parallel()
+
+	// Резолвер отвечает сентиеллом доступа (мост в вайре переводит
+	// ErrParticipantNotFound доступа на сентиелл истории): наверх —
+	// privacy-404, стор не трогается.
+	scopes := &scopesFake{err: ErrNotFound}
+	reader := &readerFake{}
+	svc := NewHistoryReadService(reader, policyFake{}, nil, scopes)
+
+	if _, err := svc.ParticipantFeed(t.Context(), uuid.Must(uuid.NewV7()), "foreign@example.com", FeedQuery{}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("foreign participant: want the privacy ErrNotFound, got %v", err)
+	}
+	if reader.gotQuery != nil {
+		t.Fatalf("the store must not be touched when the resolution fails")
+	}
+}
+
+func TestParticipantFeedTariffGateApplies(t *testing.T) {
+	t.Parallel()
+
+	// Скоуп страницы — объекты читающего (он владелец ног): на basic тарифе
+	// гейт отвечает ErrTariffRequired, как у всякого сужения на свой объект
+	// (ADR 0064, ревизия #1465).
+	userID := uuid.Must(uuid.NewV7())
+	leg := uuid.Must(uuid.NewV7())
+	roles := map[uuid.UUID]sharedpolicy.Role{leg: sharedpolicy.RoleOwner}
+	gate := &gateStub{allows: false}
+	svc, reader, scopes := newParticipantFeedFake(
+		ParticipantScope{UserID: userID, PropertyIDs: []uuid.UUID{leg}},
+		roles, gate,
+	)
+
+	if _, err := svc.ParticipantFeed(t.Context(), uuid.Must(uuid.NewV7()), userID.String(), FeedQuery{}); !errors.Is(err, ErrTariffRequired) {
+		t.Fatalf("participant feed on basic: want ErrTariffRequired, got %v", err)
+	}
+	if reader.gotQuery != nil {
+		t.Fatalf("the store must not be touched when the tariff refuses")
+	}
+	if scopes.calls != 1 || gate.calls != 1 {
+		t.Fatalf("resolver %d / gate %d calls, want one each", scopes.calls, gate.calls)
 	}
 }
 

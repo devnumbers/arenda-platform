@@ -101,21 +101,46 @@ type FiltersOptions struct {
 	Objects      []domain.FilterObject
 }
 
+// ParticipantScope is the resolved read scope of the «Действия участника»
+// page (карта #1582, решение владельца 22.10.2026): the person's user id —
+// zero for a pending invitee, whose actions do not exist (ADR 0061 §3) —
+// and the property ids of the person's current access legs.
+type ParticipantScope struct {
+	UserID      uuid.UUID
+	PropertyIDs []uuid.UUID
+}
+
+// ParticipantScopeResolver resolves a participant of the reading actor into
+// the feed scope (карта #1582, тикет #1583): the identifier is the same
+// aggregate id as GET /participants/{participantId} — a registered user's
+// uuid or an invitee email (issue #693). A person outside the actor's scope
+// is the privacy answer — the resolver reports the access sentinel and the
+// adapter maps it onto ErrNotFound (ADR 0035 consumer-side port; the wire
+// bridge fits the access participants service to it).
+type ParticipantScopeResolver interface {
+	ResolveParticipantScope(ctx context.Context, actor uuid.UUID, participantID string) (ParticipantScope, error)
+}
+
 // HistoryReadService is the journal's reading service.
 type HistoryReadService struct {
 	reader EntryReader
 	policy sharedpolicy.Policy
 	gate   PaidSectionsGate
+	scopes ParticipantScopeResolver
 }
 
 // NewHistoryReadService creates the reading service. The policy proves the
 // requested property scope before the store is touched; the tariff gate
 // decides the paid scope on the already-resolved roles (ADR 0064, ревизия
-// #1465). A nil gate disables the check — the package convention for
-// optional dependencies (mirrors the access use cases); the composition root
-// always wires the billing adapter.
-func NewHistoryReadService(reader EntryReader, policy sharedpolicy.Policy, gate PaidSectionsGate) *HistoryReadService {
-	return &HistoryReadService{reader: reader, policy: policy, gate: gate}
+// #1465); the scope resolver feeds the participant page. A nil gate disables
+// the check — the package convention for optional dependencies (mirrors the
+// access use cases); the composition root always wires the billing adapter.
+// A nil scopes resolver keeps the general surfaces and leaves the
+// participant page unwired (the feed method refuses).
+func NewHistoryReadService(
+	reader EntryReader, policy sharedpolicy.Policy, gate PaidSectionsGate, scopes ParticipantScopeResolver,
+) *HistoryReadService {
+	return &HistoryReadService{reader: reader, policy: policy, gate: gate, scopes: scopes}
 }
 
 // Feed returns one page of the reader's journal feed.
@@ -168,6 +193,31 @@ func (s *HistoryReadService) Feed(ctx context.Context, actor uuid.UUID, q FeedQu
 		page.PrevCursor = encodeFeedCursor(CursorKey{CreatedAt: rows[0].CreatedAt, ID: rows[0].ID})
 	}
 	return page, nil
+}
+
+// ParticipantFeed returns one page of the «Действия участника» feed (карта
+// #1582, решение владельца 22.10.2026 — переработка объектного deep-link:
+// «страница истории действий участника (только одного), где будут все
+// объекты, к которым я добавил ему доступ»): the scope is derived on the
+// server — the person's user uuid ANDed with their current access legs —
+// and the same proofs as Feed apply to it. A pending invitee has no actions
+// (the journal's actor_id is a user uuid, ADR 0061 §3): an empty page
+// without touching the store; legs-less scopes stay empty the same way —
+// they must never degrade into the un-narrowed global feed.
+func (s *HistoryReadService) ParticipantFeed(ctx context.Context, actor uuid.UUID, participantID string, q FeedQuery) (FeedPage, error) {
+	if s.scopes == nil {
+		return FeedPage{}, fmt.Errorf("participant feed: %w", ErrInvalidInput)
+	}
+	scope, err := s.scopes.ResolveParticipantScope(ctx, actor, participantID)
+	if err != nil {
+		return FeedPage{}, err
+	}
+	if scope.UserID == (uuid.UUID{}) || len(scope.PropertyIDs) == 0 {
+		return FeedPage{}, nil
+	}
+	q.ActorIDs = []uuid.UUID{scope.UserID}
+	q.PropertyIDs = scope.PropertyIDs
+	return s.Feed(ctx, actor, q)
 }
 
 // foldLimit applies the page-size default and ceiling (канон #597/#633).

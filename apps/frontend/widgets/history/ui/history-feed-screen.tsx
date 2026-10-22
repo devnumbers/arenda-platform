@@ -143,11 +143,32 @@ const HEADER_LINK =
  * только у чистой ленты.
  *
  * «Действия участника» (#712) — глобальная лента по одному человеку —
- * снята решением владельца 12.10.2026 (#1361): маршрут
- * /history/participants/[participantId] удалён, входы (тап по актёру в
- * общей ленте и кебаб страницы участника) сняты; амендмент 13.10.2026 —
- * тап по актёру общей ленты вернулся, но ведёт в пару человек+объект.
- * Пин одного человека живёт только в паре с объектом (#841).
+ * снята решением владельца 12.10.2026 (#1361); амендмент 13.10.2026 —
+ * тап по актёру общей ленты ведёт в пару человек+объект. 22.10.2026
+ * страница вернулась в переработанной форме — по скоупу ног участника
+ * (карта #1582, секция выше); пин одного человека без объектного
+ * скоупа мёртв по-прежнему.
+ *
+ * «Действия участника» (карта #1582, решение владельца 22.10.2026 —
+ * переработка его же объектного deep-link c8ee2e82c: «страница истории
+ * действий участника (только одного), где будут все объекты, к которым
+ * я добавил ему доступ; чужих там объектов не будет») — лента одного
+ * человека по всем его ТЕКУЩИМ ногам доступа. Это не возврат снятой
+ * глобальной страницы #712/#1361 (там был пин человека без объектного
+ * скоупа): скоуп «человек × его ноги» выводит сервер — под-ресурс
+ * GET /participants/{participantId}/history (идентификатор агрегата #693:
+ * uuid юзера либо pending-почта; actor_ids AND property_ids в SQL, ADR
+ * 0061 §7; privacy-404 и роль-осознанный тарифный гейт — серверные).
+ * Маршрут /participants/[participantId]/history — под-ресурс страницы
+ * участника; путь /history/participants/[id] остался за перманентным
+ * 308 #1361. Отозванная нога уводит свои строки со страницы (ноги
+ * перечитываются на каждый запрос), pending — пустая лента «Действий
+ * не было» (actor_id журнала — uuid юзера, действий не бывает). Шита
+ * «Настройки» нет — скоуп фиксированный («И всё»); поиск q остаётся.
+ * Группировка — день → объект → карточка актёра, шапки объектов ведут
+ * в «Историю объекта», шапка актёра статична (человек — предмет
+ * страницы, как на паре #841). Вход — кебаб страницы участника;
+ * «Назад» живым переходом возвращает на неё (фолбэк — тоже).
  *
  * ## История объекта (#840; макет 3258-76984, карта #1324 тикет #1321)
  *
@@ -197,13 +218,15 @@ const HEADER_LINK =
  */
 export type HistoryFeedScreenProps = {
   /** «Действия участника в объекте» (#841): uuid юзера, прибивающий
-   * ленту вместе с propertyId (actor_ids = один). Undefined — общая
-   * лента или «История объекта»; самостоятельной страницы «Действия
-   * участника» больше нет (#1361). */
+   * ленту вместе с propertyId (actor_ids = один). На странице участника
+   * без объекта (карта #1582) — тот же проп несёт агрегат-id (#693:
+   * uuid юзера либо pending-почта): скоуп «человек × его текущие ноги»
+   * сервер выводит сам (GET /participants/{id}/history). Undefined —
+   * общая лента или «История объекта». */
   readonly participantId?: string;
   /** История объекта (#840): uuid объекта, прибивающий ленту
    * (property_ids = один); вместе с participantId — двойной пин #841.
-   * Undefined — общая лента. */
+   * Undefined — общая лента или страница участника. */
   readonly propertyId?: string;
 };
 
@@ -212,7 +235,8 @@ export function HistoryFeedScreen({
   propertyId,
 }: HistoryFeedScreenProps = {}): JSX.Element {
   // Личность экрана: страница объекта прибивает объект, страница пары
-  // (#841) — объект и человека; заголовок, фолбэк «Назад» и прибитые
+  // (#841) — объект и человека, страница участника (карта #1582) —
+  // человека со скоупом его ног; заголовок, фолбэк «Назад» и прибитые
   // группы шита следуют за предметом; прибитые группы в URL не живут.
   // Личность экрана одним вычислением (widgets/history/lib/screen-chrome):
   // заголовок — в TopNavTitle и в шите, фолбэк «Назад» — у кнопки; те же
@@ -220,6 +244,9 @@ export function HistoryFeedScreen({
   const isMemberPage = participantId !== undefined;
   const isPropertyPage = propertyId !== undefined;
   const isMemberPropertyPage = isMemberPage && isPropertyPage;
+  // Страница участника (карта #1582): шита нет — скоуп фиксированный,
+  // серверный («И всё», решение владельца 22.10.2026); поиск остаётся.
+  const isParticipantPage = isMemberPage && !isPropertyPage;
   const pageTitle = historyScreenTitle(participantId, propertyId);
   const backHref = historyScreenBackHref(participantId, propertyId);
   const [searchMode, setSearchMode] = useState(false);
@@ -262,9 +289,11 @@ export function HistoryFeedScreen({
   // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710) + пины
   // страницы (historyFeedScope: прибитые объект/пара #840/#841
   // подставляются в скоуп, неприбитые группы адреса действуют поверх).
-  // Группа фильтров, выбранная «в ноль», означает пустой
-  // результат — скоупа нет (null), запрос не делается.
-  const scope = historyFeedScope(filters, pins);
+  // Страница участника (карта #1582) скоупится сервером — агрегат-id в
+  // скоупе, группы адреса ей не указ. Группа фильтров, выбранная «в
+  // ноль», означает пустой результат — скоупа нет (null), запрос не
+  // делается.
+  const scope = isParticipantPage ? { participantId } : historyFeedScope(filters, pins);
   // Скоуп запроса ленты одним значением: тот же объект уходит и в решатель
   // прокрутки (метка live-влития реестра ключуется по скоупу, hooks.ts).
   // Объект скоупа новый на каждом рендере (фильтры перечитываются из адреса
@@ -635,16 +664,19 @@ export function HistoryFeedScreen({
         * клики нижнего хрома по краям (пилюли ПК #876), кликабельна только
         * сама кнопка. Ниже ПК кнопка плавает над видимым TabBar (паттерн
         * «CTA над TabBar», решение владельца 06.10.2026 #1166): футер 72 +
-        * паддинг + зазор 12; на ПК TabBar нет — у нижнего края. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom)_+_12px)] z-40 flex justify-center">
-        <div className="pointer-events-auto mx-auto flex w-full max-w-column justify-center">
-          <Button type="button" onClick={() => setFiltersOpen(true)}>
-            Настройки
-          </Button>
+        * паддинг + зазор 12; на ПК TabBar нет — у нижнего края. Странице
+        * участника (карта #1582) шита нет — скоуп фиксированный. */}
+      {!isParticipantPage && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom)_+_12px)] z-40 flex justify-center">
+          <div className="pointer-events-auto mx-auto flex w-full max-w-column justify-center">
+            <Button type="button" onClick={() => setFiltersOpen(true)}>
+              Настройки
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {filtersOpen && (
+      {!isParticipantPage && filtersOpen && (
         <HistoryFiltersSheet
           applied={filters}
           optionsQuery={filtersQuery}
