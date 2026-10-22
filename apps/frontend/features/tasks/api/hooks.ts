@@ -368,6 +368,54 @@ export function useDeleteCompletedGlobalTasks(): UseMutationResult<
 }
 
 /**
+ * Удаление правила задачи (глоссарий «Удалённое правило», резолюция #496):
+ * жёсткое — невыполненные вхождения сносятся, журнал выполненных остаётся
+ * (бэк обнуляет rule_id строк журнала). Контракт DELETE готов с самого
+ * правилного среза (#497 «the contract is ready») — это первый его вью.
+ * Ответа экрану не нужно — инвалидация taskKeys.all перечитывает и список
+ * объекта, и ленту.
+ */
+export function useDeleteTaskRule(
+  propertyId: string,
+  ruleId: string,
+): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      await apiClient<void>(
+        `/properties/${encodeURIComponent(propertyId)}/tasks/rules/${encodeURIComponent(ruleId)}`,
+        { method: 'DELETE' },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
+ * Удаление правила без объекта (#537): тот же жёсткий DELETE, что у
+ * объектного пути, — глобальный /tasks/rules/{ruleId} (#520), owner-only.
+ * Чужое или объектное правило — контрактный privacy 404 (срезы не
+ * смешиваются, ADR 0052).
+ */
+export function useDeletePropertylessTaskRule(
+  ruleId: string,
+): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useGuardedMutation({
+    mutationFn: async () => {
+      await apiClient<void>(`/tasks/rules/${encodeURIComponent(ruleId)}`, {
+        method: 'DELETE',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+/**
  * Сохранение правки правила (#502): частичный PATCH — команду-дифф собирает
  * lib/task-edit (только изменённые поля; comment/dueDate/dueTime —
  * три-стейт, null очищает). Сервер перематериализует будущие вхождения

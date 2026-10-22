@@ -438,7 +438,7 @@ function FavoritesSectionBody({
 }): JSX.Element {
   if (favorites.length === 0) {
     return (
-      <PaymentsGlobalPlaceholder image="/images/payments/favorites-empty.png">
+      <PaymentsGlobalPlaceholder image="/images/payments/favorites-empty.webp">
         Здесь будут платежи, которые вы добавите в избранное
       </PaymentsGlobalPlaceholder>
     );
@@ -499,7 +499,7 @@ function OverdueSectionBody({
 }): JSX.Element {
   if (overdue.length === 0) {
     return (
-      <PaymentsGlobalPlaceholder image="/images/payments/overdue-empty.png">
+      <PaymentsGlobalPlaceholder image="/images/payments/overdue-empty.webp">
         Здесь будут просроченные платежи
       </PaymentsGlobalPlaceholder>
     );
@@ -576,7 +576,7 @@ function DueSectionBody({
 }): JSX.Element {
   if (due.length === 0) {
     return (
-      <PaymentsGlobalPlaceholder image="/images/payments/due-empty.png">
+      <PaymentsGlobalPlaceholder image="/images/payments/due-empty.webp">
         Здесь будут платежи на оплату
       </PaymentsGlobalPlaceholder>
     );
@@ -698,12 +698,18 @@ function PaymentsGlobalPlaceholder({
         {children}
       </p>
       {/* Fade-in 350мс (dl-fade-in): иллюстрация проявляется вместе с
-       * секцией при первом показе — разом всплывающие 3D-картинки (#1349). */}
+       * секцией при первом показе — разом всплывающие 3D-картинки (#1349).
+       * sizes = 2x слота — суперсэмплинг (решение владельца 22.10.2026
+       * «всегда в хорошем качестве», вместо точного слота #1002); priority —
+       * как в EmptyState: иллюстрация always above the fold. */}
       <Image
         src={image}
         alt=""
         width={64}
         height={64}
+        sizes="128px"
+        quality={90}
+        priority
         className="h-16 w-16 shrink-0 animate-[dl-fade-in_350ms_var(--dl-ease)_both]"
       />
     </div>
@@ -723,7 +729,7 @@ function PaymentsGlobalEmpty({
   return (
     <div data-testid="payments-global-empty">
       <EmptyState
-        imageSrc="/images/payments/payments-empty.png"
+        imageSrc="/images/payments/payments-empty.webp"
         title="Вы пока не добавляли платежи"
         description="Создайте объект, чтобы добавлять платежи"
         action={

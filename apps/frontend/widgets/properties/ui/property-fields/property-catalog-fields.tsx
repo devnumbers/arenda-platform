@@ -18,10 +18,12 @@ import { Button, TextField } from '@/shared/ui/design';
 
 /**
  * Поля каталога характеристик по типу объекта — общая часть визарда
- * создания (шаг 3, Figma 1218:54295) и формы правки (карта #583, тикет
- * #590, Figma 1550:95852). Чипы enum (radius 16), поля с единицами-
- * префиксами слева; пары полей — в две колонки («Этаж» + «Этажность
- * дома», у квартиры также «Жилая площадь» + «Площадь кухни»).
+ * создания (шаг 3, Figma 1218:54304) и формы правки (карта #583, тикет
+ * #590, Figma 1550:95852). Чипы enum (radius 16), единицы измерения
+ * number-полей — инлайновым серым суффиксом, следующим за значением
+ * (решение владельца 2026-10-22, снят прежний префикс слева); пары полей —
+ * в две колонки («Этаж» + «Этажность дома», у квартиры также «Жилая
+ * площадь» + «Площадь кухни»).
  *
  * Значения — «сырые»: строки хранятся как набрано (фильтр
  * sanitizeAttributeInput), числа из объекта остаются числами;
@@ -160,7 +162,7 @@ export function PropertyCatalogFields({
       error={showError(field.key)}
       inputMode={field.kind === 'number' ? 'decimal' : field.kind === 'integer' ? 'numeric' : undefined}
       maxLength={field.kind === 'string' ? field.maxLen : undefined}
-      prefix={field.kind === 'number' ? field.unit : undefined}
+      inlineSuffix={field.kind === 'number' ? field.unit : undefined}
     />
   );
 

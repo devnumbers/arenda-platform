@@ -6,12 +6,12 @@ import type { PropertyAttributes, PropertyType } from '@/entities/property';
 import { propertyAutonamePhrase } from '@/features/properties';
 import { TextField } from '@/shared/ui/design';
 import { PropertyCatalogFields } from '../property-fields/property-catalog-fields';
-import { PropertyHousingTypeChips } from '../property-fields/property-housing-type-chips';
 
 /**
  * Шаг 3 «Характеристики» (#482, Figma 1218-54295): название объекта,
- * чип-группа «Тип жилья» для категории «Квартира» (закрывает тип
- * apartments) и поля из каталога по текущему типу, описание в конце.
+ * поля из каталога по текущему типу, описание в конце. Поля «Тип жилья»
+ * больше нет (аменда владельца 22.10): квартира, студия и апартаменты —
+ * главные категории шага 1, тип приходит в шаг уже выбранным.
  * Все характеристики необязательные (docs/entities/obekt.md),
  * готовность шага определяет название. Поля каталога — общая часть с
  * формой правки (property-fields, тикет #590).
@@ -26,7 +26,6 @@ const DESCRIPTION_MAX_LENGTH = 1024;
 
 export type CharacteristicsStepProps = {
   readonly type: PropertyType;
-  readonly onHousingTypeChange: (type: PropertyType) => void;
   readonly name: string;
   readonly onNameChange: (name: string) => void;
   readonly description: string;
@@ -37,7 +36,6 @@ export type CharacteristicsStepProps = {
 
 export function CharacteristicsStep({
   type,
-  onHousingTypeChange,
   name,
   onNameChange,
   description,
@@ -54,7 +52,7 @@ export function CharacteristicsStep({
 
   // Ошибки характеристик показываются после правки поля (blur), набор
   // полей сменился — ошибки прошлого типа неактуальны. Подгонка состояния
-  // при рендере — официальный паттерн React (как в AmountField).
+  // при рендере — официальный паттерн React.
   const [shownErrorsType, setShownErrorsType] = useState<{ type: PropertyType; shown: boolean }>({
     type,
     shown: false,
@@ -73,7 +71,6 @@ export function CharacteristicsStep({
         value={name}
         onChange={(event) => onNameChange(event.currentTarget.value)}
       />
-      <PropertyHousingTypeChips type={type} onChange={onHousingTypeChange} />
       <PropertyCatalogFields
         type={type}
         attributes={attributes}

@@ -112,7 +112,7 @@ export function ParticipantsInviteScreen(): JSX.Element {
     // Гард тикета: приглашать некуда — объектов читающего нет.
     content = (
       <EmptyState
-        imageSrc="/images/tariff/tariff-about-sharing.png"
+        imageSrc="/images/tariff/tariff-about-sharing.webp"
         title="Объектов пока нет"
         description="Чтобы пригласить участника, добавьте хотя бы один объект"
       />
@@ -121,10 +121,11 @@ export function ParticipantsInviteScreen(): JSX.Element {
     content = (
       <div className="flex flex-col pt-4">
         <Image
-          src="/images/tariff/tariff-about-sharing.png"
+          src="/images/tariff/tariff-about-sharing.webp"
           alt=""
           width={96}
           height={96}
+          quality={90}
           className="h-24 w-24 self-center"
         />
         <h1 className="mt-8 text-[28px] font-semibold leading-8 text-content">

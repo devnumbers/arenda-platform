@@ -7,7 +7,11 @@ import { sortPaymentsByNextOccurrence } from '@/features/payments';
  * категорий с красной точкой накопленной просрочки (семантика точки —
  * payments/CONTEXT.md; идентификаторы платёж с просрочкой считает
  * вызывающий код из usePropertyOverdueOperations, как на «Платежах
- * объекта»). Лимиты: обе группы — по 4, одна группа — 7. Порядок группы:
+ * объекта»). Потолки данных: обе группы — по 4, одна группа — 7;
+ * сколько реально видно — решает ширина колонки (shared/lib/icon-row-fit,
+ * решение владельца 22.10: невлезающие в один ряд не показываются,
+ * поэтому на телефоне из четырёх видно три, на широких окнах — все
+ * четыре). Порядок группы:
  * сначала платежи с накопленной просрочкой, затем по ближайшему вхождению.
  * Паузные правила — обычные круги без отличий (решение владельца 12.10,
  * #1353 — отмена правила #463: платёж на паузе не исчезает с экранов):
@@ -16,6 +20,9 @@ import { sortPaymentsByNextOccurrence } from '@/features/payments';
  */
 export type PropertyPaymentGroup = {
   readonly label: 'Автоплатежи' | 'Платежи';
+  /** Потолок данных группы (4 при обеих, 7 при одной) — для обрезки
+   * по ширине колонки в компоненте. */
+  readonly limit: number;
   readonly items: ReadonlyArray<{
     readonly payment: Payment;
     readonly overdue: boolean;
@@ -53,8 +60,8 @@ export function propertyPaymentGroups(
     overdue: overduePaymentIds.has(payment.id),
   });
   const groups: PropertyPaymentGroup[] = [
-    { label: 'Автоплатежи', items: auto.slice(0, limit).map(toItem) },
-    { label: 'Платежи', items: regular.slice(0, limit).map(toItem) },
+    { label: 'Автоплатежи', limit, items: auto.slice(0, limit).map(toItem) },
+    { label: 'Платежи', limit, items: regular.slice(0, limit).map(toItem) },
   ];
   return groups.filter((group) => group.items.length > 0);
 }

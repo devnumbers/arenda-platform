@@ -1,23 +1,23 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
 import { notificationKeys } from '@/shared/api/query-keys';
 import { reportClientError } from '@/shared/lib/error-reporting/report-client-error';
 import { notify } from '@/shared/lib/notifications';
-import { allCategoriesEnabled } from '@/entities/notification';
 import {
   healPushSubscription,
   type PushRowProbe,
 } from '../lib/heal';
 import { getBrowserSubscription } from '../lib/browser-subscription';
-import { isPushSupported, readNotificationPermission } from '../lib/platform';
+import { runAutoPromptStep } from '../lib/auto-prompt';
 import {
-  hasPushPromptBeenShown,
-  markPushPromptShown,
-} from '../lib/push-prompt-flag';
+  allowsGesturelessPermissionPrompt,
+  isPushSupported,
+  readNotificationPermission,
+} from '../lib/platform';
 import { requestPushPermissionAndSubscribe } from '../lib/request-push';
 import { usePushSubscriptionTools } from '../lib/push-tools';
 import { pushSubscriptionKeys } from './hooks';
@@ -42,7 +42,8 @@ async function probePushRow(endpoint: string): Promise<PushRowProbe> {
 
 /**
  * Стартовый гейт пушей (маунтится в ScreenLayout — авторизованная зона,
- * слайс 2 #1038, спека #1028 §3–§4). Два шага, строго по порядку:
+ * слайс 2 #1038, спека #1028 §3–§4 в редакции аменды #1548). Два шага,
+ * строго по порядку:
  *
  * 1. **Heal** — браузерная подписка есть, а строки в БД нет ⇒ молчаливая
  *    `unsubscribe()` (вариант А): UI честно показывает «выключено», хвост
@@ -50,12 +51,19 @@ async function probePushRow(endpoint: string): Promise<PushRowProbe> {
  *    ошибка пробы подписку не трогает. Проба подписки (react-query) и кэш
  *    настроек этого endpoint обновляются здесь же — экран настроек не
  *    успевает соврать.
- * 2. **Авто-промпт новому юзеру** — разрешение ещё `default` и флага
- *    `push-prompt-shown` нет в localStorage: `requestPermission()` без
- *    жеста; флаг ставится до окна и независимо от исхода — повторов нет.
+ * 2. **Авто-промпт варианта (c)** (карта #1545, разрешение #1548 — решения
+ *    владельца 22.10.2026, отмена «авто-промпт один раз»): разрешение ещё
+ *    `default` ⇒ `requestPermission()` без жеста — **при каждом заходе**;
+ *    памяти о показе нет (localStorage-флаг `push-prompt-shown` снесён,
+ *    старые ключи игнорируются), единственный гейт повтора — `default`.
  *    grant → тихая подписка + POST со всеми категориями ВКЛ + тост; иначе —
- *    ничего. iOS без установленной PWA и Firefox окно не покажут (ограничение
- *    принято в спеке) — флаг всё равно ставится.
+ *    молчание: denied, резолв `default` без окна (подавление Chrome) и тихий
+ *    reject Firefox (безжестовый промис реджектится — глотает шаг
+ *    `runAutoPromptStep`) не ошибка и не репортинг. WebKit (Safari macOS,
+ *    iOS PWA) безжестового вызова не получает вовсе — риск персистентного
+ *    `denied` ⚠; iOS без установленной PWA молчит (`ios-needs-install`).
+ *    Включение во всех этих браузерах — только жестовым путём, тумблером
+ *    настроек.
  *
  * Логаут подписку НЕ отпишивает (per-device, осознанно): смена аккаунта в
  * том же браузере лечится этим же heal'ом. `ensureActiveSubscription` с
@@ -65,6 +73,16 @@ async function probePushRow(endpoint: string): Promise<PushRowProbe> {
 export function usePushStartup(): void {
   const queryClient = useQueryClient();
   const { vapidKey, postSubscription } = usePushSubscriptionTools();
+  // postSubscription нестабилен идентичностью: useGuardedMutation создаёт
+  // mutateAsync заново каждый рендер, и любой резолв запроса экрана
+  // перезапускал бы эффект, абортя летящий флоу ровно на тосте (POST при
+  // этом доезжал — найдено живой приёмкой #1549). Свежая функция всегда в
+  // ref (запись в эффекте до основного — правило React Compiler «refs during
+  // render»), эффект зависит только от примитива vapidKey.
+  const postSubscriptionRef = useRef(postSubscription);
+  useEffect(() => {
+    postSubscriptionRef.current = postSubscription;
+  }, [postSubscription]);
 
   useEffect(() => {
     if (!isPushSupported()) return;
@@ -102,31 +120,31 @@ export function usePushStartup(): void {
         return;
       }
 
-      // 2. Авто-промпт: только пока разрешение default и окно ещё не
-      // показывали этому браузеру. VAPID-ключ ждём до окна: grant без
-      // возможности подписаться потратил бы разрешение впустую.
-      if (cancelled() || vapidKey === undefined) return;
-      if (readNotificationPermission() !== 'default') return;
-      if (hasPushPromptBeenShown()) return;
-      markPushPromptShown();
-
-      const outcome = await requestPushPermissionAndSubscribe(
-        vapidKey,
-        postSubscription,
-        allCategoriesEnabled(),
-      );
+      // 2. Авто-промпт варианта (c): единственный гейт повтора — разрешение
+      // default при каждом заходе; WebKit безжестового вызова не получает,
+      // тихий reject Firefox глотает шаг. VAPID-ключ ждём до окна (шаг):
+      // grant без возможности подписаться потратил бы разрешение впустую.
       if (cancelled()) return;
-      if (outcome.outcome === 'subscribed') {
+      const step = await runAutoPromptStep({
+        vapidKey,
+        postSubscription: (payload, categories) =>
+          postSubscriptionRef.current(payload, categories),
+        probePermission: readNotificationPermission,
+        allowsGesturelessPrompt: allowsGesturelessPermissionPrompt,
+        request: requestPushPermissionAndSubscribe,
+      });
+      if (cancelled()) return;
+      if (step.kind === 'subscribed') {
         // POST-мутация уже посадила endpoint в пробу подписки — экран
         // настроек и тост-гейт обновились; остаётся тост.
         notify.scenarios.profile.pushEnabled();
-      } else if (outcome.outcome === 'error' && outcome.reason !== 'no-vapid-key') {
-        reportClientError(`push auto-prompt subscribe failed: ${outcome.reason}`);
+      } else if (step.kind === 'error') {
+        reportClientError(`push auto-prompt subscribe failed: ${step.reason}`);
       }
     })();
 
     return () => {
       flow.abort();
     };
-  }, [vapidKey, postSubscription, queryClient]);
+  }, [vapidKey, queryClient]);
 }

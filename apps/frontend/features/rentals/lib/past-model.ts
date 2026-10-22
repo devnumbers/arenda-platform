@@ -1,4 +1,5 @@
-import { fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
+import { fullMonthsBetween, inclusiveDays, type IsoDate } from '@/shared/lib/calendar';
+import { daysWord } from '@/shared/lib/days-word';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { monthsWord } from '@/shared/lib/months-word';
 import type { Rental } from '@/entities/rental';
@@ -19,24 +20,34 @@ export function completedRentalsOf(items: ReadonlyArray<Rental>): ReadonlyArray<
 }
 
 /** Чем аренда кончилась: доменный факт завершения, для незавершённой —
- * плановое окончание (оба nullable по типу). */
+ * плановое окончание (оба nullable по типу); совсем без конца — начало
+ * (ноль прожитого). */
 function rentalEndDate(rental: Rental): IsoDate | null {
   return rental.completedDate ?? rental.plannedEndDate;
+}
+
+/** Конец для сроковых строк: тот же конец, а без него — начало
+ * (inclusiveDays даст 1 — минимальный срок). */
+function completedRentalEnd(rental: Rental): IsoDate {
+  return rentalEndDate(rental) ?? rental.startDate;
 }
 
 /** Прожитые полные месяцы: от начала до фактической даты завершения;
  * та не задана (не бывает у завершённой, но тип nullable) — плановое
  * окончание, затем начало (ноль). */
 export function completedRentalMonths(rental: Rental): number {
-  return fullMonthsBetween(rental.startDate, rentalEndDate(rental) ?? rental.startDate);
+  return fullMonthsBetween(rental.startDate, completedRentalEnd(rental));
 }
 
 /** Заголовок карточки списка: срок в месяцах — «24 месяца»; неполный
- * месяц — «Меньше месяца» (как срок итогов #534). */
+ * месяц — точные дни включительно («16 дней», «1 день»; решение владельца
+ * 22.10 — вместо «Меньше месяца», как срок итогов #534). Конец не раньше
+ * начала гарантирован контрактами завершения (ADR 0053 §3). */
 export function pastRentalCardTitle(rental: Rental): string {
   const months = completedRentalMonths(rental);
   if (months <= 0) {
-    return 'Меньше месяца';
+    const days = inclusiveDays(rental.startDate, completedRentalEnd(rental));
+    return `${days} ${daysWord(days)}`;
   }
   return `${months} ${monthsWord(months)}`;
 }

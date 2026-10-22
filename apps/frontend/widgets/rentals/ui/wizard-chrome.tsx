@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ComponentPropsWithRef, JSX, ReactNode } from 'react';
-import { ArrowLeft, Cancel, SmallArrowDown } from '@/shared/assets/icons';
+import { ArrowLeft, SmallArrowDown } from '@/shared/assets/icons';
 import type { RentalPaymentDay, RentalUtilities } from '@/entities/rental';
 import type { PaymentReminderOffset } from '@/entities/payment';
 import {
@@ -24,6 +24,7 @@ import {
   StickyBottomBar,
   Switch,
   syncAmountInputDom,
+  TextField,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
@@ -147,11 +148,15 @@ export function PickerTriggerBox({
   );
 }
 
-/** Компактное денежное поле (решения владельца 2026-09-05): бокс 56px
- * без символа рубля — при вводе живая группировка разрядов «56 000»,
- * плейсхолдера нет (пустое поле пустое); очистка — круглая Cancel-иконка
- * справа. Паттерн поля правки платежа #467 (AmountBoxInput): «сырое»
- * значение + groupedAmount + syncAmountInputDom. */
+/** Компактное денежное поле аренды (решение владельца 2026-10-22, макет
+ * 1270:46905 — «₽» вернулся серым инлайновым суффиксом, следующим за
+ * суммой; решение 2026-09-05 «без символа рубля» снято): бокс 56px, при
+ * вводе живая группировка разрядов «56 000», плейсхолдера нет — пустое
+ * поле пустое, у пустого поля «₽» серым стоит у левого края; очистка —
+ * круглая Cancel-иконка справа. Рендер — канонный TextField с
+ * inlineSuffix (собственный бокс-дубликат снесён). Паттерн поля правки
+ * платежа #467 (AmountBoxInput): «сырое» значение + groupedAmount +
+ * syncAmountInputDom. */
 export function MoneyField({
   title,
   required = false,
@@ -168,36 +173,23 @@ export function MoneyField({
   readonly onClear: () => void;
   readonly ariaLabel: string;
 }): JSX.Element {
-  const hasValue = raw.length > 0;
-
   return (
-    <div className="flex w-full flex-col gap-2 font-sans">
-      <FieldTitle title={title} required={required} />
-      <div className="flex h-14 w-full items-center rounded-button bg-surface-muted pl-[18px] pr-2 transition-shadow hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]">
-        <input
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          spellCheck={false}
-          aria-label={ariaLabel}
-          value={groupedAmount(raw)}
-          onChange={(event) => {
-            const sanitized = sanitizeAmountInput(event.target.value);
-            onRawChange(sanitized);
-            syncAmountInputDom(event.target, sanitized);
-          }}
-          className="h-full min-w-0 flex-1 border-none bg-transparent text-base leading-[18px] text-content outline-none"
-        />
-        {hasValue && (
-          <IconButton
-            icon={<Cancel />}
-            label={`Очистить «${title}»`}
-            variant="secondary"
-            onClick={onClear}
-          />
-        )}
-      </div>
-    </div>
+    <TextField
+      title={title}
+      required={required}
+      value={groupedAmount(raw)}
+      onChange={(event) => {
+        const sanitized = sanitizeAmountInput(event.currentTarget.value);
+        onRawChange(sanitized);
+        syncAmountInputDom(event.currentTarget, sanitized);
+      }}
+      onClear={onClear}
+      inlineSuffix="₽"
+      inputMode="decimal"
+      autoComplete="off"
+      spellCheck={false}
+      aria-label={ariaLabel}
+    />
   );
 }
 

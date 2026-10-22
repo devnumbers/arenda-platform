@@ -1,8 +1,11 @@
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { TextField } from '@/shared/ui/design';
 import { AmountStep } from './amount-step';
 import {
+  shouldFocusAmountOnMount,
   WizardAmountField,
+  WizardAmountFieldView,
   WizardDirectionSegment,
   WizardHeading,
 } from './wizard-chrome';
@@ -21,6 +24,13 @@ type InspectableProps = {
   type?: unknown;
   ariaLabel?: string;
   focusOnMount?: boolean;
+  variant?: unknown;
+  title?: unknown;
+  inputMode?: unknown;
+  pattern?: unknown;
+  enterKeyHint?: unknown;
+  value?: unknown;
+  ref?: unknown;
 };
 
 function flatten(
@@ -124,15 +134,30 @@ describe('WizardDirectionSegment — общий сегмент «Расход/Д
     expect(String(income?.props.className)).toContain('shadow-');
   });
 
-  it('контейнер 232px на дисплейном ярусе, вся колонка только от 1024 (граница desktop:, не md:)', () => {
+  it('сегмент во всю ширину на всех ярусах — макет 2913:69741 отменил 232px (решение владельца 22.10)', () => {
     const segment = WizardDirectionSegment({
       type: 'expense',
       onTypeChange: NOOP,
       ariaLabel: 'Направление операции',
     });
-    expect(String(segment.props.className)).toContain('max-w-[232px]');
-    expect(String(segment.props.className)).toContain('desktop:max-w-none');
-    expect(String(segment.props.className)).not.toContain('md:max-w-none');
+    const className = String(segment.props.className);
+    expect(className).toContain('w-full');
+    expect(className).not.toContain('max-w-[232px]');
+    expect(className).not.toContain('desktop:max-w-none');
+  });
+
+  it('тень пилюли обрезается треком (overflow-clip) и между пилюлями зазор 2px — как в макете 2913:69741', () => {
+    const segment = WizardDirectionSegment({
+      type: 'expense',
+      onTypeChange: NOOP,
+      ariaLabel: 'Направление операции',
+    });
+    const className = String(segment.props.className);
+    expect(className).toContain('overflow-clip');
+    expect(className).toContain('gap-[2px]');
+    expect(className).toContain('p-[2px]');
+    expect(className).toContain('rounded-2xl');
+    expect(className).toContain('bg-surface-muted');
   });
 
   it('клик по радио вызывает onTypeChange с этой опцией', () => {
@@ -221,5 +246,89 @@ describe('автоподъём клавиатуры — флаг focusOnMount ч
     });
     const field = tree(step).find((el) => el.type === WizardAmountField);
     expect(field?.props.focusOnMount).toBeUndefined();
+  });
+});
+
+describe('WizardAmountFieldView — единый ярус (решение владельца 22.10, макет 2913:69551)', () => {
+  it('один бокс Title In на всех ширинах — без дисплейного яруса AmountField', () => {
+    const field = WizardAmountFieldView({
+      label: 'Сумма',
+      buffer: '',
+      onInputChange: NOOP,
+      onFocus: NOOP,
+      onBlur: NOOP,
+    });
+    const box = tree(field).find((el) => el.type === TextField);
+    expect(box).toBeDefined();
+    expect(box?.props.variant).toBe('titleIn');
+    expect(box?.props.title).toBe('Сумма');
+  });
+
+  it('контракт мобильной клавиатуры бывшего дисплея — inputMode/pattern/enterKeyHint на боксе', () => {
+    const field = WizardAmountFieldView({
+      label: 'Сумма',
+      buffer: '2500,5',
+      onInputChange: NOOP,
+      onFocus: NOOP,
+      onBlur: NOOP,
+    });
+    const box = tree(field).find((el) => el.type === TextField);
+    expect(box?.props.inputMode).toBe('decimal');
+    expect(box?.props.pattern).toBe('[0-9]*');
+    expect(box?.props.enterKeyHint).toBe('done');
+    // Группировка разрядов рисуется в значении бокса.
+    expect(box?.props.value).toBe('2\u00A0500,5');
+  });
+
+  it('маунт-фокус — callback-ref на инпуте бокса (решение на маунте, не проп autoFocus)', () => {
+    const mountFocusRef = (): void => undefined;
+    const field = WizardAmountFieldView({
+      label: 'Сумма',
+      buffer: '',
+      mountFocusRef,
+      onInputChange: NOOP,
+      onFocus: NOOP,
+      onBlur: NOOP,
+    });
+    const box = tree(field).find((el) => el.type === TextField);
+    expect(box?.props.ref).toBe(mountFocusRef);
+  });
+
+  it('shouldFocusAmountOnMount: жест (#1151) или ПК ≥1024 — фокус; мобилка вне жеста — нет', () => {
+    expect(shouldFocusAmountOnMount(true, false)).toBe(true);
+    expect(shouldFocusAmountOnMount(false, true)).toBe(true);
+    expect(shouldFocusAmountOnMount(true, true)).toBe(true);
+    expect(shouldFocusAmountOnMount(false, false)).toBe(false);
+  });
+});
+
+describe('отступы шагов суммы — едины на всех ширинах (макет 2913:69553)', () => {
+  it('AmountStep: pt-24/px-24/gap-24 без ярусных вилок', () => {
+    const step = AmountStep({
+      amountKopecks: undefined,
+      onAmountChange: NOOP,
+      type: undefined,
+      onTypeChange: NOOP,
+    });
+    const className = String(step.props.className);
+    expect(className).toContain('gap-6');
+    expect(className).toContain('px-6');
+    expect(className).toContain('pt-6');
+    expect(className).not.toContain('pt-16');
+    expect(className).not.toContain('gap-8');
+    expect(className).not.toContain('desktop:');
+  });
+
+  it('OperationAmountStep: те же единые отступы', () => {
+    const step = OperationAmountStep({
+      amountKopecks: undefined,
+      onAmountChange: NOOP,
+      type: 'expense',
+      onTypeChange: NOOP,
+    });
+    const className = String(step.props.className);
+    expect(className).toContain('gap-6');
+    expect(className).toContain('pt-6');
+    expect(className).not.toContain('desktop:');
   });
 });

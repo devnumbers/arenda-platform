@@ -481,17 +481,16 @@ const eslintConfig = defineConfig([
   // Web storage is owned by the auth module and the shared draft store only:
   // session tokens live in httpOnly cookies and must not spread into
   // localStorage/sessionStorage (decision #331; the whitelist paths hold the
-  // login draft, the resend cooldown, useDraftStore, the per-browser
-  // push-prompt flag (спека #1028 §3, слайс 2 #1038 — флаг обязан жить
-  // per-браузер, не на бекенде) and the Playwright e2e fixtures seeding a
-  // test wizard draft through addInitScript — #463 test infrastructure, not
-  // app code).
+  // login draft, the resend cooldown, useDraftStore and the Playwright e2e
+  // fixtures seeding a test wizard draft through addInitScript — #463 test
+  // infrastructure, not app code. Бывший третий владелец — per-browser флаг
+  // авто-промпта — снесён вариантом (c) #1549: памяти о показе нет, аменда
+  // §3 спеки #1028).
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
     ignores: [
       "features/auth/lib/**",
       "shared/lib/hooks/useDraftStore.ts",
-      "features/push-notifications/lib/push-prompt-flag.ts",
       "e2e/**",
     ],
     rules: {

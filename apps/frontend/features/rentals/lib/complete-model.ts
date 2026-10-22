@@ -1,4 +1,5 @@
-import { cmp, fullMonthsBetween, type IsoDate } from '@/shared/lib/calendar';
+import { cmp, fullMonthsBetween, inclusiveDays, type IsoDate } from '@/shared/lib/calendar';
+import { daysWord } from '@/shared/lib/days-word';
 import { parseRublesToKopecks } from '@/shared/lib/format-money';
 import { monthsWord } from '@/shared/lib/months-word';
 import { pluralize } from '@/shared/lib/pluralize';
@@ -29,12 +30,15 @@ function yearsWord(count: number): string {
 }
 
 /** Срок аренды для итогов (Figma 1433:61927 «2 года, 8 месяцев»): полные
- * календарные месяцы между началом и завершением. Неполный месяц —
- * «Меньше месяца» (нулевой срок в макет не пойман — сверить на приёмке). */
+ * календарные месяцы между началом и завершением. Неполный месяц — точные
+ * дни включительно («15 дней», «1 день»; решение владельца 22.10 — вместо
+ * «Меньше месяца»). Конец не раньше начала гарантирован мастером (ADR 0053
+ * §3 — дата в [начало, сегодня]). */
 export function rentalDurationLine(startDate: IsoDate, endDate: IsoDate): string {
   const months = fullMonthsBetween(startDate, endDate);
   if (months <= 0) {
-    return 'Меньше месяца';
+    const days = inclusiveDays(startDate, endDate);
+    return `${days} ${daysWord(days)}`;
   }
   const years = Math.floor(months / 12);
   const rest = months % 12;

@@ -325,7 +325,7 @@ function SectionEmptyState({
 }): JSX.Element {
   return (
     <EmptyState
-      imageSrc="/images/tariff/tariff-about-sharing.png"
+      imageSrc="/images/tariff/tariff-about-sharing.webp"
       title="Участников нет"
       description="Пригласите пользователей в свои объекты и управляйте вместе"
       action={

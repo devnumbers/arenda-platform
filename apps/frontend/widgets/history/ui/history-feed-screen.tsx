@@ -7,6 +7,7 @@ import { cn } from '@/shared/lib/cn';
 import { type HistoryFilterOptions } from '@/entities/history';
 import type { HistoryActorGroup } from '@/features/history';
 import { useMe } from '@/features/auth';
+import { useParticipant } from '@/features/participants';
 import { PropertyAvatar, type PropertyType } from '@/entities/property';
 import {
   acknowledgeFreshFeedEntryIds,
@@ -143,11 +144,40 @@ const HEADER_LINK =
  * только у чистой ленты.
  *
  * «Действия участника» (#712) — глобальная лента по одному человеку —
- * снята решением владельца 12.10.2026 (#1361): маршрут
- * /history/participants/[participantId] удалён, входы (тап по актёру в
- * общей ленте и кебаб страницы участника) сняты; амендмент 13.10.2026 —
- * тап по актёру общей ленты вернулся, но ведёт в пару человек+объект.
- * Пин одного человека живёт только в паре с объектом (#841).
+ * снята решением владельца 12.10.2026 (#1361); амендмент 13.10.2026 —
+ * тап по актёру общей ленты ведёт в пару человек+объект. 22.10.2026
+ * страница вернулась в переработанной форме — по скоупу ног участника
+ * (карта #1582, секция выше); пин одного человека без объектного
+ * скоупа мёртв по-прежнему.
+ *
+ * «Действия участника» (карта #1582, решение владельца 22.10.2026 —
+ * переработка его же объектного deep-link c8ee2e82c: «страница истории
+ * действий участника (только одного), где будут все объекты, к которым
+ * я добавил ему доступ; чужих там объектов не будет») — лента одного
+ * человека по всем его ТЕКУЩИМ ногам доступа. Это не возврат снятой
+ * глобальной страницы #712/#1361 (там был пин человека без объектного
+ * скоупа): скоуп «человек × его ноги» выводит сервер — под-ресурс
+ * GET /participants/{participantId}/history (идентификатор агрегата #693:
+ * uuid юзера либо pending-почта; actor_ids AND property_ids в SQL, ADR
+ * 0061 §7; privacy-404 и роль-осознанный тарифный гейт — серверные).
+ * Маршрут /participants/[participantId]/history — под-ресурс страницы
+ * участника; путь /history/participants/[id] остался за перманентным
+ * 308 #1361. Отозванная нога уводит свои строки со страницы (ноги
+ * перечитываются на каждый запрос), pending — пустая лента «Действий
+ * не было» (actor_id журнала — uuid юзера, действий не бывает).
+ * Шит «Настройки» — как на всех скоуп-страницах (аменда владельца
+ * 22.10.2026: «стандартная кнопка настроек и фильтр как и на всех
+ * остальных страницах; фильтр по пользователю заблокирован»): группа
+ * «Участник» прибита серым («1/1», незабираемая, макет 2184-92510 —
+ * зеркало пары #841), группа «Объекты» редактируемая и предлагает
+ * только ноги агрегата («объекты опять же только те, в которые
+ * приглашён участник» — сужение пересечением доказывает сервер,
+ * property_ids под-ресурса); период, действия и виды правят скоуп как
+ * на общей ленте — всё в адресе (§3), пины адреса не читаются, поиск q
+ * остаётся. Группировка — день → объект → карточка актёра, шапки
+ * объектов ведут в «Историю объекта», шапка актёра статична (человек —
+ * предмет страницы, как на паре #841). Вход — кебаб страницы участника;
+ * «Назад» живым переходом возвращает на неё (фолбэк — тоже).
  *
  * ## История объекта (#840; макет 3258-76984, карта #1324 тикет #1321)
  *
@@ -197,13 +227,15 @@ const HEADER_LINK =
  */
 export type HistoryFeedScreenProps = {
   /** «Действия участника в объекте» (#841): uuid юзера, прибивающий
-   * ленту вместе с propertyId (actor_ids = один). Undefined — общая
-   * лента или «История объекта»; самостоятельной страницы «Действия
-   * участника» больше нет (#1361). */
+   * ленту вместе с propertyId (actor_ids = один). На странице участника
+   * без объекта (карта #1582) — тот же проп несёт агрегат-id (#693:
+   * uuid юзера либо pending-почта): скоуп «человек × его текущие ноги»
+   * сервер выводит сам (GET /participants/{id}/history). Undefined —
+   * общая лента или «История объекта». */
   readonly participantId?: string;
   /** История объекта (#840): uuid объекта, прибивающий ленту
    * (property_ids = один); вместе с participantId — двойной пин #841.
-   * Undefined — общая лента. */
+   * Undefined — общая лента или страница участника. */
   readonly propertyId?: string;
 };
 
@@ -212,7 +244,8 @@ export function HistoryFeedScreen({
   propertyId,
 }: HistoryFeedScreenProps = {}): JSX.Element {
   // Личность экрана: страница объекта прибивает объект, страница пары
-  // (#841) — объект и человека; заголовок, фолбэк «Назад» и прибитые
+  // (#841) — объект и человека, страница участника (карта #1582) —
+  // человека со скоупом его ног; заголовок, фолбэк «Назад» и прибитые
   // группы шита следуют за предметом; прибитые группы в URL не живут.
   // Личность экрана одним вычислением (widgets/history/lib/screen-chrome):
   // заголовок — в TopNavTitle и в шите, фолбэк «Назад» — у кнопки; те же
@@ -220,6 +253,11 @@ export function HistoryFeedScreen({
   const isMemberPage = participantId !== undefined;
   const isPropertyPage = propertyId !== undefined;
   const isMemberPropertyPage = isMemberPage && isPropertyPage;
+  // Страница участника (карта #1582): шит «Настройки» с пином «Участник»
+  // (аменда владельца 22.10.2026 — «стандартная кнопка настроек и фильтр
+  // как и на всех остальных страницах; фильтр по пользователю
+  // заблокирован»), скоуп человека по-прежнему выводит сервер.
+  const isParticipantPage = isMemberPage && !isPropertyPage;
   const pageTitle = historyScreenTitle(participantId, propertyId);
   const backHref = historyScreenBackHref(participantId, propertyId);
   const [searchMode, setSearchMode] = useState(false);
@@ -230,17 +268,20 @@ export function HistoryFeedScreen({
   // Фильтры (#711) живут в адресе ленты; чтение и запись — через канон
   // useUrlParams (DESIGN.md §3), применение — push («назад» возвращает
   // без фильтров). Прибитые группы адреса не читаются: на странице
-  // объекта — «Объекты», на странице пары (#841) — обе группы: и в шит,
-  // и в скоуп идёт нормализованная модель (pinnedHistoryFilters по пинам
-  // ниже), «Применить» заодно вычищает чужой параметр.
+  // объекта — «Объекты», на странице пары (#841) — обе, на странице
+  // участника (карта #1582) — «Участники»: и в шит, и в скоуп идёт
+  // нормализованная модель (pinnedHistoryFilters по пинам ниже),
+  // «Применить» заодно вычищает чужой параметр.
   const { filters: urlFilters, applyFilters } = useHistoryFiltersState();
-  // Пины страницы (HistoryFilterPins): прибитые объект/пара считаются
-  // один раз и для нормализатора фильтров (ниже), и для скоупа.
+  // Пины страницы (HistoryFilterPins): прибитые объект/пара/участник
+  // считаются один раз и для нормализатора фильтров (ниже), и для скоупа.
   const pins = isMemberPropertyPage
     ? { actorId: participantId, propertyId }
     : isPropertyPage
       ? { propertyId }
-      : undefined;
+      : isParticipantPage
+        ? { actorId: participantId }
+        : undefined;
   const filters = pinnedHistoryFilters(urlFilters, pins);
 
   // Открытие поиска сразу делает поле активным (программный фокус —
@@ -262,9 +303,21 @@ export function HistoryFeedScreen({
   // Скоуп ленты = фильтры адреса (#711) + живой поиск (#710) + пины
   // страницы (historyFeedScope: прибитые объект/пара #840/#841
   // подставляются в скоуп, неприбитые группы адреса действуют поверх).
-  // Группа фильтров, выбранная «в ноль», означает пустой
+  // Страница участника (карта #1582): пин человека превращается в
+  // participantId скоупа — запрос уходит на под-ресурс
+  // /participants/{id}/history, где скоуп «человек × его ноги» выводит
+  // сервер; actorIds пина в скоуп не едут (актёра выводит резолвер),
+  // выбор «Объектов» шита едет property_ids (сервер пересекает его с
+  // ногами). Группа фильтров, выбранная «в ноль», означает пустой
   // результат — скоупа нет (null), запрос не делается.
-  const scope = historyFeedScope(filters, pins);
+  const resolvedScope = historyFeedScope(filters, pins);
+  let scope: typeof resolvedScope;
+  if (isParticipantPage) {
+    scope =
+      resolvedScope === null ? null : { ...resolvedScope, actorIds: undefined, participantId };
+  } else {
+    scope = resolvedScope;
+  }
   // Скоуп запроса ленты одним значением: тот же объект уходит и в решатель
   // прокрутки (метка live-влития реестра ключуется по скоупу, hooks.ts).
   // Объект скоупа новый на каждом рендере (фильтры перечитываются из адреса
@@ -281,7 +334,18 @@ export function HistoryFeedScreen({
   // запрос своим объектом — участники шита остаются собственником и
   // соучастниками объекта (D6); глобальная лента читает глобальную
   // область, где с D14 (#1305) участники — только люди моих объектов.
-  const filtersQuery = useHistoryFilters(isPropertyPage ? [propertyId] : undefined);
+  // Страница участника (карта #1582, аменда 22.10.2026: «объекты опять же
+  // только те, в которые приглашён участник») сужает запрос ногами
+  // агрегата — группа «Объекты» предлагает только их; агрегат общий со
+  // страницей участника (кэш навигации), пока он не приехал — глобальная
+  // область, сервер и так пересекает выбор с ногами.
+  const participantQuery = useParticipant(participantId ?? '', {
+    enabled: isParticipantPage,
+  });
+  const participantLegs = participantQuery.data?.properties.map((leg) => leg.propertyId);
+  const filtersQuery = useHistoryFilters(
+    isPropertyPage ? [propertyId] : isParticipantPage ? participantLegs : undefined,
+  );
   // Свой актор (решение владельца 24.09): узнаём по id сессии — канон
   // шита фильтров (#710); серый суффикс «(Вы)» у своей шапки.
   const meQuery = useMe();
@@ -648,7 +712,7 @@ export function HistoryFeedScreen({
         <HistoryFiltersSheet
           applied={filters}
           optionsQuery={filtersQuery}
-          title={isPropertyPage ? pageTitle : undefined}
+          title={isPropertyPage || isParticipantPage ? pageTitle : undefined}
           pinnedParticipantId={participantId}
           pinnedPropertyId={propertyId}
           onApply={(draft: HistoryFilters) => {

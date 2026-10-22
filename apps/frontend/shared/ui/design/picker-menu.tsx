@@ -16,7 +16,17 @@ import { Modal, ModalContent, ModalTrigger, useIsDesktop } from './modal';
  * 2026-09-03). Триггер — готовая кнопка: обработчики открытия передаются
  * ей через asChild, поэтому она должна прокидывать пропсы кнопки
  * (…props на свою <button>). Открытое состояние держат Radix и vaul —
- * компоненту состояние не нужно. */
+ * компоненту состояние не нужно.
+ *
+ * Спек меню-пикера — прежний (макет 1603-94487): карточка py 12px,
+ * радиус 24 и тень 0 8px 24px, пункты 44px/px 20. Новый кебаб-спек
+ * 3183-86541 (menu.tsx) на сортировки не переводили (решение владельца
+ * 22.10) — пин-константы ниже побеждают новую базу через cn; снимаются
+ * одной правкой, когда макет пикера обновят. */
+export const pickerMenuContentPinClasses =
+  'rounded-card py-3 shadow-[0_8px_24px_rgba(23,26,28,0.12)]';
+
+export const pickerMenuPinnedRowClasses = 'h-11 min-h-11 px-5';
 export type PickerMenuOption = {
   readonly label: string;
   readonly selected: boolean;
@@ -41,7 +51,10 @@ export function PickerMenu({ title, groups, children }: PickerMenuProps): JSX.El
     return (
       <Menu>
         <MenuTrigger asChild>{children}</MenuTrigger>
-        <MenuContent align="start" className="w-[246px] gap-0">
+        <MenuContent
+          align="start"
+          className={cn('w-[246px] gap-0', pickerMenuContentPinClasses)}
+        >
           {groups.map((group, index) => (
             <div
               key={index}
@@ -101,6 +114,7 @@ function PickerMenuRow({ variant, option }: PickerMenuRowProps): JSX.Element {
   if (variant === 'menu') {
     return (
       <MenuItem
+        className={pickerMenuPinnedRowClasses}
         onSelect={option.onSelect}
         icon={
           option.selected ? (

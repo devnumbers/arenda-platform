@@ -75,9 +75,9 @@ const CATALOG: Record<
 /** Иллюстрация пустого состояния; у просроченных своей нет — берётся
  * платежная (решение владельца). */
 const EMPTY_IMAGE: Record<PaymentsCatalogVariant, string> = {
-  overdue: '/images/payments/empty-payments.png',
-  payments: '/images/payments/empty-payments.png',
-  auto: '/images/payments/empty-autopayments.png',
+  overdue: '/images/payments/empty-payments.webp',
+  payments: '/images/payments/empty-payments.webp',
+  auto: '/images/payments/empty-autopayments.webp',
 };
 
 export function PaymentsCatalogScreen({

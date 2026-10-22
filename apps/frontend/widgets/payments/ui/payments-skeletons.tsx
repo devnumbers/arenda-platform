@@ -247,20 +247,19 @@ export function PaymentEditFormSkeleton(): JSX.Element {
 
 /**
  * Скелетон шага «Добавить операцию» (#607): каркас OperationAmountStep —
- * денежное поле и сегмент «Расход/Доход» в ярусах шага (дисплейный
- * <1024: сумма 44/48 по центру и сегмент 232px, py-16/gap-8; ПК ≥1024:
- * бокс 56px и сегмент во всю колонку, pt-6/gap-6). Нижняя панель
+ * денежное поле и сегмент «Расход/Доход» шага — единый ярус (макет
+ * 2913:69553, решение владельца 2026-10-22): бокс «Сумма» 56px и сегмент
+ * во всю колонку, pt-24/gap-24. Нижняя панель
  * «Продолжить» — постоянная часть шага, её приносит экран реальной
  * кнопкой.
  */
 export function OperationAmountStepSkeleton(): JSX.Element {
   return (
-    <div
-      aria-hidden
-      className="flex flex-col items-center gap-8 px-6 pt-16 pb-16 desktop:gap-6 desktop:pt-6"
-    >
-      <Skeleton className="h-12 w-40 desktop:h-14 desktop:w-full desktop:rounded-button" />
-      <Skeleton className="h-10 w-[232px] rounded-2xl desktop:w-full" />
+    <div aria-hidden className="flex flex-col items-center gap-6 px-6 pt-6 pb-16">
+      <Skeleton className="h-14 w-full rounded-button" />
+      {/* h-11 — реальная высота сегмента 44 (min-h-10 пилюль + p-[2px]
+          трека), скелетон не дрейфует относительно шага. */}
+      <Skeleton className="h-11 w-full rounded-2xl" />
     </div>
   );
 }

@@ -3145,6 +3145,86 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /participants/{participantId}/history:
+    get:
+      operationId: getParticipantHistory
+      summary: "Страница ленты «Действия участника» (двусторонний keyset, канон #597)"
+      description: |
+        Лента «Истории действий» одного участника по всем его текущим ногам
+        доступа (карта #1582, решение владельца 22.10.2026 — переработка
+        объектного deep-link: «страница истории действий участника (только
+        одного), где будут все объекты, к которым я добавил ему доступ»;
+        ADR 0061 §7). Скоуп выводит сервер, клиент не собирает комбинацию
+        фильтров: агрегат участника (#693) резолвится в скоупе читающего —
+        uuid юзера AND ноги агрегата (property_members ∪ invitations,
+        неархивные объекты, как у самой страницы участника); человек вне
+        скоупа — privacy-404 всего запроса (канон ленты задач #547).
+
+        У pending-приглашённого действий не бывает — actor_id журнала это
+        uuid юзера (ADR 0061 §3), страница отдаёт пустую ленту. Отозванная
+        нога уводит свои строки со страницы (скоуп — текущие ноги); строки
+        объектов вне скоупа читающего не покидают базу — предикат видимости
+        actor_can_read_property (000142).
+
+        Группа «Объекты» шита страницы (аменда владельца 22.10.2026:
+        «объекты опять же только те, в которые приглашён участник»):
+        property_ids сужает ленту пересечением с ногами агрегата —
+        перечисленный объект вне ног участника молча выпадает из скоупа
+        (не 404: скоуп страницы и так доказан читающему), выбор, не задевший
+        ни одной ноги, — пустая страница. Некорректный uuid — 400.
+
+        Ответ и постраничная механика — те же, что у GET /history:
+        двусторонний keyset по (created_at, id) DESC, before_cursor — в
+        прошлое, after_cursor — prepend свежих, оба сразу — 400; поиск q —
+        всегда-OR предикат prefix-FTS OR ILIKE-trgm (ресерч #839); счётчика
+        «найдено N» нет. Тарифный гейт — роль-осознанный (ADR 0064, ревизия
+        #1465): скоуп страницы — объекты читающего (он владелец ног), на
+        basic тарифе честный 402 tariff_required.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: participantId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: A registered user's uuid or a pending invitee email.
+        - $ref: '#/components/parameters/HistoryBeforeCursor'
+        - $ref: '#/components/parameters/HistoryAfterCursor'
+        - $ref: '#/components/parameters/HistoryLimit'
+        - $ref: '#/components/parameters/HistoryDateFrom'
+        - $ref: '#/components/parameters/HistoryDateTo'
+        - $ref: '#/components/parameters/HistoryBaseActions'
+        - $ref: '#/components/parameters/HistoryKinds'
+        - name: property_ids
+          in: query
+          required: false
+          description: >-
+            Выбор «Объектов» шита страницы (аменда владельца 22.10.2026:
+            «объекты опять же только те, в которые приглашён участник») —
+            uuid через запятую; сужает ленту пересечением с ногами
+            агрегата. В отличие от GET /history, перечисленный объект вне
+            ног участника НЕ 404 — он молча выпадает из скоупа (ноги
+            уже доказаны читающему); выбор, не задевший ни одной ноги, —
+            пустая страница. Некорректный uuid — 400.
+          schema:
+            type: string
+            example: 33333333-3333-4333-8333-333333333333
+        - $ref: '#/components/parameters/HistoryQuery'
+      responses:
+        '200':
+          description: Страница ленты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /history:
     get:
       operationId: getHistory
@@ -8400,7 +8480,9 @@ components:
           description: >
             The person's display name (name and surname, or the anonymous
             label «Пользователь» — карта #1105, аменд #1123);
-            null for a pending row (the email is the label).
+            null for a pending row — the screen draws the same anonymous
+            label with the email as the subtitle (аменда владельца
+            22.10.2026, макет 3313-77128).
         photo_url:
           type: string
           nullable: true

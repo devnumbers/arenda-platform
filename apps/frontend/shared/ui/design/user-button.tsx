@@ -61,6 +61,13 @@ export function UserButton({
       ) : (
         name !== undefined && <span>{name}</span>
       )}
+      {/* loading не перекрывается: дефолт row-lazy — канон. Крыло страницы на
+       * ПК скрыто (desktop:hidden под PersistentNavWings), а display:none
+       * img с lazy не грузится никогда — иначе скрытый близнец запрашивал
+       * бы thumb на каждой навигации (живая приёмка 22.10.2026: 4 GET на
+       * 4 перехода с eager). Видимые экземпляры (постоянное крыло, хабы
+       * мобайла) — above the fold: обсервер стреляет на монтировании,
+       * мгновенный показ даёт реестр photo-session-cache. */}
       <UserAvatar photoUrl={pending ? null : photoUrl} aria-hidden />
     </Link>
   );

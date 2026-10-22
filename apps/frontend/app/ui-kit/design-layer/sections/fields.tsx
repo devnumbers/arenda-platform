@@ -2,13 +2,8 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { ChangeVertical } from '@/shared/assets/icons';
 import {
-    amountKopecks,
-    AmountField,
-    Button,
     Checkbox,
-    ChipButton,
     RadioGroup,
     RadioGroupItem,
     SearchField,
@@ -22,6 +17,7 @@ export function TextFieldTitleOutSection(): JSX.Element {
     const [nameValue, setNameValue] = useState('');
     const [nameInValue, setNameInValue] = useState('');
     const [limitedValue, setLimitedValue] = useState('Страхование квартиры');
+    const [areaValue, setAreaValue] = useState('56');
 
     return (
         <div className={styles.group}>
@@ -36,6 +32,14 @@ export function TextFieldTitleOutSection(): JSX.Element {
                     value={nameValue}
                     onChange={(event) => setNameValue(event.target.value)}
                     onClear={() => setNameValue('')}
+                />
+                <TextField
+                    title="Общая площадь"
+                    inlineSuffix="м²"
+                    inputMode="decimal"
+                    value={areaValue}
+                    onChange={(event) => setAreaValue(event.target.value)}
+                    onClear={() => setAreaValue('')}
                 />
                 <TextField
                     title="Название платежа"
@@ -188,38 +192,6 @@ export function SearchFieldSection({ value, onValueChange }: SearchFieldSectionP
                     onChange={(event) => setSearchFilled(event.target.value)}
                     onClear={() => setSearchFilled('')}
                 />
-            </div>
-        </div>
-    );
-}
-
-export function AmountFieldSection(): JSX.Element {
-    const [amount, setAmount] = useState('');
-    const [direction, setDirection] = useState<'income' | 'expense'>('income');
-
-    return (
-        <div className={styles.group}>
-            <h3 className={styles.groupTitle}>AmountField · ввод суммы</h3>
-            <p className={styles.groupTitle}>
-                Ввод с клавиатуры, только цифры и запятая (маска до 9 999 999,99 ₽); под суммой
-                — кнопка направления: клик меняет её значение, без всплывающих окон
-                (Figma 835:19795 «Расход»; чип «Формы оплаты» снесён — карта #1005).
-                Кнопка заблокирована, пока сумма не введена. Вся область дисплея
-                «0 ₽» — цель тапа: инпут расширен за текст измерителя, тап в любом
-                месте дисплея фокусирует поле и поднимает клавиатуру (#1151).
-            </p>
-            <div className={styles.column} style={{ maxWidth: 560 }}>
-                <AmountField value={amount} onChange={setAmount} label="Сумма" />
-                <div className="flex justify-center gap-2">
-                    <ChipButton
-                        trailingIcon={<ChangeVertical />}
-                        aria-label={`Направление: ${direction === 'income' ? 'Доход' : 'Расход'}. Нажмите, чтобы переключить`}
-                        onClick={() => setDirection((prev) => (prev === 'income' ? 'expense' : 'income'))}
-                    >
-                        {direction === 'income' ? 'Доход' : 'Расход'}
-                    </ChipButton>
-                </div>
-                <Button disabled={amountKopecks(amount) === 0}>Создать платеж</Button>
             </div>
         </div>
     );

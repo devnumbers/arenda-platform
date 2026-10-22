@@ -63,7 +63,7 @@ func (historyPolicyAllow) RoleForProperty(context.Context, uuid.UUID, uuid.UUID)
 func newHistoryTestHandlers() (*HistoryHandlers, *historyReaderFake) {
 	reader := &historyReaderFake{}
 	// Nil-гейт выключен — тарифный вердикт пинят tariff_gate_test.go рядом.
-	svc := historyapp.NewHistoryReadService(reader, historyPolicyAllow{}, nil)
+	svc := historyapp.NewHistoryReadService(reader, historyPolicyAllow{}, nil, nil)
 	return NewHistoryHandlers(svc, slog.Default()), reader
 }
 
@@ -258,4 +258,121 @@ func TestHistoryHandlers_GetHistoryFilters(t *testing.T) {
 	require.Len(t, body.Objects, 1)
 	assert.Equal(t, fakePropertyName, body.Objects[0].Name)
 	assert.Equal(t, "garage", body.Objects[0].Type, "the filter row's glyph type (#1244)")
+}
+
+// scopesFake is the participant-scope resolver's http test double (карта
+// #1582): canned scope or error plus the id the handler passed through.
+type scopesFake struct {
+	scope historyapp.ParticipantScope
+	err   error
+	gotID string
+}
+
+func (f *scopesFake) ResolveParticipantScope(_ context.Context, _ uuid.UUID, participantID string) (historyapp.ParticipantScope, error) {
+	f.gotID = participantID
+	return f.scope, f.err
+}
+
+func newParticipantHistoryHandlers(scope historyapp.ParticipantScope, scopesErr error) (*HistoryHandlers, *historyReaderFake, *scopesFake) {
+	reader := &historyReaderFake{}
+	scopes := &scopesFake{scope: scope, err: scopesErr}
+	svc := historyapp.NewHistoryReadService(reader, historyPolicyAllow{}, nil, scopes)
+	return NewHistoryHandlers(svc, slog.Default()), reader, scopes
+}
+
+func TestHistoryHandlers_GetParticipantHistory(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.Must(uuid.NewV7())
+	leg1, leg2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+
+	// Зарегистрированный: скоуп едет на сервис (uuid юзера AND ноги),
+	// ответ — страница ленты.
+	h, reader, scopes := newParticipantHistoryHandlers(
+		historyapp.ParticipantScope{UserID: userID, PropertyIDs: []uuid.UUID{leg1, leg2}},
+		nil,
+	)
+	q := "платёж"
+	w := httptest.NewRecorder()
+	req := historyRequest(&historyReaderID, "/participants/x/history")
+	h.GetParticipantHistory(w, req, "12111111-1111-4111-8111-111111111121", openapi.GetParticipantHistoryParams{
+		Q: &q,
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, reader.gotFeed)
+	assert.Equal(t, []uuid.UUID{userID}, reader.gotFeed.ActorIDs)
+	assert.Equal(t, []uuid.UUID{leg1, leg2}, reader.gotFeed.PropertyIDs)
+	assert.Equal(t, "платёж", reader.gotFeed.Search)
+	assert.Equal(t, "12111111-1111-4111-8111-111111111121", scopes.gotID)
+
+	var page struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+
+	// Pending: uuid нет — пустая страница без стора.
+	h, reader, _ = newParticipantHistoryHandlers(
+		historyapp.ParticipantScope{UserID: uuid.UUID{}, PropertyIDs: []uuid.UUID{leg1}},
+		nil,
+	)
+	w = httptest.NewRecorder()
+	h.GetParticipantHistory(w, req, "pending@example.com", openapi.GetParticipantHistoryParams{})
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	assert.Empty(t, page.Items)
+	assert.Nil(t, reader.gotFeed, "pending must not reach the store")
+
+	// Чужой участник: privacy-404 с формулировкой поверхности.
+	h, _, _ = newParticipantHistoryHandlers(historyapp.ParticipantScope{}, historyapp.ErrNotFound)
+	w = httptest.NewRecorder()
+	h.GetParticipantHistory(w, req, "stranger@example.com", openapi.GetParticipantHistoryParams{})
+	require.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "Участник не найден")
+
+	// Нет сессии — 401; битый курсор — 400.
+	h, _, _ = newParticipantHistoryHandlers(
+		historyapp.ParticipantScope{UserID: userID, PropertyIDs: []uuid.UUID{leg1}}, nil,
+	)
+	w = httptest.NewRecorder()
+	h.GetParticipantHistory(w, historyRequest(nil, "/participants/x/history"), userID.String(), openapi.GetParticipantHistoryParams{})
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+
+	w = httptest.NewRecorder()
+	h.GetParticipantHistory(w, req, userID.String(), openapi.GetParticipantHistoryParams{
+		BeforeCursor: new("###"),
+	})
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHistoryHandlers_GetParticipantHistoryObjectsFilter(t *testing.T) {
+	t.Parallel()
+
+	// Выбор «Объектов» шита страницы (property_ids; аменда владельца
+	// 22.10.2026: «объекты опять же только те, в которые приглашён
+	// участник»): csv едет в сервис — пересечение с ногами делает он
+	// (здесь: выбор одной ноги доходит одной ногой); битый uuid —
+	// контрактный 400, как у /history.
+	userID := uuid.Must(uuid.NewV7())
+	leg1, leg2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	h, reader, _ := newParticipantHistoryHandlers(
+		historyapp.ParticipantScope{UserID: userID, PropertyIDs: []uuid.UUID{leg1, leg2}},
+		nil,
+	)
+	req := historyRequest(&historyReaderID, "/participants/x/history")
+	choice := leg2.String()
+	w := httptest.NewRecorder()
+	h.GetParticipantHistory(w, req, userID.String(), openapi.GetParticipantHistoryParams{
+		PropertyIds: &choice,
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, reader.gotFeed)
+	assert.Equal(t, []uuid.UUID{leg2}, reader.gotFeed.PropertyIDs, "выбор сужает ноги пересечением")
+	assert.Equal(t, []uuid.UUID{userID}, reader.gotFeed.ActorIDs)
+
+	bad := "not-a-uuid"
+	w = httptest.NewRecorder()
+	h.GetParticipantHistory(w, req, userID.String(), openapi.GetParticipantHistoryParams{
+		PropertyIds: &bad,
+	})
+	require.Equal(t, http.StatusBadRequest, w.Code)
 }

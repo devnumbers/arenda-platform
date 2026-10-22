@@ -37,7 +37,7 @@ export function PropertiesEmptyState({
 
   return (
     <EmptyState
-      imageSrc="/images/properties/properties-empty.png"
+      imageSrc="/images/properties/properties-empty.webp"
       imageAlt="Объектов нет"
       title="Объектов нет"
       description="Добавьте квартиру, дом или помещение, чтобы начать управлять объектом"

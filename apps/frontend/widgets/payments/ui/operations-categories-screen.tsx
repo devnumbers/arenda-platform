@@ -161,10 +161,13 @@ export function OperationsCategoriesScreen({
             // через 80px после чипов, подпись 16/18 серым (320 по ширине).
             <div className="flex flex-col items-center px-6 pt-[72px]">
               <Image
-                src="/images/payments/operations-categories.png"
+                src="/images/payments/operations-categories.webp"
                 alt=""
                 width={128}
                 height={128}
+                sizes="256px"
+                quality={90}
+                priority
                 className="h-32 w-32"
               />
               <p className="mt-4 max-w-[320px] text-center text-base leading-[18px] text-content-secondary">

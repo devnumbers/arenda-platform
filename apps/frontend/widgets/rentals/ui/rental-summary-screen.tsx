@@ -104,7 +104,7 @@ export function RentalSummaryScreen({
           (rental === undefined ||
             (rental.status === 'completed' && completedDate === null)) && (
             <EmptyState
-              imageSrc="/images/rentals/rental-hero.png"
+              imageSrc="/images/rentals/rental-hero.webp"
               title="Аренда не найдена"
               description="Возможно, она была удалена"
             />

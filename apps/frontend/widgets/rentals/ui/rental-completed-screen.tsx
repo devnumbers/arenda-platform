@@ -107,7 +107,7 @@ export function RentalCompletedScreen({
       {!rentalsQuery.isPending && !rentalsQuery.isError && rental === undefined && (
         <PageContent>
           <EmptyState
-            imageSrc="/images/rentals/rental-hero.png"
+            imageSrc="/images/rentals/rental-hero.webp"
             title="Аренда не найдена"
             description="Возможно, она была удалена"
           />
@@ -165,10 +165,11 @@ function RentalCompletedBody({
       <div className="flex flex-col gap-12">
         <div className="flex flex-col items-center gap-4">
           <Image
-            src="/images/rentals/rental-hero.png"
+            src="/images/rentals/rental-hero.webp"
             alt=""
             width={96}
             height={96}
+            quality={90}
             className="h-24 w-24"
             aria-hidden
           />

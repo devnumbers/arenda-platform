@@ -93,7 +93,16 @@ describe('pastRentalTitle', () => {
       pastRentalCardTitle(
         completedFixture({ startDate: '2028-05-10', completedDate: '2028-05-25', plannedEndDate: null }),
       ),
-    ).toBe('Меньше месяца');
+    ).toBe('16 дней');
+  });
+
+  it('неполный месяц — точные дни; завершение в день начала — «1 день»', () => {
+    const one = completedFixture({
+      startDate: '2028-05-10',
+      completedDate: '2028-05-10',
+      plannedEndDate: null,
+    });
+    expect(pastRentalCardTitle(one)).toBe('1 день');
   });
 
   it('без оплаченных операций — «Не было платежей» (1550:94517)', () => {
@@ -118,13 +127,13 @@ describe('pastRentalTitle', () => {
     expect(pastRentalTitle(one, 1)).toBe('1 месяц');
   });
 
-  it('неполный месяц с платежами — «Меньше месяца»', () => {
+  it('неполный месяц с платежами — точные дни', () => {
     const rental = completedFixture({
       startDate: '2028-05-10',
       completedDate: '2028-05-25',
       plannedEndDate: null,
     });
-    expect(pastRentalTitle(rental, 1)).toBe('Меньше месяца');
+    expect(pastRentalTitle(rental, 1)).toBe('16 дней');
   });
 });
 

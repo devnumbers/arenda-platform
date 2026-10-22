@@ -138,10 +138,12 @@ test('приглашение незарегистрированной почты
     await expect(toast).toBeVisible();
     await toast.getByRole('button', { name: 'Закрыть' }).click();
 
-    // Pending-ряд появился: почта — титул, бейдж «Аккаунт не создан»
-    // (D3 #1313: у pending-агрегата ровно этот статус).
+    // Pending-ряд появился: титул «Пользователь», почта подзаголовком
+    // (аменда владельца 22.10.2026, макет 3313-77128), бейдж «Аккаунт не
+    // создан» (D3 #1313: у pending-агрегата ровно этот статус).
     const inviteeRow = page.getByRole('button', { name: new RegExp(INVITEE_EMAIL) });
     await expect(inviteeRow).toBeVisible();
+    await expect(inviteeRow.getByText('Пользователь', { exact: true })).toBeVisible();
     await expect(inviteeRow.getByText('Аккаунт не создан')).toBeVisible();
 
     // Серверная правда: pending-приглашения на все 3 объекта снапшота.

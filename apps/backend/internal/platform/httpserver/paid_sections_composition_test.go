@@ -145,7 +145,7 @@ func newPaidSectionsRouter(t *testing.T, allows bool) http.Handler {
 		// same fixed gate as the middleware: the composition pins that the
 		// handler-owned verdict reaches the wire — and that the narrowed
 		// membership read passes on the basic tariff.
-		HistoryRead:      historyapp.NewHistoryReadService(emptyHistory{}, memberEverywhere{}, gate),
+		HistoryRead:      historyapp.NewHistoryReadService(emptyHistory{}, memberEverywhere{}, gate, nil),
 		ReadonlyGate:     allowingSubscription{},
 		PaidSectionsGate: gate,
 		Logger:           slog.New(slog.DiscardHandler),

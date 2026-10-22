@@ -5,13 +5,14 @@ import {
   test,
 } from './fixtures';
 
-// Визард создания объекта: каркас флоу и шаг «Выбор категории» (#480,
-// Figma 1213-52111), шаг «Адрес» с подсказками (#481, Figma 1213-52017/
-// 52391, 1519-94336), шаг «Характеристики» (#482, Figma 1218-54295) и
-// экран успеха (#483, Figma 1425-55788). Один маршрут /properties/new,
-// шаги — клиентское состояние потока; черновика нет (карта #1052, Q2=В):
-// перезагрузка даёт чистый лист. Успех шагом не считается; с ?returnTo=
-// он пропускается.
+// Визард создания объекта: каркас флоу и шаг «Выбор категории» (аменда
+// владельца 22.10: Figma 3625-89189 — иллюстрация над заголовком, 11
+// главных категорий без поля «Тип жилья»), шаг «Адрес» с подсказками
+// (#481, Figma 1213-52017/52391, 1519-94336), шаг «Характеристики»
+// (#482, Figma 1218-54295) и экран успеха (#483, Figma 1425-55788).
+// Один маршрут /properties/new, шаги — клиентское состояние потока;
+// черновика нет (карта #1052, Q2=В): перезагрузка даёт чистый лист.
+// Успех шагом не считается; с ?returnTo= он пропускается.
 //
 // Живые подсказки проверяются только при настроенном стабе Dadata
 // (DADATA_BASE_URL локального прогона): в CI ключа нет, endpoint тихо
@@ -35,9 +36,25 @@ async function openWizard(page: Parameters<typeof openCabinetWithSeededSession>[
 test('шаг 1 → шаг 2: категория ведёт на адрес, ручной ввод продолжает', async ({ page, seededUser }, testInfo) => {
   await openWizard(page, seededUser);
 
-  // Шаг 1: девять чипов категорий, чип «шаг 1 из 3».
+  // Шаг 1: иллюстрация над заголовком, одиннадцать чипов категорий,
+  // чип «шаг 1 из 3».
+  await expect(page.locator('img[src*="property-create-key"]')).toBeVisible();
   const group = page.getByRole('group', { name: 'Категория объекта' });
-  await expect(group.getByRole('button')).toHaveCount(9);
+  await expect(group.getByRole('button')).toHaveCount(11);
+  // Порядок кадра 3625-89189: типы жилья сразу после квартиры.
+  await expect(group.getByRole('button')).toHaveText([
+    'Квартира',
+    'Студия',
+    'Апартаменты',
+    'Комната',
+    'Дом',
+    'Коммерческое помещение',
+    'Офис',
+    'Склад',
+    'Гараж',
+    'Машиноместо',
+    'Земельный участок',
+  ]);
   await expect(page.getByText('шаг 1 из 3')).toBeVisible();
   await captureScreen(page, testInfo, '01-category-step');
 
@@ -106,22 +123,17 @@ test('шаг 2: подсказки адреса — список, выбор, в
   await captureScreen(page, testInfo, '03-address-picked');
 });
 
-test('шаг 3: характеристики — поля каталога, тип жилья, название необязательно', async ({ page, seededUser }, testInfo) => {
+test('шаг 3: характеристики — поля каталога без «Тип жилья», название необязательно', async ({ page, seededUser }, testInfo) => {
   await openWizard(page, seededUser);
   await page.getByRole('group', { name: 'Категория объекта' }).getByRole('button', { name: 'Квартира' }).click();
   await page.getByRole('textbox', { name: 'Введите адрес' }).fill('Ленина, 1');
   await page.getByRole('button', { name: 'Продолжить' }).click();
 
-  // Заголовок и подсказка шага 3; «Тип жилья» только у категории
-  // «Квартира» (закрывает типы apartments и studio — #1003).
+  // Заголовок и подсказка шага 3; поля «Тип жилья» больше нет (аменда
+  // владельца 22.10): тип выбран на шаге 1.
   await expect(page.getByRole('heading', { name: 'Характеристики' })).toBeVisible();
   await expect(page.getByText('Вы можете создать объект, а характеристики заполнить позже')).toBeVisible();
-  const housing = page.getByRole('group', { name: 'Тип жилья' });
-  // Порядок чипов по кадру 1218-54295 (#1081).
-  await expect(housing.getByRole('button')).toHaveText(['Квартира', 'Студия', 'Апартаменты']);
-  await expect(housing.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'false');
-  await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('group', { name: 'Тип жилья' })).toHaveCount(0);
 
   // Поля каталога квартиры: enum-чипы (комнат в наборе больше нет) и
   // единицы слева внутри бокса.
@@ -129,20 +141,9 @@ test('шаг 3: характеристики — поля каталога, ти
   await expect(page.getByRole('group', { name: 'Санузел' }).getByRole('button', { name: 'Раздельный' })).toBeVisible();
   await expect(page.getByText('м²').first()).toBeVisible();
 
-  // Первое поле шага захватило фокус на входе (паттерн шага «Адрес»);
-  // проверяем до кликов по чипам — они перенесут фокус.
+  // Первое поле шага захватило фокус на входе (паттерн шага «Адрес»).
   const name = page.getByRole('textbox', { name: 'Название объекта' });
   await expect(name).toBeFocused();
-
-  // Смена типа жилья — чипы перезаключаются, набор полей тот же (один
-  // каталог у квартиры, апартаментов и студии — #1003), смена тихая —
-  // без нотиса.
-  await housing.getByRole('button', { name: 'Апартаменты' }).click();
-  await expect(housing.getByRole('button', { name: 'Апартаменты' })).toHaveAttribute('aria-pressed', 'true');
-  await housing.getByRole('button', { name: 'Студия' }).click();
-  await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('group', { name: 'Санузел' }).getByRole('button', { name: 'Раздельный' })).toBeVisible();
-  await expect(page.getByRole('status')).toHaveCount(0);
 
   // Нечислимый ввод не попадает в поле: фильтр по типу поля.
   const floor = page.getByRole('textbox', { name: 'Этаж', exact: true });
@@ -182,7 +183,7 @@ test('шаг 2: очистка убирает «Продолжить»; пере
 
   // Очистка поля прячет «Продолжить» — готовность шага по непустому адресу.
   await address.fill('Ленина, 1');
-  await page.getByRole('button', { name: 'Очистить поле' }).click();
+  await page.getByRole('button', { name: 'Очистить «Введите адрес»' }).click();
   await expect(address).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Продолжить' })).toBeHidden();
 

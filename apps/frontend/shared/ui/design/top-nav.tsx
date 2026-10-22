@@ -8,6 +8,8 @@ import { cn } from '@/shared/lib/cn';
 import { HeaderLogo } from './header-logo';
 import { UserButton } from './user-button';
 import { useTopNavUser } from './top-nav-user-context';
+import { topNavWingClasses, topNavWingUser } from './top-nav-wings';
+import { useHasPersistentNavWings } from './persistent-nav-wings';
 
 /** Компакт-бар хаба (решение владельца 2026-09-09, Figma 1603-93157 →
  * 1733-93740): при прокрутке хаб-шапки (заголовок + пилюля) бар показывает
@@ -123,28 +125,27 @@ export function TopNav({
 }: TopNavProps): JSX.Element {
   const user = useTopNavUser();
 
-  const firstName = user?.name;
-  // pending — useMe в полёте (провайдер пометил сам): скелетон вместо
-  // текста — текстовый плейсхолдер «Пользователь» раздувал крыло и
-  // наезжал на заголовок хаба на мобайле (аудит #876), ширина кнопки
-  // должна быть стабильной. Ошибка useMe и имя-null — терминальные
-  // состояния, вне провайдера контекста нет — все три показывают
-  // текстовый плейсхолдер, как раньше.
-  const pending = user !== null && user.pending === true && firstName === undefined;
-  // «Пользователь» — плейсхолдер и для пустой строки имени (контракт её
-  // допускает): фолбэчим и её, не только null/undefined.
-  const wingName =
-    pending ? undefined : firstName === undefined || firstName === '' ? 'Пользователь' : firstName;
+  // Имя и pending крыла — общая чистая логика с постоянным крылом ПК
+  // (PersistentNavWings): плейсхолдер «Пользователь», скелетон в pending.
+  const { wingName, pending } = topNavWingUser(user);
   // Крылья: мобайл — только с mobileWings; планшет (561–1023) — без
   // leading-кнопки, ПК — всегда.
   // Boolean — чтобы условный leading={cond && <Button/>} при cond=false
   // считался «без leading». Внутри полноэкранной поверхности (overlay)
   // крылья на мобайле/планшете отсутствуют, на ПК их рисует сама
   // поверхность — хром ПК не исчезает (решение 25.09, доработка #865).
+  // Под постоянным крылом ПК (PersistentNavWings в ScreenLayout) собственное
+  // крыло страницы на ПК гасится — иначе два одинаковых крыла в одном
+  // слоте (решение владельца 22.10.2026, анти-мигание аватара).
   const hasLeading = Boolean(leading);
-  const wingsMobileClass = !overlay && mobileWings ? 'flex' : 'hidden';
-  const wingsTierClass =
-    hasLeading || overlay || hideWingsBelowDesktop ? 'desktop:flex' : 'tablet:flex';
+  const persistentWings = useHasPersistentNavWings();
+  const { wingsMobileClass, wingsTierClass, desktopWingsClass } = topNavWingClasses({
+    hasLeading,
+    overlay,
+    hideWingsBelowDesktop,
+    mobileWings,
+    persistentWings,
+  });
 
   return (
     <header
@@ -167,6 +168,7 @@ export function TopNav({
           'absolute left-0 top-0 z-10 h-[72px] items-center pl-[22px] outline-none focus-visible:rounded-pill focus-visible:ring-2 focus-visible:ring-primary',
           wingsMobileClass,
           wingsTierClass,
+          desktopWingsClass,
         )}
       >
         <HeaderLogo />
@@ -176,6 +178,7 @@ export function TopNav({
           'absolute right-0 top-0 z-10 h-[72px] items-center',
           wingsMobileClass,
           wingsTierClass,
+          desktopWingsClass,
         )}
       >
         {/* Имя крыла — на всех ярусах (решение владельца 02.10, макет

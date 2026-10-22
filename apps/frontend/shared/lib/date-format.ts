@@ -10,7 +10,7 @@
 
 import type { IsoDate, IsoRange } from './calendar';
 import { fromIso, isoYear } from './calendar';
-import { pluralize } from './pluralize';
+import { daysWord } from './days-word';
 
 const dayMonthFormatter = new Intl.DateTimeFormat('ru-RU', {
   day: 'numeric',
@@ -90,7 +90,7 @@ export const MONTH_PREPOSITIONAL: ReadonlyArray<string> = [
 
 /** Русское склонение «день/дня/дней»: 1 день, 3 дня, 5 дней, 21 день. */
 export function formatOverdueDays(days: number): string {
-  return `${days} ${pluralize(Math.abs(days), 'день', 'дня', 'дней')}`;
+  return `${days} ${daysWord(Math.abs(days))}`;
 }
 
 /** Полноширинная дата «01.01.2025» — границы диапазона другого года. */

@@ -8,6 +8,8 @@ import {
   DesktopNavPills,
   DesktopSidebar,
   PageTransitionOverlay,
+  PersistentNavWings,
+  PersistentNavWingsProvider,
   TabBar,
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
@@ -35,8 +37,9 @@ import { TopNavUserProvider } from './top-nav-user-provider';
  * приложения (ADR 0032): регистрация и тихое обновление service worker
  * и PushPermissionGate — невидимый
  * стартовый гейт пушей: heal-проверка правды подписки при загрузке и
- * авто-промпт новому юзеру (слайс 2 #1038); системный промпт из него
- * поднимает только авто-промпт, и только пока разрешение `default`.
+ * авто-промпт разрешения (слайс 2 #1038, вариант (c) #1548 — окно при
+ * каждом заходе); системный промпт из него поднимается при каждом заходе,
+ * пока разрешение `default`.
  */
 /** Число непрочитанных для бейджей навигации (#747): тот же react-query
  * запрос, что у чипа ленты — SSE и refetch-on-focus обновляют кэш один
@@ -53,29 +56,36 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
   const notificationsBadge = useNavigationBadge();
 
   return (
-    <TabBarVisibilityProvider>
-      <HubPrefetchProvider>
-        <TopNavUserProvider>
-          <div className="screen-shell flex min-h-dvh flex-col tablet:pt-[72px]">
-            <DesktopSidebar />
-            <div className="flex min-w-0 flex-1 flex-col">
-              {children}
+    <PersistentNavWingsProvider>
+      <TabBarVisibilityProvider>
+        <HubPrefetchProvider>
+          <TopNavUserProvider>
+            <div className="screen-shell flex min-h-dvh flex-col tablet:pt-[72px]">
+              <DesktopSidebar />
+              {/* Постоянное крыло ПК (лого + профиль): переживает навигации,
+               * аватар шапки не перемонтируется (решение 22.10.2026); экраны
+               * под провайдером своё ПК-крыло гасят. Мобайл/планшет — крылья
+               * самих экранов, мигание гасит реестр загруженных фото. */}
+              <PersistentNavWings />
+              <div className="flex min-w-0 flex-1 flex-col">
+                {children}
+              </div>
+              <DesktopNavPills notificationsBadge={notificationsBadge ?? 0} />
+              <TabBar notificationsUnread={(notificationsBadge ?? 0) > 0} />
+              <ServiceWorkerRegister />
+              <ServiceWorkerUpdater />
+              <PushPermissionGate />
+              <NotificationStreamGate />
+              <RealtimeStreamProvider />
+              {/* Шторка переходов под Suspense: useSearchParams внутри требует
+               * границы при статическом рендере (порт alterix-new). */}
+              <Suspense fallback={null}>
+                <PageTransitionOverlay />
+              </Suspense>
             </div>
-            <DesktopNavPills notificationsBadge={notificationsBadge ?? 0} />
-            <TabBar notificationsUnread={(notificationsBadge ?? 0) > 0} />
-            <ServiceWorkerRegister />
-            <ServiceWorkerUpdater />
-            <PushPermissionGate />
-            <NotificationStreamGate />
-            <RealtimeStreamProvider />
-            {/* Шторка переходов под Suspense: useSearchParams внутри требует
-             * границы при статическом рендере (порт alterix-new). */}
-            <Suspense fallback={null}>
-              <PageTransitionOverlay />
-            </Suspense>
-          </div>
-        </TopNavUserProvider>
-      </HubPrefetchProvider>
-    </TabBarVisibilityProvider>
+          </TopNavUserProvider>
+        </HubPrefetchProvider>
+      </TabBarVisibilityProvider>
+    </PersistentNavWingsProvider>
   );
 }

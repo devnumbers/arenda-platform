@@ -8,12 +8,23 @@ import {
   isModifiedClick,
   resolveTransitionHref,
 } from './page-transition-click';
-import { createPageTransitionMachine } from './page-transition-machine';
+import { createPageTransitionMachine, type TransitionPhase } from './page-transition-machine';
 
-/** Машина шторки — модульный синглтон: оверлей рисует его фазу, канал
+/** Машина переходов — модульный синглтон: оверлей рисует её фазу, канал
  * навигации (pushPage/replacePage/goBack из shared/lib/navigation) и
- * перехват кликов заводят в него переходы. */
-const machine = createPageTransitionMachine();
+ * перехват кликов заводят в неё переходы. Раннер view transitions —
+ * единственное DOM-касание машины: есть document.startViewTransition —
+ * основной путь кроссфейда, нет (Safari < 18, Firefox < 144) — шторка.
+ * Гвард typeof — страница рендерится и на сервере, module-level
+ * document там запрещён. */
+const machine = createPageTransitionMachine(
+  typeof document === 'undefined' || typeof document.startViewTransition !== 'function'
+    ? undefined
+    : (update) => {
+        const transition = document.startViewTransition(update);
+        return { skip: () => transition.skipTransition() };
+      },
+);
 
 /* Лист — Tailwind-утилиты на токенах (канон design-слоя без CSS-модулей):
  * база — transition-opacity на --pt-reveal-duration, покрытие короче —
@@ -30,21 +41,29 @@ const OVERLAY_CLASS = [
 ].join(' ');
 
 /**
- * Шторка плавных переходов между страницами (порт PageTransitionOverlay
- * alterix-new): клик по same-origin ссылке или программный переход
- * (pushPage/replacePage/goBack) заливает экран листом цвета поверхности
- * (--dl-surface), под ним едет навигация, по смене URL лист уходит.
- * Решение о клике — resolveTransitionHref; у шторки нет своего UI,
- * кроме полноэкранного aria-hidden листа. Тайминги канона DESIGN.md §8,
- * reduced-motion укорачивает до ~150ms. Исключение для якоря —
- * [data-page-transition-skip]. Браузерные Back/Forward без шторки:
- * popstate нельзя перехватить до навигации.
+ * Переходы между страницами (канон DESIGN.md §8, решения владельца
+ * 21.10). Основной движок — кроссфейд View Transitions API: по тапу
+ * машина стартует document.startViewTransition, старый экран остаётся
+ * живым (фаза vt-pending шторку не зажигает), навигация едет внутри
+ * update-колбэка, по смене URL браузер сам анимирует пару old/new одним
+ * кроссфейдом --pt-crossfade-duration (правила ::view-transition-* — в
+ * globals.css). Шторка ниже — фолбэк браузеров без VT и предохранитель
+ * медленной сети (watchdog 600ms машины накрывает экран листом,
+ * кроссфейд скипается). Решение о клике — resolveTransitionHref; у
+ * оверлея нет своего UI, кроме полноэкранного aria-hidden листа
+ * фолбэка. Исключение для якоря — [data-page-transition-skip].
+ * Браузерные Back/Forward без анимации: popstate нельзя перехватить до
+ * навигации.
  */
 export function PageTransitionOverlay(): JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const phase = useSyncExternalStore(machine.subscribe, machine.getPhase);
+  const phase = useSyncExternalStore(
+    machine.subscribe,
+    machine.getPhase,
+    (): TransitionPhase => 'idle',
+  );
   const urlKey = `${pathname}?${searchParams.toString()}`;
 
   // Канал программной навигации живёт, пока оверлей смонтирован: в

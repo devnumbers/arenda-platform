@@ -1,7 +1,7 @@
 'use client';
 
-import { useId, useLayoutEffect, useRef } from 'react';
-import type { ComponentProps, JSX, ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
+import type { ComponentProps, FocusEvent, JSX, MouseEvent, ReactNode } from 'react';
 import { Cancel } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { IconButton } from './icon-button';
@@ -21,9 +21,20 @@ import { IconButton } from './icon-button';
  * нет намеренно (решение владельца 2026-08-26): видимый признак фокуса —
  * каретка. Кнопка очистки появляется при непустом значении и переданном
  * onClear; остаётся в таб-порядке.
- * Суффикс и префикс (Figma 1218:54295 — единицы «м²», «м» в полях
- * характеристик) — серый текст внутри бокса, только декоративный
- * (aria-hidden): префикс стоит слева до ввода, суффикс — справа.
+ * Инлайновая единица измерения (Figma 1218:54304 — характеристики,
+ * 1270:46905 — арендная плата; решение владельца 2026-10-22; референс
+ * поведения — инпут цены Яндекс.Аренды) — проп inlineSuffix, декоративный
+ * текст (aria-hidden), который является частью строки значения: следует
+ * за введённым текстом, у пустого поля стоит у левого края. Цвет
+ * (аменда владельца 2026-10-22): серый, пока поле пусто и не в фокусе;
+ * при фокусе или непустом значении — цветом значения. Механика без
+ * JS-замера: невидимый двойник текста (тот же value, та же типографика,
+ * в потоке) занимает ровно ширину значения, инпут лежит поверх
+ * абсолютом; спан единицы стоит в потоке следом. Клик по пустой части
+ * бокса фокусирует инпут с кареткой в конце. Только для однострочного
+ * поля и без плейсхолдера (плейсхолдер не помещается в
+ * сжатый инпут); прежние каноны сняты: префикс-единица слева до ввода
+ * (1218:54295) и правый статичный суффикс.
  * Многострочное поле (Figma 1227:58065 «Title Out Multi Lines») — textarea
  * в том же боксе: бокс растёт от контента, минимум 56px; вариант titleIn
  * с multiline не сочетается — плавающий лейбл рассчитан на одну строку.
@@ -49,11 +60,16 @@ type TextFieldBaseProps = {
    * счётчик «длина/лимит»; красным — при достижении лимита. */
   readonly maxLength?: number;
   readonly onClear?: () => void;
-  /** Декоративный хвост бокса (единица измерения справа), aria-hidden. */
-  readonly suffix?: ReactNode;
-  /** Декоративная головка бокса (единица измерения слева, до ввода),
-   * aria-hidden. */
-  readonly prefix?: ReactNode;
+  /** Инлайновая единица измерения (м², м, ₽): декоративный текст,
+   * следующий за введённым значением; у пустого поля — у левого края.
+   * Цвет: серый (content-secondary), пока поле пусто и не в фокусе;
+   * при фокусе или непустом значении — цветом значения (content;
+   * аменда владельца 2026-10-22).
+   * Только однострочные поля с инпутом в потоке (titleOut или без
+   * заголовка; titleIn с плавающим лейблом не поддержан); плейсхолдер в
+   * этом режиме игнорируется — сжатому инпуту некуда его класть
+   * (механика — невидимый двойник текста в ветке unitActive). */
+  readonly inlineSuffix?: ReactNode;
   /** Только с multiline: статичная высота поля в строках (3 по умолчанию);
    * текст сверх — скролл внутри, поле не растёт (описание объекта — 8
    * строк, решение владельца 2026-10-02, кадр 1218:54295). */
@@ -82,8 +98,7 @@ export function TextField({
   error,
   maxLength,
   onClear,
-  suffix,
-  prefix,
+  inlineSuffix,
   multiline = false,
   autoGrow = false,
   rows: rowsCount = 3,
@@ -94,6 +109,72 @@ export function TextField({
 }: TextFieldProps): JSX.Element {
   const inputId = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Инлайновая единица: ширину инпута задаёт невидимый двойник текста
+  // (тот же текст той же типографикой в потоке) — единица следует за
+  // введённым без всякого JS-замера. Только ветки с инпутом в потоке
+  // (titleOut или без заголовка): в titleIn с плавающим лейблом ветки
+  // нет — там единица не поддержана. mousedown по освободившейся части
+  // бокса фокусирует инпут (ищется запросом по боксу: caller-ref инпута
+  // не трогаем). Клик по самому инпуту не перехватывается — он
+  // позиционирует каретку; клик мимо ставит каретку в конец значения,
+  // готовый к дописыванию.
+  const unitActive =
+    inlineSuffix !== undefined
+    && !multiline
+    && (variant === 'titleOut' || title === undefined);
+  const unitValue =
+    typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+  // Цвет единицы (аменда владельца 2026-10-22): серый, пока поле пусто и
+  // не в фокусе; при фокусе или непустом значении — цветом значения.
+  const [unitFocused, setUnitFocused] = useState(false);
+  const unitTinted = unitFocused || unitValue.length > 0;
+  const focusInlineUnit = (event: MouseEvent<HTMLDivElement>): void => {
+    const input = event.currentTarget.querySelector<HTMLInputElement>('input');
+    if (input === null || event.target === input) {
+      return;
+    }
+    // preventDefault: mousedown по умолчанию унёс бы фокус с инпута.
+    event.preventDefault();
+    input.focus();
+    // Каретка в конец — только у текстовых типов: у number/email движок
+    // браузера бросает InvalidStateError на принудительную селекцию.
+    if (input.type === 'text') {
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    }
+  };
+  // Общая анатомия однострочного инпута для обеих веток (обычной и
+  // инлайновой единицы); в режиме единицы плейсхолдер игнорируется —
+  // сжатому до ширины текста инпуту некуда его класть. Фокус-обработчики
+  // единицы составлены с caller-обработчиками, не заменяют их.
+  const renderSingleLineInput = (inputClassName: string): JSX.Element => {
+    const { onFocus: callerFocus, onBlur: callerBlur, ...inputRest } =
+      props as ComponentProps<'input'>;
+    const focusProps = unitActive
+      ? {
+          onFocus: (event: FocusEvent<HTMLInputElement>) => {
+            callerFocus?.(event);
+            setUnitFocused(true);
+          },
+          onBlur: (event: FocusEvent<HTMLInputElement>) => {
+            callerBlur?.(event);
+            setUnitFocused(false);
+          },
+        }
+      : {};
+    return (
+      <input
+        id={inputId}
+        className={inputClassName}
+        disabled={disabled}
+        value={value}
+        placeholder={unitActive ? undefined : placeholder}
+        maxLength={maxLength}
+        {...inputRest}
+        {...focusProps}
+      />
+    );
+  };
   /** Заголовок с маркером обязательности — красная звёздочка следом. */
   const titleNode =
     title !== undefined && required ? (
@@ -131,6 +212,7 @@ export function TextField({
   const box = cn(
     'flex w-full items-center rounded-button bg-surface-muted pl-[18px] pr-2 transition-shadow',
     multiline ? 'min-h-14 flex-col justify-center py-[10px]' : 'h-14 py-0',
+    unitActive && 'cursor-text',
     !disabled && error === undefined && 'hover:shadow-[inset_0_0_0_2px_var(--dl-input-border)]',
     error !== undefined && 'bg-surface-danger hover:shadow-none',
   );
@@ -150,7 +232,10 @@ export function TextField({
           {titleNode}
         </label>
       )}
-      <div className={box}>
+      <div
+        className={box}
+        onMouseDown={unitActive && !disabled ? focusInlineUnit : undefined}
+      >
         {variant === 'titleIn' && !multiline && title !== undefined && (
           <div className="relative h-full min-w-0 flex-1">
             {/* Инпут идёт перед лейблом: peer-варианты требуют, чтобы peer
@@ -198,11 +283,6 @@ export function TextField({
         )}
         {(variant === 'titleOut' || title === undefined || multiline) && (
           <>
-            {prefix !== undefined && (
-              <span aria-hidden className="pr-1 text-base leading-[18px] text-content-secondary">
-                {prefix}
-              </span>
-            )}
             {multiline ? (
               <textarea
                 id={inputId}
@@ -215,20 +295,34 @@ export function TextField({
                 rows={rowsCount}
                 {...(props as ComponentProps<'textarea'>)}
               />
+            ) : unitActive ? (
+              // Режим инлайновой единицы: невидимый двойник текста (тот же
+              // текст, та же типографика) занимает ровно ширину значения в
+              // потоке, инпут лежит поверх абсолютом — каретка, выделение и
+              // ввод обычные, синхронизация с двойником не нужна (это один
+              // и тот же value в одном рендере).
+              <span className="relative inline-flex h-full min-w-[2px] max-w-full items-center overflow-hidden">
+                <span aria-hidden className="invisible whitespace-pre text-base leading-[18px]">
+                  {unitValue}
+                </span>
+                {renderSingleLineInput(cn(input, 'absolute inset-0 px-0'))}
+              </span>
             ) : (
-              <input
-                id={inputId}
-                className={cn(input, prefix !== undefined && 'px-0')}
-                disabled={disabled}
-                value={value}
-                placeholder={placeholder}
-                maxLength={maxLength}
-                {...(props as ComponentProps<'input'>)}
-              />
+              renderSingleLineInput(input)
             )}
-            {suffix !== undefined && (
-              <span aria-hidden className="pl-1 text-base leading-[18px] text-content-secondary">
-                {suffix}
+            {unitActive && (
+              <span
+                aria-hidden
+                className={cn(
+                  'shrink-0 text-base leading-[18px]',
+                  // Зазор перед единицей — только при непустом значении
+                  // (аменда владельца 2026-10-22, референс — Яндекс):
+                  // пустое поле держит единицу у левого края (18px бокса).
+                  unitValue.length > 0 && 'pl-1',
+                  unitTinted ? 'text-content' : 'text-content-secondary',
+                )}
+              >
+                {inlineSuffix}
               </span>
             )}
           </>
@@ -236,10 +330,13 @@ export function TextField({
         {showClear && (
           <IconButton
             icon={<Cancel />}
-            label="Очистить поле"
+            label={title !== undefined ? `Очистить «${title}»` : 'Очистить поле'}
             variant={error !== undefined ? 'danger' : 'secondary'}
             disabled={disabled}
             onClick={onClear}
+            // В обычном режиме инпут w-full сам прижимает кнопку; ml-auto
+            // нужен только в режиме единицы, где инпут сжат до ширины текста.
+            className={unitActive ? 'ml-auto' : undefined}
           />
         )}
       </div>

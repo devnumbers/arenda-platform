@@ -141,10 +141,11 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
       <div className="flex flex-col gap-6 py-6">
         <div className="flex flex-col items-center gap-6">
           <Image
-            src="/images/tariff/tariff-avatar.png"
+            src="/images/tariff/tariff-avatar.webp"
             alt=""
             width={128}
             height={128}
+            quality={90}
             className={cn('h-24 w-24 rounded-full bg-primary/10 p-[17px]', circleIconRing.white)}
           />
           <h1 className="m-0 text-xl font-normal leading-6 text-content">

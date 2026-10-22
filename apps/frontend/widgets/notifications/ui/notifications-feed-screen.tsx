@@ -204,12 +204,12 @@ export function NotificationsFeedScreen({
             <NotificationsErrorCard onRetry={() => void feedQuery.refetch()} loading={feedQuery.isFetching} />
           ) : showEmptyAll ? (
             <EmptyState
-              imageSrc="/images/notifications/empty-bell.png"
+              imageSrc="/images/notifications/empty-bell.webp"
               title="Нет уведомлений"
             />
           ) : showEmptyUnread ? (
             <EmptyState
-              imageSrc="/images/notifications/empty-bell.png"
+              imageSrc="/images/notifications/empty-bell.webp"
               title="Все уведомления прочитаны"
             />
           ) : (

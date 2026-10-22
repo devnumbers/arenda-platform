@@ -212,6 +212,17 @@ export const ROUTES = {
    * объекта, где он изменения сделал). */
   historyMemberProperty: (participantId: string, propertyId: string) =>
     `/history/participants/${encodeURIComponent(participantId)}/properties/${encodeURIComponent(propertyId)}`,
+  /** Лента «Действия участника» (карта #1582, решение владельца
+   * 22.10.2026 — переработка его же объектного deep-link: «страница
+   * истории действий участника (только одного), где будут все объекты,
+   * к которым я добавил ему доступ; чужих там объектов не будет»).
+   * Скоуп — текущие ноги агрегата (#693), выводит сервер:
+   * GET /participants/{participantId}/history — тот же идентификатор,
+   * что у страницы участника (uuid юзера либо pending-почта). Не путать
+   * со снятой глобальной страницей «Действия участника» (#1361) — путь
+   * /history/participants/[id] остался за перманентным 308. */
+  participantHistory: (participantId: string) =>
+    `/participants/${encodeURIComponent(participantId)}/history`,
   /** Центр уведомлений — лента (карта #734, тикет #744): хаб-маршрут
    * среднего таба TabBar и пилюли ПК. */
   notifications: '/notifications',

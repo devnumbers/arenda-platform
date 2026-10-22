@@ -44,6 +44,32 @@ export function requiresInstallOnIos(): boolean {
     return isIosDevice() && !isStandaloneMode();
 }
 
+/**
+ * True when this browser honours a gesture-less
+ * `Notification.requestPermission()` — the call made outside a
+ * user-generated event handler actually raises the prompt. Chromium browsers
+ * do; Apple WebKit never does (Safari macOS ties the request to a user
+ * gesture, iOS/iPadOS requires a gesture inside an installed PWA), and a
+ * gesture-less call there is not merely useless but harmful: WebKit resolves
+ * it `denied` ⚠ (persistence undocumented), which would poison the
+ * permission store and break the future gesture path — the settings toggle.
+ *
+ * Firefox passes this gate deliberately: it rejects the gesture-less promise
+ * instantly, and the caller catches that rejection silently (решение #1548,
+ * вариант (c) карты #1545). iPadOS 13+ spoofs desktop Safari, so the iOS
+ * detector's touch signal, not just UA tokens, is load-bearing here.
+ */
+export function allowsGesturelessPermissionPrompt(): boolean {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+    if (isIosDevice()) return false;
+    const ua = navigator.userAgent;
+    // WebKit-движок без токенов других браузеров: Safari desktop и прочие
+    // обёртки над ним (Chrome/Edge/Firefox вставляют свои токены в UA).
+    const isAppleWebkit =
+        /safari/i.test(ua) && !/chrome|chromium|crios|fxios|edg|android/i.test(ua);
+    return !isAppleWebkit;
+}
+
 export type NotificationPermissionState = NotificationPermission | 'unsupported';
 
 /**

@@ -91,7 +91,7 @@ test('неверный код — инлайн в поле, крестик сб�
     await page.getByRole('textbox', { name: 'Код' }).evaluate((el) => getComputedStyle(el).caretColor),
   ).toBe('rgb(43, 127, 255)');
 
-  await page.getByRole('button', { name: 'Очистить поле' }).click();
+  await page.getByRole('button', { name: 'Очистить «Код»' }).click();
   await expect(page.getByText('Неверный код')).toBeHidden();
   await expect(page.getByRole('textbox', { name: 'Код' })).toHaveValue('');
 

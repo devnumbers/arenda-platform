@@ -137,6 +137,7 @@ export function PropertyAboutScreen(): JSX.Element {
                             alt=""
                             width={64}
                             height={64}
+                            quality={90}
                             className="h-16 w-16"
                         />
                         <p className="mt-3 max-w-[281px] text-sm leading-4 text-content-secondary">

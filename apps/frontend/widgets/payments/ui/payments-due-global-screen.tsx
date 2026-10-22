@@ -203,7 +203,7 @@ function PaymentsDueEmpty(): JSX.Element {
       className="flex min-h-[calc(100dvh-216px)] flex-1 items-center justify-center"
     >
       <EmptyState
-        imageSrc="/images/payments/due-empty.png"
+        imageSrc="/images/payments/due-empty.webp"
         title="Нет платежей на оплату"
         description="Когда вам придет уведомление об оплате, платеж появится здесь"
         descriptionClassName="text-content"

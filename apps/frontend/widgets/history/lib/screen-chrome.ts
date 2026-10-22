@@ -9,7 +9,9 @@ import { ROUTES } from '@/shared/config/routes';
  * точка — чтобы хром фолбэка не разъезжался с хромом экрана.
  */
 
-/** Заголовок экрана по скоупу страницы. */
+/** Заголовок экрана по скоупу страницы. Страница участника без объекта —
+ * «Действия участника» (карта #1582): скоуп «человек × его текущие ноги»,
+ * переработка решения 22.10.2026. */
 export function historyScreenTitle(
   participantId?: string,
   propertyId?: string,
@@ -18,11 +20,13 @@ export function historyScreenTitle(
     ? 'Действия участника в объекте'
     : propertyId !== undefined
       ? 'История объекта'
-      : 'История действий';
+      : participantId !== undefined
+        ? 'Действия участника'
+        : 'История действий';
 }
 
 /** Фолбэк «Назад» по скоупу страницы (общий предок источника входа,
- * #843). */
+ * #843). Страница участника возвращается на неё саму (карта #1582). */
 export function historyScreenBackHref(
   participantId?: string,
   propertyId?: string,
@@ -31,5 +35,7 @@ export function historyScreenBackHref(
     ? ROUTES.participantRights(participantId, propertyId)
     : propertyId !== undefined
       ? ROUTES.propertyParticipants(propertyId)
-      : ROUTES.participants;
+      : participantId !== undefined
+        ? ROUTES.participant(participantId)
+        : ROUTES.participants;
 }

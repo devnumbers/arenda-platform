@@ -190,13 +190,22 @@ test.describe('гард двойного сабмита (#1120)', () => {
     await page.getByRole('textbox', { name: 'Задача' }).fill(title);
     await page.getByRole('button', { name: 'Далее' }).click();
 
-    const release = await holdLatency(page, 600);
-    const submit = page.getByRole('button', { name: 'Создать', exact: true });
-    await doubleClickInOneTask(submit);
-    await expect(submit).toBeDisabled();
-    await expect(page).toHaveURL(/\/tasks$/);
-    await release();
-    expect(posts).toHaveLength(1);
-    expect(await sqlCount('task_rules', title)).toBe(1);
+    try {
+      const release = await holdLatency(page, 600);
+      const submit = page.getByRole('button', { name: 'Создать', exact: true });
+      await doubleClickInOneTask(submit);
+      await expect(submit).toBeDisabled();
+      await expect(page).toHaveURL(/\/tasks$/);
+      await release();
+      expect(posts).toHaveLength(1);
+      expect(await sqlCount('task_rules', title)).toBe(1);
+    } finally {
+      // Тест не мусорит ленту: правило задачи и его вхождение гасятся
+      // даже при упавшем ассерте — «совсем пустая лента» empty-filter
+      // ожидает чистый фид (утечка «Гард-задача NNN» ловилась им в
+      // полном прогоне, 2026-10-22).
+      await execE2eSql(`DELETE FROM tasks WHERE title = '${title}'`);
+      await execE2eSql(`DELETE FROM task_rules WHERE title = '${title}'`);
+    }
   });
 });

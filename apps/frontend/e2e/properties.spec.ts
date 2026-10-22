@@ -113,35 +113,41 @@ test('правка объекта: «Описание» — статичный �
   expect(await description.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
 });
 
-test('правка объекта: пикер «Тип объекта» — 9 категорий, жильё через «Тип жилья» (#1081)', async ({ page, seededUser }) => {
-  // Канон владельца (кадры 1213-52111 + 1218-54295, «тут всё как надо»):
-  // апартаменты и студия не выбираются чипом «Тип объекта» — уточнение
-  // квартира/апартаменты/студия живёт в отдельном поле «Тип жилья»
-  // (двухуровневая модель #1003). Смена уточнения меняет плейсхолдер
-  // названия по типу, категория в закрытом боксе остаётся «Квартира».
+test('правка объекта: пикер «Тип объекта» — 11 главных категорий (аменда 22.10)', async ({ page, seededUser }) => {
+  // Аменда владельца 22.10 (Figma 3625-89189): квартира, студия и
+  // апартаменты — главные категории, поля «Тип жилья» у формы больше
+  // нет. Шит пикера — те же 11 категорий, что на шаге 1 создания; выбор
+  // «Студии» меняет и закрытый бокс, и плейсхолдер названия по типу.
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto(`/properties/${SEEDED_APARTMENT_PROPERTY_ID}/edit`);
 
-  // Шит пикера: те же 9 категорий, что на шаге 1 создания; чип выбранной
-  // категории отмечен. Пикер на форме один — триггер уникален.
+  // Пикер на форме один — триггер уникален.
   const pickerTrigger = page.locator('button[aria-haspopup="dialog"]');
   await expect(pickerTrigger).toHaveText('Квартира');
   await pickerTrigger.click();
   const sheet = page.getByRole('dialog', { name: 'Тип объекта' });
   const chips = sheet.getByRole('group', { name: 'Тип объекта' });
-  await expect(chips.getByRole('button')).toHaveCount(9);
-  await expect(chips.getByRole('button', { name: 'Апартаменты' })).toHaveCount(0);
-  await expect(chips.getByRole('button', { name: 'Студия' })).toHaveCount(0);
+  // Порядок кадра 3625-89189: типы жилья сразу после квартиры.
+  await expect(chips.getByRole('button')).toHaveText([
+    'Квартира',
+    'Студия',
+    'Апартаменты',
+    'Комната',
+    'Дом',
+    'Коммерческое помещение',
+    'Офис',
+    'Склад',
+    'Гараж',
+    'Машиноместо',
+    'Земельный участок',
+  ]);
   await expect(chips.getByRole('button', { name: 'Квартира' })).toHaveAttribute('aria-pressed', 'true');
-  await page.keyboard.press('Escape');
-
-  // «Тип жилья» — отдельное поле, порядок кадра 1218-54295.
-  const housing = page.getByRole('group', { name: 'Тип жилья' });
-  await expect(housing.getByRole('button')).toHaveText(['Квартира', 'Студия', 'Апартаменты']);
-  await housing.getByRole('button', { name: 'Студия' }).click();
-  await expect(housing.getByRole('button', { name: 'Студия' })).toHaveAttribute('aria-pressed', 'true');
+  await chips.getByRole('button', { name: 'Студия' }).click();
+  await expect(pickerTrigger).toHaveText('Студия');
   await expect(page.getByPlaceholder('Моя студия')).toBeVisible();
-  await expect(pickerTrigger).toHaveText('Квартира');
+
+  // Поля «Тип жилья» у формы больше нет.
+  await expect(page.getByRole('group', { name: 'Тип жилья' })).toHaveCount(0);
 });
 
 test('чужие карточки: ряд владельца — имя, у безымянного «Пользователь» (карта #1105, аменд #1123, #1109)', async ({ page, seededUser }, testInfo) => {

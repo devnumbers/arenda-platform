@@ -14,6 +14,7 @@ import (
 	historyapp "github.com/nambers/arenda-planform/apps/backend/internal/history/application"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/httpsupport"
 	"github.com/nambers/arenda-planform/apps/backend/internal/platform/openapi"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // HistoryHandlers implements the journal's reading endpoints: the
@@ -39,32 +40,10 @@ func (h *HistoryHandlers) GetHistory(w http.ResponseWriter, r *http.Request, par
 		return
 	}
 
-	q := historyapp.FeedQuery{}
-	if params.BeforeCursor != nil {
-		q.BeforeCursor = *params.BeforeCursor
-	}
-	if params.AfterCursor != nil {
-		q.AfterCursor = *params.AfterCursor
-	}
-	if params.Limit != nil {
-		q.Limit = *params.Limit
-	}
-	if params.DateFrom != nil {
-		from := time.Date(params.DateFrom.Year(), params.DateFrom.Month(), params.DateFrom.Day(), 0, 0, 0, 0, time.UTC)
-		q.DateFrom = &from
-	}
-	if params.DateTo != nil {
-		// Верхняя граница периода исключающая — дата + 24ч (канон
-		// админ-аудита): экран фильтрует календарными днями.
-		to := time.Date(params.DateTo.Year(), params.DateTo.Month(), params.DateTo.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
-		q.DateTo = &to
-	}
-	if params.Actions != nil {
-		q.BaseActions = splitCSV(*params.Actions)
-	}
-	if params.Kinds != nil {
-		q.Kinds = splitCSV(*params.Kinds)
-	}
+	q := foldFeedPageQuery(
+		params.BeforeCursor, params.AfterCursor, params.Limit,
+		params.DateFrom, params.DateTo, params.Actions, params.Kinds, params.Q,
+	)
 	actorIDs, err := parseUUIDList(params.ActorIds, "actor id")
 	if err != nil {
 		h.writeError(r, w, err)
@@ -77,9 +56,6 @@ func (h *HistoryHandlers) GetHistory(w http.ResponseWriter, r *http.Request, par
 		return
 	}
 	q.PropertyIDs = propertyIDs
-	if params.Q != nil {
-		q.Query = *params.Q
-	}
 
 	page, err := h.svc.Feed(r.Context(), actor, q)
 	if err != nil {
@@ -87,6 +63,88 @@ func (h *HistoryHandlers) GetHistory(w http.ResponseWriter, r *http.Request, par
 		return
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, historyPageResponse(page))
+}
+
+// GetParticipantHistory implements GET /participants/{participantId}/history
+// (карта #1582, тикет #1583): the «Действия участника» page — the server
+// derives the scope (the person's user uuid AND their current legs), the
+// request carries only the page shape. A pending invitee is an empty page;
+// a person outside the reader's scope is the privacy 404, a basic-tariff
+// owner is the role-aware 402.
+func (h *HistoryHandlers) GetParticipantHistory(
+	w http.ResponseWriter, r *http.Request, participantID string, params openapi.GetParticipantHistoryParams,
+) {
+	actor, ok := httpsupport.RequireUser(w, r)
+	if !ok {
+		return
+	}
+
+	q := foldFeedPageQuery(
+		params.BeforeCursor, params.AfterCursor, params.Limit,
+		params.DateFrom, params.DateTo, params.Actions, params.Kinds, params.Q,
+	)
+	// «Объекты» шита страницы (аменда владельца 22.10.2026): выбор едет в
+	// сервис, который пересекает его с ногами агрегата — чужой id молча
+	// выпадает; битый uuid — 400, как у /history.
+	propertyIDs, err := parseUUIDList(params.PropertyIds, "property id")
+	if err != nil {
+		h.writeError(r, w, err)
+		return
+	}
+	q.PropertyIDs = propertyIDs
+
+	page, err := h.svc.ParticipantFeed(r.Context(), actor, participantID, q)
+	if err != nil {
+		h.writeErrorWithNotFound(r, w, err, "Участник не найден")
+		return
+	}
+	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, historyPageResponse(page))
+}
+
+// foldFeedPageQuery folds the feed's shared page parameters — cursors,
+// limit, period, base actions, kinds, search — into the service query. Both
+// feed endpoints carry the same aliases (ADR 0061 §7); actor id lists stay
+// endpoint-specific (the participant page derives the actor on the server),
+// property ids travel on both — /history фильтрует ими область, страница
+// участника сужает ею ноги. Malformed values surface as the contract's 400
+// from the service's own fold (cursors, page size, vocabulary, search
+// length).
+func foldFeedPageQuery(
+	beforeCursor, afterCursor *string,
+	limit *int,
+	dateFrom, dateTo *openapi_types.Date,
+	actions, kinds, query *string,
+) historyapp.FeedQuery {
+	q := historyapp.FeedQuery{}
+	if beforeCursor != nil {
+		q.BeforeCursor = *beforeCursor
+	}
+	if afterCursor != nil {
+		q.AfterCursor = *afterCursor
+	}
+	if limit != nil {
+		q.Limit = *limit
+	}
+	if dateFrom != nil {
+		from := time.Date(dateFrom.Year(), dateFrom.Month(), dateFrom.Day(), 0, 0, 0, 0, time.UTC)
+		q.DateFrom = &from
+	}
+	if dateTo != nil {
+		// Верхняя граница периода исключающая — дата + 24ч (канон
+		// админ-аудита): экран фильтрует календарными днями.
+		to := time.Date(dateTo.Year(), dateTo.Month(), dateTo.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+		q.DateTo = &to
+	}
+	if actions != nil {
+		q.BaseActions = splitCSV(*actions)
+	}
+	if kinds != nil {
+		q.Kinds = splitCSV(*kinds)
+	}
+	if query != nil {
+		q.Query = *query
+	}
+	return q
 }
 
 // GetHistoryFilters implements GET /history/filters.
@@ -138,12 +196,20 @@ func (h *HistoryHandlers) GetHistoryFilters(w http.ResponseWriter, r *http.Reque
 // 402 is the role-aware tariff gate's verdict (ADR 0064, ревизия #1465),
 // the middleware's canonical wire shape.
 func (h *HistoryHandlers) writeError(r *http.Request, w http.ResponseWriter, err error) {
+	h.writeErrorWithNotFound(r, w, err, "Объект не найден")
+}
+
+// writeErrorWithNotFound is writeError with the surface's own 404 wording —
+// the participant page's privacy-404 names the missing person, not the
+// property («Участник не найден»); the statuses and the privacy discipline
+// are the same.
+func (h *HistoryHandlers) writeErrorWithNotFound(r *http.Request, w http.ResponseWriter, err error, notFoundDetail string) {
 	switch {
 	case errors.Is(err, historyapp.ErrTariffRequired):
 		httpsupport.WriteTariffRequired(r.Context(), w)
 	case errors.Is(err, historyapp.ErrNotFound):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusNotFound,
-			httpsupport.Problem(r.Context(), "Not found", "Объект не найден"))
+			httpsupport.Problem(r.Context(), "Not found", notFoundDetail))
 	case errors.Is(err, historyapp.ErrInvalidInput):
 		httpsupport.WriteProblem(r.Context(), w, http.StatusBadRequest,
 			httpsupport.Problem(r.Context(), "Bad request", "Некорректный запрос"))

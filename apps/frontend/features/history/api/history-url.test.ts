@@ -48,4 +48,34 @@ describe('historyFeedUrl', () => {
       historyFeedUrl({ propertyIds: ['33333333-3333-4333-8333-333333333333'] }, undefined, 1),
     ).toBe('/history?limit=1&property_ids=33333333-3333-4333-8333-333333333333');
   });
+
+  it('страница участника: под-ресурс /participants/{id}/history, скоуп выводит сервер (карта #1582)', () => {
+    expect(
+      historyFeedUrl({ participantId: '12111111-1111-4111-8111-111111111121' }, undefined),
+    ).toBe(`/participants/12111111-1111-4111-8111-111111111121/history?limit=${HISTORY_PAGE_SIZE}`);
+  });
+
+  it('страница участника: курсоры, поиск и «Объекты» шита едут; actor_ids нет (актёра выводит сервер)', () => {
+    // «Объекты» — аменда владельца 22.10.2026 («объекты опять же только
+    // те, в которые приглашён участник»): выбор сужает ноги пересечением
+    // на сервере; actor_ids странице не указ — скоуп выводит резолвер.
+    const url = historyFeedUrl(
+      {
+        // Параметр маршрута Next декодирует — билдер кодирует сам (канон
+        // ROUTES.participant).
+        participantId: 'pending@example.com',
+        dateFrom: '2026-10-01',
+        actorIds: ['11111111-1111-4111-8111-111111111111'],
+        propertyIds: ['33333333-3333-4333-8333-333333333333'],
+        q: 'гараж',
+      },
+      { before: 'blob-old' },
+    );
+    expect(url).toBe(
+      '/participants/pending%40example.com/history' +
+        `?limit=${HISTORY_PAGE_SIZE}&before_cursor=blob-old` +
+        '&date_from=2026-10-01' +
+        '&property_ids=33333333-3333-4333-8333-333333333333&q=%D0%B3%D0%B0%D1%80%D0%B0%D0%B6',
+    );
+  });
 });

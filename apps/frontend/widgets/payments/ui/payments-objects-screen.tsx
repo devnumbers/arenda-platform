@@ -31,6 +31,12 @@ import {
 } from "@/shared/ui/design";
 import { goBack } from "@/shared/lib/navigation";
 import {
+  iconsFitInRow,
+  stackColumnWidth,
+  stackFallbackWidth,
+} from "@/shared/lib/icon-row-fit";
+import { useElementWidth } from "@/shared/lib/hooks/use-element-width";
+import {
   isPaymentlessObject,
   paymentObjectStacks,
 } from "../lib/payments-objects-model";
@@ -45,7 +51,9 @@ import { pushPage } from "@/shared/lib/navigation";
  * #582; макет 654:7558): карточки видимых объектов (#575) со стопками
  * правил («Автоплатежи»/«Платежи», красная точка — просрочка правила).
  * Обрезка стопки — решение владельца 10.09: обе группы — по 4 иконки, одна
- * — 7, без счётчика; пустые группы не показываются. Булавка — пассивный
+ * — 7, без счётчика; пустые группы не показываются; поверх потолка
+ * невлезающие в один ряд колонки не рендерятся (решение владельца 22.10,
+ * shared/lib/icon-row-fit). Булавка — пассивный
  * индикатор глобального скрепления (#577; закрепление живёт на странице
  * объекта, карточка только отображает), закреплённые сверху (порядок
  * сервера). Кликается вся карточка — платежи объекта. Объект без платежей
@@ -165,7 +173,7 @@ export function PaymentsObjectsScreen(): JSX.Element {
 
               {!pending && !error && objects.length === 0 && (
                 <EmptyState
-                  imageSrc="/images/payments/payments-empty.png"
+                  imageSrc="/images/payments/payments-empty.webp"
                   title="Объектов пока нет"
                   description="Создайте объект, чтобы добавлять платежи"
                   action={
@@ -269,7 +277,10 @@ function ArchivedObjectsButton(): JSX.Element {
 
 /** Карточка объекта (654:7558): серый блок rounded-24, шапка — аватар
  * (фото или белый круг с домом), название, адрес, булавка-индикатор у
- * закреплённых; стопки правил под шапкой. Кликается вся карточка. */
+ * закреплённых; стопки правил под шапкой. Кликается вся карточка. Ряд
+ * стопки строго в одну строку (решение владельца 22.10, shared/lib/
+ * icon-row-fit): рендерится столько кругов, сколько влезает в колонку —
+ * до замера ширины колонка эталонного 375. */
 function PaymentObjectCard({
   object,
   paymentsById,
@@ -280,6 +291,10 @@ function PaymentObjectCard({
   readonly onSelect: () => void;
 }): JSX.Element {
   const stacks = paymentObjectStacks(object, paymentsById);
+  const [stacksRef, stacksWidth] = useElementWidth<HTMLDivElement>();
+  const single = stacks.length === 1;
+  const columnWidth =
+    stacksWidth === null ? null : stackColumnWidth(stacksWidth, single);
 
   return (
     <button
@@ -308,31 +323,37 @@ function PaymentObjectCard({
       </div>
 
       {stacks.length > 0 && (
-        <div className="flex gap-4">
-          {stacks.map((stack) => (
-            <div
-              key={stack.label}
-              className="flex min-w-0 flex-1 flex-col gap-3"
-            >
-              <span className="text-sm leading-4 text-content">
-                {stack.label}
-              </span>
-              <div className="flex">
-                {stack.keys.map((rule) => (
-                  <CategoryIcon
-                    key={rule.paymentId}
-                    icon={rule.icon}
-                    color={rule.color}
-                    badge={rule.hasOverdue ? "notification" : undefined}
-                    surface="muted"
-                    // Нахлёст стопки 654:7558 (gap -12): каждый следующий
-                    // ключ ложится на правый край предыдущего.
-                    className="-ml-3 first:ml-0"
-                  />
-                ))}
+        <div ref={stacksRef} className="flex gap-4">
+          {stacks.map((stack) => {
+            const fit = iconsFitInRow(
+              columnWidth ?? stackFallbackWidth(single),
+              stack.limit,
+            );
+            return (
+              <div
+                key={stack.label}
+                className="flex min-w-0 flex-1 flex-col gap-3"
+              >
+                <span className="text-sm leading-4 text-content">
+                  {stack.label}
+                </span>
+                <div className="flex flex-nowrap">
+                  {stack.keys.slice(0, fit).map((rule) => (
+                    <CategoryIcon
+                      key={rule.paymentId}
+                      icon={rule.icon}
+                      color={rule.color}
+                      badge={rule.hasOverdue ? "notification" : undefined}
+                      surface="muted"
+                      // Нахлёст стопки 654:7558 (gap -12): каждый следующий
+                      // ключ ложится на правый край предыдущего.
+                      className="-ml-3 first:ml-0"
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </button>

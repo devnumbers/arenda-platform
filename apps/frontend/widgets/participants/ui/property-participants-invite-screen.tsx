@@ -68,10 +68,11 @@ export function PropertyParticipantsInviteScreen(): JSX.Element {
       <PageContent className="px-6" aboveTabBarFooter>
         <div className="flex flex-col pt-4">
           <Image
-            src="/images/tariff/tariff-about-sharing.png"
+            src="/images/tariff/tariff-about-sharing.webp"
             alt=""
             width={96}
             height={96}
+            quality={90}
             className="h-24 w-24 self-center"
           />
           <h1 className="mt-8 text-[28px] font-semibold leading-8 text-content">

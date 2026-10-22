@@ -101,10 +101,13 @@ export function PropertyAddressSearch({
         {showEmptyState && (
           <div className="flex flex-col items-center gap-4 pt-16">
             <Image
-              src="/images/properties/address-search-empty.png"
+              src="/images/properties/address-search-empty.webp"
               alt=""
               width={128}
               height={128}
+              sizes="256px"
+              quality={90}
+              priority
               className="h-32 w-32"
             />
             <p className="max-w-[280px] text-center text-base leading-[18px] text-content-secondary">

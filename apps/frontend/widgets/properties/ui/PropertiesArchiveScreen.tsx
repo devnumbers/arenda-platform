@@ -41,7 +41,7 @@ export function PropertiesArchiveScreen(): JSX.Element {
 
         {!isLoading && !isError && isEmpty && (
           <EmptyState
-            imageSrc="/images/properties/properties-empty.png"
+            imageSrc="/images/properties/properties-empty.webp"
             imageAlt="В архиве пока пусто"
             title="В архиве пока пусто"
             description="Заархивированные объекты появятся здесь"

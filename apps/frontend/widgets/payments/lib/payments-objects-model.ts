@@ -2,9 +2,11 @@
  * Модель страницы «Объекты» глобальных платежей (карта #573, тикет #582;
  * макет 654:7558): стопки карточки объекта из данных #575, обрезка по
  * решениям владельца 10.09 — при обеих группах максимум 4 иконки в группе,
- * при одной — 7, без счётчика; пустые группы не показываются. Иконки ключей
- * — категории правил фида (#575) по paymentId: объектный ответ ключей
- * категорий не несёт.
+ * при одной — 7, без счётчика; пустые группы не показываются. Поверх
+ * потолка видимость решает ширина колонки (решение владельца 22.10:
+ * невлезающие в один ряд не показываются — shared/lib/icon-row-fit).
+ * Иконки ключей — категории правил фида (#575) по paymentId: объектный
+ * ответ ключей категорий не несёт.
  */
 
 import { categoryStyle } from '@/features/payment-categories';
@@ -21,9 +23,12 @@ export type PaymentObjectStackKey = {
   readonly color: string;
 };
 
-/** Группа стопки карточки: подпись и обрезанный ряд ключей. */
+/** Группа стопки карточки: подпись, потолок данных группы (для обрезки
+ * по ширине колонки в компоненте — shared/lib/icon-row-fit) и обрезанный
+ * ряд ключей. */
 export type PaymentObjectStack = {
   readonly label: string;
+  readonly limit: number;
   readonly keys: ReadonlyArray<PaymentObjectStackKey>;
 };
 
@@ -56,6 +61,7 @@ export function paymentObjectStacks(
     rules: GlobalPaymentObject['autoPayRules'],
   ): PaymentObjectStack => ({
     label,
+    limit,
     keys: rules.slice(0, limit).map((rule) => {
       const payment = paymentsById.get(rule.paymentId);
       const style = payment !== undefined
