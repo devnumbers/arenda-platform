@@ -121,6 +121,20 @@ func (s *settingsStub) EmailAllowed(ctx context.Context, userID uuid.UUID, categ
 	return s.allowed, s.err
 }
 
+// paymentEmailStub answers the per-payment email flag (карта #1551).
+type paymentEmailStub struct {
+	allowed bool
+	err     error
+	calls   int
+	lastID  uuid.UUID
+}
+
+func (s *paymentEmailStub) EmailAllowed(ctx context.Context, paymentID uuid.UUID) (bool, error) {
+	s.calls++
+	s.lastID = paymentID
+	return s.allowed, s.err
+}
+
 func emailJob(id uuid.UUID) *river.Job[DeliverEmailArgs] {
 	return &river.Job[DeliverEmailArgs]{
 		JobRow: &rivertype.JobRow{Attempt: 1},
@@ -135,11 +149,12 @@ func newEmailWorker(
 	emailer application.TemplateEmailSender,
 	limiter providerLimiter,
 	settings application.DeliverySettings,
+	paymentEmail application.PaymentEmailSetting,
 ) *DeliverEmailWorker {
 	t.Helper()
 	metrics, err := NewEmailMetrics()
 	require.NoError(t, err)
-	return NewDeliverEmailWorker(feed, resolver, emailer, limiter, metrics, "https://app.example", nil, settings)
+	return NewDeliverEmailWorker(feed, resolver, emailer, limiter, metrics, "https://app.example", nil, settings, paymentEmail)
 }
 
 func TestDeliverEmailWorkerSendsRenderedNotification(t *testing.T) {
@@ -150,7 +165,7 @@ func TestDeliverEmailWorkerSendsRenderedNotification(t *testing.T) {
 	emailer := &emailerStub{}
 	w := newEmailWorker(t, feed,
 		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
-		emailer, limiterStub{allow: true}, &settingsStub{allowed: true})
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true}, &paymentEmailStub{allowed: true})
 
 	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
 
@@ -173,7 +188,7 @@ func TestDeliverEmailWorkerSkipsRecipientWithoutContact(t *testing.T) {
 	w := newEmailWorker(t,
 		&feedStub{notification: n},
 		resolverStub{err: application.ErrNoContact},
-		emailer, limiterStub{allow: true}, &settingsStub{allowed: true})
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true}, &paymentEmailStub{allowed: true})
 
 	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
 	assert.Zero(t, emailer.calls, "a recipient without a verified contact has no email leg")
@@ -187,7 +202,7 @@ func TestDeliverEmailWorkerSnoozesWhenProviderBudgetSpent(t *testing.T) {
 	w := newEmailWorker(t,
 		&feedStub{notification: n},
 		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
-		emailer, limiterStub{allow: false}, &settingsStub{allowed: true})
+		emailer, limiterStub{allow: false}, &settingsStub{allowed: true}, &paymentEmailStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(n.ID))
 	require.Error(t, err)
@@ -205,7 +220,7 @@ func TestDeliverEmailWorkerRetriesSendFailure(t *testing.T) {
 	w := newEmailWorker(t,
 		&feedStub{notification: n},
 		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
-		emailer, limiterStub{allow: true}, &settingsStub{allowed: true})
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true}, &paymentEmailStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(n.ID))
 	require.ErrorContains(t, err, "send notification email")
@@ -217,7 +232,8 @@ func TestDeliverEmailWorkerCancelsWhenFeedRowGone(t *testing.T) {
 
 	w := newEmailWorker(t,
 		&feedStub{err: application.ErrNotFound},
-		resolverStub{}, &emailerStub{}, limiterStub{allow: true}, &settingsStub{allowed: true})
+		resolverStub{}, &emailerStub{}, limiterStub{allow: true}, &settingsStub{allowed: true},
+		&paymentEmailStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(uuid.Must(uuid.NewV7())))
 	require.Error(t, err)
@@ -230,7 +246,8 @@ func TestDeliverEmailWorkerRetriesFeedFailure(t *testing.T) {
 
 	w := newEmailWorker(t,
 		&feedStub{err: errors.New("db unavailable")},
-		resolverStub{}, &emailerStub{}, limiterStub{allow: true}, &settingsStub{allowed: true})
+		resolverStub{}, &emailerStub{}, limiterStub{allow: true}, &settingsStub{allowed: true},
+		&paymentEmailStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(uuid.Must(uuid.NewV7())))
 	require.ErrorContains(t, err, "load notification")
@@ -248,7 +265,7 @@ func TestDeliverEmailWorkerSkipsWhenCategoryEmailOff(t *testing.T) {
 	w := newEmailWorker(t,
 		&feedStub{notification: n},
 		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
-		emailer, limiterStub{allow: true}, settings)
+		emailer, limiterStub{allow: true}, settings, &paymentEmailStub{allowed: true})
 
 	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
 
@@ -264,8 +281,89 @@ func TestDeliverEmailWorkerFailsWhenSettingsReadFails(t *testing.T) {
 		&feedStub{notification: n},
 		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
 		&emailerStub{}, limiterStub{allow: true},
-		&settingsStub{err: errors.New("db unavailable")})
+		&settingsStub{err: errors.New("db unavailable")}, &paymentEmailStub{allowed: true})
 
 	err := w.Work(context.Background(), emailJob(n.ID))
 	require.ErrorContains(t, err, "check email settings", "a failed settings read is a retryable delivery failure")
+}
+
+// feedNotificationWithPayment builds a feed row whose payload links the
+// payment rule (the payment events' payload, решение #737) — the shape the
+// per-payment email gate reads (карта #1551).
+func feedNotificationWithPayment(t *testing.T) (domain.Notification, uuid.UUID) {
+	t.Helper()
+	n := feedNotification(t)
+	paymentID := uuid.Must(uuid.NewV7())
+	n.Payload.PaymentID = &paymentID
+	return n, paymentID
+}
+
+// The per-payment flag gates the email leg at delivery time (карта #1551,
+// тикет #1554, решение владельца 22.10.2026): a rule with «Уведомления на
+// почту» off loses only its letters — same outcome path as the category
+// matrix's skip, the feed row stays untouched. No cache: the flag is read
+// live, once per delivery.
+func TestDeliverEmailWorkerSkipsWhenPaymentEmailOff(t *testing.T) {
+	t.Parallel()
+
+	n, paymentID := feedNotificationWithPayment(t)
+	emailer := &emailerStub{}
+	paymentEmail := &paymentEmailStub{allowed: false}
+	w := newEmailWorker(t,
+		&feedStub{notification: n},
+		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true}, paymentEmail)
+
+	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
+
+	assert.Zero(t, emailer.calls, "a rule with the email flag off has no email leg")
+	assert.Equal(t, 1, paymentEmail.calls, "the flag is read once, for the payload's payment")
+	assert.Equal(t, paymentID, paymentEmail.lastID)
+}
+
+func TestDeliverEmailWorkerSendsWhenPaymentEmailOn(t *testing.T) {
+	t.Parallel()
+
+	n, _ := feedNotificationWithPayment(t)
+	emailer := &emailerStub{}
+	w := newEmailWorker(t,
+		&feedStub{notification: n},
+		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true}, &paymentEmailStub{allowed: true})
+
+	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
+	assert.Equal(t, 1, emailer.calls, "the flag on delivers the letter as today")
+}
+
+// A payload without the payment link (non-payment events, old rows) skips
+// the lookup altogether — the gate speaks only for payment events.
+func TestDeliverEmailWorkerSkipsLookupWithoutPaymentLink(t *testing.T) {
+	t.Parallel()
+
+	n := feedNotification(t)
+	emailer := &emailerStub{}
+	paymentEmail := &paymentEmailStub{allowed: false}
+	w := newEmailWorker(t,
+		&feedStub{notification: n},
+		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
+		emailer, limiterStub{allow: true}, &settingsStub{allowed: true}, paymentEmail)
+
+	require.NoError(t, w.Work(context.Background(), emailJob(n.ID)))
+
+	assert.Equal(t, 1, emailer.calls, "without a payment link the letter goes as today")
+	assert.Zero(t, paymentEmail.calls, "no payment link — no lookup")
+}
+
+func TestDeliverEmailWorkerFailsWhenPaymentFlagReadFails(t *testing.T) {
+	t.Parallel()
+
+	n, _ := feedNotificationWithPayment(t)
+	w := newEmailWorker(t,
+		&feedStub{notification: n},
+		resolverStub{contact: application.Contact{Email: testRecipientEmail}},
+		&emailerStub{}, limiterStub{allow: true}, &settingsStub{allowed: true},
+		&paymentEmailStub{err: errors.New("db unavailable")})
+
+	err := w.Work(context.Background(), emailJob(n.ID))
+	require.ErrorContains(t, err, "check payment email flag", "a failed flag read is a retryable delivery failure")
 }

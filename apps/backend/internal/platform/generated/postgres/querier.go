@@ -446,6 +446,12 @@ type Querier interface {
 	// One rule by id within the owner's scope on the given property, with the
 	// user category's current name resolved for the CategoryView.
 	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
+	// The per-payment email flag's delivery-time lookup (карта #1551, тикет
+	// #1554): the email worker asks the rule's «Уведомления на почту»
+	// (payments.notify_email, миграция 000163) right before sending — живая
+	// правда на доставку, кэша нет. Отсутствие строки правила — ответ «как
+	// сегодня»: гейт молчит по живым правилам, снесённое не глушит.
+	GetPaymentEmailFlag(ctx context.Context, id pgtype.UUID) (bool, error)
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	// Whether the notification's own payment occurrence (решение #737: payment

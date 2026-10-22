@@ -144,6 +144,7 @@ func WireRiverQueue(
 		cfg.AppBaseURL,
 		p.Logger,
 		notificationsMod.DeliverySettingsGate,
+		notificationsMod.PaymentEmailGate,
 	))
 	river.AddWorker(workers, notificationsjob.NewDeliverPushWorker(
 		notificationsMod.NotificationRepo,

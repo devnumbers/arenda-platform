@@ -133,6 +133,16 @@ SELECT EXISTS (
     WHERE payment_id = $1 AND date = $2 AND status = 'planned'
 ) AS open;
 
+-- name: GetPaymentEmailFlag :one
+-- The per-payment email flag's delivery-time lookup (карта #1551, тикет
+-- #1554): the email worker asks the rule's «Уведомления на почту»
+-- (payments.notify_email, миграция 000163) right before sending — живая
+-- правда на доставку, кэша нет. Отсутствие строки правила — ответ «как
+-- сегодня»: гейт молчит по живым правилам, снесённое не глушит.
+SELECT notify_email
+FROM payments
+WHERE id = $1;
+
 -- name: GetTaskOpenState :one
 -- Whether the notification's task still awaits action: it exists and is not
 -- completed. A completed or deleted task leaves the notification without

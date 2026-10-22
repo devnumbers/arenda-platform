@@ -192,6 +192,24 @@ func (q *Queries) GetNotificationForUser(ctx context.Context, arg GetNotificatio
 	return i, err
 }
 
+const getPaymentEmailFlag = `-- name: GetPaymentEmailFlag :one
+SELECT notify_email
+FROM payments
+WHERE id = $1
+`
+
+// The per-payment email flag's delivery-time lookup (карта #1551, тикет
+// #1554): the email worker asks the rule's «Уведомления на почту»
+// (payments.notify_email, миграция 000163) right before sending — живая
+// правда на доставку, кэша нет. Отсутствие строки правила — ответ «как
+// сегодня»: гейт молчит по живым правилам, снесённое не глушит.
+func (q *Queries) GetPaymentEmailFlag(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getPaymentEmailFlag, id)
+	var notify_email bool
+	err := row.Scan(&notify_email)
+	return notify_email, err
+}
+
 const getPaymentOpenState = `-- name: GetPaymentOpenState :one
 SELECT EXISTS (
     SELECT 1 FROM operations

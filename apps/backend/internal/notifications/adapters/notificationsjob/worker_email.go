@@ -40,14 +40,15 @@ const providerSnooze = time.Minute
 // mailer.
 type DeliverEmailWorker struct {
 	river.WorkerDefaults[DeliverEmailArgs]
-	feed       application.NotificationRepository
-	resolver   application.ContactResolver
-	emailer    application.TemplateEmailSender
-	provider   providerLimiter
-	settings   application.DeliverySettings
-	metrics    *EmailMetrics
-	appBaseURL string
-	log        *slog.Logger
+	feed         application.NotificationRepository
+	resolver     application.ContactResolver
+	emailer      application.TemplateEmailSender
+	provider     providerLimiter
+	settings     application.DeliverySettings
+	paymentEmail application.PaymentEmailSetting
+	metrics      *EmailMetrics
+	appBaseURL   string
+	log          *slog.Logger
 }
 
 // providerLimiter is the global email-provider budget the worker spends
@@ -66,13 +67,15 @@ func NewDeliverEmailWorker(
 	appBaseURL string,
 	log *slog.Logger,
 	settings application.DeliverySettings,
+	paymentEmail application.PaymentEmailSetting,
 ) *DeliverEmailWorker {
 	if log == nil {
 		log = slog.Default()
 	}
 	return &DeliverEmailWorker{
 		feed: feed, resolver: resolver, emailer: emailer,
-		provider: provider, settings: settings, metrics: metrics,
+		provider: provider, settings: settings, paymentEmail: paymentEmail,
+		metrics:    metrics,
 		appBaseURL: appBaseURL, log: log,
 	}
 }
@@ -105,6 +108,25 @@ func (w *DeliverEmailWorker) Work(ctx context.Context, job *river.Job[DeliverEma
 			slog.String("recipient_id", n.UserID.String()),
 			slog.String("category", string(category)))
 		return nil
+	}
+
+	// The per-payment flag speaks on top of the enabled matrix (карта
+	// #1551, тикет #1554, решение владельца 22.10.2026): a payment event's
+	// rule with «Уведомления на почту» off loses only its letter — the feed
+	// row and the other channels stay. No cache: the flip after the enqueue
+	// silences the in-flight job.
+	if n.Payload.PaymentID != nil {
+		paymentAllowed, err := w.paymentEmail.EmailAllowed(ctx, *n.Payload.PaymentID)
+		if err != nil {
+			return fmt.Errorf("check payment email flag: %w", err)
+		}
+		if !paymentAllowed {
+			w.metrics.RecordDispatch(ctx, outcomeSkipped)
+			w.log.InfoContext(ctx, "notification email skipped: payment email off",
+				slog.String("notification_id", n.ID.String()),
+				slog.String("payment_id", n.Payload.PaymentID.String()))
+			return nil
+		}
 	}
 
 	contact, err := w.resolver.Resolve(ctx, n.UserID)
