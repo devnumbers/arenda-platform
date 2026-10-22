@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
 import { ApiError } from '@/shared/api/errors';
@@ -73,6 +73,16 @@ async function probePushRow(endpoint: string): Promise<PushRowProbe> {
 export function usePushStartup(): void {
   const queryClient = useQueryClient();
   const { vapidKey, postSubscription } = usePushSubscriptionTools();
+  // postSubscription нестабилен идентичностью: useGuardedMutation создаёт
+  // mutateAsync заново каждый рендер, и любой резолв запроса экрана
+  // перезапускал бы эффект, абортя летящий флоу ровно на тосте (POST при
+  // этом доезжал — найдено живой приёмкой #1549). Свежая функция всегда в
+  // ref (запись в эффекте до основного — правило React Compiler «refs during
+  // render»), эффект зависит только от примитива vapidKey.
+  const postSubscriptionRef = useRef(postSubscription);
+  useEffect(() => {
+    postSubscriptionRef.current = postSubscription;
+  }, [postSubscription]);
 
   useEffect(() => {
     if (!isPushSupported()) return;
@@ -117,7 +127,8 @@ export function usePushStartup(): void {
       if (cancelled()) return;
       const step = await runAutoPromptStep({
         vapidKey,
-        postSubscription,
+        postSubscription: (payload, categories) =>
+          postSubscriptionRef.current(payload, categories),
         probePermission: readNotificationPermission,
         allowsGesturelessPrompt: allowsGesturelessPermissionPrompt,
         request: requestPushPermissionAndSubscribe,
@@ -135,5 +146,5 @@ export function usePushStartup(): void {
     return () => {
       flow.abort();
     };
-  }, [vapidKey, postSubscription, queryClient]);
+  }, [vapidKey, queryClient]);
 }
