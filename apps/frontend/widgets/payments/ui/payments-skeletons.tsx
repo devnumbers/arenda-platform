@@ -164,11 +164,14 @@ export function PaymentGroupedListSkeleton({
     <>
       {rowsPerGroup.map((rows, groupIndex) => (
         <section key={groupIndex} aria-hidden className="flex flex-col">
-          {/* Верх 24 — паритет PaymentsHeading (канон Heading). */}
+          {/* Верх 24 и гэп 8 под заголовком — паритет PaymentsHeading и
+           * контейнера группы (канон Heading, Figma 1036-40829). */}
           <Skeleton className="mx-6 mt-6 h-6 w-24" />
-          {skeletonRowWidths(rows).map((rowWidths, index) => (
-            <SkeletonListRow key={index} value widths={rowWidths} className="px-3 py-3" />
-          ))}
+          <div className="pt-2">
+            {skeletonRowWidths(rows).map((rowWidths, index) => (
+              <SkeletonListRow key={index} value widths={rowWidths} className="px-3 py-3" />
+            ))}
+          </div>
         </section>
       ))}
     </>

@@ -70,14 +70,17 @@ function SkeletonDateGroup({
       <div className="px-6 pt-6">
         <Skeleton className={`h-6 w-24 ${skeletonBlockClass('base')}`} />
       </div>
-      {widths.map((rowWidths, index) => (
-        <SkeletonListRow
-          key={index}
-          value
-          widths={rowWidths}
-          className="px-6 py-3"
-        />
-      ))}
+      {/* Гэп 8 под заголовком — паритет контейнера группы (pt-2). */}
+      <div className="pt-2">
+        {widths.map((rowWidths, index) => (
+          <SkeletonListRow
+            key={index}
+            value
+            widths={rowWidths}
+            className="px-6 py-3"
+          />
+        ))}
+      </div>
     </section>
   );
 }
