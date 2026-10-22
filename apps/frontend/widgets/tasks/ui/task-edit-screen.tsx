@@ -3,7 +3,7 @@
 import { useEffect, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
-import { Cancel } from '@/shared/assets/icons';
+import { Cancel, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { goBack } from '@/shared/lib/navigation';
 import { notify } from '@/shared/lib/notifications';
@@ -16,6 +16,8 @@ import {
   initialTaskEditDraft,
   TASK_REPEAT_OPTIONS,
   useActiveTasks,
+  useDeletePropertylessTaskRule,
+  useDeleteTaskRule,
   usePropertylessTaskRule,
   usePropertylessTasks,
   useTaskRule,
@@ -49,6 +51,9 @@ const COMMENT_MAX_LENGTH = 1000;
  * объекта и правило без объекта), отличается только путь запроса. */
 type TaskRuleUpdateMutation = UseMutationResult<void, ApiError, TaskRuleUpdateCommand>;
 
+/** Мутация удаления правила — оба среза отвечают 204 без тела. */
+type TaskRuleDeleteMutation = UseMutationResult<void, ApiError, void>;
+
 /**
  * Экран «Изменить задачу» (#502, Figma 1549-91324) на объектном срезе:
  * одноэкранная форма правки правила (словарь #494) — та же анатомия, что
@@ -66,6 +71,13 @@ type TaskRuleUpdateMutation = UseMutationResult<void, ApiError, TaskRuleUpdateCo
  * /tasks/{ruleId}/edit (#537) — решение экранной карты #522; срезы (объект
  * / без объекта) не смешиваются (ADR 0052), общие — каркас и форма
  * (TaskEditBody + TaskEditForm), различия срезов — в обёртках ниже.
+ *
+ * Удаление правила — иконка TrashBin в правом слоте хедера (глоссарий
+ * «Удалённое правило», #496): жёсткое, невыполненные вхождения сносятся,
+ * журнал выполненных остаётся; без подтверждения — сразу (решение
+ * владельца 2026-10-22). Контракт DELETE готов с правилного среза (#497)
+ * — вью вызвал его первым. После удаления — тот же выход из потока, что
+ * у «Закрыть»: goBack на список (канон удаления сущности).
  */
 export function TaskEditScreen({
   propertyId,
@@ -78,6 +90,7 @@ export function TaskEditScreen({
   const propertyQuery = useProperty(propertyId);
   const ruleQuery = useTaskRule(propertyId, ruleId);
   const update = useUpdateTaskRule(propertyId, ruleId);
+  const remove = useDeleteTaskRule(propertyId, ruleId);
   // «Сегодня» собственника — границы пикера (ADR 0048); источник — кэш
   // листинга, как на создании.
   const activeTasksQuery = useActiveTasks(propertyId);
@@ -103,6 +116,7 @@ export function TaskEditScreen({
       ruleQuery={ruleQuery}
       today={today}
       update={update}
+      remove={remove}
       close={close}
       // Правило здесь всегда объектное (propertyId — из маршрута, срезы
       // не смешиваются); монтируем форму только когда доступ подтверждён.
@@ -133,6 +147,7 @@ export function TaskPropertylessEditScreen({
   const router = useRouter();
   const ruleQuery = usePropertylessTaskRule(ruleId);
   const update = useUpdatePropertylessTaskRule(ruleId);
+  const remove = useDeletePropertylessTaskRule(ruleId);
   // «Сегодня» владельца — страница безобъектного листинга (ADR 0048).
   const todayQuery = usePropertylessTasks();
   const today = todayQuery.data?.today;
@@ -148,6 +163,7 @@ export function TaskPropertylessEditScreen({
       ruleQuery={ruleQuery}
       today={today}
       update={update}
+      remove={remove}
       close={close}
       ready
       loading={ruleQuery.isPending}
@@ -161,11 +177,15 @@ export function TaskPropertylessEditScreen({
 }
 
 /** Общий каркас экрана правки обоих срезов: хедер, состояния и монтаж
- * формы. Источники rule/today, мутация и выход из потока — из обёртки. */
+ * формы. Источники rule/today, мутации и выход из потока — из обёртки.
+ * Удаление (иконка в правом слоте хедера) — без подтверждения: успех —
+ * тост и тот же goBack, что у «Закрыть» (тост живёт в глобальном портале
+ * и виден уже на списке); провал — error-тост, экран остаётся. */
 function TaskEditBody({
   ruleQuery,
   today,
   update,
+  remove,
   close,
   ready,
   loading,
@@ -175,16 +195,44 @@ function TaskEditBody({
   readonly ruleQuery: UseQueryResult<TaskRule, ApiError>;
   readonly today: IsoDate | undefined;
   readonly update: TaskRuleUpdateMutation;
+  readonly remove: TaskRuleDeleteMutation;
   readonly close: () => void;
   readonly ready: boolean;
   readonly loading: boolean;
   readonly failed: boolean;
   readonly onRetry: () => void;
 }): JSX.Element {
+  const handleDelete = (): void => {
+    remove.mutate(undefined, {
+      onSuccess: () => {
+        // Тост живёт в глобальном портале — виден уже на списке.
+        notify.scenarios.tasks.deleted();
+        close();
+      },
+      onError: (error) => notify.scenarios.tasks.deleteError(error),
+    });
+  };
+
+  // Корзина живёт вместе с формой (канон «кнопок, которые нельзя сделать,
+  // быть не должно»): в состояниях загрузки и ошибки правила её нет —
+  // некому отвечать за удаление несуществующего/чужого правила.
+  const formMounted = !loading && !failed && ready && ruleQuery.isSuccess;
+
   return (
     <>
       <TopNav
         leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={close} />}
+        trailing={
+          formMounted ? (
+            <IconButton
+              icon={<TrashBin />}
+              label="Удалить задачу"
+              data-testid="task-edit-delete"
+              disabled={remove.isPending}
+              onClick={handleDelete}
+            />
+          ) : undefined
+        }
       >
         <TopNavTitle title="Изменить задачу" />
       </TopNav>
