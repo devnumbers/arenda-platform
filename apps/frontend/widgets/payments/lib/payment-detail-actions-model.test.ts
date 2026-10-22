@@ -22,14 +22,19 @@ describe('paymentDetailActions — состав круглых действий 
       .toStrictEqual(['editRental', 'pay']);
   });
 
-  it('управляемый платёж завершённой аренды — только «Оплатить»: «Завершена» — финал, правки условий нет (#1158)', () => {
+  it('управляемый платёж завершённой аренды — ряд пуст: завершать нечего, «Оплатить» не показывается вовсе (решение владельца 22.10)', () => {
     expect(paymentDetailActions({ isRentalManaged: true, isRentalCompleted: true }, false, false, false, false))
-      .toStrictEqual(['pay']);
+      .toStrictEqual([]);
   });
 
-  it('состояние аренды решает, не клиентский предикат завершённости правила: «Ожидает действия» (isCompleted-истина) ещё правится', () => {
+  it('управляемый платёж завершённой аренды при исчерпанном правиле — ряд пуст и здесь: состояние аренды сильнее завершённости правила', () => {
+    expect(paymentDetailActions({ isRentalManaged: true, isRentalCompleted: true }, false, true, true, false))
+      .toStrictEqual([]);
+  });
+
+  it('управляемый платёж, всё оплачено («Ожидает действия», isCompleted-истина): вместо disabled «Оплатить» — «Завершить аренду» (решение владельца 22.10)', () => {
     expect(paymentDetailActions({ isRentalManaged: true, isRentalCompleted: false }, false, true, true, false))
-      .toStrictEqual(['editRental', 'pay']);
+      .toStrictEqual(['editRental', 'completeRental']);
   });
 });
 
@@ -54,8 +59,8 @@ describe('paymentDetailActions — вычисляемая завершённос
       .toStrictEqual(['edit', 'pay']);
   });
 
-  it('у арендно-управляемого платежа «Завершить» нет: complete гейтится арендой (409)', () => {
-    expect(paymentDetailActions({ isRentalManaged: true, isRentalCompleted: false }, false, true, true, false))
+  it('у управляемого платежа решает серверная завершённость, не клиентский предикат: endDate прошла, но есть неоплаченные (долг) — «Оплатить» остаётся', () => {
+    expect(paymentDetailActions({ isRentalManaged: true, isRentalCompleted: false }, false, true, false, false))
       .toStrictEqual(['editRental', 'pay']);
   });
 });
