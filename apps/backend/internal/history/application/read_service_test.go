@@ -701,6 +701,72 @@ func TestParticipantFeedTariffGateApplies(t *testing.T) {
 	}
 }
 
+func TestParticipantFeedObjectsFilterIntersectsWithLegs(t *testing.T) {
+	t.Parallel()
+
+	// Группа «Объекты» шита страницы (аменда владельца 22.10.2026:
+	// «объекты опять же только те, в которые приглашён участник»):
+	// клиентский выбор сужает скоуп пересечением с ногами — чужой объект
+	// выбора молчит, порядок ног хранится, пустой выбор — все ноги.
+	actor := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+	leg1, leg2, leg3 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	foreign := uuid.Must(uuid.NewV7())
+	roles := map[uuid.UUID]sharedpolicy.Role{
+		leg1: sharedpolicy.RoleOwner,
+		leg2: sharedpolicy.RoleOwner,
+		leg3: sharedpolicy.RoleOwner,
+	}
+	svc, reader, _ := newParticipantFeedFake(
+		ParticipantScope{UserID: userID, PropertyIDs: []uuid.UUID{leg1, leg2, leg3}},
+		roles, nil,
+	)
+
+	if _, err := svc.ParticipantFeed(t.Context(), actor, userID.String(), FeedQuery{
+		PropertyIDs: []uuid.UUID{foreign, leg3, leg1},
+	}); err != nil {
+		t.Fatalf("participant feed with objects filter: %v", err)
+	}
+	got := reader.gotQuery
+	if got == nil {
+		t.Fatalf("the store must receive the scoped query")
+	}
+	if len(got.PropertyIDs) != 2 || got.PropertyIDs[0] != leg1 || got.PropertyIDs[1] != leg3 {
+		t.Fatalf("property ids: %+v, want the choice ∩ legs in legs order (leg1, leg3)", got.PropertyIDs)
+	}
+	if len(got.ActorIDs) != 1 || got.ActorIDs[0] != userID {
+		t.Fatalf("actor ids: %+v, want the participant's user uuid", got.ActorIDs)
+	}
+}
+
+func TestParticipantFeedForeignObjectsOnlyIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Выбор шита, не задевший ни одной ноги (hand-crafted адрес тоже):
+	// пересечение пусто — пустая страница без стора, гард от деградации
+	// пустого списка в глобальную ленту (тот же, что у ног).
+	userID := uuid.Must(uuid.NewV7())
+	leg := uuid.Must(uuid.NewV7())
+	svc, reader, _ := newParticipantFeedFake(
+		ParticipantScope{UserID: userID, PropertyIDs: []uuid.UUID{leg}},
+		map[uuid.UUID]sharedpolicy.Role{leg: sharedpolicy.RoleOwner},
+		nil,
+	)
+
+	page, err := svc.ParticipantFeed(t.Context(), uuid.Must(uuid.NewV7()), userID.String(), FeedQuery{
+		PropertyIDs: []uuid.UUID{uuid.Must(uuid.NewV7())},
+	})
+	if err != nil {
+		t.Fatalf("foreign-objects feed: %v", err)
+	}
+	if len(page.Items) != 0 || page.NextCursor != "" || page.PrevCursor != "" {
+		t.Fatalf("foreign-objects feed must be empty: %+v", page)
+	}
+	if reader.gotQuery != nil {
+		t.Fatalf("empty intersection must not reach the store as a global feed")
+	}
+}
+
 func TestCursorRoundtrip(t *testing.T) {
 	t.Parallel()
 

@@ -3166,6 +3166,13 @@ paths:
         объектов вне скоупа читающего не покидают базу — предикат видимости
         actor_can_read_property (000142).
 
+        Группа «Объекты» шита страницы (аменда владельца 22.10.2026:
+        «объекты опять же только те, в которые приглашён участник»):
+        property_ids сужает ленту пересечением с ногами агрегата —
+        перечисленный объект вне ног участника молча выпадает из скоупа
+        (не 404: скоуп страницы и так доказан читающему), выбор, не задевший
+        ни одной ноги, — пустая страница. Некорректный uuid — 400.
+
         Ответ и постраничная механика — те же, что у GET /history:
         двусторонний keyset по (created_at, id) DESC, before_cursor — в
         прошлое, after_cursor — prepend свежих, оба сразу — 400; поиск q —
@@ -3189,6 +3196,20 @@ paths:
         - $ref: '#/components/parameters/HistoryDateTo'
         - $ref: '#/components/parameters/HistoryBaseActions'
         - $ref: '#/components/parameters/HistoryKinds'
+        - name: property_ids
+          in: query
+          required: false
+          description: >-
+            Выбор «Объектов» шита страницы (аменда владельца 22.10.2026:
+            «объекты опять же только те, в которые приглашён участник») —
+            uuid через запятую; сужает ленту пересечением с ногами
+            агрегата. В отличие от GET /history, перечисленный объект вне
+            ног участника НЕ 404 — он молча выпадает из скоупа (ноги
+            уже доказаны читающему); выбор, не задевший ни одной ноги, —
+            пустая страница. Некорректный uuid — 400.
+          schema:
+            type: string
+            example: 33333333-3333-4333-8333-333333333333
         - $ref: '#/components/parameters/HistoryQuery'
       responses:
         '200':
@@ -8459,7 +8480,9 @@ components:
           description: >
             The person's display name (name and surname, or the anonymous
             label «Пользователь» — карта #1105, аменд #1123);
-            null for a pending row (the email is the label).
+            null for a pending row — the screen draws the same anonymous
+            label with the email as the subtitle (аменда владельца
+            22.10.2026, макет 3313-77128).
         photo_url:
           type: string
           nullable: true

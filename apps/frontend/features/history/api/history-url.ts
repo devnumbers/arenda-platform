@@ -51,15 +51,14 @@ export function historyFeedUrl(
   if (scope.kinds?.length) {
     query.set('kinds', scope.kinds.join(','));
   }
-  // actor_ids/property_ids — только общий ленте: страница участника выводит
-  // скоуп на сервере, клиентские группы ему не указ (контракт #1583).
-  if (scope.participantId === undefined) {
-    if (scope.actorIds?.length) {
-      query.set('actor_ids', scope.actorIds.join(','));
-    }
-    if (scope.propertyIds?.length) {
-      query.set('property_ids', scope.propertyIds.join(','));
-    }
+  // actor_ids странице не указ — актёра выводит резолвер скоупа; property_ids
+  // («Объекты» шита, аменда владельца 22.10.2026: «объекты опять же только
+  // те, в которые приглашён участник») сужает ноги пересечением на сервере.
+  if (scope.participantId === undefined && scope.actorIds?.length) {
+    query.set('actor_ids', scope.actorIds.join(','));
+  }
+  if (scope.propertyIds?.length) {
+    query.set('property_ids', scope.propertyIds.join(','));
   }
   if (scope.q) {
     query.set('q', scope.q);

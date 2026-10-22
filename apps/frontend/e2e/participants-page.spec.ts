@@ -158,12 +158,54 @@ test('кебаб: «История действий» — лента одног�
     await expect(page.getByText('Запись Марии в студии')).toHaveCount(0);
     await expect(page.getByText('Студия на Полевой')).toHaveCount(0);
 
-    // Скоуп фиксированный («И всё»): шита «Настройки» нет.
-    await expect(page.getByRole('button', { name: 'Настройки' })).toHaveCount(0);
-
     await captureScreen(page, testInfo, 'participant-history-entry');
 
-    // «Назад» живым переходом возвращает на страницу участника.
+    // Шит «Настройки» — аменда владельца 22.10.2026 («стандартная кнопка
+    // настроек и фильтр как и на всех остальных страницах; фильтр по
+    // пользователю заблокирован»): группа «Участник» прибита серым
+    // (1/1, чекбоксы disabled), «Объекты» предлагает только ноги
+    // агрегата (студии без ноги нет).
+    await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
+    await page.getByRole('button', { name: 'Настройки' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Фильтры истории' });
+    await expect(sheet.getByText('Действия участника', { exact: true })).toBeVisible();
+    await expect(sheet.getByText('Участник', { exact: true })).toBeVisible();
+    const participantMaster = sheet.getByRole('checkbox', { name: 'Выбрать все: Участник' });
+    await expect(participantMaster).toBeDisabled();
+    const mariaRow = sheet.getByRole('checkbox', { name: 'Мария Петрова' });
+    await expect(mariaRow).toBeDisabled();
+    await expect(mariaRow).toBeChecked();
+    await sheet.getByRole('button', { name: /Объекты/ }).click();
+    await expect(sheet.getByText('Квартира на Ленина')).toBeVisible();
+    await expect(sheet.getByText('Гараж на Садовой')).toBeVisible();
+    await expect(sheet.getByText('Студия на Полевой')).toHaveCount(0);
+
+    // Выбор «Объектов» сужает ленту пересечением с ногами на сервере:
+    // в адрес уходит objects=, в запрос под-ресурса — property_ids.
+    await sheet.getByRole('checkbox', { name: 'Выбрать все: Объекты' }).click();
+    await sheet.getByRole('checkbox', { name: 'Гараж на Садовой' }).click();
+    const narrowedFeed = page.waitForRequest(
+      (request) =>
+        request.url().includes(`/participants/${MARIA_ID}/history`) &&
+        request.url().includes(`property_ids=${SEEDED_GARAGE_PROPERTY_ID}`),
+    );
+    await sheet.getByRole('button', { name: 'Применить фильтры' }).click();
+    expect((await narrowedFeed).url()).toContain(`property_ids=${SEEDED_GARAGE_PROPERTY_ID}`);
+    expect(new URL(page.url()).searchParams.get('objects')).toBe(SEEDED_GARAGE_PROPERTY_ID);
+    await expect(page.getByText('Запись Марии в гараже')).toBeVisible();
+    await expect(page.getByText('Запись Марии на квартире')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Квартира на Ленина' })).toHaveCount(0);
+
+    // «Назад» снимает применённые фильтры (канон §3: применение — push,
+    // «назад» возвращает без фильтров), второй — живым переходом на
+    // страницу участника.
+    await header.getByRole('button', { name: 'Назад' }).click();
+    await page.waitForURL(
+      (url) =>
+        url.pathname.endsWith(`/participants/${MARIA_ID}/history`) &&
+        url.searchParams.get('objects') === null,
+    );
+    await expect(page.getByText('Запись Марии на квартире')).toBeVisible();
     await header.getByRole('button', { name: 'Назад' }).click();
     await page.waitForURL(new RegExp(`/participants/${MARIA_ID}$`));
   } finally {
@@ -200,7 +242,14 @@ test('pending-участник: «История действий» — пуст
 
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/participants');
-    await page.getByRole('button', { name: new RegExp(PENDING_EMAIL) }).click();
+    // Ряд pending-агрегата (аменда владельца 22.10.2026, макет
+    // 3313-77128): титул «Пользователь», почта подзаголовком, бейдж
+    // «Аккаунт не создан» — почта больше не титул (#693 амендован).
+    const pendingRow = page.getByRole('button', { name: new RegExp(PENDING_EMAIL) });
+    await expect(pendingRow.getByText('Пользователь', { exact: true })).toBeVisible();
+    await expect(pendingRow.getByText(PENDING_EMAIL)).toBeVisible();
+    await expect(pendingRow.getByText('Аккаунт не создан')).toBeVisible();
+    await pendingRow.click();
     await page.waitForURL(/\/participants\/[^/]+$/);
     const participantPath = new URL(page.url()).pathname;
     // Своё pending-состояние на странице: бейдж «Аккаунт не создан» (D3
@@ -230,11 +279,21 @@ test('pending-участник: «История действий» — пуст
     });
 
     // Пустая лента: «Действий не было» (канон пустой книги, без
-    // иллюстрации); чужих строк и шапок объектов нет, шита нет.
+    // иллюстрации); чужих строк и шапок объектов нет. Кнопка «Настройки»
+    // стоит и на пустой ленте (канон шита #711); в шите группа
+    // «Участник» не рисуется (pending нет в опциях — гарда прибитой
+    // строки), «Объекты» показывает приглашённый объект.
     await expect(page.getByText('Действий не было')).toBeVisible();
     await expect(page.getByText('Тест-запись приглашения')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Квартира на Ленина' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Настройки' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible();
+    await page.getByRole('button', { name: 'Настройки' }).click();
+    const pendingSheet = page.getByRole('dialog', { name: 'Фильтры истории' });
+    await expect(pendingSheet.getByText('Участник', { exact: true })).toHaveCount(0);
+    await pendingSheet.getByRole('button', { name: /Объекты/ }).click();
+    await expect(pendingSheet.getByText('Квартира на Ленина')).toBeVisible();
+    await pendingSheet.getByRole('button', { name: 'Закрыть фильтры' }).click();
+    await expect(page.getByText('Действий не было')).toBeVisible();
 
     await captureScreen(page, testInfo, 'participant-history-pending');
 
@@ -630,21 +689,25 @@ test('pending-участник: deep-link по почте, бейдж «Акка
     const header = screenHeader(page);
 
     await expect(header.getByText('Участник', { exact: true }).first()).toBeVisible();
-    // Имени нет — почта титул (контракт: «the email is the label»); бейдж
-    // в шапке — «Аккаунт не создан» (D3 #1313: у pending-агрегата ровно
-    // этот статус). У pending-ноги гаража свой чип «Приглашён» (ассерт
-    // ниже) — он-role бейдж, не статусный.
-    await expect(page.getByText('e2e-pending@example.com').first()).toBeVisible();
+    // Имени нет — титул «Пользователь», почта строкой под ним (аменда
+    // владельца 22.10.2026, макет 3313-77128: почта больше не титул,
+    // #693 амендован); бейдж в шапке — «Аккаунт не создан» (D3 #1313: у
+    // pending-агрегата ровно этот статус). У pending-ноги гаража свой чип
+    // «Приглашён» (ассерт ниже) — он-role бейдж, не статусный.
+    await expect(page.getByRole('heading', { name: 'Пользователь', exact: true })).toBeVisible();
+    await expect(page.getByText('e2e-pending@example.com')).toBeVisible();
     await expect(page.getByText('Аккаунт не создан')).toBeVisible();
 
-    // Чип шапки pending-участника: титул → 24 + 6 внутреннего паддинга
-    // инстанса бейджа (#1402, 2036-84861).
-    const h1Box = await page.getByRole('heading', { name: 'e2e-pending@example.com' }).boundingBox();
+    // Чип шапки pending-участника: почта → 24 + 6 внутреннего паддинга
+    // инстанса бейджа (#1402, 2036-84861; с амендой 22.10.2026 между
+    // титулом и бейджем строка почты — зазор 8 по gap-2 блока,
+    // меряется от неё).
+    const emailBox = await page.getByText('e2e-pending@example.com').boundingBox();
     const chipBox = await page.getByText('Аккаунт не создан').boundingBox();
-    if (!h1Box || !chipBox) {
-      throw new Error('боксы титула и чипа не измерились');
+    if (!emailBox || !chipBox) {
+      throw new Error('боксы почты и чипа не измерились');
     }
-    expect(Math.round(chipBox.y - h1Box.y - h1Box.height)).toBe(30);
+    expect(Math.round(chipBox.y - emailBox.y - emailBox.height)).toBe(30);
 
     const garageRow = page.getByRole('button', { name: /Гараж на Садовой/ });
     await expect(garageRow.getByText('Приглашён')).toBeVisible();

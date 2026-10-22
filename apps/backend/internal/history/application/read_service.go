@@ -204,6 +204,14 @@ func (s *HistoryReadService) Feed(ctx context.Context, actor uuid.UUID, q FeedQu
 // (the journal's actor_id is a user uuid, ADR 0061 §3): an empty page
 // without touching the store; legs-less scopes stay empty the same way —
 // they must never degrade into the un-narrowed global feed.
+//
+// The sheet's «Объекты» group (аменда владельца 22.10.2026: «объекты опять
+// же только те, в которые приглашён участник») narrows the feed by
+// INTERSECTING the client's choice with the legs — a foreign id in the
+// query silently drops out, and an intersection that misses every leg is
+// an empty page without touching the store: the same no-degradation guard
+// as the legs-less scope, an empty id list must not reach the SQL, where
+// it means "no filter".
 func (s *HistoryReadService) ParticipantFeed(ctx context.Context, actor uuid.UUID, participantID string, q FeedQuery) (FeedPage, error) {
 	if s.scopes == nil {
 		return FeedPage{}, fmt.Errorf("participant feed: %w", ErrInvalidInput)
@@ -216,8 +224,30 @@ func (s *HistoryReadService) ParticipantFeed(ctx context.Context, actor uuid.UUI
 		return FeedPage{}, nil
 	}
 	q.ActorIDs = []uuid.UUID{scope.UserID}
-	q.PropertyIDs = scope.PropertyIDs
+	q.PropertyIDs = intersectUUIDs(scope.PropertyIDs, q.PropertyIDs)
+	if len(q.PropertyIDs) == 0 {
+		return FeedPage{}, nil
+	}
 	return s.Feed(ctx, actor, q)
+}
+
+// intersectUUIDs narrows the legs to the client's choice, keeping legs
+// order; a nil/empty choice means "no narrowing" — all legs.
+func intersectUUIDs(legs, choice []uuid.UUID) []uuid.UUID {
+	if len(choice) == 0 {
+		return legs
+	}
+	picked := make(map[uuid.UUID]struct{}, len(choice))
+	for _, id := range choice {
+		picked[id] = struct{}{}
+	}
+	out := make([]uuid.UUID, 0, len(legs))
+	for _, id := range legs {
+		if _, ok := picked[id]; ok {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // foldLimit applies the page-size default and ceiling (канон #597/#633).

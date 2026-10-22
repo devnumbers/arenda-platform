@@ -83,6 +83,15 @@ func (h *HistoryHandlers) GetParticipantHistory(
 		params.BeforeCursor, params.AfterCursor, params.Limit,
 		params.DateFrom, params.DateTo, params.Actions, params.Kinds, params.Q,
 	)
+	// «Объекты» шита страницы (аменда владельца 22.10.2026): выбор едет в
+	// сервис, который пересекает его с ногами агрегата — чужой id молча
+	// выпадает; битый uuid — 400, как у /history.
+	propertyIDs, err := parseUUIDList(params.PropertyIds, "property id")
+	if err != nil {
+		h.writeError(r, w, err)
+		return
+	}
+	q.PropertyIDs = propertyIDs
 
 	page, err := h.svc.ParticipantFeed(r.Context(), actor, participantID, q)
 	if err != nil {
@@ -94,10 +103,12 @@ func (h *HistoryHandlers) GetParticipantHistory(
 
 // foldFeedPageQuery folds the feed's shared page parameters — cursors,
 // limit, period, base actions, kinds, search — into the service query. Both
-// feed endpoints carry the same aliases (ADR 0061 §7); actor/property id
-// lists stay endpoint-specific (the participant page derives them on the
-// server). Malformed values surface as the contract's 400 from the
-// service's own fold (cursors, page size, vocabulary, search length).
+// feed endpoints carry the same aliases (ADR 0061 §7); actor id lists stay
+// endpoint-specific (the participant page derives the actor on the server),
+// property ids travel on both — /history фильтрует ими область, страница
+// участника сужает ею ноги. Malformed values surface as the contract's 400
+// from the service's own fold (cursors, page size, vocabulary, search
+// length).
 func foldFeedPageQuery(
 	beforeCursor, afterCursor *string,
 	limit *int,

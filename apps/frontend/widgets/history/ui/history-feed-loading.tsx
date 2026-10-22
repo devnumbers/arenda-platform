@@ -15,7 +15,8 @@ import { historyFeedSkeleton } from './history-states';
  * краю, как загруженная (flex-1 justify-end): пришедший контент встаёт на
  * место скелетона без сдвига, у длинной ленты первый кадр тоже у дна.
  * Кнопка «Настройки» в покое — интерактивный экран подменяет её без
- * сдвига.
+ * сдвига (на всех скоуп-страницах, включая страницу участника —
+ * аменда владельца 22.10.2026, шит с пином «Участник»).
  */
 export function HistoryFeedLoading({
   participantId,
@@ -24,9 +25,6 @@ export function HistoryFeedLoading({
   readonly participantId?: string;
   readonly propertyId?: string;
 }): JSX.Element {
-  // Странице участника (карта #1582) шита нет — скоуп фиксированный,
-  // серверный; плейсхолдер «Настройки» подменять нечему.
-  const isParticipantPage = participantId !== undefined && propertyId === undefined;
   return (
     <>
       <TopNav
@@ -42,15 +40,13 @@ export function HistoryFeedLoading({
       {/* Зеркало плавающей кнопки «Настройки» живого экрана (паттерн «CTA
         * над TabBar» #1166): контейнер и оффсеты те же — подмена без
         * сдвига. */}
-      {!isParticipantPage && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom)_+_12px)] z-40 flex justify-center">
-          <div className="pointer-events-auto mx-auto flex w-full max-w-column justify-center">
-            <Button type="button" disabled>
-              Настройки
-            </Button>
-          </div>
+      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom)_+_12px)] z-40 flex justify-center">
+        <div className="pointer-events-auto mx-auto flex w-full max-w-column justify-center">
+          <Button type="button" disabled>
+            Настройки
+          </Button>
         </div>
-      )}
+      </div>
     </>
   );
 }

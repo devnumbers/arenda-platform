@@ -63,7 +63,7 @@ describe('participantRowTitle / participantRowSubtitle', () => {
     expect(participantRowSubtitle(p)).toBe('maria@example.com');
   });
 
-  it('pending-строка: почта — титул, подзаголовка нет (макет дважды почту не повторяет)', () => {
+  it('pending-строка: титул «Пользователь», почта подзаголовком (аменда владельца 22.10.2026, макет 3313-77128 — #693 «email is the label» амендован)', () => {
     const p = participant({
       id: 'invitee@example.com',
       userId: undefined,
@@ -71,8 +71,8 @@ describe('participantRowTitle / participantRowSubtitle', () => {
       email: 'invitee@example.com',
     });
 
-    expect(participantRowTitle(p)).toBe('invitee@example.com');
-    expect(participantRowSubtitle(p)).toBeUndefined();
+    expect(participantRowTitle(p)).toBe('Пользователь');
+    expect(participantRowSubtitle(p)).toBe('invitee@example.com');
   });
 });
 

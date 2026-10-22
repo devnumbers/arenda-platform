@@ -343,3 +343,36 @@ func TestHistoryHandlers_GetParticipantHistory(t *testing.T) {
 	})
 	require.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestHistoryHandlers_GetParticipantHistoryObjectsFilter(t *testing.T) {
+	t.Parallel()
+
+	// Выбор «Объектов» шита страницы (property_ids; аменда владельца
+	// 22.10.2026: «объекты опять же только те, в которые приглашён
+	// участник»): csv едет в сервис — пересечение с ногами делает он
+	// (здесь: выбор одной ноги доходит одной ногой); битый uuid —
+	// контрактный 400, как у /history.
+	userID := uuid.Must(uuid.NewV7())
+	leg1, leg2 := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	h, reader, _ := newParticipantHistoryHandlers(
+		historyapp.ParticipantScope{UserID: userID, PropertyIDs: []uuid.UUID{leg1, leg2}},
+		nil,
+	)
+	req := historyRequest(&historyReaderID, "/participants/x/history")
+	choice := leg2.String()
+	w := httptest.NewRecorder()
+	h.GetParticipantHistory(w, req, userID.String(), openapi.GetParticipantHistoryParams{
+		PropertyIds: &choice,
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, reader.gotFeed)
+	assert.Equal(t, []uuid.UUID{leg2}, reader.gotFeed.PropertyIDs, "выбор сужает ноги пересечением")
+	assert.Equal(t, []uuid.UUID{userID}, reader.gotFeed.ActorIDs)
+
+	bad := "not-a-uuid"
+	w = httptest.NewRecorder()
+	h.GetParticipantHistory(w, req, userID.String(), openapi.GetParticipantHistoryParams{
+		PropertyIds: &bad,
+	})
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}

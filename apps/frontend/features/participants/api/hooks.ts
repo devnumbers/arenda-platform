@@ -61,13 +61,17 @@ export function useRevokeAllParticipants(): UseMutationResult<void, ApiError, vo
  * человека с per-object ногами. 404 (человек вне скоупа читающего или уже
  * отозван) доходит до экрана как ApiError со статусом — deep-link-политика
  * «Участник не найден»; 404 не ретрается глобальным предикатом (#769,
- * shared/providers/query-retry) — экран показывает состояние сразу. */
+ * shared/providers/query-retry) — экран показывает состояние сразу.
+ * enabled — выключатель вызова (прецедент useHistoryHasEntries): экран
+ * без участничьей потребности не запрашивает агрегат (лента истории
+ * кормит им только шит «Объектов», карта #1582). */
 export function useParticipant(
   participantId: string,
+  options: { readonly enabled?: boolean } = {},
 ): UseQueryResult<Participant, ApiError> {
   return useQuery({
     ...participantQueryOptions({ participantId }),
-    enabled: participantId.length > 0,
+    enabled: (options.enabled ?? true) && participantId.length > 0,
   });
 }
 

@@ -8,6 +8,8 @@ import { ROUTES } from '@/shared/config/routes';
 import {
   ParticipantRowBadge,
   participantLegBadge,
+  participantRowSubtitle,
+  participantRowTitle,
   participantStatusBadge,
   type Participant,
   type ParticipantPropertyLeg,
@@ -208,14 +210,21 @@ export function ParticipantScreen({
  * H1 28/32 SemiBold, почта 14/16 — зазоры: аватар → блок 24, имя → почта
  * 8, блок → бейдж 24 + 6 внутреннего паддинга инстанса бейджа (pt-1.5);
  * всё по центру. Маржин h1 глобально снесён (#1402) — зазор тут явный
- * gap-2, легаси-плюс 18.76px больше не вспухает. У pending-участника
- * имени нет — почта уже титул. Бейдж — из двух статусных (D3 #1313):
- * «Аккаунт не создан» у pending, «Превышен лимит объектов» у suspended;
- * остальные без бейджа. */
+ * gap-2, легаси-плюс 18.76px больше не вспухает. Титул — серверный канон
+ * display_name, без имени (и у pending, у которого display_name на
+ * проводе нет) — «Пользователь», почта строкой под ним (аменда владельца
+ * 22.10.2026, макет 3313-77128 — #693 «the email is the label» для
+ * титула амендован). Бейдж — из двух статусных (D3 #1313): «Аккаунт не
+ * создан» у pending, «Превышен лимит объектов» у suspended; остальные
+ * без бейджа. */
 function ParticipantHeader({ participant }: { readonly participant: Participant }): JSX.Element {
-  const title = participant.displayName ?? participant.email ?? '';
-  const email =
-    participant.displayName !== undefined ? participant.email : undefined;
+  // Титул и почта — один канон с рядами списков (entities/participants:
+  // серверный display_name, без имени и у pending — «Пользователь»,
+  // почта строкой под ним; аменда владельца 22.10.2026, макет
+  // 3313-77128). Суффикс «(Вы)» своей строке здесь не нужен — шапка
+  // чужого агрегата, своей строки у хаба (владелец исключён, #693).
+  const title = participantRowTitle(participant);
+  const email = participantRowSubtitle(participant);
   const badge = participantStatusBadge(participant);
 
   return (

@@ -1273,6 +1273,13 @@ export interface paths {
          *     объектов вне скоупа читающего не покидают базу — предикат видимости
          *     actor_can_read_property (000142).
          *
+         *     Группа «Объекты» шита страницы (аменда владельца 22.10.2026:
+         *     «объекты опять же только те, в которые приглашён участник»):
+         *     property_ids сужает ленту пересечением с ногами агрегата —
+         *     перечисленный объект вне ног участника молча выпадает из скоупа
+         *     (не 404: скоуп страницы и так доказан читающему), выбор, не задевший
+         *     ни одной ноги, — пустая страница. Некорректный uuid — 400.
+         *
          *     Ответ и постраничная механика — те же, что у GET /history:
          *     двусторонний keyset по (created_at, id) DESC, before_cursor — в
          *     прошлое, after_cursor — prepend свежих, оба сразу — 400; поиск q —
@@ -3657,7 +3664,7 @@ export interface components {
              * @description The invitee email of a pending row; for a registered user, their email resolved for display (null when the user has none).
              */
             email?: string | null;
-            /** @description The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row (the email is the label). */
+            /** @description The person's display name (name and surname, or the anonymous label «Пользователь» — карта #1105, аменд #1123); null for a pending row — the screen draws the same anonymous label with the email as the subtitle (аменда владельца 22.10.2026, макет 3313-77128). */
             display_name?: string | null;
             /** @description The registered user's profile photo same-origin streaming path (ADR 0065; решение владельца #1286): /api/users/{userId}/photo, readable while the reader shares a readable property with the user; a revoked access answers 404 and the client falls back to the placeholder. Null for a pending row or a user without a photo. */
             photo_url?: string | null;
@@ -7170,6 +7177,8 @@ export interface operations {
                 actions?: components["parameters"]["HistoryBaseActions"];
                 /** @description Фильтр по видам действий — через запятую, одно или несколько из семи групп словаря (ADR 0061 §4). Неизвестное значение — 400. */
                 kinds?: components["parameters"]["HistoryKinds"];
+                /** @description Выбор «Объектов» шита страницы (аменда владельца 22.10.2026: «объекты опять же только те, в которые приглашён участник») — uuid через запятую; сужает ленту пересечением с ногами агрегата. В отличие от GET /history, перечисленный объект вне ног участника НЕ 404 — он молча выпадает из скоупа (ноги уже доказаны читающему); выбор, не задевший ни одной ноги, — пустая страница. Некорректный uuid — 400. */
+                property_ids?: string;
                 /** @description Поисковая строка по журналу области чтения: ищет по тексту строки и снапшотам актёра (имя, почта) — «как в Telegram»: по началу слова (префикс), по фрагменту внутри слова и по словоформам; всегда-OR предикат prefix-FTS OR ILIKE (ресерч #839, тикет #842). Пробелы по краям не участвуют; пустая строка — фильтра нет. Серверный бэкстоп: ввод 400 байт и больше — 400 (255 символа кириллицы потолок схемы превышают; практические поисковые вводы на порядок короче). */
                 q?: components["parameters"]["HistoryQuery"];
             };
