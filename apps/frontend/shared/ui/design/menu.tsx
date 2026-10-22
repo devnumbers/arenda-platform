@@ -22,7 +22,8 @@ import { cn } from '@/shared/lib/cn';
 import { useFocusRestore, type FocusRestore } from './focus-restore';
 
 /** Меню-кебаб дизайн-слоя (карта #497; спек по макету 3183-86541 — меню
- * уведомлений) — dropdown на Radix: белая карточка radius 24, паддинг
+ * уведомлений) — dropdown на Radix: белая карточка radius 18 (решение
+ * владельца 22.10; в макете пока 24), паддинг
  * 2px, зазор пунктов 0, тень 0 8px 12px rgba(0,0,0,0.12); пункты —
  * кнопки «Button White Small» (Figma 1186:44732): min-h 48, px 16,
  * иконка 24 + подпись 14/500 с межстрочным 16, radius 16, hover —
@@ -73,9 +74,11 @@ export const MenuTrigger = forwardRef<HTMLButtonElement, ComponentProps<typeof T
 export type MenuContentProps = ComponentProps<typeof Content>;
 
 /** Классы карточки — статичные, подняты на уровень модуля: контракт
- * спека (макет 3183-86541) проверяется без рендера (menu.test.ts). */
+ * спека (макет 3183-86541) проверяется без рендера (menu.test.ts).
+ * Радиус 18 — решение владельца 22.10 (в макете пока 24); он
+ * концентричен пункту: 16 у кнопки + 2px паддинга карточки. */
 export const menuContentBaseClasses =
-  'z-50 flex w-fit flex-col gap-0 rounded-card bg-surface p-0.5 font-sans shadow-[0_8px_12px_rgba(0,0,0,0.12)] outline-none';
+  'z-50 flex w-fit flex-col gap-0 rounded-[18px] bg-surface p-0.5 font-sans shadow-[0_8px_12px_rgba(0,0,0,0.12)] outline-none';
 
 export function MenuContent({
   className,

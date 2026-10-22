@@ -21,8 +21,8 @@ describe('Карточка MenuContent — макет 3183-86541', () => {
     expect(menuContentBaseClasses).not.toContain('0_8px_24px');
   });
 
-  it('радиус карточки 24 остаётся', () => {
-    expect(menuContentBaseClasses).toContain('rounded-card');
+  it('радиус карточки 18 (решение владельца 22.10, в макете 3183-86541 пока 24) — концентричен пункту 16 + паддинг 2', () => {
+    expect(menuContentBaseClasses).toContain('rounded-[18px]');
   });
 });
 
