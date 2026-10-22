@@ -107,17 +107,18 @@ export function PropertySectionEmpty({
 }: PropertySectionEmptyProps): JSX.Element {
   return (
     <div className="flex flex-col items-center px-12 py-6 text-center">
-      {/* sizes: слот 64 CSS — на 3x-экранах srcset отдаёт даунскейл из
-       * источника вместо апскейла 128 (#1002); потолок задаёт источник.
-       * priority — как в EmptyState: иллюстрация секционного «пусто»
-       * всегда above the fold (решение владельца 22.10.2026), ленивость
-       * откладывала запрос после уже случившейся загрузки данных. */}
+      {/* sizes = 2x слота — суперсэмплинг (решение владельца 22.10.2026
+       * «всегда в хорошем качестве»): точный слот 64 кодировал детальный
+       * 3D-арт 1:1 в 64–128px — мыло; чёткость появлялась только после
+       * клиентской навигации (srcset брал вариант на ступень больше),
+       * перезагрузка возвращала мыло. priority — как в EmptyState:
+       * иллюстрация секционного «пусто» всегда above the fold. */}
       <Image
         src={imageSrc}
         alt=""
         width={64}
         height={64}
-        sizes="64px"
+        sizes="128px"
         quality={90}
         priority
         className="h-16 w-16"

@@ -214,7 +214,7 @@ function SearchStateView({ text }: { readonly text: string }): JSX.Element {
         alt=""
         width={128}
         height={128}
-        sizes="128px"
+        sizes="256px"
         quality={90}
         priority
         className="h-32 w-32"

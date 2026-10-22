@@ -699,14 +699,15 @@ function PaymentsGlobalPlaceholder({
       </p>
       {/* Fade-in 350мс (dl-fade-in): иллюстрация проявляется вместе с
        * секцией при первом показе — разом всплывающие 3D-картинки (#1349).
-       * sizes/quality — канон слота 64 (#1002), priority — как в EmptyState
-       * (решение владельца 22.10.2026): иллюстрация always above the fold. */}
+       * sizes = 2x слота — суперсэмплинг (решение владельца 22.10.2026
+       * «всегда в хорошем качестве», вместо точного слота #1002); priority —
+       * как в EmptyState: иллюстрация always above the fold. */}
       <Image
         src={image}
         alt=""
         width={64}
         height={64}
-        sizes="64px"
+        sizes="128px"
         quality={90}
         priority
         className="h-16 w-16 shrink-0 animate-[dl-fade-in_350ms_var(--dl-ease)_both]"
