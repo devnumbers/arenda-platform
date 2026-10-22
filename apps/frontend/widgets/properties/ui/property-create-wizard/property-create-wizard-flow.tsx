@@ -109,26 +109,28 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
       >
         <StepsChip step={step} total={PROPERTY_CREATE_TOTAL_STEPS} size="m" />
       </TopNav>
-      {/* Шаг 1: контент прижат к низу области под хедером — прижатие
-          сохранено по решению владельца (аменда 22.10) вместе с новой
-          иллюстрацией. pb-6 вместо дефолтных pb-[136px] PageContent —
-          зазор кадра 3625-89189 (24px под чипами, всё видно на 852 без
-          скролла); 136px — офсет старого кадра 1213-52111. На десктопе —
-          сверху, как принято для высоких окон (решение владельца). */}
+      {/* Шаг 1 (аменда владельца 22.10, вторая правка): картинка прижата
+          сверху — 90px фикса от хедера до глифа, без фикс-высоты блока;
+          контент (заголовок и чипы) прижат к низу на мобиле, зазор
+          картинка→контент плавает — свободную высоту забирает mb-auto
+          картинки. pb-6 вместо дефолтных pb-[136px] PageContent — зазор
+          кадра 3625-89189 под чипами. На планшете/десктопе свободной
+          высоты нет — контент идёт сразу после картинки, сверху. */}
       <PageContent
         className={
           step === 1
-            ? 'min-h-[calc(100dvh-72px)] justify-end pb-6 pt-0 tablet:min-h-0 tablet:justify-start'
+            ? 'min-h-[calc(100dvh-72px)] pb-6 pt-0 tablet:min-h-0'
             : 'pt-0'
         }
       >
         {step === 1 && (
           <>
             {/* Иллюстрация шага (аменда владельца 22.10, Figma
-                3625-89189): глиф 212 по центру блока 392, зазор до
-                заголовка дают 24px pt-6 хединга. sizes = 2x слота,
-                quality 90, priority — канон EmptyState (22.10). */}
-            <div className="flex h-[392px] items-center justify-center px-6">
+                3625-89189): глиф 212, 90px фикса от хедера; mb-auto
+                отдаёт свободную высоту плавающему зазору до контента.
+                sizes = 2x слота, quality 90, priority — канон
+                EmptyState (22.10). */}
+            <div className="mb-auto mt-[90px] flex justify-center px-6">
               <Image
                 src="/images/properties/property-create-key.webp"
                 alt=""
