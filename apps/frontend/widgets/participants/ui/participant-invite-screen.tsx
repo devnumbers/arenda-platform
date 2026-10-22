@@ -143,7 +143,7 @@ export function ParticipantInviteScreen({
   } else if (options.length === 0) {
     content = (
       <EmptyState
-        imageSrc="/images/tariff/tariff-about-sharing.png"
+        imageSrc="/images/tariff/tariff-about-sharing.webp"
         title="Доступ уже открыт"
         description="У участника есть доступ ко всем объектам, которыми вы управляете"
       />

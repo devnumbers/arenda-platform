@@ -10,9 +10,9 @@ import type {
 /** Картинки рядов возможностей (48×48, без скругления — как в макетах);
  * переиспользуются карточками экрана «Выбрать тариф» (#623). */
 export const FEATURE_IMAGES: Record<TariffFeatureRow['kind'], string> = {
-  objects: '/images/tariff/tariff-about-objects.png',
-  sharing: '/images/tariff/tariff-about-sharing.png',
-  history: '/images/tariff/tariff-about-history.png',
+  objects: '/images/tariff/tariff-about-objects.webp',
+  sharing: '/images/tariff/tariff-about-sharing.webp',
+  history: '/images/tariff/tariff-about-history.webp',
 };
 
 /** Карточка тарифа экрана «О тарифе» (#621, макет 1918-73255): серая
@@ -54,6 +54,7 @@ export function TariffFeaturesCard({
             alt=""
             width={48}
             height={48}
+            quality={90}
             className="h-12 w-12 shrink-0"
           />
           <div className="flex flex-col gap-2">

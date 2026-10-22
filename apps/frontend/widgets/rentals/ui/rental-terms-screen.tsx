@@ -99,7 +99,7 @@ export function RentalTermsScreen({
         {!rentalsQuery.isPending && !rentalsQuery.isError && rental === undefined && archived && (
           // Ссылка на условия несуществующей/незавершённой аренды — без контента.
           <EmptyState
-            imageSrc="/images/rentals/rental-hero.png"
+            imageSrc="/images/rentals/rental-hero.webp"
             title="Аренда не найдена"
             description="Возможно, она была удалена"
           />

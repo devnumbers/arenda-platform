@@ -70,6 +70,11 @@ export {
   type TopNavUser,
 } from './top-nav-user-context';
 export {
+  PersistentNavWings,
+  PersistentNavWingsProvider,
+  useHasPersistentNavWings,
+} from './persistent-nav-wings';
+export {
   TabBar,
   TabBarVisibilityProvider,
   useTabBarSuppression,

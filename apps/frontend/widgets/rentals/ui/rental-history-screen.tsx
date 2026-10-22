@@ -133,7 +133,7 @@ export function RentalHistoryScreen({
               вместо вечного скелетона. */}
           {rentalsQuery.isSuccess && rental === undefined && (
             <EmptyState
-              imageSrc="/images/rentals/rental-hero.png"
+              imageSrc="/images/rentals/rental-hero.webp"
               title="Аренда не найдена"
               description="Возможно, она была удалена"
             />
@@ -146,7 +146,7 @@ export function RentalHistoryScreen({
             <>
               {groups.length === 0 ? (
                 <EmptyState
-                  imageSrc="/images/rentals/rental-hero.png"
+                  imageSrc="/images/rentals/rental-hero.webp"
                   title="Не было операций"
                 />
               ) : (

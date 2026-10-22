@@ -387,7 +387,7 @@ export function PaymentFavoritesScreen(): JSX.Element {
 }
 
 
-/** Пустое состояние (889:28111): иллюстрация favorites-empty.png 128 и
+/** Пустое состояние (889:28111): иллюстрация favorites-empty.webp 128 и
  * две тёмные подписи — заголовок и подсказка (оба #171A1C в макете).
  * Центрируется в доступной высоте, как глобальное пустое главного экрана. */
 function FavoritesEmpty(): JSX.Element {
@@ -397,7 +397,7 @@ function FavoritesEmpty(): JSX.Element {
       className="flex min-h-[calc(100dvh-216px)] flex-1 items-center justify-center"
     >
       <EmptyState
-        imageSrc="/images/payments/favorites-empty.png"
+        imageSrc="/images/payments/favorites-empty.webp"
         title="Вы пока не добавляли платежи в избранное"
         description="Добавьте платеж в избранное и он появится здесь"
         descriptionClassName="text-content"

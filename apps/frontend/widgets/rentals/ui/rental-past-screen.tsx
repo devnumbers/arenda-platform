@@ -63,7 +63,7 @@ export function RentalPastScreen({ propertyId }: { readonly propertyId: string }
 
         {!rentalsQuery.isPending && !rentalsQuery.isError && completed.length === 0 && (
           <EmptyState
-            imageSrc="/images/rentals/rental-hero.png"
+            imageSrc="/images/rentals/rental-hero.webp"
             title="У вас нет завершенных аренд"
             description="Когда аренда закончится, информация об этом появится здесь"
           />

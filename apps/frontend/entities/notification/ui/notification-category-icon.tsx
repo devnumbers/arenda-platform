@@ -50,16 +50,16 @@ type CategoryVisual =
   | { readonly kind: 'boldKey'; readonly className: string };
 
 const CATEGORY_VISUALS: Record<NotificationCategory, CategoryVisual> = {
-  rental: { kind: 'image', src: '/images/notifications/category-rental.png', className: CATEGORY_LIGHT_BG },
+  rental: { kind: 'image', src: '/images/notifications/category-rental.webp', className: CATEGORY_LIGHT_BG },
   payments_operations: { kind: 'boldKey', className: 'bg-primary' },
-  tasks: { kind: 'image', src: '/images/notifications/category-tasks.png', className: CATEGORY_LIGHT_BG },
+  tasks: { kind: 'image', src: '/images/notifications/category-tasks.webp', className: CATEGORY_LIGHT_BG },
   shared_access: {
     kind: 'image',
-    src: '/images/notifications/category-shared-access.png',
+    src: '/images/notifications/category-shared-access.webp',
     className: CATEGORY_LIGHT_BG,
   },
-  tariff: { kind: 'image', src: '/images/notifications/category-tariff.png', className: CATEGORY_LIGHT_BG },
-  system: { kind: 'image', src: '/images/notifications/category-system.png', className: 'bg-surface-muted' },
+  tariff: { kind: 'image', src: '/images/notifications/category-tariff.webp', className: CATEGORY_LIGHT_BG },
+  system: { kind: 'image', src: '/images/notifications/category-system.webp', className: 'bg-surface-muted' },
 };
 
 

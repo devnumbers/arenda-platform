@@ -40,11 +40,12 @@ export function TariffHero({ hero }: { readonly hero: TariffHeroModel }): JSX.El
           фон родителя (правка владельца 12.09.2026, #620). */}
       {!stopped && (
         <Image
-          src="/images/tariff/tariff-hero.png"
+          src="/images/tariff/tariff-hero.webp"
           alt=""
           fill
           priority
           sizes="(max-width: 607px) calc(100vw - 48px), 512px"
+          quality={90}
           className="object-cover"
         />
       )}

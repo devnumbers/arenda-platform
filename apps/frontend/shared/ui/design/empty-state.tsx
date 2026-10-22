@@ -40,16 +40,24 @@ export function EmptyState({
 }: EmptyStateProps): JSX.Element {
   return (
     <div className={cn('flex flex-col items-center px-8 pt-14 text-center', className)}>
-      {/* sizes: слот 128 CSS — на 3x-экранах srcset отдаёт 384px-вариант
-       * вместо апскейла 256 (#1002); потолок задаёт источник: меньший файл
-       * Next не растягивает, 384-варианта у него нет. */}
+      {/* sizes = 2x слота — суперсэмплинг (решение владельца 22.10.2026
+       * «всегда в хорошем качестве»): точный слот давал вариант 1:1 —
+       * детальный 3D-арт в мелком растре мыл, чёткость появлялась только
+       * после клиентской навигации (вариант на ступень больше), перезагрузка
+       * возвращала мыло. priority на всех пустых состояниях (решение
+       * владельца 22.10.2026): EmptyState монтируется уже после данных
+       * (скелетон до него), и вторая ленивость (дефолт loading="lazy" ждёт
+       * пересечения вьюпорта) откладывала запрос иллюстрации ещё на кадр —
+       * на пустом экране она всегда above the fold, lazy там не нужен ни
+       * полноэкранному, ни секционному слоту. */}
       <Image
         src={imageSrc}
         alt={imageAlt}
         width={128}
         height={128}
-        sizes="128px"
+        sizes="256px"
         quality={90}
+        priority
         className={cn('h-32 w-32', imageRounded && 'rounded-pill object-cover')}
       />
       {(title !== undefined || description !== undefined) && (

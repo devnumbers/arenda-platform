@@ -391,6 +391,7 @@ function TariffFeatureCard({
             alt=""
             width={48}
             height={48}
+            quality={90}
             className="h-12 w-12 shrink-0"
           />
           <div className="flex min-w-0 flex-1 flex-col gap-2">

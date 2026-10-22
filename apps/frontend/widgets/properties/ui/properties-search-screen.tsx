@@ -91,13 +91,13 @@ export function PropertiesSearchScreen(): JSX.Element {
           <PropertiesSearchErrorCard onRetry={() => void searchQuery.refetch()} loading={searchQuery.isFetching} />
         ) : !searching ? (
           <EmptyState
-            imageSrc="/images/payments/payments-objects-search.png"
+            imageSrc="/images/payments/payments-objects-search.webp"
             className="pt-16 pb-16"
             description="Введите название или адрес объекта"
           />
         ) : properties.length === 0 ? (
           <EmptyState
-            imageSrc="/images/payments/payments-objects-search.png"
+            imageSrc="/images/payments/payments-objects-search.webp"
             className="pt-16 pb-16"
             description="Такого объекта нет"
           />
@@ -179,7 +179,7 @@ export function PropertiesSearchLoading(): JSX.Element {
 
       <PageContent>
         <EmptyState
-          imageSrc="/images/payments/payments-objects-search.png"
+          imageSrc="/images/payments/payments-objects-search.webp"
           className="pt-16 pb-16"
           description="Введите название или адрес объекта"
         />
