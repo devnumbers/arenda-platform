@@ -39,7 +39,7 @@ export function amountKopecks(value: string): number {
 
 /** Экранное значение поля «1234,5» → «1 234,5»: группировка разрядов
  * рублей неразрывным пробелом, копейки как набраны; пустая строка —
- * пустота (плейсхолдер рисует «0 ₽»). */
+ * пустота (плейсхолдера у денежных полей нет). */
 export function groupedAmount(value: string): string {
   const [rubles = '', kopecks] = value.split(',');
   const grouped = rubles === '' ? '' : Number(rubles).toLocaleString('ru-RU');

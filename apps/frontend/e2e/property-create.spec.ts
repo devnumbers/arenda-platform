@@ -182,7 +182,7 @@ test('шаг 2: очистка убирает «Продолжить»; пере
 
   // Очистка поля прячет «Продолжить» — готовность шага по непустому адресу.
   await address.fill('Ленина, 1');
-  await page.getByRole('button', { name: 'Очистить поле' }).click();
+  await page.getByRole('button', { name: 'Очистить «Введите адрес»' }).click();
   await expect(address).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Продолжить' })).toBeHidden();
 

@@ -17,6 +17,7 @@ export function TextFieldTitleOutSection(): JSX.Element {
     const [nameValue, setNameValue] = useState('');
     const [nameInValue, setNameInValue] = useState('');
     const [limitedValue, setLimitedValue] = useState('Страхование квартиры');
+    const [areaValue, setAreaValue] = useState('56');
 
     return (
         <div className={styles.group}>
@@ -31,6 +32,14 @@ export function TextFieldTitleOutSection(): JSX.Element {
                     value={nameValue}
                     onChange={(event) => setNameValue(event.target.value)}
                     onClear={() => setNameValue('')}
+                />
+                <TextField
+                    title="Общая площадь"
+                    inlineSuffix="м²"
+                    inputMode="decimal"
+                    value={areaValue}
+                    onChange={(event) => setAreaValue(event.target.value)}
+                    onClear={() => setAreaValue('')}
                 />
                 <TextField
                     title="Название платежа"
