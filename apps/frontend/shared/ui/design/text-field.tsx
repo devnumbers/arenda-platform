@@ -315,6 +315,10 @@ export function TextField({
                 aria-hidden
                 className={cn(
                   'shrink-0 text-base leading-[18px]',
+                  // Зазор перед единицей — только при непустом значении
+                  // (аменда владельца 2026-10-22, референс — Яндекс):
+                  // пустое поле держит единицу у левого края (18px бокса).
+                  unitValue.length > 0 && 'pl-1',
                   unitTinted ? 'text-content' : 'text-content-secondary',
                 )}
               >
