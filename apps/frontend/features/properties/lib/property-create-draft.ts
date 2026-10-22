@@ -1,14 +1,19 @@
 import type { PropertyAttributes, PropertyType } from '@/entities/property';
-import { propertyTypeOptions } from './property-types';
+import { propertyTypeLabels } from './property-types';
 
 /**
  * Модель флоу «Создание объекта» в новом дизайне (#480): три шага —
- * 1 «Выбор категории» (Figma 1213-52111), 2 «Адрес» (#481, Figma
- * 1213-52017/52391, 1519-94336), 3 «Характеристики» (#482, Figma
+ * 1 «Выбор категории» (аменда владельца 22.10: Figma 3625-89189 —
+ * иллюстрация над заголовком, 11 главных категорий), 2 «Адрес» (#481,
+ * Figma 1213-52017/52391, 1519-94336), 3 «Характеристики» (#482, Figma
  * 1218-54295). Экран успеха шагом не считается — он появляется после
  * успешного POST (#483, Figma 1425-55788). Состояние шагов — обычный
  * useState потока (карта #1052, Q2=В: черновика у создания объекта нет —
  * уход со страницы, перезагрузка и закрытие дают чистый лист).
+ *
+ * Двухуровневой модели больше нет (аменда владельца 22.10): квартира,
+ * студия и апартаменты — главные категории шага 1, поля «Тип жилья» у
+ * них нет ни в создании, ни в правке.
  */
 
 export type PropertyCreateStep = 1 | 2 | 3;
@@ -16,9 +21,8 @@ export type PropertyCreateStep = 1 | 2 | 3;
 export const PROPERTY_CREATE_TOTAL_STEPS = 3;
 
 export type PropertyCreateDraft = {
-  /** Категория объекта (шаг 1). Тип apartments на шаге 1 не выбирается —
-   * он появляется на шаге 3 как «Тип жилья» внутри категории «Квартира»
-   * (Figma 1218-54295), поэтому чипы шага 1 его не предлагают. */
+  /** Категория объекта (шаг 1) — тип домена выбирается сразу, один из
+   * одиннадцати (аменда владельца 22.10, Figma 3625-89189). */
   readonly type?: PropertyType;
   /** Адрес объекта (шаг 2). */
   readonly address?: string;
@@ -30,38 +34,26 @@ export type PropertyCreateDraft = {
   readonly attributes?: PropertyAttributes;
 };
 
-/** Чипы шага 1 (Figma 1213-52111): девять категорий макета — все типы
- * домена, кроме apartments (см. PropertyCreateDraft.type). Порядок и
- * подписи — из общего реестра типов, лейбл домена вместо опечатки макета
- * («Земельныый участок»). */
-export const propertyCategoryOptions: readonly { value: PropertyType; label: string }[] =
-  propertyTypeOptions.filter(
-    (option) => option.value !== 'apartments' && option.value !== 'studio',
-  );
-
-/** Чип-группа «Тип жилья» шага 3 (Figma 1218-54295; студия добавлена по
- * решению владельца 30.09, тикет #1003): закрывают типы внутри категории
- * «Квартира» — все три делят один каталог характеристик (студия — клон
- * набора квартиры), поэтому смена между ними не меняет набор полей.
- * Порядок по кадру — Квартира, Студия, Апартаменты (тикет #1081). */
-export const propertyHousingTypeOptions: readonly { value: PropertyType; label: string }[] = [
-  { value: 'apartment', label: 'Квартира' },
-  { value: 'studio', label: 'Студия' },
-  { value: 'apartments', label: 'Апартаменты' },
-];
-
-/** Категория двухуровневой модели, представляющая тип в чип-пикерах
- * (шаг 1 создания, «Тип объекта» правки): все три типа жилья показываются
- * чипом «Квартира» — уточнение живёт в «Типе жилья» (#1003, #1081). */
-export function propertyCategoryOf(type: PropertyType): PropertyType {
-  return isApartmentCategory(type) ? 'apartment' : type;
-}
-
-/** Категория «Квартира» шага 1 (апартаменты и студия появляются только
- * здесь, на шаге «Тип жилья»). */
-export function isApartmentCategory(type: PropertyType): boolean {
-  return type === 'apartment' || type === 'apartments' || type === 'studio';
-}
+/** Чипы шага 1 (аменда владельца 22.10, Figma 3625-89189): все одиннадцать
+ * типов домена главными категориями, порядок кадра — квартира, студия и
+ * апартаменты сразу после квартиры. Порядок кадра ≠ порядок реестра
+ * (propertyTypeOptions), поэтому список явный, а не фильтр: новый тип
+ * реестра на шаг 1 не попадёт, пока не добавлен сюда. Подписи — из общего
+ * реестра типов (лейбл домена вместо опечатки макета «Земельныый
+ * участок»). */
+export const propertyCategoryOptions: readonly { value: PropertyType; label: string }[] = ([
+  'apartment',
+  'studio',
+  'apartments',
+  'room',
+  'house',
+  'commercial',
+  'office',
+  'warehouse',
+  'garage',
+  'parking',
+  'land',
+] as const).map((value) => ({ value, label: propertyTypeLabels[value] }));
 
 /** Готовность шага: категория выбрана / адрес непустой / шаг 3 достигнут.
  * Характеристики, описание и название на готовность шага 3 не влияют —

@@ -12,11 +12,8 @@ export {
   type PropertyBadgeTone,
 } from './lib/property-badges';
 export {
-  isApartmentCategory,
-  propertyCategoryOf,
   propertyCategoryOptions,
   propertyCreateStepReady,
-  propertyHousingTypeOptions,
   PROPERTY_CREATE_TOTAL_STEPS,
 } from './lib/property-create-draft';
 export type {
