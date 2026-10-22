@@ -6,13 +6,17 @@ import {
 } from '@/entities/notification';
 import {
   PUSH_SLOT_MESSAGES,
+  anyFlightFreezes,
   applyCategoryChange,
   categoryEnableCategories,
   masterEnableCategories,
+  pushFlightFreezes,
   resolvePushDisplay,
   slotStateHolds,
   verdictFromOutcome,
+  type PushMutationFlight,
   type PushSlotReason,
+  type PushToggleTarget,
 } from './notification-settings';
 
 const ALL_ON: PushDevicePreferences = {
@@ -170,5 +174,83 @@ describe('verdictFromOutcome — исходы флоу включения (сп�
     expect(verdictFromOutcome({ outcome: 'error', reason: 'no-vapid-key' })).toStrictEqual({
       kind: 'flow-error',
     });
+  });
+});
+
+describe('pushFlightFreezes — правило фризинга пуш-колонки (тикет #1546)', () => {
+  const ALL_TARGETS: readonly PushToggleTarget[] = [
+    { kind: 'master' },
+    ...NOTIFICATION_SETTINGS_CATEGORIES.map((category) => ({ kind: 'category' as const, category })),
+  ];
+
+  it('никакой мутации в полёте — ничего не задизейблено', () => {
+    for (const target of ALL_TARGETS) {
+      expect(anyFlightFreezes([], target)).toBe(false);
+    }
+  });
+
+  it('включение через мастер (флоу разрешения) — вся колонка: мастер и все категорийные', () => {
+    const flight: PushMutationFlight = { kind: 'enable-flow-master' };
+    for (const target of ALL_TARGETS) {
+      expect(pushFlightFreezes(flight, target)).toBe(true);
+    }
+  });
+
+  it('выключение мастера (отписка + DELETE) — тоже вся колонка', () => {
+    const flight: PushMutationFlight = { kind: 'disable-master' };
+    for (const target of ALL_TARGETS) {
+      expect(pushFlightFreezes(flight, target)).toBe(true);
+    }
+  });
+
+  it('включение через категорийный тумблер без подписки — Disabled только этот тумблер (table-driven по всем категориям)', () => {
+    for (const category of NOTIFICATION_SETTINGS_CATEGORIES) {
+      const flight: PushMutationFlight = { kind: 'enable-flow-category', category };
+      expect(pushFlightFreezes(flight, { kind: 'category', category })).toBe(true);
+      expect(pushFlightFreezes(flight, { kind: 'master' })).toBe(false);
+      for (const other of NOTIFICATION_SETTINGS_CATEGORIES) {
+        if (other === category) continue;
+        expect(pushFlightFreezes(flight, { kind: 'category', category: other })).toBe(false);
+      }
+    }
+  });
+});
+
+describe('anyFlightFreezes — фриз при нескольких полётах сразу (ревью #1546)', () => {
+  const ALL_TARGETS: readonly PushToggleTarget[] = [
+    { kind: 'master' },
+    ...NOTIFICATION_SETTINGS_CATEGORIES.map((category) => ({ kind: 'category' as const, category })),
+  ];
+
+  it('полётов нет — ничего не заморожено', () => {
+    expect(anyFlightFreezes([], { kind: 'master' })).toBe(false);
+    expect(anyFlightFreezes([], { kind: 'category', category: 'rental' })).toBe(false);
+  });
+
+  it('одиночный полёт — агрегат совпадает с правилом одной операции', () => {
+    const categoryFlight: PushMutationFlight = { kind: 'enable-flow-category', category: 'tasks' };
+    for (const target of ALL_TARGETS) {
+      expect(anyFlightFreezes([categoryFlight], target)).toBe(
+        pushFlightFreezes(categoryFlight, target),
+      );
+    }
+  });
+
+  it('категорийный флоу + флоу мастера — объединение: вся колонка (мастер-флоу шире)', () => {
+    const flights: readonly PushMutationFlight[] = [
+      { kind: 'enable-flow-category', category: 'shared_access' },
+      { kind: 'enable-flow-master' },
+    ];
+    for (const target of ALL_TARGETS) {
+      expect(anyFlightFreezes(flights, target)).toBe(true);
+    }
+  });
+
+  it('категорийный флоу жив, второй (его) снялся — его тумблер остаётся заморожен, чужие свободны', () => {
+    const flights: readonly PushMutationFlight[] = [
+      { kind: 'enable-flow-category', category: 'rental' },
+    ];
+    expect(anyFlightFreezes(flights, { kind: 'category', category: 'rental' })).toBe(true);
+    expect(anyFlightFreezes(flights, { kind: 'master' })).toBe(false);
   });
 });
