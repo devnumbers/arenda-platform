@@ -191,12 +191,16 @@ export function RentalCompleteFlow({
       <PageContent className="pt-0">
         {stage === 'confirm' && (
           <div className="flex flex-col items-center gap-8 px-12 pt-6">
-            {/* Ключ аренды 96 — единая картинка (1232:61491). */}
+            {/* Ключ аренды 96 — единая картинка (1232:61491); priority —
+              * above the fold финального экрана (канон EmptyState 22.10). */}
             <Image
               src="/images/rentals/rental-hero.webp"
               alt=""
               width={96}
               height={96}
+              sizes="96px"
+              quality={90}
+              priority
               className="h-24 w-24"
               aria-hidden
             />

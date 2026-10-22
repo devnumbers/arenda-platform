@@ -387,7 +387,7 @@ export function PaymentFavoritesScreen(): JSX.Element {
 }
 
 
-/** Пустое состояние (889:28111): иллюстрация favorites-empty.png 128 и
+/** Пустое состояние (889:28111): иллюстрация favorites-empty.webp 128 и
  * две тёмные подписи — заголовок и подсказка (оба #171A1C в макете).
  * Центрируется в доступной высоте, как глобальное пустое главного экрана. */
 function FavoritesEmpty(): JSX.Element {
