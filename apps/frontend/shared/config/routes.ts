@@ -212,6 +212,17 @@ export const ROUTES = {
    * объекта, где он изменения сделал). */
   historyMemberProperty: (participantId: string, propertyId: string) =>
     `/history/participants/${encodeURIComponent(participantId)}/properties/${encodeURIComponent(propertyId)}`,
+  /** Лента «Истории действий» со страницы участника (решение владельца
+   * 22.10.2026): общая лента, скоупнутая объектами участника — адресный
+   * фильтр ?objects=csv ног (канон §3 «Состояние страницы в адресе»;
+   * сервер сужает по property_ids, ADR 0061 §7; без property_ids общая
+   * лента читает только свои объекты, канон D14 #1412, — «не по чужим»
+   * держит сервер при любом адресе). Не прибитая страница: группы
+   * фильтров адреса остаются редактируемыми; не путать со снятой
+   * глобальной страницей «Действия участника» (#1361) — там был пин
+   * одного человека без объектного скоупа. */
+  historyParticipantObjects: (propertyIds: ReadonlyArray<string>) =>
+    `/history?objects=${propertyIds.join(',')}`,
   /** Центр уведомлений — лента (карта #734, тикет #744): хаб-маршрут
    * среднего таба TabBar и пилюли ПК. */
   notifications: '/notifications',

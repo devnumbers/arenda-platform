@@ -6,7 +6,11 @@ import {
   openCabinetWithSeededSession,
   openCabinetWithSessionToken,
   screenHeader,
+  seedJournalEntry,
   seededMemberSessionToken,
+  SEEDED_APARTMENT_PROPERTY_ID,
+  SEEDED_GARAGE_PROPERTY_ID,
+  SEEDED_STUDIO_PROPERTY_ID,
   test,
 } from './fixtures';
 
@@ -48,16 +52,159 @@ test('страница участника: шапка, чип агрегата, 
   await expect(apartmentRow).toBeVisible();
   await expect(apartmentRow.getByText('Управление')).toBeVisible();
 
-  // Кебаб шапки: приглашение и отзыв (макет 2008-48318); пункта
-  // «Действия участника» больше нет (#1361 — глобальная лента по одному
-  // человеку снята).
+  // Кебаб шапки: приглашение, история действий (решение владельца
+  // 22.10.2026 — лента по объектам участника) и отзыв; пункта
+  // «Действия участника» (глобальная лента по одному человеку) больше
+  // нет (#1361) — возврат входа 22.10 объектным скоупом его не вернул.
   await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
   await expect(page.getByRole('menuitem', { name: 'Пригласить в объект' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'История действий' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Отозвать доступ к объектам' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Действия участника' })).toHaveCount(0);
   await page.keyboard.press('Escape');
 
   await captureScreen(page, testInfo, 'participant-page');
+});
+
+test('кебаб: «История действий» — лента по объектам участника, не вся моя (решение владельца 22.10.2026); сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+  // Журнал на всех трёх объектах владельца: общая лента показала бы все
+  // три секции — скоуп ног участника обязан показать только его объекты
+  // («не по чужим, а только по моим»). Мария сидит на квартире; гараж
+  // досаживается SQL'ем — в скоупе двое; студия остаётся за бортом.
+  // Вторая нога и три строки журнала — разрушающие правки, finally
+  // восстанавливает сид (workers=1).
+  const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+  const GARAGE_LEG_ID = '99999999-9999-4999-8999-999999999941';
+  const JOURNAL_APARTMENT_ID = '9b111111-1111-4111-8111-111111111191';
+  const JOURNAL_GARAGE_ID = '9b111111-1111-4111-8111-111111111192';
+  const JOURNAL_STUDIO_ID = '9b111111-1111-4111-8111-111111111193';
+  const NOW_TEN_AM_SQL = "date_trunc('day', now()) + interval '10 hours'";
+  try {
+    await seedJournalEntry(
+      { id: JOURNAL_APARTMENT_ID, propertyId: SEEDED_APARTMENT_PROPERTY_ID, text: 'Тест-запись квартиры', createdAtSql: NOW_TEN_AM_SQL },
+      seededUser,
+    );
+    await seedJournalEntry(
+      { id: JOURNAL_GARAGE_ID, propertyId: SEEDED_GARAGE_PROPERTY_ID, text: 'Тест-запись гаража', createdAtSql: NOW_TEN_AM_SQL },
+      seededUser,
+    );
+    await seedJournalEntry(
+      { id: JOURNAL_STUDIO_ID, propertyId: SEEDED_STUDIO_PROPERTY_ID, text: 'Тест-запись студии', createdAtSql: NOW_TEN_AM_SQL },
+      seededUser,
+    );
+    await execE2eSql(
+      `INSERT INTO property_members (id, property_id, user_id, role, granted_by) ` +
+        `VALUES ('${GARAGE_LEG_ID}', '${SEEDED_GARAGE_PROPERTY_ID}', '${MARIA_ID}', 'viewer', '${OWNER_ID}') ` +
+        `ON CONFLICT (property_id, user_id) WHERE status = 'active' DO NOTHING`,
+    );
+
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto(`/participants/${MARIA_ID}`);
+
+    // Сетевой скоуп ленты: XHR /api/history несёт property_ids ровно ног
+    // участника; документ /history?objects=… property_ids не содержит —
+    // предикат их различает.
+    const scopedFeed = page.waitForRequest(
+      (request) => request.url().includes('/history?') && request.url().includes('property_ids='),
+    );
+    const header = screenHeader(page);
+    await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+    await page.getByRole('menuitem', { name: 'История действий' }).click();
+    await page.waitForURL(/\/history\?objects=/);
+
+    const requestedIds =
+      new URL((await scopedFeed).url()).searchParams.get('property_ids')?.split(',') ?? [];
+    expect([...requestedIds].sort()).toEqual(
+      [SEEDED_APARTMENT_PROPERTY_ID, SEEDED_GARAGE_PROPERTY_ID].sort(),
+    );
+    // Канон §3: скоуп живёт в адресе ленты (?objects=csv ног).
+    const addressObjects = new URL(page.url()).searchParams.get('objects')?.split(',') ?? [];
+    expect([...addressObjects].sort()).toEqual(
+      [SEEDED_APARTMENT_PROPERTY_ID, SEEDED_GARAGE_PROPERTY_ID].sort(),
+    );
+
+    // Секции ленты: объекты участника — есть (first: в общей БД e2e у
+    // объекта бывают и чужие сид-строки — секций может быть несколько,
+    // по одной на день); студия (чужая для скоупа) — ни шапкой, ни строкой.
+    await expect(page.getByRole('heading', { name: 'Квартира на Ленина' }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Гараж на Садовой' }).first()).toBeVisible();
+    await expect(page.getByText('Студия на Полевой')).toHaveCount(0);
+    await expect(page.getByText('Тест-запись студии')).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'participant-history-entry');
+
+    // «Назад» живым переходом возвращает на страницу участника.
+    await header.getByRole('button', { name: 'Назад' }).click();
+    await page.waitForURL(new RegExp(`/participants/${MARIA_ID}$`));
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_members WHERE id = '${GARAGE_LEG_ID}'; ` +
+        `DELETE FROM action_journal WHERE id IN ('${JOURNAL_APARTMENT_ID}', '${JOURNAL_GARAGE_ID}', '${JOURNAL_STUDIO_ID}')`,
+    );
+  }
+});
+
+test('pending-участник: «История действий» — лента приглашённых объектов; сид восстанавливается', async ({ page, seededUser }, testInfo) => {
+  // Pending-нога (приглашение по email) — тоже «объект, в который
+  // добавили»: пункт кебаба живёт, скоуп — приглашённая квартира. Своих
+  // действий у pending не бывает (actor_id журнала — uuid юзера, его ещё
+  // нет), лента скоупа показывает действия объектов — здесь строку
+  // приглашения. Идентификатор агрегата pending составляет бэкенд —
+  // открываем страницу кликом по ряду списка.
+  const PENDING_EMAIL = 'e2e-pending-history@example.com';
+  const INVITATION_ID = '99999999-9999-4999-8999-999999999951';
+  const JOURNAL_ID = '9b111111-1111-4111-8111-111111111194';
+  const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+  const NOW_TEN_AM_SQL = "date_trunc('day', now()) + interval '10 hours'";
+  try {
+    await execE2eSql(
+      `INSERT INTO property_member_invitations (id, property_id, email, role, invited_by, last_sent_at) ` +
+        `VALUES ('${INVITATION_ID}', '${SEEDED_APARTMENT_PROPERTY_ID}', '${PENDING_EMAIL}', 'viewer', '${OWNER_ID}', now()) ` +
+        `ON CONFLICT (property_id, lower(email)) DO NOTHING`,
+    );
+    await seedJournalEntry(
+      { id: JOURNAL_ID, propertyId: SEEDED_APARTMENT_PROPERTY_ID, text: 'Тест-запись приглашения', createdAtSql: NOW_TEN_AM_SQL },
+      seededUser,
+    );
+
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/participants');
+    await page.getByRole('button', { name: new RegExp(PENDING_EMAIL) }).click();
+    await page.waitForURL(/\/participants\/[^/]+$/);
+    const participantPath = new URL(page.url()).pathname;
+    // Своё pending-состояние на странице: бейдж «Аккаунт не создан» (D3
+    // #1313) — значит, открыт именно pending-агрегат.
+    await expect(page.getByText('Аккаунт не создан')).toBeVisible();
+
+    const scopedFeed = page.waitForRequest(
+      (request) => request.url().includes('/history?') && request.url().includes('property_ids='),
+    );
+    const header = screenHeader(page);
+    await header.getByRole('button', { name: 'Еще — действия с участником' }).click();
+    await page.getByRole('menuitem', { name: 'История действий' }).click();
+    await page.waitForURL(/\/history\?objects=/);
+
+    const requestedIds =
+      new URL((await scopedFeed).url()).searchParams.get('property_ids')?.split(',') ?? [];
+    expect(requestedIds).toEqual([SEEDED_APARTMENT_PROPERTY_ID]);
+
+    // Скоуп — только приглашённая квартира; гараж и студия (ноги нет) —
+    // ни шапками, ни строками.
+    await expect(page.getByRole('heading', { name: 'Квартира на Ленина' }).first()).toBeVisible();
+    await expect(page.getByText('Гараж на Садовой')).toHaveCount(0);
+    await expect(page.getByText('Студия на Полевой')).toHaveCount(0);
+
+    await captureScreen(page, testInfo, 'participant-history-pending');
+
+    // «Назад» возвращает на страницу pending-участника.
+    await header.getByRole('button', { name: 'Назад' }).click();
+    await page.waitForURL((url) => url.pathname === participantPath);
+  } finally {
+    await execE2eSql(
+      `DELETE FROM property_member_invitations WHERE id = '${INVITATION_ID}'; ` +
+        `DELETE FROM action_journal WHERE id = '${JOURNAL_ID}'`,
+    );
+  }
 });
 
 test('безымянный участник: «Пользователь» — заголовок шапки, почта подзаголовком (карта #1105, аменд #1123); сид восстанавливается', async ({ page, seededUser }, testInfo) => {

@@ -2,7 +2,7 @@
 
 import { useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import { Add, Block, Info, Kebab, SmallArrowRight } from '@/shared/assets/icons';
+import { Add, Block, Info, Kebab, SmallArrowRight, TimeHistory } from '@/shared/assets/icons';
 import { goBack, pushPage } from '@/shared/lib/navigation';
 import { ROUTES } from '@/shared/config/routes';
 import {
@@ -38,17 +38,23 @@ import { ParticipantScreenSkeleton } from './participants-skeletons';
  * Страница участника (карта #692, тикет #698; Figma 2008-81468): блок
  * «аватар — имя — почта — чип агрегат-статуса», список «Доступные объекты»
  * (Row Button с фото/домом, адресом из кэша /properties, бейджем роли ноги
- * и чевроном) и кебаб шапки: «Пригласить в объект» (#694, отдельный экран)
- * и «Отозвать доступ к объектам» (макет 2008-48318; ConfirmDialog 2008-82147
- * канона #629 — крупный заголовок, кнопки столбиком) → DELETE
- * /participants/{id} → goBack на список (источник), тост «Участник
- * удален» показывается в момент успеха (2008-83716; тост вместо
- * успех-попапа, решение владельца 19.10.2026).
+ * и чевроном) и кебаб шапки: «Пригласить в объект» (#694, отдельный экран),
+ * «История действий» (решение владельца 22.10.2026 — возврат входа в
+ * объектном скоупе: push на общую ленту с адресным фильтром ?objects= ног
+ * участника — лента только тех объектов, куда он добавлен; канон §3, группы
+ * фильтров адреса остаются редактируемыми) и «Отозвать доступ к объектам»
+ * (макет 2008-48318; ConfirmDialog 2008-82147 канона #629 — крупный
+ * заголовок, кнопки столбиком) → DELETE /participants/{id} → goBack на
+ * список (источник), тост «Участник удален» показывается в момент успеха
+ * (2008-83716; тост вместо успех-попапа, решение владельца 19.10.2026).
  *
  * Пункт кебаба «Действия участника» снят вместе с его страницей (решение
  * владельца 12.10.2026, #1361): глобальная лента по одному человеку
  * удалена, лента истории адресуется парами человек+объект (#841) или
- * объектом (#840).
+ * объектом (#840). Возврат 22.10.2026 — НЕ его воскрешение: новый пункт
+ * «История действий» ведёт на объектный скоуп (?objects=), пина одного
+ * человека по-прежнему нет (пара #841 — единственный носитель). Пункт
+ * живёт только при ногах (канон §7: входа в ленту без скоупа не бывает).
  *
  * Deep-link-политика (#693): человек вне скоупа читающего или уже отозван
  * — приватный 404 → «Участник не найден» по центру, кебаб скрыт (§7),
@@ -74,6 +80,10 @@ export function ParticipantScreen({
   // Иконки/меню шапки — только когда участник загружен (§7: пустых и
   // ошибочных состояний они не касаются).
   const kebabVisible = headerLoaded;
+  // Вход «Истории действий» — только при ногах (канон §7: входа в ленту
+  // без скоупа не бывает); ноги есть у всякого загруженного агрегата
+  // (контракт: хотя бы одна), ветка оборонительная.
+  const historyObjectIds = participant?.properties.map((leg) => leg.propertyId);
   const propertyById = new Map(
     (propertiesQuery.data ?? []).map((property) => [property.id, property]),
   );
@@ -99,6 +109,16 @@ export function ParticipantScreen({
                   >
                     Пригласить в объект
                   </MenuItem>
+                  {historyObjectIds !== undefined && historyObjectIds.length > 0 && (
+                    <MenuItem
+                      icon={<TimeHistory className="h-6 w-6" />}
+                      onSelect={() =>
+                        pushPage(router, ROUTES.historyParticipantObjects(historyObjectIds))
+                      }
+                    >
+                      История действий
+                    </MenuItem>
+                  )}
                   <MenuItem
                     icon={<Block className="h-6 w-6 text-error" />}
                     className="text-error"
