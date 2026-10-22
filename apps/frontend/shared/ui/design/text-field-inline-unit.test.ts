@@ -55,6 +55,13 @@ describe('Инлайновая единица TextField — проп и разм
     );
   });
 
+  it('единица вплотную к значению — зазора pl-1 нет (аменда владельца 22.10)', () => {
+    const anchor = textFieldSource.indexOf("unitTinted ? 'text-content'");
+    const unitBlock = textFieldSource.slice(anchor - 120, anchor + 120);
+    expect(unitBlock, 'спан единицы без pl-1').not.toContain('pl-1');
+    expect(unitBlock).toContain('shrink-0 text-base leading-[18px]');
+  });
+
   it('тёмная единица: фокус или непустое значение (аменда владельца 22.10)', () => {
     expect(textFieldSource).toContain('const unitTinted = unitFocused || unitValue.length > 0;');
     expect(textFieldSource).toContain('setUnitFocused(true)');

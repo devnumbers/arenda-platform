@@ -314,7 +314,7 @@ export function TextField({
               <span
                 aria-hidden
                 className={cn(
-                  'shrink-0 pl-1 text-base leading-[18px]',
+                  'shrink-0 text-base leading-[18px]',
                   unitTinted ? 'text-content' : 'text-content-secondary',
                 )}
               >
