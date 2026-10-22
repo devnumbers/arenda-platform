@@ -1055,6 +1055,8 @@ test.describe('визард создания платежа', () => {
   }) => {
     // Email-матрица аккаунта (#743): тумблер шага отражает её значение,
     // клик пишет PUT с флипом категории — пер-платёжных override нет (#822).
+    // «Не напоминать» (дефолт шага #1193) гасит весь ряд (решение владельца
+    // 22.10.2026) — для шотката включаем напоминание.
     // Мок stateful: refetch после PUT возвращает сохранённое состояние.
     const { savedCategories } = await mockEmailCategoryShortcut(page);
 
@@ -1066,6 +1068,10 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
 
     const toggle = page.getByRole('switch', { name: 'Уведомления на почту' });
+    // Ряд гаснут целиком: тумблер некликабелен, пока «Не напоминать».
+    await expect(toggle).toBeDisabled();
+    await page.getByRole('button', { name: 'За 1 день' }).click();
+    await expect(toggle).toBeEnabled();
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     await toggle.click();
     // Оптимистичный флип и PUT — трекер запросов только через expect.poll.
@@ -1098,8 +1104,13 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('button', { name: 'За 1 день' })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Окончание платежа' })).toBeVisible();
+    // «Не уведомлять» (дефолт) гасит ряд «Уведомления на почту» целиком,
+    // «Да, уведомлять» возвращает (решение владельца 22.10.2026).
+    const emailToggle = page.getByRole('switch', { name: 'Уведомления на почту' });
+    await expect(emailToggle).toBeDisabled();
     await captureScreen(page, testInfo, 'wizard-step4-autopayment-mobile');
     await page.getByRole('button', { name: 'Да, уведомлять' }).click();
+    await expect(emailToggle).toBeEnabled();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('3300');

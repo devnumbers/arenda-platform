@@ -42,6 +42,7 @@ import {
   buildPaymentUpdateCommand,
   branchKind,
   editFormReady,
+  emailNotificationsRowDisabled,
   formAfterRecurrenceChange,
   periodicityReady,
   recurrencesEqual,
@@ -119,7 +120,9 @@ import { CategorySearchHint, WizardDirectionSegment, WizardHeading } from './pay
  * #1186). Регулярность — без «Один раз» (решение #449) с ветками дат;
  * `since` не редактируется. Ряд «Уведомления на почту» — общий
  * EmailNotificationsRow (шоткат глобальной email-настройки категории,
- * канон #746, подпись — как на шаге 4 создания).
+ * канон #746, подпись — как на шаге 4 создания); пер-платёжный выбор
+ * «не надо» гасит весь ряд (emailNotificationsRowDisabled, решение
+ * владельца 22.10.2026), состояние живое — переключил радио, ряд ожил.
  *
  * Сохранение — частичный PATCH: команда — дифф формы (update-model),
  * пересоздание планового вхождения делает сервер — правка меняет только
@@ -356,7 +359,8 @@ function PaymentEditForm({
   const updatePayment = useUpdatePayment(propertyId, payment.id);
   const deletePayment = useDeletePayment(propertyId, payment.id);
   // Ряд «Уведомления на почту» (макет 1127:32504) — общий EmailNotificationsRow:
-  // подпись с почтой пользователя, как на шаге 4 создания (#1193).
+  // подпись с почтой пользователя, как на шаге 4 создания (#1193); гейт
+  // «не надо» — решение владельца 22.10.2026 (см. докстринг компонента).
   const meQuery = useMe();
   const email = meQuery.data?.email ?? null;
 
@@ -779,6 +783,13 @@ function PaymentEditForm({
         <EmailNotificationsRow
           title="Уведомления на почту"
           caption={emailReminderCaption('о платеже', email)}
+          disabled={emailNotificationsRowDisabled(
+            payment.autoPay ? 'autopayment' : 'payment',
+            {
+              reminderOffsetDays: form.reminderOffsetDays,
+              notifyAutoPaid: form.notifyAutoPaid,
+            },
+          )}
         />
 
         {canDelete && (

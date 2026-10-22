@@ -11,6 +11,7 @@ import {
   EmailNotificationsRow,
 } from '@/features/notifications';
 import {
+  emailNotificationsRowDisabled,
   periodicityReady,
   type PaymentDraftType,
 } from '@/features/payments';
@@ -34,7 +35,9 @@ import { WizardHeading } from './wizard-chrome';
  * Секция «Настройки» (без подзаголовка, по макету): тумблер «Уведомления
  * на почту» — общий EmailNotificationsRow (шоткат глобальной email-настройки
  * категории «Платежи и операции», канон #746; опечатки подписей макетов не
- * воспроизводятся, канон AutoPayRow) и тумблер «Окончание платежа»
+ * воспроизводятся, канон AutoPayRow); пер-платёжный выбор «не надо» гасит
+ * весь ряд (emailNotificationsRowDisabled, решение владельца 22.10.2026)
+ * и тумблер «Окончание платежа»
  * («Необязательно»): включённым открывает строку «Выбрать дату» (канон
  * Figma 843:8345), выключенным чистит выбранную дату.
  *
@@ -121,7 +124,14 @@ export function PaymentSettingsStep({
           заголовка — итого 40px от последней радио-строки. */}
       <StepSectionHeading title="Настройки" />
       <div className="flex flex-col pt-4">
-        <EmailNotificationsRow title="Уведомления на почту" caption={emailReminderCaption('о платеже', email)} />
+        <EmailNotificationsRow
+          title="Уведомления на почту"
+          caption={emailReminderCaption('о платеже', email)}
+          disabled={emailNotificationsRowDisabled(draftType, {
+            reminderOffsetDays,
+            notifyAutoPaid,
+          })}
+        />
         <EndDateToggleRow checked={endDateOn} onToggle={toggleEndDate} />
         {endDateOn && (
           <EndDateRow

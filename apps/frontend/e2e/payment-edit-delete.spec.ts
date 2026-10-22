@@ -304,6 +304,8 @@ test.describe('экран правки платежа', () => {
 
     const reminderField = page.getByRole('button', { name: 'Напоминать о платеже' });
     await expect(reminderField).toHaveText(/За 3 дня/);
+    // Напоминание стоит — ряд «Уведомления на почту» жив (22.10.2026).
+    await expect(page.getByRole('switch', { name: 'Уведомления на почту' })).toBeEnabled();
     await reminderField.click();
     const group = page
       .getByRole('dialog', { name: 'Напоминать о платеже' })
@@ -311,6 +313,8 @@ test.describe('экран правки платежа', () => {
     await expect(group.getByRole('radio', { name: 'За 3 дня' })).toBeChecked();
     await group.getByRole('radio', { name: 'Не напоминать' }).click();
     await page.keyboard.press('Escape');
+    // «Не напоминать» гасит ряд «Уведомления на почту» целиком (22.10.2026).
+    await expect(page.getByRole('switch', { name: 'Уведомления на почту' })).toBeDisabled();
     await expect(stickySaveButton(page)).toBeEnabled();
     await stickySaveButton(page).click();
     await expect(page.getByText('Изменения сохранены')).toBeVisible();
@@ -337,6 +341,9 @@ test.describe('экран правки платежа', () => {
     await expect(page.getByRole('button', { name: 'Напоминать о платеже' })).toHaveCount(0);
     const notifyField = page.getByRole('button', { name: 'Уведомлять об оплате' });
     await expect(notifyField).toHaveText(/Не уведомлять/);
+    // Флаг false гасит ряд «Уведомления на почту» целиком (22.10.2026).
+    const emailToggle = page.getByRole('switch', { name: 'Уведомления на почту' });
+    await expect(emailToggle).toBeDisabled();
 
     // Шит с двумя радио — подписи шага 4 создания (#1193).
     await notifyField.click();
@@ -349,6 +356,7 @@ test.describe('экран правки платежа', () => {
     await page.keyboard.press('Escape');
 
     await expect(notifyField).toHaveText(/Да, уведомлять/);
+    await expect(emailToggle).toBeEnabled();
     await expect(stickySaveButton(page)).toBeEnabled();
     await stickySaveButton(page).click();
     await expect(page.getByText('Изменения сохранены')).toBeVisible();

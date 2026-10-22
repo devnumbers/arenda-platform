@@ -111,6 +111,7 @@ export {
   recurrencesEqual,
   type PaymentEditForm,
 } from './lib/update-model';
+export { emailNotificationsRowDisabled } from './lib/email-notifications-row';
 export {
   fetchGlobalOperationsPage,
   fetchGlobalOperationsSummary,
