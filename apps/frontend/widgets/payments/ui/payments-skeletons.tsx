@@ -3,7 +3,6 @@ import {
   Skeleton,
   SkeletonFormField,
   SkeletonListRow,
-  SkeletonRoundAction,
   skeletonBlockClass,
   skeletonRowWidths,
 } from '@/shared/ui/design';
@@ -48,17 +47,39 @@ function SkeletonOperationSection({ children }: { readonly children: ReactNode }
   );
 }
 
+/** Круглая кнопка с подписью в две строки (94 = 56 + 8 + 30) — высота
+ * ряда круглых кнопок арендного платежа («Изменить аренду», «Завершить
+ * аренду», решение #802) и тройки страницы аренды; однострочный архетип
+ * SkeletonRoundAction (79) на 15 ниже и сдвигал бы секции. */
+function SkeletonRoundActionTwoLineCaption(): JSX.Element {
+  return (
+    <span aria-hidden className="flex flex-col items-center gap-2">
+      <Skeleton className="h-14 w-14 rounded-pill" />
+      <span className="flex flex-col items-center">
+        <Skeleton className={`h-[15px] w-16 ${MUTED}`} />
+        <Skeleton className={`h-[15px] w-12 ${MUTED}`} />
+      </span>
+    </span>
+  );
+}
+
 /**
- * Скелетон страницы платежа (#606): hero-карточка правила, три круглые
- * кнопки (полный доступ), секции «Ближайший платеж» (строка со суммой)
- * и «Просроченные платежи» (строки со суммой и сроком), зазор секций 16px
- * (3214:76434, #1194 — как у контента); плиток подэкранов нет (снесены
- * #1073), секция истории скелетоном не рисуется — на загрузке её ещё нет:
- * секция появляется после ответа истории (блок постоянен в данных,
- * #1338, но isPending истории рисует null).
+ * Скелетон страницы платежа (#606): hero-карточка правила, круглые кнопки
+ * с подписями в две строки и три секции каркаса в срезе типичной активной
+ * аренды (решение владельца 22.10): «Ближайший платеж» — строка,
+ * «Просроченные платежи» — пустой подзаголовок (у здорового платежа
+ * просрочек нет), «История платежа» — строка: блок постоянен в данных
+ * (#1338), порция ждётся серверным префетчем. Высоты — по реальному
+ * контенту: кнопочный ряд 94, секция со строкой 144 (строка 60: py-1.5
+ * скелетона против py-2 реальной PaymentRowButton с px-3 pb-2), секция
+ * с пустым подзаголовком 116 (hint 32 = текст 16 + pb-4). Зазор секций
+ * 16px (3214:76434, #1194 — как у контента); плиток подэкранов нет
+ * (снесены #1073). Состояния вне типового среза («все оплачено» —
+ * «Ближайший платеж» пустой, свежее правило — история пуста, просрочки)
+ * доезжают в пределах одной секции: статичный каркас не знает состояния
+ * до загрузки.
  */
 export function PaymentDetailSkeleton(): JSX.Element {
-  const overdueWidths = skeletonRowWidths(1);
   return (
     <>
       <div className="px-6">
@@ -77,28 +98,25 @@ export function PaymentDetailSkeleton(): JSX.Element {
 
       <div className="px-6" aria-hidden>
         <div className="grid grid-cols-3">
-          <SkeletonRoundAction />
-          <SkeletonRoundAction />
-          <SkeletonRoundAction />
+          <SkeletonRoundActionTwoLineCaption />
+          <SkeletonRoundActionTwoLineCaption />
+          <SkeletonRoundActionTwoLineCaption />
         </div>
       </div>
 
       <div className="flex flex-col gap-4">
         <SkeletonPaymentsGroup>
-          <SkeletonListRow value tone="muted" className="px-3" />
+          <SkeletonListRow value tone="muted" className="py-1.5" />
         </SkeletonPaymentsGroup>
 
         <SkeletonPaymentsGroup>
-          {overdueWidths.map((rowWidths, index) => (
-            <SkeletonListRow
-              key={index}
-              value
-              description
-              tone="muted"
-              widths={rowWidths}
-              className="px-3"
-            />
-          ))}
+          <div className="px-6 pb-4">
+            <Skeleton className={`h-4 w-56 ${MUTED}`} />
+          </div>
+        </SkeletonPaymentsGroup>
+
+        <SkeletonPaymentsGroup>
+          <SkeletonListRow value tone="muted" className="py-1.5" />
         </SkeletonPaymentsGroup>
       </div>
     </>

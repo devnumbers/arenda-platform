@@ -275,4 +275,77 @@ test.describe('гейт мутаций платежа аренды', () => {
 
     await captureScreen(page, testInfo, 'rental-completion-deletes-payment');
   });
+
+  test('все месяцы оплачены: вместо disabled «Оплатить» — «Завершить аренду», вход в мастер итогов (решение владельца 22.10)', async ({
+    page,
+    seededUser,
+  }, testInfo) => {
+    await openCabinetWithSeededSession(page, seededUser);
+
+    // Своя аренда (не ensureRental): плановое окончание — сегодня, чтобы
+    // после оплаты единственного вхождения правило исчерпалось
+    // (isCompleted) при живой незавершённой аренде — состояние «Ожидает
+    // действия», в котором раньше висела disabled «Оплатить». Создаётся
+    // бессрочной, срок ставится SQL-ом (канон lifecycle-спека): валюатор
+    // создания однодневную аренду не обещает.
+    const today = todayIso();
+    const created = await page.request.post(`/api/properties/${PROPERTY}/rentals`, {
+      data: {
+        amountKopecks: 3_000_000,
+        paymentDay: Number(today.slice(8, 10)),
+        startDate: today,
+        plannedEndDate: null,
+        utilities: 'included',
+        autoPay: false,
+      },
+    });
+    expect(created.status()).toBe(201);
+    const rental = (await created.json()) as RentalFromApi;
+    const paymentId = rental.rentPayment.paymentId;
+    fixtureRentals = [...fixtureRentals, { rentalId: rental.id, paymentId }];
+
+    expect(await execE2eSql(
+      `UPDATE payments SET end_date = CURRENT_DATE WHERE id = '${paymentId}'`,
+    )).toBe('UPDATE 1');
+
+    // Оплата единственного вхождения (вхождение «сегодня» материализовал
+    // тик создания) — через UI, как живой сценарий: «Оплатить» → операция
+    // → «Отметить оплаченной» → «Хорошо» возвращает на страницу платежа.
+    await page.goto(`/properties/${PROPERTY}/payments/${paymentId}`);
+    await expect(page.getByRole('button', { name: 'Оплатить' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Оплатить' }).click();
+    await expect(page).toHaveURL(new RegExp(`/properties/${PROPERTY}/operations/[0-9a-f-]+`));
+    await page.getByRole('button', { name: 'Отметить оплаченной' }).click();
+    await expect(page.getByText('Платеж оплачен')).toBeVisible();
+    await page.getByRole('button', { name: 'Хорошо', exact: true }).click();
+
+    // Исчерпанность: секция ближайшего — «Платежей больше не будет»,
+    // «Оплатить» ушла, на её месте — «Завершить аренду» (secondary,
+    // подпись в две строки — как у тройки страницы аренды).
+    await expect(page.getByText('Платежей больше не будет')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Оплатить' })).toHaveCount(0);
+    const completeRentalButton = page.getByRole('button', { name: 'Завершить аренду' });
+    await expect(completeRentalButton).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Изменить аренду' })).toBeVisible();
+
+    // Server truth: правило вычислено завершённым при живой аренде.
+    const detail = await page.request.get(`/api/properties/${PROPERTY}/payments/${paymentId}`);
+    expect(detail.ok()).toBe(true);
+    expect(((await detail.json()) as { isCompleted: boolean }).isCompleted).toBe(true);
+    expect(await execE2eSql(
+      `SELECT count(*) FROM operations WHERE payment_id = '${paymentId}' AND status = 'planned'`,
+    )).toBe('0');
+    expect(await execE2eSql(
+      `SELECT count(*) FROM rentals WHERE id = '${rental.id}' AND completed_date IS NULL`,
+    )).toBe('1');
+
+    // Вход ведёт в стандартный мастер завершения аренды (итоги аренды).
+    await completeRentalButton.click();
+    await expect(page).toHaveURL(
+      new RegExp(`/properties/${PROPERTY}/rentals/complete`),
+    );
+    await expect(page.getByText('Завершить аренду?').first()).toBeVisible();
+
+    await captureScreen(page, testInfo, 'rental-payment-complete-rental-cta');
+  });
 });
