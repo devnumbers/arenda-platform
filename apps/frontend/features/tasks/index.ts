@@ -11,6 +11,8 @@ export {
   useCompleteTask,
   useCreateTaskRule,
   useDeleteCompletedTasks,
+  useDeletePropertylessTaskRule,
+  useDeleteTaskRule,
   usePropertylessTaskRule,
   usePropertylessTasks,
   useTaskRule,
