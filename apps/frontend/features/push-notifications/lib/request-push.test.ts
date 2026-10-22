@@ -121,6 +121,28 @@ describe('requestPushPermissionAndSubscribe — явное включение (�
         expect(post).not.toHaveBeenCalled();
     });
 
+    it('default: requestPermission реджектит без окна (Firefox 72+ без жеста) — реджект уходит наружу: контракт строгий, тихо его глотает только шаг авто-промпта (#1548)', async () => {
+        const browser = stubBrowser({ permission: 'default' });
+        browser.requestPermission.mockRejectedValue(
+            new Error(
+                'The Notification permission may only be requested from inside a short running user-generated event handler',
+            ),
+        );
+        const post = makePost();
+        await expect(
+            requestPushPermissionAndSubscribe(VAPID_KEY, post),
+        ).rejects.toThrow('user-generated event handler');
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    it('default: промис резолвится default без окна (Chrome 155+ таймаут баннера, подавление quieter UI) — denied (#1548)', async () => {
+        stubBrowser({ permission: 'default', requestPermissionResult: 'default' });
+        const post = makePost();
+        const outcome = await requestPushPermissionAndSubscribe(VAPID_KEY, post);
+        expect(outcome).toStrictEqual({ outcome: 'denied' });
+        expect(post).not.toHaveBeenCalled();
+    });
+
     it('default: промпт выдан — тихая подписка + POST (полученные категории уходят явно)', async () => {
         const browser = stubBrowser({ permission: 'default', requestPermissionResult: 'granted' });
         const post = makePost();

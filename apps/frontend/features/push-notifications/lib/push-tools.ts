@@ -13,7 +13,8 @@ import type { PostSubscriptionFn } from './request-push';
  * (useSubscribePush), и стартовый гейт (авто-промпт) вызывали их из
  * эффектов, не перетаскивая правила хуков в асинхронные хелперы. Фоновых
  * подписок не существует (спека #1028 §4, слайс 2 #1038) — кроме
- * авто-промпта нового юзера это единственные точки POST'а.
+ * авто-промпта (вариант (c): окно при каждом заходе, пока `default`,
+ * #1548) это единственные точки POST'а.
  */
 export function usePushSubscriptionTools(): {
   readonly vapidKey: string | undefined;
