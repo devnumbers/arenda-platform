@@ -181,18 +181,19 @@ function ChoiceCard({
     >
       {/* priority — как в EmptyState: иллюстрация внутри открывающегося
           шита, ленивую загрузку наблюдатель вьюпорта может пропустить.
-          sizes = 2x слота — суперсэмплинг (решение владельца 22.10.2026
-          «всегда в хорошем качестве»); единое качество выдачи 90,
-          исходники q100 (#1070) не тронуты. */}
+          Слот 128 — канонный размер иллюстрации (как EmptyState), sizes =
+          2x слота — суперсэмплинг; единое качество выдачи 90, исходники
+          512² — канонный класс источников (решение владельца 22.10.2026
+          «к тому же стилю, как и все», нормализация импорта #1070). */}
       <Image
         src={meta.image}
         alt=""
-        width={64}
-        height={64}
+        width={128}
+        height={128}
         priority
-        sizes="128px"
+        sizes="256px"
         quality={90}
-        className="h-16 w-16"
+        className="h-32 w-32"
       />
       <span className="flex flex-col gap-2">
         <span className="text-base font-medium leading-[18px] text-content">{meta.label}</span>
