@@ -21,13 +21,15 @@ import {
 import { cn } from '@/shared/lib/cn';
 import { useFocusRestore, type FocusRestore } from './focus-restore';
 
-/** Меню-кебаб дизайн-слоя (карта #497, Figma 1535-77633 — меню списка
- * задач) — dropdown на Radix: белая карточка radius 24 с тенью, пункты —
- * кнопки «Button White Small» (Figma 1186:44732): иконка 24 + подпись
- * 14/500, radius 16, hover — серый фон. Позиция — под якорем с
- * выравниванием по правому краю (кебаб у правого края экрана), вылет за
- * вьюпорт гасит collision-детект Радикса. Типобезопасно повторяет API
- * примитива: Menu (Root) / MenuTrigger / MenuContent / MenuItem. */
+/** Меню-кебаб дизайн-слоя (карта #497; спек по макету 3183-86541 — меню
+ * уведомлений) — dropdown на Radix: белая карточка radius 24, паддинг
+ * 2px, зазор пунктов 0, тень 0 8px 12px rgba(0,0,0,0.12); пункты —
+ * кнопки «Button White Small» (Figma 1186:44732): min-h 48, px 16,
+ * иконка 24 + подпись 14/500 с межстрочным 16, radius 16, hover —
+ * серый фон. Позиция — под якорем с выравниванием по правому краю
+ * (кебаб у правого края экрана), вылет за вьюпорт гасит
+ * collision-детект Радикса. Типобезопасно повторяет API примитива:
+ * Menu (Root) / MenuTrigger / MenuContent / MenuItem. */
 
 /** Пара capture/restore одного цикла меню, общая для триггера и
  * контента. DropdownMenu не экспортирует onOpenAutoFocus, а к закрытию
@@ -70,6 +72,11 @@ export const MenuTrigger = forwardRef<HTMLButtonElement, ComponentProps<typeof T
 
 export type MenuContentProps = ComponentProps<typeof Content>;
 
+/** Классы карточки — статичные, подняты на уровень модуля: контракт
+ * спека (макет 3183-86541) проверяется без рендера (menu.test.ts). */
+export const menuContentBaseClasses =
+  'z-50 flex w-fit flex-col gap-0 rounded-card bg-surface p-0.5 font-sans shadow-[0_8px_12px_rgba(0,0,0,0.12)] outline-none';
+
 export function MenuContent({
   className,
   sideOffset = 4,
@@ -86,9 +93,7 @@ export function MenuContent({
         sideOffset={sideOffset}
         align={align}
         className={cn(
-          // Figma 1535-77633: карточка radius 24, паддинг 12px 2px, зазор
-          // пунктов 2px, тень 0 8px 24px rgba(0,0,0,0.12).
-          'z-50 flex w-fit flex-col gap-0.5 rounded-card bg-surface px-0.5 py-3 font-sans shadow-[0_8px_24px_rgba(23,26,28,0.12)] outline-none',
+          menuContentBaseClasses,
           '[transform-origin:var(--radix-dropdown-menu-content-transform-origin,center)]',
           'data-[state=open]:animate-[menu-in_150ms_var(--dl-ease)]',
           'data-[state=closed]:animate-[menu-out_120ms_var(--dl-ease)]',
@@ -135,7 +140,7 @@ export function MenuItem({ className, icon, children, ...props }: MenuItemProps)
   return (
     <Item
       className={cn(
-        'flex h-11 cursor-pointer select-none items-center gap-1.5 rounded-button px-5 text-sm font-medium text-content outline-none transition-colors',
+        'flex min-h-12 cursor-pointer select-none items-center gap-1.5 rounded-button px-4 text-sm font-medium leading-4 text-content outline-none transition-colors',
         'data-[highlighted]:bg-surface-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         // Нажатие темнее ховера — сет DesktopMenuButton (невыбранной):
         // hover bg-surface-muted, при нажатии bg-surface-muted-hover.
