@@ -4127,8 +4127,13 @@ export interface components {
              * @enum {integer|null}
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
+            /**
+             * @description Персональная галочка отправки писем по платежу аренды (карта #1551, тикет #1555): получать ли письма по уведомлениям её Платежа арендной платы — сервер переносит флаг на платёж, как reminderOffsetDays. Независима от напоминания (решение владельца 22.10.2026); дефолт для новых — true («включена»), как у обычных платежей (#1553). Гейтится только email: лента, тосты и push не трогаются; глобальная настройка почты профиля — мастер.
+             * @default true
+             */
+            notifyEmail: boolean;
         };
-        /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment, reminderOffsetDays) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж, напоминание и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
+        /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment, reminderOffsetDays, notifyEmail) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж, напоминание, галочка почты и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
         RentalUpdateRequest: {
             /** Format: int64 */
             amountKopecks?: number;
@@ -4139,6 +4144,8 @@ export interface components {
              * @enum {integer|null}
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
+            /** @description Tri-state пер-платёжной галочки почты Платежа арендной платы (карта #1551, тикет #1555): omitted keeps the current value, null и false выключают письма правила, true включает. Независима от напоминания (решение владельца 22.10.2026); синхронно правит Платёж арендной платы, как reminderOffsetDays. */
+            notifyEmail?: boolean | null;
             /**
              * Format: date
              * @description Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала). Окно графика (тикет #1154): слитая пара «день оплаты + плановое окончание» целиком — смена дня перепроверяет стоящее окончание, смена окончания сверяется с хранящимся днём; раньше первого вхождения дня оплаты — 400.
@@ -4211,6 +4218,8 @@ export interface components {
             amountKopecks: number;
             paymentDay: components["schemas"]["RentalPaymentDay"];
             autoPay: boolean;
+            /** @description Персональная галочка отправки писем управляемого платежа (карта #1551, тикет #1555) — рендер читается из платежа, как reminderOffsetDays. Гейтится только email-канал; глобальная настройка почты профиля — мастер. У завершённой аренды платёж удалён — Архив условий флаг не хранит, ответ несёт false. */
+            notifyEmail: boolean;
             /**
              * @description Lead time of the managed payment's reminder (карта #822); null — напоминаний нет.
              * @enum {integer|null}

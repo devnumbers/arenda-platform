@@ -155,6 +155,25 @@ func (h *seamHarness) createRentalWithReminderOffset(offset *int) rentalsapp.Ren
 	return view
 }
 
+// createRentalWithNotifyEmail is the same create with an explicit email
+// toggle (карта #1551, тикет #1555) for the tests that pin the seam's copy
+// into the managed payment.
+func (h *seamHarness) createRentalWithNotifyEmail(on bool) rentalsapp.RentalView {
+	t := h.t
+	t.Helper()
+	view, err := h.svc.CreateRental(context.Background(), h.owner, h.propID,
+		rentalsapp.CreateRentalCommand{
+			AmountKopecks: 5_000_000,
+			PaymentDay:    rentalsdomain.MustPaymentDay(15),
+			StartDate:     seamToday,
+			Utilities:     rentalsdomain.UtilitiesIncluded,
+			AutoPay:       true,
+			NotifyEmail:   on,
+		})
+	require.NoError(t, err)
+	return view
+}
+
 func TestSeam_CreateBuildsTheManagedPaymentAndMaterializes(t *testing.T) {
 	t.Parallel()
 	h := newSeamHarness(t)
@@ -390,6 +409,57 @@ func TestSeam_ClearingThePlannedEndMakesThePaymentOpenEnded(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, payment.EndDate)
 	assert.Nil(t, updated.Progress.TotalMonths, "an open-ended rental has no total")
+}
+
+// The email toggle rides the seam into the managed payment (карта #1551,
+// тикет #1555): the create copies the flag into the payment rule, the terms
+// edit rewrites it, and the render state reads it back from the payment —
+// SQL-правда на Платеже аренды, как reminderOffsetDays. Независима от
+// напоминания (решение владельца 22.10.2026).
+func TestSeam_NotifyEmailRidesTheManagedPayment(t *testing.T) {
+	t.Parallel()
+	t.Run("create copies the flag into the payment", func(t *testing.T) {
+		t.Parallel()
+		h := newSeamHarness(t)
+		h.seedOwner()
+
+		off := h.createRentalWithNotifyEmail(false)
+		offPayment, err := h.paySvc.GetPayment(context.Background(), h.owner, h.propID, *off.Rental.PaymentID)
+		require.NoError(t, err)
+		assert.False(t, offPayment.NotifyEmail, "SQL-правда: флаг живёт на платеже аренды")
+		assert.False(t, off.Payment.NotifyEmail, "the render state reads the payment back")
+
+		on := newSeamHarness(t)
+		on.seedOwner()
+		view := on.createRentalWithNotifyEmail(true)
+		onPayment, err := on.paySvc.GetPayment(context.Background(), on.owner, on.propID, *view.Rental.PaymentID)
+		require.NoError(t, err)
+		assert.True(t, onPayment.NotifyEmail)
+	})
+	t.Run("the terms edit flips the flag, an edit without it keeps it", func(t *testing.T) {
+		t.Parallel()
+		h := newSeamHarness(t)
+		h.seedOwner()
+		view := h.createRentalWithNotifyEmail(false)
+
+		_, err := h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+			rentalsapp.UpdateRentalCommand{NotifyEmail: new(true)})
+		require.NoError(t, err)
+		payment, err := h.paySvc.GetPayment(context.Background(), h.owner, h.propID, *view.Rental.PaymentID)
+		require.NoError(t, err)
+		assert.True(t, payment.NotifyEmail, "the edit rewrites the flag")
+		updated, err := h.svc.GetRental(context.Background(), h.owner, h.propID, view.Rental.ID)
+		require.NoError(t, err)
+		assert.True(t, updated.Payment.NotifyEmail, "the read-back rides the view")
+
+		// An edit without the toggle keeps the stored flag.
+		_, err = h.svc.UpdateRental(context.Background(), h.owner, h.propID, view.Rental.ID,
+			rentalsapp.UpdateRentalCommand{AmountKopecks: new(int64(5_500_000))})
+		require.NoError(t, err)
+		payment, err = h.paySvc.GetPayment(context.Background(), h.owner, h.propID, *view.Rental.PaymentID)
+		require.NoError(t, err)
+		assert.True(t, payment.NotifyEmail, "an edit without the toggle keeps it")
+	})
 }
 
 // The schedule window rides the real wiring too (ticket #1154): the create

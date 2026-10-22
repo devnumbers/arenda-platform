@@ -149,10 +149,9 @@ func (t *rentPaymentGatewayTx) Create(
 		EndDate:        seed.PlannedEndDate,
 		AutoPay:        seed.AutoPay,
 		NotifyAutoPaid: seed.NotifyAutoPaid,
-		// Пер-платёжная почта включена безусловно (#1553): дефолт флага —
-		// «включена», нулевое значение домена молча выключило бы письма
-		// аренды; явный флаг в контрактах аренды прокидывает тикет #1555.
-		NotifyEmail:        true,
+		// Пер-платёжная почта (#1555): флаг едет с контрактов аренды, как
+		// reminderOffsetDays; omitted→true резолвит транспорт (#1553).
+		NotifyEmail:        seed.NotifyEmail,
 		ReminderOffsetDays: seed.ReminderOffsetDays,
 		Category:           paymentsdomain.CategoryRef{Slug: &category},
 	}); err != nil {
@@ -198,6 +197,9 @@ func (t *rentPaymentGatewayTx) Update(
 	}
 	if change.ReminderOffsetDays != nil {
 		payment.ReminderOffsetDays = change.ReminderOffsetDays.Value
+	}
+	if change.NotifyEmail != nil {
+		payment.NotifyEmail = *change.NotifyEmail
 	}
 	changes := paymentsdomain.DiffPaymentChanges(before, payment)
 	if err := t.payments.Update(ctx, payment); err != nil {
@@ -313,6 +315,7 @@ func (g *rentPaymentGateway) RentPaymentState(
 		PaymentDay:         day,
 		AutoPay:            payment.AutoPay,
 		ReminderOffsetDays: payment.ReminderOffsetDays,
+		NotifyEmail:        payment.NotifyEmail,
 	}, nil
 }
 

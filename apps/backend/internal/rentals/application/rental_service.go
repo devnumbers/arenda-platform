@@ -72,6 +72,10 @@ type CreateRentalCommand struct {
 	// ReminderOffsetDays is the managed payment's reminder lead time
 	// (карта #822): 1/3/7, nil = без напоминаний.
 	ReminderOffsetDays *int
+	// NotifyEmail is the managed payment's per-payment email gate (карта
+	// #1551, тикет #1555), независим от напоминания; omitted→true резолвит
+	// транспорт (#1553).
+	NotifyEmail bool
 }
 
 // UpdateRentalCommand is the partial-update payload: a nil field leaves the
@@ -84,11 +88,15 @@ type UpdateRentalCommand struct {
 	AutoPay            *bool
 	PlannedEndDate     *DateUpdate
 	ReminderOffsetDays *ReminderOffsetUpdate
-	Utilities          *domain.Utilities
-	DepositKopecks     *AmountUpdate
-	CommissionKopecks  *AmountUpdate
-	ContactID          *ContactUpdate
-	Comment            *StringUpdate
+	// NotifyEmail is the tri-state email-toggle patch (тикет #1555): nil
+	// keeps, a boolean sets — the transport folds the wire's explicit null
+	// onto false (#1553).
+	NotifyEmail       *bool
+	Utilities         *domain.Utilities
+	DepositKopecks    *AmountUpdate
+	CommissionKopecks *AmountUpdate
+	ContactID         *ContactUpdate
+	Comment           *StringUpdate
 }
 
 // DepositReturn is the optional deposit-return record of the completion: how
@@ -243,6 +251,7 @@ func (s *RentalService) CreateRental(
 				AutoPay:            cmd.AutoPay,
 				NotifyAutoPaid:     true,
 				ReminderOffsetDays: cmd.ReminderOffsetDays,
+				NotifyEmail:        cmd.NotifyEmail,
 			})
 			if err != nil {
 				return mutationOutcome{}, fmt.Errorf("create rent payment: %w", err)
@@ -818,6 +827,12 @@ func paymentSyncFromUpdate(
 		change.ReminderOffsetDays = cmd.ReminderOffsetDays
 		paymentChanged = true
 	}
+	if cmd.NotifyEmail != nil {
+		// The email toggle rides the seam like the reminder's (тикет
+		// #1555) — the bool needs no contract validation.
+		change.NotifyEmail = cmd.NotifyEmail
+		paymentChanged = true
+	}
 	return change, paymentChanged, nil
 }
 
@@ -983,6 +998,9 @@ func updatedRentalFields(cmd UpdateRentalCommand) []string {
 	}
 	if cmd.ReminderOffsetDays != nil {
 		fields = append(fields, "reminder_offset_days")
+	}
+	if cmd.NotifyEmail != nil {
+		fields = append(fields, "notify_email")
 	}
 	if cmd.Utilities != nil {
 		fields = append(fields, "utilities")
