@@ -936,9 +936,11 @@ h-137 оставлял объектным пустоту в середине); �
 ## 9. Даты и деньги
 
 - Даты — только `shared/lib/calendar` (ISO-математика: `fromIso`, `addDays`,
-  `daysOverdue`, месяцы, лента пикера) и `shared/lib/date-format` («11 августа»,
-  «13 мая, 2027», «N дней» через `pluralize`); склонение месяца («N месяцев»)
-  — `shared/lib/months-word` (`monthsWord`) рядом с `pluralize` (#851).
+  `daysOverdue`, `inclusiveDays`, месяцы, лента пикера) и `shared/lib/date-format`
+  («11 августа», «13 мая, 2027», «N дней» через `formatOverdueDays`); склонения
+  имени числа без числа («N месяцев», «N дней») — `shared/lib/months-word`
+  (`monthsWord`) и `shared/lib/days-word` (`daysWord`) рядом с `pluralize`
+  (#851; дни — срок аренды вместо «Меньше месяца», решение владельца 22.10).
   Ручные `slice`-парсинг, Intl и склонения на местах запрещены. «Сегодня» —
   параметром от сервера (ADR 0048), клиент часов не держит; всё в UTC.
 - Группировка ленты по createdAt-таймстампам (подписочные «Операции»,

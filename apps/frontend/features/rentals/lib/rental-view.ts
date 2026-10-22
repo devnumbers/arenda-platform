@@ -1,5 +1,6 @@
 import type { IsoDate } from '@/shared/lib/calendar';
-import { daysUntil, fullMonthsBetween } from '@/shared/lib/calendar';
+import { daysUntil, fullMonthsBetween, inclusiveDays } from '@/shared/lib/calendar';
+import { daysWord } from '@/shared/lib/days-word';
 import { formatDayMonthWithYear, formatOverdueDays } from '@/shared/lib/date-format';
 import { formatMoneyKopecks, ratioToPercent } from '@/shared/lib/format-money';
 import { monthsWord } from '@/shared/lib/months-word';
@@ -91,11 +92,14 @@ export function hasProgressCard(rental: Rental): boolean {
 
 /** Строка бессрочной аренды (решение владельца 2026-09-07): полных месяцев
  * с начала — «Прошло 12 месяцев», глагол как у остатка («Прошёл 21 месяц»);
- * пока не прошёл полный месяц — «Идёт 1 месяц». */
+ * пока не прошёл полный месяц — точные дни включительно («Идёт 3 дня»,
+ * «Идёт 1 день»; решение владельца 22.10 — вместо «Идёт 1 месяц»; будущий
+ * старт кверк-класс прежнего «Идёт 1 месяц» — прижат к 1 дню). */
 export function rentalElapsedLine(startDate: IsoDate, today: IsoDate): string {
   const elapsed = fullMonthsBetween(startDate, today);
   if (elapsed === 0) {
-    return 'Идёт 1 месяц';
+    const days = Math.max(1, inclusiveDays(startDate, today));
+    return `Идёт ${days} ${daysWord(days)}`;
   }
   const verb = pluralize(elapsed, 'Прошёл', 'Прошло', 'Прошло');
   return `${verb} ${elapsed} ${monthsWord(elapsed)}`;
