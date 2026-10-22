@@ -36,7 +36,6 @@ import {
 } from '@/shared/ui/design';
 import { Cancel, Check } from '@/shared/assets/icons';
 import { PropertyCatalogFields } from '../property-fields/property-catalog-fields';
-import { PropertyHousingTypeChips } from '../property-fields/property-housing-type-chips';
 import { PropertyAddressSearch } from './property-address-search';
 import { PropertyPhotoSlot } from './property-photo-slot';
 import { PropertyTypePicker } from './property-type-picker';
@@ -53,9 +52,10 @@ import { PropertyTypePicker } from './property-type-picker';
  * параллельно, уход без сохранения сервер не трогает; решение владельца
  * 08.10),
  * тип (PickerField
- * с шитом чипов 1554:97471), адрес
+ * с шитом чипов 1554:97471; 11 главных категорий — аменда владельца
+ * 22.10, Figma 3625-89189, поля «Тип жилья» больше нет), адрес
  * (тап — полноэкранный поиск адреса с подсказками DaData, 1518:93118/
- * 93341), название 0/64, «Тип жилья» и поля каталога — общая часть с
+ * 93341), название 0/64, поля каталога — общая часть с
  * визардом создания (property-fields), описание 0/1024.
  *
  * Смена типа lossless (как в визарде): чужие ключи прежнего типа
@@ -261,9 +261,6 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
             value={draft.name}
             onChange={(event) => updateDraft({ name: event.currentTarget.value })}
           />
-          {draft.type !== undefined && (
-            <PropertyHousingTypeChips type={draft.type} onChange={changeType} />
-          )}
           {draft.type !== undefined && (
             <PropertyCatalogFields
               type={draft.type}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { ArrowLeft, Cancel } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { buildReturnUrl, goBack, pushPage, replacePage } from '@/shared/lib/navigation';
@@ -108,20 +109,36 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
       >
         <StepsChip step={step} total={PROPERTY_CREATE_TOTAL_STEPS} size="m" />
       </TopNav>
-      {/* Шаг 1: контент прижат к низу области под хедером (Figma
-          1213-52111: Page Content высотой с вьюпорт, alignItems flex-end,
-          136px снизу; pb-[136px] PageContent — тот самый отступ). На
-          десктопе — сверху, как принято для высоких окон (решение
-          владельца). */}
+      {/* Шаг 1: контент прижат к низу области под хедером — прижатие
+          сохранено по решению владельца (аменда 22.10) вместе с новой
+          иллюстрацией. pb-6 вместо дефолтных pb-[136px] PageContent —
+          зазор кадра 3625-89189 (24px под чипами, всё видно на 852 без
+          скролла); 136px — офсет старого кадра 1213-52111. На десктопе —
+          сверху, как принято для высоких окон (решение владельца). */}
       <PageContent
         className={
           step === 1
-            ? 'min-h-[calc(100dvh-72px)] justify-end pt-0 tablet:min-h-0 tablet:justify-start'
+            ? 'min-h-[calc(100dvh-72px)] justify-end pb-6 pt-0 tablet:min-h-0 tablet:justify-start'
             : 'pt-0'
         }
       >
         {step === 1 && (
           <>
+            {/* Иллюстрация шага (аменда владельца 22.10, Figma
+                3625-89189): глиф 212 по центру блока 392, зазор до
+                заголовка дают 24px pt-6 хединга. sizes = 2x слота,
+                quality 90, priority — канон EmptyState (22.10). */}
+            <div className="flex h-[392px] items-center justify-center px-6">
+              <Image
+                src="/images/properties/property-create-key.webp"
+                alt=""
+                width={212}
+                height={212}
+                sizes="424px"
+                quality={90}
+                priority
+              />
+            </div>
             <PropertyWizardHeading title="Выберите, какая у вас недвижимость" />
             <CategoryStep
               selected={draft.type}
@@ -149,9 +166,10 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
           </>
         )}
         {/* Шаг 3 «Характеристики» (#482, Figma 1218-54295): название,
-            тип жилья для «Квартиры», поля каталога по типу, описание;
-            внизу «Создать объект» — POST /properties. Шаг достижим только
-            с выбранной категорией, поэтому draft.type определён. */}
+            поля каталога по типу, описание; внизу «Создать объект» —
+            POST /properties. Шаг достижим только с выбранной категорией,
+            поэтому draft.type определён. Поля «Тип жилья» больше нет
+            (аменда владельца 22.10): тип выбран на шаге 1. */}
         {step === 3 && draft.type !== undefined && (
           <>
             <PropertyWizardHeading
@@ -160,7 +178,6 @@ export function PropertyCreateWizardFlow({ returnTo }: PropertyCreateWizardFlowP
             />
             <CharacteristicsStep
               type={draft.type}
-              onHousingTypeChange={(type) => setDraft((prev) => ({ ...prev, type }))}
               name={draft.name ?? ''}
               onNameChange={(name) => setDraft((prev) => ({ ...prev, name }))}
               description={draft.description ?? ''}

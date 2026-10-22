@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { propertyAutonamePhrase, propertyTypeOptions } from './property-types';
 
 describe('propertyTypeOptions', () => {
-  it('одиннадцать типов реестра, студия в семье квартиры после апартаментов (#1003)', () => {
+  it('одиннадцать типов реестра, студия и апартаменты соседями в реестре (#1003)', () => {
     expect(propertyTypeOptions).toHaveLength(11);
     const values = propertyTypeOptions.map((option) => option.value);
     expect(values).toContain('studio');
