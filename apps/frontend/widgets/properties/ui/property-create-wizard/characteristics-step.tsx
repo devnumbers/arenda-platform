@@ -54,7 +54,7 @@ export function CharacteristicsStep({
 
   // Ошибки характеристик показываются после правки поля (blur), набор
   // полей сменился — ошибки прошлого типа неактуальны. Подгонка состояния
-  // при рендере — официальный паттерн React (как в AmountField).
+  // при рендере — официальный паттерн React.
   const [shownErrorsType, setShownErrorsType] = useState<{ type: PropertyType; shown: boolean }>({
     type,
     shown: false,

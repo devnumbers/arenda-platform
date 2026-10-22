@@ -779,8 +779,9 @@ test.describe('визард создания платежа', () => {
 
     const field = page.getByRole('textbox', { name: 'Сумма' });
     await field.click();
-    // Мобильный ярус — дисплей 44/48 (канон WizardAmountField, карта #1005).
-    await expect(field).toHaveCSS('font-size', '44px');
+    // Единый ярус — бокс Title In (макет 2913:69551, решение владельца
+    // 2026-10-22); на мобилке поле в фокусе после тапа.
+    await expect(field).toHaveCSS('font-size', '16px');
     // Регресс «2» → «2,00»: первая цифра не дописывает копейки, ввод продолжается.
     await field.pressSequentially('2');
     await expect(field).toHaveValue(/^2$/);
@@ -1139,8 +1140,9 @@ test.describe('визард создания платежа — десктоп',
     await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
   });
 
-  // Шаг 5 на ПК ≥1024 (тикет #1008, макет 2913:69551): бокс «Сумма» 56px
-  // Title In вместо дисплейного яруса; сегмент направления один в один с
+  // Шаг 5 (тикет #1008; макет 2913:69551, решение владельца 2026-10-22 —
+  // единый ярус): бокс «Сумма» 56px Title In на всех ширинах, на ПК
+  // поле активно при маунте; сегмент направления один в один с
   // операцией, «Форма оплаты» снесена.
   test('шаг суммы ≥1024 (ПК): бокс «Сумма», сегмент направления; гейт кнопки', async ({
     page,
@@ -1155,12 +1157,12 @@ test.describe('визард создания платежа — десктоп',
     await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
     await page.getByRole('button', { name: 'Далее' }).click();
 
-    // Один input «Сумма» в дереве доступности: бокс яруса ПК виден,
-    // дисплейный скрыт display:none (канон WizardAmountField); ярус
-    // опознаётся по 16px бокса (дисплей — 44px).
+    // Один input «Сумма» — единый ярус: бокс Title In 16px, на ПК
+    // в фокусе сразу после «Далее» (маунт в жесте, #1151).
     const amount = page.getByRole('textbox', { name: 'Сумма' });
     await expect(amount).toHaveCount(1);
     await expect(amount).toHaveCSS('font-size', '16px');
+    await expect(amount).toBeFocused();
 
     // Сегмент направления без формы оплаты: пилюли «Расход/Доход»,
     // дефолт «Доход» подсвечен.
@@ -1178,9 +1180,10 @@ test.describe('визард создания платежа — десктоп',
     await captureScreen(page, testInfo, 'wizard-step5-amount-desktop');
   });
 
-  // Дополнение карты 01.10: дисплейный ярус — вся мобилка и планшет
-  // (<1024), бокс остался только на ПК.
-  test('шаг суммы на планшете 768–1023: дисплейный ярус, сегмент 232px', async ({
+  // Единый ярус (решение владельца 2026-10-22): планшет 768–1023 — тот же
+  // бокс «Сумма», сегмент во всю ширину; автоподъёма клавиатуры вне
+  // жеста нет, фокус поля — из жеста «Далее» (#1151).
+  test('шаг суммы на планшете 768–1023: единый бокс, сегмент во всю ширину', async ({
     page,
     seededUser,
   }) => {
@@ -1193,14 +1196,14 @@ test.describe('визард создания платежа — десктоп',
     await page.getByRole('button', { name: 'Продолжить' }).click();
     await page.getByRole('button', { name: 'Далее' }).click();
 
-    // Дисплейный ярус на планшете — тот же блок, что на мобилке: 44px
-    // дисплей, сегмент 232px, бокс скрыт.
+    // Тот же бокс Title In, что на ПК и мобилке (16px); колонка капится
+    // 560, сегмент = 560 − px-6 = 512 (проверено живой приёмкой).
     const amount = page.getByRole('textbox', { name: 'Сумма' });
     await expect(amount).toHaveCount(1);
-    await expect(amount).toHaveCSS('font-size', '44px');
+    await expect(amount).toHaveCSS('font-size', '16px');
     const segment = page.getByRole('radiogroup', { name: 'Направление платежа' });
     const segmentBox = await segment.boundingBox();
-    expect(segmentBox?.width).toBeCloseTo(232);
+    expect(segmentBox?.width).toBeCloseTo(512);
     await expect(page.getByRole('radio', { name: 'Доход' })).toBeChecked();
   });
 });

@@ -6,7 +6,6 @@ import { Button, StickyBottomBar } from '@/shared/ui/design';
 import styles from '../page.module.css';
 import { ButtonSection, ChipButtonSection, IconButtonSection } from './sections/actions';
 import {
-    AmountFieldSection,
     CheckboxRadioSwitchSection,
     SearchFieldSection,
     TextFieldTitleInSection,
@@ -101,7 +100,6 @@ export function DesignLayerShowcase(): JSX.Element {
                 <CalendarRangePickerSection />
                 <CalendarRangePickerEmptySection />
                 <MonthDaysGridSection />
-                <AmountFieldSection />
                 <ListRowSection />
                 <CircleIconSection />
                 <CategoryIconSection />

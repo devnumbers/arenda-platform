@@ -8,11 +8,11 @@ import {
 } from './fixtures';
 
 // Визард создания операции (#570), шаг 1 — сумма и направление (тикет
-// #1007, карта #1005; макеты 1858:104557/105397 мобилка, 2913:69551
-// широкий; дополнение 01.10 — дисплейный ярус расширен на планшет):
-// денежное поле двумя ярусами — <1024 (мобилка и планшет) дисплей «0 ₽»
-// 44/48 (AmountField), ≥1024 (ПК) бокс «Сумма» 56px Title In; сегмент
-// «Расход/Доход» 232px на дисплейном ярусе и во всю колонку на ПК. До
+// #1007; макет 2913:69551, решение владельца 2026-10-22 — единый ярус
+// вместо двухъярусной карты #1005): бокс «Сумма» 56px Title In на всех
+// ширинах (мобилка/планшет/ПК), на ПК ≥1024 поле активно при маунте;
+// сегмент «Расход/Доход» во всю колонку с обрезанной треком тенью
+// (2913:69741). До
 // сабмита визард ничего не пишет на сервер, состояние шагов —
 // клиентский useState (черновика у операции нет, карта #1052 Q2=В) —
 // спека данных не создаёт. Шаг 3 «Категория» — H1 «Выберите категорию
@@ -35,14 +35,15 @@ test.describe('визард операции — шаг суммы', () => {
     await page.goto(WIZARD_URL);
     await expect(page.getByText('Добавить операцию')).toBeVisible();
 
-    // Один input «Сумма» в дереве доступности: бокс яруса ПК виден,
-    // дисплейный скрыт display:none (канон WizardAmountField).
+    // Один input «Сумма» — единый ярус (бокс Title In на всех ширинах).
     const amount = page.getByRole('textbox', { name: 'Сумма' });
     await expect(amount).toHaveCount(1);
-    // Ярус опознаётся по строке значения: бокс Title In — 16px (дисплей —
-    // 44px), лейбл «Сумма» плавает внутри бокса.
+    // Бокс Title In — строка значения 16px, лейбл «Сумма» плавает внутри.
     await expect(amount).toHaveCSS('font-size', '16px');
     await expect(page.getByText('Сумма', { exact: true })).toBeVisible();
+    // ПК: поле активно сразу при заходе (решение владельца 2026-10-22,
+    // разворот п.4 #1151).
+    await expect(amount).toBeFocused();
 
     const segment = page.getByRole('radiogroup', { name: 'Направление операции' });
     await expect(segment).toBeVisible();
@@ -56,7 +57,7 @@ test.describe('визард операции — шаг суммы', () => {
     await expect(next).toBeEnabled();
 
     // Широкий макет 2913:69553: сегмент — вся ширина колонки минус
-    // px-6 шага (560 − 48 = 512), а не дисплейные 232px.
+    // px-6 шага (560 − 48 = 512).
     const widths = await page.evaluate(() => {
       const column = document.querySelector('.max-w-column');
       const group = document.querySelector(
@@ -88,7 +89,7 @@ test.describe('визард операции — шаг суммы', () => {
     await captureScreen(page, testInfo, 'operation-wizard-step1-amount-desktop');
   });
 
-  test('<1024 (мобилка и планшет): дисплей 44/48 по центру, сегмент 232px', async ({
+  test('<1024 (мобилка и планшет): тот же бокс «Сумма», сегмент во всю ширину — единый ярус', async ({
     page,
     seededUser,
   }, testInfo) => {
@@ -97,32 +98,35 @@ test.describe('визард операции — шаг суммы', () => {
     await page.goto(WIZARD_URL);
     await expect(page.getByText('Добавить операцию')).toBeVisible();
 
-    // Один input «Сумма» — дисплейный ярус; бокс скрыт display:none.
+    // Один input «Сумма» — единый ярус: тот же бокс Title In, что на ПК
+    // (макет 2913:69551 «Mobile»; на мобилке вне жеста фокуса нет —
+    // iOS клавиатуру не поднимает, research #1148 §A).
     const amount = page.getByRole('textbox', { name: 'Сумма' });
     await expect(amount).toHaveCount(1);
-    await expect(amount).toHaveCSS('font-size', '44px');
+    await expect(amount).toHaveCSS('font-size', '16px');
+    // Негатив контракта фокуса: маунт вне жеста не фокусирует поле.
+    await expect(amount).not.toBeFocused();
 
-    // Сегмент 232px (Figma 1858:105404) и переключение направления.
+    // Сегмент во всю ширину колонки (макет 2913:69741; 393 − px-6 = 345).
     const segment = page.getByRole('radiogroup', { name: 'Направление операции' });
     const segmentBox = await segment.boundingBox();
-    expect(segmentBox?.width).toBeCloseTo(232);
+    expect(segmentBox?.width).toBeCloseTo(345);
     await page.getByRole('radio', { name: 'Доход' }).click();
     await expect(page.getByRole('radio', { name: 'Доход' })).toBeChecked();
 
-    // Ввод через скрытый focusable input дисплея: группировка разрядов
-    // на дисплее (макет 1858:105403 «6 000 ₽») и гейт кнопки.
+    // Ввод в бокс: группировка разрядов и гейт кнопки.
     await amount.fill('6000');
     await expect(amount).toHaveValue(/6\s?000/);
     await expect(page.getByRole('button', { name: 'Продолжить' })).toBeEnabled();
 
     await captureScreen(page, testInfo, 'operation-wizard-step1-amount-mobile');
 
-    // Планшет 768–1023 — тот же дисплейный ярус (дополнение карты 01.10:
-    // макеты 1858:104557/105397.mobile), блок один в один с мобилкой.
+    // Планшет 768–1023 — тот же единый ярус; колонка капится 560,
+    // сегмент = 560 − px-6 = 512 (проверено живой приёмкой).
     await page.setViewportSize({ width: 800, height: 1024 });
-    await expect(amount).toHaveCSS('font-size', '44px');
+    await expect(amount).toHaveCSS('font-size', '16px');
     const tabletBox = await segment.boundingBox();
-    expect(tabletBox?.width).toBeCloseTo(232);
+    expect(tabletBox?.width).toBeCloseTo(512);
     await captureScreen(page, testInfo, 'operation-wizard-step1-amount-tablet');
   });
 });
