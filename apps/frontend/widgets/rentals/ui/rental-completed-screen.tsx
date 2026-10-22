@@ -169,6 +169,7 @@ function RentalCompletedBody({
             alt=""
             width={96}
             height={96}
+            quality={90}
             className="h-24 w-24"
             aria-hidden
           />

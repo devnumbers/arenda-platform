@@ -349,6 +349,7 @@ export function RentalCompleteFlow({
                   alt=""
                   width={1024}
                   height={1024}
+                  quality={90}
                   priority
                   className="h-auto w-full"
                   aria-hidden
@@ -373,6 +374,7 @@ export function RentalCompleteFlow({
                   alt=""
                   width={128}
                   height={128}
+                  quality={90}
                   className="h-32 w-32"
                   aria-hidden
                 />

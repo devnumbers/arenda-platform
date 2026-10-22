@@ -72,6 +72,7 @@ export function PropertyParticipantsInviteScreen(): JSX.Element {
             alt=""
             width={96}
             height={96}
+            quality={90}
             className="h-24 w-24 self-center"
           />
           <h1 className="mt-8 text-[28px] font-semibold leading-8 text-content">

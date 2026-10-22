@@ -145,6 +145,7 @@ function PaymentDetailBody({ payment }: { readonly payment: SubscriptionPayment 
             alt=""
             width={128}
             height={128}
+            quality={90}
             className={cn('h-24 w-24 rounded-full bg-primary/10 p-[17px]', circleIconRing.white)}
           />
           <h1 className="m-0 text-xl font-normal leading-6 text-content">

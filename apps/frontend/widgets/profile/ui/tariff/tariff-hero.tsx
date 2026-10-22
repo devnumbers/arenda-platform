@@ -45,6 +45,7 @@ export function TariffHero({ hero }: { readonly hero: TariffHeroModel }): JSX.El
           fill
           priority
           sizes="(max-width: 607px) calc(100vw - 48px), 512px"
+          quality={90}
           className="object-cover"
         />
       )}
