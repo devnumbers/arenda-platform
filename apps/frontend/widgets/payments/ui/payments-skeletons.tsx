@@ -168,8 +168,9 @@ export function PaymentGroupedListSkeleton({
            * контейнера группы (канон Heading, Figma 1036-40829). */}
           <Skeleton className="mx-6 mt-6 h-6 w-24" />
           <div className="pt-2">
+            {/* px-6 — плоские 24 до контента, как у реального ряда (12+12). */}
             {skeletonRowWidths(rows).map((rowWidths, index) => (
-              <SkeletonListRow key={index} value widths={rowWidths} className="px-3 py-3" />
+              <SkeletonListRow key={index} value widths={rowWidths} className="px-6 py-3" />
             ))}
           </div>
         </section>

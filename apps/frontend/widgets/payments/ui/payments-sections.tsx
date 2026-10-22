@@ -315,7 +315,7 @@ export function PaymentsHeading({
   readonly children: ReactNode;
   readonly inset?: boolean;
 }): JSX.Element {
-  return <h2 className={inset ? `${headingClass} px-6 pt-6` : `${headingClass} pt-6`}>{children}</h2>;
+  return <h2 className={`${headingClass} pt-6${inset ? ' px-6' : ''}`}>{children}</h2>;
 }
 
 /** Скелетон секции на время загрузки — серая карточка с пульсирующими

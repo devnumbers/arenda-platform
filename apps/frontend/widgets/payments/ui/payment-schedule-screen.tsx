@@ -81,7 +81,7 @@ export function PaymentScheduleScreen({
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
           {loading && <PaymentGroupedListSkeleton rowsPerGroup={[1, 2]} />}
 
           {failed && (
