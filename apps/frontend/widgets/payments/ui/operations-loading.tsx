@@ -149,7 +149,9 @@ export function OperationsCategoriesLoading(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-6 pt-4">
+        {/* Чип периода без своего верхнего паддинга — как у живого
+         * выборщика (24 даёт PageContent). */}
+        <div className="flex flex-col gap-6">
           <div className="flex flex-wrap gap-1.5 px-6">
             <OperationsPeriodChip period={null} />
             <span

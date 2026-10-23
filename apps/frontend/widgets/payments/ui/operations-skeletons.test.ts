@@ -79,21 +79,29 @@ describe('SearchResultsSkeleton (канон отступов выдачи, §7/1
     expect(className).not.toContain('pt-4');
   });
 
-  it('заголовки-заглушки несут верх 24 (px-6 pt-6, полоска h-6) — паритет PaymentsHeading', () => {
-    const headingWrappers = findElements(
+  it('заголовки-заглушки: первый прижат к хедеру (px-6 без верха — 24 даёт PageContent), второй несёт верх 24', () => {
+    const sections = findElements(
       skeleton.props.children,
-      (element) =>
-        element.type === 'div' && String(element.props.className).includes('pt-6'),
+      (element) => element.type === 'section',
     );
-    expect(headingWrappers).toHaveLength(2);
-    for (const wrapper of headingWrappers) {
-      expect(String(wrapper.props.className)).toContain('px-6');
+    expect(sections).toHaveLength(2);
+    const [first, second] = sections as [typeof sections[number], typeof sections[number]];
+    for (const section of sections) {
+      const stripWrapper = findElement(
+        section.props.children,
+        (element) =>
+          typeof element.type === 'string' &&
+          String(element.props.className).startsWith('px-6'),
+      );
+      expect(stripWrapper).not.toBeNull();
       const strip = findElement(
-        wrapper.props.children,
+        stripWrapper?.props.children,
         (element) => String(element.props.className).includes('h-6 w-40'),
       );
       expect(strip).not.toBeNull();
     }
+    expect(String(findElement(first.props.children, (e) => typeof e.type === 'string' && String(e.props.className).startsWith('px-6'))?.props.className)).toBe('px-6');
+    expect(String(findElement(second.props.children, (e) => typeof e.type === 'string' && String(e.props.className).startsWith('px-6'))?.props.className)).toBe('px-6 pt-6');
   });
 
   it('чипы под заголовком с верхом 16 (pt-4), ряды — с верхом 8 (pt-2)', () => {
