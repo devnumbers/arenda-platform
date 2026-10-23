@@ -5,7 +5,11 @@ export {
   propertyPermissions,
   type PropertyPermissions,
 } from './model/property-permissions';
-export { comparePrimaryProperty } from './model/primary-property';
+export {
+  comparePrimaryProperty,
+  effectiveSelectedPropertyId,
+  propertiesByPrimaryOrder,
+} from './model/primary-property';
 export { mapPropertyResponse } from './model/mappers';
 export { propertyTypeIcons } from './lib/property-type-icons';
 export type { Property, PropertyAccess, PropertyAttributes, PropertyStatus, PropertyType } from './model/types';

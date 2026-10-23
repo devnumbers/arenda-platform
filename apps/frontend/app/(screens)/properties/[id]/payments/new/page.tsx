@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { ROUTES } from '@/shared/config/routes';
-import { parseStringParam } from '@/shared/lib/parse-string-param';
+import { parsePaymentDraftTypeParam } from '@/features/payments';
 import { PaymentCreateWizardScreen } from '@/widgets/payments';
 
 /**
@@ -13,24 +13,17 @@ export const metadata: Metadata = {
   title: 'Новый платеж — Рентли',
 };
 
-const DRAFT_TYPES = new Set(['payment', 'autopayment']);
-
 export default async function PaymentNewRoutePage({
   params,
   searchParams,
 }: PageProps<'/properties/[id]/payments/new'>) {
   const { id } = await params;
   const query = await searchParams;
-  const typeParam = parseStringParam(query.type);
+  const draftType = parsePaymentDraftTypeParam(query.type);
 
-  if (typeParam === undefined || !DRAFT_TYPES.has(typeParam)) {
+  if (draftType === undefined) {
     redirect(ROUTES.propertyPayments(id));
   }
 
-  return (
-    <PaymentCreateWizardScreen
-      propertyId={id}
-      draftType={typeParam as 'payment' | 'autopayment'}
-    />
-  );
+  return <PaymentCreateWizardScreen propertyId={id} draftType={draftType} />;
 }

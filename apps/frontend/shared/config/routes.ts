@@ -76,6 +76,10 @@ export const ROUTES = {
   paymentsDue: '/payments/due',
   paymentsObjects: '/payments/objects',
   paymentsObjectsSearch: '/payments/objects/search',
+  /** Визард создания платежа — глобальный вход (решение владельца
+   * 23.10.2026, аналог /operations/new #570): тип — query-параметр модалки
+   * выбора хаба, объект выбирается шагом «Выбрать объект». */
+  paymentsNew: (type: 'payment' | 'autopayment') => `/payments/new?type=${type}`,
   /** Экран «Операции объекта» — срез «Рентли. Новые экраны сервиса» (#474). */
   propertyOperations: (id: string) => `/properties/${id}/operations`,
   /** Визард создания операции с объекта (#570): объектного шага нет,
