@@ -725,7 +725,8 @@ func (s *OperationService) listScoped(
 // while the past carries no lower bound (the owner's decision: backdating
 // without limits). The transport decodes and delegates here, so the rules
 // cannot drift between layers: the direction enum, a non-empty title within
-// MaxTitleLength characters (counted in runes), kopecks within 1..10⁹ and a
+// MaxTitleLength characters (counted in runes), kopecks of at least 1 with
+// no ceiling (ADR 0069) and a
 // resolvable catalog slug.
 func validateManualOperation(op domain.Operation, today time.Time) error {
 	if op.Type != domain.TypeIncome && op.Type != domain.TypeExpense {
@@ -734,7 +735,7 @@ func validateManualOperation(op domain.Operation, today time.Time) error {
 	if title := strings.TrimSpace(op.Title); title == "" || utf8.RuneCountInString(title) > MaxTitleLength {
 		return ErrInvalidInput
 	}
-	if op.AmountKopecks < 1 || op.AmountKopecks > MaxAmountKopecks {
+	if op.AmountKopecks < 1 {
 		return ErrInvalidInput
 	}
 	// Date-only values compare as UTC midnights on both sides (ADR 0048):

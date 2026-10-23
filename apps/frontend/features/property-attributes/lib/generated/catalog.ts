@@ -17,7 +17,6 @@ export type AttrField =
       readonly kind: 'number';
       readonly unit: 'м²' | 'сотки' | 'м';
       readonly min: number;
-      readonly max: number;
       readonly decimals: number;
       readonly group: AttrGroup | null;
     }
@@ -25,7 +24,6 @@ export type AttrField =
       readonly key: AttrKey;
       readonly kind: 'integer';
       readonly min: number;
-      readonly max: number;
       readonly group: AttrGroup | null;
     }
   | {
@@ -37,90 +35,88 @@ export type AttrField =
 
 export type AttrFieldList = readonly AttrField[];
 
-const yearBuiltMax = new Date().getFullYear() + 5;
-
 const apartmentFields: AttrFieldList = [
-  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
-  { key: "area_living", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
-  { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
-  { key: "floor", kind: 'integer', min: -3, max: 200, group: "about_object" },
-  { key: "floors_total", kind: 'integer', min: 1, max: 200, group: "about_object" },
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_object" },
+  { key: "area_living", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_object" },
+  { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_object" },
+  { key: "floor", kind: 'integer', min: -3, group: "about_object" },
+  { key: "floors_total", kind: 'integer', min: 1, group: "about_object" },
   { key: "bathroom", kind: 'enum', options: ["combined", "separate", "multiple"], group: "about_object" },
   { key: "balcony", kind: 'enum', options: ["none", "balcony", "loggia", "balcony_and_loggia"], group: "about_object" },
   { key: "renovation", kind: 'enum', options: ["cosmetic", "euro", "design", "required"], group: "about_object" },
-  { key: "year_built", kind: 'integer', min: 1800, max: yearBuiltMax, group: "about_building" },
-  { key: "ceiling_height", kind: 'number', unit: "м", min: 2, max: 10, decimals: 2, group: "about_building" },
+  { key: "year_built", kind: 'integer', min: 1800, group: "about_building" },
+  { key: "ceiling_height", kind: 'number', unit: "м", min: 2, decimals: 2, group: "about_building" },
   { key: "parking_type", kind: 'enum', options: ["closed", "underground", "open"], group: "about_building" },
 ];
 
 const roomFields: AttrFieldList = [
-  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
-  { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
-  { key: "floor", kind: 'integer', min: -3, max: 200, group: "about_object" },
-  { key: "floors_total", kind: 'integer', min: 1, max: 200, group: "about_object" },
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_object" },
+  { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_object" },
+  { key: "floor", kind: 'integer', min: -3, group: "about_object" },
+  { key: "floors_total", kind: 'integer', min: 1, group: "about_object" },
   { key: "bathroom", kind: 'enum', options: ["combined", "separate", "multiple"], group: "about_object" },
   { key: "balcony", kind: 'enum', options: ["none", "balcony", "loggia", "balcony_and_loggia"], group: "about_object" },
   { key: "renovation", kind: 'enum', options: ["cosmetic", "euro", "design", "required"], group: "about_object" },
-  { key: "year_built", kind: 'integer', min: 1800, max: yearBuiltMax, group: "about_building" },
+  { key: "year_built", kind: 'integer', min: 1800, group: "about_building" },
 ];
 
 const studioFields: AttrFieldList = [
-  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
-  { key: "area_living", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
-  { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_object" },
-  { key: "floor", kind: 'integer', min: -3, max: 200, group: "about_object" },
-  { key: "floors_total", kind: 'integer', min: 1, max: 200, group: "about_object" },
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_object" },
+  { key: "area_living", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_object" },
+  { key: "area_kitchen", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_object" },
+  { key: "floor", kind: 'integer', min: -3, group: "about_object" },
+  { key: "floors_total", kind: 'integer', min: 1, group: "about_object" },
   { key: "bathroom", kind: 'enum', options: ["combined", "separate", "multiple"], group: "about_object" },
   { key: "balcony", kind: 'enum', options: ["none", "balcony", "loggia", "balcony_and_loggia"], group: "about_object" },
   { key: "renovation", kind: 'enum', options: ["cosmetic", "euro", "design", "required"], group: "about_object" },
-  { key: "year_built", kind: 'integer', min: 1800, max: yearBuiltMax, group: "about_building" },
-  { key: "ceiling_height", kind: 'number', unit: "м", min: 2, max: 10, decimals: 2, group: "about_building" },
+  { key: "year_built", kind: 'integer', min: 1800, group: "about_building" },
+  { key: "ceiling_height", kind: 'number', unit: "м", min: 2, decimals: 2, group: "about_building" },
   { key: "parking_type", kind: 'enum', options: ["closed", "underground", "open"], group: "about_building" },
 ];
 
 const houseFields: AttrFieldList = [
-  { key: "land_area", kind: 'number', unit: "сотки", min: 0.01, max: 1000000, decimals: 2, group: "about_land" },
+  { key: "land_area", kind: 'number', unit: "сотки", min: 0.01, decimals: 2, group: "about_land" },
   { key: "land_type", kind: 'enum', options: ["izhs", "garden", "farm"], group: "about_land" },
-  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: "about_house" },
-  { key: "floors_total", kind: 'integer', min: 1, max: 200, group: "about_house" },
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, decimals: 1, group: "about_house" },
+  { key: "floors_total", kind: 'integer', min: 1, group: "about_house" },
   { key: "rooms", kind: 'enum', options: ["1", "2", "3", "4", "5", "6", "7_plus"], group: "about_house" },
   { key: "house_type", kind: 'enum', options: ["detached", "part", "townhouse", "duplex"], group: "about_house" },
   { key: "material", kind: 'enum', options: ["brick", "monolithic", "panel", "brick_monolithic", "block", "wooden", "reinforced_concrete"], group: "about_house" },
   { key: "bathroom", kind: 'enum', options: ["indoor", "outdoor", "none"], group: "about_house" },
   { key: "shower", kind: 'enum', options: ["indoor", "outdoor", "none"], group: "about_house" },
-  { key: "year_built", kind: 'integer', min: 1800, max: yearBuiltMax, group: "about_house" },
+  { key: "year_built", kind: 'integer', min: 1800, group: "about_house" },
 ];
 
 const officeFields: AttrFieldList = [
   { key: "building_type", kind: 'enum', options: ["business_center", "warehouse_building", "shopping_center", "detached", "residential"], group: null },
-  { key: "floor", kind: 'integer', min: -3, max: 200, group: null },
-  { key: "floors_total", kind: 'integer', min: 1, max: 200, group: null },
-  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: null },
+  { key: "floor", kind: 'integer', min: -3, group: null },
+  { key: "floors_total", kind: 'integer', min: 1, group: null },
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, decimals: 1, group: null },
   { key: "rooms", kind: 'enum', options: ["1", "2", "3", "4", "5", "6", "7_plus"], group: null },
   { key: "entrance", kind: 'enum', options: ["separate", "common"], group: null },
   { key: "renovation", kind: 'enum', options: ["cosmetic", "euro", "design", "required"], group: null },
 ];
 
 const warehouseFields: AttrFieldList = [
-  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: null },
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, decimals: 1, group: null },
   { key: "entrance", kind: 'enum', options: ["separate", "common"], group: null },
   { key: "building_type", kind: 'enum', options: ["business_center", "warehouse_building", "shopping_center", "detached", "residential"], group: null },
 ];
 
 const garageFields: AttrFieldList = [
-  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: null },
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, decimals: 1, group: null },
   { key: "material", kind: 'enum', options: ["brick", "metal", "reinforced_concrete"], group: null },
 ];
 
 const parkingFields: AttrFieldList = [
-  { key: "area_total", kind: 'number', unit: "м²", min: 1, max: 100000, decimals: 1, group: null },
+  { key: "area_total", kind: 'number', unit: "м²", min: 1, decimals: 1, group: null },
   { key: "parking_location", kind: 'enum', options: ["underground", "indoor", "outdoor"], group: null },
-  { key: "parking_level", kind: 'integer', min: -5, max: 100, group: null },
+  { key: "parking_level", kind: 'integer', min: -5, group: null },
   { key: "spot_number", kind: 'string', maxLen: 50, group: null },
 ];
 
 const landFields: AttrFieldList = [
-  { key: "land_area", kind: 'number', unit: "сотки", min: 0.01, max: 1000000, decimals: 2, group: null },
+  { key: "land_area", kind: 'number', unit: "сотки", min: 0.01, decimals: 2, group: null },
   { key: "land_type", kind: 'enum', options: ["izhs", "garden", "farm"], group: null },
 ];
 

@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://arenda-planform.local/tools/property-attributes/catalog.schema.json",
   "title": "Property attributes catalog",
-  "description": "Single source of truth for the property attributes catalog (10 property types).",
+  "description": "Single source of truth for the property attributes catalog (10 property types). Numeric fields carry min bounds only — no upper bounds (решение владельца 23.10.2026); cross-field rules are gone too.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "version", "types", "groups", "rules"],
+  "required": ["$schema", "version", "types", "groups"],
   "properties": {
     "$schema": {
       "type": "string"
@@ -54,10 +54,6 @@
         "about_house": { "$ref": "#/$defs/groupDef" },
         "about_land": { "$ref": "#/$defs/groupDef" }
       }
-    },
-    "rules": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/ruleDef" }
     }
   },
   "$defs": {
@@ -129,21 +125,6 @@
         "label": { "type": "string", "minLength": 1 }
       }
     },
-    "ruleDef": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["types", "field", "lte"],
-      "properties": {
-        "types": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "$ref": "#/$defs/typeKey" },
-          "uniqueItems": true
-        },
-        "field": { "$ref": "#/$defs/fieldKey" },
-        "lte": { "$ref": "#/$defs/fieldKey" }
-      }
-    },
     "fieldDef": {
       "anyOf": [
         {
@@ -172,13 +153,12 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "label", "unit", "min", "max", "decimals", "group"],
+          "required": ["kind", "label", "unit", "min", "decimals", "group"],
           "properties": {
             "kind": { "const": "number" },
             "label": { "type": "string", "minLength": 1 },
             "unit": { "type": "string", "enum": ["м²", "сотки", "м"] },
             "min": { "type": "number" },
-            "max": { "type": "number" },
             "decimals": { "type": "integer", "minimum": 0 },
             "group": { "$ref": "#/$defs/groupKey" }
           }
@@ -186,17 +166,11 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "label", "min", "max", "group"],
+          "required": ["kind", "label", "min", "group"],
           "properties": {
             "kind": { "const": "integer" },
             "label": { "type": "string", "minLength": 1 },
             "min": { "type": "integer" },
-            "max": { "type": "integer" },
-            "yearBuiltMaxDynamic": {
-              "type": "boolean",
-              "const": true,
-              "description": "Marks the max bound as dynamic: it should be recomputed at generation/runtime as current_year + 5 (matches Go maxYearBuilt() and TS yearBuiltMax)."
-            },
             "group": { "$ref": "#/$defs/groupKey" }
           }
         },

@@ -22,10 +22,12 @@ describe('amount-input', () => {
     expect(sanitizeAmountInput(',5')).toBe('0,5');
   });
 
-  it('маска: не больше 2 копеечных и 7 рублёвых разрядов', () => {
+  it('маска: не больше 2 копеечных и 13 рублёвых разрядов (потолка сумм нет — технический предел точности double)', () => {
     expect(sanitizeAmountInput('1,234')).toBe('1,23');
-    expect(sanitizeAmountInput('12345678')).toBe('1234567');
-    expect(sanitizeAmountInput('1234567,89')).toBe('1234567,89');
+    expect(sanitizeAmountInput('12345678')).toBe('12345678');
+    expect(sanitizeAmountInput('1234567890123,56')).toBe('1234567890123,56');
+    expect(sanitizeAmountInput('12345678901234')).toBe('1234567890123');
+    expect(sanitizeAmountInput('12345678901234,99')).toBe('1234567890123,99');
   });
 
   it('копейки: пустота и нули — 0, иначе целые копейки', () => {

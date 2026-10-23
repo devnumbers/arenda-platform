@@ -104,9 +104,10 @@ func TestCreateProperty_WithValidAttributes(t *testing.T) {
 	}
 }
 
-// TestCreateProperty_WithInvalidAttributes verifies that an out-of-range floor
+// TestCreateProperty_WithInvalidAttributes verifies that a below-minimum floor
 // yields an *AttributeValidationErrors that unwraps to ErrInvalidInput and
-// reports exactly one error bound to the "floor" field.
+// reports exactly one error bound to the "floor" field (потолка нет —
+// решение владельца 23.10.2026, минимум остался).
 func TestCreateProperty_WithInvalidAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -121,7 +122,7 @@ func TestCreateProperty_WithInvalidAttributes(t *testing.T) {
 		Type:    string(domain.PropertyTypeApartment),
 		Address: attrTestCreateAddress,
 		Attributes: map[string]any{
-			attrFloor: float64(999), // Out of range (max 200).
+			attrFloor: float64(-4), // Out of range (min -3).
 		},
 	})
 	if err == nil {

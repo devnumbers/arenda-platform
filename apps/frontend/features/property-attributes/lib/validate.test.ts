@@ -63,27 +63,25 @@ describe('validateField — number (area_total on apartment)', () => {
   const def = findField(type, key);
   if (def?.kind !== 'number') throw new Error('expected number field');
 
-  it('returns undefined for a value within [min, max]', () => {
+  it('returns undefined for a value at/above min', () => {
     expect(validateField(type, key, def.min)).toBeUndefined();
-    expect(validateField(type, key, def.max)).toBeUndefined();
     expect(validateField(type, key, 50)).toBeUndefined();
   });
 
-  it('returns "от X до Y unit" for a value below min', () => {
+  it('returns "не менее X unit" for a value below min', () => {
     expect(validateField(type, key, def.min - 0.1)).toBe(
-      `от ${def.min} до ${def.max} ${def.unit}`,
+      `не менее ${def.min} ${def.unit}`,
     );
   });
 
-  it('returns "от X до Y unit" for a value above max', () => {
-    expect(validateField(type, key, def.max + 1)).toBe(
-      `от ${def.min} до ${def.max} ${def.unit}`,
-    );
+  it('has no upper bound: arbitrary values are valid', () => {
+    expect(validateField(type, key, 100001)).toBeUndefined();
+    expect(validateField(type, key, 5_000_000)).toBeUndefined();
   });
 
-  it('returns "от X до Y unit" for NaN string', () => {
+  it('returns "не менее X unit" for NaN string', () => {
     expect(validateField(type, key, 'abc')).toBe(
-      `от ${def.min} до ${def.max} ${def.unit}`,
+      `не менее ${def.min} ${def.unit}`,
     );
   });
 
@@ -126,26 +124,26 @@ describe('validateField — integer (floor on apartment)', () => {
   const def = findField(type, key);
   if (def?.kind !== 'integer') throw new Error('expected integer field');
 
-  it('returns undefined for an integer within [min, max]', () => {
+  it('returns undefined for an integer at/above min', () => {
     expect(validateField(type, key, def.min)).toBeUndefined();
-    expect(validateField(type, key, def.max)).toBeUndefined();
     expect(validateField(type, key, 5)).toBeUndefined();
   });
 
-  it('returns "от X до Y" for a non-integer (fractional)', () => {
-    expect(validateField(type, key, 5.5)).toBe(`от ${def.min} до ${def.max}`);
+  it('returns "не менее X" for a non-integer (fractional)', () => {
+    expect(validateField(type, key, 5.5)).toBe(`не менее ${def.min}`);
   });
 
-  it('returns "от X до Y" for a value below min', () => {
-    expect(validateField(type, key, def.min - 1)).toBe(`от ${def.min} до ${def.max}`);
+  it('returns "не менее X" for a value below min', () => {
+    expect(validateField(type, key, def.min - 1)).toBe(`не менее ${def.min}`);
   });
 
-  it('returns "от X до Y" for a value above max', () => {
-    expect(validateField(type, key, def.max + 1)).toBe(`от ${def.min} до ${def.max}`);
+  it('has no upper bound: arbitrary integers are valid', () => {
+    expect(validateField(type, key, 201)).toBeUndefined();
+    expect(validateField(type, key, 1000)).toBeUndefined();
   });
 
-  it('returns "от X до Y" for NaN', () => {
-    expect(validateField(type, key, 'abc')).toBe(`от ${def.min} до ${def.max}`);
+  it('returns "не менее X" for NaN', () => {
+    expect(validateField(type, key, 'abc')).toBe(`не менее ${def.min}`);
   });
 });
 
@@ -190,8 +188,8 @@ describe('validateAttributes — error aggregation', () => {
       bathroom: 'invalid', // not in options -> error
     };
     const errors = validateAttributes(type, attrs);
-    expect(errors.area_total).toBe('от 1 до 100000 м²');
-    expect(errors.floor).toBe('от -3 до 200');
+    expect(errors.area_total).toBe('не менее 1 м²');
+    expect(errors.floor).toBe('не менее -3');
     expect(errors.bathroom).toBe('значение некорректно');
   });
 
@@ -238,104 +236,47 @@ describe('validateAttributes — error aggregation', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Cross-field rules (CRITICAL — these are the migration contract)
+// Cross-field rules: сняты (решение владельца 23.10.2026) — согласованность
+// полей больше не валидируется, любые значения любых полей.
 // ---------------------------------------------------------------------------
 
-describe('validateAttributes — cross-field floor > floors_total', () => {
-  it.each([asType('apartment'), asType('apartments')])(
-    'sets floor error "этаж не может превышать этажность" on %s when floor > floors_total',
+describe('validateAttributes — no cross-field rules', () => {
+  it.each([asType('apartment'), asType('apartments'), asType('studio'), asType('room')])(
+    'floor above floors_total is valid on %s',
     (type) => {
       const attrs: PropertyAttributes = { floor: 10, floors_total: 5 };
-      const errors = validateAttributes(type, attrs);
-      expect(errors.floor).toBe('этаж не может превышать этажность');
+      expect(validateAttributes(type, attrs)).toEqual({});
     },
   );
 
-  it('does NOT set the cross-field error when floor == floors_total', () => {
-    const attrs: PropertyAttributes = { floor: 5, floors_total: 5 };
-    expect(validateAttributes(asType('apartment'), attrs).floor).toBeUndefined();
-  });
+  it.each([asType('apartment'), asType('apartments'), asType('studio')])(
+    'area_living above area_total is valid on %s',
+    (type) => {
+      const attrs: PropertyAttributes = { area_living: 60, area_total: 50 };
+      expect(validateAttributes(type, attrs)).toEqual({});
+    },
+  );
 
-  it('does NOT set the cross-field error when floor < floors_total', () => {
-    const attrs: PropertyAttributes = { floor: 3, floors_total: 9 };
-    expect(validateAttributes(asType('apartment'), attrs).floor).toBeUndefined();
-  });
+  it.each([asType('apartment'), asType('apartments'), asType('studio'), asType('room')])(
+    'area_kitchen above area_total is valid on %s',
+    (type) => {
+      const attrs: PropertyAttributes = { area_kitchen: 60, area_total: 50 };
+      expect(validateAttributes(type, attrs)).toEqual({});
+    },
+  );
 
-  it('does NOT apply cross-field when floors_total is individually invalid', () => {
-    // floors_total below min(1) -> individually invalid -> cross-rule skipped.
+  it('individual errors still surface on both fields', () => {
+    // floors_total ниже минимума — своя ошибка остаётся; кросс-правила не
+    // добавляют ничего.
     const attrs: PropertyAttributes = { floor: 10, floors_total: 0 };
     const errors = validateAttributes(asType('apartment'), attrs);
     expect(errors.floor).toBeUndefined();
-    expect(errors.floors_total).toBe('от 1 до 200');
+    expect(errors.floors_total).toBe('не менее 1');
   });
 
-  it('cross-rule is skipped when floor is individually invalid', () => {
-    // floor fractional -> individually invalid -> cross-rule does not override its own error.
-    const attrs: PropertyAttributes = { floor: 5.5, floors_total: 2 };
-    const errors = validateAttributes(asType('apartment'), attrs);
-    expect(errors.floor).toBe('от -3 до 200');
-  });
-});
-
-describe('validateAttributes — cross-field area_living > area_total', () => {
-  it.each([asType('apartment'), asType('apartments')])(
-    'sets area_living error "не может превышать общую площадь" on %s',
-    (type) => {
-      const attrs: PropertyAttributes = { area_living: 60, area_total: 50 };
-      const errors = validateAttributes(type, attrs);
-      expect(errors.area_living).toBe('не может превышать общую площадь');
-    },
-  );
-
-  it('does NOT set error when area_living == area_total', () => {
-    const attrs: PropertyAttributes = { area_living: 50, area_total: 50 };
-    expect(validateAttributes(asType('apartment'), attrs).area_living).toBeUndefined();
-  });
-
-  it('cross-rule is skipped when area_total is individually invalid', () => {
-    const attrs: PropertyAttributes = { area_living: 60, area_total: 0 };
-    const errors = validateAttributes(asType('apartment'), attrs);
-    expect(errors.area_living).toBeUndefined();
-    expect(errors.area_total).toBe('от 1 до 100000 м²');
-  });
-});
-
-describe('validateAttributes — cross-field area_kitchen > area_total', () => {
-  it.each([asType('apartment'), asType('apartments'), asType('room')])(
-    'sets area_kitchen error "не может превышать общую площадь" on %s',
-    (type) => {
-      const attrs: PropertyAttributes = { area_kitchen: 60, area_total: 50 };
-      const errors = validateAttributes(type, attrs);
-      expect(errors.area_kitchen).toBe('не может превышать общую площадь');
-    },
-  );
-
-  it('does NOT set error when area_kitchen == area_total', () => {
-    const attrs: PropertyAttributes = { area_kitchen: 50, area_total: 50 };
-    expect(validateAttributes(asType('apartment'), attrs).area_kitchen).toBeUndefined();
-  });
-
-  it('cross-rule is skipped when area_total is individually invalid', () => {
-    const attrs: PropertyAttributes = { area_kitchen: 60, area_total: 0 };
-    const errors = validateAttributes(asType('apartment'), attrs);
-    expect(errors.area_kitchen).toBeUndefined();
-    expect(errors.area_total).toBe('от 1 до 100000 м²');
-  });
-});
-
-describe('validateAttributes — string numeric inputs are parsed for cross-rules', () => {
-  it('parses string floor/floors_total for the cross-field comparison', () => {
+  it('string numeric inputs are kept as-is (no cross-rule parsing)', () => {
     const attrs: PropertyAttributes = { floor: '10', floors_total: '5' };
-    expect(validateAttributes(asType('apartment'), attrs).floor).toBe(
-      'этаж не может превышать этажность',
-    );
-  });
-
-  it('parses string areas for the cross-field comparison', () => {
-    const attrs: PropertyAttributes = { area_living: '60', area_total: '50' };
-    expect(validateAttributes(asType('apartment'), attrs).area_living).toBe(
-      'не может превышать общую площадь',
-    );
+    expect(validateAttributes(asType('apartment'), attrs)).toEqual({});
   });
 });
 

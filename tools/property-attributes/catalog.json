@@ -10,7 +10,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -19,7 +18,6 @@
           "label": "Жилая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -28,7 +26,6 @@
           "label": "Площадь кухни",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -36,23 +33,30 @@
           "kind": "integer",
           "label": "Этаж",
           "min": -3,
-          "max": 200,
           "group": "about_object"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
           "min": 1,
-          "max": 200,
           "group": "about_object"
         },
         "bathroom": {
           "kind": "enum",
           "label": "Санузел",
           "options": [
-            { "key": "combined", "label": "Совмещенный" },
-            { "key": "separate", "label": "Раздельный" },
-            { "key": "multiple", "label": "Несколько" }
+            {
+              "key": "combined",
+              "label": "Совмещенный"
+            },
+            {
+              "key": "separate",
+              "label": "Раздельный"
+            },
+            {
+              "key": "multiple",
+              "label": "Несколько"
+            }
           ],
           "group": "about_object"
         },
@@ -60,10 +64,22 @@
           "kind": "enum",
           "label": "Балкон",
           "options": [
-            { "key": "none", "label": "Нет" },
-            { "key": "balcony", "label": "Балкон" },
-            { "key": "loggia", "label": "Лоджия" },
-            { "key": "balcony_and_loggia", "label": "Балкон и лоджия" }
+            {
+              "key": "none",
+              "label": "Нет"
+            },
+            {
+              "key": "balcony",
+              "label": "Балкон"
+            },
+            {
+              "key": "loggia",
+              "label": "Лоджия"
+            },
+            {
+              "key": "balcony_and_loggia",
+              "label": "Балкон и лоджия"
+            }
           ],
           "group": "about_object"
         },
@@ -71,10 +87,22 @@
           "kind": "enum",
           "label": "Ремонт",
           "options": [
-            { "key": "cosmetic", "label": "Косметический" },
-            { "key": "euro", "label": "Евро" },
-            { "key": "design", "label": "Дизайнерский" },
-            { "key": "required", "label": "Требуется" }
+            {
+              "key": "cosmetic",
+              "label": "Косметический"
+            },
+            {
+              "key": "euro",
+              "label": "Евро"
+            },
+            {
+              "key": "design",
+              "label": "Дизайнерский"
+            },
+            {
+              "key": "required",
+              "label": "Требуется"
+            }
           ],
           "group": "about_object"
         },
@@ -82,8 +110,6 @@
           "kind": "integer",
           "label": "Год постройки",
           "min": 1800,
-          "max": 2031,
-          "yearBuiltMaxDynamic": true,
           "group": "about_building"
         },
         "ceiling_height": {
@@ -91,7 +117,6 @@
           "label": "Высота потолков",
           "unit": "м",
           "min": 2,
-          "max": 10,
           "decimals": 2,
           "group": "about_building"
         },
@@ -99,9 +124,18 @@
           "kind": "enum",
           "label": "Парковка",
           "options": [
-            { "key": "closed", "label": "Закрытая" },
-            { "key": "underground", "label": "Подземная" },
-            { "key": "open", "label": "Открытая" }
+            {
+              "key": "closed",
+              "label": "Закрытая"
+            },
+            {
+              "key": "underground",
+              "label": "Подземная"
+            },
+            {
+              "key": "open",
+              "label": "Открытая"
+            }
           ],
           "group": "about_building"
         }
@@ -115,7 +149,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -124,7 +157,6 @@
           "label": "Площадь кухни",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -132,23 +164,30 @@
           "kind": "integer",
           "label": "Этаж",
           "min": -3,
-          "max": 200,
           "group": "about_object"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
           "min": 1,
-          "max": 200,
           "group": "about_object"
         },
         "bathroom": {
           "kind": "enum",
           "label": "Санузел",
           "options": [
-            { "key": "combined", "label": "Совмещенный" },
-            { "key": "separate", "label": "Раздельный" },
-            { "key": "multiple", "label": "Несколько" }
+            {
+              "key": "combined",
+              "label": "Совмещенный"
+            },
+            {
+              "key": "separate",
+              "label": "Раздельный"
+            },
+            {
+              "key": "multiple",
+              "label": "Несколько"
+            }
           ],
           "group": "about_object"
         },
@@ -156,10 +195,22 @@
           "kind": "enum",
           "label": "Балкон",
           "options": [
-            { "key": "none", "label": "Нет" },
-            { "key": "balcony", "label": "Балкон" },
-            { "key": "loggia", "label": "Лоджия" },
-            { "key": "balcony_and_loggia", "label": "Балкон и лоджия" }
+            {
+              "key": "none",
+              "label": "Нет"
+            },
+            {
+              "key": "balcony",
+              "label": "Балкон"
+            },
+            {
+              "key": "loggia",
+              "label": "Лоджия"
+            },
+            {
+              "key": "balcony_and_loggia",
+              "label": "Балкон и лоджия"
+            }
           ],
           "group": "about_object"
         },
@@ -167,10 +218,22 @@
           "kind": "enum",
           "label": "Ремонт",
           "options": [
-            { "key": "cosmetic", "label": "Косметический" },
-            { "key": "euro", "label": "Евро" },
-            { "key": "design", "label": "Дизайнерский" },
-            { "key": "required", "label": "Требуется" }
+            {
+              "key": "cosmetic",
+              "label": "Косметический"
+            },
+            {
+              "key": "euro",
+              "label": "Евро"
+            },
+            {
+              "key": "design",
+              "label": "Дизайнерский"
+            },
+            {
+              "key": "required",
+              "label": "Требуется"
+            }
           ],
           "group": "about_object"
         },
@@ -178,8 +241,6 @@
           "kind": "integer",
           "label": "Год постройки",
           "min": 1800,
-          "max": 2031,
-          "yearBuiltMaxDynamic": true,
           "group": "about_building"
         }
       }
@@ -192,7 +253,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -201,7 +261,6 @@
           "label": "Жилая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -210,7 +269,6 @@
           "label": "Площадь кухни",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -218,23 +276,30 @@
           "kind": "integer",
           "label": "Этаж",
           "min": -3,
-          "max": 200,
           "group": "about_object"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
           "min": 1,
-          "max": 200,
           "group": "about_object"
         },
         "bathroom": {
           "kind": "enum",
           "label": "Санузел",
           "options": [
-            { "key": "combined", "label": "Совмещенный" },
-            { "key": "separate", "label": "Раздельный" },
-            { "key": "multiple", "label": "Несколько" }
+            {
+              "key": "combined",
+              "label": "Совмещенный"
+            },
+            {
+              "key": "separate",
+              "label": "Раздельный"
+            },
+            {
+              "key": "multiple",
+              "label": "Несколько"
+            }
           ],
           "group": "about_object"
         },
@@ -242,10 +307,22 @@
           "kind": "enum",
           "label": "Балкон",
           "options": [
-            { "key": "none", "label": "Нет" },
-            { "key": "balcony", "label": "Балкон" },
-            { "key": "loggia", "label": "Лоджия" },
-            { "key": "balcony_and_loggia", "label": "Балкон и лоджия" }
+            {
+              "key": "none",
+              "label": "Нет"
+            },
+            {
+              "key": "balcony",
+              "label": "Балкон"
+            },
+            {
+              "key": "loggia",
+              "label": "Лоджия"
+            },
+            {
+              "key": "balcony_and_loggia",
+              "label": "Балкон и лоджия"
+            }
           ],
           "group": "about_object"
         },
@@ -253,10 +330,22 @@
           "kind": "enum",
           "label": "Ремонт",
           "options": [
-            { "key": "cosmetic", "label": "Косметический" },
-            { "key": "euro", "label": "Евро" },
-            { "key": "design", "label": "Дизайнерский" },
-            { "key": "required", "label": "Требуется" }
+            {
+              "key": "cosmetic",
+              "label": "Косметический"
+            },
+            {
+              "key": "euro",
+              "label": "Евро"
+            },
+            {
+              "key": "design",
+              "label": "Дизайнерский"
+            },
+            {
+              "key": "required",
+              "label": "Требуется"
+            }
           ],
           "group": "about_object"
         },
@@ -264,8 +353,6 @@
           "kind": "integer",
           "label": "Год постройки",
           "min": 1800,
-          "max": 2031,
-          "yearBuiltMaxDynamic": true,
           "group": "about_building"
         },
         "ceiling_height": {
@@ -273,7 +360,6 @@
           "label": "Высота потолков",
           "unit": "м",
           "min": 2,
-          "max": 10,
           "decimals": 2,
           "group": "about_building"
         },
@@ -281,9 +367,18 @@
           "kind": "enum",
           "label": "Парковка",
           "options": [
-            { "key": "closed", "label": "Закрытая" },
-            { "key": "underground", "label": "Подземная" },
-            { "key": "open", "label": "Открытая" }
+            {
+              "key": "closed",
+              "label": "Закрытая"
+            },
+            {
+              "key": "underground",
+              "label": "Подземная"
+            },
+            {
+              "key": "open",
+              "label": "Открытая"
+            }
           ],
           "group": "about_building"
         }
@@ -297,7 +392,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -306,7 +400,6 @@
           "label": "Жилая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -315,7 +408,6 @@
           "label": "Площадь кухни",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_object"
         },
@@ -323,23 +415,30 @@
           "kind": "integer",
           "label": "Этаж",
           "min": -3,
-          "max": 200,
           "group": "about_object"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
           "min": 1,
-          "max": 200,
           "group": "about_object"
         },
         "bathroom": {
           "kind": "enum",
           "label": "Санузел",
           "options": [
-            { "key": "combined", "label": "Совмещенный" },
-            { "key": "separate", "label": "Раздельный" },
-            { "key": "multiple", "label": "Несколько" }
+            {
+              "key": "combined",
+              "label": "Совмещенный"
+            },
+            {
+              "key": "separate",
+              "label": "Раздельный"
+            },
+            {
+              "key": "multiple",
+              "label": "Несколько"
+            }
           ],
           "group": "about_object"
         },
@@ -347,10 +446,22 @@
           "kind": "enum",
           "label": "Балкон",
           "options": [
-            { "key": "none", "label": "Нет" },
-            { "key": "balcony", "label": "Балкон" },
-            { "key": "loggia", "label": "Лоджия" },
-            { "key": "balcony_and_loggia", "label": "Балкон и лоджия" }
+            {
+              "key": "none",
+              "label": "Нет"
+            },
+            {
+              "key": "balcony",
+              "label": "Балкон"
+            },
+            {
+              "key": "loggia",
+              "label": "Лоджия"
+            },
+            {
+              "key": "balcony_and_loggia",
+              "label": "Балкон и лоджия"
+            }
           ],
           "group": "about_object"
         },
@@ -358,10 +469,22 @@
           "kind": "enum",
           "label": "Ремонт",
           "options": [
-            { "key": "cosmetic", "label": "Косметический" },
-            { "key": "euro", "label": "Евро" },
-            { "key": "design", "label": "Дизайнерский" },
-            { "key": "required", "label": "Требуется" }
+            {
+              "key": "cosmetic",
+              "label": "Косметический"
+            },
+            {
+              "key": "euro",
+              "label": "Евро"
+            },
+            {
+              "key": "design",
+              "label": "Дизайнерский"
+            },
+            {
+              "key": "required",
+              "label": "Требуется"
+            }
           ],
           "group": "about_object"
         },
@@ -369,8 +492,6 @@
           "kind": "integer",
           "label": "Год постройки",
           "min": 1800,
-          "max": 2031,
-          "yearBuiltMaxDynamic": true,
           "group": "about_building"
         },
         "ceiling_height": {
@@ -378,7 +499,6 @@
           "label": "Высота потолков",
           "unit": "м",
           "min": 2,
-          "max": 10,
           "decimals": 2,
           "group": "about_building"
         },
@@ -386,9 +506,18 @@
           "kind": "enum",
           "label": "Парковка",
           "options": [
-            { "key": "closed", "label": "Закрытая" },
-            { "key": "underground", "label": "Подземная" },
-            { "key": "open", "label": "Открытая" }
+            {
+              "key": "closed",
+              "label": "Закрытая"
+            },
+            {
+              "key": "underground",
+              "label": "Подземная"
+            },
+            {
+              "key": "open",
+              "label": "Открытая"
+            }
           ],
           "group": "about_building"
         }
@@ -402,7 +531,6 @@
           "label": "Площадь участка",
           "unit": "сотки",
           "min": 0.01,
-          "max": 1000000,
           "decimals": 2,
           "group": "about_land"
         },
@@ -410,9 +538,18 @@
           "kind": "enum",
           "label": "Тип участка",
           "options": [
-            { "key": "izhs", "label": "ИЖС" },
-            { "key": "garden", "label": "Садовый" },
-            { "key": "farm", "label": "Фермерский" }
+            {
+              "key": "izhs",
+              "label": "ИЖС"
+            },
+            {
+              "key": "garden",
+              "label": "Садовый"
+            },
+            {
+              "key": "farm",
+              "label": "Фермерский"
+            }
           ],
           "group": "about_land"
         },
@@ -421,7 +558,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": "about_house"
         },
@@ -429,20 +565,40 @@
           "kind": "integer",
           "label": "Этажность дома",
           "min": 1,
-          "max": 200,
           "group": "about_house"
         },
         "rooms": {
           "kind": "enum",
           "label": "Комнаты",
           "options": [
-            { "key": "1", "label": "1" },
-            { "key": "2", "label": "2" },
-            { "key": "3", "label": "3" },
-            { "key": "4", "label": "4" },
-            { "key": "5", "label": "5" },
-            { "key": "6", "label": "6" },
-            { "key": "7_plus", "label": "7+" }
+            {
+              "key": "1",
+              "label": "1"
+            },
+            {
+              "key": "2",
+              "label": "2"
+            },
+            {
+              "key": "3",
+              "label": "3"
+            },
+            {
+              "key": "4",
+              "label": "4"
+            },
+            {
+              "key": "5",
+              "label": "5"
+            },
+            {
+              "key": "6",
+              "label": "6"
+            },
+            {
+              "key": "7_plus",
+              "label": "7+"
+            }
           ],
           "group": "about_house"
         },
@@ -450,10 +606,22 @@
           "kind": "enum",
           "label": "Тип дома",
           "options": [
-            { "key": "detached", "label": "Отдельный" },
-            { "key": "part", "label": "Часть дома" },
-            { "key": "townhouse", "label": "Таунхаус" },
-            { "key": "duplex", "label": "Дуплекс" }
+            {
+              "key": "detached",
+              "label": "Отдельный"
+            },
+            {
+              "key": "part",
+              "label": "Часть дома"
+            },
+            {
+              "key": "townhouse",
+              "label": "Таунхаус"
+            },
+            {
+              "key": "duplex",
+              "label": "Дуплекс"
+            }
           ],
           "group": "about_house"
         },
@@ -461,13 +629,34 @@
           "kind": "enum",
           "label": "Материал",
           "options": [
-            { "key": "brick", "label": "Кирпичный" },
-            { "key": "monolithic", "label": "Монолитный" },
-            { "key": "panel", "label": "Панельный" },
-            { "key": "brick_monolithic", "label": "Кирпично-монолитный" },
-            { "key": "block", "label": "Блочный" },
-            { "key": "wooden", "label": "Деревянный" },
-            { "key": "reinforced_concrete", "label": "Железобетонный" }
+            {
+              "key": "brick",
+              "label": "Кирпичный"
+            },
+            {
+              "key": "monolithic",
+              "label": "Монолитный"
+            },
+            {
+              "key": "panel",
+              "label": "Панельный"
+            },
+            {
+              "key": "brick_monolithic",
+              "label": "Кирпично-монолитный"
+            },
+            {
+              "key": "block",
+              "label": "Блочный"
+            },
+            {
+              "key": "wooden",
+              "label": "Деревянный"
+            },
+            {
+              "key": "reinforced_concrete",
+              "label": "Железобетонный"
+            }
           ],
           "group": "about_house"
         },
@@ -475,9 +664,18 @@
           "kind": "enum",
           "label": "Санузел",
           "options": [
-            { "key": "indoor", "label": "В доме" },
-            { "key": "outdoor", "label": "На улице" },
-            { "key": "none", "label": "Нет" }
+            {
+              "key": "indoor",
+              "label": "В доме"
+            },
+            {
+              "key": "outdoor",
+              "label": "На улице"
+            },
+            {
+              "key": "none",
+              "label": "Нет"
+            }
           ],
           "group": "about_house"
         },
@@ -485,9 +683,18 @@
           "kind": "enum",
           "label": "Душ",
           "options": [
-            { "key": "indoor", "label": "В доме" },
-            { "key": "outdoor", "label": "На улице" },
-            { "key": "none", "label": "Нет" }
+            {
+              "key": "indoor",
+              "label": "В доме"
+            },
+            {
+              "key": "outdoor",
+              "label": "На улице"
+            },
+            {
+              "key": "none",
+              "label": "Нет"
+            }
           ],
           "group": "about_house"
         },
@@ -495,8 +702,6 @@
           "kind": "integer",
           "label": "Год постройки",
           "min": 1800,
-          "max": 2031,
-          "yearBuiltMaxDynamic": true,
           "group": "about_house"
         }
       }
@@ -508,11 +713,26 @@
           "kind": "enum",
           "label": "Тип здания",
           "options": [
-            { "key": "business_center", "label": "Бизнес-центр" },
-            { "key": "warehouse_building", "label": "Складское здание" },
-            { "key": "shopping_center", "label": "Торговый центр" },
-            { "key": "detached", "label": "Отдельное здание" },
-            { "key": "residential", "label": "Жилой дом" }
+            {
+              "key": "business_center",
+              "label": "Бизнес-центр"
+            },
+            {
+              "key": "warehouse_building",
+              "label": "Складское здание"
+            },
+            {
+              "key": "shopping_center",
+              "label": "Торговый центр"
+            },
+            {
+              "key": "detached",
+              "label": "Отдельное здание"
+            },
+            {
+              "key": "residential",
+              "label": "Жилой дом"
+            }
           ],
           "group": null
         },
@@ -520,14 +740,12 @@
           "kind": "integer",
           "label": "Этаж",
           "min": -3,
-          "max": 200,
           "group": null
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
           "min": 1,
-          "max": 200,
           "group": null
         },
         "area_total": {
@@ -535,7 +753,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": null
         },
@@ -543,13 +760,34 @@
           "kind": "enum",
           "label": "Комнаты",
           "options": [
-            { "key": "1", "label": "1" },
-            { "key": "2", "label": "2" },
-            { "key": "3", "label": "3" },
-            { "key": "4", "label": "4" },
-            { "key": "5", "label": "5" },
-            { "key": "6", "label": "6" },
-            { "key": "7_plus", "label": "7+" }
+            {
+              "key": "1",
+              "label": "1"
+            },
+            {
+              "key": "2",
+              "label": "2"
+            },
+            {
+              "key": "3",
+              "label": "3"
+            },
+            {
+              "key": "4",
+              "label": "4"
+            },
+            {
+              "key": "5",
+              "label": "5"
+            },
+            {
+              "key": "6",
+              "label": "6"
+            },
+            {
+              "key": "7_plus",
+              "label": "7+"
+            }
           ],
           "group": null
         },
@@ -557,8 +795,14 @@
           "kind": "enum",
           "label": "Вход",
           "options": [
-            { "key": "separate", "label": "Отдельный" },
-            { "key": "common", "label": "Общий" }
+            {
+              "key": "separate",
+              "label": "Отдельный"
+            },
+            {
+              "key": "common",
+              "label": "Общий"
+            }
           ],
           "group": null
         },
@@ -566,10 +810,22 @@
           "kind": "enum",
           "label": "Ремонт",
           "options": [
-            { "key": "cosmetic", "label": "Косметический" },
-            { "key": "euro", "label": "Евро" },
-            { "key": "design", "label": "Дизайнерский" },
-            { "key": "required", "label": "Требуется" }
+            {
+              "key": "cosmetic",
+              "label": "Косметический"
+            },
+            {
+              "key": "euro",
+              "label": "Евро"
+            },
+            {
+              "key": "design",
+              "label": "Дизайнерский"
+            },
+            {
+              "key": "required",
+              "label": "Требуется"
+            }
           ],
           "group": null
         }
@@ -582,11 +838,26 @@
           "kind": "enum",
           "label": "Тип здания",
           "options": [
-            { "key": "business_center", "label": "Бизнес-центр" },
-            { "key": "warehouse_building", "label": "Складское здание" },
-            { "key": "shopping_center", "label": "Торговый центр" },
-            { "key": "detached", "label": "Отдельное здание" },
-            { "key": "residential", "label": "Жилой дом" }
+            {
+              "key": "business_center",
+              "label": "Бизнес-центр"
+            },
+            {
+              "key": "warehouse_building",
+              "label": "Складское здание"
+            },
+            {
+              "key": "shopping_center",
+              "label": "Торговый центр"
+            },
+            {
+              "key": "detached",
+              "label": "Отдельное здание"
+            },
+            {
+              "key": "residential",
+              "label": "Жилой дом"
+            }
           ],
           "group": null
         },
@@ -594,14 +865,12 @@
           "kind": "integer",
           "label": "Этаж",
           "min": -3,
-          "max": 200,
           "group": null
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
           "min": 1,
-          "max": 200,
           "group": null
         },
         "area_total": {
@@ -609,7 +878,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": null
         },
@@ -617,13 +885,34 @@
           "kind": "enum",
           "label": "Комнаты",
           "options": [
-            { "key": "1", "label": "1" },
-            { "key": "2", "label": "2" },
-            { "key": "3", "label": "3" },
-            { "key": "4", "label": "4" },
-            { "key": "5", "label": "5" },
-            { "key": "6", "label": "6" },
-            { "key": "7_plus", "label": "7+" }
+            {
+              "key": "1",
+              "label": "1"
+            },
+            {
+              "key": "2",
+              "label": "2"
+            },
+            {
+              "key": "3",
+              "label": "3"
+            },
+            {
+              "key": "4",
+              "label": "4"
+            },
+            {
+              "key": "5",
+              "label": "5"
+            },
+            {
+              "key": "6",
+              "label": "6"
+            },
+            {
+              "key": "7_plus",
+              "label": "7+"
+            }
           ],
           "group": null
         },
@@ -631,8 +920,14 @@
           "kind": "enum",
           "label": "Вход",
           "options": [
-            { "key": "separate", "label": "Отдельный" },
-            { "key": "common", "label": "Общий" }
+            {
+              "key": "separate",
+              "label": "Отдельный"
+            },
+            {
+              "key": "common",
+              "label": "Общий"
+            }
           ],
           "group": null
         },
@@ -640,10 +935,22 @@
           "kind": "enum",
           "label": "Ремонт",
           "options": [
-            { "key": "cosmetic", "label": "Косметический" },
-            { "key": "euro", "label": "Евро" },
-            { "key": "design", "label": "Дизайнерский" },
-            { "key": "required", "label": "Требуется" }
+            {
+              "key": "cosmetic",
+              "label": "Косметический"
+            },
+            {
+              "key": "euro",
+              "label": "Евро"
+            },
+            {
+              "key": "design",
+              "label": "Дизайнерский"
+            },
+            {
+              "key": "required",
+              "label": "Требуется"
+            }
           ],
           "group": null
         }
@@ -657,7 +964,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": null
         },
@@ -665,8 +971,14 @@
           "kind": "enum",
           "label": "Вход",
           "options": [
-            { "key": "separate", "label": "Отдельный" },
-            { "key": "common", "label": "Общий" }
+            {
+              "key": "separate",
+              "label": "Отдельный"
+            },
+            {
+              "key": "common",
+              "label": "Общий"
+            }
           ],
           "group": null
         },
@@ -674,11 +986,26 @@
           "kind": "enum",
           "label": "Тип здания",
           "options": [
-            { "key": "business_center", "label": "Бизнес-центр" },
-            { "key": "warehouse_building", "label": "Складское здание" },
-            { "key": "shopping_center", "label": "Торговый центр" },
-            { "key": "detached", "label": "Отдельное здание" },
-            { "key": "residential", "label": "Жилой дом" }
+            {
+              "key": "business_center",
+              "label": "Бизнес-центр"
+            },
+            {
+              "key": "warehouse_building",
+              "label": "Складское здание"
+            },
+            {
+              "key": "shopping_center",
+              "label": "Торговый центр"
+            },
+            {
+              "key": "detached",
+              "label": "Отдельное здание"
+            },
+            {
+              "key": "residential",
+              "label": "Жилой дом"
+            }
           ],
           "group": null
         }
@@ -692,7 +1019,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": null
         },
@@ -700,9 +1026,18 @@
           "kind": "enum",
           "label": "Материал",
           "options": [
-            { "key": "brick", "label": "Кирпичный" },
-            { "key": "metal", "label": "Металлический" },
-            { "key": "reinforced_concrete", "label": "Железобетонный" }
+            {
+              "key": "brick",
+              "label": "Кирпичный"
+            },
+            {
+              "key": "metal",
+              "label": "Металлический"
+            },
+            {
+              "key": "reinforced_concrete",
+              "label": "Железобетонный"
+            }
           ],
           "group": null
         }
@@ -716,7 +1051,6 @@
           "label": "Общая площадь",
           "unit": "м²",
           "min": 1,
-          "max": 100000,
           "decimals": 1,
           "group": null
         },
@@ -724,9 +1058,18 @@
           "kind": "enum",
           "label": "Расположение",
           "options": [
-            { "key": "underground", "label": "Подземная" },
-            { "key": "indoor", "label": "Крытая" },
-            { "key": "outdoor", "label": "Открытая" }
+            {
+              "key": "underground",
+              "label": "Подземная"
+            },
+            {
+              "key": "indoor",
+              "label": "Крытая"
+            },
+            {
+              "key": "outdoor",
+              "label": "Открытая"
+            }
           ],
           "group": null
         },
@@ -734,7 +1077,6 @@
           "kind": "integer",
           "label": "Уровень",
           "min": -5,
-          "max": 100,
           "group": null
         },
         "spot_number": {
@@ -753,7 +1095,6 @@
           "label": "Площадь участка",
           "unit": "сотки",
           "min": 0.01,
-          "max": 1000000,
           "decimals": 2,
           "group": null
         },
@@ -761,9 +1102,18 @@
           "kind": "enum",
           "label": "Тип участка",
           "options": [
-            { "key": "izhs", "label": "ИЖС" },
-            { "key": "garden", "label": "Садовый" },
-            { "key": "farm", "label": "Фермерский" }
+            {
+              "key": "izhs",
+              "label": "ИЖС"
+            },
+            {
+              "key": "garden",
+              "label": "Садовый"
+            },
+            {
+              "key": "farm",
+              "label": "Фермерский"
+            }
           ],
           "group": null
         }
@@ -783,22 +1133,5 @@
     "about_land": {
       "label": "Об участке"
     }
-  },
-  "rules": [
-    {
-      "types": ["apartment", "apartments", "studio", "room", "office", "commercial"],
-      "field": "floor",
-      "lte": "floors_total"
-    },
-    {
-      "types": ["apartment", "apartments", "studio"],
-      "field": "area_living",
-      "lte": "area_total"
-    },
-    {
-      "types": ["apartment", "apartments", "studio", "room"],
-      "field": "area_kitchen",
-      "lte": "area_total"
-    }
-  ]
+  }
 }

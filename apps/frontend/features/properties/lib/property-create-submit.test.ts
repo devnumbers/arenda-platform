@@ -36,7 +36,7 @@ const stubCatalog: PropertyAttributesPort = {
     }
     return wire;
   },
-  validateAttributes: (_type, attrs) => (attrs.land_area === '999999' ? { land_area: 'от 0.01 до 1000000 сотки' } : {}),
+  validateAttributes: (_type, attrs) => (attrs.land_area === '999999' ? { land_area: 'не менее 0.01 сотки' } : {}),
   fieldKeys: (type) => new Set(STUB_KEYS[type] ?? []),
 };
 

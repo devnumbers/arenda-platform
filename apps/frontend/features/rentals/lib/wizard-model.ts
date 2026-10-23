@@ -47,10 +47,6 @@ export const WIZARD_TOTAL_STEPS = 4;
 
 export type RentalWizardStep = 1 | 2 | 3 | 4;
 
-/** Верхняя граница сумм контракта (копейки): 1…10⁹ для платы, 0…10⁹ для
- * залога и комиссии. Ввод сверху срезает маска суммы (9 999 999,99 ₽). */
-export const RENTAL_AMOUNT_MAX_KOPECKS = 1_000_000_000;
-
 /** Режимы коммунальных платежей в порядке меню (Figma 1296:48965). */
 export const UTILITIES_OPTIONS = [
   { value: 'included', label: 'Включены в стоимость' },
@@ -249,7 +245,6 @@ export function buildRentalCreateCommand(
   if (
     amountKopecks === undefined
     || amountKopecks <= 0
-    || amountKopecks > RENTAL_AMOUNT_MAX_KOPECKS
     || paymentDay === undefined
     || startDate === undefined
     || rentalStartDateError(startDate, today) !== undefined
@@ -282,9 +277,10 @@ export function buildRentalCreateCommand(
   };
 }
 
-/** Залог/комиссия за границей контракта (0…10⁹ копеек) командой не идут. */
+/** Отрицательные залог/комиссия командой не идут (минимум 0; потолка нет —
+ * ADR 0069, решение владельца 23.10.2026). */
 function clampAmount(kopecks: number | undefined): number | null {
-  if (kopecks === undefined || kopecks < 0 || kopecks > RENTAL_AMOUNT_MAX_KOPECKS) {
+  if (kopecks === undefined || kopecks < 0) {
     return null;
   }
   return kopecks;

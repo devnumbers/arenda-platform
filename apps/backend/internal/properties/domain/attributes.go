@@ -18,8 +18,8 @@ type ValidationResult struct {
 func (r ValidationResult) Valid() bool { return len(r.Errors) == 0 }
 
 // The catalog field maps, type classifications (fieldDef/attrKind), validation
-// functions (ValidateAttributes, validateField, crossFieldErrors), and helpers
-// (CatalogKeys, FilterByType, fieldsForType, maxYearBuilt) live in the
+// functions (ValidateAttributes, validateField), and helpers
+// (CatalogKeys, FilterByType, fieldsForType) live in the
 // generated artifact zz_catalog.gen.go, produced from
 // tools/property-attributes/catalog.json by generate.mjs. Do not edit those
 // here; regenerate instead.
