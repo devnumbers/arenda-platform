@@ -28,3 +28,7 @@ export {
   type HistoryFilters,
 } from './lib/history-filters';
 export { useHistoryFiltersState } from './lib/use-history-filters';
+/** Личность страниц истории (тайтл/фолбэк «Назад» по скоупу) — чистая
+ * функция без React: живой экран, Suspense-фолбэк и реестр персистентной
+ * шапки (widgets/screen-layout) строят хром одним вычислением (#1605). */
+export { historyScreenBackHref, historyScreenTitle } from './lib/screen-chrome';

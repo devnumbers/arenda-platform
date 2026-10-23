@@ -15,6 +15,8 @@ import {
   historyFeedScope,
   historyFeedScopeKey,
   freshFeedEntryIdsMergedSince,
+  historyScreenBackHref,
+  historyScreenTitle,
   isDefaultHistoryFilters,
   lastLiveMergeAt,
   pinnedHistoryFilters,
@@ -39,7 +41,6 @@ import {
   TopNavTitle,
 } from '@/shared/ui/design';
 import { ROUTES } from '@/shared/config/routes';
-import { historyScreenBackHref, historyScreenTitle } from '../lib/screen-chrome';
 import { HistoryRow } from './history-row';
 import { FOLLOW_BOTTOM_PX, decideFeedScroll, distanceToBottom, type FeedEdges } from '../lib/feed-scroll';
 import { historyFeedSkeleton } from './history-states';
@@ -247,7 +248,7 @@ export function HistoryFeedScreen({
   // (#841) — объект и человека, страница участника (карта #1582) —
   // человека со скоупом его ног; заголовок, фолбэк «Назад» и прибитые
   // группы шита следуют за предметом; прибитые группы в URL не живут.
-  // Личность экрана одним вычислением (widgets/history/lib/screen-chrome):
+  // Личность экрана одним вычислением (features/history/lib/screen-chrome):
   // заголовок — в TopNavTitle и в шите, фолбэк «Назад» — у кнопки; те же
   // вычисления у фолбэка Suspense-границы (#1281) — одна точка на оба хрома.
   const isMemberPage = participantId !== undefined;
