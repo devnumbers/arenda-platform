@@ -176,111 +176,112 @@ export function OperationsGlobalScreen(): JSX.Element {
           />
         ) : (
           /* От пилюли до чипов 24 (макет 3226-74599: пилюля 72–128, чипы
-           * со 152) — дальше ритм gap-6 до конца первого блока. */
-          <div className="mt-6 flex flex-col gap-6">
-            <OperationsFilterChips
-              className="px-6"
-              periodLabel={operationsPeriodChipLabel(filters.period)}
-              periodActive={filters.period !== null}
-              propertyLabel={operationsPropertyChipLabel(filters.propertyIds)}
-              propertyActive={filters.propertyIds.length > 0}
-              categoriesLabel={operationsCategoryChipLabel(
-                filters.categories,
-                categoryRows,
-              )}
-              categoriesActive={filters.categories.length > 0}
-              onOpenPeriod={() => setPeriodOpen(true)}
-              onOpenProperties={() =>
-                pushPage(router,
-                  globalOperationsFiltersHref(ROUTES.operationsObjects, filters, {
-                    return: ROUTES.operations,
-                  }),
-                )
-              }
-              onOpenCategories={() =>
-                pushPage(router,
-                  globalOperationsFiltersHref(ROUTES.operationsCategories, filters, {
-                    return: ROUTES.operations,
-                  }),
-                )
-              }
-            />
+           * со 152); верхний блок «чипы → карточки сводки» держит 24, до
+           * ленты — гэп 8 контейнера: к заголовку первой дат-группы выходит
+           * канонный ритм 32 (верх 24 у PaymentsHeading). */
+          <div className="mt-6 flex flex-col gap-2">
+            <div className="flex flex-col gap-6">
+              <OperationsFilterChips
+                className="px-6"
+                periodLabel={operationsPeriodChipLabel(filters.period)}
+                periodActive={filters.period !== null}
+                propertyLabel={operationsPropertyChipLabel(filters.propertyIds)}
+                propertyActive={filters.propertyIds.length > 0}
+                categoriesLabel={operationsCategoryChipLabel(
+                  filters.categories,
+                  categoryRows,
+                )}
+                categoriesActive={filters.categories.length > 0}
+                onOpenPeriod={() => setPeriodOpen(true)}
+                onOpenProperties={() =>
+                  pushPage(router,
+                    globalOperationsFiltersHref(ROUTES.operationsObjects, filters, {
+                      return: ROUTES.operations,
+                    }),
+                  )
+                }
+                onOpenCategories={() =>
+                  pushPage(router,
+                    globalOperationsFiltersHref(ROUTES.operationsCategories, filters, {
+                      return: ROUTES.operations,
+                    }),
+                  )
+                }
+              />
 
-            {pending && (
-              <>
-                {/* Паритет §7: копия контента — ряд карточек сводки и
-                 * группы дат со строками; чипы выше — вне фазы загрузки. */}
+              {pending && (
+                /* Паритет §7: копия контента — ряд карточек сводки и
+                 * группы дат со строками; чипы выше — вне фазы загрузки. */
                 <OperationsSummarySkeleton cards={2} />
-                <OperationsDateFeedSkeleton />
-              </>
-            )}
+              )}
 
-            {!pending && (
-              <>
-                {listQuery.isError ? (
-                  <PaymentsStateCard
-                    title="Не удалось загрузить операции"
-                    hint="Проверьте подключение и попробуйте еще раз"
-                    action={
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        onClick={() => void listQuery.refetch()}
-                      >
-                        Повторить
-                      </Button>
+              {!pending && listQuery.isError && (
+                <PaymentsStateCard
+                  title="Не удалось загрузить операции"
+                  hint="Проверьте подключение и попробуйте еще раз"
+                  action={
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      onClick={() => void listQuery.refetch()}
+                    >
+                      Повторить
+                    </Button>
+                  }
+                />
+              )}
+
+              {!pending && !listQuery.isError && (
+                /* Карточки сводки (Figma 1510-77101): сумма за период +
+                 * полоса-разбивка пилюлями категорий. Тап ведёт на
+                 * страницу направления (#548 — отменяет решение #539
+                 * о некликабельных карточках). */
+                <div className="flex gap-2 px-6">
+                  <OperationsSummaryCard
+                    label="Расходы"
+                    totalKopecks={summaryQuery.data?.expenseTotalKopecks}
+                    segments={summaryBarSegments(
+                      summaryQuery.data,
+                      "expense",
+                    )}
+                    openLabel="Открыть все расходы"
+                    onOpen={() =>
+                      pushPage(router,
+                        globalOperationsFiltersHref(ROUTES.operationsExpenses, filters, {
+                          return: ROUTES.operations,
+                        }),
+                      )
                     }
                   />
-                ) : (
-                  <>
-                    {/* Карточки сводки (Figma 1510-77101): сумма за период +
-                     * полоса-разбивка пилюлями категорий. Тап ведёт на
-                     * страницу направления (#548 — отменяет решение #539
-                     * о некликабельных карточках). */}
-                    <div className="flex gap-2 px-6">
-                      <OperationsSummaryCard
-                        label="Расходы"
-                        totalKopecks={summaryQuery.data?.expenseTotalKopecks}
-                        segments={summaryBarSegments(
-                          summaryQuery.data,
-                          "expense",
-                        )}
-                        openLabel="Открыть все расходы"
-                        onOpen={() =>
-                          pushPage(router,
-                            globalOperationsFiltersHref(ROUTES.operationsExpenses, filters, {
-                              return: ROUTES.operations,
-                            }),
-                          )
-                        }
-                      />
-                      <OperationsSummaryCard
-                        label="Доходы"
-                        totalKopecks={summaryQuery.data?.incomeTotalKopecks}
-                        segments={summaryBarSegments(
-                          summaryQuery.data,
-                          "income",
-                        )}
-                        openLabel="Открыть все доходы"
-                        onOpen={() =>
-                          pushPage(router,
-                            globalOperationsFiltersHref(ROUTES.operationsIncomes, filters, {
-                              return: ROUTES.operations,
-                            }),
-                          )
-                        }
-                      />
-                    </div>
+                  <OperationsSummaryCard
+                    label="Доходы"
+                    totalKopecks={summaryQuery.data?.incomeTotalKopecks}
+                    segments={summaryBarSegments(
+                      summaryQuery.data,
+                      "income",
+                    )}
+                    openLabel="Открыть все доходы"
+                    onOpen={() =>
+                      pushPage(router,
+                        globalOperationsFiltersHref(ROUTES.operationsIncomes, filters, {
+                          return: ROUTES.operations,
+                        }),
+                      )
+                    }
+                  />
+                </div>
+              )}
+            </div>
 
-                    <OperationsDateList
-                      groups={groups}
-                      onSelectOperation={openOperation}
-                      renderSubtitle={(operation) => operation.propertyName}
-                      tail={<InfiniteQueryTail query={listQuery} />}
-                    />
-                  </>
-                )}
-              </>
+            {pending && <OperationsDateFeedSkeleton />}
+
+            {!pending && !listQuery.isError && (
+              <OperationsDateList
+                groups={groups}
+                onSelectOperation={openOperation}
+                renderSubtitle={(operation) => operation.propertyName}
+                tail={<InfiniteQueryTail query={listQuery} />}
+              />
             )}
           </div>
         )}

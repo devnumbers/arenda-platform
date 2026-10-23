@@ -55,6 +55,14 @@ describe('validatePaymentWizardDraft', () => {
     });
   });
 
+  it('propertyId глобального входа наружу из хранилища не выходит', () => {
+    // Объект шага «Выбрать объект» живёт только в памяти потока: попав в
+    // хранилище (мусор), он отбрасывается, черновик не роняя.
+    expect(
+      validatePaymentWizardDraft({ title: 'x', propertyId: 'p1' }),
+    ).toStrictEqual({ title: 'x' });
+  });
+
   it('напоминание сохраняется, чужой оффсет роняет черновик (карта #822)', () => {
     expect(validatePaymentWizardDraft({ title: 'x', reminderOffsetDays: 3 })).toStrictEqual({
       title: 'x',

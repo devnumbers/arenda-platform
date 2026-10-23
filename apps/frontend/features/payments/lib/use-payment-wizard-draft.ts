@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { clearDraftStorage, useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 import { PAYMENT_REMINDER_OPTIONS } from '@/entities/payment';
@@ -18,7 +19,11 @@ import type {
  * Автоплатёж»). Обёртка владеет только ключом, дефолтом и проверкой формы —
  * сам цикл хранения живёт в useDraftStore. Форма черновика покрывает поля
  * шагов визарда и служебный штамп последнего шага — resume открывает
- * сохранённый шаг, а не пересчёт из заполненности (#1055).
+ * сохранённый шаг, а не пересчёт из заполненности (#1055). У глобального
+ * входа (/payments/new, решение владельца 23.10.2026) персистентного
+ * черновика нет — состояние живёт в памяти потока (useEphemeral…), а
+ * выбранный на шаге «Выбрать объект» объект едет в поле propertyId и
+ * наружу из хранилища не выходит.
  */
 
 /** Тип создаваемого из шита: обычный платёж или автоплатёж (флаг autoPay). */
@@ -46,6 +51,9 @@ export type PaymentWizardDraft = {
   readonly notifyEmail?: boolean;
   /** Сумма в копейках, целая положительная (шаг 5). */
   readonly amountKopecks?: number;
+  /** Объект шага «Выбрать объект» — только глобальный вход; в хранилище не
+   * пишется (валидатор поле отбрасывает). */
+  readonly propertyId?: string;
   /** Последний шаг, на котором был пользователь — штамп каждого перехода
    * (вперёд и «Назад», #1055): resume открывает сохранённый шаг, а не
    * пересчёт из заполненности. Служебное поле: само по себе черновиком
@@ -56,6 +64,26 @@ export type PaymentWizardDraft = {
    * себе черновиком не считается. */
   readonly updatedAt?: number;
 };
+
+/** Хранилище состояния шагов визарда: у объектного входа это черновик
+ * localStorage, у глобального — память смонтированного потока. */
+export type PaymentWizardDraftController = {
+  readonly draft: PaymentWizardDraft;
+  readonly setDraft: Dispatch<SetStateAction<PaymentWizardDraft>>;
+  readonly clearDraft: () => void;
+};
+
+/** Состояние шагов глобального входа: чистый лист при каждом маунте потока —
+ * канон операций (карта #1052, Q2=В), персистентности нет (уход со страницы
+ * и перезагрузка стирают введённое). */
+export function useEphemeralPaymentWizardDraft(): PaymentWizardDraftController {
+  const [draft, setDraft] = useState<PaymentWizardDraft>({});
+  return {
+    draft,
+    setDraft,
+    clearDraft: () => setDraft({}),
+  };
+}
 
 const DEFAULT_DRAFT: PaymentWizardDraft = {};
 

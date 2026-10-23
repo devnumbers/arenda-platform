@@ -121,8 +121,10 @@ export function PaymentCreateWizardScreen({
       {!loading && canMutate && (
         <PaymentCreateWizardFlow
           key={`${propertyId}:${draftType}`}
+          mode="property"
           propertyId={propertyId}
           draftType={draftType}
+          draftController={draftState}
         />
       )}
     </>

@@ -84,12 +84,16 @@ export function OperationsLoading(): JSX.Element {
         </HubCollapseAnchor>
 
         {/* Тот же ритм первого блока, что у живого экрана (макет
-         * 3226-74599): чипы в 24 под пилюлей — контент встаёт на место
-         * скелетона без сдвига. */}
-        <div className="mt-6 flex flex-col gap-6">
-          <OperationsFilterChipsLoading />
+         * 3226-74599): чипы в 24 под пилюлей, карточная часть под чипами
+         * в 24, лента за гэпом 8 — контент встаёт на место скелетона
+         * без сдвига. */}
+        <div className="mt-6 flex flex-col gap-2">
+          <div className="flex flex-col gap-6">
+            <OperationsFilterChipsLoading />
 
-          <OperationsSummarySkeleton cards={2} />
+            <OperationsSummarySkeleton cards={2} />
+          </div>
+
           <OperationsDateFeedSkeleton />
         </div>
       </PageContent>
@@ -119,10 +123,16 @@ export function OperationsDirectionLoading({
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-6 pt-4">
-          <OperationsFilterChipsLoading />
+        {/* Тот же ритм, что у живого экрана (макет 1858-104152): чипы
+         * открывают контент, карточная часть под чипами в 24, лента за
+         * гэпом 8. */}
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-6">
+            <OperationsFilterChipsLoading />
 
-          <OperationsSummarySkeleton cards={1} />
+            <OperationsSummarySkeleton cards={1} />
+          </div>
+
           <OperationsDateFeedSkeleton />
         </div>
       </PageContent>
@@ -139,7 +149,9 @@ export function OperationsCategoriesLoading(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-6 pt-4">
+        {/* Чип периода без своего верхнего паддинга — как у живого
+         * выборщика (24 даёт PageContent). */}
+        <div className="flex flex-col gap-6">
           <div className="flex flex-wrap gap-1.5 px-6">
             <OperationsPeriodChip period={null} />
             <span
