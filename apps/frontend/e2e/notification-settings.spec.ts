@@ -118,9 +118,30 @@ test.describe('настройки уведомлений — email-колонк�
     }
     await captureScreen(page, testInfo, 'notification-settings-mutation-no-disable');
 
+    // PUT удержанного выключения: ждём ответ сервера, не только оптимистику.
+    const offPut = page.waitForResponse(
+      (r) => r.request().method() === 'PUT' && r.url().includes('/api/notification-preferences'),
+    );
     releasePut?.();
     await expect(emailSwitch('Аренда')).toHaveAttribute('aria-checked', 'false');
+    await offPut;
     await page.unroute('**/api/notification-preferences');
+
+    // Состояние возвращаем: сид-бэкенд общий на весь прогон (workers:1),
+    // протечка «Аренда=false» прячет ряд почты у следующих спек
+    // (rental-reminder, rentals-wizard читают ту же матрицу). Восстановление
+    // держим до реального ответа PUT и серверной правды — оптимистика тут
+    // не гарантирует, что протечки нет.
+    const onPut = page.waitForResponse(
+      (r) => r.request().method() === 'PUT' && r.url().includes('/api/notification-preferences'),
+    );
+    await emailSwitch('Аренда').click();
+    await expect(emailSwitch('Аренда')).toHaveAttribute('aria-checked', 'true');
+    await onPut;
+    const prefs = (await (await page.request.get('/api/notification-preferences')).json()) as {
+      email: { rental: boolean };
+    };
+    expect(prefs.email.rental, 'серверная правда матрицы').toBe(true);
   });
 
   test('вся строка кликается: тап по тексту переключает мастер и почтовый тумблер', async ({
@@ -139,14 +160,28 @@ test.describe('настройки уведомлений — email-колонк�
       page.getByRole('switch', { name: 'Получать пуш-уведомления на этом устройстве' }),
     ).toHaveAttribute('aria-checked', 'false');
 
-    // Тап по тексту почтовой строки «Аренда» гасит тумблер (оптимистичный
-    // PUT), как клик самого свитча.
+    // Тап по тексту почтовой строки «Аренда» двигает тумблер, как клик
+    // самого свитча (оптимистичный PUT); кликаем и возвращаем — состояние
+    // общего бэка не оставляем переключённым. Оба PUT держим до реального
+    // ответа сервера: оптимистика не гарантирует, что протечки нет.
     const rentalEmail = page.getByRole('switch', { name: 'Электронная почта — Аренда' });
     await expect(rentalEmail).toHaveAttribute('aria-checked', 'true');
-    await rentalEmail
-      .locator('xpath=..')
-      .getByText('Электронная почта', { exact: true })
-      .click();
+    const putResponse = () =>
+      page.waitForResponse(
+        (r) => r.request().method() === 'PUT' && r.url().includes('/api/notification-preferences'),
+      );
+    const rentalRow = rentalEmail.locator('xpath=..');
+    const offPut = putResponse();
+    await rentalRow.getByText('Электронная почта', { exact: true }).click();
     await expect(rentalEmail).toHaveAttribute('aria-checked', 'false');
+    await offPut;
+    const onPut = putResponse();
+    await rentalRow.getByText('Электронная почта', { exact: true }).click();
+    await expect(rentalEmail).toHaveAttribute('aria-checked', 'true');
+    await onPut;
+    const prefs = (await (await page.request.get('/api/notification-preferences')).json()) as {
+      email: { rental: boolean };
+    };
+    expect(prefs.email.rental, 'серверная правда матрицы').toBe(true);
   });
 });

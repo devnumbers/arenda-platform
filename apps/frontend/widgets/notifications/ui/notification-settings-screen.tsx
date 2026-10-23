@@ -296,7 +296,15 @@ export function NotificationSettingsScreen(): JSX.Element {
         <NotificationSettingsContentSkeleton />
       ) : (
         <div className="flex flex-col pb-6 pt-1">
-          <div className="flex items-center justify-between py-3">
+          {/* Ряды экрана кликаются целиком (решение владельца 23.10.2026):
+              текст связан со свитчем label'ом (канон пары label+Switch
+              дизайн-слоя) — тап по заголовку переключает тумблер. Скелетон
+              рендерится без id-свитча — клик по такому ряду глухой;
+              замороженный полётом свитч disabled и клик не пускает сам. */}
+          <label
+            htmlFor="push-master-switch"
+            className="flex cursor-pointer items-center justify-between py-3"
+          >
             <span
               className={cn('text-base text-content', masterFrozen && 'opacity-50')}
             >
@@ -306,13 +314,14 @@ export function NotificationSettingsScreen(): JSX.Element {
               <Skeleton className="h-7 w-16 rounded-pill" />
             ) : (
               <Switch
+                id="push-master-switch"
                 checked={display.masterOn}
                 onCheckedChange={toggleMaster}
                 disabled={masterFrozen}
                 aria-label="Получать пуш-уведомления на этом устройстве"
               />
             )}
-          </div>
+          </label>
           {shownSlot !== null && (
             <p role="alert" className="m-0 text-sm leading-[18px] text-error">
               {PUSH_SLOT_MESSAGES[shownSlot]}
@@ -340,20 +349,27 @@ export function NotificationSettingsScreen(): JSX.Element {
                     {GROUP_DESCRIPTIONS[category]}
                   </p>
 
-                  <div className="flex items-center justify-between py-3">
+                  <label
+                    htmlFor={`email-switch-${category}`}
+                    className="flex cursor-pointer items-center justify-between py-3"
+                  >
                     <span className="text-base text-content">Электронная почта</span>
                     {emailQuery.isPending ? (
                       <Skeleton className="h-7 w-16 rounded-pill" />
                     ) : (
                       <Switch
+                        id={`email-switch-${category}`}
                         checked={emailQuery.data[category]}
                         onCheckedChange={(value) => toggleEmail(category, value)}
                         aria-label={`Электронная почта — ${notificationCategoryLabel(category)}`}
                       />
                     )}
-                  </div>
+                  </label>
 
-                  <div className="flex items-center justify-between py-3">
+                  <label
+                    htmlFor={`push-switch-${category}`}
+                    className="flex cursor-pointer items-center justify-between py-3"
+                  >
                     <span
                       className={cn('text-base text-content', categoryFrozen && 'opacity-50')}
                     >
@@ -363,13 +379,14 @@ export function NotificationSettingsScreen(): JSX.Element {
                       <Skeleton className="h-7 w-16 rounded-pill" />
                     ) : (
                       <Switch
+                        id={`push-switch-${category}`}
                         checked={display.categories[category]}
                         onCheckedChange={(value) => togglePushCategory(category, value)}
                         disabled={categoryFrozen}
                         aria-label={`Пуш-уведомления — ${notificationCategoryLabel(category)}`}
                       />
                     )}
-                  </div>
+                  </label>
                 </section>
               );
             })

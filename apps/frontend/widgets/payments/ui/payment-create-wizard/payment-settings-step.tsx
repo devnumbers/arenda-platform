@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { JSX } from 'react';
 import { RadioFalse, RadioTrue, SmallArrowRight } from '@/shared/assets/icons';
 import type { IsoDate, PaymentReminderOffset, Recurrence } from '@/entities/payment';
@@ -33,14 +33,17 @@ import { WizardHeading } from './wizard-chrome';
  *   напоминаний у автоплатежа нет (сервер при создании форсирует оффсет
  *   в null, решение гриллинга #1186).
  *
- * Секция «Настройки» (без подзаголовка, по макету): тумблер «Уведомления
- * на почту» — NotifyEmailRow, персональная галочка почты этого платежа
- * (карта #1551, канон #1552): значение живёт в черновике (старт on),
- * радио «не надо» гасит весь ряд (emailNotificationsRowDisabled, решение
- * владельца 22.10.2026), глобальный мастер категории решает видимость
- * ряда вовсе; и тумблер «Окончание платежа»
+ * Секция «Настройки» (без подзаголовка, по макету): сверху тумблер
+ * «Окончание платежа»
  * («Необязательно»): включённым открывает строку «Выбрать дату» (канон
- * Figma 843:8345), выключенным чистит выбранную дату.
+ * Figma 843:8345), выключенным чистит выбранную дату; под ним тумблер
+ * «Уведомления на почту» — NotifyEmailRow, персональная галочка почты
+ * этого платежа (карта #1551, канон #1552): значение живёт в черновике
+ * (старт on), радио «не надо» гасит весь ряд (emailNotificationsRowDisabled,
+ * решение владельца 22.10.2026), глобальный мастер категории решает
+ * видимость ряда вовсе. Порядок рядов — решение владельца 23.10.2026
+ * (было: почта сверху); оба ряда кликаются целиком — текст связан со
+ * свитчем label'ом (канон пары label+Switch дизайн-слоя).
  *
  * Окончание (#1155): в пикере endDate дни раньше первого вхождения
  * расписания (since = «сегодня» владельца — сервер ставит его сам,
@@ -136,17 +139,11 @@ export function PaymentSettingsStep({
       )}
 
       {/* 16px секционного зазора макета + 24px собственных отступов
-          заголовка — итого 40px от последней радио-строки. */}
+          заголовка — итого 40px от последней радио-строки. Порядок рядов —
+          решение владельца 23.10.2026: сверху «Окончание платежа», под ним
+          «Уведомления на почту»; строка даты остаётся под своим тумблером. */}
       <StepSectionHeading title="Настройки" />
       <div className="flex flex-col pt-4">
-        <NotifyEmailRow
-          category={PAYMENTS_EMAIL_CATEGORY}
-          title="Уведомления на почту"
-          caption={emailReminderCaption('о платеже', email)}
-          checked={emailRow.value}
-          onCheckedChange={onNotifyEmailChange}
-          disabled={emailRow.disabled}
-        />
         <EndDateToggleRow checked={endDateOn} onToggle={toggleEndDate} />
         {endDateOn && (
           <EndDateRow
@@ -155,6 +152,14 @@ export function PaymentSettingsStep({
             onOpen={() => setPickerOpen(true)}
           />
         )}
+        <NotifyEmailRow
+          category={PAYMENTS_EMAIL_CATEGORY}
+          title="Уведомления на почту"
+          caption={emailReminderCaption('о платеже', email)}
+          checked={emailRow.value}
+          onCheckedChange={onNotifyEmailChange}
+          disabled={emailRow.disabled}
+        />
       </div>
 
       {/* Рендер только в открытом состоянии — состояние ленты и черновик
@@ -227,7 +232,9 @@ function NotifyAutoPaidPicker({
 
 /** Строка-тумблер «Окончание платежа» (макет 3214:72995, анатомия
  * NotifyEmailRow): подпись «Необязательно», включённым раскрывает
- * строку даты. */
+ * строку даты. Ряд кликается целиком: текст связан со свитчем label'ом
+ * (канон пары label+Switch дизайн-слоя) — тап по заголовку/подписи
+ * переключает тумблер. */
 function EndDateToggleRow({
   checked,
   onToggle,
@@ -235,18 +242,20 @@ function EndDateToggleRow({
   readonly checked: boolean;
   readonly onToggle: (checked: boolean) => void;
 }): JSX.Element {
+  const switchId = useId();
   return (
-    <div className="flex items-center justify-between gap-4 px-6 py-3">
-      <div className="flex min-w-0 flex-col gap-1">
+    <label htmlFor={switchId} className="flex cursor-pointer items-center justify-between gap-4 px-6 py-3">
+      <span className="flex min-w-0 flex-col gap-1">
         <span className="text-base font-medium leading-[18px] text-content">Окончание платежа</span>
         <span className="text-sm leading-4 text-content-tertiary">Необязательно</span>
-      </div>
+      </span>
       <Switch
+        id={switchId}
         checked={checked}
         onCheckedChange={(value) => onToggle(value === true)}
         aria-label="Окончание платежа"
       />
-    </div>
+    </label>
   );
 }
 
