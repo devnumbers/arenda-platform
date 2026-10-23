@@ -104,7 +104,9 @@ export function OperationsGlobalCategoriesScreen(): JSX.Element {
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-6 pt-4">
+        {/* Чип периода открывает контент в 24 от хедера — своего верхнего
+         * паддинга у контейнера нет (замечание владельца 23.10: лишние 16). */}
+        <div className="flex flex-col gap-6">
           <div className="flex flex-wrap gap-1.5 px-6">
             {/* Чип периода — кнопка канонного пикера (решение владельца
              * 01.10): период меняется на месте, применение возвращает к

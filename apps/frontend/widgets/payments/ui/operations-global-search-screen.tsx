@@ -179,11 +179,16 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
               description="Такой операции нет"
             />
           ) : (
-            <div className="flex flex-col gap-6 pt-4">
+            /* Секции делит гэп 8 — к заголовку второй выходит канонный
+             * ритм 32 (верх 24 у PaymentsHeading). Первый блок прижат к
+             * хедеру: канонный верх заголовка погашен (pt-0), 24 уже даёт
+             * PageContent (замечание владельца 23.10). Под заголовком
+             * чипы в 16, ряды в 8. */
+            <div className="flex flex-col gap-2">
               {chips.length > 0 && (
                 <section aria-label="Категории">
-                  <PaymentsHeading>Категории</PaymentsHeading>
-                  <div className="flex flex-wrap gap-1.5 px-6 pt-2">
+                  <PaymentsHeading className="pt-0">Категории</PaymentsHeading>
+                  <div className="flex flex-wrap gap-1.5 px-6 pt-4">
                     {chips.map((chip) => (
                       <ChipButton
                         key={chip.slug}
@@ -199,7 +204,10 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
               )}
 
               <section aria-label="Операции">
-                <PaymentsHeading>Операции</PaymentsHeading>
+                {/* Первый блок, когда чипов нет — верх погашен. */}
+                <PaymentsHeading className={chips.length > 0 ? undefined : 'pt-0'}>
+                  Операции
+                </PaymentsHeading>
                 <div className="flex flex-col pt-2">
                   {operations.map((operation) => (
                     <OperationRow

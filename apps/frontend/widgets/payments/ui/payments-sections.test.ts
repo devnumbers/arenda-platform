@@ -110,6 +110,13 @@ describe('PaymentsHeading (заголовок дат-группы)', () => {
     expect(className).toContain('pt-6');
     expect(className).not.toContain('px-6');
   });
+
+  it('className потребителя гасит канонный верх — pt-0 побеждает внутренний pt-6', () => {
+    const heading = PaymentsHeading({ children: 'Категории', className: 'pt-0' });
+    const className = String(heading.props.className);
+    expect(className).toContain('pt-0');
+    expect(className).not.toContain('pt-6');
+  });
 });
 
 describe('скелетоны (паритет §7 с рядом 24/12 и карточкой pb-3)', () => {

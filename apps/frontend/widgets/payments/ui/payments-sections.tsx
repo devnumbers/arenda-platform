@@ -307,15 +307,20 @@ export function PaymentsStateCard({
  * inset=false — без своей вставки ПО БОКАМ: глобальная лента (#541) держит
  * ритм 24px на уровне всей страницы, заголовки дат прижаты к её краю
  * (решение владельца 2026-09-05); верхние 24 — канон макета, действуют в
- * обоих вариантах. */
+ * обоих вариантах. className — вставка потребителя поверх канона
+ * (cn/tailwind-merge, ADR 0050): первый блок подэкрана гасит канонный
+ * верх — pt-0, 24 до хедера уже даёт PageContent (поиски, замечание
+ * владельца 23.10). */
 export function PaymentsHeading({
   children,
   inset = true,
+  className,
 }: {
   readonly children: ReactNode;
   readonly inset?: boolean;
+  readonly className?: string;
 }): JSX.Element {
-  return <h2 className={`${headingClass} pt-6${inset ? ' px-6' : ''}`}>{children}</h2>;
+  return <h2 className={cn(headingClass, 'pt-6', inset && 'px-6', className)}>{children}</h2>;
 }
 
 /** Скелетон секции на время загрузки — серая карточка с пульсирующими
