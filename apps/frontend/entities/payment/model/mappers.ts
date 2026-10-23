@@ -74,6 +74,7 @@ export function mapPayment(dto: PaymentDto): Payment {
     reminderOffsetDays: dto.reminderOffsetDays ?? undefined,
     autoPay: dto.autoPay,
     notifyAutoPaid: dto.notifyAutoPaid,
+    notifyEmail: dto.notifyEmail,
     category: mapCategoryView(dto.category),
     isFavorite: dto.isFavorite,
     isCompleted: dto.isCompleted,

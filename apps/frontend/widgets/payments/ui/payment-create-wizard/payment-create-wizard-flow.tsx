@@ -37,6 +37,11 @@ import {
   type WizardStep,
 } from '@/features/payments';
 import { paymentCategoryBySlug } from '@/features/payment-categories';
+import {
+  emailNotificationsRowVisible,
+  PAYMENTS_EMAIL_CATEGORY,
+  useEmailNotificationPreferences,
+} from '@/features/notifications';
 import { AmountStep } from './amount-step';
 import { CategoryStep } from './category-step';
 import { PaymentSettingsStep } from './payment-settings-step';
@@ -91,6 +96,15 @@ export function PaymentCreateWizardFlow({
   const [categorySearchOpen, setCategorySearchOpen] = useState(false);
   const [categoryQuery, setCategoryQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // Мастер видимости ряда почты (карта #1551): решение для команды сабмита.
+  // Общий предикат с NotifyEmailRow шага 4 — расхождений нет; в полёте
+  // решение не блокируем (галочка едет), при off и сбое ряд скрыт и поле
+  // в команду не едёт (канон #1552). Кэш общий — второй запрос не летает.
+  const emailMasterQuery = useEmailNotificationPreferences();
+  const notifyEmailRowVisible = emailNotificationsRowVisible(
+    emailMasterQuery.isPending,
+    emailMasterQuery.data?.[PAYMENTS_EMAIL_CATEGORY],
+  );
 
   // Открытие поиска сразу делает поле активным (программный фокус —
   // устоявшийся a11y-паттерн вместо autoFocus).
@@ -284,6 +298,10 @@ export function PaymentCreateWizardFlow({
               onNotifyAutoPaidChange={(notifyAutoPaid) =>
                 setDraft((prev) => ({ ...prev, notifyAutoPaid }))
               }
+              notifyEmail={draft.notifyEmail ?? true}
+              onNotifyEmailChange={(notifyEmail) =>
+                setDraft((prev) => ({ ...prev, notifyEmail }))
+              }
               endDate={draft.endDate}
               onEndDateChange={(endDate) => setDraft((prev) => ({ ...prev, endDate }))}
               recurrence={draft.recurrence}
@@ -388,6 +406,7 @@ export function PaymentCreateWizardFlow({
     const command = buildPaymentCreateCommand(draft, {
       autoPay: draftType === 'autopayment',
       resolveTitle: (slug) => paymentCategoryBySlug(slug)?.label,
+      notifyEmailRowVisible,
     });
     if (command === undefined) {
       return;

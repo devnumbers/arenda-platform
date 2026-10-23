@@ -305,6 +305,9 @@ describe('buildPaymentCreateCommand — сериализация чернови�
       recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
       categorySlug: 'rent',
       autoPay: false,
+      // Дефолтное радио «Не напоминать» гасит ряд почты — галочка off
+      // (карта #1551, канон #1552: заглушенный ряд отправляет off).
+      notifyEmail: false,
     });
   });
 
@@ -369,6 +372,34 @@ describe('buildPaymentCreateCommand — сериализация чернови�
       autoPay: false,
     });
     expect(regular !== undefined && Object.hasOwn(regular, 'notifyAutoPaid')).toBe(false);
+  });
+
+  it('персональная галочка почты: живой ряд едет значением черновика, дефолт on (карта #1551)', () => {
+    // Ряд жив («За 1 день») — черновик-поле (не тронуто → on) в команде.
+    expect(
+      buildPaymentCreateCommand(draft({ reminderOffsetDays: 1 }), {})?.notifyEmail,
+    ).toBe(true);
+    // Пользователь выключил свитч — off запомнен и уезжает.
+    expect(
+      buildPaymentCreateCommand(draft({ reminderOffsetDays: 1, notifyEmail: false }), {})
+        ?.notifyEmail,
+    ).toBe(false);
+  });
+
+  it('гейт «не надо» отправляет off независимо от запомненного (канон #1552)', () => {
+    // «Не напоминать» (дефолт ручной ветки) — галочки почты нет.
+    expect(buildPaymentCreateCommand(draft({}), {})?.notifyEmail).toBe(false);
+    // «Не уведомлять» (дефолт автоплатежа) — так же.
+    expect(buildPaymentCreateCommand(draft({}), { autoPay: true })?.notifyEmail).toBe(false);
+    // Запомненное on не протекает: заглушенный ряд показывает и отправляет off.
+    expect(buildPaymentCreateCommand(draft({ notifyEmail: true }), {})?.notifyEmail).toBe(false);
+  });
+
+  it('ряд скрыт мастером (notifyEmailRowVisible: false) — поле в команду не едёт', () => {
+    const hidden = buildPaymentCreateCommand(draft({ reminderOffsetDays: 1 }), {
+      notifyEmailRowVisible: false,
+    });
+    expect(hidden !== undefined && Object.hasOwn(hidden, 'notifyEmail')).toBe(false);
   });
 });
 

@@ -169,6 +169,7 @@ SELECT pay.id,
        pay.end_date,
        pay.auto_pay,
        pay.notify_auto_paid,
+       pay.notify_email,
        pay.reminder_offset_days,
        pay.category_slug,
        pay.user_category_id,
@@ -199,6 +200,7 @@ type GetPaymentByIDRow struct {
 	EndDate            pgtype.Date        `json:"end_date"`
 	AutoPay            bool               `json:"auto_pay"`
 	NotifyAutoPaid     bool               `json:"notify_auto_paid"`
+	NotifyEmail        bool               `json:"notify_email"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
@@ -235,6 +237,7 @@ func (q *Queries) GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) 
 		&i.EndDate,
 		&i.AutoPay,
 		&i.NotifyAutoPaid,
+		&i.NotifyEmail,
 		&i.ReminderOffsetDays,
 		&i.CategorySlug,
 		&i.UserCategoryID,
@@ -288,9 +291,9 @@ func (q *Queries) GetPropertyForPaymentMutation(ctx context.Context, id pgtype.U
 const insertPayment = `-- name: InsertPayment :exec
 INSERT INTO payments (
     id, owner_id, property_id, type, title, amount_kopecks, recurrence,
-    since, end_date, auto_pay, notify_auto_paid, reminder_offset_days, category_slug
+    since, end_date, auto_pay, notify_auto_paid, notify_email, reminder_offset_days, category_slug
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 `
 
 type InsertPaymentParams struct {
@@ -305,6 +308,7 @@ type InsertPaymentParams struct {
 	EndDate            pgtype.Date `json:"end_date"`
 	AutoPay            bool        `json:"auto_pay"`
 	NotifyAutoPaid     bool        `json:"notify_auto_paid"`
+	NotifyEmail        bool        `json:"notify_email"`
 	ReminderOffsetDays pgtype.Int4 `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text `json:"category_slug"`
 }
@@ -314,7 +318,8 @@ type InsertPaymentParams struct {
 // this slice (user_category_id stays NULL). reminder_offset_days is the
 // nullable reminder lead time (карта #822; NULL = напоминаний нет);
 // notify_auto_paid — гейт события «Автоплатёж исполнен» (#1189, дефолт новых
-// false, макет 3214-72739).
+// false, макет 3214-72739); notify_email — пер-платёжный гейт email-канала
+// (#1553, дефолт true — присланное значение всегда явное: транспорта дефолт).
 func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) error {
 	_, err := q.db.Exec(ctx, insertPayment,
 		arg.ID,
@@ -328,6 +333,7 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) er
 		arg.EndDate,
 		arg.AutoPay,
 		arg.NotifyAutoPaid,
+		arg.NotifyEmail,
 		arg.ReminderOffsetDays,
 		arg.CategorySlug,
 	)
@@ -396,6 +402,7 @@ SELECT pay.id,
        pay.end_date,
        pay.auto_pay,
        pay.notify_auto_paid,
+       pay.notify_email,
        pay.reminder_offset_days,
        pay.category_slug,
        pay.user_category_id,
@@ -429,6 +436,7 @@ type ListPaymentsByPropertyRow struct {
 	EndDate            pgtype.Date        `json:"end_date"`
 	AutoPay            bool               `json:"auto_pay"`
 	NotifyAutoPaid     bool               `json:"notify_auto_paid"`
+	NotifyEmail        bool               `json:"notify_email"`
 	ReminderOffsetDays pgtype.Int4        `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text        `json:"category_slug"`
 	UserCategoryID     pgtype.UUID        `json:"user_category_id"`
@@ -462,6 +470,7 @@ func (q *Queries) ListPaymentsByProperty(ctx context.Context, arg ListPaymentsBy
 			&i.EndDate,
 			&i.AutoPay,
 			&i.NotifyAutoPaid,
+			&i.NotifyEmail,
 			&i.ReminderOffsetDays,
 			&i.CategorySlug,
 			&i.UserCategoryID,
@@ -525,9 +534,10 @@ SET type = $3,
     end_date = $7,
     auto_pay = $8,
     notify_auto_paid = $9,
-    reminder_offset_days = $10,
-    category_slug = $11,
-    title_is_manual = $12
+    notify_email = $10,
+    reminder_offset_days = $11,
+    category_slug = $12,
+    title_is_manual = $13
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -541,6 +551,7 @@ type UpdatePaymentParams struct {
 	EndDate            pgtype.Date `json:"end_date"`
 	AutoPay            bool        `json:"auto_pay"`
 	NotifyAutoPaid     bool        `json:"notify_auto_paid"`
+	NotifyEmail        bool        `json:"notify_email"`
 	ReminderOffsetDays pgtype.Int4 `json:"reminder_offset_days"`
 	CategorySlug       pgtype.Text `json:"category_slug"`
 	TitleIsManual      bool        `json:"title_is_manual"`
@@ -561,6 +572,7 @@ func (q *Queries) UpdatePayment(ctx context.Context, arg UpdatePaymentParams) er
 		arg.EndDate,
 		arg.AutoPay,
 		arg.NotifyAutoPaid,
+		arg.NotifyEmail,
 		arg.ReminderOffsetDays,
 		arg.CategorySlug,
 		arg.TitleIsManual,

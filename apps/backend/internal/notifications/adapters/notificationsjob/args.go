@@ -91,9 +91,9 @@ type PaymentDueArgs struct {
 func (PaymentDueArgs) Kind() string { return "notifications:payment_due" }
 
 // PaymentOverdueArgs publishes one operation's «Платёж просрочен» at the
-// wall clock 22:00
-// of the day after the operation date in the owner's timezone (issues #776,
-// #1168).
+// wall clock 10:00
+// of the day after the operation date in the owner's timezone (issue #776;
+// вечером в 22:00 — до решения владельца 22.10.2026).
 // The args are the job's dedup key, the same shape as PaymentDueArgs; the
 // two legs are different kinds, so one operation's due and overdue jobs
 // coexist.

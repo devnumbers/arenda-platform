@@ -24,6 +24,8 @@ export function makePayment(overrides: Partial<Payment> = {}): Payment {
     since: '2026-01-01',
     autoPay: false,
     notifyAutoPaid: false,
+    // Контракт #1553 — бэкфилл «включена»: хранёные правила несут true.
+    notifyEmail: true,
     category: { source: 'default', slug: 'rent', label: 'Арендная плата' },
     isFavorite: false,
     isCompleted: false,

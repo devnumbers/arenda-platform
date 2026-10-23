@@ -257,7 +257,7 @@ export function PaymentEditFormSkeleton(): JSX.Element {
         <Skeleton className="h-[15px] w-32" />
       </span>
       <SkeletonFormField labelWidth="w-44" />
-      {/* Ряд email-уведомлений (EmailNotificationsRow): заголовок + подпись
+      {/* Ряд email-уведомлений (NotifyEmailRow): заголовок + подпись
           слева, тумблер справа. */}
       <span className="flex items-center justify-between gap-4 py-3">
         <span className="flex min-w-0 flex-col gap-1">

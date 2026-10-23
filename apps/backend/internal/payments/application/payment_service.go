@@ -64,7 +64,11 @@ type CreatePaymentCommand struct {
 	// NotifyAutoPaid is the per-payment gate of the «Автоплатёж исполнен»
 	// event (#1189); absent on the wire means false («Не уведомлять»,
 	// макет 3214-72739).
-	NotifyAutoPaid     bool
+	NotifyAutoPaid bool
+	// NotifyEmail is the per-payment email toggle (карта #1551, тикет
+	// #1553); absent on the wire means true («включена», решение владельца
+	// 22.10.2026) — the transport resolves the default.
+	NotifyEmail        bool
 	ReminderOffsetDays *int
 }
 
@@ -90,8 +94,12 @@ type UpdatePaymentCommand struct {
 	// value; a set value applies it (#1189). An explicit null on the wire
 	// resolves to false at the transport.
 	NotifyAutoPaid *bool
-	// ReminderOffsetDays is tri-state the same way: omit keeps, a set value
-	// applies (1/3/7), a clear turns reminders off.
+	// NotifyEmail is tri-state the same way (#1553): a nil command field
+	// keeps the current value; a set value applies it. An explicit null on
+	// the wire resolves to false (выключена) at the transport.
+	NotifyEmail *bool
+	// ReminderOffsetDays is tri-state: omit keeps, a set value applies
+	// (1/3/7), a clear turns reminders off.
 	ReminderOffsetDays *ReminderOffsetUpdate
 }
 
@@ -178,6 +186,7 @@ func (s *PaymentService) CreatePayment(
 				EndDate:            cmd.EndDate,
 				AutoPay:            cmd.AutoPay,
 				NotifyAutoPaid:     cmd.NotifyAutoPaid,
+				NotifyEmail:        cmd.NotifyEmail,
 				ReminderOffsetDays: cmd.ReminderOffsetDays,
 				Category:           domain.CategoryRef{Slug: &cmd.CategorySlug},
 			}
@@ -759,6 +768,9 @@ func applyUpdate(payment *domain.Payment, cmd UpdatePaymentCommand) {
 	if cmd.NotifyAutoPaid != nil {
 		payment.NotifyAutoPaid = *cmd.NotifyAutoPaid
 	}
+	if cmd.NotifyEmail != nil {
+		payment.NotifyEmail = *cmd.NotifyEmail
+	}
 	if cmd.ReminderOffsetDays != nil {
 		payment.ReminderOffsetDays = cmd.ReminderOffsetDays.Value
 	}
@@ -791,6 +803,9 @@ func updatedFields(cmd UpdatePaymentCommand) []string {
 	}
 	if cmd.NotifyAutoPaid != nil {
 		fields = append(fields, "notify_auto_paid")
+	}
+	if cmd.NotifyEmail != nil {
+		fields = append(fields, "notify_email")
 	}
 	if cmd.ReminderOffsetDays != nil {
 		fields = append(fields, "reminder_offset_days")

@@ -28,6 +28,10 @@ type Notifications struct {
 	// DeliverySettingsGate is the delivery-time read of the email matrix the
 	// email worker checks before sending.
 	DeliverySettingsGate *notificationspg.DeliverySettingsGate
+	// PaymentEmailGate is the delivery-time read of the per-payment email
+	// flag (карта #1551, тикет #1554) the email worker checks after the
+	// matrix.
+	PaymentEmailGate *notificationspg.PaymentEmailGate
 }
 
 // WireNotifications constructs the push-subscription and feed repositories,
@@ -38,6 +42,7 @@ func WireNotifications(p platformDeps) *Notifications {
 	notificationRepo := notificationspg.NewNotificationRepository(p.DB)
 	emailPreferencesRepo := notificationspg.NewEmailPreferencesRepository(p.DB)
 	deliverySettingsGate := notificationspg.NewDeliverySettingsGate(emailPreferencesRepo)
+	paymentEmailGate := notificationspg.NewPaymentEmailGate(p.DB)
 
 	// The action computation reads the live rental against the data owner's
 	// calendar date (ADR 0048) — the same calendar the payments context
@@ -53,5 +58,6 @@ func WireNotifications(p platformDeps) *Notifications {
 		FeedService:             feedService,
 		SettingsService:         settingsService,
 		DeliverySettingsGate:    deliverySettingsGate,
+		PaymentEmailGate:        paymentEmailGate,
 	}
 }

@@ -51,6 +51,11 @@ export type RentalPaymentView = {
    * (PAYMENT_REMINDER_OPTIONS), entity-слой соседних слайсов не
    * импортирует. */
   readonly reminderOffsetDays: 1 | 3 | 7 | null;
+  /** Персональная галочка отправки писем этого платежа (карта #1551,
+   * «Уведомление на почту» — словарь payments), читается из Платежа, как
+   * reminderOffsetDays; сервер переносит её при создании и правке аренды
+   * (#1555). Гейтится только email-канал — лента/тосты/push не трогаются. */
+  readonly notifyEmail: boolean;
   readonly nextPayment: RentalNextPayment | null;
 };
 
@@ -109,6 +114,11 @@ export type RentalCreateCommand = {
    * слайсов не импортирует. Дефолт экрана — «Не напоминать»: null едет
    * в команду явно, дефолт не протекает молча (#1198). */
   readonly reminderOffsetDays: 1 | 3 | 7 | null;
+  /** Персональная галочка почты аренды (карта #1551, тикет #1557): живой
+   * ряд едет значением черновика (не тронуто → on), сервер переносит на
+   * Платёж (#1555). Ряд, скрытый мастером, поле не пишет — опущенное поле
+   * получает серверный дефолт true (контракт не-nullable). */
+  readonly notifyEmail?: boolean;
 };
 
 /**
@@ -126,6 +136,10 @@ export type RentalUpdateCommand = {
   /** Tri-state лид-тайм напоминания (#1208): опущенное остаётся, явный null
    * выключает напоминания («Не напоминать»), 1|3|7 ставит. */
   readonly reminderOffsetDays?: 1 | 3 | 7 | null;
+  /** Tri-state галочка почты (#1557): опущенное остаётся, false (и null —
+   * та же запись в не-nullable колонке) выключает, true включает; сервер
+   * синхронно переносит на Платёж арендной платы. */
+  readonly notifyEmail?: boolean | null;
   readonly plannedEndDate?: IsoDate | null;
   readonly utilities?: RentalUtilities;
   readonly depositKopecks?: number | null;

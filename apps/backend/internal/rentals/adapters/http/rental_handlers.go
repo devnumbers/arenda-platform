@@ -320,6 +320,7 @@ func (h *RentalHandlers) GetRentalSummary(
 type updateClears struct {
 	PlannedEndDate bool
 	ReminderOffset bool
+	NotifyEmail    bool
 	DepositKopecks bool
 	Commission     bool
 	ContactID      bool
@@ -352,6 +353,7 @@ func (h *RentalHandlers) decodeUpdateBody(
 	var shadow struct {
 		PlannedEndDate    json.RawMessage `json:"plannedEndDate"`
 		ReminderOffset    json.RawMessage `json:"reminderOffsetDays"`
+		NotifyEmail       json.RawMessage `json:"notifyEmail"`
 		DepositKopecks    json.RawMessage `json:"depositKopecks"`
 		CommissionKopecks json.RawMessage `json:"commissionKopecks"`
 		ContactID         json.RawMessage `json:"contactId"`
@@ -367,6 +369,7 @@ func (h *RentalHandlers) decodeUpdateBody(
 	return updateClears{
 		PlannedEndDate: isNullJSON(shadow.PlannedEndDate),
 		ReminderOffset: isNullJSON(shadow.ReminderOffset),
+		NotifyEmail:    isNullJSON(shadow.NotifyEmail),
 		DepositKopecks: isNullJSON(shadow.DepositKopecks),
 		Commission:     isNullJSON(shadow.CommissionKopecks),
 		ContactID:      isNullJSON(shadow.ContactID),
@@ -395,6 +398,12 @@ func createRentalCommand(body openapi.RentalCreateRequest) (rentalsapp.CreateRen
 		ContactID:      uuidPtrFromWire(body.ContactId),
 		Comment:        stringPtrFromWire(body.Comment),
 		AutoPay:        body.AutoPay,
+		// Omitted резолвит дефолт true («включена», #1553) — тот же
+		// порядок, что у createPayment.
+		NotifyEmail: true,
+	}
+	if body.NotifyEmail != nil {
+		cmd.NotifyEmail = *body.NotifyEmail
 	}
 	if body.ReminderOffsetDays != nil {
 		cmd.ReminderOffsetDays = new(int(*body.ReminderOffsetDays))
@@ -449,6 +458,14 @@ func paymentTermsFromUpdate(
 		cmd.ReminderOffsetDays = &rentalsapp.ReminderOffsetUpdate{Value: &offset}
 	} else if clears.ReminderOffset {
 		cmd.ReminderOffsetDays = &rentalsapp.ReminderOffsetUpdate{}
+	}
+	// The email toggle's tri-state (тикет #1555): a boolean sets it, an
+	// explicit null folds onto false (галочка не-nullable, #1553), omitted
+	// keeps — nil rides the command.
+	if body.NotifyEmail != nil {
+		cmd.NotifyEmail = body.NotifyEmail
+	} else if clears.NotifyEmail {
+		cmd.NotifyEmail = new(false)
 	}
 	return cmd, nil
 }
@@ -614,6 +631,7 @@ func rentalResponse(view rentalsapp.RentalView) (openapi.RentalResponse, error) 
 		AmountKopecks: view.Payment.AmountKopecks,
 		PaymentDay:    paymentDay,
 		AutoPay:       view.Payment.AutoPay,
+		NotifyEmail:   view.Payment.NotifyEmail,
 		NextPayment:   nextPaymentToWire(view.NextPayment, view.Today),
 	}
 	if view.Payment.ReminderOffsetDays != nil {

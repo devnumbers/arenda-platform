@@ -307,15 +307,25 @@ export function RentalSummarySkeleton(): JSX.Element {
 
 /** Скелетон формы правки условий (#532): семь полевых строк канона
  * (MoneyField, пикеры, статичное начало, деньги, пикер коммунальных
- * платежей) — метка 16/18 и серый бокс h-14, обёртка шага (зазор 32).
- * Тумблер автоплатежа, блок комментария и панель сохранения — ниже
- * сгиба, панель появляется с формой. */
+ * платежей) — метка 16/18 и серый бокс h-14, обёртка шага (зазор 32);
+ * ряд почты (#1557) — заголовок + подпись слева, тумблер справа (канон
+ * ряда, как в скелетоне правки платежа). Тумблер автоплатежа, блок
+ * комментария и панель сохранения — ниже сгиба, панель появляется
+ * с формой. */
 export function RentalTermsEditFormSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-8 px-6 pt-6">
       {Array.from({ length: 7 }, (_, index) => (
         <SkeletonFormField key={index} labelWidth={index % 2 === 0 ? 'w-28' : 'w-24'} />
       ))}
+      <span className="flex items-center justify-between gap-4 py-3">
+        <span className="flex min-w-0 flex-col gap-1">
+          <Skeleton className="h-[18px] w-64 max-w-full" />
+          <Skeleton className="h-4 w-48" />
+        </span>
+        {/* w-16 — геометрия живого свитча ряда (NotifyEmailRow). */}
+        <Skeleton className="h-7 w-16 rounded-pill" />
+      </span>
     </div>
   );
 }

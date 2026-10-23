@@ -112,6 +112,11 @@ export {
   type PaymentEditForm,
 } from './lib/update-model';
 export {
+  emailNotificationsRowDisabled,
+  emailNotificationsRowState,
+  emailNotificationsRowValue,
+} from './lib/email-notifications-row';
+export {
   fetchGlobalOperationsPage,
   fetchGlobalOperationsSummary,
   fetchGlobalPaymentObjects,

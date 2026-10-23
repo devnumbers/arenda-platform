@@ -89,6 +89,7 @@ type PaymentFromApi = {
   type: string;
   autoPay: boolean;
   notifyAutoPaid?: boolean;
+  notifyEmail?: boolean;
   since: string;
   endDate?: string | null;
   reminderOffsetDays?: number | null;
@@ -1049,30 +1050,89 @@ test.describe('визард создания платежа', () => {
     expect(created?.endDate ?? null).toBeNull();
   });
 
-  test('тумблер «Уведомления на почту» — шоткат глобальной настройки категории «Платежи и операции»', async ({
+  test('ряд «Уведомления на почту» — персональная галочка платежа, матрица не пишется (карта #1551)', async ({
     page,
     seededUser,
   }) => {
-    // Email-матрица аккаунта (#743): тумблер шага отражает её значение,
-    // клик пишет PUT с флипом категории — пер-платёжных override нет (#822).
-    // Мок stateful: refetch после PUT возвращает сохранённое состояние.
-    const { savedCategories } = await mockEmailCategoryShortcut(page);
+    // Двухуровневая модель (канон #1552): свитч — флаг формы этого платежа,
+    // клик пишет только черновик; глобальная матрица аккаунта из шага 4
+    // не пишется (шоткат #746 снят). «Не напоминать» (дефолт шага #1193)
+    // гасит ряд — свитч disabled и показывает off.
+    const { puts } = await mockEmailCategoryShortcut(page);
 
     await openWizard(page, seededUser);
     await selectCategory(page);
-    await passTitleStep(page, 'E2E шоткат почты');
+    await passTitleStep(page, 'E2E галочка почты');
     // Ежедневная ветка завершает шаг 3 сама — клик ведёт сразу на шаг 4.
     await page.getByRole('button', { name: 'Каждый день' }).click();
     await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
 
     const toggle = page.getByRole('switch', { name: 'Уведомления на почту' });
-    await expect(toggle).toHaveAttribute('aria-checked', 'true');
-    await toggle.click();
-    // Оптимистичный флип и PUT — трекер запросов только через expect.poll.
+    // Ряд гаснет целиком, пока «Не напоминать».
+    await expect(toggle).toBeDisabled();
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
-    await expect
-      .poll(() => savedCategories()?.payments_operations, { timeout: 5_000 })
-      .toBe(false);
+    // «За 1 день» оживляет ряд: черновик стартует включённым.
+    await page.getByRole('button', { name: 'За 1 день' }).click();
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+
+    // Выключение запоминается: «не надо» значение не стирает — заглушенный
+    // ряд показывает off, возврат «да» возвращает запомненное.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('button', { name: 'Не напоминать' }).click();
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('button', { name: 'За 1 день' }).click();
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+    // Матрица аккаунта из шага 4 не пишется.
+    expect(puts()).toBe(0);
+
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('650');
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toBeVisible();
+
+    // Выключенная галочка доезжает до контракта пер-платёжным флагом.
+    const items = await fetchPayments(page);
+    const created = items.find((payment) => payment.title === 'E2E галочка почты');
+    expect(created?.notifyEmail).toBe(false);
+    expect(created?.reminderOffsetDays).toBe(1);
+  });
+
+  test('мастер категории off — ряд «Уведомления на почту» скрыт, флаг в команду не едёт', async ({
+    page,
+    seededUser,
+  }) => {
+    // Глобальный мастер — видимость ряда: off (или нечитаемый GET) — ряда
+    // нет вовсе, команда сохранения галочку не пишет (дифф без поля,
+    // канон #1552), сервер ставит дефолт true (#1553).
+    await mockEmailCategoryShortcut(page, {
+      initial: { rental: true, payments_operations: false, tasks: true, shared_access: true },
+    });
+
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, 'E2E мастер off');
+    await page.getByRole('button', { name: 'Каждый день' }).click();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
+
+    // Ряд скрыт целиком — ни свитча, ни текстов (пока GET в полёте,
+    // рендер прежний, после ответа схлопывается).
+    const toggle = page.getByRole('switch', { name: 'Уведомления на почту' });
+    await expect(toggle).toHaveCount(0);
+    await expect(page.getByText('Уведомления на почту')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await page.getByRole('textbox', { name: 'Сумма' }).fill('650');
+    await page.getByRole('button', { name: 'Создать платеж' }).click();
+    await expect(page.getByRole('heading', { name: /Вы создали платеж/ })).toBeVisible();
+
+    const items = await fetchPayments(page);
+    const created = items.find((payment) => payment.title === 'E2E мастер off');
+    expect(created?.notifyEmail).toBe(true);
   });
 
   test('автоплатёж создаётся с флагом autoPay и заголовком успеха про автоплатёж', async ({
@@ -1098,8 +1158,13 @@ test.describe('визард создания платежа', () => {
     await expect(page.getByRole('button', { name: 'За 1 день' })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Окончание платежа' })).toBeVisible();
+    // «Не уведомлять» (дефолт) гасит ряд «Уведомления на почту» целиком,
+    // «Да, уведомлять» возвращает (решение владельца 22.10.2026).
+    const emailToggle = page.getByRole('switch', { name: 'Уведомления на почту' });
+    await expect(emailToggle).toBeDisabled();
     await captureScreen(page, testInfo, 'wizard-step4-autopayment-mobile');
     await page.getByRole('button', { name: 'Да, уведомлять' }).click();
+    await expect(emailToggle).toBeEnabled();
     await page.getByRole('button', { name: 'Далее' }).click();
 
     await page.getByRole('textbox', { name: 'Сумма' }).fill('3300');

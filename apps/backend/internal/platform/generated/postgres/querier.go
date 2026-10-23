@@ -446,6 +446,12 @@ type Querier interface {
 	// One rule by id within the owner's scope on the given property, with the
 	// user category's current name resolved for the CategoryView.
 	GetPaymentByID(ctx context.Context, arg GetPaymentByIDParams) (GetPaymentByIDRow, error)
+	// The per-payment email flag's delivery-time lookup (карта #1551, тикет
+	// #1554): the email worker asks the rule's «Уведомления на почту»
+	// (payments.notify_email, миграция 000163) right before sending — живая
+	// правда на доставку, кэша нет. Отсутствие строки правила — ответ «как
+	// сегодня»: гейт молчит по живым правилам, снесённое не глушит.
+	GetPaymentEmailFlag(ctx context.Context, id pgtype.UUID) (bool, error)
 	GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	GetPaymentMethodByIDForUpdate(ctx context.Context, id pgtype.UUID) (PaymentMethod, error)
 	// Whether the notification's own payment occurrence (решение #737: payment
@@ -529,7 +535,7 @@ type Querier interface {
 	// silent (the owner knows — they paid it). The live day only: an
 	// operation whose date is no longer the zone's today (a job awake after
 	// the day rolled over) answers no row — a downtime's missed days are not
-	// backfilled, the 22:00 overdue leg speaks for the unpaid past; an
+	// backfilled, the 10:00 overdue leg speaks for the unpaid past; an
 	// archived property answers no row. The per-payment flag (#1189): a rule
 	// with notify_auto_paid = false answers no row — the flag flipped after
 	// the booking silences the standing job.
@@ -555,8 +561,8 @@ type Querier interface {
 	// at its own 10:00.
 	GetScheduledDuePayment(ctx context.Context, arg GetScheduledDuePaymentParams) (GetScheduledDuePaymentRow, error)
 	// The overdue boundary job's delivery-time resolution (issue #776): the
-	// operation as it stands at its overdue boundary — the wall clock 22:00 of
-	// the day after the operation date in the owner's timezone (#1168). The
+	// operation as it stands at its overdue boundary — the wall clock 10:00 of
+	// the day after the operation date in the owner's timezone. The
 	// overdue leg's conditions are re-checked as of the wake-up instant ($3):
 	// planned, non-archived property, the date strictly before the zone's
 	// today — auto-pay rules included, the sweep's overdue leg's shape.
@@ -681,7 +687,8 @@ type Querier interface {
 	// this slice (user_category_id stays NULL). reminder_offset_days is the
 	// nullable reminder lead time (карта #822; NULL = напоминаний нет);
 	// notify_auto_paid — гейт события «Автоплатёж исполнен» (#1189, дефолт новых
-	// false, макет 3214-72739).
+	// false, макет 3214-72739); notify_email — пер-платёжный гейт email-канала
+	// (#1553, дефолт true — присланное значение всегда явное: транспорта дефолт).
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) error
 	// The payment change log queries (ADR 0065, ticket #1188): the append-only
 	// story of one rule's user edits. The insert runs inside the mutation
@@ -1160,9 +1167,10 @@ type Querier interface {
 	// rules included, the tick never backdates an auto charge (ADR 0049). The
 	// dedup key (rule, operation date) keeps a long-unpaid operation single —
 	// the sweep lists it daily, the publication inserts nothing. The instant
-	// gate (#1168): the leg's boundary is the wall clock 22:00 of the day after
+	// gate (#1168, решение владельца 22.10.2026 — время вечера перенесено в
+	// утро): the leg's boundary is the wall clock 10:00 of the day after
 	// the operation date in the owner's timezone — yesterday's occurrence waits
-	// for its 22:00 even though the date says overdue since the zone's midnight;
+	// for its 10:00 even though the date says overdue since the zone's midnight;
 	// a long-unpaid operation's boundary is long past and the gate keeps it
 	// sweeping (the persistent leg's semantics).
 	ListPaymentOverdueTargets(ctx context.Context, arg ListPaymentOverdueTargetsParams) ([]ListPaymentOverdueTargetsRow, error)
@@ -1202,11 +1210,11 @@ type Querier interface {
 	// non-archived property only (the ticks' canon).
 	ListPaymentScheduledDueTargets(ctx context.Context, arg ListPaymentScheduledDueTargetsParams) ([]ListPaymentScheduledDueTargetsRow, error)
 	// The payments scan's booking list of the overdue leg (issue #776): the
-	// planned operations whose overdue boundary — the wall clock 22:00 of the
-	// day after the operation date read in the owner's timezone (#1168, по
-	// гриллингу #1167: просрочка приходит вечером, не в полночь) — falls in the
-	// window (from, until]. Auto-pay rules included (the tick never backdates an auto
-	// charge, ADR 0049); the wall clock 22:00 is
+	// planned operations whose overdue boundary — the wall clock 10:00 of the
+	// day after the operation date read in the owner's timezone (решение
+	// владельца 22.10.2026: просрочка приходит утром, вместе со всей семьёй
+	// 10:00) — falls in the window (from, until]. Auto-pay rules included (the tick never backdates an auto
+	// charge, ADR 0049); the wall clock 10:00 is
 	// the boundary, a DST day rolls it with the wall clock.
 	ListPaymentScheduledOverdueTargets(ctx context.Context, arg ListPaymentScheduledOverdueTargetsParams) ([]ListPaymentScheduledOverdueTargetsRow, error)
 	// The payments scan's booking list of the reminder leg (карта #822, #824):

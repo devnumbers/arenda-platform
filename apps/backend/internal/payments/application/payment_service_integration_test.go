@@ -859,3 +859,79 @@ func assertNotifyReadBack(t *testing.T, h *paymentsHarness, paymentID uuid.UUID,
 		t.Fatalf("notify_auto_paid = %v, want %v", got, want)
 	}
 }
+
+// TestNotifyEmail_Lifecycle (#1553) goes the per-payment email toggle through
+// its contract: the migration's column default is true («включена» —
+// бэкфилл существующих без поведенческого регресса, решение владельца
+// 22.10.2026), an explicit boolean persists either way, the patch resolves
+// tri-state — omitted keeps, a value applies.
+func TestNotifyEmail_Lifecycle(t *testing.T) {
+	t.Parallel()
+	h := newPaymentsHarness(t).withOwner("Europe/Moscow")
+
+	var columnDefault *string
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT column_default FROM information_schema.columns
+		 WHERE table_name = 'payments' AND column_name = 'notify_email'`,
+	).Scan(&columnDefault); err != nil {
+		t.Fatalf("read notify_email column default: %v", err)
+	}
+	if columnDefault == nil || *columnDefault != "true" {
+		t.Fatalf("notify_email column default = %v, want true", columnDefault)
+	}
+
+	// Явная «включена» пишется как есть.
+	enabled, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, func() paymentsapp.CreatePaymentCommand {
+		cmd := h.createCmd()
+		cmd.NotifyEmail = true
+		return cmd
+	}())
+	if err != nil {
+		t.Fatalf("create payment with notify_email on: %v", err)
+	}
+	assertNotifyEmailReadBack(t, h, enabled.ID, true)
+
+	// Стартовое «выключена» (галочка стартует от радио «не надо», карта
+	// #1551) пишется как есть.
+	disabled, err := h.svc.CreatePayment(h.ctx(), h.owner, h.propID, func() paymentsapp.CreatePaymentCommand {
+		cmd := h.createCmd()
+		cmd.NotifyEmail = false
+		return cmd
+	}())
+	if err != nil {
+		t.Fatalf("create payment with notify_email off: %v", err)
+	}
+	assertNotifyEmailReadBack(t, h, disabled.ID, false)
+
+	// Tri-state патч: omit хранит, значение применяет.
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, disabled.ID, paymentsapp.UpdatePaymentCommand{}); err != nil {
+		t.Fatalf("update without changes: %v", err)
+	}
+	assertNotifyEmailReadBack(t, h, disabled.ID, false)
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, disabled.ID, paymentsapp.UpdatePaymentCommand{
+		NotifyEmail: new(true),
+	}); err != nil {
+		t.Fatalf("patch notify_email true: %v", err)
+	}
+	assertNotifyEmailReadBack(t, h, disabled.ID, true)
+	if _, err := h.svc.UpdatePayment(h.ctx(), h.owner, h.propID, disabled.ID, paymentsapp.UpdatePaymentCommand{
+		NotifyEmail: new(false),
+	}); err != nil {
+		t.Fatalf("patch notify_email false: %v", err)
+	}
+	assertNotifyEmailReadBack(t, h, disabled.ID, false)
+}
+
+// assertNotifyEmailReadBack fails unless the stored email toggle equals want
+// (the raw column read — the response mapping is the HTTP layer's).
+func assertNotifyEmailReadBack(t *testing.T, h *paymentsHarness, paymentID uuid.UUID, want bool) {
+	t.Helper()
+	var got bool
+	if err := h.pool.QueryRow(h.ctx(),
+		`SELECT notify_email FROM payments WHERE id = $1`, paymentID).Scan(&got); err != nil {
+		t.Fatalf("read notify_email: %v", err)
+	}
+	if got != want {
+		t.Fatalf("notify_email = %v, want %v", got, want)
+	}
+}
