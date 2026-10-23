@@ -77,5 +77,18 @@ test.describe('пустая лента задач с фильтром', () => {
     // Чипы с фильтром спрятаны вместе с «+» шапки (анатомия 3235-74057).
     await expect(page.getByRole('button', { name: 'Объект' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Создать задачу' })).toHaveCount(0);
+
+    // Верх пустоты — канон §7 (замечание владельца 23.10): от нижней кромки
+    // строки заголовка хаба иллюстрацию ведёт только pt-14 (56) самого
+    // EmptyState — без mt-6 обёртки ленты, как на «Платежах» и bareEmpty
+    // «Объектов» (решение владельца 14.10.2026).
+    const titleBox = await page
+      .getByRole('heading', { name: 'Задачи', exact: true })
+      .boundingBox();
+    const imageBox = await page.locator('img[src*="empty-tasks"]').boundingBox();
+    if (titleBox === null || imageBox === null) {
+      throw new Error('не нашлись заголовок хаба «Задачи» или иллюстрация пустоты');
+    }
+    expect(Math.round(imageBox.y - (titleBox.y + titleBox.height))).toBe(56);
   });
 });
