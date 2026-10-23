@@ -196,25 +196,29 @@ func TestAttributesNumberRanges(t *testing.T) {
 		wantErr  bool
 	}
 	cases := []tc{
+		// Границ нет вовсе (ADR 0069, второй раунд: минимумы сняты) —
+		// валидны любые числа; ошибки только по типу.
 		{PropertyTypeApartment, attrAreaTotal, 1.0, false},
-		{PropertyTypeApartment, attrAreaTotal, 0.5, true},
+		{PropertyTypeApartment, attrAreaTotal, 0.5, false},
+		{PropertyTypeApartment, attrAreaTotal, 0, false},
+		{PropertyTypeApartment, attrAreaTotal, -5, false},
 		{PropertyTypeApartment, attrAreaTotal, 100000.0, false},
-		{PropertyTypeApartment, attrAreaTotal, 100001.0, true},
+		{PropertyTypeApartment, attrAreaTotal, 5000000.0, false},
 		{PropertyTypeApartment, attrCeilingHeight, 2.0, false},
-		{PropertyTypeApartment, attrCeilingHeight, 1.9, true},
-		{PropertyTypeApartment, attrCeilingHeight, 10.0, false},
-		{PropertyTypeApartment, attrCeilingHeight, 10.1, true},
+		{PropertyTypeApartment, attrCeilingHeight, 1.9, false},
+		{PropertyTypeApartment, attrCeilingHeight, 0, false},
 		{PropertyTypeHouse, attrLandArea, 0.01, false},
-		{PropertyTypeHouse, attrLandArea, 0.001, true},
+		{PropertyTypeHouse, attrLandArea, 0.001, false},
+		{PropertyTypeHouse, attrLandArea, 0, false},
 		{PropertyTypeWarehouse, attrAreaTotal, 1.0, false},
-		{PropertyTypeWarehouse, attrAreaTotal, 0.5, true},
+		{PropertyTypeWarehouse, attrAreaTotal, 0.5, false},
 		{PropertyTypeGarage, attrAreaTotal, 100000.0, false},
-		{PropertyTypeGarage, attrAreaTotal, 100001.0, true},
+		{PropertyTypeGarage, attrAreaTotal, 100001.0, false},
 		{PropertyTypeParking, attrAreaTotal, 25.0, false},
 		{PropertyTypeLand, attrLandArea, 0.01, false},
-		{PropertyTypeLand, attrLandArea, 0.001, true},
+		{PropertyTypeLand, attrLandArea, 0.001, false},
 		{PropertyTypeLand, attrLandArea, 1000000.0, false},
-		{PropertyTypeLand, attrLandArea, 1000001.0, true},
+		{PropertyTypeLand, attrLandArea, 1000001.0, false},
 	}
 	for _, c := range cases {
 		res := ValidateAttributes(c.propType, Attributes{c.field: c.value})
@@ -237,27 +241,30 @@ func TestAttributesIntegerRanges(t *testing.T) {
 		wantErr  bool
 	}{
 		{PropertyTypeApartment, attrFloor, -3, false},
-		{PropertyTypeApartment, attrFloor, -4, true},
+		{PropertyTypeApartment, attrFloor, -4, false},
+		// Границ нет вовсе (ADR 0069): этаж/этажность/год — любые целые.
+		{PropertyTypeApartment, attrFloor, 0, false},
 		{PropertyTypeApartment, attrFloor, 200, false},
-		{PropertyTypeApartment, attrFloor, 201, true},
+		{PropertyTypeApartment, attrFloor, 201, false},
 		{PropertyTypeApartment, attrFloorsTotal, 1, false},
-		{PropertyTypeApartment, attrFloorsTotal, 0, true},
+		{PropertyTypeApartment, attrFloorsTotal, 0, false},
 		{PropertyTypeApartment, attrYearBuilt, 1800, false},
-		{PropertyTypeApartment, attrYearBuilt, 1799, true},
+		{PropertyTypeApartment, attrYearBuilt, 1799, false},
 		{PropertyTypeApartment, attrYearBuilt, float64(currentYear + 5), false},
-		{PropertyTypeApartment, attrYearBuilt, float64(currentYear + 6), true},
+		{PropertyTypeApartment, attrYearBuilt, float64(currentYear + 6), false},
+		{PropertyTypeApartment, attrYearBuilt, 1000, false},
 		{PropertyTypeHouse, attrYearBuilt, 1800, false},
 		{PropertyTypeHouse, attrYearBuilt, float64(currentYear + 5), false},
 		{PropertyTypeOffice, attrFloor, -3, false},
-		{PropertyTypeOffice, attrFloor, -4, true},
+		{PropertyTypeOffice, attrFloor, -4, false},
 		{PropertyTypeOffice, attrFloor, 200, false},
-		{PropertyTypeOffice, attrFloor, 201, true},
+		{PropertyTypeOffice, attrFloor, 201, false},
 		{PropertyTypeOffice, attrFloorsTotal, 1, false},
-		{PropertyTypeOffice, attrFloorsTotal, 0, true},
+		{PropertyTypeOffice, attrFloorsTotal, 0, false},
 		{PropertyTypeParking, attrParkingLevel, -5, false},
-		{PropertyTypeParking, attrParkingLevel, -6, true},
+		{PropertyTypeParking, attrParkingLevel, -6, false},
 		{PropertyTypeParking, attrParkingLevel, 100, false},
-		{PropertyTypeParking, attrParkingLevel, 101, true},
+		{PropertyTypeParking, attrParkingLevel, 101, false},
 	}
 	for _, c := range cases {
 		res := ValidateAttributes(c.propType, Attributes{c.field: c.value})
@@ -285,7 +292,10 @@ func TestAttributesRoomRoomsUnknown(t *testing.T) {
 	assertHasField(t, res, attrRooms, "unknown attribute")
 }
 
-func TestAttributesCrossValidations(t *testing.T) {
+// Кросс-правила согласованности сняты (решение владельца 23.10.2026):
+// «этаж ≤ этажность» и «жилая/кухня ≤ общая» больше не валидируются —
+// любые сочетания значений валидны.
+func TestAttributesNoCrossValidations(t *testing.T) {
 	t.Parallel()
 
 	t.Run("apartment floor exceeds floors_total", func(t *testing.T) {
@@ -294,7 +304,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 			attrFloor:       float64(5),
 			attrFloorsTotal: float64(3),
 		})
-		assertHasField(t, res, attrFloor, "")
+		assertValid(t, res)
 	})
 
 	t.Run("apartment area_living exceeds area_total", func(t *testing.T) {
@@ -303,7 +313,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 			attrAreaLiving: 80.0,
 			attrAreaTotal:  50.0,
 		})
-		assertHasField(t, res, attrAreaLiving, "")
+		assertValid(t, res)
 	})
 
 	t.Run("apartment area_kitchen exceeds area_total", func(t *testing.T) {
@@ -312,15 +322,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 			attrAreaKitchen: 40.0,
 			attrAreaTotal:   30.0,
 		})
-		assertHasField(t, res, attrAreaKitchen, "")
-	})
-
-	t.Run("floor alone without floors_total passes", func(t *testing.T) {
-		t.Parallel()
-		res := ValidateAttributes(PropertyTypeApartment, Attributes{attrFloor: float64(3)})
-		if !res.Valid() {
-			t.Fatalf("floor=3 alone should be valid, got errors: %+v", res.Errors)
-		}
+		assertValid(t, res)
 	})
 
 	t.Run("room floor exceeds floors_total", func(t *testing.T) {
@@ -329,7 +331,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 			attrFloor:       float64(5),
 			attrFloorsTotal: float64(3),
 		})
-		assertHasField(t, res, attrFloor, "")
+		assertValid(t, res)
 	})
 
 	t.Run("room area_kitchen exceeds area_total", func(t *testing.T) {
@@ -338,7 +340,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 			attrAreaKitchen: 40.0,
 			attrAreaTotal:   30.0,
 		})
-		assertHasField(t, res, attrAreaKitchen, "")
+		assertValid(t, res)
 	})
 
 	t.Run("office floor exceeds floors_total", func(t *testing.T) {
@@ -347,7 +349,7 @@ func TestAttributesCrossValidations(t *testing.T) {
 			attrFloor:       float64(10),
 			attrFloorsTotal: float64(5),
 		})
-		assertHasField(t, res, attrFloor, "")
+		assertValid(t, res)
 	})
 
 	t.Run("commercial floor exceeds floors_total", func(t *testing.T) {
@@ -356,8 +358,16 @@ func TestAttributesCrossValidations(t *testing.T) {
 			attrFloor:       float64(10),
 			attrFloorsTotal: float64(5),
 		})
-		assertHasField(t, res, attrFloor, "")
+		assertValid(t, res)
 	})
+}
+
+// assertValid fails when the result carries any validation errors.
+func assertValid(t *testing.T, res ValidationResult) {
+	t.Helper()
+	if !res.Valid() {
+		t.Fatalf("expected valid attributes, got errors: %+v", res.Errors)
+	}
 }
 
 func TestAttributesUnknownKeys(t *testing.T) {
@@ -377,23 +387,23 @@ func TestAttributesNullValues(t *testing.T) {
 func TestAttributesMultipleErrorsCollected(t *testing.T) {
 	t.Parallel()
 
-	// Floor=-4 (out of range), balcony=invalid, area_total=0.5 (below min).
+	// Floor=5.5 (not an integer), balcony=invalid — границы не валидируются,
+	// ошибки только по типу/принадлежности.
 	res := ValidateAttributes(PropertyTypeApartment, Attributes{
-		attrFloor:     float64(-4),
-		attrBalcony:   "studioo",
-		attrAreaTotal: 0.5,
+		attrFloor:   5.5,
+		attrBalcony: "studioo",
 	})
 	fields := make(map[string]bool)
 	for _, e := range res.Errors {
 		fields[e.Field] = true
 	}
-	for _, want := range []string{attrFloor, attrBalcony, attrAreaTotal} {
+	for _, want := range []string{attrFloor, attrBalcony} {
 		if !fields[want] {
 			t.Fatalf("expected an error on field %q, got errors: %+v", want, res.Errors)
 		}
 	}
-	if len(res.Errors) != 3 {
-		t.Fatalf("expected exactly 3 errors, got %d: %+v", len(res.Errors), res.Errors)
+	if len(res.Errors) != 2 {
+		t.Fatalf("expected exactly 2 errors, got %d: %+v", len(res.Errors), res.Errors)
 	}
 }
 
@@ -513,7 +523,7 @@ func TestAttributesApartmentsMirrorsApartment(t *testing.T) {
 	t.Parallel()
 
 	// A valid apartment set must also be valid for the apartments type, and a
-	// cross-field violation surfaces identically.
+	// former cross-rule violation no longer surfaces (правила сняты).
 	valid := Attributes{
 		attrBalcony:     enumLoggia,
 		attrAreaTotal:   60.0,
@@ -530,8 +540,9 @@ func TestAttributesApartmentsMirrorsApartment(t *testing.T) {
 		attrFloor:       float64(9),
 		attrFloorsTotal: float64(5),
 	}
-	res := ValidateAttributes(PropertyTypeApartments, bad)
-	assertHasField(t, res, attrFloor, "")
+	if res := ValidateAttributes(PropertyTypeApartments, bad); !res.Valid() {
+		t.Fatalf("floor above floors_total is valid now, got errors: %+v", res.Errors)
+	}
 }
 
 func TestAttributesCommercialMirrorsOffice(t *testing.T) {
@@ -554,8 +565,9 @@ func TestAttributesCommercialMirrorsOffice(t *testing.T) {
 		attrFloor:       float64(15),
 		attrFloorsTotal: float64(5),
 	}
-	res := ValidateAttributes(PropertyTypeCommercial, bad)
-	assertHasField(t, res, attrFloor, "")
+	if res := ValidateAttributes(PropertyTypeCommercial, bad); !res.Valid() {
+		t.Fatalf("floor above floors_total is valid now, got errors: %+v", res.Errors)
+	}
 }
 
 func TestAttributesParkingSpotNumber(t *testing.T) {
@@ -581,7 +593,7 @@ func TestAttributesStudio(t *testing.T) {
 	t.Parallel()
 
 	// Студия делит набор характеристик с квартирой (каталог, тикет #1003):
-	// те же поля и те же кросс-правила.
+	// те же поля; кросс-правила сняты (решение владельца 23.10.2026).
 	t.Run("apartment field set is valid for studio", func(t *testing.T) {
 		t.Parallel()
 		res := ValidateAttributes(PropertyTypeStudio, Attributes{
@@ -604,7 +616,7 @@ func TestAttributesStudio(t *testing.T) {
 			attrFloor:       float64(5),
 			attrFloorsTotal: float64(3),
 		})
-		assertHasField(t, res, attrFloor, "")
+		assertValid(t, res)
 	})
 
 	t.Run("area_living exceeds area_total", func(t *testing.T) {
@@ -613,7 +625,7 @@ func TestAttributesStudio(t *testing.T) {
 			attrAreaLiving: 80.0,
 			attrAreaTotal:  50.0,
 		})
-		assertHasField(t, res, attrAreaLiving, "")
+		assertValid(t, res)
 	})
 
 	t.Run("area_kitchen exceeds area_total", func(t *testing.T) {
@@ -622,7 +634,7 @@ func TestAttributesStudio(t *testing.T) {
 			attrAreaKitchen: 40.0,
 			attrAreaTotal:   30.0,
 		})
-		assertHasField(t, res, attrAreaKitchen, "")
+		assertValid(t, res)
 	})
 
 	t.Run("house-only key is unknown for studio", func(t *testing.T) {

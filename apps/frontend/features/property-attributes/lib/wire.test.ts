@@ -74,16 +74,18 @@ describe('sanitizeAttributeInput', () => {
     expect(sanitizeAttributeInput(area, '')).toBe('');
   });
 
-  it('целое число: только цифры; минус — если каталог допускает отрицательные', () => {
+  it('целое число: только цифры; минус — в начале любого числового поля (границ нет, ADR 0069)', () => {
     const year = field('apartment', 'year_built');
     const floor = field('apartment', 'floor');
+    const area = field('apartment', 'area_total');
     // Буквы (в т.ч. похожая на ноль «о») не вводятся.
     expect(sanitizeAttributeInput(year, '2о19')).toBe('219');
-    expect(sanitizeAttributeInput(year, '-2019')).toBe('2019');
+    expect(sanitizeAttributeInput(year, '-2019')).toBe('-2019');
     expect(sanitizeAttributeInput(floor, '-')).toBe('-');
     expect(sanitizeAttributeInput(floor, '-3')).toBe('-3');
     expect(sanitizeAttributeInput(floor, '3-4')).toBe('34');
     expect(sanitizeAttributeInput(floor, '-3,5')).toBe('-35');
+    expect(sanitizeAttributeInput(area, '-4,5')).toBe('-4,5');
   });
 
   it('строковое поле не фильтруется', () => {

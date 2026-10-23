@@ -18,10 +18,6 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
-// MaxAmountKopecks is the create/update amount ceiling: 10⁹ kopecks = 10
-// million rubles (ADR 0053 §4, the payments bound).
-const MaxAmountKopecks = 1_000_000_000
-
 // MaxCommentLength bounds the rental comment, counted in characters — a
 // product copy limit, not a byte limit (the schema CHECK counts the same
 // number: char_length is character-based for TEXT).
@@ -744,12 +740,13 @@ func nilIfZero(n int) *int {
 	return &n
 }
 
-// validateCreate enforces the create contract (ADR 0053 §4): the amount
-// within 1..10⁹, the utilities mode, the start today or later (no backdated
+// validateCreate enforces the create contract (ADR 0053 §4): the amount of at
+// least 1 kopeck with no ceiling (ADR 0069), the
+// utilities mode, the start today or later (no backdated
 // rentals), the planned end strictly after the start, the optional records in
 // bounds and the comment within its limit.
 func validateCreate(cmd CreateRentalCommand, today time.Time) error {
-	if cmd.AmountKopecks < 1 || cmd.AmountKopecks > MaxAmountKopecks {
+	if cmd.AmountKopecks < 1 {
 		return ErrInvalidInput
 	}
 	if !cmd.Utilities.Valid() {
@@ -794,7 +791,7 @@ func paymentSyncFromUpdate(
 	var change RentPaymentChange
 	paymentChanged := false
 	if cmd.AmountKopecks != nil {
-		if *cmd.AmountKopecks < 1 || *cmd.AmountKopecks > MaxAmountKopecks {
+		if *cmd.AmountKopecks < 1 {
 			return change, false, ErrInvalidInput
 		}
 		change.AmountKopecks = cmd.AmountKopecks
@@ -904,14 +901,15 @@ func validateCompletedDate(completedDate, start, today time.Time) error {
 	return nil
 }
 
-// validateDepositReturn enforces the completion record: the amount within
-// 0..10⁹ (a zero sum is valid — «не вернул») and the comment only with an
-// amount (the schema CHECK keeps the same invariant durably).
+// validateDepositReturn enforces the completion record: the amount is
+// non-negative with no ceiling (ADR 0069; a zero sum is valid — «не вернул»)
+// and the comment only with an amount (the schema CHECK keeps the same
+// invariant durably).
 func validateDepositReturn(ret *DepositReturn) error {
 	if ret == nil {
 		return nil
 	}
-	if ret.AmountKopecks < 0 || ret.AmountKopecks > MaxAmountKopecks {
+	if ret.AmountKopecks < 0 {
 		return ErrInvalidInput
 	}
 	if ret.Comment != nil && utf8.RuneCountInString(*ret.Comment) > MaxCommentLength {
@@ -921,12 +919,12 @@ func validateDepositReturn(ret *DepositReturn) error {
 }
 
 // validateOptionalAmount enforces the deposit/commission bounds: nil is
-// «нет записи», a value within 0..10⁹ (решение №6).
+// «нет записи», a value is non-negative (решение №6; потолка нет — ADR 0069).
 func validateOptionalAmount(amount *int64) error {
 	if amount == nil {
 		return nil
 	}
-	if *amount < 0 || *amount > MaxAmountKopecks {
+	if *amount < 0 {
 		return ErrInvalidInput
 	}
 	return nil

@@ -189,7 +189,6 @@ func TestCreateOperation_InvalidCommandsRejected(t *testing.T) {
 			func(c *paymentsapp.CreateOperationCommand) { c.Title = strings.Repeat("а", 256) },
 		},
 		{"zero amount", func(c *paymentsapp.CreateOperationCommand) { c.AmountKopecks = 0 }},
-		{"amount over 10^9", func(c *paymentsapp.CreateOperationCommand) { c.AmountKopecks = 1_000_000_001 }},
 		{"unknown category slug", func(c *paymentsapp.CreateOperationCommand) { c.CategorySlug = "not-a-catalog-slug" }},
 		{"empty category slug", func(c *paymentsapp.CreateOperationCommand) { c.CategorySlug = "" }},
 	}
