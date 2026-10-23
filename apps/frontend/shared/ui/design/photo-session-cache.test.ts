@@ -21,6 +21,19 @@ describe('photoThumbKey — thumb-ключ версионированного UR
     // чтобы успех ретрая тоже помечал исходное фото.
     expect(photoThumbKey('/api/me/photo?v=abc')).not.toContain('r=');
   });
+
+  it('непроизводный URL (data:-превью загрузки) — проходит как есть, суффикс не клеится', () => {
+    // Превью летящей загрузки (#1230): байты уже в data-URL, thumb-варианта
+    // у выдачи для него нет; ?size=thumb делает src невалидным
+    // (net::ERR_INVALID_URL, тикет #1607).
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+    expect(photoThumbKey(dataUrl)).toBe(dataUrl);
+  });
+
+  it('непроизводный URL (blob:) — проходит как есть', () => {
+    const blobUrl = 'blob:http://localhost:3029/0b32e13b-f2a1-4f36-9f0e-2f7ddb3d1d34';
+    expect(photoThumbKey(blobUrl)).toBe(blobUrl);
+  });
 });
 
 describe('сессионный реестр загруженных фото', () => {
@@ -45,5 +58,11 @@ describe('сессионный реестр загруженных фото', ()
     // что ключ от того же URL совпадает с ключом загруженного src без &r.
     markPhotoThumbLoaded('/api/me/photo?v=retry');
     expect(isPhotoThumbLoaded('/api/me/photo?v=retry')).toBe(true);
+  });
+
+  it('превью-загрузка (data:) ключуется сырым URL — отметка и проверка совпадают', () => {
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    markPhotoThumbLoaded(dataUrl);
+    expect(isPhotoThumbLoaded(dataUrl)).toBe(true);
   });
 });

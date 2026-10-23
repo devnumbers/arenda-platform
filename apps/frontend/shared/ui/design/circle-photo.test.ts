@@ -94,3 +94,24 @@ describe('circlePhotoView — ретрай транзиентной ошибки
     expect(view.imgSrc).toBeNull();
   });
 });
+
+describe('circlePhotoView — непроизводные URL: превью data:/blob: (тикет #1607)', () => {
+  const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+  const blobUrl = 'blob:http://localhost:3029/0b32e13b-f2a1-4f36-9f0e-2f7ddb3d1d34';
+
+  it('data:-превью летящей загрузки — src как есть, без thumb-суффикса (иначе ERR_INVALID_URL); img ждёт декод под глифом', () => {
+    const view = circlePhotoView(dataUrl, { photoBroken: false, photoReady: false });
+    expect(view.imgSrc).toBe(dataUrl);
+    expect(view.imgHidden).toBe(true);
+  });
+
+  it('готовое превью — показано как есть', () => {
+    const view = circlePhotoView(dataUrl, { photoBroken: false, photoReady: true });
+    expect(view.imgSrc).toBe(dataUrl);
+    expect(view.imgHidden).toBe(false);
+  });
+
+  it('blob:-URL — как есть, без суффикса', () => {
+    expect(circlePhotoView(blobUrl, { photoBroken: false, photoReady: false }).imgSrc).toBe(blobUrl);
+  });
+});
