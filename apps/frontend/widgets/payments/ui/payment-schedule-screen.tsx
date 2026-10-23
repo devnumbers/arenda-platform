@@ -81,7 +81,7 @@ export function PaymentScheduleScreen({
       </TopNav>
 
       <PageContent>
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
           {loading && <PaymentGroupedListSkeleton rowsPerGroup={[1, 2]} />}
 
           {failed && (
@@ -226,32 +226,38 @@ function ScheduleList({
     <>
       <section className="flex flex-col">
         <PaymentsHeading>Ближайший</PaymentsHeading>
-        <ScheduleRow
-          entry={nearest}
-          category={schedule.category}
-          fallbackTitle={schedule.title}
-          defaultAmountKopecks={schedule.amountKopecks}
-          isFavorite={schedule.isFavorite}
-          today={today}
-          onSelect={() => selectEntry(nearest)}
-        />
+        {/* Гэп 8 от заголовка до рядов — контейнер группы макета
+         * (Figma 1036-40829); ряды — столбиком. */}
+        <div className="flex flex-col pt-2">
+          <ScheduleRow
+            entry={nearest}
+            category={schedule.category}
+            fallbackTitle={schedule.title}
+            defaultAmountKopecks={schedule.amountKopecks}
+            isFavorite={schedule.isFavorite}
+            today={today}
+            onSelect={() => selectEntry(nearest)}
+          />
+        </div>
       </section>
 
       {visibleFollowing.length > 0 && (
         <section className="flex flex-col">
           <PaymentsHeading>Следующие</PaymentsHeading>
-          {visibleFollowing.map((entry) => (
-            <ScheduleRow
-              key={entry.kind === 'operation' ? entry.operation.id : entry.date}
-              entry={entry}
-              category={schedule.category}
-              fallbackTitle={schedule.title}
-              defaultAmountKopecks={schedule.amountKopecks}
-              isFavorite={schedule.isFavorite}
-              today={today}
-              onSelect={() => selectEntry(entry)}
-            />
-          ))}
+          <div className="flex flex-col pt-2">
+            {visibleFollowing.map((entry) => (
+              <ScheduleRow
+                key={entry.kind === 'operation' ? entry.operation.id : entry.date}
+                entry={entry}
+                category={schedule.category}
+                fallbackTitle={schedule.title}
+                defaultAmountKopecks={schedule.amountKopecks}
+                isFavorite={schedule.isFavorite}
+                today={today}
+                onSelect={() => selectEntry(entry)}
+              />
+            ))}
+          </div>
         </section>
       )}
 

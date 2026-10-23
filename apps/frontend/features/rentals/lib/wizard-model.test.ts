@@ -282,6 +282,7 @@ describe('buildRentalCreateCommand', () => {
       contactId: '0198c7a2-0000-7000-8000-000000000003',
       autoPay: false,
       reminderOffsetDays: 3,
+      notifyEmail: true,
     });
   });
 
@@ -302,6 +303,7 @@ describe('buildRentalCreateCommand', () => {
       contactId: null,
       autoPay: false,
       reminderOffsetDays: null,
+      notifyEmail: true,
     });
   });
 
@@ -325,6 +327,22 @@ describe('buildRentalCreateCommand', () => {
     expect(buildRentalCreateCommand({ amountKopecks: -1, paymentDay: 5, startDate: TODAY }, TODAY)).toBeUndefined();
   });
 
+  it('суммы сверх прежнего потолка 10⁹ валидны — потолка нет (решение владельца 23.10.2026)', () => {
+    const cmd = buildRentalCreateCommand(
+      {
+        amountKopecks: 9_000_000_000_000_000,
+        paymentDay: 5,
+        startDate: TODAY,
+        depositKopecks: 1_500_000_000,
+        commissionKopecks: 2_000_000_000,
+      },
+      TODAY,
+    );
+    expect(cmd?.amountKopecks).toBe(9_000_000_000_000_000);
+    expect(cmd?.depositKopecks).toBe(1_500_000_000);
+    expect(cmd?.commissionKopecks).toBe(2_000_000_000);
+  });
+
   it('некорректные даты команду роняют', () => {
     expect(
       buildRentalCreateCommand({ amountKopecks: 100, paymentDay: 5, startDate: '2026-09-04' }, TODAY),
@@ -340,5 +358,47 @@ describe('buildRentalCreateCommand', () => {
         TODAY,
       ),
     ).toBeUndefined();
+  });
+});
+
+/** Галочка почты в команде создания (карта #1551, тикет #1557, канон
+ * #1552): свитч ряда «Уведомления на почту» — персональный флаг почты
+ * аренды, сервер переносит его на Платёж (#1555). Ряд независим от пикера
+ * напоминаний (гейта у аренды нет — решение владельца 22.10.2026), скрытый
+ * мастером ряд поле не пишет — сервер ставит дефолт true (#1555). */
+describe('buildRentalCreateCommand — галочка почты (#1557)', () => {
+  const DRAFT = { amountKopecks: 5600000, paymentDay: 10, startDate: TODAY };
+
+  it('не тронутый свитч едет on (создание стартует включённым)', () => {
+    expect(buildRentalCreateCommand(DRAFT, TODAY)?.notifyEmail).toBe(true);
+  });
+
+  it('выключенная галочка черновика едет off', () => {
+    expect(buildRentalCreateCommand({ ...DRAFT, notifyEmail: false }, TODAY)?.notifyEmail).toBe(
+      false,
+    );
+    expect(buildRentalCreateCommand({ ...DRAFT, notifyEmail: true }, TODAY)?.notifyEmail).toBe(
+      true,
+    );
+  });
+
+  it('ряд, скрытый мастером, поле не пишет — дифф без поля (канон #1552)', () => {
+    const command = buildRentalCreateCommand({ ...DRAFT, notifyEmail: false }, TODAY, {
+      notifyEmailRowVisible: false,
+    });
+    expect(command).toBeDefined();
+    expect(Object.hasOwn(command ?? {}, 'notifyEmail')).toBe(false);
+  });
+
+  it('ряд в полёте или с живым мастером поле пишет (дефолт видимости)', () => {
+    expect(
+      Object.hasOwn(buildRentalCreateCommand(DRAFT, TODAY, { notifyEmailRowVisible: true }) ?? {}, 'notifyEmail'),
+    ).toBe(true);
+    expect(
+      Object.hasOwn(buildRentalCreateCommand(DRAFT, TODAY, {}) ?? {}, 'notifyEmail'),
+    ).toBe(true);
+    expect(
+      Object.hasOwn(buildRentalCreateCommand(DRAFT, TODAY) ?? {}, 'notifyEmail'),
+    ).toBe(true);
   });
 });

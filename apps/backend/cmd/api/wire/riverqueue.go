@@ -43,8 +43,7 @@ type RiverQueue struct {
 	// #776): the hourly sweep books the upcoming operations' boundary jobs
 	// — «Оплатите платёж» at the wall clock 10:00 of the operation date,
 	// «Платёж
-	// просрочен» at 22:00 of the day after, each in the owner's timezone
-	// (#1168) —
+	// просрочен» at 10:00 of the day after, each in the owner's timezone —
 	// and sweeps the zones as the backstop; the boundary workers publish
 	// through it (bound post-construction, see
 	// DeferredPaymentBoundaryDeliverer).
@@ -145,6 +144,7 @@ func WireRiverQueue(
 		cfg.AppBaseURL,
 		p.Logger,
 		notificationsMod.DeliverySettingsGate,
+		notificationsMod.PaymentEmailGate,
 	))
 	river.AddWorker(workers, notificationsjob.NewDeliverPushWorker(
 		notificationsMod.NotificationRepo,

@@ -270,9 +270,11 @@ function SkeletonSummarySection({ titleWidth, fields }: {
 /** Скелетон «Итогов аренды» (#535): секции «Период аренды» (3 поля),
  * «Финансы за время аренды» (3 поля), «Возвращение залога» (поле и блок
  * комментария) — обёртка контента (зазор 48, боковые 24), ниже «Данные
- * аренды» (три строки канона с ведущим кругом) с отступом 64. Тон блоков
- * базовый: секции лежат на белом (§7 — muted только внутри серых
- * карточек). */
+ * аренды» (три строки канона с ведущим кругом) по канону Heading —
+ * зазор 24, заголовок 24/24/0, до строк 8; ряды на всю ширину —
+ * базовый px-6 скелетонного ряда (круг в 24, как иконка контента),
+ * py-3 — высота 68 (макеты 1433:61927/1433:61074). Тон блоков базовый:
+ * секции лежат на белом (§7 — muted только внутри серых карточек). */
 export function RentalSummarySkeleton(): JSX.Element {
   return (
     <div aria-hidden className="pb-6">
@@ -291,14 +293,14 @@ export function RentalSummarySkeleton(): JSX.Element {
           </div>
         </section>
       </div>
-      <div className="pt-16">
-        <div className="px-6">
+      <div className="pt-6">
+        <div className="px-6 pt-6">
           <Skeleton className="h-6 w-36" />
         </div>
-        <div className="flex flex-col px-3 pt-2">
-          <SkeletonListRow leading className="px-3 py-2" />
-          <SkeletonListRow leading className="px-3 py-2" />
-          <SkeletonListRow leading className="px-3 py-2" />
+        <div className="flex flex-col pt-2">
+          <SkeletonListRow leading className="py-3" />
+          <SkeletonListRow leading className="py-3" />
+          <SkeletonListRow leading className="py-3" />
         </div>
       </div>
     </div>
@@ -307,15 +309,25 @@ export function RentalSummarySkeleton(): JSX.Element {
 
 /** Скелетон формы правки условий (#532): семь полевых строк канона
  * (MoneyField, пикеры, статичное начало, деньги, пикер коммунальных
- * платежей) — метка 16/18 и серый бокс h-14, обёртка шага (зазор 32).
- * Тумблер автоплатежа, блок комментария и панель сохранения — ниже
- * сгиба, панель появляется с формой. */
+ * платежей) — метка 16/18 и серый бокс h-14, обёртка шага (зазор 32);
+ * ряд почты (#1557) — заголовок + подпись слева, тумблер справа (канон
+ * ряда, как в скелетоне правки платежа). Тумблер автоплатежа, блок
+ * комментария и панель сохранения — ниже сгиба, панель появляется
+ * с формой. */
 export function RentalTermsEditFormSkeleton(): JSX.Element {
   return (
     <div aria-hidden className="flex flex-col gap-8 px-6 pt-6">
       {Array.from({ length: 7 }, (_, index) => (
         <SkeletonFormField key={index} labelWidth={index % 2 === 0 ? 'w-28' : 'w-24'} />
       ))}
+      <span className="flex items-center justify-between gap-4 py-3">
+        <span className="flex min-w-0 flex-col gap-1">
+          <Skeleton className="h-[18px] w-64 max-w-full" />
+          <Skeleton className="h-4 w-48" />
+        </span>
+        {/* w-16 — геометрия живого свитча ряда (NotifyEmailRow). */}
+        <Skeleton className="h-7 w-16 rounded-pill" />
+      </span>
     </div>
   );
 }

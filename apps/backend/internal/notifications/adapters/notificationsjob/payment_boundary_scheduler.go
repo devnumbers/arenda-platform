@@ -23,7 +23,8 @@ const boundaryJobMaxAttempts = 5
 // River client (issue #776): the due leg's job wakes at the wall clock 10:00
 // of the operation date in the owner's timezone, the reminder leg's — at
 // 10:00 of the operation date minus the rule's lead time (карта #822), the
-// overdue leg's — at 22:00 of the day after (#1168). Unique by (kind, rule
+// overdue leg's — at 10:00 of the day after (решение владельца 22.10.2026).
+// Unique by (kind, rule
 // id, date) in
 // every non-terminal state, so the hourly scan's repeated asks are
 // idempotent — a duplicate returns the standing job, nothing is enqueued

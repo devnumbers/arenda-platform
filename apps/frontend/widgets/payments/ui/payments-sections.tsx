@@ -185,7 +185,7 @@ export function PaymentsSection({
 }): JSX.Element {
   const isEmpty = children === null;
   return (
-    <section data-testid={testId} className="mx-6 rounded-card bg-surface-muted pb-6">
+    <section data-testid={testId} className="mx-6 rounded-card bg-surface-muted pb-3">
       <div className="px-6 pt-6">
         <button
           type="button"
@@ -223,8 +223,8 @@ export function PaymentsGroup({
 }): JSX.Element {
   const isEmpty = children === null;
   return (
-    <section className="mx-6 rounded-card bg-surface-muted pb-6">
-      <div className="px-6 pb-3 pt-6">
+    <section className="mx-6 rounded-card bg-surface-muted pb-3">
+      <div className="px-6 pb-2 pt-6">
         {open !== undefined ? (
           <button
             type="button"
@@ -301,39 +301,48 @@ export function PaymentsStateCard({
   );
 }
 
-/** Заголовок секции платежей/операций — 16/500 серым со вставкой 24px
- * (строки списков приносят паддинг сами, заголовок — свой). inset=false —
- * без своей вставки: глобальная лента (#541) держит ритм 24px на уровне
- * всей страницы, заголовки дат прижаты к её краю (решение владельца
- * 2026-09-05). */
+/** Заголовок секции платежей/операций — 16/500 серым; бока 24 и верх 24 —
+ * своя вставка (строки списков приносят паддинг сами), снизу 0 — до списка
+ * гэп 8 контейнера (канон Heading, Figma 1096-37789/1036-40829/1858-102657).
+ * inset=false — без своей вставки ПО БОКАМ: глобальная лента (#541) держит
+ * ритм 24px на уровне всей страницы, заголовки дат прижаты к её краю
+ * (решение владельца 2026-09-05); верхние 24 — канон макета, действуют в
+ * обоих вариантах. className — вставка потребителя поверх канона
+ * (cn/tailwind-merge, ADR 0050): первый блок подэкрана гасит канонный
+ * верх — pt-0, 24 до хедера уже даёт PageContent (поиски, замечание
+ * владельца 23.10). */
 export function PaymentsHeading({
   children,
   inset = true,
+  className,
 }: {
   readonly children: ReactNode;
   readonly inset?: boolean;
+  readonly className?: string;
 }): JSX.Element {
-  return <h2 className={inset ? `${headingClass} px-6` : headingClass}>{children}</h2>;
+  return <h2 className={cn(headingClass, 'pt-6', inset && 'px-6', className)}>{children}</h2>;
 }
 
 /** Скелетон секции на время загрузки — серая карточка с пульсирующими
- * строками. */
+ * строками; геометрия реальной секции (§7 паритет): шапка 24 сверху и 8 до
+ * строк, ряд 68 (иконка 44 + вертикаль 12/12), низ карточки 12. */
 export function PaymentsSkeleton({ withHeading }: { readonly withHeading?: boolean }): JSX.Element {
   return (
-    <section className="mx-6 rounded-card bg-surface-muted px-6 py-6" aria-hidden>
-      <Skeleton className={`${withHeading ? 'mb-4' : ''} h-6 w-40 bg-surface-muted-hover`} />
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-11 bg-surface-muted-hover" />
-        <Skeleton className="h-11 w-4/5 bg-surface-muted-hover" />
+    <section className="mx-6 rounded-card bg-surface-muted px-6 pt-6 pb-3" aria-hidden>
+      <Skeleton className={`${withHeading ? 'mb-2' : ''} h-6 w-40 bg-surface-muted-hover`} />
+      <div className="flex flex-col">
+        <Skeleton className="h-17 bg-surface-muted-hover" />
+        <Skeleton className="h-17 w-4/5 bg-surface-muted-hover" />
       </div>
     </section>
   );
 }
 
 /** Скелетон плоского списка строк правил (#605): строки канона
- * PaymentRowButton px-6 py-2 — иконка 44, название + объект, справа сумма и
- * дата (списки избранного #579 и просроченных #580). description=false —
- * строки без правого нижнего поля (сумма одной строкой). */
+ * PaymentRowButton 24/12 (px-6 плоско, py-3 — иконка 44, название + объект,
+ * справа сумма и дата; списки избранного #579 и просроченных #580).
+ * description=false — строки без правого нижнего поля (сумма одной
+ * строкой). */
 export function PaymentsRowsSkeleton({
   rows = 5,
   description = true,
@@ -350,6 +359,7 @@ export function PaymentsRowsSkeleton({
           value
           description={description}
           widths={rowWidths}
+          className="py-3"
         />
       ))}
     </div>

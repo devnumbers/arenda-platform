@@ -360,6 +360,39 @@ func TestRentalsIntegration_ReminderOffsetFlowsToSeed(t *testing.T) {
 	assert.ErrorIs(t, err, rentalsapp.ErrInvalidInput)
 }
 
+// TestRentalsIntegration_NotifyEmailFlowsToSeed (карта #1551, тикет #1555):
+// the email toggle rides the create command into the managed payment's seed
+// verbatim — the service resolves no default, the transport owns omitted→true
+// (#1553); независима от напоминания (решение владельца 22.10.2026).
+func TestRentalsIntegration_NotifyEmailFlowsToSeed(t *testing.T) {
+	t.Parallel()
+	t.Run("false rides verbatim", func(t *testing.T) {
+		t.Parallel()
+		h := newRentalsHarness(t)
+		h.seedOwner()
+
+		cmd := h.createCmd()
+		cmd.NotifyEmail = false
+		_, err := h.svc.CreateRental(context.Background(), h.owner, h.propID, cmd)
+		require.NoError(t, err)
+		require.Len(t, h.gateway.created, 1)
+		assert.False(t, h.gateway.created[0].NotifyEmail)
+	})
+	t.Run("true rides regardless of the reminder's lead time", func(t *testing.T) {
+		t.Parallel()
+		h := newRentalsHarness(t)
+		h.seedOwner()
+
+		cmd := h.createCmd()
+		cmd.NotifyEmail = true
+		cmd.ReminderOffsetDays = new(3)
+		_, err := h.svc.CreateRental(context.Background(), h.owner, h.propID, cmd)
+		require.NoError(t, err)
+		require.Len(t, h.gateway.created, 1)
+		assert.True(t, h.gateway.created[0].NotifyEmail)
+	})
+}
+
 func TestRentalsIntegration_ListOrdering(t *testing.T) {
 	t.Parallel()
 	h := newRentalsHarness(t)

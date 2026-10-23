@@ -2,9 +2,11 @@ export {
   clearPaymentWizardDraft,
   latestPaymentDraftType,
   paymentDraftStorageKey,
+  useEphemeralPaymentWizardDraft,
   usePaymentWizardDraft,
   type PaymentDraftType,
   type PaymentWizardDraft,
+  type PaymentWizardDraftController,
 } from './lib/use-payment-wizard-draft';
 export {
   buildOperationCreateCommand,
@@ -21,6 +23,7 @@ export { TYPE_LABELS } from './lib/payment-labels';
 export {
   PERIODICITY_OPTIONS,
   WEEKDAY_BUTTONS,
+  WIZARD_STEP_LAYOUTS,
   WIZARD_TOTAL_STEPS,
   branchKind,
   buildPaymentCreateCommand,
@@ -32,18 +35,23 @@ export {
   toggleWeekday,
   wizardDraftAfterStep,
   wizardStepReady,
+  wizardTotalSteps,
   yearlyAnchorDate,
+  type PaymentWizardMode,
   type PeriodicityBranch,
   type PeriodicityKind,
   type PeriodicityPick,
   type WizardStep,
+  type WizardStepName,
 } from './lib/wizard-model';
 export { successScreenCopy, type SuccessScreenCopyInput } from './lib/success-copy';
 export {
   paymentAddSheetState,
   type PaymentAddSheetState,
 } from './lib/payment-add-sheet-model';
+export { parsePaymentDraftTypeParam } from './lib/payment-draft-type-param';
 export { PaymentsAddSheet } from './ui/payments-add-sheet';
+export { PaymentsTypeChoiceSheet } from './ui/payments-type-choice-sheet';
 export {
   isOperationPayable,
   isPaymentCompleted,
@@ -111,6 +119,11 @@ export {
   recurrencesEqual,
   type PaymentEditForm,
 } from './lib/update-model';
+export {
+  emailNotificationsRowDisabled,
+  emailNotificationsRowState,
+  emailNotificationsRowValue,
+} from './lib/email-notifications-row';
 export {
   fetchGlobalOperationsPage,
   fetchGlobalOperationsSummary,

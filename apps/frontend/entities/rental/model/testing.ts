@@ -30,6 +30,7 @@ export function makeRental(overrides: Partial<Rental> = {}): Rental {
       amountKopecks: 5_600_000,
       paymentDay: 1,
       autoPay: false,
+      notifyEmail: true,
       reminderOffsetDays: null,
       nextPayment: {
         operationId: 'operation-1',

@@ -97,22 +97,35 @@ export function RentalSummaryContent({
         )}
       </div>
 
-      <div className="pt-16">
-        <h2 className="px-6 text-xl font-semibold leading-6 text-content">Данные аренды</h2>
-        <div className="flex flex-col px-3 pt-2">
-          <DataRow
+      {/* Секция по канону Heading (699:8717 — паддинг 24/24/0, макеты
+          1433:61927/1433:61074): зазор после «Возвращения залога» 24,
+          заголовок несёт свои верх 24 и бока 24, до строк 8. Строки —
+          статичные Row Button White без суммы (Figma 1323:60672), круг
+          44 и два текста; на всю ширину (на мобайле — экрана, в колонке
+          560 — колонки): горизонтали до контента 24 приносит сам ряд
+          (12+12), pointer-events-none гасит hover и клики. */}
+      <div className="pt-6">
+        <h2 className="px-6 pt-6 text-xl font-semibold leading-6 text-content">Данные аренды</h2>
+        <div className="flex flex-col pt-2">
+          <PaymentRowButton
+            variant="white"
+            className="pointer-events-none"
             categoryIcon={<CategoryIcon icon={rentStyle.icon} color={rentStyle.color} />}
             title="Арендная плата"
             subtitle="Платеж"
           />
           {tenant !== null && (
-            <DataRow
-              categoryIcon={<UserAvatar variant="muted" photoUrl={tenantPhotoUrl} />}
+            <PaymentRowButton
+              variant="white"
+              className="pointer-events-none"
+              categoryIcon={<UserAvatar variant="white" photoUrl={tenantPhotoUrl} />}
               title={rentalTenantTitle(tenant)}
               subtitle="Арендатор"
             />
           )}
-          <DataRow
+          <PaymentRowButton
+            variant="white"
+            className="pointer-events-none"
             categoryIcon={
               <PropertyAvatar surface="row" photoUrl={propertyPhotoUrl ?? null} type={propertyType} />
             }
@@ -152,27 +165,5 @@ function SummaryField({ label, value }: { readonly label: string; readonly value
         {value}
       </div>
     </div>
-  );
-}
-
-/** Строка «Данных аренды» (Row Button White, Figma 1323:60672 без суммы):
- * круг-иконка 44, название и серый подзаголовок; статичная, без действия. */
-function DataRow({
-  categoryIcon,
-  title,
-  subtitle,
-}: {
-  readonly categoryIcon: ReactNode;
-  readonly title: string;
-  readonly subtitle: string;
-}): JSX.Element {
-  return (
-    <PaymentRowButton
-      variant="white"
-      className="pointer-events-none px-3"
-      categoryIcon={categoryIcon}
-      title={title}
-      subtitle={subtitle}
-    />
   );
 }

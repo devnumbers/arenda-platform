@@ -143,20 +143,24 @@ export function PaymentsDueGlobalScreen({
                       className="flex flex-col"
                     >
                       <PaymentsHeading>{group.label}</PaymentsHeading>
-                      {group.items.map((item) => (
-                        <DueRow
-                          key={item.operationId}
-                          item={item}
-                          onSelect={() =>
-                            pushPage(router,
-                              ROUTES.propertyPayment(
-                                item.propertyId,
-                                item.paymentId,
-                              ),
-                            )
-                          }
-                        />
-                      ))}
+                      {/* Гэп 8 от заголовка до рядов — контейнер группы
+                       * макета (Figma 1036-40829); ряды — столбиком. */}
+                      <div className="flex flex-col pt-2">
+                        {group.items.map((item) => (
+                          <DueRow
+                            key={item.operationId}
+                            item={item}
+                            onSelect={() =>
+                              pushPage(router,
+                                ROUTES.propertyPayment(
+                                  item.propertyId,
+                                  item.paymentId,
+                                ),
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
                     </section>
                   ))}
                 </div>
@@ -182,7 +186,6 @@ function DueRow({
   const style = categoryStyle(item.category.source, item.category.slug);
   return (
     <PaymentRowButton
-      className="px-6"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} />}
       title={item.title}
       subtitle={item.propertyName}

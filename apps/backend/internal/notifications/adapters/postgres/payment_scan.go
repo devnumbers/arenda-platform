@@ -72,7 +72,7 @@ func (s *PaymentScanStore) ListDueTargets(
 
 // ListOverdueTargets lists the zone's planned operations dated strictly
 // before the zone's today (решение #737, тип №3), auto-pay rules included.
-// The instant gate (#1168): now — the sweep's instant the 22:00 boundary is
+// The instant gate: now — the sweep's instant the 10:00 boundary is
 // compared against.
 func (s *PaymentScanStore) ListOverdueTargets(
 	ctx context.Context, zone string, today, now time.Time,
@@ -198,8 +198,8 @@ func (s *PaymentScanStore) ListScheduledDueTargets(
 }
 
 // ListScheduledOverdueTargets lists the operations whose overdue boundary —
-// the wall clock 22:00 of the day after the operation date in the owner's
-// timezone (#1168) — falls
+// the wall clock 10:00 of the day after the operation date in the owner's
+// timezone — falls
 // in the window (from, until]; the overdue leg's booking list (issue #776),
 // auto-pay rules included.
 func (s *PaymentScanStore) ListScheduledOverdueTargets(

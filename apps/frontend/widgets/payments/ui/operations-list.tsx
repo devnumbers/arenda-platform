@@ -40,14 +40,18 @@ export function OperationsDateList({
       {groups.map((group) => (
         <section key={group.date} className="flex flex-col">
           <PaymentsHeading>{group.label}</PaymentsHeading>
-          {group.operations.map((operation) => (
-            <OperationRow
-              key={operation.id}
-              operation={operation}
-              subtitle={renderSubtitle?.(operation)}
-              onSelect={() => onSelectOperation(operation)}
-            />
-          ))}
+          {/* Гэп 8 от заголовка до рядов — контейнер группы макета
+           * (Figma 1036-40829/1858-102657); ряды — столбиком. */}
+          <div className="flex flex-col pt-2">
+            {group.operations.map((operation) => (
+              <OperationRow
+                key={operation.id}
+                operation={operation}
+                subtitle={renderSubtitle?.(operation)}
+                onSelect={() => onSelectOperation(operation)}
+              />
+            ))}
+          </div>
         </section>
       ))}
       {tail}

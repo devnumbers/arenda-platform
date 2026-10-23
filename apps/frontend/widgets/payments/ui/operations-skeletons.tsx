@@ -66,17 +66,21 @@ function SkeletonDateGroup({
   const widths = skeletonRowWidths(rows);
   return (
     <section aria-hidden className="flex flex-col">
-      <div className="px-6">
+      {/* Верх 24 — паритет PaymentsHeading (канон Heading). */}
+      <div className="px-6 pt-6">
         <Skeleton className={`h-6 w-24 ${skeletonBlockClass('base')}`} />
       </div>
-      {widths.map((rowWidths, index) => (
-        <SkeletonListRow
-          key={index}
-          value
-          widths={rowWidths}
-          className="px-6 py-3"
-        />
-      ))}
+      {/* Гэп 8 под заголовком — паритет контейнера группы (pt-2). */}
+      <div className="pt-2">
+        {widths.map((rowWidths, index) => (
+          <SkeletonListRow
+            key={index}
+            value
+            widths={rowWidths}
+            className="px-6 py-3"
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -135,13 +139,16 @@ export function OperationsObjectsSkeleton(): JSX.Element {
 /**
  * Поисковая выдача-заглушка (#543/#476): контент — две секции («Категории» —
  * заголовок + чипы, «Операции»/«Платежи» — заголовок + ряды), скелетон
- * зеркалит их анатомию: заголовки-полоски, чипы-заглушки (высота канона
- * ChipButton), ряды канона #605. Пара «заголовок + контент» живёт в своей
- * секции, как <section aria-label> живой выдачи: зазор заголовок→контент
- * держит pt-2 контента (8px), gap-6 контейнера делит только секции —
- * иначе контент уезжает вверх на смене загрузки→выдача. Общий архетип
- * поисковых экранов операций и платежей. description — дата под суммой
- * в строках глобального поиска; в объектном (#476) строки без неё.
+ * зеркалит их анатомию: полоски-заголовки паритетны PaymentsHeading —
+ * первый прижат к хедеру (24 даёт PageContent, верх погашен — замечание
+ * владельца 23.10), второй с канонным верхом 24; чипы-заглушки (высота
+ * канона ChipButton), ряды канона #605. Пара «заголовок + контент» живёт
+ * в своей секции, как <section aria-label> живой выдачи: секции делит
+ * гэп 8 контейнера — к заголовку второй секции выходит канонный ритм 32;
+ * зазор заголовок→контент держит pt контента (чипы 16, ряды 8) — контент
+ * встаёт на место скелетона без сдвига. Общий архетип поисковых экранов
+ * операций и платежей. description — дата под суммой в строках глобального
+ * поиска; в объектном (#476) строки без неё.
  */
 export function SearchResultsSkeleton({
   description = false,
@@ -149,16 +156,20 @@ export function SearchResultsSkeleton({
   readonly description?: boolean;
 }): JSX.Element {
   return (
-    <div aria-hidden className="flex flex-col gap-6 pt-4">
+    <div aria-hidden className="flex flex-col gap-2">
       <section aria-hidden className="flex flex-col">
-        <Skeleton className="ml-6 h-6 w-40" />
-        <div className="flex flex-wrap gap-1.5 px-6 pt-2">
+        <div className="px-6">
+          <Skeleton className="h-6 w-40" />
+        </div>
+        <div className="flex flex-wrap gap-1.5 px-6 pt-4">
           <Skeleton className="h-11 w-28 rounded-full" />
           <Skeleton className="h-11 w-36 rounded-full" />
         </div>
       </section>
       <section aria-hidden className="flex flex-col">
-        <Skeleton className="ml-6 h-6 w-40" />
+        <div className="px-6 pt-6">
+          <Skeleton className="h-6 w-40" />
+        </div>
         <div className="flex flex-col pt-2">
           <PaymentsRowsSkeleton description={description} />
         </div>

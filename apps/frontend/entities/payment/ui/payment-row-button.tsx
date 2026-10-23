@@ -72,7 +72,7 @@ export function PaymentRowButton({
       {...activatorProps}
       aria-pressed={pressed}
       className={cn(
-        'pressable group/row flex w-full cursor-pointer items-center py-2 outline-none',
+        'pressable group/row flex w-full cursor-pointer items-center py-3 outline-none',
         'focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         'hover:opacity-80 px-3',
         variant === 'gray' ? 'bg-surface-muted' : 'bg-surface',

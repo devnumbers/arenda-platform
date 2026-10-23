@@ -29,6 +29,7 @@ const RENTAL: Rental = {
     amountKopecks: 5600000,
     paymentDay: 10,
     autoPay: true,
+    notifyEmail: true,
     reminderOffsetDays: 3,
     nextPayment: null,
   },
@@ -43,6 +44,7 @@ describe('rentalEditFormFromRental', () => {
       amountKopecks: 5600000,
       paymentDay: 10,
       autoPay: true,
+      notifyEmail: true,
       reminderOffsetDays: 3,
       plannedEndDate: '2028-05-10',
       utilities: 'meters_only',
@@ -58,11 +60,13 @@ describe('rentalEditFormFromRental', () => {
       plannedEndDate: null,
       depositKopecks: null,
       comment: '',
+      rentPayment: { ...RENTAL.rentPayment, notifyEmail: false },
     };
     expect(rentalEditFormFromRental(endless)).toStrictEqual({
       amountKopecks: 5600000,
       paymentDay: 10,
       autoPay: true,
+      notifyEmail: false,
       reminderOffsetDays: 3,
       plannedEndDate: null,
       utilities: 'meters_only',
@@ -177,15 +181,19 @@ describe('buildRentalUpdateCommand', () => {
     });
   });
 
-  it('невалидная сумма (пустая, ноль, сверх лимита) команду роняет', () => {
+  it('невалидная сумма (пустая, ноль) команду роняет', () => {
     const base = rentalEditFormFromRental(RENTAL);
     expect(
       buildRentalUpdateCommand(RENTAL, { ...base, amountKopecks: undefined }),
     ).toBeUndefined();
     expect(buildRentalUpdateCommand(RENTAL, { ...base, amountKopecks: 0 })).toBeUndefined();
+  });
+
+  it('сумма сверх прежнего потолка валидна — потолка нет (решение владельца 23.10.2026)', () => {
+    const base = rentalEditFormFromRental(RENTAL);
     expect(
-      buildRentalUpdateCommand(RENTAL, { ...base, amountKopecks: 1_000_000_001 }),
-    ).toBeUndefined();
+      buildRentalUpdateCommand(RENTAL, { ...base, amountKopecks: 9_000_000_000_000_000 }),
+    ).toStrictEqual({ amountKopecks: 9_000_000_000_000_000 });
   });
 
   it('неизвестный день оплаты команду роняет', () => {
@@ -216,14 +224,14 @@ describe('buildRentalUpdateCommand', () => {
     });
   });
 
-  it('залог/комиссия сверх лимита команду роняют, ноль валиден', () => {
+  it('залог/комиссия за прежним потолком валидны, ноль валиден', () => {
     const base = rentalEditFormFromRental(RENTAL);
     expect(
-      buildRentalUpdateCommand(RENTAL, { ...base, depositKopecks: 1_000_000_001 }),
-    ).toBeUndefined();
+      buildRentalUpdateCommand(RENTAL, { ...base, depositKopecks: 1_500_000_000 }),
+    ).toStrictEqual({ depositKopecks: 1_500_000_000 });
     expect(
-      buildRentalUpdateCommand(RENTAL, { ...base, commissionKopecks: 1_000_000_001 }),
-    ).toBeUndefined();
+      buildRentalUpdateCommand(RENTAL, { ...base, commissionKopecks: 2_000_000_000 }),
+    ).toStrictEqual({ commissionKopecks: 2_000_000_000 });
     expect(
       buildRentalUpdateCommand(RENTAL, { ...base, depositKopecks: 0 })?.depositKopecks,
     ).toBe(0);
@@ -238,6 +246,47 @@ describe('buildRentalUpdateCommand', () => {
     expect(
       buildRentalUpdateCommand(RENTAL, { ...base, comment: 'а'.repeat(2000) })?.comment,
     ).toBe('а'.repeat(2000));
+  });
+});
+
+/** Галочка почты в диффе правки (карта #1551, тикет #1557, канон #1552):
+ * свитч ряда — флаг аренды (`rentPayment.notifyEmail`, сервер держит его
+ * на Платеже); дифф едет tri-state контракта PATCH — значение при смене,
+ * нетронутое поле опущено; ряд, скрытый мастером, галочку не трогает
+ * (дифф без поля). */
+describe('buildRentalUpdateCommand — галочка почты (#1557)', () => {
+  it('снятая галочка уходит off значением (tri-state: false выключает)', () => {
+    const form = { ...rentalEditFormFromRental(RENTAL), notifyEmail: false };
+    expect(buildRentalUpdateCommand(RENTAL, form)).toStrictEqual({ notifyEmail: false });
+  });
+
+  it('включённая галочка у on-аренды едет true', () => {
+    const off: Rental = { ...RENTAL, rentPayment: { ...RENTAL.rentPayment, notifyEmail: false } };
+    const form = { ...rentalEditFormFromRental(off), notifyEmail: true };
+    expect(buildRentalUpdateCommand(off, form)).toStrictEqual({ notifyEmail: true });
+  });
+
+  it('нетронутая галочка в дифф не едет', () => {
+    const form = rentalEditFormFromRental(RENTAL);
+    expect(buildRentalUpdateCommand(RENTAL, { ...form, comment: 'уточнил' })).toStrictEqual({
+      comment: 'уточнил',
+    });
+    const off: Rental = { ...RENTAL, rentPayment: { ...RENTAL.rentPayment, notifyEmail: false } };
+    expect(
+      buildRentalUpdateCommand(off, { ...rentalEditFormFromRental(off), notifyEmail: false }),
+    ).toBeUndefined();
+  });
+
+  it('ряд, скрытый мастером, поле не пишет даже при сменённой галочке', () => {
+    const form = { ...rentalEditFormFromRental(RENTAL), notifyEmail: false };
+    expect(
+      buildRentalUpdateCommand(RENTAL, form, { notifyEmailRowVisible: false }),
+    ).toBeUndefined();
+    expect(
+      buildRentalUpdateCommand(RENTAL, { ...form, comment: 'уточнил' }, {
+        notifyEmailRowVisible: false,
+      }),
+    ).toStrictEqual({ comment: 'уточнил' });
   });
 });
 

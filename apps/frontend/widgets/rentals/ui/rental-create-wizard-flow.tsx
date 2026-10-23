@@ -11,6 +11,11 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { type IsoDate } from '@/entities/payment';
 import type { Rental } from '@/entities/rental';
 import {
+  emailNotificationsRowVisible,
+  RENTAL_EMAIL_CATEGORY,
+  useEmailNotificationPreferences,
+} from '@/features/notifications';
+import {
   useCreateRental,
   useRentalWizardSession,
   wizardStepReady,
@@ -65,6 +70,15 @@ export function RentalCreateWizardFlow({
   const [created, setCreated] = useState<Rental | null>(null);
   const today: IsoDate = dateToIsoLocal(new Date());
   const [step, setStep] = useState<RentalWizardStep>(() => initialStep(draft, today));
+  // Мастер видимости ряда почты (карта #1551): решение для команды сабмита.
+  // Общий предикат с NotifyEmailRow шага 3 — расхождений нет; в полёте
+  // решение не блокируем (галочка едет), при off и сбое ряд скрыт и поле
+  // в команду не едёт (канон #1552). Кэш общий — второй запрос не летает.
+  const emailMasterQuery = useEmailNotificationPreferences();
+  const notifyEmailRowVisible = emailNotificationsRowVisible(
+    emailMasterQuery.isPending,
+    emailMasterQuery.data?.[RENTAL_EMAIL_CATEGORY],
+  );
 
   if (created !== null) {
     return (
@@ -168,6 +182,8 @@ export function RentalCreateWizardFlow({
             <SettingsStep
               autoPay={draft.autoPay ?? false}
               onAutoPayChange={(autoPay) => setDraft((prev) => ({ ...prev, autoPay }))}
+              notifyEmail={draft.notifyEmail ?? true}
+              onNotifyEmailChange={(notifyEmail) => setDraft((prev) => ({ ...prev, notifyEmail }))}
               reminderOffsetDays={draft.reminderOffsetDays}
               onReminderOffsetChange={(reminderOffsetDays) =>
                 setDraft((prev) => ({ ...prev, reminderOffsetDays }))
@@ -241,7 +257,7 @@ export function RentalCreateWizardFlow({
   }
 
   async function submit(): Promise<void> {
-    const command = buildRentalCreateCommand(draft, today);
+    const command = buildRentalCreateCommand(draft, today, { notifyEmailRowVisible });
     if (command === undefined) {
       return;
     }

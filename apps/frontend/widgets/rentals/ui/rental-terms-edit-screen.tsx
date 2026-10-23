@@ -10,6 +10,14 @@ import { notify } from '@/shared/lib/notifications';
 import { type IsoDate } from '@/shared/lib/calendar';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
 import { kopecksToAmountInputString, parseRublesToKopecks } from '@/shared/lib/format-money';
+import { useMe } from '@/features/auth';
+import {
+  emailNotificationsRowVisible,
+  emailReminderCaption,
+  NotifyEmailRow,
+  RENTAL_EMAIL_CATEGORY,
+  useEmailNotificationPreferences,
+} from '@/features/notifications';
 import {
   buildRentalUpdateCommand,
   currentRentalOf,
@@ -53,19 +61,29 @@ import { RentalTermsEditFormSkeleton } from './rental-skeletons';
  * невалидной форме обе гаснут). Поля в порядке макета: арендная плата*,
  * день оплаты*, начало аренды, окончание, залог, комиссия, коммунальные
  * платежи, тумблер автоплатежа, селект «За сколько напоминать» (#1208,
- * канон шага создания), комментарий 0/2000.
+ * канон шага создания), ряд «Включить уведомления об оплате на почту»
+ * (после пикера напоминания — канон #1552), комментарий 0/2000.
  *
  * «Начало аренды» — read-only (ADR 0053 §3: «Начало не правится», PATCH
- * startDate не принимает; иконки календаря у поля нет). Тумблеры
- * email-уведомлений макета и арендатор вырезаны (тело #532; в контракте
- * аренды их нет). Окончание — канонический бесконечный календарь: снятая
+ * startDate не принимает; иконки календаря у поля нет). Арендатор вырезан
+ * (тело #532); email-ряд макета был вырезан тем же решением — карта #1551
+ * (тикет #1557) разворачивает эту часть: ряд возвращён как NotifyEmailRow
+ * (карта #1551), свитч — персональная галочка почты аренды
+ * (`rentPayment.notifyEmail`, сервер держит флаг на Платеже и переносит
+ * при правке, #1555), предзаполнение из флага аренды; глобальный мастер
+ * категории «Аренда» решает видимость ряда вовсе — общий предикат
+ * с компонентом ряда решает и видимость, и «едет ли notifyEmail в PATCH»
+ * (при off и сбое — дифф без поля, канон #1552); гейта от пикера
+ * напоминаний у аренды нет — ряд независим (решение владельца
+ * 22.10.2026). Окончание — канонический бесконечный календарь: снятая
  * дата — бессрочная (tri-state null), будущие дни открыты, дни ≤ начала
  * и дни до первого вхождения дня оплаты погашены (minDate, #1156 —
  * валидатор слитой пары на сервере, #1154); смена дня оплаты молча чистит
  * окончание, переставшее покрывать новое первое вхождение. Сумма, день
- * оплаты, автоплатёж, напоминание и окончание сервер синхронно переносит
- * на Платёж арендной платы (#1208) — фронт шлёт дифф формы (edit-model)
- * одним PATCH. Сохранение — тост и возврат на «Условия аренды».
+ * оплаты, автоплатёж, напоминание, галочка почты и окончание сервер
+ * синхронно переносит на Платёж арендной платы (#1208, #1555) — фронт
+ * шлёт дифф формы (edit-model) одним PATCH. Сохранение — тост и возврат
+ * на «Условия аренды».
  */
 export function RentalTermsEditScreen({
   propertyId,
@@ -156,6 +174,20 @@ function RentalTermsEditForm({
   // today — серверный (TZ собственника): границы валидации и форматы дат.
   const today: IsoDate = rental.today;
 
+  // Ряд «Уведомления на почту» (карта #1551, тикет #1557): подпись с
+  // почтой пользователя, канон шага создания; свитч — персональная
+  // галочка этой аренды, предзаполнение из её флага. Мастер категории
+  // здесь только читается: общий предикат с компонентом ряда решает и
+  // видимость, и «едет ли notifyEmail в PATCH» (при off и сбое — дифф
+  // без поля, канон #1552).
+  const meQuery = useMe();
+  const email = meQuery.data?.email ?? null;
+  const emailMasterQuery = useEmailNotificationPreferences();
+  const emailRowVisible = emailNotificationsRowVisible(
+    emailMasterQuery.isPending,
+    emailMasterQuery.data?.[RENTAL_EMAIL_CATEGORY],
+  );
+
   const [form, setForm] = useState<RentalEditForm>(() => rentalEditFormFromRental(rental));
   // «Сырые» набранные значения денег — источник отображения (группировка
   // не сбрасывает каретку); копейки едут в форму для диффа и валидации.
@@ -175,7 +207,7 @@ function RentalTermsEditForm({
   const update = <K extends keyof RentalEditForm>(key: K, value: RentalEditForm[K]): void =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  const command = buildRentalUpdateCommand(rental, form);
+  const command = buildRentalUpdateCommand(rental, form, { notifyEmailRowVisible: emailRowVisible });
   const canSave = command !== undefined;
   // Эффективный день оплаты (#1156): выбранный в форме, иначе день платежа
   // аренды — от него считается минимум пикера окончания и сброс.
@@ -313,6 +345,16 @@ function RentalTermsEditForm({
           <ReminderPickerField
             value={form.reminderOffsetDays}
             onChange={(offset) => update('reminderOffsetDays', offset)}
+          />
+
+          {/* Ряд почты — после пикера напоминания (канон #1552): свитч —
+              персональная галочка этой аренды, гейта от пикера нет. */}
+          <NotifyEmailRow
+            category={RENTAL_EMAIL_CATEGORY}
+            title="Включить уведомления об оплате на почту"
+            caption={emailReminderCaption('об оплате', email)}
+            checked={form.notifyEmail}
+            onCheckedChange={(notifyEmail) => update('notifyEmail', notifyEmail)}
           />
 
           <TextField

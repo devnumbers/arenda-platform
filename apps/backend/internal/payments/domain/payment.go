@@ -128,6 +128,15 @@ type Payment struct {
 	// владельца по гриллингу #1186). The notifications publisher reads it;
 	// the mode switches never rewrite the flag.
 	NotifyAutoPaid bool
+	// NotifyEmail is the per-payment toggle of this rule's email
+	// notifications (карта #1551, тикет #1553): false — письма по
+	// уведомлениям правила не отправляются. Defaults to true («включена» —
+	// решение владельца 22.10.2026; миграция проставила true всем
+	// существующим, поведение данных не меняла); глобальная настройка почты
+	// профиля остаётся мастером. Гейтится только email-канал: лента, тосты и
+	// push не трогаются. Конструкторы правила вне платежей (арендный шов)
+	// обязаны ставить true явно — нулевое значение молча выключает письма.
+	NotifyEmail bool
 	// ReminderOffsetDays is how many days ahead of an occurrence the
 	// «Напоминание о платеже» fires: 1, 3 or 7; nil means no reminders. The
 	// notification lives independently of AutoPay — an auto-pay rule with a

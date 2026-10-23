@@ -23,6 +23,7 @@ export { OperationsSearchScreen } from './ui/operations-search-screen';
 export { PaymentsCatalogScreen } from './ui/payments-catalog-screen';
 export type { PaymentsCatalogVariant } from './ui/payments-catalog-screen';
 export { PaymentCreateWizardScreen } from './ui/payment-create-wizard/payment-create-wizard-screen';
+export { PaymentsGlobalCreateWizardScreen } from './ui/payment-create-wizard/payments-global-create-wizard-screen';
 export { PaymentDetailScreen } from './ui/payment-detail-screen';
 export { OperationDetailScreen } from './ui/operation-detail-screen';
 export { PaymentDetailSkeleton, OperationDetailSkeleton } from './ui/payments-skeletons';

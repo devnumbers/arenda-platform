@@ -138,17 +138,20 @@ func (t *rentPaymentGatewayTx) Create(
 	}
 	category := rentCategorySlug
 	if err := t.payments.Create(ctx, paymentsdomain.Payment{
-		ID:                 id,
-		OwnerID:            seed.OwnerID,
-		PropertyID:         seed.PropertyID,
-		Type:               paymentsdomain.TypeIncome,
-		Title:              rentPaymentTitle,
-		AmountKopecks:      seed.AmountKopecks,
-		Recurrence:         recurrence,
-		Since:              seed.StartDate,
-		EndDate:            seed.PlannedEndDate,
-		AutoPay:            seed.AutoPay,
-		NotifyAutoPaid:     seed.NotifyAutoPaid,
+		ID:             id,
+		OwnerID:        seed.OwnerID,
+		PropertyID:     seed.PropertyID,
+		Type:           paymentsdomain.TypeIncome,
+		Title:          rentPaymentTitle,
+		AmountKopecks:  seed.AmountKopecks,
+		Recurrence:     recurrence,
+		Since:          seed.StartDate,
+		EndDate:        seed.PlannedEndDate,
+		AutoPay:        seed.AutoPay,
+		NotifyAutoPaid: seed.NotifyAutoPaid,
+		// Пер-платёжная почта (#1555): флаг едет с контрактов аренды, как
+		// reminderOffsetDays; omitted→true резолвит транспорт (#1553).
+		NotifyEmail:        seed.NotifyEmail,
 		ReminderOffsetDays: seed.ReminderOffsetDays,
 		Category:           paymentsdomain.CategoryRef{Slug: &category},
 	}); err != nil {
@@ -194,6 +197,9 @@ func (t *rentPaymentGatewayTx) Update(
 	}
 	if change.ReminderOffsetDays != nil {
 		payment.ReminderOffsetDays = change.ReminderOffsetDays.Value
+	}
+	if change.NotifyEmail != nil {
+		payment.NotifyEmail = *change.NotifyEmail
 	}
 	changes := paymentsdomain.DiffPaymentChanges(before, payment)
 	if err := t.payments.Update(ctx, payment); err != nil {
@@ -309,6 +315,7 @@ func (g *rentPaymentGateway) RentPaymentState(
 		PaymentDay:         day,
 		AutoPay:            payment.AutoPay,
 		ReminderOffsetDays: payment.ReminderOffsetDays,
+		NotifyEmail:        payment.NotifyEmail,
 	}, nil
 }
 

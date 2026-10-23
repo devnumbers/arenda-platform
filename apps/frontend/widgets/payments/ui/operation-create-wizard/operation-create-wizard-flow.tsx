@@ -32,11 +32,16 @@ import {
 } from '@/features/payments';
 import { paymentCategoryBySlug } from '@/features/payment-categories';
 import { useProperties } from '@/features/properties';
+import {
+  effectiveSelectedPropertyId,
+  filterEditableProperties,
+  propertiesByPrimaryOrder,
+} from '@/entities/property';
 import { CategorySearchHint, WizardBottomBar, WizardHeading } from '../payment-create-wizard/wizard-chrome';
 import { CategoryStep } from '../payment-create-wizard/category-step';
+import { PropertyStep } from '../payment-create-wizard/property-step';
 import { OperationAmountStep } from './operation-amount-step';
 import { OperationTitleStep } from './operation-title-step';
-import { OperationPropertyStep } from './operation-property-step';
 import { OperationSuccess } from './operation-success';
 
 /**
@@ -95,8 +100,19 @@ export function OperationCreateWizardFlow({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   // Имя объекта для успеха глобального входа — из списка объектов,
   // загруженного шагом выбора (ответ POST имя не несёт); у входа с
-  // объекта имя приходит из экрана, список не запрашивается.
+  // объекта имя приходит из экрана, список не запрашивается. Тот же
+  // список даёт дефолт предвыбора шага 5.
   const propertiesQuery = useProperties({ enabled: mode === 'global' });
+  const editableProperties = propertiesByPrimaryOrder(
+    filterEditableProperties(propertiesQuery.data ?? []),
+  );
+  // Видимый на шаге и уходящий в сабмит объект: явный выбор пользователя
+  // сильнее, до явного — дефолт (верхняя строка, канон «Основного
+  // объекта»); в состоянии шагов хранится только явный выбор.
+  const selectedPropertyId = effectiveSelectedPropertyId(
+    draft.propertyId,
+    editableProperties,
+  );
 
   // Открытие поиска сразу делает поле активным (программный фокус —
   // устоявшийся a11y-паттерн вместо autoFocus).
@@ -308,16 +324,23 @@ export function OperationCreateWizardFlow({
         )}
         {step === 5 && (
           <>
-            <OperationPropertyStep
-              selectedPropertyId={draft.propertyId}
+            <PropertyStep
+              selectedPropertyId={selectedPropertyId}
               onSelect={(id) => setDraft((prev) => ({ ...prev, propertyId: id }))}
+              ariaLabel="Объект операции"
             />
-            {/* Сабмит глобального входа: неактивен, пока объект не выбран. */}
+            {/* Сабмит глобального входа: с дефолтом предвыбора активен
+                сразу, гаснет только на пустом справочнике редактируемых. */}
             <StickyBottomBar>
               <WizardBottomBar>
                 <Button
                   className="w-full"
-                  disabled={!operationWizardStepReady(5, draft)}
+                  disabled={
+                    !operationWizardStepReady(5, {
+                      ...draft,
+                      propertyId: selectedPropertyId,
+                    })
+                  }
                   loading={createOperation.isPending}
                   onClick={() => void submit()}
                 >
@@ -358,10 +381,10 @@ export function OperationCreateWizardFlow({
       : ROUTES.operations;
   }
 
-  /** Объект сабмита: у входа с объекта — маршрут, у глобального — выбор
-   * шага 5. */
+  /** Объект сабмита: у входа с объекта — маршрут, у глобального — видимый
+   * выбор шага 5 (явный или дефолт). */
   function targetPropertyId(): string | undefined {
-    return mode === 'property' ? propertyId : draft.propertyId;
+    return mode === 'property' ? propertyId : selectedPropertyId;
   }
 
   function createdPropertyName(id: string): string | undefined {

@@ -28,21 +28,6 @@ function fractionDigits(value: string | number): number {
   return str.length - dot - 1;
 }
 
-function numericValue(
-  attrs: PropertyAttributes,
-  key: AttrKey,
-): number | undefined {
-  const value = attrs[key];
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
 export function validateField(
   type: PropertyType,
   key: AttrKey,
@@ -68,8 +53,8 @@ export function validateField(
 
   if (def.kind === 'number') {
     const parsed = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(parsed) || parsed < def.min || parsed > def.max) {
-      return `от ${def.min} до ${def.max} ${def.unit}`;
+    if (Number.isNaN(parsed)) {
+      return 'значение некорректно';
     }
     if (fractionDigits(value) > def.decimals) {
       return `не более ${def.decimals} знаков после запятой`;
@@ -79,8 +64,8 @@ export function validateField(
 
   if (def.kind === 'integer') {
     const parsed = typeof value === 'number' ? value : Number(value);
-    if (!Number.isInteger(parsed) || parsed < def.min || parsed > def.max) {
-      return `от ${def.min} до ${def.max}`;
+    if (!Number.isInteger(parsed)) {
+      return 'значение некорректно';
     }
     return undefined;
   }
@@ -111,31 +96,6 @@ export function validateAttributes(
     const error = validateField(type, rawKey as AttrKey, rawValue);
     if (error !== undefined) {
       errors[rawKey as AttrKey] = error;
-    }
-  }
-
-  // Cross-field rules: only applied when both sides present and individually valid.
-  if (errors.floor === undefined && errors.floors_total === undefined) {
-    const floor = numericValue(attrs, "floor");
-    const floorsTotal = numericValue(attrs, "floors_total");
-    if (floor !== undefined && floorsTotal !== undefined && floor > floorsTotal) {
-      errors.floor = "этаж не может превышать этажность";
-    }
-  }
-
-  if (errors.area_living === undefined && errors.area_total === undefined) {
-    const areaLiving = numericValue(attrs, "area_living");
-    const areaTotal = numericValue(attrs, "area_total");
-    if (areaLiving !== undefined && areaTotal !== undefined && areaLiving > areaTotal) {
-      errors.area_living = "не может превышать общую площадь";
-    }
-  }
-
-  if (errors.area_kitchen === undefined && errors.area_total === undefined) {
-    const areaKitchen = numericValue(attrs, "area_kitchen");
-    const areaTotal = numericValue(attrs, "area_total");
-    if (areaKitchen !== undefined && areaTotal !== undefined && areaKitchen > areaTotal) {
-      errors.area_kitchen = "не может превышать общую площадь";
     }
   }
 

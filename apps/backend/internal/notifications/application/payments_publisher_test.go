@@ -489,7 +489,7 @@ func TestPaymentsPublisher_NilZoneDirectory(t *testing.T) {
 // уведомления — чётко по времени): the hourly pass books the upcoming
 // boundary jobs before the zone sweep — the due leg's job wakes at the wall
 // clock 10:00 of the operation date in the owner's zone (#1168), the
-// overdue leg's — at 22:00 of the day after. All windows are asked for the
+// overdue leg's — at 10:00 of the day after. All windows are asked for the
 // same two-day horizon; the
 // sweep itself goes on as the backstop.
 func TestPaymentsPublisher_SchedulesUpcomingBoundaries(t *testing.T) {
@@ -508,7 +508,7 @@ func TestPaymentsPublisher_SchedulesUpcomingBoundaries(t *testing.T) {
 	h.source.schedOverdue = []PaymentScheduleTarget{
 		{
 			PaymentID: overdueRule, DueDate: time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
-			FireAt: time.Date(2026, 9, 20, 19, 0, 0, 0, time.UTC),
+			FireAt: time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC),
 		},
 	}
 	h.source.schedAutoPaid = []PaymentScheduleTarget{
@@ -531,7 +531,7 @@ func TestPaymentsPublisher_SchedulesUpcomingBoundaries(t *testing.T) {
 	// Each leg books its own kind at the boundary instant it was given.
 	assert.Equal(t, time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC),
 		h.scheduler.booked[paymentBookingKey("due", dueRule, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))])
-	assert.Equal(t, time.Date(2026, 9, 20, 19, 0, 0, 0, time.UTC),
+	assert.Equal(t, time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC),
 		h.scheduler.booked[paymentBookingKey("overdue", overdueRule, time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC))])
 	assert.Equal(t, time.Date(2026, 9, 21, 7, 0, 0, 0, time.UTC),
 		h.scheduler.booked[paymentBookingKey("auto paid", autoPaidRule, time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC))])

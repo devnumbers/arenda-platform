@@ -215,74 +215,77 @@ export function OperationsOfTypeScreen({
             }
           />
         ) : (
-          <div className="flex flex-col gap-6 pt-4">
-            {/* Чипы фильтров — как на главном (Figma 1502:65149): период
-             * применён — синий, дефолт «весь период» — нейтральный серый
-             * (#675); выбор — отдельные страницы (#477). */}
-            <OperationsFilterChips
-              className="px-6"
-              periodLabel={operationsPeriodChipLabel(filters.period)}
-              periodActive={filters.period !== null}
-              categoriesLabel={operationsCategoryChipLabel(
-                filters.categories,
-                categoryRows,
-              )}
-              categoriesActive={filters.categories.length > 0}
-              onOpenPeriod={() => setPeriodOpen(true)}
-              onOpenCategories={openCategories}
-            />
-
-            {pending && (
-              <>
-                {/* Паритет §7: одна карточка направления во всю ширину и
-                 * группы дат со строками — как у глобальных направлений
-                 * (#548); чипы выше — вне фазы загрузки. */}
-                <OperationsSummarySkeleton cards={1} />
-                <OperationsDateFeedSkeleton />
-              </>
-            )}
-
-            {!pending && (
-              <>
-                {listQuery.isError ? (
-                  <PaymentsStateCard
-                    title="Не удалось загрузить операции"
-                    hint="Проверьте подключение и попробуйте еще раз"
-                    action={
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        onClick={() => void listQuery.refetch()}
-                      >
-                        Повторить
-                      </Button>
-                    }
-                  />
-                ) : (
-                  <>
-                    {/* Карточка направления (Figma 1863-35008/1863-35816):
-                     * некликабельна, полоса разбивки та же — вход на
-                     * направление только с главного экрана операций. */}
-                    <div className="px-6">
-                      <OperationsSummaryCard
-                        label={SCREEN_COPY[type].label}
-                        totalKopecks={
-                          type === "expense"
-                            ? summaryQuery.data?.expenseTotalKopecks
-                            : summaryQuery.data?.incomeTotalKopecks
-                        }
-                        segments={summaryBarSegments(summaryQuery.data, type)}
-                      />
-                    </div>
-
-                    <OperationsDateList
-                      groups={groups}
-                      onSelectOperation={openOperation}
-                      tail={<InfiniteQueryTail query={listQuery} />}
-                    />
-                  </>
+          /* Канон ленты (макет 1858-104152): чипы открывают контент
+           * (24 PageContent), верхний блок «чипы → карточка» держит 24,
+           * до ленты — гэп 8 контейнера: к заголовку первой дат-группы
+           * выходит канонный ритм 32 (верх 24 у PaymentsHeading). */
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-6">
+              {/* Чипы фильтров — как на главном (Figma 1502:65149): период
+               * применён — синий, дефолт «весь период» — нейтральный серый
+               * (#675); выбор — отдельные страницы (#477). */}
+              <OperationsFilterChips
+                className="px-6"
+                periodLabel={operationsPeriodChipLabel(filters.period)}
+                periodActive={filters.period !== null}
+                categoriesLabel={operationsCategoryChipLabel(
+                  filters.categories,
+                  categoryRows,
                 )}
-              </>
+                categoriesActive={filters.categories.length > 0}
+                onOpenPeriod={() => setPeriodOpen(true)}
+                onOpenCategories={openCategories}
+              />
+
+              {pending && (
+                /* Паритет §7: одна карточка направления во всю ширину —
+                 * как у глобальных направлений (#548); чипы выше — вне
+                 * фазы загрузки. */
+                <OperationsSummarySkeleton cards={1} />
+              )}
+
+              {!pending && listQuery.isError && (
+                <PaymentsStateCard
+                  title="Не удалось загрузить операции"
+                  hint="Проверьте подключение и попробуйте еще раз"
+                  action={
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      onClick={() => void listQuery.refetch()}
+                    >
+                      Повторить
+                    </Button>
+                  }
+                />
+              )}
+
+              {!pending && !listQuery.isError && (
+                /* Карточка направления (Figma 1863-35008/1863-35816):
+                 * некликабельна, полоса разбивки та же — вход на
+                 * направление только с главного экрана операций. */
+                <div className="px-6">
+                  <OperationsSummaryCard
+                    label={SCREEN_COPY[type].label}
+                    totalKopecks={
+                      type === "expense"
+                        ? summaryQuery.data?.expenseTotalKopecks
+                        : summaryQuery.data?.incomeTotalKopecks
+                    }
+                    segments={summaryBarSegments(summaryQuery.data, type)}
+                  />
+                </div>
+              )}
+            </div>
+
+            {pending && <OperationsDateFeedSkeleton />}
+
+            {!pending && !listQuery.isError && (
+              <OperationsDateList
+                groups={groups}
+                onSelectOperation={openOperation}
+                tail={<InfiniteQueryTail query={listQuery} />}
+              />
             )}
           </div>
         )}

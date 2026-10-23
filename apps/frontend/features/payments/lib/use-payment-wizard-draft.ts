@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { clearDraftStorage, useDraftStore } from '@/shared/lib/hooks/useDraftStore';
 import { PAYMENT_REMINDER_OPTIONS } from '@/entities/payment';
@@ -18,7 +19,11 @@ import type {
  * Автоплатёж»). Обёртка владеет только ключом, дефолтом и проверкой формы —
  * сам цикл хранения живёт в useDraftStore. Форма черновика покрывает поля
  * шагов визарда и служебный штамп последнего шага — resume открывает
- * сохранённый шаг, а не пересчёт из заполненности (#1055).
+ * сохранённый шаг, а не пересчёт из заполненности (#1055). У глобального
+ * входа (/payments/new, решение владельца 23.10.2026) персистентного
+ * черновика нет — состояние живёт в памяти потока (useEphemeral…), а
+ * выбранный на шаге «Выбрать объект» объект едет в поле propertyId и
+ * наружу из хранилища не выходит.
  */
 
 /** Тип создаваемого из шита: обычный платёж или автоплатёж (флаг autoPay). */
@@ -40,8 +45,15 @@ export type PaymentWizardDraft = {
   /** «Уведомлять об автоплатеже» (шаг 4, ветка автоплатежа, #1193): хранится
    * только явное «Да, уведомлять» — «Не уведомлять» (дефолт) поля не пишет. */
   readonly notifyAutoPaid?: boolean;
+  /** «Уведомления на почту» (шаг 4, карта #1551): запомненное значение
+   * свитча; не тронуто — поле не пишет (ряд стартует с on, канон #1552).
+   * Хранится в обе стороны — выключенный свитч переживает перезагрузку. */
+  readonly notifyEmail?: boolean;
   /** Сумма в копейках, целая положительная (шаг 5). */
   readonly amountKopecks?: number;
+  /** Объект шага «Выбрать объект» — только глобальный вход; в хранилище не
+   * пишется (валидатор поле отбрасывает). */
+  readonly propertyId?: string;
   /** Последний шаг, на котором был пользователь — штамп каждого перехода
    * (вперёд и «Назад», #1055): resume открывает сохранённый шаг, а не
    * пересчёт из заполненности. Служебное поле: само по себе черновиком
@@ -52,6 +64,26 @@ export type PaymentWizardDraft = {
    * себе черновиком не считается. */
   readonly updatedAt?: number;
 };
+
+/** Хранилище состояния шагов визарда: у объектного входа это черновик
+ * localStorage, у глобального — память смонтированного потока. */
+export type PaymentWizardDraftController = {
+  readonly draft: PaymentWizardDraft;
+  readonly setDraft: Dispatch<SetStateAction<PaymentWizardDraft>>;
+  readonly clearDraft: () => void;
+};
+
+/** Состояние шагов глобального входа: чистый лист при каждом маунте потока —
+ * канон операций (карта #1052, Q2=В), персистентности нет (уход со страницы
+ * и перезагрузка стирают введённое). */
+export function useEphemeralPaymentWizardDraft(): PaymentWizardDraftController {
+  const [draft, setDraft] = useState<PaymentWizardDraft>({});
+  return {
+    draft,
+    setDraft,
+    clearDraft: () => setDraft({}),
+  };
+}
 
 const DEFAULT_DRAFT: PaymentWizardDraft = {};
 
@@ -108,6 +140,7 @@ export function hasPaymentWizardDraftFields(draft: PaymentWizardDraft): boolean 
     || draft.endDate !== undefined
     || draft.reminderOffsetDays !== undefined
     || draft.notifyAutoPaid !== undefined
+    || draft.notifyEmail !== undefined
     || draft.amountKopecks !== undefined
   );
 }
@@ -216,6 +249,13 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
   }
   const notifyAutoPaid = record.notifyAutoPaid === true;
 
+  // Галочка почты (карта #1551): значима в обе стороны (выключенный свитч —
+  // «запоминание» канона #1552), небулево роняет черновик как чужой тип.
+  if (record.notifyEmail !== undefined && typeof record.notifyEmail !== 'boolean') {
+    return DEFAULT_DRAFT;
+  }
+  const notifyEmail = typeof record.notifyEmail === 'boolean' ? record.notifyEmail : undefined;
+
   const amountKopecks = isPositiveInt(record.amountKopecks) ? record.amountKopecks : undefined;
   if (record.amountKopecks !== undefined && amountKopecks === undefined) return DEFAULT_DRAFT;
 
@@ -236,6 +276,7 @@ export function validatePaymentWizardDraft(parsed: unknown): PaymentWizardDraft 
     ...(endDate !== undefined && { endDate }),
     ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
     ...(notifyAutoPaid && { notifyAutoPaid }),
+    ...(notifyEmail !== undefined && { notifyEmail }),
     ...(amountKopecks !== undefined && { amountKopecks }),
     ...(step !== undefined && { step }),
     ...(updatedAt !== undefined && { updatedAt }),

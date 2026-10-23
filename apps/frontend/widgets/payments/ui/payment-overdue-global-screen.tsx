@@ -142,7 +142,6 @@ export function PaymentOverdueGlobalScreen({
               {overdue.map((payment) => (
                 <PaymentRowButton
                   key={payment.id}
-                  className="px-6"
                   categoryIcon={<OverdueRowIcon payment={payment} />}
                   title={payment.title}
                   subtitle={payment.propertyName}

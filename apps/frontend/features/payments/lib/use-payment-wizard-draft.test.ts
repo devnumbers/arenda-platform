@@ -55,6 +55,14 @@ describe('validatePaymentWizardDraft', () => {
     });
   });
 
+  it('propertyId глобального входа наружу из хранилища не выходит', () => {
+    // Объект шага «Выбрать объект» живёт только в памяти потока: попав в
+    // хранилище (мусор), он отбрасывается, черновик не роняя.
+    expect(
+      validatePaymentWizardDraft({ title: 'x', propertyId: 'p1' }),
+    ).toStrictEqual({ title: 'x' });
+  });
+
   it('напоминание сохраняется, чужой оффсет роняет черновик (карта #822)', () => {
     expect(validatePaymentWizardDraft({ title: 'x', reminderOffsetDays: 3 })).toStrictEqual({
       title: 'x',
@@ -77,6 +85,20 @@ describe('validatePaymentWizardDraft', () => {
     });
     // Небулево значение — мусор из хранилища, роняет черновик как чужой тип.
     expect(validatePaymentWizardDraft({ notifyAutoPaid: 'да' })).toStrictEqual({});
+  });
+
+  it('галочка почты: оба булевых значимы, небулево роняет черновик (карта #1551)', () => {
+    // Пользовательский выбор хранится в обе стороны: выключенный свитч
+    // («запоминание», канон #1552) обязан пережить перезагрузку.
+    expect(validatePaymentWizardDraft({ title: 'x', notifyEmail: false })).toStrictEqual({
+      title: 'x',
+      notifyEmail: false,
+    });
+    expect(validatePaymentWizardDraft({ title: 'x', notifyEmail: true })).toStrictEqual({
+      title: 'x',
+      notifyEmail: true,
+    });
+    expect(validatePaymentWizardDraft({ notifyEmail: 'нет' })).toStrictEqual({});
   });
 
   it('пустые строки и неположительные суммы отбрасываются', () => {
@@ -125,6 +147,8 @@ describe('hasPaymentWizardDraftFields', () => {
     expect(hasPaymentWizardDraftFields({ endDate: '2027-01-31' })).toBe(true);
     expect(hasPaymentWizardDraftFields({ reminderOffsetDays: 7 })).toBe(true);
     expect(hasPaymentWizardDraftFields({ notifyAutoPaid: true })).toBe(true);
+    // Выключенная галочка почты — тоже пользовательский выбор (#1551).
+    expect(hasPaymentWizardDraftFields({ notifyEmail: false })).toBe(true);
   });
 
   it('служебный updatedAt сам по себе черновиком не считается', () => {

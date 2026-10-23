@@ -70,6 +70,11 @@ type RentPaymentSeed struct {
 	// (карта #822): 1/3/7, nil = без напоминаний. Аренда ставит его вместе
 	// с автоплатежом (решение #823).
 	ReminderOffsetDays *int
+	// NotifyEmail is the managed payment's per-payment email gate (карта
+	// #1551, тикет #1555): письма по уведомлениям этого правила. Независим
+	// от напоминания; дефолт omitted→true резолвит транспорт — команда
+	// carries the resolved verdict verbatim (#1553).
+	NotifyEmail bool
 }
 
 // ReminderOffsetUpdate is the tri-state resolution of the reminder patch
@@ -89,6 +94,10 @@ type RentPaymentChange struct {
 	AutoPay            *bool
 	PlannedEndDate     *DateUpdate
 	ReminderOffsetDays *ReminderOffsetUpdate
+	// NotifyEmail is the tri-state email-toggle patch (тикет #1555): nil
+	// keeps the current value, a boolean sets it — the transport folds the
+	// wire's explicit null onto false (галочка не-nullable, #1553).
+	NotifyEmail *bool
 }
 
 // RentPaymentState is the payment's render state (ADR 0053 §2): the day of
@@ -105,6 +114,11 @@ type RentPaymentState struct {
 	// ReminderOffsetDays is the managed payment's reminder lead time read
 	// back for the settings screens (карта #822); nil = без напоминаний.
 	ReminderOffsetDays *int
+	// NotifyEmail is the managed payment's per-payment email gate read back
+	// for the settings screens (тикет #1555); у завершённой аренды рендер
+	// собирается из Архива условий — флаг там не хранится, ответ несёт
+	// false.
+	NotifyEmail bool
 }
 
 // RentPaymentTerms is the managed payment's current terms read inside the

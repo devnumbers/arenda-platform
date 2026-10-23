@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 import {
   PERIODICITY_OPTIONS,
+  WIZARD_STEP_LAYOUTS,
   WIZARD_TOTAL_STEPS,
   branchKind,
   buildPaymentCreateCommand,
@@ -13,6 +14,7 @@ import {
   draftAfterRecurrenceChange,
   wizardDraftAfterStep,
   wizardStepReady,
+  wizardTotalSteps,
   yearlyAnchorDate,
 } from './wizard-model';
 
@@ -26,8 +28,31 @@ const draft = (over: Partial<PaymentWizardDraft>): PaymentWizardDraft => ({
   ...over,
 });
 
-describe('константы визарда', () => {
-  it('пять шагов, меню периодичности без «Один раз»', () => {
+describe('раскладка шагов по точке входа', () => {
+  it('объектный вход — 5 шагов: объект известен из маршрута', () => {
+    expect(wizardTotalSteps('property')).toBe(5);
+    expect(WIZARD_STEP_LAYOUTS.property).toStrictEqual({
+      category: 1,
+      title: 2,
+      periodicity: 3,
+      settings: 4,
+      amount: 5,
+    });
+  });
+
+  it('глобальный вход — 6 шагов: после категории «Выбрать объект» (аналог /operations/new #570)', () => {
+    expect(wizardTotalSteps('global')).toBe(6);
+    expect(WIZARD_STEP_LAYOUTS.global).toStrictEqual({
+      category: 1,
+      property: 2,
+      title: 3,
+      periodicity: 4,
+      settings: 5,
+      amount: 6,
+    });
+  });
+
+  it('канон штампов черновика — 5 шагов объектного входа; меню периодичности без «Один раз»', () => {
     expect(WIZARD_TOTAL_STEPS).toBe(5);
     expect(PERIODICITY_OPTIONS.map((option) => option.label)).toStrictEqual([
       'Каждый день',
@@ -40,34 +65,38 @@ describe('константы визарда', () => {
 
 describe('wizardStepReady — валидация шагов не пускает дальше без обязательного', () => {
   it.each([
-    [1, draft({}), true],
-    [2, draft({ title: '' }), true], // название необязательно
-    [3, draft({ recurrence: { kind: 'daily' } }), true],
+    ['category', draft({}), true],
+    ['title', draft({ title: '' }), true], // название необязательно
+    ['periodicity', draft({ recurrence: { kind: 'daily' } }), true],
     [
-      3,
+      'periodicity',
       draft({ recurrence: { kind: 'weekly', weekdays: [] } }),
       false, // ветка недели пуста
     ],
     [
-      3,
+      'periodicity',
       draft({ recurrence: { kind: 'weekly', weekdays: [1] } }),
       true,
     ],
-    [4, draft({ endDate: undefined }), true], // окончание необязательно
-    [5, draft({ amountKopecks: 250000 }), true],
-    [5, draft({ amountKopecks: 0 }), false],
-    [5, draft({ type: undefined }), true], // у типа дефолт «доход»
-    [5, draft({ amountKopecks: undefined }), false],
-  ] as const)('шаг %s → %s', (step, value, expected) => {
-    expect(wizardStepReady(step, value)).toBe(expected);
+    ['settings', draft({ endDate: undefined }), true], // окончание необязательно
+    ['amount', draft({ amountKopecks: 250000 }), true],
+    ['amount', draft({ amountKopecks: 0 }), false],
+    ['amount', draft({ type: undefined }), true], // у типа дефолт «доход»
+    ['amount', draft({ amountKopecks: undefined }), false],
+  ] as const)('шаг %s → %s', (name, value, expected) => {
+    expect(wizardStepReady(name, value)).toBe(expected);
   });
 
-  it('шаги 1 и 5 не готовы на пустом черновике', () => {
+  it('категория, объект, периодичность и сумма не готовы на пустом состоянии шагов', () => {
     const empty: PaymentWizardDraft = {};
-    expect(wizardStepReady(1, empty)).toBe(false);
-    expect(wizardStepReady(2, empty)).toBe(true);
-    expect(wizardStepReady(3, empty)).toBe(false);
-    expect(wizardStepReady(5, empty)).toBe(false);
+    expect(wizardStepReady('category', empty)).toBe(false);
+    expect(wizardStepReady('property', empty)).toBe(false);
+    expect(wizardStepReady('periodicity', empty)).toBe(false);
+    expect(wizardStepReady('amount', empty)).toBe(false);
+  });
+
+  it('объект готов явным выбором шага «Выбрать объект» (глобальный вход)', () => {
+    expect(wizardStepReady('property', draft({ propertyId: 'p1' }))).toBe(true);
   });
 });
 
@@ -305,6 +334,9 @@ describe('buildPaymentCreateCommand — сериализация чернови�
       recurrence: { kind: 'monthly', daysOfMonth: [1], lastDay: false },
       categorySlug: 'rent',
       autoPay: false,
+      // Дефолтное радио «Не напоминать» гасит ряд почты — галочка off
+      // (карта #1551, канон #1552: заглушенный ряд отправляет off).
+      notifyEmail: false,
     });
   });
 
@@ -369,6 +401,34 @@ describe('buildPaymentCreateCommand — сериализация чернови�
       autoPay: false,
     });
     expect(regular !== undefined && Object.hasOwn(regular, 'notifyAutoPaid')).toBe(false);
+  });
+
+  it('персональная галочка почты: живой ряд едет значением черновика, дефолт on (карта #1551)', () => {
+    // Ряд жив («За 1 день») — черновик-поле (не тронуто → on) в команде.
+    expect(
+      buildPaymentCreateCommand(draft({ reminderOffsetDays: 1 }), {})?.notifyEmail,
+    ).toBe(true);
+    // Пользователь выключил свитч — off запомнен и уезжает.
+    expect(
+      buildPaymentCreateCommand(draft({ reminderOffsetDays: 1, notifyEmail: false }), {})
+        ?.notifyEmail,
+    ).toBe(false);
+  });
+
+  it('гейт «не надо» отправляет off независимо от запомненного (канон #1552)', () => {
+    // «Не напоминать» (дефолт ручной ветки) — галочки почты нет.
+    expect(buildPaymentCreateCommand(draft({}), {})?.notifyEmail).toBe(false);
+    // «Не уведомлять» (дефолт автоплатежа) — так же.
+    expect(buildPaymentCreateCommand(draft({}), { autoPay: true })?.notifyEmail).toBe(false);
+    // Запомненное on не протекает: заглушенный ряд показывает и отправляет off.
+    expect(buildPaymentCreateCommand(draft({ notifyEmail: true }), {})?.notifyEmail).toBe(false);
+  });
+
+  it('ряд скрыт мастером (notifyEmailRowVisible: false) — поле в команду не едёт', () => {
+    const hidden = buildPaymentCreateCommand(draft({ reminderOffsetDays: 1 }), {
+      notifyEmailRowVisible: false,
+    });
+    expect(hidden !== undefined && Object.hasOwn(hidden, 'notifyEmail')).toBe(false);
   });
 });
 

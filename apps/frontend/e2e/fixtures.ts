@@ -488,15 +488,23 @@ const EMAIL_CATEGORIES_ALL_ON: EmailCategories = {
  * `email` и отвечает уже сохранённым — refetch после PUT видит его же.
  * Возвращает `savedCategories` — что записал последний PUT (undefined, пока
  * PUT не было); гонки запросов в спеках читаются только через expect.poll
- * по нему.
+ * по нему. `initial` — стартовое состояние матрицы (мастер off для
+ * проверки скрытия ряда, карта #1551); `puts` — счётчик PUT (на платёжных
+ * экранах шоткат снят — счётчик обязан стоять на нуле, тикет #1556).
  */
-export async function mockEmailCategoryShortcut(page: Page): Promise<{
+export async function mockEmailCategoryShortcut(
+  page: Page,
+  options: { readonly initial?: EmailCategories } = {},
+): Promise<{
   savedCategories: () => EmailCategories | undefined;
+  puts: () => number;
 }> {
-  let current: EmailCategories = { ...EMAIL_CATEGORIES_ALL_ON };
+  let current: EmailCategories = options.initial ?? { ...EMAIL_CATEGORIES_ALL_ON };
   let saved: EmailCategories | undefined;
+  let putCount = 0;
   await page.route('**/api/notification-preferences', async (route) => {
     if (route.request().method() === 'PUT') {
+      putCount += 1;
       saved = (route.request().postDataJSON() as { email: EmailCategories }).email;
       current = { ...saved };
       await route.fulfill({ json: { email: current } });
@@ -504,7 +512,7 @@ export async function mockEmailCategoryShortcut(page: Page): Promise<{
     }
     await route.fulfill({ json: { email: current } });
   });
-  return { savedCategories: () => saved };
+  return { savedCategories: () => saved, puts: () => putCount };
 }
 
 /**

@@ -6,18 +6,46 @@ import type {
 } from '@/entities/payment';
 import { firstOccurrence } from '@/entities/payment';
 import { cmp, dateInMonth, isoYear } from '@/shared/lib/calendar';
+import {
+  emailNotificationsRowState,
+} from './email-notifications-row';
 import type { PaymentWizardDraft } from './use-payment-wizard-draft';
 
 /**
  * Чистая логика визарда создания платежа (#464): готовность шагов,
  * ветки периодичности (без «Один раз» — решение #449), мультивыбор
  * дней недели и сериализация черновика в команду POST создания.
- * Шаги UI и хранение черновика — в слое экрана; здесь только правила.
+ * Точка входа задаёт раскладку шагов: объектный — 5 шагов (объект известен
+ * из маршрута), глобальный (#570-аналог /operations/new, решение владельца
+ * 23.10.2026) — 6, после категории шаг «Выбрать объект». Шаги UI и
+ * хранение черновика — в слое экрана; здесь только правила.
  */
 
+/**
+ * Раскладка шагов по точке входа; последний шаг («amount») — сабмит.
+ * У глобального входа между категорией и названием стоит шаг «Выбрать
+ * объект», поэтому последующие номера сдвинуты на единицу.
+ */
+export const WIZARD_STEP_LAYOUTS = {
+  property: { category: 1, title: 2, periodicity: 3, settings: 4, amount: 5 },
+  global: { category: 1, property: 2, title: 3, periodicity: 4, settings: 5, amount: 6 },
+} as const;
+
+export type PaymentWizardMode = keyof typeof WIZARD_STEP_LAYOUTS;
+
+export type WizardStepName = keyof (typeof WIZARD_STEP_LAYOUTS)['global'];
+
+/** Число шагов визарда точки входа (последний шаг — сабмит). */
+export function wizardTotalSteps(mode: PaymentWizardMode): 5 | 6 {
+  return WIZARD_STEP_LAYOUTS[mode].amount;
+}
+
+/** Канон штампов черновика: черновик хранит только объектный вход
+ * (глобальный живёт в памяти потока), поэтому валидатор верит номерам
+ * 1..5 объектной раскладки. */
 export const WIZARD_TOTAL_STEPS = 5;
 
-export type WizardStep = 1 | 2 | 3 | 4 | 5;
+export type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 /** Пункты меню периодичности (Figma 823:11219, «Один раз» убран). */
 export const PERIODICITY_OPTIONS = [
@@ -140,35 +168,41 @@ export function periodicityReady(recurrence: Recurrence | undefined): boolean {
   }
 }
 
-/** Готовность шага к продолжению (обязательные поля заполнены). */
-export function wizardStepReady(step: WizardStep, draft: PaymentWizardDraft): boolean {
-  switch (step) {
-    case 1:
+/** Готовность шага к продолжению по имени из раскладки (обязательные
+ * поля заполнены); имена одинаковы в обоих режимах — «property» встречается
+ * только у глобального входа. */
+export function wizardStepReady(name: WizardStepName, draft: PaymentWizardDraft): boolean {
+  switch (name) {
+    case 'category':
       return draft.categorySlug !== undefined;
-    case 2:
+    case 'property':
+      return draft.propertyId !== undefined;
+    case 'title':
       // Название необязательно, дефолт — лейбл категории.
       return true;
-    case 3:
+    case 'periodicity':
       return periodicityReady(draft.recurrence);
-    case 4:
+    case 'settings':
       // Окончание платежа необязательно: пусто — бессрочный.
       return true;
-    case 5:
+    case 'amount':
       // У типа есть дефолт («Доход») — решает только положительная сумма.
       return draft.amountKopecks !== undefined && draft.amountKopecks > 0;
   }
 }
 
 /** Восстановление черновика без штампа шага: первый незавершённый шаг
- * (опциональные 2 и 4 перепрыгиваются). */
+ * (опциональные название и настройки перепрыгиваются); номера — канон
+ * объектной раскладки. */
 function initialStep(draft: PaymentWizardDraft): WizardStep {
-  if (!wizardStepReady(1, draft)) return 1;
-  if (!wizardStepReady(3, draft)) return 3;
+  if (!wizardStepReady('category', draft)) return 1;
+  if (!wizardStepReady('periodicity', draft)) return 3;
   return 5;
 }
 
-/** Неизвестное значение — номер шага визарда (целое 1..5): диапазонная
- * проверка persisted штампа; гарду верит и валидатор черновика, и resume. */
+/** Неизвестное значение — номер шага объектной раскладки (целое 1..5):
+ * диапазонная проверка persisted штампа; гарду верит и валидатор черновика,
+ * и resume. */
 export function isWizardStep(value: unknown): value is WizardStep {
   return (
     typeof value === 'number'
@@ -253,6 +287,10 @@ export type CreateCommandOptions = {
    * пустым; резолвер передаёт слой каталога — модель визарда от него свободна.
    */
   readonly resolveTitle?: (categorySlug: string) => string | undefined;
+  /** Ряд почты виден (глобальный мастер категории on либо ещё грузится —
+   * решение не блокируем); false — мастер off, ряд скрыт и галочка в
+   * команду не едёт (дифф без поля, канон #1552). Дефолт — виден. */
+  readonly notifyEmailRowVisible?: boolean;
 };
 
 /** Команда создания из завершённого черновика; undefined — черновик неполон. */
@@ -270,6 +308,19 @@ export function buildPaymentCreateCommand(
       ? draft.title.trim()
       : options.resolveTitle?.(draft.categorySlug);
   if (title === undefined) return undefined;
+
+  // Персональная галочка почты (карта #1551, канон #1552): живой ряд едет
+  // значением черновика (не тронуто → on), гейт «не надо» отправляет off;
+  // скрытый мастером ряд поле не пишет — сервер ставит дефолт true (#1553).
+  const notifyEmailVisible = options.notifyEmailRowVisible !== false;
+  const notifyEmail = emailNotificationsRowState(
+    options.autoPay === true ? 'autopayment' : 'payment',
+    {
+      reminderOffsetDays: draft.reminderOffsetDays,
+      notifyAutoPaid: draft.notifyAutoPaid,
+    },
+    draft.notifyEmail ?? true,
+  ).value;
 
   return {
     type: effectivePaymentType(draft.type),
@@ -289,5 +340,6 @@ export function buildPaymentCreateCommand(
     // уведомлять», сервер ставит false (#1189).
     ...(options.autoPay === true
       && draft.notifyAutoPaid === true && { notifyAutoPaid: true }),
+    ...(notifyEmailVisible && { notifyEmail }),
   };
 }

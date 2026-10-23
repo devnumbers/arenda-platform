@@ -192,6 +192,24 @@ func (q *Queries) GetNotificationForUser(ctx context.Context, arg GetNotificatio
 	return i, err
 }
 
+const getPaymentEmailFlag = `-- name: GetPaymentEmailFlag :one
+SELECT notify_email
+FROM payments
+WHERE id = $1
+`
+
+// The per-payment email flag's delivery-time lookup (карта #1551, тикет
+// #1554): the email worker asks the rule's «Уведомления на почту»
+// (payments.notify_email, миграция 000163) right before sending — живая
+// правда на доставку, кэша нет. Отсутствие строки правила — ответ «как
+// сегодня»: гейт молчит по живым правилам, снесённое не глушит.
+func (q *Queries) GetPaymentEmailFlag(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getPaymentEmailFlag, id)
+	var notify_email bool
+	err := row.Scan(&notify_email)
+	return notify_email, err
+}
+
 const getPaymentOpenState = `-- name: GetPaymentOpenState :one
 SELECT EXISTS (
     SELECT 1 FROM operations
@@ -312,7 +330,7 @@ type GetScheduledAutoPaidPaymentRow struct {
 // silent (the owner knows — they paid it). The live day only: an
 // operation whose date is no longer the zone's today (a job awake after
 // the day rolled over) answers no row — a downtime's missed days are not
-// backfilled, the 22:00 overdue leg speaks for the unpaid past; an
+// backfilled, the 10:00 overdue leg speaks for the unpaid past; an
 // archived property answers no row. The per-payment flag (#1189): a rule
 // with notify_auto_paid = false answers no row — the flag flipped after
 // the booking silences the standing job.
@@ -529,8 +547,8 @@ type GetScheduledOverduePaymentRow struct {
 }
 
 // The overdue boundary job's delivery-time resolution (issue #776): the
-// operation as it stands at its overdue boundary — the wall clock 22:00 of
-// the day after the operation date in the owner's timezone (#1168). The
+// operation as it stands at its overdue boundary — the wall clock 10:00 of
+// the day after the operation date in the owner's timezone. The
 // overdue leg's conditions are re-checked as of the wake-up instant ($3):
 // planned, non-archived property, the date strictly before the zone's
 // today — auto-pay rules included, the sweep's overdue leg's shape.
@@ -1063,7 +1081,7 @@ WHERE u.timezone = $1
   AND o.date < $2::date
   AND o.status = 'planned'
   AND p.status IN ('active', 'maintenance')
-  AND (((o.date + 1)::timestamp + time '22:00') AT TIME ZONE u.timezone) <= $3::timestamptz
+  AND (((o.date + 1)::timestamp + time '10:00') AT TIME ZONE u.timezone) <= $3::timestamptz
 ORDER BY o.id
 `
 
@@ -1093,9 +1111,10 @@ type ListPaymentOverdueTargetsRow struct {
 // rules included, the tick never backdates an auto charge (ADR 0049). The
 // dedup key (rule, operation date) keeps a long-unpaid operation single —
 // the sweep lists it daily, the publication inserts nothing. The instant
-// gate (#1168): the leg's boundary is the wall clock 22:00 of the day after
+// gate (#1168, решение владельца 22.10.2026 — время вечера перенесено в
+// утро): the leg's boundary is the wall clock 10:00 of the day after
 // the operation date in the owner's timezone — yesterday's occurrence waits
-// for its 22:00 even though the date says overdue since the zone's midnight;
+// for its 10:00 even though the date says overdue since the zone's midnight;
 // a long-unpaid operation's boundary is long past and the gate keeps it
 // sweeping (the persistent leg's semantics).
 func (q *Queries) ListPaymentOverdueTargets(ctx context.Context, arg ListPaymentOverdueTargetsParams) ([]ListPaymentOverdueTargetsRow, error) {
@@ -1375,7 +1394,7 @@ func (q *Queries) ListPaymentScheduledDueTargets(ctx context.Context, arg ListPa
 const listPaymentScheduledOverdueTargets = `-- name: ListPaymentScheduledOverdueTargets :many
 SELECT pay.id AS payment_id,
        o.date,
-       CAST(((o.date + 1)::timestamp + time '22:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
+       CAST(((o.date + 1)::timestamp + time '10:00') AT TIME ZONE u.timezone AS timestamptz) AS fire_at
 FROM operations o
 JOIN payments pay ON pay.id = o.payment_id
 JOIN properties p ON p.id = o.property_id
@@ -1399,11 +1418,11 @@ type ListPaymentScheduledOverdueTargetsRow struct {
 }
 
 // The payments scan's booking list of the overdue leg (issue #776): the
-// planned operations whose overdue boundary — the wall clock 22:00 of the
-// day after the operation date read in the owner's timezone (#1168, по
-// гриллингу #1167: просрочка приходит вечером, не в полночь) — falls in the
-// window (from, until]. Auto-pay rules included (the tick never backdates an auto
-// charge, ADR 0049); the wall clock 22:00 is
+// planned operations whose overdue boundary — the wall clock 10:00 of the
+// day after the operation date read in the owner's timezone (решение
+// владельца 22.10.2026: просрочка приходит утром, вместе со всей семьёй
+// 10:00) — falls in the window (from, until]. Auto-pay rules included (the tick never backdates an auto
+// charge, ADR 0049); the wall clock 10:00 is
 // the boundary, a DST day rolls it with the wall clock.
 func (q *Queries) ListPaymentScheduledOverdueTargets(ctx context.Context, arg ListPaymentScheduledOverdueTargetsParams) ([]ListPaymentScheduledOverdueTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listPaymentScheduledOverdueTargets, arg.Column1, arg.Column2)

@@ -18,10 +18,6 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
-// MaxAmountKopecks is the create/update amount ceiling: 10⁹ kopecks = 10
-// million rubles (ADR 0053 §4, the payments bound).
-const MaxAmountKopecks = 1_000_000_000
-
 // MaxCommentLength bounds the rental comment, counted in characters — a
 // product copy limit, not a byte limit (the schema CHECK counts the same
 // number: char_length is character-based for TEXT).
@@ -72,6 +68,10 @@ type CreateRentalCommand struct {
 	// ReminderOffsetDays is the managed payment's reminder lead time
 	// (карта #822): 1/3/7, nil = без напоминаний.
 	ReminderOffsetDays *int
+	// NotifyEmail is the managed payment's per-payment email gate (карта
+	// #1551, тикет #1555), независим от напоминания; omitted→true резолвит
+	// транспорт (#1553).
+	NotifyEmail bool
 }
 
 // UpdateRentalCommand is the partial-update payload: a nil field leaves the
@@ -84,11 +84,15 @@ type UpdateRentalCommand struct {
 	AutoPay            *bool
 	PlannedEndDate     *DateUpdate
 	ReminderOffsetDays *ReminderOffsetUpdate
-	Utilities          *domain.Utilities
-	DepositKopecks     *AmountUpdate
-	CommissionKopecks  *AmountUpdate
-	ContactID          *ContactUpdate
-	Comment            *StringUpdate
+	// NotifyEmail is the tri-state email-toggle patch (тикет #1555): nil
+	// keeps, a boolean sets — the transport folds the wire's explicit null
+	// onto false (#1553).
+	NotifyEmail       *bool
+	Utilities         *domain.Utilities
+	DepositKopecks    *AmountUpdate
+	CommissionKopecks *AmountUpdate
+	ContactID         *ContactUpdate
+	Comment           *StringUpdate
 }
 
 // DepositReturn is the optional deposit-return record of the completion: how
@@ -243,6 +247,7 @@ func (s *RentalService) CreateRental(
 				AutoPay:            cmd.AutoPay,
 				NotifyAutoPaid:     true,
 				ReminderOffsetDays: cmd.ReminderOffsetDays,
+				NotifyEmail:        cmd.NotifyEmail,
 			})
 			if err != nil {
 				return mutationOutcome{}, fmt.Errorf("create rent payment: %w", err)
@@ -735,12 +740,13 @@ func nilIfZero(n int) *int {
 	return &n
 }
 
-// validateCreate enforces the create contract (ADR 0053 §4): the amount
-// within 1..10⁹, the utilities mode, the start today or later (no backdated
+// validateCreate enforces the create contract (ADR 0053 §4): the amount of at
+// least 1 kopeck with no ceiling (ADR 0069), the
+// utilities mode, the start today or later (no backdated
 // rentals), the planned end strictly after the start, the optional records in
 // bounds and the comment within its limit.
 func validateCreate(cmd CreateRentalCommand, today time.Time) error {
-	if cmd.AmountKopecks < 1 || cmd.AmountKopecks > MaxAmountKopecks {
+	if cmd.AmountKopecks < 1 {
 		return ErrInvalidInput
 	}
 	if !cmd.Utilities.Valid() {
@@ -785,7 +791,7 @@ func paymentSyncFromUpdate(
 	var change RentPaymentChange
 	paymentChanged := false
 	if cmd.AmountKopecks != nil {
-		if *cmd.AmountKopecks < 1 || *cmd.AmountKopecks > MaxAmountKopecks {
+		if *cmd.AmountKopecks < 1 {
 			return change, false, ErrInvalidInput
 		}
 		change.AmountKopecks = cmd.AmountKopecks
@@ -816,6 +822,12 @@ func paymentSyncFromUpdate(
 			return change, false, ErrInvalidInput
 		}
 		change.ReminderOffsetDays = cmd.ReminderOffsetDays
+		paymentChanged = true
+	}
+	if cmd.NotifyEmail != nil {
+		// The email toggle rides the seam like the reminder's (тикет
+		// #1555) — the bool needs no contract validation.
+		change.NotifyEmail = cmd.NotifyEmail
 		paymentChanged = true
 	}
 	return change, paymentChanged, nil
@@ -889,14 +901,15 @@ func validateCompletedDate(completedDate, start, today time.Time) error {
 	return nil
 }
 
-// validateDepositReturn enforces the completion record: the amount within
-// 0..10⁹ (a zero sum is valid — «не вернул») and the comment only with an
-// amount (the schema CHECK keeps the same invariant durably).
+// validateDepositReturn enforces the completion record: the amount is
+// non-negative with no ceiling (ADR 0069; a zero sum is valid — «не вернул»)
+// and the comment only with an amount (the schema CHECK keeps the same
+// invariant durably).
 func validateDepositReturn(ret *DepositReturn) error {
 	if ret == nil {
 		return nil
 	}
-	if ret.AmountKopecks < 0 || ret.AmountKopecks > MaxAmountKopecks {
+	if ret.AmountKopecks < 0 {
 		return ErrInvalidInput
 	}
 	if ret.Comment != nil && utf8.RuneCountInString(*ret.Comment) > MaxCommentLength {
@@ -906,12 +919,12 @@ func validateDepositReturn(ret *DepositReturn) error {
 }
 
 // validateOptionalAmount enforces the deposit/commission bounds: nil is
-// «нет записи», a value within 0..10⁹ (решение №6).
+// «нет записи», a value is non-negative (решение №6; потолка нет — ADR 0069).
 func validateOptionalAmount(amount *int64) error {
 	if amount == nil {
 		return nil
 	}
-	if *amount < 0 || *amount > MaxAmountKopecks {
+	if *amount < 0 {
 		return ErrInvalidInput
 	}
 	return nil
@@ -983,6 +996,9 @@ func updatedRentalFields(cmd UpdateRentalCommand) []string {
 	}
 	if cmd.ReminderOffsetDays != nil {
 		fields = append(fields, "reminder_offset_days")
+	}
+	if cmd.NotifyEmail != nil {
+		fields = append(fields, "notify_email")
 	}
 	if cmd.Utilities != nil {
 		fields = append(fields, "utilities")

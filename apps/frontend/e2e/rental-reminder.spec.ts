@@ -34,6 +34,7 @@ type RentalsFromApi = {
     rentPayment: {
       paymentId: string;
       autoPay: boolean;
+      notifyEmail?: boolean;
       reminderOffsetDays?: number | null;
     };
   }>;
@@ -236,24 +237,95 @@ test.describe.serial('настройки аренды: «За сколько н�
     expect(cleanup.ok()).toBe(true);
   });
 
-  test('тумблер «Включить уведомления об оплате на почту» — шоткат категории «Платежи и операции»', async ({
+  test('ряд «Включить уведомления об оплате на почту» — персональная галочка аренды, матрица не пишется (карта #1551)', async ({
     page,
     seededUser,
   }) => {
-    // Тот же шоткат, что на шаге 4 платежей (#825): значение и запись —
-    // глобальная email-матрица аккаунта. Мок stateful: refetch после PUT
-    // возвращает сохранённое состояние.
-    const { savedCategories } = await mockEmailCategoryShortcut(page);
+    // Двухуровневая модель (канон #1552): свитч — флаг формы этой аренды,
+    // клик пишет только черновик; глобальная матрица аккаунта из шага 3
+    // не пишется (шоткат #746 снят). Гейта от пикера напоминаний у аренды
+    // нет — ряд жив при дефолтном «Не напоминать».
+    const { puts } = await mockEmailCategoryShortcut(page);
 
     await passToSettings(page, seededUser, SEEDED_APARTMENT_PROPERTY_ID);
 
     const toggle = page.getByRole('switch', { name: 'Включить уведомления об оплате на почту' });
+    await expect(toggle).toBeEnabled();
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect(
+      page.getByRole('button', { name: 'За сколько напоминать: Не напоминать' }),
+    ).toBeVisible();
+
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    // Матрица аккаунта из шага 3 не пишется.
+    expect(puts()).toBe(0);
+
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Создать аренду' }).click();
+    await expect(page.getByRole('heading', { name: 'Вы создали аренду' })).toBeVisible();
+
+    const rentals = await fetchRentals(page, SEEDED_APARTMENT_PROPERTY_ID);
+    const rental = rentals[0];
+    expect(rental).toBeDefined();
+    if (rental === undefined) return;
+    // Снятая галочка доезжает до контракта пер-арендным флагом (сервер
+    // держит его на Платеже аренды, #1555).
+    expect(rental.rentPayment.notifyEmail).toBe(false);
     await expect
-      .poll(() => savedCategories()?.payments_operations, { timeout: 5_000 })
-      .toBe(false);
+      .poll(() =>
+        execE2eSql(
+          `SELECT notify_email FROM payments WHERE id = '${rental.rentPayment.paymentId}'`,
+        ),
+      )
+      .toBe('f');
+
+    const cleanup = await page.request.delete(
+      `/api/properties/${SEEDED_APARTMENT_PROPERTY_ID}/rentals/${rental.id}`,
+    );
+    expect(cleanup.ok()).toBe(true);
+  });
+
+  test('мастер категории «Аренда» off — ряд скрыт, галочка в команду не едет', async ({
+    page,
+    seededUser,
+  }) => {
+    // Глобальный мастер — видимость ряда: off (или нечитаемый GET) — ряда
+    // нет вовсе, команда сохранения галочку не пишет (дифф без поля,
+    // канон #1552), сервер ставит дефолт true (#1555).
+    await mockEmailCategoryShortcut(page, {
+      initial: { rental: false, payments_operations: true, tasks: true, shared_access: true },
+    });
+
+    await passToSettings(page, seededUser, SEEDED_APARTMENT_PROPERTY_ID);
+
+    // Ряд скрыт целиком — ни свитча, ни текстов (пока GET в полёте,
+    // рендер прежний, после ответа схлопывается).
+    const toggle = page.getByRole('switch', { name: 'Включить уведомления об оплате на почту' });
+    await expect(toggle).toHaveCount(0);
+    await expect(page.getByText('Включить уведомления об оплате на почту')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Создать аренду' }).click();
+    await expect(page.getByRole('heading', { name: 'Вы создали аренду' })).toBeVisible();
+
+    const rentals = await fetchRentals(page, SEEDED_APARTMENT_PROPERTY_ID);
+    const rental = rentals[0];
+    expect(rental).toBeDefined();
+    if (rental === undefined) return;
+    expect(rental.rentPayment.notifyEmail).toBe(true);
+    await expect
+      .poll(() =>
+        execE2eSql(
+          `SELECT notify_email FROM payments WHERE id = '${rental.rentPayment.paymentId}'`,
+        ),
+      )
+      .toBe('t');
+
+    const cleanup = await page.request.delete(
+      `/api/properties/${SEEDED_APARTMENT_PROPERTY_ID}/rentals/${rental.id}`,
+    );
+    expect(cleanup.ok()).toBe(true);
   });
 
   test('правка условий меняет напоминание: 3 → 7 → «Не напоминать» (#1208)', async ({
@@ -330,6 +402,66 @@ test.describe.serial('настройки аренды: «За сколько н�
       )
       .toBe('');
     await expect.poll(() => execE2eSql(chipCount('7', 'null'))).toBe('1');
+
+    const cleanup = await page.request.delete(
+      `/api/properties/${SEEDED_STUDIO_PROPERTY_ID}/rentals/${rental.id}`,
+    );
+    expect(cleanup.ok()).toBe(true);
+  });
+
+  test('правка условий меняет галочку почты: on → off → on, SQL-правда на Платеже (карта #1551)', async ({
+    page,
+    seededUser,
+  }) => {
+    // Ряд на правке условий (канон #1552: после пикера напоминания;
+    // возвращённая часть решения #532): предзаполнение из флага аренды,
+    // PATCH едет диффом — галочка меняется, напоминание в той же сессии
+    // не трогается; сервер переносит флаг на Платёж (#1555).
+    await mockEmailCategoryShortcut(page);
+    await passToSettings(page, seededUser, SEEDED_STUDIO_PROPERTY_ID);
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'Создать аренду' }).click();
+    await expect(page.getByRole('heading', { name: 'Вы создали аренду' })).toBeVisible();
+
+    const rentals = await fetchRentals(page, SEEDED_STUDIO_PROPERTY_ID);
+    const rental = rentals[0];
+    expect(rental).toBeDefined();
+    if (rental === undefined) return;
+    const paymentId = rental.rentPayment.paymentId;
+    expect(rental.rentPayment.notifyEmail).toBe(true);
+
+    const sqlFlag = (): Promise<string> =>
+      execE2eSql(`SELECT notify_email FROM payments WHERE id = '${paymentId}'`);
+
+    // Правка on → off: ряд предзаполнен включённым, переключение и
+    // сохранение пишут PATCH (дифф без reminderOffsetDays).
+    await page.goto(`/properties/${SEEDED_STUDIO_PROPERTY_ID}/rentals/terms/edit`);
+    const toggle = page.getByRole('switch', { name: 'Включить уведомления об оплате на почту' });
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    await page.waitForURL((url) => !url.pathname.endsWith('/rentals/terms/edit'));
+
+    const afterOff = await fetchRentals(page, SEEDED_STUDIO_PROPERTY_ID);
+    expect(afterOff[0]?.rentPayment.notifyEmail).toBe(false);
+    await expect.poll(sqlFlag).toBe('f');
+
+    // Правка off → on: предзаполнение из флага (off), возврат едет тем же
+    // диффом; напоминание аренды остаётся «Не напоминать» — ряд независим.
+    await page.goto(`/properties/${SEEDED_STUDIO_PROPERTY_ID}/rentals/terms/edit`);
+    const toggleAgain = page.getByRole('switch', { name: 'Включить уведомления об оплате на почту' });
+    await expect(toggleAgain).toHaveAttribute('aria-checked', 'false');
+    await toggleAgain.click();
+    await expect(toggleAgain).toHaveAttribute('aria-checked', 'true');
+    await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+    await page.waitForURL((url) => !url.pathname.endsWith('/rentals/terms/edit'));
+
+    const afterOn = await fetchRentals(page, SEEDED_STUDIO_PROPERTY_ID);
+    expect(afterOn[0]?.rentPayment.notifyEmail).toBe(true);
+    expect(afterOn[0]?.rentPayment.reminderOffsetDays ?? null).toBeNull();
+    await expect.poll(sqlFlag).toBe('t');
 
     const cleanup = await page.request.delete(
       `/api/properties/${SEEDED_STUDIO_PROPERTY_ID}/rentals/${rental.id}`,

@@ -32,7 +32,6 @@ import {
 } from '@/features/tasks';
 import type { Task } from '@/entities/task';
 import {
-  Button,
   ChipButton,
   CollapsibleSection,
   EmptyState,
@@ -49,6 +48,7 @@ import {
 } from '@/shared/ui/design';
 import { TaskRow } from '@/features/tasks';
 import { tasksFeedEmptyState } from '../lib/tasks-feed-gate';
+import { TasksFeedEmpty } from './tasks-feed-empty';
 import { TaskSectionCard } from './task-section-card';
 import { TasksDeleteCompletedDialog } from './tasks-delete-completed-dialog';
 import {
@@ -304,65 +304,58 @@ export function TasksFeedScreen({
         )}
         </HubCollapseAnchor>
 
-        <div className="mt-6 flex flex-col gap-6 pb-6">
-          {activeQuery.isPending || completedQuery.isPending ? (
-            // Паритет §7: секции-карточки со строками задач и свёрнутые
-            // «Выполненные»; чипы выше — вне фазы загрузки.
-            <TasksFeedSkeleton />
-          ) : activeQuery.isError ? (
-            <TasksStateCard
-              title="Не удалось загрузить задачи"
-              onRetry={() => void activeQuery.refetch()}
-              loading={activeQuery.isFetching}
-            />
-          ) : completedQuery.isError ? (
-            <TasksStateCard
-              title="Не удалось загрузить выполненные"
-              onRetry={() => void completedQuery.refetch()}
-              loading={completedQuery.isFetching}
-            />
-          ) : empty === 'filtered' ? (
-            // Пусто под фильтром «Объект» — канон пустого периода операций
-            // (#474): иллюстрация и одна строка без заголовка и CTA; чипы
-            // и «+» выше остаются — фильтр меняют тем же чипом «Объект»
-            // (решение владельца 15.10.2026). Иллюстрация круглая —
-            // канон задач (imageRounded), у платежей она квадратная.
-            <EmptyState
-              imageSrc="/images/tasks/empty-tasks.webp"
-              imageRounded
-              className="pt-16 pb-16"
-              description="Задач не найдено. Попробуйте изменить фильтр"
-            />
-          ) : showEmpty ? (
-            <EmptyState
-              imageSrc="/images/tasks/empty-tasks.webp"
-              imageRounded
-              title="Задач нет"
-              description="Добавьте задачу — например, позвонить арендатору, вызвать мастера или проверить состояние объекта"
-              action={
-                // CTA пустого состояния — канон (3235-74057): «+» шапки
-                // на пустоте спрятан, создание остаётся здесь.
-                <Button size="small" radius="m" onClick={() => pushPage(router, ROUTES.taskCreate)}>
-                  Добавить задачу
-                </Button>
-              }
-            />
-          ) : (
-            sections.map((section) => (
-              // Пока today не пришёл, sections пуст — заглушка '' не рисуется.
-              <FeedSection
-                key={sectionKey(section)}
-                section={section}
-                today={today ?? ''}
-                propertyOf={propertyOf}
-                completedTotal={completedTotal}
-                onToggle={toggleTask}
-                toggling={togglePendingFor}
-                onOpen={openTaskFor}
+        {showEmpty ? (
+          // Совсем пустая лента — вне общей обёртки ленты: её mt-6 съезжал
+          // пустоту на 24 вниз относительно других хабов; канон §7 —
+          // pt-14 состояния от строки заголовка (см. TasksFeedEmpty).
+          <TasksFeedEmpty onCreate={() => pushPage(router, ROUTES.taskCreate)} />
+        ) : (
+          <div className="mt-6 flex flex-col gap-6 pb-6">
+            {activeQuery.isPending || completedQuery.isPending ? (
+              // Паритет §7: секции-карточки со строками задач и свёрнутые
+              // «Выполненные»; чипы выше — вне фазы загрузки.
+              <TasksFeedSkeleton />
+            ) : activeQuery.isError ? (
+              <TasksStateCard
+                title="Не удалось загрузить задачи"
+                onRetry={() => void activeQuery.refetch()}
+                loading={activeQuery.isFetching}
               />
-            ))
-          )}
-        </div>
+            ) : completedQuery.isError ? (
+              <TasksStateCard
+                title="Не удалось загрузить выполненные"
+                onRetry={() => void completedQuery.refetch()}
+                loading={completedQuery.isFetching}
+              />
+            ) : empty === 'filtered' ? (
+              // Пусто под фильтром «Объект» — канон пустого периода операций
+              // (#474): иллюстрация и одна строка без заголовка и CTA; чипы
+              // и «+» выше остаются — фильтр меняют тем же чипом «Объект»
+              // (решение владельца 15.10.2026). Иллюстрация круглая —
+              // канон задач (imageRounded), у платежей она квадратная.
+              <EmptyState
+                imageSrc="/images/tasks/empty-tasks.webp"
+                imageRounded
+                className="pt-16 pb-16"
+                description="Задач не найдено. Попробуйте изменить фильтр"
+              />
+            ) : (
+              sections.map((section) => (
+                // Пока today не пришёл, sections пуст — заглушка '' не рисуется.
+                <FeedSection
+                  key={sectionKey(section)}
+                  section={section}
+                  today={today ?? ''}
+                  propertyOf={propertyOf}
+                  completedTotal={completedTotal}
+                  onToggle={toggleTask}
+                  toggling={togglePendingFor}
+                  onOpen={openTaskFor}
+                />
+              ))
+            )}
+          </div>
+        )}
       </PageContent>
 
       <TasksDeleteCompletedDialog

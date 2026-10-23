@@ -5,9 +5,10 @@ import { PaymentDetailLoading, PaymentDetailScreen } from '@/widgets/payments';
 import {
   paymentDetailQueryOptions,
   paymentOperationsGateQueryOptions,
+  paymentOperationsPagedQueryOptions,
 } from '@/features/payments';
 import { propertyDetailQueryOptions } from '@/features/properties';
-import { paymentKeys } from '@/shared/api/query-keys';
+import { OPERATIONS_FEED_SORT, paymentKeys } from '@/shared/api/query-keys';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
 
@@ -24,8 +25,12 @@ export const metadata: Metadata = {
 
 /**
  * Серверная раскладка первого кадра (#887): деталь объекта и деталь
- * платежа — параллельный первый кадр; статусные списки операций (гасилки
- * «Оплатить») — после успеха платежа, как у экрана (enabled по id правила).
+ * платежа — параллельная волна; после успеха платежа монолитно ждём
+ * остальное содержимое экрана — гасилки «Оплатить» (те же ключи, что
+ * читает экран) и первую порцию истории (решение владельца 22.10):
+ * секции приходят с данными сразу, скелетон сменяется контентом одним
+ * кадром без волн догрузки (страница не дёргается: секция истории не
+ * прыгает после гидрации, «Просроченные» не мигают пустым).
  */
 async function prefetchPaymentScreen(
   queryClient: QueryClient,
@@ -42,8 +47,18 @@ async function prefetchPaymentScreen(
   const [overdue, planned] = paymentOperationsGateQueryOptions({
     propertyId, paymentId, transport: serverApiClient,
   });
-  void queryClient.prefetchQuery(overdue);
-  void queryClient.prefetchQuery(planned);
+  await Promise.all([
+    queryClient.prefetchQuery(overdue),
+    queryClient.prefetchQuery(planned),
+    queryClient.prefetchInfiniteQuery(paymentOperationsPagedQueryOptions({
+      propertyId,
+      paymentId,
+      status: 'paid',
+      order: 'desc',
+      sort: OPERATIONS_FEED_SORT,
+      transport: serverApiClient,
+    })),
+  ]);
 }
 
 export default async function PaymentRoutePage({ params }: PageProps<'/properties/[id]/payments/[paymentId]'>) {

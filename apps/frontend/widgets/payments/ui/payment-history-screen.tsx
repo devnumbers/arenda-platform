@@ -222,20 +222,24 @@ export function PaymentHistoryScreen({
                   {timeline.map((group) => (
                     <section key={group.date} className="flex flex-col">
                       <PaymentsHeading>{group.label}</PaymentsHeading>
-                      {group.items.map((item) =>
-                        item.kind === 'operation' ? (
-                          <HistoryRow
-                            key={item.operation.id}
-                            operation={item.operation}
-                            onSelect={() =>
-                              pushPage(router,
-                                ROUTES.propertyOperation(propertyId, item.operation.id),
-                              )}
-                          />
-                        ) : (
-                          <ChangeChipsBlock key={item.entry.id} chips={item.chips} />
-                        ),
-                      )}
+                      {/* Гэп 8 от заголовка до рядов — контейнер группы
+                       * макета (Figma 1036-40829); ряды и чипы — столбиком. */}
+                      <div className="flex flex-col pt-2">
+                        {group.items.map((item) =>
+                          item.kind === 'operation' ? (
+                            <HistoryRow
+                              key={item.operation.id}
+                              operation={item.operation}
+                              onSelect={() =>
+                                pushPage(router,
+                                  ROUTES.propertyOperation(propertyId, item.operation.id),
+                                )}
+                              />
+                            ) : (
+                              <ChangeChipsBlock key={item.entry.id} chips={item.chips} />
+                            ),
+                        )}
+                      </div>
                     </section>
                   ))}
 

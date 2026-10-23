@@ -424,6 +424,136 @@ func TestUpdateRental_TriState(t *testing.T) {
 	assert.Nil(t, gotCmd.CommissionKopecks, "omitted keeps")
 	assert.Nil(t, gotCmd.Comment, "omitted keeps")
 	assert.Nil(t, gotCmd.Utilities, "omitted keeps")
+	assert.Nil(t, gotCmd.NotifyEmail, "omitted keeps")
+}
+
+// The email-toggle create mapping (карта #1551, тикет #1555): omitted
+// resolves the default true («включена», как у обычных платежей #1553), an
+// explicit false/true rides verbatim; the response renders the flag from the
+// payment state — never from the request (the fixture's state disagrees with
+// the sent value on purpose, so every case doubles as the independence pin).
+func TestCreateRental_NotifyEmailMaps(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name        string
+		field       string
+		wantCmd     bool
+		renderState bool
+	}{
+		{"omitted resolves the default true", "", true, false},
+		{"explicit false rides false", `"notifyEmail": false`, false, true},
+		{"explicit true rides true", `"notifyEmail": true`, true, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			view := viewFixture(t)
+			view.Payment.NotifyEmail = tc.renderState
+			var gotCmd rentalsapp.CreateRentalCommand
+			svc := &fakeRentalManager{create: func(
+				_ context.Context, _, _ uuid.UUID, cmd rentalsapp.CreateRentalCommand,
+			) (rentalsapp.RentalView, error) {
+				gotCmd = cmd
+				return view, nil
+			}}
+			h := NewRentalHandlers(svc, nil)
+
+			fields := `"amountKopecks": 5000000, "paymentDay": 15, "startDate": "2026-09-04",
+			           "utilities": "meters_only", "autoPay": false`
+			if tc.field != "" {
+				fields += ", " + tc.field
+			}
+			req := rentalRequest(t, http.MethodPost, view.Rental.OwnerID,
+				fmt.Sprintf("/properties/%s/rentals", view.Rental.PropertyID), "{"+fields+"}")
+			rec := httptest.NewRecorder()
+
+			h.CreateRental(rec, req, view.Rental.PropertyID)
+
+			require.Equal(t, http.StatusCreated, rec.Code)
+			assert.Equal(t, tc.wantCmd, gotCmd.NotifyEmail)
+
+			var response openapi.RentalResponse
+			require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+			assert.Equal(t, tc.renderState, response.RentPayment.NotifyEmail,
+				"the flag renders from the payment state, not the request")
+		})
+	}
+}
+
+// The completed rental's wire shape (ревизия #1161, тикет #1555): the
+// payment is deleted and the terms archive does not store the email flag —
+// the response carries false beside the null paymentId.
+func TestCreateRental_CompletedRentalRendersNoNotifyEmail(t *testing.T) {
+	t.Parallel()
+	view := viewFixture(t)
+	view.Payment.PaymentID = uuid.Nil
+	view.Payment.NotifyEmail = false
+	svc := &fakeRentalManager{create: func(
+		_ context.Context, _, _ uuid.UUID, _ rentalsapp.CreateRentalCommand,
+	) (rentalsapp.RentalView, error) {
+		return view, nil
+	}}
+	h := NewRentalHandlers(svc, nil)
+
+	body := `{"amountKopecks": 5000000, "paymentDay": 15, "startDate": "2026-09-04",
+	          "utilities": "meters_only", "autoPay": false, "notifyEmail": true}`
+	req := rentalRequest(t, http.MethodPost, view.Rental.OwnerID,
+		fmt.Sprintf("/properties/%s/rentals", view.Rental.PropertyID), body)
+	rec := httptest.NewRecorder()
+
+	h.CreateRental(rec, req, view.Rental.PropertyID)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var response openapi.RentalResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	assert.Nil(t, response.RentPayment.PaymentId)
+	assert.False(t, response.RentPayment.NotifyEmail,
+		"the archive stores no email flag — even a sent true renders false")
+}
+
+// The email-toggle patch's tri-state (тикет #1555): true/false set the flag,
+// an explicit null turns the emails off (null ≡ false — колонка не-nullable),
+// an omitted field keeps — the same resolution vocabulary as the payment's
+// own PATCH (#1553).
+func TestUpdateRental_NotifyEmailTriState(t *testing.T) {
+	t.Parallel()
+	view := viewFixture(t)
+	var gotCmds []rentalsapp.UpdateRentalCommand
+	svc := &fakeRentalManager{update: func(
+		_ context.Context, _, _, _ uuid.UUID, cmd rentalsapp.UpdateRentalCommand,
+	) (rentalsapp.RentalView, error) {
+		gotCmds = append(gotCmds, cmd)
+		return view, nil
+	}}
+	h := NewRentalHandlers(svc, nil)
+	target := fmt.Sprintf("/properties/%s/rentals/%s", view.Rental.PropertyID, view.Rental.ID)
+
+	patch := func(t *testing.T, body string) {
+		t.Helper()
+		req := rentalRequest(t, http.MethodPatch, view.Rental.OwnerID, target, body)
+		rec := httptest.NewRecorder()
+		h.UpdateRental(rec, req, view.Rental.PropertyID, view.Rental.ID)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	}
+
+	patch(t, `{"notifyEmail": true}`)
+	require.Len(t, gotCmds, 1)
+	require.NotNil(t, gotCmds[0].NotifyEmail, "a value is the set verdict")
+	assert.True(t, *gotCmds[0].NotifyEmail)
+
+	patch(t, `{"notifyEmail": false}`)
+	require.Len(t, gotCmds, 2)
+	require.NotNil(t, gotCmds[1].NotifyEmail)
+	assert.False(t, *gotCmds[1].NotifyEmail)
+
+	patch(t, `{"notifyEmail": null}`)
+	require.Len(t, gotCmds, 3)
+	require.NotNil(t, gotCmds[2].NotifyEmail, "an explicit null is the off verdict")
+	assert.False(t, *gotCmds[2].NotifyEmail)
+
+	patch(t, `{"amountKopecks": 6000000}`)
+	require.Len(t, gotCmds, 4)
+	assert.Nil(t, gotCmds[3].NotifyEmail, "omitted keeps")
 }
 
 func TestUpdateRental_UnknownFieldIs400(t *testing.T) {

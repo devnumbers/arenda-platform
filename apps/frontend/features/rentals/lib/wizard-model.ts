@@ -23,6 +23,9 @@ export type RentalWizardDraft = {
   readonly paymentDay?: RentalPaymentDay;
   /** Автоплатёж Платежа арендной платы (шаг 3; отсутствие = выключен). */
   readonly autoPay?: boolean;
+  /** Персональная галочка почты аренды (шаг 3, карта #1551; отсутствие —
+   * не тронуто → on, канон #1552). */
+  readonly notifyEmail?: boolean;
   /** Лид-тайм напоминания о платеже (шаг 3, карта #822; #1198: отсутствие —
    * «Не напоминать», дефолт шага; в команду уходит явный null). */
   readonly reminderOffsetDays?: PaymentReminderOffset;
@@ -43,10 +46,6 @@ export type RentalWizardDraft = {
 export const WIZARD_TOTAL_STEPS = 4;
 
 export type RentalWizardStep = 1 | 2 | 3 | 4;
-
-/** Верхняя граница сумм контракта (копейки): 1…10⁹ для платы, 0…10⁹ для
- * залога и комиссии. Ввод сверху срезает маска суммы (9 999 999,99 ₽). */
-export const RENTAL_AMOUNT_MAX_KOPECKS = 1_000_000_000;
 
 /** Режимы коммунальных платежей в порядке меню (Figma 1296:48965). */
 export const UTILITIES_OPTIONS = [
@@ -226,17 +225,26 @@ export function draftAfterPaymentDayChange(
   };
 }
 
+/** Опции команды создания. */
+export type RentalCreateCommandOptions = {
+  /** Ряд почты виден (глобальный мастер категории «Аренда» on либо ещё
+   * грузится — решение не блокируем); false — мастер off, ряд скрыт и
+   * галочка в команду не едёт (дифф без поля, канон #1552). Дефолт —
+   * виден. */
+  readonly notifyEmailRowVisible?: boolean;
+};
+
 /** Черновик → команда создания; недостроенный или некорректный черновик
  * команды не даёт (кнопка сабмита уже притушена готовностью шагов). */
 export function buildRentalCreateCommand(
   draft: RentalWizardDraft,
   today: IsoDate,
+  options: RentalCreateCommandOptions = {},
 ): RentalCreateCommand | undefined {
   const { amountKopecks, paymentDay, startDate } = draft;
   if (
     amountKopecks === undefined
     || amountKopecks <= 0
-    || amountKopecks > RENTAL_AMOUNT_MAX_KOPECKS
     || paymentDay === undefined
     || startDate === undefined
     || rentalStartDateError(startDate, today) !== undefined
@@ -244,6 +252,12 @@ export function buildRentalCreateCommand(
   ) {
     return undefined;
   }
+
+  // Персональная галочка почты (карта #1551, канон #1552): живой ряд едет
+  // значением черновика (не тронуто → on); гейта от пикера напоминаний у
+  // аренды нет (ряд независим — решение владельца 22.10.2026). Скрытый
+  // мастером ряд поле не пишет — сервер ставит дефолт true (#1555).
+  const notifyEmailVisible = options.notifyEmailRowVisible !== false;
 
   return {
     amountKopecks,
@@ -259,12 +273,14 @@ export function buildRentalCreateCommand(
     // отсутствие выбора едет явным null — дефолт не протекает в команду
     // молча.
     reminderOffsetDays: draft.reminderOffsetDays ?? null,
+    ...(notifyEmailVisible && { notifyEmail: draft.notifyEmail ?? true }),
   };
 }
 
-/** Залог/комиссия за границей контракта (0…10⁹ копеек) командой не идут. */
+/** Отрицательные залог/комиссия командой не идут (минимум 0; потолка нет —
+ * ADR 0069, решение владельца 23.10.2026). */
 function clampAmount(kopecks: number | undefined): number | null {
-  if (kopecks === undefined || kopecks < 0 || kopecks > RENTAL_AMOUNT_MAX_KOPECKS) {
+  if (kopecks === undefined || kopecks < 0) {
     return null;
   }
   return kopecks;

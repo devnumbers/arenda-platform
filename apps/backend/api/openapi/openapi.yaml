@@ -7277,7 +7277,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         recurrence:
           $ref: '#/components/schemas/Recurrence'
         categorySlug:
@@ -7303,6 +7302,15 @@ components:
             Присылать ли событие «Автоплатёж исполнен» по правилу (#1189).
             Дефолт для новых — false («Не уведомлять», макет 3214-72739);
             явный null равен false.
+        notifyEmail:
+          type: boolean
+          default: true
+          description: >-
+            Персональная галочка отправки писем по платежу (карта #1551,
+            тикет #1553): получать ли письма по уведомлениям этого правила.
+            Дефолт для новых — true («включена»); глобальная настройка почты
+            профиля — мастер, выключенная гасит письма вовсе. Гейтится только
+            email: лента, тосты и push не трогаются.
         reminderOffsetDays:
           type: integer
           nullable: true
@@ -7333,7 +7341,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         recurrence:
           $ref: '#/components/schemas/Recurrence'
         categorySlug:
@@ -7359,6 +7366,13 @@ components:
             Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps
             the current value, null turns the «Автоплатёж исполнен» event off,
             true/false sets it.
+        notifyEmail:
+          type: boolean
+          nullable: true
+          description: >
+            Tri-state пер-платёжной галочки почты (#1553): omitted keeps the
+            current value, null turns this rule's email notifications off,
+            true/false sets them.
         reminderOffsetDays:
           type: integer
           nullable: true
@@ -7403,7 +7417,7 @@ components:
 
     PaymentResponse:
       type: object
-      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, notifyAutoPaid, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
+      required: [id, propertyId, type, title, amountKopecks, recurrence, since, autoPay, notifyAutoPaid, notifyEmail, category, isFavorite, isCompleted, nearestDate, isRentalManaged, isRentalCompleted, pauses, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -7437,6 +7451,14 @@ components:
             false — правило автоплатежа гасится молча. Дефолт новых правил —
             false (макет 3214-72739); существующим автоплатежам проставлен
             true миграцией (без поведенческого регресса, #1186).
+        notifyEmail:
+          type: boolean
+          description: >-
+            The per-payment email toggle (карта #1551, тикет #1553): whether
+            this rule's notifications travel the email channel. Дефолт —
+            true («включена», существующим проставлен миграцией); глобальная
+            настройка почты профиля — мастер. Гейтится только email: лента,
+            тосты и push не трогаются.
         category:
           $ref: '#/components/schemas/CategoryView'
         reminderOffsetDays:
@@ -7991,7 +8013,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         categorySlug:
           type: string
           description: Slug of the default category catalog; frozen as the operation's snapshot.
@@ -9332,7 +9353,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         paymentDay:
           $ref: '#/components/schemas/RentalPaymentDay'
         startDate:
@@ -9353,13 +9373,11 @@ components:
           type: integer
           format: int64
           minimum: 0
-          maximum: 1000000000
           nullable: true
         commissionKopecks:
           type: integer
           format: int64
           minimum: 0
-          maximum: 1000000000
           nullable: true
         contactId:
           type: string
@@ -9381,22 +9399,32 @@ components:
             напоминаний нет. Аренда ставит его вместе с автоплатежом; дефолт
             выбора на экране — «Не напоминать», null едет в команду явно
             (#1198, решение владельца 07.10).
+        notifyEmail:
+          type: boolean
+          default: true
+          description: >-
+            Персональная галочка отправки писем по платежу аренды (карта
+            #1551, тикет #1555): получать ли письма по уведомлениям её
+            Платежа арендной платы — сервер переносит флаг на платёж, как
+            reminderOffsetDays. Независима от напоминания (решение владельца
+            22.10.2026); дефолт для новых — true («включена»), как у обычных
+            платежей (#1553). Гейтится только email: лента, тосты и push не
+            трогаются; глобальная настройка почты профиля — мастер.
 
     RentalUpdateRequest:
       description: >-
         Частичная правка условий аренды. Начало не правится. Nullable-поля
         (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment,
-        reminderOffsetDays) — tri-state: omitted оставляет значение, явный
-        null очищает. Сумма, день оплаты, автоплатёж, напоминание и плановое
-        окончание синхронно правят Платёж арендной платы. Завершённая аренда
-        — 409.
+        reminderOffsetDays, notifyEmail) — tri-state: omitted оставляет
+        значение, явный null очищает. Сумма, день оплаты, автоплатёж,
+        напоминание, галочка почты и плановое окончание синхронно правят
+        Платёж арендной платы. Завершённая аренда — 409.
       type: object
       properties:
         amountKopecks:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         paymentDay:
           $ref: '#/components/schemas/RentalPaymentDay'
         autoPay:
@@ -9411,6 +9439,15 @@ components:
             value, null turns reminders off («Не напоминать»), 1/3/7 sets the
             lead time. Синхронно правит Платёж арендной платы; смена пишется
             и в его журнал изменений (#1208).
+        notifyEmail:
+          type: boolean
+          nullable: true
+          description: >-
+            Tri-state пер-платёжной галочки почты Платежа арендной платы
+            (карта #1551, тикет #1555): omitted keeps the current value,
+            null и false выключают письма правила, true включает. Независима
+            от напоминания (решение владельца 22.10.2026); синхронно правит
+            Платёж арендной платы, как reminderOffsetDays.
         plannedEndDate:
           type: string
           format: date
@@ -9428,13 +9465,11 @@ components:
           type: integer
           format: int64
           minimum: 0
-          maximum: 1000000000
           nullable: true
         commissionKopecks:
           type: integer
           format: int64
           minimum: 0
-          maximum: 1000000000
           nullable: true
         contactId:
           type: string
@@ -9464,7 +9499,6 @@ components:
               type: integer
               format: int64
               minimum: 0
-              maximum: 1000000000
               description: 0 валиден — «не вернул».
             comment:
               type: string
@@ -9538,7 +9572,7 @@ components:
         у завершённой аренды платёж удалён — paymentId null, а сумма и день
         оплаты приходят из Архива условий на аренде; nextPayment всегда null.
       type: object
-      required: [paymentId, amountKopecks, paymentDay, autoPay]
+      required: [paymentId, amountKopecks, paymentDay, autoPay, notifyEmail]
       properties:
         paymentId:
           type: string
@@ -9554,6 +9588,14 @@ components:
           $ref: '#/components/schemas/RentalPaymentDay'
         autoPay:
           type: boolean
+        notifyEmail:
+          type: boolean
+          description: >-
+            Персональная галочка отправки писем управляемого платежа (карта
+            #1551, тикет #1555) — рендер читается из платежа, как
+            reminderOffsetDays. Гейтится только email-канал; глобальная
+            настройка почты профиля — мастер. У завершённой аренды платёж
+            удалён — Архив условий флаг не хранит, ответ несёт false.
         reminderOffsetDays:
           type: integer
           nullable: true

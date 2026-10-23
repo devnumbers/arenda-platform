@@ -3088,6 +3088,11 @@ export interface components {
              */
             notifyAutoPaid: boolean | null;
             /**
+             * @description Персональная галочка отправки писем по платежу (карта #1551, тикет #1553): получать ли письма по уведомлениям этого правила. Дефолт для новых — true («включена»); глобальная настройка почты профиля — мастер, выключенная гасит письма вовсе. Гейтится только email: лента, тосты и push не трогаются.
+             * @default true
+             */
+            notifyEmail: boolean;
+            /**
              * @description За сколько дней предупреждать о вхождении («Напоминание о платеже», карта #822): 1, 3 или 7. Null/omitted — напоминаний нет (выбор опционален). Напоминание живёт независимо от autoPay. У правила с autoPay=true присланный оффсет при создании форсируется в null (решение владельца по гриллингу #1186: автоплатёжная форма reminder-пикер не показывает).
              * @enum {integer|null}
              */
@@ -3110,6 +3115,8 @@ export interface components {
             autoPay?: boolean;
             /** @description Tri-state флаг «уведомлять об автоплатеже» (#1189): omitted keeps the current value, null turns the «Автоплатёж исполнен» event off, true/false sets it. */
             notifyAutoPaid?: boolean | null;
+            /** @description Tri-state пер-платёжной галочки почты (#1553): omitted keeps the current value, null turns this rule's email notifications off, true/false sets them. */
+            notifyEmail?: boolean | null;
             /**
              * @description Tri-state lead time of the payment reminder («Напоминание о платеже»): omitted keeps the current value, null turns reminders off, 1/3/7 sets the lead time.
              * @enum {integer|null}
@@ -3150,6 +3157,8 @@ export interface components {
             autoPay: boolean;
             /** @description The per-payment gate of the «Автоплатёж исполнен» event (#1189): false — правило автоплатежа гасится молча. Дефолт новых правил — false (макет 3214-72739); существующим автоплатежам проставлен true миграцией (без поведенческого регресса, #1186). */
             notifyAutoPaid: boolean;
+            /** @description The per-payment email toggle (карта #1551, тикет #1553): whether this rule's notifications travel the email channel. Дефолт — true («включена», существующим проставлен миграцией); глобальная настройка почты профиля — мастер. Гейтится только email: лента, тосты и push не трогаются. */
+            notifyEmail: boolean;
             category: components["schemas"]["CategoryView"];
             /**
              * @description The payment reminder's lead time in days (карта #822); null — напоминаний нет. Живёт независимо от autoPay.
@@ -4167,8 +4176,13 @@ export interface components {
              * @enum {integer|null}
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
+            /**
+             * @description Персональная галочка отправки писем по платежу аренды (карта #1551, тикет #1555): получать ли письма по уведомлениям её Платежа арендной платы — сервер переносит флаг на платёж, как reminderOffsetDays. Независима от напоминания (решение владельца 22.10.2026); дефолт для новых — true («включена»), как у обычных платежей (#1553). Гейтится только email: лента, тосты и push не трогаются; глобальная настройка почты профиля — мастер.
+             * @default true
+             */
+            notifyEmail: boolean;
         };
-        /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment, reminderOffsetDays) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж, напоминание и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
+        /** @description Частичная правка условий аренды. Начало не правится. Nullable-поля (plannedEndDate, depositKopecks, commissionKopecks, contactId, comment, reminderOffsetDays, notifyEmail) — tri-state: omitted оставляет значение, явный null очищает. Сумма, день оплаты, автоплатёж, напоминание, галочка почты и плановое окончание синхронно правят Платёж арендной платы. Завершённая аренда — 409. */
         RentalUpdateRequest: {
             /** Format: int64 */
             amountKopecks?: number;
@@ -4179,6 +4193,8 @@ export interface components {
              * @enum {integer|null}
              */
             reminderOffsetDays?: 1 | 3 | 7 | null;
+            /** @description Tri-state пер-платёжной галочки почты Платежа арендной платы (карта #1551, тикет #1555): omitted keeps the current value, null и false выключают письма правила, true включает. Независима от напоминания (решение владельца 22.10.2026); синхронно правит Платёж арендной платы, как reminderOffsetDays. */
+            notifyEmail?: boolean | null;
             /**
              * Format: date
              * @description Явный null — аренда становится бессрочной; не в прошлое (≥ today, > начала). Окно графика (тикет #1154): слитая пара «день оплаты + плановое окончание» целиком — смена дня перепроверяет стоящее окончание, смена окончания сверяется с хранящимся днём; раньше первого вхождения дня оплаты — 400.
@@ -4251,6 +4267,8 @@ export interface components {
             amountKopecks: number;
             paymentDay: components["schemas"]["RentalPaymentDay"];
             autoPay: boolean;
+            /** @description Персональная галочка отправки писем управляемого платежа (карта #1551, тикет #1555) — рендер читается из платежа, как reminderOffsetDays. Гейтится только email-канал; глобальная настройка почты профиля — мастер. У завершённой аренды платёж удалён — Архив условий флаг не хранит, ответ несёт false. */
+            notifyEmail: boolean;
             /**
              * @description Lead time of the managed payment's reminder (карта #822); null — напоминаний нет.
              * @enum {integer|null}

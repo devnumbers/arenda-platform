@@ -132,6 +132,7 @@ describe('completePlannedEndDate', () => {
         amountKopecks: 56_000_00,
         paymentDay: 10,
         autoPay: false,
+        notifyEmail: true,
         reminderOffsetDays: null,
         nextPayment: null,
       },

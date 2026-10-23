@@ -16,10 +16,6 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
-// MaxAmountKopecks is the create/update amount ceiling: 10⁹ kopecks = 10
-// million rubles (ADR 0049 §4).
-const MaxAmountKopecks = 1_000_000_000
-
 // MaxTitleLength bounds the rule title, counted in characters — a product
 // copy limit, not a byte limit.
 const MaxTitleLength = 255
@@ -64,7 +60,11 @@ type CreatePaymentCommand struct {
 	// NotifyAutoPaid is the per-payment gate of the «Автоплатёж исполнен»
 	// event (#1189); absent on the wire means false («Не уведомлять»,
 	// макет 3214-72739).
-	NotifyAutoPaid     bool
+	NotifyAutoPaid bool
+	// NotifyEmail is the per-payment email toggle (карта #1551, тикет
+	// #1553); absent on the wire means true («включена», решение владельца
+	// 22.10.2026) — the transport resolves the default.
+	NotifyEmail        bool
 	ReminderOffsetDays *int
 }
 
@@ -90,8 +90,12 @@ type UpdatePaymentCommand struct {
 	// value; a set value applies it (#1189). An explicit null on the wire
 	// resolves to false at the transport.
 	NotifyAutoPaid *bool
-	// ReminderOffsetDays is tri-state the same way: omit keeps, a set value
-	// applies (1/3/7), a clear turns reminders off.
+	// NotifyEmail is tri-state the same way (#1553): a nil command field
+	// keeps the current value; a set value applies it. An explicit null on
+	// the wire resolves to false (выключена) at the transport.
+	NotifyEmail *bool
+	// ReminderOffsetDays is tri-state: omit keeps, a set value applies
+	// (1/3/7), a clear turns reminders off.
 	ReminderOffsetDays *ReminderOffsetUpdate
 }
 
@@ -178,6 +182,7 @@ func (s *PaymentService) CreatePayment(
 				EndDate:            cmd.EndDate,
 				AutoPay:            cmd.AutoPay,
 				NotifyAutoPaid:     cmd.NotifyAutoPaid,
+				NotifyEmail:        cmd.NotifyEmail,
 				ReminderOffsetDays: cmd.ReminderOffsetDays,
 				Category:           domain.CategoryRef{Slug: &cmd.CategorySlug},
 			}
@@ -667,7 +672,8 @@ const auditFieldsKey = "fields"
 // invariants — the transport decodes and delegates here, so the rules cannot
 // drift between layers. It enforces: the direction enum, a
 // non-empty title within MaxTitleLength characters (counted in runes: the
-// limit is a product copy limit, not a byte limit), kopecks within 1..10⁹,
+// limit is a product copy limit, not a byte limit), kopecks of at least 1
+// with no ceiling (ADR 0069),
 // a resolvable category reference (a default-catalog slug or a user category
 // — the XOR is a durable schema invariant), a constructed non-zero
 // recurrence and an end date no earlier than the rule's lower bound.
@@ -678,7 +684,7 @@ func validateRule(rule domain.Payment) error {
 	if title := strings.TrimSpace(rule.Title); title == "" || utf8.RuneCountInString(title) > MaxTitleLength {
 		return ErrInvalidInput
 	}
-	if rule.AmountKopecks < 1 || rule.AmountKopecks > MaxAmountKopecks {
+	if rule.AmountKopecks < 1 {
 		return ErrInvalidInput
 	}
 	if err := validateCategory(rule.Category); err != nil {
@@ -759,6 +765,9 @@ func applyUpdate(payment *domain.Payment, cmd UpdatePaymentCommand) {
 	if cmd.NotifyAutoPaid != nil {
 		payment.NotifyAutoPaid = *cmd.NotifyAutoPaid
 	}
+	if cmd.NotifyEmail != nil {
+		payment.NotifyEmail = *cmd.NotifyEmail
+	}
 	if cmd.ReminderOffsetDays != nil {
 		payment.ReminderOffsetDays = cmd.ReminderOffsetDays.Value
 	}
@@ -791,6 +800,9 @@ func updatedFields(cmd UpdatePaymentCommand) []string {
 	}
 	if cmd.NotifyAutoPaid != nil {
 		fields = append(fields, "notify_auto_paid")
+	}
+	if cmd.NotifyEmail != nil {
+		fields = append(fields, "notify_email")
 	}
 	if cmd.ReminderOffsetDays != nil {
 		fields = append(fields, "reminder_offset_days")

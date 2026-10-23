@@ -154,6 +154,21 @@ type DeliverySettings interface {
 	EmailAllowed(ctx context.Context, userID uuid.UUID, category domain.Category) (bool, error)
 }
 
+// PaymentEmailSetting reads the payment rule's per-payment email flag at
+// delivery time (карта #1551, тикет #1554, решение владельца 22.10.2026 —
+// «персонально для каждого платежа настраивается отправка на почту»):
+// the payments vocabulary's «Уведомление на почту» (payments.notify_email)
+// gates the rule's email leg on top of the account matrix — the matrix is
+// the master, the flag speaks only for its own rule's letters. No cache:
+// the delivery asks the live flag, a flip after the enqueue silences the
+// in-flight job.
+type PaymentEmailSetting interface {
+	// EmailAllowed reports whether the rule's flag lets the email leg
+	// through. A vanished rule reads as allowed — the gate silences living
+	// rules, a deleted one leaves the in-flight delivery as it was.
+	EmailAllowed(ctx context.Context, paymentID uuid.UUID) (bool, error)
+}
+
 // Contact is a resolved delivery endpoint. The channel is not part of the
 // contact: since #740 each channel is its own job, and the email worker
 // reads the address only.

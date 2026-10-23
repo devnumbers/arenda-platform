@@ -19,7 +19,7 @@ import {
 import { propertyPermissions } from "@/entities/property";
 import { useProperties } from "@/features/properties";
 import {
-  PaymentsAddSheet,
+  PaymentsTypeChoiceSheet,
   useGlobalPaymentObjects,
   useGlobalPayments,
   usePaymentsDue,
@@ -46,7 +46,7 @@ import { globalFavoritePayments,
   nearestDateLine,
   overdueDaysLine,
   overdueOperationsCountLabel,
-  paymentHubAddTarget,
+  paymentHubCanCreate,
   paymentHubSectionHasAllCard,
   paymentsCountLabel,
 } from "../lib/payments-global-model";
@@ -86,12 +86,11 @@ const SECTION_CARDS_LIMIT = 4;
  * «+» создания (макет 3226-75059) — в ряду заголовка и в правом слоте
  * компакт-бара; видна, когда в книге есть хоть один объект с правом правки
  * (#703), на глобальной пустоте скрыта — действие там CTA состояния.
- * Ведёт через существующие поверхности (новых роутов создания нет): у
- * единственного редактируемого объекта — шит единого входа #453 (черновик →
- * выбор типа → визард его объекта), у нескольких — страница «Объекты»
- * (#582: карточка → платежи объекта → «Добавить»). Один объект в книге —
- * тап по его карточке ведёт сразу на платежи объекта, без страницы
- * «Объекты».
+ * Ведёт в модалку выбора типа «Платёж / Автоплатёж», из неё — в глобальный
+ * визард /payments/new (аналог /operations/new #570, решение владельца
+ * 23.10.2026), где объект выбирается шагом «Выбрать объект»; черновой фазы
+ * у хаба нет — черновики живут в объектном входе (#453). Один объект в
+ * книге — тап по его карточке ведёт сразу на платежи объекта.
  */
 export function PaymentsGlobalScreen(): JSX.Element {
   const router = useRouter();
@@ -122,24 +121,13 @@ export function PaymentsGlobalScreen(): JSX.Element {
   const editableIds = (propertiesQuery.data ?? [])
     .filter((property) => propertyPermissions(property).canEdit)
     .map((property) => property.id);
-  const addTarget = paymentHubAddTarget(editableIds);
-  const showAdd = !globalEmpty && addTarget !== null;
+  const showAdd = !globalEmpty && paymentHubCanCreate(editableIds);
 
-  // Шит единого входа помнит свой объект: цель может смениться на
-  // «Объекты» после перечитывания справочника — открытая модалка не должна
-  // перемонтироваться.
+  // Модалка выбора типа переживает перечитывание справочника: цель «+» от
+  // числа объектов больше не зависит (решение владельца 23.10.2026).
   const [addSheetOpen, setAddSheetOpen] = useState(false);
-  const [addSheetPropertyId, setAddSheetPropertyId] = useState<string | null>(
-    null,
-  );
 
   const openAdd = (): void => {
-    if (addTarget === null) return;
-    if (addTarget.kind === "objects") {
-      pushPage(router, ROUTES.paymentsObjects);
-      return;
-    }
-    setAddSheetPropertyId(addTarget.propertyId);
     setAddSheetOpen(true);
   };
 
@@ -331,16 +319,13 @@ export function PaymentsGlobalScreen(): JSX.Element {
         )}
       </PageContent>
 
-      {/* Единый вход в создание платежа (#453) для единственного
-       * редактируемого объекта: черновик → выбор типа → визард его
-       * объекта. Без fixedType — шит сам разбирает черновики обоих типов. */}
-      {addSheetPropertyId !== null && (
-        <PaymentsAddSheet
-          propertyId={addSheetPropertyId}
-          open={addSheetOpen}
-          onOpenChange={setAddSheetOpen}
-        />
-      )}
+      {/* Вход в создание платежа с хаба (решение владельца 23.10.2026):
+       * модалка выбора типа «Платёж / Автоплатёж» ведёт в глобальный
+       * визард /payments/new, объект выбирается шагом «Выбрать объект». */}
+      <PaymentsTypeChoiceSheet
+        open={addSheetOpen}
+        onOpenChange={setAddSheetOpen}
+      />
     </>
   );
 }

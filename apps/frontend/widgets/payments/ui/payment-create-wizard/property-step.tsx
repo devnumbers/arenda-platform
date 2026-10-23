@@ -4,30 +4,42 @@ import { type JSX } from 'react';
 import { BoldHome, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, CircleIcon, CirclePhoto, Skeleton } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { filterEditableProperties, propertyTypeIcons, type PropertyType } from '@/entities/property';
+import {
+  filterEditableProperties,
+  propertiesByPrimaryOrder,
+  propertyTypeIcons,
+  type PropertyType,
+} from '@/entities/property';
 
 /**
- * Шаг «Выбрать объект» визарда операции (#570, Figma 1858:105011) — только
- * у глобального входа (аннотация фрейма: у входа с объекта этой страницы
- * нет). Каркас выбора объекта задачи/контакта: радио-список объектов,
- * архивные отфильтрованы (решение владельца 08.09), строки без «общей»
- * операции — операция всегда привязана к объекту. Выбор применяется
- * сразу, сабмит «Добавить операцию» — панель шага во flow. Список —
- * только объекты с правом правки (#703): зритель и архив ведут в отказ
- * сервера при сабмите.
+ * Шаг «Выбрать объект» визарда (#570, Figma 1858:105011) — служит обоим
+ * визардам: у операции это шаг 5 глобального входа, у платежа — шаг 2
+ * глобального входа /payments/new (решение владельца 23.10.2026); у входа
+ * с объекта этой страницы нет. Каркас выбора объекта задачи/контакта:
+ * радио-список объектов, архивные отфильтрованы (решение владельца 08.09),
+ * строки без «общей» сущности — правило и операция всегда привязаны к
+ * объекту. Порядок — канон «Основного объекта» (основной выше, #584),
+ * дефолт предвыбора — верхняя строка (effectiveSelectedPropertyId в flow,
+ * явный выбор сильнее). Выбор применяется сразу, сабмит — панель шага во
+ * flow. Список — только объекты с правом правки (#703): зритель и архив
+ * ведут в отказ сервера при сабмите.
  */
-export function OperationPropertyStep({
+export function PropertyStep({
   selectedPropertyId,
   onSelect,
+  ariaLabel,
 }: {
   readonly selectedPropertyId: string | undefined;
   readonly onSelect: (propertyId: string) => void;
+  readonly ariaLabel: string;
 }): JSX.Element {
   const propertiesQuery = useProperties();
-  const properties = filterEditableProperties(propertiesQuery.data ?? []);
+  const properties = propertiesByPrimaryOrder(
+    filterEditableProperties(propertiesQuery.data ?? []),
+  );
 
   return (
-    <div role="radiogroup" aria-label="Объект операции" className="px-6 pt-6">
+    <div role="radiogroup" aria-label={ariaLabel} className="px-6 pt-6">
         {propertiesQuery.isPending && <ObjectRowsSkeleton />}
         {propertiesQuery.isError && (
           <ObjectLoadErrorCard onRetry={() => void propertiesQuery.refetch()} />

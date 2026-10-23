@@ -28,9 +28,9 @@ func NewPaymentDueWorker(
 
 // NewPaymentOverdueWorker builds the overdue boundary worker over the
 // publisher and the process clock (issue #776): the worker wakes at one
-// operation's overdue boundary — the wall clock 22:00 of the day after the
+// operation's overdue boundary — the wall clock 10:00 of the day after the
 // operation date
-// in the owner's timezone (#1168) — and hands the (rule, date) and the
+// in the owner's timezone — and hands the (rule, date) and the
 // wake-up
 // instant to the publisher's delivery-time resolution with the same shape
 // the due worker runs.

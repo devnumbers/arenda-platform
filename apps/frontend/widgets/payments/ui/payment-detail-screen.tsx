@@ -8,6 +8,7 @@ import {
   Check,
   Edit,
   EndPay,
+  Key,
   Pause,
   Play,
   Repeat,
@@ -418,8 +419,11 @@ function PaymentHeroCard({
  * завершённости «Оплатить» заменяется на «Завершить» (иконка EndPay) с
  * confirm-шторкой (3249:75723) и финальным экраном. Состав держит
  * paymentDetailActions (#818): у управляемого арендой платежа вместо
- * «Изменить» — «Изменить аренду» (#1158), у завершённой аренды остаётся
- * только «Оплатить», «Завершить» нет (complete гейтится арендой). */
+ * «Изменить» — «Изменить аренду» (#1158), при исчерпанной оплате
+ * («Ожидает действия», settled) вместо disabled «Оплатить» —
+ * «Завершить аренду» (решение владельца 22.10, макет 1550:93718): та же
+ * кнопка, что у тройки страницы аренды — вход в мастер завершения через
+ * итоги аренды; у платежа завершённой аренды кнопок нет вовсе. */
 function PaymentActionsRow({
   propertyId,
   payment,
@@ -476,8 +480,9 @@ function PaymentActionsRow({
     <>
       {/* Равные колонки по видимому составу: три кнопки, две у завершённого
        * правила (история 44) и две у управляемого арендой платежа —
-       * «Изменить аренду» + «Оплатить» (#818, #1158), одна — у платежа
-       * завершённой аренды. */}
+       * «Изменить аренду» + «Оплатить», при исчерпанной оплате —
+       * «Изменить аренду» + «Завершить аренду» (решение владельца 22.10);
+       * у платежа завершённой аренды ряда нет (#1158, решение 22.10). */}
       <div className={ACTIONS_GRID[actions.length]}>
         {actions.includes('pause') && (
           <RoundActionButton
@@ -513,6 +518,20 @@ function PaymentActionsRow({
             icon={<Edit />}
             caption={<>Изменить<br />аренду</>}
             onClick={() => pushPage(router, ROUTES.propertyRentalTermsEdit(propertyId))}
+          />
+        )}
+        {/* Все месяцы аренды оплачены (settled) — вместо disabled «Оплатить»
+         * вход в мастер завершения аренды (решение владельца 22.10, макет
+         * 1550:93718): secondary с ключом и подписью в две строки — кнопка
+         * тройки страницы аренды; итоги аренды собирает сам мастер
+         * (/rentals/complete). Без confirm-шторки: завершение с датой,
+         * залогом и итогами — многошаговый мастер. */}
+        {actions.includes('completeRental') && (
+          <RoundActionButton
+            variant="secondary"
+            icon={<Key />}
+            caption={<>Завершить<br />аренду</>}
+            onClick={() => pushPage(router, ROUTES.propertyRentalComplete(propertyId))}
           />
         )}
         {actions.includes('complete') && (
@@ -734,7 +753,6 @@ function NextPaymentRow({
   return (
     <PaymentRowButton
       variant="gray"
-      className="px-3 pb-2"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
       title={title}
       subtitle={subtitle}
@@ -891,7 +909,6 @@ function HistoryPreviewRow({
   return (
     <PaymentRowButton
       variant="gray"
-      className="px-3 pb-2"
       categoryIcon={<CategoryIcon icon={style.icon} color={style.color} surface="muted" />}
       title={operation.title}
       subtitle={formatDayMonthWithYear(operation.paidDate ?? operation.date, today)}

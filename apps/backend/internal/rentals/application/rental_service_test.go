@@ -62,6 +62,7 @@ const (
 	eventHistoryRecord = "history.Record"
 	// Journal markers the terms-edit assertions share with the fakes.
 	eventRentalsUpdate = "rentals.Update"
+	eventPayUpdate     = "pay.Update"
 	eventPayRunTick    = "pay.RunTick"
 )
 
@@ -220,7 +221,7 @@ func (t *fakeGatewayTx) Create(_ context.Context, seed RentPaymentSeed) (uuid.UU
 func (t *fakeGatewayTx) Update(
 	_ context.Context, _, _, _, _ uuid.UUID, change RentPaymentChange, _ time.Time,
 ) error {
-	t.journal.add("pay.Update")
+	t.journal.add(eventPayUpdate)
 	t.gateway.changes = append(t.gateway.changes, change)
 	return nil
 }
@@ -582,7 +583,6 @@ func TestCreateRental_Validation(t *testing.T) {
 		mut  func(*CreateRentalCommand)
 	}{
 		{"zero amount", func(c *CreateRentalCommand) { c.AmountKopecks = 0 }},
-		{"over the ceiling", func(c *CreateRentalCommand) { c.AmountKopecks = MaxAmountKopecks + 1 }},
 		{"start in the past", func(c *CreateRentalCommand) { c.StartDate = today.AddDate(0, 0, -1) }},
 		{"planned end at start", func(c *CreateRentalCommand) {
 			c.PlannedEndDate = new(c.StartDate)
@@ -610,6 +610,51 @@ func strings2001() string {
 		s[i] = 'а'
 	}
 	return string(s)
+}
+
+// Потолка сумм больше нет (решение владельца 23.10.2026): суммы контракта
+// произвольные — арендная плата, залог, комиссия, возврат залога. Минимумы
+// остаются: плата ≥ 1 копейки, залог/комиссия/возврат ≥ 0.
+func TestRentalAmountsHaveNoCeiling(t *testing.T) {
+	t.Parallel()
+	t.Run("create with amounts above the old 10⁹ bound", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		cmd := createCmd()
+		cmd.AmountKopecks = 5_000_000_000 // 50 млн ₽ — за прежним потолком.
+		cmd.DepositKopecks = new(int64(3_000_000_000))
+		cmd.CommissionKopecks = new(int64(2_000_000_000))
+
+		_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+		require.NoError(t, err)
+		assert.Equal(t, 5_000_000_000, int(h.gateway.createSeed.AmountKopecks))
+	})
+
+	t.Run("terms edit above the old bound syncs the payment", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		cmd := UpdateRentalCommand{AmountKopecks: new(int64(9_000_000_000_000_000))}
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+		require.NoError(t, err)
+		require.Len(t, h.gateway.changes, 1)
+		require.NotNil(t, h.gateway.changes[0].AmountKopecks)
+		assert.Equal(t, int64(9_000_000_000_000_000), *h.gateway.changes[0].AmountKopecks)
+	})
+
+	t.Run("deposit return above the old bound", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		_, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, rentalID,
+			CompleteRentalCommand{
+				CompletedDate: today,
+				DepositReturn: &DepositReturn{AmountKopecks: 1_500_000_000},
+			})
+		require.NoError(t, err)
+	})
 }
 
 func TestCreateRental_SecondUnfinishedIs409(t *testing.T) {
@@ -661,7 +706,7 @@ func TestUpdateRental_PaymentTermsSyncAndTick(t *testing.T) {
 	view, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"pay.Update", eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
+	assert.Equal(t, []string{eventPayUpdate, eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
 	require.Len(t, h.gateway.changes, 1)
 	change := h.gateway.changes[0]
 	require.NotNil(t, change.AmountKopecks)
@@ -692,7 +737,7 @@ func TestUpdateRental_ReminderOffsetSyncs(t *testing.T) {
 	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"pay.Update", eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
+	assert.Equal(t, []string{eventPayUpdate, eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
 	require.Len(t, h.gateway.changes, 1)
 	change := h.gateway.changes[0]
 	require.NotNil(t, change.ReminderOffsetDays)
@@ -717,7 +762,7 @@ func TestUpdateRental_ReminderOffsetRules(t *testing.T) {
 		}
 		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
 		require.ErrorIs(t, err, ErrInvalidInput)
-		assert.NotContains(t, h.journal.events, "pay.Update",
+		assert.NotContains(t, h.journal.events, eventPayUpdate,
 			"an invalid patch never reaches the seam")
 	})
 	t.Run("explicit null clears the reminders", func(t *testing.T) {
@@ -743,6 +788,62 @@ func TestUpdateRental_ReminderOffsetRules(t *testing.T) {
 		assert.Empty(t, h.gateway.changes, "a no-op patch syncs nothing")
 		assert.NotContains(t, h.journal.events, eventPayRunTick)
 	})
+}
+
+// The email-toggle leg (карта #1551, тикет #1555): the notifyEmail flag
+// rides the create into the managed payment's seed verbatim — the service
+// resolves no default of its own, the transport owns the omitted→true
+// resolution (как notifyEmail обычных платежей, #1553).
+func TestCreateRental_NotifyEmailRidesSeed(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	cmd := createCmd()
+	cmd.NotifyEmail = false
+	_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+	require.NoError(t, err)
+	assert.False(t, h.gateway.createSeed.NotifyEmail, "галочка едет как прислали")
+
+	h = newHarness(t)
+	cmd.NotifyEmail = true
+	_, err = h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+	require.NoError(t, err)
+	assert.True(t, h.gateway.createSeed.NotifyEmail)
+}
+
+// The email-toggle patch rides the seam like the reminder's (тикет #1555):
+// the tri-state resolves on the transport (null ≡ false — галочка
+// не-nullable, явный null выключает), the tick re-runs (the payment changed)
+// and the audit names the moved field.
+func TestUpdateRental_NotifyEmailSyncs(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(nil)
+
+	cmd := UpdateRentalCommand{NotifyEmail: new(false)}
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{eventPayUpdate, eventRentalsUpdate, eventAuditRecord, eventHistoryRecord, eventPayRunTick}, h.journal.events)
+	require.Len(t, h.gateway.changes, 1)
+	require.NotNil(t, h.gateway.changes[0].NotifyEmail)
+	assert.False(t, *h.gateway.changes[0].NotifyEmail)
+
+	// The audit names the moved field (values never travel, ADR 0061 §4).
+	fields, ok := h.audit.entries[0].Context["fields"].([]string)
+	require.True(t, ok)
+	assert.Contains(t, fields, "notify_email")
+}
+
+func TestUpdateRental_NotifyEmailOmittedKeeps(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(nil)
+
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, UpdateRentalCommand{})
+	require.NoError(t, err)
+	assert.Empty(t, h.gateway.changes, "a no-op patch syncs nothing")
+	assert.NotContains(t, h.journal.events, eventPayRunTick)
 }
 
 func TestUpdateRental_NonPaymentFieldsSkipTick(t *testing.T) {
