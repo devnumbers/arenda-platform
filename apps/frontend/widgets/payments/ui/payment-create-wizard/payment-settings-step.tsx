@@ -226,7 +226,7 @@ function NotifyAutoPaidPicker({
 }
 
 /** Строка-тумблер «Окончание платежа» (макет 3214:72995, анатомия
- * EmailNotificationsRow): подпись «Необязательно», включённым раскрывает
+ * NotifyEmailRow): подпись «Необязательно», включённым раскрывает
  * строку даты. */
 function EndDateToggleRow({
   checked,

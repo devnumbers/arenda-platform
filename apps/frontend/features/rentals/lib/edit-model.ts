@@ -26,6 +26,10 @@ export type RentalEditForm = {
   readonly amountKopecks: number | undefined;
   readonly paymentDay: RentalPaymentDay | undefined;
   readonly autoPay: boolean;
+  /** Персональная галочка почты аренды (карта #1551, тикет #1557),
+   * предзаполняется из флага аренды (`rentPayment.notifyEmail` — сервер
+   * держит его на Платеже, канон #1552). */
+  readonly notifyEmail: boolean;
   /** Выбранный оффсет; undefined — «Не напоминать» (канон update-model
    * платежа #1197): в команду уходит явный null (#1208). */
   readonly reminderOffsetDays: PaymentReminderOffset | undefined;
@@ -36,12 +40,21 @@ export type RentalEditForm = {
   readonly comment: string;
 };
 
+/** Опции диффа правки. */
+export type RentalUpdateCommandOptions = {
+  /** Ряд почты виден (глобальный мастер категории «Аренда» on либо ещё
+   * грузится); false — мастер off, ряд скрыт и галочка в PATCH не едет
+   * (дифф без поля, канон #1552). Дефолт — виден. */
+  readonly notifyEmailRowVisible?: boolean;
+};
+
 /** Форма, предзаполненная текущими условиями. */
 export function rentalEditFormFromRental(rental: Rental): RentalEditForm {
   return {
     amountKopecks: rental.rentPayment.amountKopecks,
     paymentDay: rental.rentPayment.paymentDay,
     autoPay: rental.rentPayment.autoPay,
+    notifyEmail: rental.rentPayment.notifyEmail,
     reminderOffsetDays: rental.rentPayment.reminderOffsetDays ?? undefined,
     plannedEndDate: rental.plannedEndDate,
     utilities: rental.utilities,
@@ -94,6 +107,7 @@ export function formAfterPaymentDayChange(
 export function buildRentalUpdateCommand(
   rental: Rental,
   form: RentalEditForm,
+  options: RentalUpdateCommandOptions = {},
 ): RentalUpdateCommand | undefined {
   const { amountKopecks, paymentDay } = form;
   if (
@@ -133,6 +147,13 @@ export function buildRentalUpdateCommand(
   // undefined формы для сравнения.
   if (form.reminderOffsetDays !== (rental.rentPayment.reminderOffsetDays ?? undefined)) {
     patch.reminderOffsetDays = form.reminderOffsetDays ?? null;
+  }
+  // Галочка почты (карта #1551, тикет #1557): живой ряд едет диффом
+  // действующих значений (tri-state: false выключает, true включает);
+  // ряд, скрытый мастером, галочку не трогает — дифф без поля (канон
+  // #1552). Гейта от пикера напоминаний у аренды нет — независимы.
+  if (options.notifyEmailRowVisible !== false && form.notifyEmail !== rental.rentPayment.notifyEmail) {
+    patch.notifyEmail = form.notifyEmail;
   }
   if (form.plannedEndDate !== rental.plannedEndDate) {
     patch.plannedEndDate = form.plannedEndDate;

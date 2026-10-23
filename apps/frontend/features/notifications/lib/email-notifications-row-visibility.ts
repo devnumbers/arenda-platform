@@ -20,3 +20,6 @@ export function emailNotificationsRowVisible(
 /** Категория матрицы, гейтящая видимость платёжных рядов. */
 export const PAYMENTS_EMAIL_CATEGORY: NotificationSettingsCategory =
   'payments_operations';
+
+/** Категория матрицы, гейтящая видимость арендных рядов (тикет #1557). */
+export const RENTAL_EMAIL_CATEGORY: NotificationSettingsCategory = 'rental';

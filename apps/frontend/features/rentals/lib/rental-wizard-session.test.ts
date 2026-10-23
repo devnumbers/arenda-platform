@@ -22,6 +22,7 @@ describe('validateRentalWizardDraft', () => {
         amountKopecks: 5600000,
         paymentDay: 10,
         autoPay: true,
+        notifyEmail: false,
         startDate: '2026-09-10',
         plannedEndDate: '2027-09-09',
         utilities: 'full_receipt',
@@ -34,6 +35,7 @@ describe('validateRentalWizardDraft', () => {
       amountKopecks: 5600000,
       paymentDay: 10,
       autoPay: true,
+      notifyEmail: false,
       startDate: '2026-09-10',
       plannedEndDate: '2027-09-09',
       utilities: 'full_receipt',
@@ -79,6 +81,13 @@ describe('validateRentalWizardDraft', () => {
     expect(validateRentalWizardDraft({ reminderOffsetDays: 5 })).toStrictEqual({});
     expect(validateRentalWizardDraft({ reminderOffsetDays: 0 })).toStrictEqual({});
     expect(validateRentalWizardDraft({ reminderOffsetDays: 'три' })).toStrictEqual({});
+  });
+
+  it('галочка почты — только boolean (карта #1551, тикет #1557)', () => {
+    expect(validateRentalWizardDraft({ notifyEmail: false })).toStrictEqual({ notifyEmail: false });
+    expect(validateRentalWizardDraft({ notifyEmail: true })).toStrictEqual({ notifyEmail: true });
+    expect(validateRentalWizardDraft({ notifyEmail: 'нет' })).toStrictEqual({});
+    expect(validateRentalWizardDraft({ notifyEmail: 0 })).toStrictEqual({});
   });
 
   it('не-объект и массив роняют весь черновик', () => {

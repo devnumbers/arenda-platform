@@ -72,6 +72,9 @@ function mapRentPayment(dto: components['schemas']['RentalPaymentView']): Rental
     // null — «Не напоминать» (#1208): absent в проводе нормализуется в null,
     // как у остальных nullable-полей ответа.
     reminderOffsetDays: dto.reminderOffsetDays ?? null,
+    // Галочка почты читается из Платежа аренды (карта #1551) — контракт
+    // required, переносится как есть.
+    notifyEmail: dto.notifyEmail,
     nextPayment: mapNextPayment(dto.nextPayment),
   };
 }

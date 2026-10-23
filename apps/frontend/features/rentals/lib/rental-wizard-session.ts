@@ -247,11 +247,14 @@ export function validateRentalWizardDraft(parsed: unknown): RentalWizardDraft {
   const reminderOffsetDays = PAYMENT_REMINDER_OPTIONS.find(
     (option) => option.offset === record.reminderOffsetDays,
   )?.offset;
+  // Галочка почты (карта #1551) — boolean; отсутствие = не тронуто (on).
+  const notifyEmail = typeof record.notifyEmail === 'boolean' ? record.notifyEmail : undefined;
 
   return {
     ...(amountKopecks !== undefined && { amountKopecks }),
     ...(paymentDay !== undefined && { paymentDay }),
     ...(autoPay !== undefined && { autoPay }),
+    ...(notifyEmail !== undefined && { notifyEmail }),
     ...(reminderOffsetDays !== undefined && { reminderOffsetDays }),
     ...(startDate !== undefined && { startDate }),
     ...(plannedEndDate !== undefined && { plannedEndDate }),

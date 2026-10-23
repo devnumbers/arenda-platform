@@ -28,8 +28,8 @@ const DTO: RentalResponseDto = {
     amountKopecks: 5600000,
     paymentDay: 10,
     autoPay: false,
-    // Контракт ответа с #1555; сущность галочку не несёт — ряд почты
-    // на создании/правке аренды читает её напрямую из ответа API.
+    // Контракт ответа с #1555; сущность несёт галочку с #1557 — ряд почты
+    // на создании/правке аренды читает её из сущности.
     notifyEmail: true,
     reminderOffsetDays: 7,
     nextPayment: {
@@ -70,6 +70,7 @@ describe('mapRental', () => {
         amountKopecks: 5600000,
         paymentDay: 10,
         autoPay: false,
+        notifyEmail: true,
         reminderOffsetDays: 7,
         nextPayment: {
           operationId: '0198c7a2-0000-7000-8000-000000000004',
