@@ -118,7 +118,7 @@ export function RentalSummaryContent({
             <PaymentRowButton
               variant="white"
               className="pointer-events-none"
-              categoryIcon={<UserAvatar variant="muted" photoUrl={tenantPhotoUrl} />}
+              categoryIcon={<UserAvatar variant="white" photoUrl={tenantPhotoUrl} />}
               title={rentalTenantTitle(tenant)}
               subtitle="Арендатор"
             />

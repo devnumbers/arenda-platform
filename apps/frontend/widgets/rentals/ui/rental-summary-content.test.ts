@@ -4,13 +4,15 @@ import { RentalSummarySkeleton } from './rental-skeletons';
 import { RentalSummaryContent } from './rental-summary-content';
 import { makeRental, type RentalSummary } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
-import { SkeletonListRow } from '@/shared/ui/design';
+import { SkeletonListRow, UserAvatar } from '@/shared/ui/design';
 
 /** Канон секции «Данные аренды» итогов аренды (Figma 1433:61927 — десктоп,
  * 1433:61074 — мобайль, геометрия одинакова): зазор после «Возвращения
  * залога» 24, заголовок — канон Heading 24/24/0 (свои верх и бока, низ 0),
  * до строк 8, белые строки Row Button на всю ширину (иконка в 24 от края —
- * 12+12 ряда, потребительские горизонтали не навешиваются). Скелетон
+ * 12+12 ряда, потребительские горизонтали не навешиваются). Аватар
+ * арендатора — белой поверхности (variant=white): кант сливается с белой
+ * строкой, обводки у фото нет (решение владельца 23.10). Скелетон
  * повторяет геометрию (§7 паритет): ряд базовый px-6 (круг в 24) + py-3 —
  * 68. */
 
@@ -18,6 +20,8 @@ type InspectableProps = {
   children?: ReactNode;
   className?: string;
   variant?: unknown;
+  categoryIcon?: unknown;
+  subtitle?: unknown;
 };
 
 function findElements(
@@ -120,6 +124,18 @@ describe('Секция «Данные аренды» (канон Figma 1433:6192
       expect(className).not.toContain('px-3');
       expect(row.props.variant).toBe('white');
     }
+  });
+
+  it('аватар арендатора — белой поверхности (variant=white): серого канта на белой строке нет', () => {
+    const rows = findElements(
+      renderContent(),
+      (element) => element.type === PaymentRowButton,
+    );
+    const tenantRow = rows.find((row) => row.props.subtitle === 'Арендатор');
+    expect(tenantRow).toBeDefined();
+    const avatar = tenantRow?.props.categoryIcon as ReactElement<InspectableProps>;
+    expect(avatar.type).toBe(UserAvatar);
+    expect(avatar.props.variant).toBe('white');
   });
 });
 
