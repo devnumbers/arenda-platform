@@ -1126,9 +1126,9 @@ test.describe('визард создания платежа', () => {
     await expect(emailSwitch).toBeEnabled();
 
     // Порядок: «Окончание платежа» выше «Уведомлений на почту».
-    const endDateBox = await endDateSwitch.boundingBox();
-    const emailBox = await emailSwitch.boundingBox();
-    expect(endDateBox?.y ?? 0).toBeLessThan(emailBox?.y ?? 0);
+    const endDateBox = (await endDateSwitch.boundingBox()) as { y: number };
+    const emailBox = (await emailSwitch.boundingBox()) as { y: number };
+    expect(endDateBox.y).toBeLessThan(emailBox.y);
 
     // Тап по заголовку ряда = тумблер: почта гасится и зажигается.
     await expect(emailSwitch).toHaveAttribute('aria-checked', 'true');

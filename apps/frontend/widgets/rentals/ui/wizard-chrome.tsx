@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { ComponentPropsWithRef, JSX, ReactNode } from 'react';
 import { ArrowLeft, SmallArrowDown } from '@/shared/assets/icons';
 import type { RentalPaymentDay, RentalUtilities } from '@/entities/rental';
@@ -394,7 +394,9 @@ export function PickerSelectField({
 /** Строка тумблера «Сделать платеж автоматическим?» (общая для шага
  * настроек #530 и правки #532; опечатки подписи макета не воспроизводятся):
  * включённый автоплатёж фиксирует оплату в назначенный день сам,
- * выключенный оставляет отметку владельцу. */
+ * выключенный оставляет отметку владельцу. Ряд кликается целиком: текст
+ * связан со свитчем label'ом (канон пары label+Switch дизайн-слоя) — тап
+ * по заголовку/подписи переключает тумблер. */
 export function AutoPayRow({
   checked,
   onCheckedChange,
@@ -402,9 +404,10 @@ export function AutoPayRow({
   readonly checked: boolean;
   readonly onCheckedChange: (checked: boolean) => void;
 }): JSX.Element {
+  const switchId = useId();
   return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="flex min-w-0 flex-col gap-1">
+    <label htmlFor={switchId} className="flex cursor-pointer items-center justify-between gap-4">
+      <span className="flex min-w-0 flex-col gap-1">
         <span className="text-base font-medium leading-[18px] text-content">
           Сделать платеж автоматическим?
         </span>
@@ -412,12 +415,13 @@ export function AutoPayRow({
           Оплата аренды автоматически зафиксируется в назначенный день.
           Либо отмечайте её вручную, а мы пришлём напоминание
         </span>
-      </div>
+      </span>
       <Switch
+        id={switchId}
         checked={checked}
         onCheckedChange={(value) => onCheckedChange(value === true)}
         aria-label="Сделать платеж автоматическим"
       />
-    </div>
+    </label>
   );
 }
