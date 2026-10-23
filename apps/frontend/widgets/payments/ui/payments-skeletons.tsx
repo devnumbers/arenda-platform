@@ -21,12 +21,13 @@ import {
 /** Приглушённый тон блоков внутри серых карточек (§7, skeletonBlockClass). */
 const MUTED = skeletonBlockClass('muted');
 
-/** Серая группа-заглушка: каркас PaymentsGroup — заголовок 20/24 (pt-6 pb-3)
- * и строки, снизу баланс 24; боковые поля экрана приносит секция (mx-6). */
+/** Серая группа-заглушка: каркас PaymentsGroup — заголовок 20/24 (pt-6 pb-2)
+ * и строки 24/12, снизу баланс 12; боковые поля экрана приносит секция
+ * (mx-6). */
 function SkeletonPaymentsGroup({ children }: { readonly children: ReactNode }): JSX.Element {
   return (
-    <section aria-hidden className="mx-6 rounded-card bg-surface-muted pb-6">
-      <div className="px-6 pb-3 pt-6">
+    <section aria-hidden className="mx-6 rounded-card bg-surface-muted pb-3">
+      <div className="px-6 pb-2 pt-6">
         <Skeleton className={`h-6 w-40 ${MUTED}`} />
       </div>
       <div className="flex flex-col">{children}</div>
@@ -70,8 +71,10 @@ function SkeletonRoundActionTwoLineCaption(): JSX.Element {
  * «Просроченные платежи» — пустой подзаголовок (у здорового платежа
  * просрочек нет), «История платежа» — строка: блок постоянен в данных
  * (#1338), порция ждётся серверным префетчем. Высоты — по реальному
- * контенту: кнопочный ряд 94, секция со строкой 144 (строка 60: py-1.5
- * скелетона против py-2 реальной PaymentRowButton с px-3 pb-2), секция
+ * контенту: кнопочный ряд 94, секция со строкой 152 (строка 68: py-3
+ * скелетона против py-3 реальной PaymentRowButton — канон ряда 12/12
+ * после payment-row-spacing; прежняя калибровка 60/py-1.5 сидела на
+ * px-3 pb-2), секция
  * с пустым подзаголовком 116 (hint 32 = текст 16 + pb-4). Зазор секций
  * 16px (3214:76434, #1194 — как у контента); плиток подэкранов нет
  * (снесены #1073). Состояния вне типового среза («все оплачено» —
@@ -106,7 +109,7 @@ export function PaymentDetailSkeleton(): JSX.Element {
 
       <div className="flex flex-col gap-4">
         <SkeletonPaymentsGroup>
-          <SkeletonListRow value tone="muted" className="py-1.5" />
+          <SkeletonListRow value tone="muted" className="py-3" />
         </SkeletonPaymentsGroup>
 
         <SkeletonPaymentsGroup>
@@ -116,7 +119,7 @@ export function PaymentDetailSkeleton(): JSX.Element {
         </SkeletonPaymentsGroup>
 
         <SkeletonPaymentsGroup>
-          <SkeletonListRow value tone="muted" className="py-1.5" />
+          <SkeletonListRow value tone="muted" className="py-3" />
         </SkeletonPaymentsGroup>
       </div>
     </>
@@ -181,10 +184,15 @@ export function PaymentGroupedListSkeleton({
     <>
       {rowsPerGroup.map((rows, groupIndex) => (
         <section key={groupIndex} aria-hidden className="flex flex-col">
-          <Skeleton className="mx-6 h-6 w-24" />
-          {skeletonRowWidths(rows).map((rowWidths, index) => (
-            <SkeletonListRow key={index} value widths={rowWidths} className="px-3 py-3" />
-          ))}
+          {/* Верх 24 и гэп 8 под заголовком — паритет PaymentsHeading и
+           * контейнера группы (канон Heading, Figma 1036-40829). */}
+          <Skeleton className="mx-6 mt-6 h-6 w-24" />
+          <div className="pt-2">
+            {/* px-6 — плоские 24 до контента, как у реального ряда (12+12). */}
+            {skeletonRowWidths(rows).map((rowWidths, index) => (
+              <SkeletonListRow key={index} value widths={rowWidths} className="px-6 py-3" />
+            ))}
+          </div>
         </section>
       ))}
     </>
