@@ -12,28 +12,16 @@ import type { GlobalPayment, GlobalPaymentObject } from '@/entities/payment';
 import { globalOverdueList } from './overdue-global-model';
 import { PAYMENT_COMPLETED_LABEL } from './payment-row-subtitle';
 
-/** Цель «+» создания платежа на глобальном хабе (макет 3226-75059,
- * тикет #1235): единственный редактируемый объект — шит единого входа
- * (#453: черновик → выбор типа → визард его объекта, как у CTA пустых
- * «Объектов» #1066); несколько — страница «Объекты» (существующий выбор
- * объекта: карточка → платежи объекта → «Добавить»); ни одного — «+» нет
- * (canon #703: у чистого зрителя визард упёрся бы в 403). Глобального
- * роута создания (аналог /operations/new #570) у платежей нет — новый
- * вход не заводим. id — уже отфильтрованные по праву правки объекты. */
-export type PaymentHubAddTarget =
-  | { readonly kind: 'sheet'; readonly propertyId: string }
-  | { readonly kind: 'objects' };
-
-export function paymentHubAddTarget(
-  editableIds: ReadonlyArray<string>,
-): PaymentHubAddTarget | null {
-  const [single] = editableIds;
-  if (single === undefined) {
-    return null;
-  }
-  return editableIds.length === 1
-    ? { kind: 'sheet', propertyId: single }
-    : { kind: 'objects' };
+/** «+» создания платежа на глобальном хабе (решение владельца 23.10.2026):
+ * видна, когда есть хоть один редактируемый объект (canon #703 — у чистого
+ * зрителя визард упёрся бы в отказ сервера); ведёт в модалку выбора типа
+ * «Платёж / Автоплатёж», из неё — в глобальный визард /payments/new
+ * (аналог /operations/new #570), где объект выбирается шагом «Выбрать
+ * объект». Черновой фазы у хаба больше нет — черновики живут только в
+ * объектном входе (#453). id — уже отфильтрованные по праву правки
+ * объекты. */
+export function paymentHubCanCreate(editableIds: ReadonlyArray<string>): boolean {
+  return editableIds.length > 0;
 }
 
 /** Замыкающая карточка секции хаба — «Все избранные», «Все просроченные»,

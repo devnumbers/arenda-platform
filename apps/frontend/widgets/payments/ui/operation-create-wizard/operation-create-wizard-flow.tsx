@@ -34,9 +34,9 @@ import { paymentCategoryBySlug } from '@/features/payment-categories';
 import { useProperties } from '@/features/properties';
 import { CategorySearchHint, WizardBottomBar, WizardHeading } from '../payment-create-wizard/wizard-chrome';
 import { CategoryStep } from '../payment-create-wizard/category-step';
+import { PropertyStep } from '../payment-create-wizard/property-step';
 import { OperationAmountStep } from './operation-amount-step';
 import { OperationTitleStep } from './operation-title-step';
-import { OperationPropertyStep } from './operation-property-step';
 import { OperationSuccess } from './operation-success';
 
 /**
@@ -308,9 +308,10 @@ export function OperationCreateWizardFlow({
         )}
         {step === 5 && (
           <>
-            <OperationPropertyStep
+            <PropertyStep
               selectedPropertyId={draft.propertyId}
               onSelect={(id) => setDraft((prev) => ({ ...prev, propertyId: id }))}
+              ariaLabel="Объект операции"
             />
             {/* Сабмит глобального входа: неактивен, пока объект не выбран. */}
             <StickyBottomBar>

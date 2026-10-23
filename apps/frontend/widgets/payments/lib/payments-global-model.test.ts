@@ -7,7 +7,7 @@ import {
   nearestDateLine,
   overdueDaysLine,
   overdueOperationsCountLabel,
-  paymentHubAddTarget,
+  paymentHubCanCreate,
   paymentHubSectionHasAllCard,
   paymentsCountLabel,
 } from './payments-global-model';
@@ -151,21 +151,13 @@ describe('paymentHubSectionHasAllCard — замыкающая карточка 
   });
 });
 
-describe('paymentHubAddTarget — цель «+» создания платежа (макет 3226-75059)', () => {
+describe('paymentHubCanCreate — «+» создания платежа на хабе (решение владельца 23.10.2026)', () => {
   it('нет редактируемых объектов — «+» не рисуется', () => {
-    expect(paymentHubAddTarget([])).toBeNull();
+    expect(paymentHubCanCreate([])).toBe(false);
   });
 
-  it('единственный редактируемый объект — шит единого входа его объекта', () => {
-    expect(paymentHubAddTarget(['p1'])).toStrictEqual({
-      kind: 'sheet',
-      propertyId: 'p1',
-    });
-  });
-
-  it('несколько редактируемых — страница «Объекты» (выбор объекта)', () => {
-    expect(paymentHubAddTarget(['p1', 'p2', 'p3'])).toStrictEqual({
-      kind: 'objects',
-    });
+  it('есть хоть один редактируемый — «+» есть: объект выбирается шагом визарда', () => {
+    expect(paymentHubCanCreate(['p1'])).toBe(true);
+    expect(paymentHubCanCreate(['p1', 'p2', 'p3'])).toBe(true);
   });
 });

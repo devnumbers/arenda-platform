@@ -131,14 +131,19 @@ export function usePropertyOperationsPaged(
 /**
  * Создание платежа (визард #464): контракт POST создания camelCase — команда
  * уходит телом без переупаковки; `since` проставляет сервер (сегодня в TZ
- * собственника). Инвалидация списков платежей и операций объекта.
+ * собственника). Объект — часть переменных мутации: у глобального входа
+ * (/payments/new) он выбирается на шаге «Выбрать объект», когда хук уже
+ * смонтирован (канон useCreateOperation #570). Инвалидация списков платежей
+ * и операций объекта.
  */
-export function useCreatePayment(
-  propertyId: string,
-): UseMutationResult<Payment, ApiError, PaymentCreateCommand> {
+export function useCreatePayment(): UseMutationResult<
+  Payment,
+  ApiError,
+  { readonly propertyId: string; readonly command: PaymentCreateCommand }
+> {
   const queryClient = useQueryClient();
   return useGuardedMutation({
-    mutationFn: async (command: PaymentCreateCommand) => {
+    mutationFn: async ({ propertyId, command }) => {
       const response = await apiClient<PaymentResponseDto>(
         `/properties/${encodeURIComponent(propertyId)}/payments`,
         // Идемпотентный ключ (Т3 #1121): см. useCreateProperty.

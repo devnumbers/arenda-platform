@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import type { JSX } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Add, Edit } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -12,6 +11,7 @@ import {
   type PaymentDraftType,
 } from '../lib/use-payment-wizard-draft';
 import { paymentAddSheetState } from '../lib/payment-add-sheet-model';
+import { PaymentTypeChoiceCards } from './payment-type-choice-cards';
 import { Button, Modal, ModalContent } from '@/shared/ui/design';
 import { pushPage } from '@/shared/lib/navigation';
 
@@ -33,30 +33,9 @@ import { pushPage } from '@/shared/lib/navigation';
  * открывают вовсе, потребитель ведёт straight в визард (UX прежний).
  * Черновики — usePaymentWizardDraft (localStorage per объект+тип),
  * свежесть — updatedAt в payload: показывается последний тронутый.
+ * С объектного входа шит ведёт в объектный визард; глобальный хаб с
+ * 23.10.2026 использует модалку без черновой фазы — PaymentsTypeChoiceSheet.
  */
-
-/** Копирайт карточек — дословно из фрейма 3065:71128 (включая «Платеж»
- * без «ё»): label + синий action, длинные description прежних фреймов
- * (1134:40415 / 1134:39570) в новом макете не видны — снесены. */
-const TYPE_META: Record<
-  PaymentDraftType,
-  {
-    readonly label: string;
-    readonly action: string;
-    readonly image: string;
-  }
-> = {
-  payment: {
-    label: 'Платеж',
-    action: 'Отмечайте оплату\nвручную',
-    image: '/images/payments/sheet-choice-payment.webp',
-  },
-  autopayment: {
-    label: 'Автоплатеж',
-    action: 'Отмечается автоматически',
-    image: '/images/payments/sheet-choice-autopayment.webp',
-  },
-};
 
 export type PaymentsAddSheetProps = {
   readonly propertyId: string;
@@ -140,13 +119,7 @@ export function PaymentsAddSheet({
     );
   } else if (state.kind === 'choice') {
     title = 'Выберите тип платежа';
-    content = (
-      <div className="grid grid-cols-2 gap-2">
-        {(Object.keys(TYPE_META) as PaymentDraftType[]).map((type) => (
-          <ChoiceCard key={type} type={type} onSelect={() => goWizard(type)} />
-        ))}
-      </div>
-    );
+    content = <PaymentTypeChoiceCards onSelect={goWizard} />;
   } else {
     // loading: контент не выбираем, чтобы выбор типа не мелькнул перед
     // черновик-состоянием.
@@ -162,43 +135,5 @@ export function PaymentsAddSheet({
         </ModalContent>
       )}
     </Modal>
-  );
-}
-
-function ChoiceCard({
-  type,
-  onSelect,
-}: {
-  readonly type: PaymentDraftType;
-  readonly onSelect: () => void;
-}): JSX.Element {
-  const meta = TYPE_META[type];
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="pressable flex cursor-pointer flex-col gap-4 rounded-card bg-surface-muted p-4 text-left outline-none focus-visible:ring-4 focus-visible:ring-primary hover:opacity-80"
-    >
-      {/* priority — как в EmptyState: иллюстрация внутри открывающегося
-          шита, ленивую загрузку наблюдатель вьюпорта может пропустить.
-          Слот 64 — по макету (Figma 3065:71128); sizes = 2x слота —
-          суперсэмплинг (визуально 64, грузится 128/256), единое качество
-          выдачи 90; исходники 512² — канонный класс источников
-          (нормализация импорта #1070, решение владельца 22.10.2026). */}
-      <Image
-        src={meta.image}
-        alt=""
-        width={64}
-        height={64}
-        priority
-        sizes="128px"
-        quality={90}
-        className="h-16 w-16"
-      />
-      <span className="flex flex-col gap-2">
-        <span className="text-base font-medium leading-[18px] text-content">{meta.label}</span>
-        <span className="whitespace-pre-line text-sm font-medium leading-4 text-primary">{meta.action}</span>
-      </span>
-    </button>
   );
 }
