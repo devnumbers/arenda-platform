@@ -383,6 +383,35 @@ test.describe('визард создания аренды — шаг «Конт�
     }
   });
 
+  test('шаг «Настройки аренды»: вся строка кликается — тап по тексту переключает тумблеры', async ({
+    page,
+    seededUser,
+  }) => {
+    // Ряды шага 3 связаны со свитчами label'ом: клик по заголовку строки —
+    // тот же тумблер (автоплатёж включается, почтовая галочка гасится;
+    // создание стартует включённой, канон #1552).
+    await openWizard(page, seededUser, APARTMENT_WIZARD_URL, APARTMENT_URL);
+    await passAmountDay(page, '56 000');
+    await page.getByRole('button', { name: 'Начало аренды: Выбрать дату' }).click();
+    await page
+      .getByRole('dialog', { name: 'Начало аренды' })
+      .getByRole('button', { name: 'Выбрать', exact: true })
+      .click();
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await expect(page.getByRole('heading', { name: 'Настройки аренды' })).toBeVisible();
+
+    const autoPay = page.getByRole('switch', { name: 'Сделать платеж автоматическим' });
+    const emailToggle = page.getByRole('switch', { name: 'Включить уведомления об оплате на почту' });
+    await expect(autoPay).toHaveAttribute('aria-checked', 'false');
+    await expect(emailToggle).toBeEnabled();
+    await expect(emailToggle).toHaveAttribute('aria-checked', 'true');
+
+    await page.getByText('Сделать платеж автоматическим?').click();
+    await expect(autoPay).toHaveAttribute('aria-checked', 'true');
+    await page.getByText('Включить уведомления об оплате на почту').click();
+    await expect(emailToggle).toHaveAttribute('aria-checked', 'false');
+  });
+
   test('условия: окончание до первой оплаты отклонено — пикер прижат к первому вхождению дня оплаты (#1156)', async ({
     page,
     seededUser,

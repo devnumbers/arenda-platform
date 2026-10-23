@@ -1102,6 +1102,49 @@ test.describe('визард создания платежа', () => {
     expect(created?.reminderOffsetDays).toBe(1);
   });
 
+  test('секция «Настройки»: окончание платежа выше почты, вся строка кликается', async ({
+    page,
+    seededUser,
+  }) => {
+    // Порядок рядов шага 4 (решение владельца 23.10.2026): сверху тумблер
+    // «Окончание платежа», под ним «Уведомления на почту»; строка «Выбрать
+    // дату» остаётся под своим тумблером. Клик по тексту ряда — тот же
+    // тумблер (ряд связан со свитчем label'ом), не только сам свитч.
+    await mockEmailCategoryShortcut(page);
+
+    await openWizard(page, seededUser);
+    await selectCategory(page);
+    await passTitleStep(page, 'E2E клик по строке');
+    // Ежедневная ветка завершает шаг 3 сама — клик ведёт сразу на шаг 4.
+    await page.getByRole('button', { name: 'Каждый день' }).click();
+    await expect(page.getByRole('heading', { name: 'За сколько напомнить об оплате' })).toBeVisible();
+    // «За 1 день» оживляет ряд почты (гейт «не надо» снят).
+    await page.getByRole('button', { name: 'За 1 день' }).click();
+
+    const endDateSwitch = page.getByRole('switch', { name: 'Окончание платежа' });
+    const emailSwitch = page.getByRole('switch', { name: 'Уведомления на почту' });
+    await expect(emailSwitch).toBeEnabled();
+
+    // Порядок: «Окончание платежа» выше «Уведомлений на почту».
+    const endDateBox = await endDateSwitch.boundingBox();
+    const emailBox = await emailSwitch.boundingBox();
+    expect(endDateBox?.y ?? 0).toBeLessThan(emailBox?.y ?? 0);
+
+    // Тап по заголовку ряда = тумблер: почта гасится и зажигается.
+    await expect(emailSwitch).toHaveAttribute('aria-checked', 'true');
+    await page.getByText('Уведомления на почту').click();
+    await expect(emailSwitch).toHaveAttribute('aria-checked', 'false');
+    await page.getByText('Уведомления на почту').click();
+    await expect(emailSwitch).toHaveAttribute('aria-checked', 'true');
+
+    // Тап по заголовку «Окончание платежа» раскрывает «Выбрать дату» под
+    // своим тумблером (до ряда почты), повторный — чистит.
+    await page.getByText('Окончание платежа').click();
+    await expect(page.getByRole('button', { name: 'Выбрать дату' })).toBeVisible();
+    await page.getByText('Окончание платежа').click();
+    await expect(page.getByRole('button', { name: 'Выбрать дату' })).toHaveCount(0);
+  });
+
   test('мастер категории off — ряд «Уведомления на почту» скрыт, флаг в команду не едёт', async ({
     page,
     seededUser,
