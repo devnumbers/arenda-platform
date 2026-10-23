@@ -44,6 +44,12 @@ import {
   PAYMENTS_EMAIL_CATEGORY,
   useEmailNotificationPreferences,
 } from '@/features/notifications';
+import { useProperties } from '@/features/properties';
+import {
+  effectiveSelectedPropertyId,
+  filterEditableProperties,
+  propertiesByPrimaryOrder,
+} from '@/entities/property';
 import { AmountStep } from './amount-step';
 import { CategoryStep } from './category-step';
 import { PaymentSettingsStep } from './payment-settings-step';
@@ -124,6 +130,19 @@ export function PaymentCreateWizardFlow({
   const notifyEmailRowVisible = emailNotificationsRowVisible(
     emailMasterQuery.isPending,
     emailMasterQuery.data?.[PAYMENTS_EMAIL_CATEGORY],
+  );
+  // Справочник для шага «Выбрать объект» и дефолта предвыбора — только у
+  // глобального входа; у объектного маршрут сам несёт объект.
+  const propertiesQuery = useProperties({ enabled: mode === 'global' });
+  const editableProperties = propertiesByPrimaryOrder(
+    filterEditableProperties(propertiesQuery.data ?? []),
+  );
+  // Видимый на шаге и уходящий в сабмит объект: явный выбор пользователя
+  // сильнее, до явного — дефолт (верхняя строка, канон «Основного
+  // объекта»); в черновике хранится только явный выбор.
+  const selectedPropertyId = effectiveSelectedPropertyId(
+    draft.propertyId,
+    editableProperties,
   );
 
   // Открытие поиска сразу делает поле активным (программный фокус —
@@ -265,18 +284,21 @@ export function PaymentCreateWizardFlow({
         )}
         {/* Шаг «Выбрать объект» существует только у глобального входа
             (аннотация фрейма выбора #570): у объектного маршрута объект
-            задан самим входом. */}
+            задан самим входом. Дефолт предвыбора — верхняя строка, явный
+            выбор сильнее. */}
         {mode === 'global' && step === WIZARD_STEP_LAYOUTS.global.property && (
           <>
             <WizardHeading title="Выберите объект" variant="h1" />
             <PropertyStep
-              selectedPropertyId={draft.propertyId}
+              selectedPropertyId={selectedPropertyId}
               onSelect={(id) => setDraft((prev) => ({ ...prev, propertyId: id }))}
               ariaLabel="Объект платежа"
             />
-            {/* «Продолжить» — после выбора объекта (канон шага категории:
-                панель действия не показывается, пока действия нет). */}
-            {wizardStepReady('property', draft) && (
+            {/* «Продолжить» — когда объект известен: с предвыбором панель
+                видна сразу при входе на шаг, исчезает только на пустом
+                справочнике редактируемых (канон §3: панель не показывается,
+                пока действия нет). */}
+            {wizardStepReady('property', { ...draft, propertyId: selectedPropertyId }) && (
               <StickyBottomBar>
                 <WizardBottomBar>
                   <Button className="w-full" onClick={() => goToStep(WIZARD_STEP_LAYOUTS.global.title)}>
@@ -457,10 +479,10 @@ export function PaymentCreateWizardFlow({
       : ROUTES.payments;
   }
 
-  /** Объект сабмита: у входа с объекта — маршрут, у глобального — выбор
-   * шага «Выбрать объект». */
+  /** Объект сабмита: у входа с объекта — маршрут, у глобального — видимый
+   * выбор шага «Выбрать объект» (явный или дефолт). */
   function targetPropertyId(): string | undefined {
-    return mode === 'property' ? propertyId : draft.propertyId;
+    return mode === 'property' ? propertyId : selectedPropertyId;
   }
 
   async function submit(): Promise<void> {

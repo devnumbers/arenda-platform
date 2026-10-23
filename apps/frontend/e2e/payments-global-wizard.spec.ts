@@ -58,14 +58,22 @@ test.describe('глобальный визард платежа (/payments/new)'
     await page.getByRole('button', { name: 'Интернет' }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    // Шаг 2 — «Выбрать объект» (только у глобального входа); панель
-    // «Продолжить» не показывается, пока объект не выбран.
+    // Шаг 2 — «Выбрать объект» (только у глобального входа): дефолт —
+    // верхняя строка списка (в сиде запиненных нет — первая строка
+    // справочника, «Квартира на Ленина»), панель «Продолжить» видна
+    // сразу; явный выбор пользователя сильнее дефолта.
     await expect(page.getByRole('heading', { name: 'Выберите объект' })).toBeVisible();
     await expect(page.getByText('шаг 2 из 6')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Продолжить' })).toHaveCount(0);
+    await expect(
+      page.getByRole('radio', { name: /Квартира на Ленина/ }),
+    ).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('button', { name: 'Продолжить' })).toBeVisible();
     await page
       .getByRole('radio', { name: /Гараж на Садовой/ })
       .click();
+    await expect(
+      page.getByRole('radio', { name: /Гараж на Садовой/ }),
+    ).toHaveAttribute('aria-checked', 'true');
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
     // Шаги 3–5 — канон объектного визарда, номера сдвинуты на единицу.

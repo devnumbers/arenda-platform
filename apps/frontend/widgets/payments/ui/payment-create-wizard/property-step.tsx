@@ -4,7 +4,12 @@ import { type JSX } from 'react';
 import { BoldHome, RadioFalse, RadioTrue } from '@/shared/assets/icons';
 import { Button, CircleIcon, CirclePhoto, Skeleton } from '@/shared/ui/design';
 import { useProperties } from '@/features/properties';
-import { filterEditableProperties, propertyTypeIcons, type PropertyType } from '@/entities/property';
+import {
+  filterEditableProperties,
+  propertiesByPrimaryOrder,
+  propertyTypeIcons,
+  type PropertyType,
+} from '@/entities/property';
 
 /**
  * Шаг «Выбрать объект» визарда (#570, Figma 1858:105011) — служит обоим
@@ -13,9 +18,11 @@ import { filterEditableProperties, propertyTypeIcons, type PropertyType } from '
  * с объекта этой страницы нет. Каркас выбора объекта задачи/контакта:
  * радио-список объектов, архивные отфильтрованы (решение владельца 08.09),
  * строки без «общей» сущности — правило и операция всегда привязаны к
- * объекту. Выбор применяется сразу, сабмит — панель шага во flow. Список —
- * только объекты с правом правки (#703): зритель и архив ведут в отказ
- * сервера при сабмите.
+ * объекту. Порядок — канон «Основного объекта» (основной выше, #584),
+ * дефолт предвыбора — верхняя строка (effectiveSelectedPropertyId в flow,
+ * явный выбор сильнее). Выбор применяется сразу, сабмит — панель шага во
+ * flow. Список — только объекты с правом правки (#703): зритель и архив
+ * ведут в отказ сервера при сабмите.
  */
 export function PropertyStep({
   selectedPropertyId,
@@ -27,7 +34,9 @@ export function PropertyStep({
   readonly ariaLabel: string;
 }): JSX.Element {
   const propertiesQuery = useProperties();
-  const properties = filterEditableProperties(propertiesQuery.data ?? []);
+  const properties = propertiesByPrimaryOrder(
+    filterEditableProperties(propertiesQuery.data ?? []),
+  );
 
   return (
     <div role="radiogroup" aria-label={ariaLabel} className="px-6 pt-6">
