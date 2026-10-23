@@ -34,8 +34,6 @@ const (
 // fieldDef internally describes each catalog field.
 type fieldDef struct {
 	kind       attrKind
-	minFloat   float64           // for kindNumber
-	minInt     int               // for kindInteger
 	maxLen     int               // for kindString
 	enumVals   []string          // for kindEnum (stored values, e.g. "studio")
 	label      string            // Russian display label for the field (from catalog.json)
@@ -44,87 +42,87 @@ type fieldDef struct {
 
 var (
 	apartmentFields = map[string]fieldDef{
-		"area_total":     {kind: kindNumber, minFloat: 1, label: "Общая площадь"},
-		"area_living":    {kind: kindNumber, minFloat: 1, label: "Жилая площадь"},
-		"area_kitchen":   {kind: kindNumber, minFloat: 1, label: "Площадь кухни"},
-		"floor":          {kind: kindInteger, minInt: -3, label: "Этаж"},
-		"floors_total":   {kind: kindInteger, minInt: 1, label: "Этажность дома"},
+		"area_total":     {kind: kindNumber, label: "Общая площадь"},
+		"area_living":    {kind: kindNumber, label: "Жилая площадь"},
+		"area_kitchen":   {kind: kindNumber, label: "Площадь кухни"},
+		"floor":          {kind: kindInteger, label: "Этаж"},
+		"floors_total":   {kind: kindInteger, label: "Этажность дома"},
 		"bathroom":       {kind: kindEnum, enumVals: []string{"combined", "separate", "multiple"}, enumLabels: map[string]string{"combined": "Совмещенный", "separate": "Раздельный", "multiple": "Несколько"}, label: "Санузел"},
 		"balcony":        {kind: kindEnum, enumVals: []string{"none", "balcony", "loggia", "balcony_and_loggia"}, enumLabels: map[string]string{"none": "Нет", "balcony": "Балкон", "loggia": "Лоджия", "balcony_and_loggia": "Балкон и лоджия"}, label: "Балкон"},
 		"renovation":     {kind: kindEnum, enumVals: []string{"cosmetic", "euro", "design", "required"}, enumLabels: map[string]string{"cosmetic": "Косметический", "euro": "Евро", "design": "Дизайнерский", "required": "Требуется"}, label: "Ремонт"},
-		"year_built":     {kind: kindInteger, minInt: 1800, label: "Год постройки"},
-		"ceiling_height": {kind: kindNumber, minFloat: 2, label: "Высота потолков"},
+		"year_built":     {kind: kindInteger, label: "Год постройки"},
+		"ceiling_height": {kind: kindNumber, label: "Высота потолков"},
 		"parking_type":   {kind: kindEnum, enumVals: []string{"closed", "underground", "open"}, enumLabels: map[string]string{"closed": "Закрытая", "underground": "Подземная", "open": "Открытая"}, label: "Парковка"},
 	}
 
 	roomFields = map[string]fieldDef{
-		"area_total":   {kind: kindNumber, minFloat: 1, label: "Общая площадь"},
-		"area_kitchen": {kind: kindNumber, minFloat: 1, label: "Площадь кухни"},
-		"floor":        {kind: kindInteger, minInt: -3, label: "Этаж"},
-		"floors_total": {kind: kindInteger, minInt: 1, label: "Этажность дома"},
+		"area_total":   {kind: kindNumber, label: "Общая площадь"},
+		"area_kitchen": {kind: kindNumber, label: "Площадь кухни"},
+		"floor":        {kind: kindInteger, label: "Этаж"},
+		"floors_total": {kind: kindInteger, label: "Этажность дома"},
 		"bathroom":     {kind: kindEnum, enumVals: []string{"combined", "separate", "multiple"}, enumLabels: map[string]string{"combined": "Совмещенный", "separate": "Раздельный", "multiple": "Несколько"}, label: "Санузел"},
 		"balcony":      {kind: kindEnum, enumVals: []string{"none", "balcony", "loggia", "balcony_and_loggia"}, enumLabels: map[string]string{"none": "Нет", "balcony": "Балкон", "loggia": "Лоджия", "balcony_and_loggia": "Балкон и лоджия"}, label: "Балкон"},
 		"renovation":   {kind: kindEnum, enumVals: []string{"cosmetic", "euro", "design", "required"}, enumLabels: map[string]string{"cosmetic": "Косметический", "euro": "Евро", "design": "Дизайнерский", "required": "Требуется"}, label: "Ремонт"},
-		"year_built":   {kind: kindInteger, minInt: 1800, label: "Год постройки"},
+		"year_built":   {kind: kindInteger, label: "Год постройки"},
 	}
 
 	studioFields = map[string]fieldDef{
-		"area_total":     {kind: kindNumber, minFloat: 1, label: "Общая площадь"},
-		"area_living":    {kind: kindNumber, minFloat: 1, label: "Жилая площадь"},
-		"area_kitchen":   {kind: kindNumber, minFloat: 1, label: "Площадь кухни"},
-		"floor":          {kind: kindInteger, minInt: -3, label: "Этаж"},
-		"floors_total":   {kind: kindInteger, minInt: 1, label: "Этажность дома"},
+		"area_total":     {kind: kindNumber, label: "Общая площадь"},
+		"area_living":    {kind: kindNumber, label: "Жилая площадь"},
+		"area_kitchen":   {kind: kindNumber, label: "Площадь кухни"},
+		"floor":          {kind: kindInteger, label: "Этаж"},
+		"floors_total":   {kind: kindInteger, label: "Этажность дома"},
 		"bathroom":       {kind: kindEnum, enumVals: []string{"combined", "separate", "multiple"}, enumLabels: map[string]string{"combined": "Совмещенный", "separate": "Раздельный", "multiple": "Несколько"}, label: "Санузел"},
 		"balcony":        {kind: kindEnum, enumVals: []string{"none", "balcony", "loggia", "balcony_and_loggia"}, enumLabels: map[string]string{"none": "Нет", "balcony": "Балкон", "loggia": "Лоджия", "balcony_and_loggia": "Балкон и лоджия"}, label: "Балкон"},
 		"renovation":     {kind: kindEnum, enumVals: []string{"cosmetic", "euro", "design", "required"}, enumLabels: map[string]string{"cosmetic": "Косметический", "euro": "Евро", "design": "Дизайнерский", "required": "Требуется"}, label: "Ремонт"},
-		"year_built":     {kind: kindInteger, minInt: 1800, label: "Год постройки"},
-		"ceiling_height": {kind: kindNumber, minFloat: 2, label: "Высота потолков"},
+		"year_built":     {kind: kindInteger, label: "Год постройки"},
+		"ceiling_height": {kind: kindNumber, label: "Высота потолков"},
 		"parking_type":   {kind: kindEnum, enumVals: []string{"closed", "underground", "open"}, enumLabels: map[string]string{"closed": "Закрытая", "underground": "Подземная", "open": "Открытая"}, label: "Парковка"},
 	}
 
 	houseFields = map[string]fieldDef{
-		"land_area":    {kind: kindNumber, minFloat: 0.01, label: "Площадь участка"},
+		"land_area":    {kind: kindNumber, label: "Площадь участка"},
 		"land_type":    {kind: kindEnum, enumVals: []string{"izhs", "garden", "farm"}, enumLabels: map[string]string{"izhs": "ИЖС", "garden": "Садовый", "farm": "Фермерский"}, label: "Тип участка"},
-		"area_total":   {kind: kindNumber, minFloat: 1, label: "Общая площадь"},
-		"floors_total": {kind: kindInteger, minInt: 1, label: "Этажность дома"},
+		"area_total":   {kind: kindNumber, label: "Общая площадь"},
+		"floors_total": {kind: kindInteger, label: "Этажность дома"},
 		"rooms":        {kind: kindEnum, enumVals: []string{"1", "2", "3", "4", "5", "6", "7_plus"}, enumLabels: map[string]string{"1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7_plus": "7+"}, label: "Комнаты"},
 		"house_type":   {kind: kindEnum, enumVals: []string{"detached", "part", "townhouse", "duplex"}, enumLabels: map[string]string{"detached": "Отдельный", "part": "Часть дома", "townhouse": "Таунхаус", "duplex": "Дуплекс"}, label: "Тип дома"},
 		"material":     {kind: kindEnum, enumVals: []string{"brick", "monolithic", "panel", "brick_monolithic", "block", "wooden", "reinforced_concrete"}, enumLabels: map[string]string{"brick": "Кирпичный", "monolithic": "Монолитный", "panel": "Панельный", "brick_monolithic": "Кирпично-монолитный", "block": "Блочный", "wooden": "Деревянный", "reinforced_concrete": "Железобетонный"}, label: "Материал"},
 		"bathroom":     {kind: kindEnum, enumVals: []string{"indoor", "outdoor", "none"}, enumLabels: map[string]string{"indoor": "В доме", "outdoor": "На улице", "none": "Нет"}, label: "Санузел"},
 		"shower":       {kind: kindEnum, enumVals: []string{"indoor", "outdoor", "none"}, enumLabels: map[string]string{"indoor": "В доме", "outdoor": "На улице", "none": "Нет"}, label: "Душ"},
-		"year_built":   {kind: kindInteger, minInt: 1800, label: "Год постройки"},
+		"year_built":   {kind: kindInteger, label: "Год постройки"},
 	}
 
 	officeFields = map[string]fieldDef{
 		"building_type": {kind: kindEnum, enumVals: []string{"business_center", "warehouse_building", "shopping_center", "detached", "residential"}, enumLabels: map[string]string{"business_center": "Бизнес-центр", "warehouse_building": "Складское здание", "shopping_center": "Торговый центр", "detached": "Отдельное здание", "residential": "Жилой дом"}, label: "Тип здания"},
-		"floor":         {kind: kindInteger, minInt: -3, label: "Этаж"},
-		"floors_total":  {kind: kindInteger, minInt: 1, label: "Этажность дома"},
-		"area_total":    {kind: kindNumber, minFloat: 1, label: "Общая площадь"},
+		"floor":         {kind: kindInteger, label: "Этаж"},
+		"floors_total":  {kind: kindInteger, label: "Этажность дома"},
+		"area_total":    {kind: kindNumber, label: "Общая площадь"},
 		"rooms":         {kind: kindEnum, enumVals: []string{"1", "2", "3", "4", "5", "6", "7_plus"}, enumLabels: map[string]string{"1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7_plus": "7+"}, label: "Комнаты"},
 		"entrance":      {kind: kindEnum, enumVals: []string{"separate", "common"}, enumLabels: map[string]string{"separate": "Отдельный", "common": "Общий"}, label: "Вход"},
 		"renovation":    {kind: kindEnum, enumVals: []string{"cosmetic", "euro", "design", "required"}, enumLabels: map[string]string{"cosmetic": "Косметический", "euro": "Евро", "design": "Дизайнерский", "required": "Требуется"}, label: "Ремонт"},
 	}
 
 	warehouseFields = map[string]fieldDef{
-		"area_total":    {kind: kindNumber, minFloat: 1, label: "Общая площадь"},
+		"area_total":    {kind: kindNumber, label: "Общая площадь"},
 		"entrance":      {kind: kindEnum, enumVals: []string{"separate", "common"}, enumLabels: map[string]string{"separate": "Отдельный", "common": "Общий"}, label: "Вход"},
 		"building_type": {kind: kindEnum, enumVals: []string{"business_center", "warehouse_building", "shopping_center", "detached", "residential"}, enumLabels: map[string]string{"business_center": "Бизнес-центр", "warehouse_building": "Складское здание", "shopping_center": "Торговый центр", "detached": "Отдельное здание", "residential": "Жилой дом"}, label: "Тип здания"},
 	}
 
 	garageFields = map[string]fieldDef{
-		"area_total": {kind: kindNumber, minFloat: 1, label: "Общая площадь"},
+		"area_total": {kind: kindNumber, label: "Общая площадь"},
 		"material":   {kind: kindEnum, enumVals: []string{"brick", "metal", "reinforced_concrete"}, enumLabels: map[string]string{"brick": "Кирпичный", "metal": "Металлический", "reinforced_concrete": "Железобетонный"}, label: "Материал"},
 	}
 
 	parkingFields = map[string]fieldDef{
-		"area_total":       {kind: kindNumber, minFloat: 1, label: "Общая площадь"},
+		"area_total":       {kind: kindNumber, label: "Общая площадь"},
 		"parking_location": {kind: kindEnum, enumVals: []string{"underground", "indoor", "outdoor"}, enumLabels: map[string]string{"underground": "Подземная", "indoor": "Крытая", "outdoor": "Открытая"}, label: "Расположение"},
-		"parking_level":    {kind: kindInteger, minInt: -5, label: "Уровень"},
+		"parking_level":    {kind: kindInteger, label: "Уровень"},
 		"spot_number":      {kind: kindString, maxLen: 50, label: "Номер места"},
 	}
 
 	landFields = map[string]fieldDef{
-		"land_area": {kind: kindNumber, minFloat: 0.01, label: "Площадь участка"},
+		"land_area": {kind: kindNumber, label: "Площадь участка"},
 		"land_type": {kind: kindEnum, enumVals: []string{"izhs", "garden", "farm"}, enumLabels: map[string]string{"izhs": "ИЖС", "garden": "Садовый", "farm": "Фермерский"}, label: "Тип участка"},
 	}
 	// apartmentsFields mirrors apartmentFields (the "apartments" type shares the apartment field set).
@@ -273,12 +271,8 @@ func ValidateAttributes(propType PropertyType, attrs Attributes) ValidationResul
 func validateField(def fieldDef, v any) string {
 	switch def.kind {
 	case kindNumber:
-		f, ok := v.(float64)
-		if !ok {
+		if _, ok := v.(float64); !ok {
 			return "expected a number"
-		}
-		if f < def.minFloat {
-			return fmt.Sprintf("must be at least %g", def.minFloat)
 		}
 	case kindInteger:
 		f, ok := v.(float64)
@@ -287,10 +281,6 @@ func validateField(def fieldDef, v any) string {
 		}
 		if f != float64(int64(f)) {
 			return "expected an integer"
-		}
-		i := int(f)
-		if i < def.minInt {
-			return fmt.Sprintf("must be at least %d", def.minInt)
 		}
 	case kindString:
 		s, ok := v.(string)

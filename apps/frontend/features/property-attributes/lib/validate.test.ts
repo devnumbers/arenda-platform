@@ -63,26 +63,16 @@ describe('validateField — number (area_total on apartment)', () => {
   const def = findField(type, key);
   if (def?.kind !== 'number') throw new Error('expected number field');
 
-  it('returns undefined for a value at/above min', () => {
-    expect(validateField(type, key, def.min)).toBeUndefined();
+  it('has no bounds: any numeric value is valid (минимумов и потолков нет — ADR 0069)', () => {
     expect(validateField(type, key, 50)).toBeUndefined();
-  });
-
-  it('returns "не менее X unit" for a value below min', () => {
-    expect(validateField(type, key, def.min - 0.1)).toBe(
-      `не менее ${def.min} ${def.unit}`,
-    );
-  });
-
-  it('has no upper bound: arbitrary values are valid', () => {
-    expect(validateField(type, key, 100001)).toBeUndefined();
+    expect(validateField(type, key, 0)).toBeUndefined();
+    expect(validateField(type, key, -5)).toBeUndefined();
+    expect(validateField(type, key, 0.5)).toBeUndefined();
     expect(validateField(type, key, 5_000_000)).toBeUndefined();
   });
 
-  it('returns "не менее X unit" for NaN string', () => {
-    expect(validateField(type, key, 'abc')).toBe(
-      `не менее ${def.min} ${def.unit}`,
-    );
+  it('returns "значение некорректно" for NaN string', () => {
+    expect(validateField(type, key, 'abc')).toBe('значение некорректно');
   });
 
   it('respects decimals: 1 decimal allowed for area_total', () => {
@@ -124,26 +114,20 @@ describe('validateField — integer (floor on apartment)', () => {
   const def = findField(type, key);
   if (def?.kind !== 'integer') throw new Error('expected integer field');
 
-  it('returns undefined for an integer at/above min', () => {
-    expect(validateField(type, key, def.min)).toBeUndefined();
+  it('has no bounds: any integer is valid (минимумов и потолков нет — ADR 0069)', () => {
     expect(validateField(type, key, 5)).toBeUndefined();
-  });
-
-  it('returns "не менее X" for a non-integer (fractional)', () => {
-    expect(validateField(type, key, 5.5)).toBe(`не менее ${def.min}`);
-  });
-
-  it('returns "не менее X" for a value below min', () => {
-    expect(validateField(type, key, def.min - 1)).toBe(`не менее ${def.min}`);
-  });
-
-  it('has no upper bound: arbitrary integers are valid', () => {
+    expect(validateField(type, key, 0)).toBeUndefined();
+    expect(validateField(type, key, -999)).toBeUndefined();
     expect(validateField(type, key, 201)).toBeUndefined();
     expect(validateField(type, key, 1000)).toBeUndefined();
   });
 
-  it('returns "не менее X" for NaN', () => {
-    expect(validateField(type, key, 'abc')).toBe(`не менее ${def.min}`);
+  it('returns "значение некорректно" for a non-integer (fractional)', () => {
+    expect(validateField(type, key, 5.5)).toBe('значение некорректно');
+  });
+
+  it('returns "значение некорректно" for NaN', () => {
+    expect(validateField(type, key, 'abc')).toBe('значение некорректно');
   });
 });
 
@@ -183,13 +167,11 @@ describe('validateAttributes — error aggregation', () => {
   it('collects multiple errors keyed by attribute', () => {
     const type = asType('apartment');
     const attrs: PropertyAttributes = {
-      area_total: 0, // below min -> error
       floor: 5.5, // not integer -> error
       bathroom: 'invalid', // not in options -> error
     };
     const errors = validateAttributes(type, attrs);
-    expect(errors.area_total).toBe('не менее 1 м²');
-    expect(errors.floor).toBe('не менее -3');
+    expect(errors.floor).toBe('значение некорректно');
     expect(errors.bathroom).toBe('значение некорректно');
   });
 
@@ -265,13 +247,12 @@ describe('validateAttributes — no cross-field rules', () => {
     },
   );
 
-  it('individual errors still surface on both fields', () => {
-    // floors_total ниже минимума — своя ошибка остаётся; кросс-правила не
-    // добавляют ничего.
-    const attrs: PropertyAttributes = { floor: 10, floors_total: 0 };
+  it('individual errors still surface', () => {
+    // Кросс-правил и границ нет — ошибки только по типу/формату.
+    const attrs: PropertyAttributes = { floor: 5.5, floors_total: 0 };
     const errors = validateAttributes(asType('apartment'), attrs);
-    expect(errors.floor).toBeUndefined();
-    expect(errors.floors_total).toBe('не менее 1');
+    expect(errors.floor).toBe('значение некорректно');
+    expect(errors.floors_total).toBeUndefined();
   });
 
   it('string numeric inputs are kept as-is (no cross-rule parsing)', () => {

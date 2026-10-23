@@ -9,7 +9,6 @@
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
@@ -17,7 +16,6 @@
           "kind": "number",
           "label": "Жилая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
@@ -25,20 +23,17 @@
           "kind": "number",
           "label": "Площадь кухни",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
         "floor": {
           "kind": "integer",
           "label": "Этаж",
-          "min": -3,
           "group": "about_object"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
-          "min": 1,
           "group": "about_object"
         },
         "bathroom": {
@@ -109,14 +104,12 @@
         "year_built": {
           "kind": "integer",
           "label": "Год постройки",
-          "min": 1800,
           "group": "about_building"
         },
         "ceiling_height": {
           "kind": "number",
           "label": "Высота потолков",
           "unit": "м",
-          "min": 2,
           "decimals": 2,
           "group": "about_building"
         },
@@ -148,7 +141,6 @@
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
@@ -156,20 +148,17 @@
           "kind": "number",
           "label": "Площадь кухни",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
         "floor": {
           "kind": "integer",
           "label": "Этаж",
-          "min": -3,
           "group": "about_object"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
-          "min": 1,
           "group": "about_object"
         },
         "bathroom": {
@@ -240,7 +229,6 @@
         "year_built": {
           "kind": "integer",
           "label": "Год постройки",
-          "min": 1800,
           "group": "about_building"
         }
       }
@@ -252,7 +240,6 @@
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
@@ -260,7 +247,6 @@
           "kind": "number",
           "label": "Жилая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
@@ -268,20 +254,17 @@
           "kind": "number",
           "label": "Площадь кухни",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
         "floor": {
           "kind": "integer",
           "label": "Этаж",
-          "min": -3,
           "group": "about_object"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
-          "min": 1,
           "group": "about_object"
         },
         "bathroom": {
@@ -352,14 +335,12 @@
         "year_built": {
           "kind": "integer",
           "label": "Год постройки",
-          "min": 1800,
           "group": "about_building"
         },
         "ceiling_height": {
           "kind": "number",
           "label": "Высота потолков",
           "unit": "м",
-          "min": 2,
           "decimals": 2,
           "group": "about_building"
         },
@@ -391,7 +372,6 @@
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
@@ -399,7 +379,6 @@
           "kind": "number",
           "label": "Жилая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
@@ -407,20 +386,17 @@
           "kind": "number",
           "label": "Площадь кухни",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_object"
         },
         "floor": {
           "kind": "integer",
           "label": "Этаж",
-          "min": -3,
           "group": "about_object"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
-          "min": 1,
           "group": "about_object"
         },
         "bathroom": {
@@ -491,14 +467,12 @@
         "year_built": {
           "kind": "integer",
           "label": "Год постройки",
-          "min": 1800,
           "group": "about_building"
         },
         "ceiling_height": {
           "kind": "number",
           "label": "Высота потолков",
           "unit": "м",
-          "min": 2,
           "decimals": 2,
           "group": "about_building"
         },
@@ -530,7 +504,6 @@
           "kind": "number",
           "label": "Площадь участка",
           "unit": "сотки",
-          "min": 0.01,
           "decimals": 2,
           "group": "about_land"
         },
@@ -557,14 +530,12 @@
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": "about_house"
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
-          "min": 1,
           "group": "about_house"
         },
         "rooms": {
@@ -701,7 +672,6 @@
         "year_built": {
           "kind": "integer",
           "label": "Год постройки",
-          "min": 1800,
           "group": "about_house"
         }
       }
@@ -739,20 +709,17 @@
         "floor": {
           "kind": "integer",
           "label": "Этаж",
-          "min": -3,
           "group": null
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
-          "min": 1,
           "group": null
         },
         "area_total": {
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": null
         },
@@ -864,20 +831,17 @@
         "floor": {
           "kind": "integer",
           "label": "Этаж",
-          "min": -3,
           "group": null
         },
         "floors_total": {
           "kind": "integer",
           "label": "Этажность дома",
-          "min": 1,
           "group": null
         },
         "area_total": {
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": null
         },
@@ -963,7 +927,6 @@
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": null
         },
@@ -1018,7 +981,6 @@
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": null
         },
@@ -1050,7 +1012,6 @@
           "kind": "number",
           "label": "Общая площадь",
           "unit": "м²",
-          "min": 1,
           "decimals": 1,
           "group": null
         },
@@ -1076,7 +1037,6 @@
         "parking_level": {
           "kind": "integer",
           "label": "Уровень",
-          "min": -5,
           "group": null
         },
         "spot_number": {
@@ -1094,7 +1054,6 @@
           "kind": "number",
           "label": "Площадь участка",
           "unit": "сотки",
-          "min": 0.01,
           "decimals": 2,
           "group": null
         },

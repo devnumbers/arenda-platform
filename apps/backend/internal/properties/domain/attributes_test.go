@@ -196,26 +196,27 @@ func TestAttributesNumberRanges(t *testing.T) {
 		wantErr  bool
 	}
 	cases := []tc{
+		// Границ нет вовсе (ADR 0069, второй раунд: минимумы сняты) —
+		// валидны любые числа; ошибки только по типу.
 		{PropertyTypeApartment, attrAreaTotal, 1.0, false},
-		{PropertyTypeApartment, attrAreaTotal, 0.5, true},
-		// Потолков больше нет (решение владельца 23.10.2026): любые значения
-		// выше минимума валидны.
+		{PropertyTypeApartment, attrAreaTotal, 0.5, false},
+		{PropertyTypeApartment, attrAreaTotal, 0, false},
+		{PropertyTypeApartment, attrAreaTotal, -5, false},
 		{PropertyTypeApartment, attrAreaTotal, 100000.0, false},
-		{PropertyTypeApartment, attrAreaTotal, 100001.0, false},
 		{PropertyTypeApartment, attrAreaTotal, 5000000.0, false},
 		{PropertyTypeApartment, attrCeilingHeight, 2.0, false},
-		{PropertyTypeApartment, attrCeilingHeight, 1.9, true},
-		{PropertyTypeApartment, attrCeilingHeight, 10.0, false},
-		{PropertyTypeApartment, attrCeilingHeight, 10.1, false},
+		{PropertyTypeApartment, attrCeilingHeight, 1.9, false},
+		{PropertyTypeApartment, attrCeilingHeight, 0, false},
 		{PropertyTypeHouse, attrLandArea, 0.01, false},
-		{PropertyTypeHouse, attrLandArea, 0.001, true},
+		{PropertyTypeHouse, attrLandArea, 0.001, false},
+		{PropertyTypeHouse, attrLandArea, 0, false},
 		{PropertyTypeWarehouse, attrAreaTotal, 1.0, false},
-		{PropertyTypeWarehouse, attrAreaTotal, 0.5, true},
+		{PropertyTypeWarehouse, attrAreaTotal, 0.5, false},
 		{PropertyTypeGarage, attrAreaTotal, 100000.0, false},
 		{PropertyTypeGarage, attrAreaTotal, 100001.0, false},
 		{PropertyTypeParking, attrAreaTotal, 25.0, false},
 		{PropertyTypeLand, attrLandArea, 0.01, false},
-		{PropertyTypeLand, attrLandArea, 0.001, true},
+		{PropertyTypeLand, attrLandArea, 0.001, false},
 		{PropertyTypeLand, attrLandArea, 1000000.0, false},
 		{PropertyTypeLand, attrLandArea, 1000001.0, false},
 	}
@@ -240,27 +241,28 @@ func TestAttributesIntegerRanges(t *testing.T) {
 		wantErr  bool
 	}{
 		{PropertyTypeApartment, attrFloor, -3, false},
-		{PropertyTypeApartment, attrFloor, -4, true},
-		// Потолков больше нет: этаж/этажность/год — любые значения выше
-		// минимума (решение владельца 23.10.2026).
+		{PropertyTypeApartment, attrFloor, -4, false},
+		// Границ нет вовсе (ADR 0069): этаж/этажность/год — любые целые.
+		{PropertyTypeApartment, attrFloor, 0, false},
 		{PropertyTypeApartment, attrFloor, 200, false},
 		{PropertyTypeApartment, attrFloor, 201, false},
 		{PropertyTypeApartment, attrFloorsTotal, 1, false},
-		{PropertyTypeApartment, attrFloorsTotal, 0, true},
+		{PropertyTypeApartment, attrFloorsTotal, 0, false},
 		{PropertyTypeApartment, attrYearBuilt, 1800, false},
-		{PropertyTypeApartment, attrYearBuilt, 1799, true},
+		{PropertyTypeApartment, attrYearBuilt, 1799, false},
 		{PropertyTypeApartment, attrYearBuilt, float64(currentYear + 5), false},
 		{PropertyTypeApartment, attrYearBuilt, float64(currentYear + 6), false},
+		{PropertyTypeApartment, attrYearBuilt, 1000, false},
 		{PropertyTypeHouse, attrYearBuilt, 1800, false},
 		{PropertyTypeHouse, attrYearBuilt, float64(currentYear + 5), false},
 		{PropertyTypeOffice, attrFloor, -3, false},
-		{PropertyTypeOffice, attrFloor, -4, true},
+		{PropertyTypeOffice, attrFloor, -4, false},
 		{PropertyTypeOffice, attrFloor, 200, false},
 		{PropertyTypeOffice, attrFloor, 201, false},
 		{PropertyTypeOffice, attrFloorsTotal, 1, false},
-		{PropertyTypeOffice, attrFloorsTotal, 0, true},
+		{PropertyTypeOffice, attrFloorsTotal, 0, false},
 		{PropertyTypeParking, attrParkingLevel, -5, false},
-		{PropertyTypeParking, attrParkingLevel, -6, true},
+		{PropertyTypeParking, attrParkingLevel, -6, false},
 		{PropertyTypeParking, attrParkingLevel, 100, false},
 		{PropertyTypeParking, attrParkingLevel, 101, false},
 	}
@@ -385,23 +387,23 @@ func TestAttributesNullValues(t *testing.T) {
 func TestAttributesMultipleErrorsCollected(t *testing.T) {
 	t.Parallel()
 
-	// Floor=-4 (out of range), balcony=invalid, area_total=0.5 (below min).
+	// Floor=5.5 (not an integer), balcony=invalid — границы не валидируются,
+	// ошибки только по типу/принадлежности.
 	res := ValidateAttributes(PropertyTypeApartment, Attributes{
-		attrFloor:     float64(-4),
-		attrBalcony:   "studioo",
-		attrAreaTotal: 0.5,
+		attrFloor:   5.5,
+		attrBalcony: "studioo",
 	})
 	fields := make(map[string]bool)
 	for _, e := range res.Errors {
 		fields[e.Field] = true
 	}
-	for _, want := range []string{attrFloor, attrBalcony, attrAreaTotal} {
+	for _, want := range []string{attrFloor, attrBalcony} {
 		if !fields[want] {
 			t.Fatalf("expected an error on field %q, got errors: %+v", want, res.Errors)
 		}
 	}
-	if len(res.Errors) != 3 {
-		t.Fatalf("expected exactly 3 errors, got %d: %+v", len(res.Errors), res.Errors)
+	if len(res.Errors) != 2 {
+		t.Fatalf("expected exactly 2 errors, got %d: %+v", len(res.Errors), res.Errors)
 	}
 }
 

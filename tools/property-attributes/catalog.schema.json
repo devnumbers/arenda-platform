@@ -2,10 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://arenda-planform.local/tools/property-attributes/catalog.schema.json",
   "title": "Property attributes catalog",
-  "description": "Single source of truth for the property attributes catalog (10 property types). Numeric fields carry min bounds only — no upper bounds (решение владельца 23.10.2026); cross-field rules are gone too.",
+  "description": "Single source of truth for the property attributes catalog (10 property types). Numeric fields carry no bounds at all — no min, no max (ADR 0069, решение владельца 23.10.2026); cross-field rules are gone too. Only format stays: decimals for numbers, maxLen for strings.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "version", "types", "groups"],
+  "required": [
+    "$schema",
+    "version",
+    "types",
+    "groups"
+  ],
   "properties": {
     "$schema": {
       "type": "string"
@@ -31,28 +36,63 @@
         "land"
       ],
       "properties": {
-        "apartment": { "$ref": "#/$defs/typeDef" },
-        "room": { "$ref": "#/$defs/typeDef" },
-        "apartments": { "$ref": "#/$defs/typeDef" },
-        "studio": { "$ref": "#/$defs/typeDef" },
-        "house": { "$ref": "#/$defs/typeDef" },
-        "office": { "$ref": "#/$defs/typeDef" },
-        "commercial": { "$ref": "#/$defs/typeDef" },
-        "warehouse": { "$ref": "#/$defs/typeDef" },
-        "garage": { "$ref": "#/$defs/typeDef" },
-        "parking": { "$ref": "#/$defs/typeDef" },
-        "land": { "$ref": "#/$defs/typeDef" }
+        "apartment": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "room": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "apartments": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "studio": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "house": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "office": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "commercial": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "warehouse": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "garage": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "parking": {
+          "$ref": "#/$defs/typeDef"
+        },
+        "land": {
+          "$ref": "#/$defs/typeDef"
+        }
       }
     },
     "groups": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["about_object", "about_building", "about_house", "about_land"],
+      "required": [
+        "about_object",
+        "about_building",
+        "about_house",
+        "about_land"
+      ],
       "properties": {
-        "about_object": { "$ref": "#/$defs/groupDef" },
-        "about_building": { "$ref": "#/$defs/groupDef" },
-        "about_house": { "$ref": "#/$defs/groupDef" },
-        "about_land": { "$ref": "#/$defs/groupDef" }
+        "about_object": {
+          "$ref": "#/$defs/groupDef"
+        },
+        "about_building": {
+          "$ref": "#/$defs/groupDef"
+        },
+        "about_house": {
+          "$ref": "#/$defs/groupDef"
+        },
+        "about_land": {
+          "$ref": "#/$defs/groupDef"
+        }
       }
     }
   },
@@ -101,28 +141,52 @@
       ]
     },
     "groupKey": {
-      "type": ["string", "null"],
-      "enum": ["about_object", "about_building", "about_house", "about_land", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "about_object",
+        "about_building",
+        "about_house",
+        "about_land",
+        null
+      ]
     },
     "typeDef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["label", "fields"],
+      "required": [
+        "label",
+        "fields"
+      ],
       "properties": {
-        "label": { "type": "string", "minLength": 1 },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
         "fields": {
           "type": "object",
-          "propertyNames": { "$ref": "#/$defs/fieldKey" },
-          "additionalProperties": { "$ref": "#/$defs/fieldDef" }
+          "propertyNames": {
+            "$ref": "#/$defs/fieldKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/fieldDef"
+          }
         }
       }
     },
     "groupDef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["label"],
+      "required": [
+        "label"
+      ],
       "properties": {
-        "label": { "type": "string", "minLength": 1 }
+        "label": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "fieldDef": {
@@ -130,59 +194,127 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "label", "options", "group"],
+          "required": [
+            "kind",
+            "label",
+            "options",
+            "group"
+          ],
           "properties": {
-            "kind": { "const": "enum" },
-            "label": { "type": "string", "minLength": 1 },
+            "kind": {
+              "const": "enum"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
             "options": {
               "type": "array",
               "minItems": 1,
               "items": {
                 "type": "object",
-                "required": ["key", "label"],
+                "required": [
+                  "key",
+                  "label"
+                ],
                 "properties": {
-                  "key": { "type": "string", "minLength": 1 },
-                  "label": { "type": "string", "minLength": 1 }
+                  "key": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 },
                 "additionalProperties": false
               }
             },
-            "group": { "$ref": "#/$defs/groupKey" }
+            "group": {
+              "$ref": "#/$defs/groupKey"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "label", "unit", "min", "decimals", "group"],
+          "required": [
+            "kind",
+            "label",
+            "unit",
+            "decimals",
+            "group"
+          ],
           "properties": {
-            "kind": { "const": "number" },
-            "label": { "type": "string", "minLength": 1 },
-            "unit": { "type": "string", "enum": ["м²", "сотки", "м"] },
-            "min": { "type": "number" },
-            "decimals": { "type": "integer", "minimum": 0 },
-            "group": { "$ref": "#/$defs/groupKey" }
+            "kind": {
+              "const": "number"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "м²",
+                "сотки",
+                "м"
+              ]
+            },
+            "decimals": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "group": {
+              "$ref": "#/$defs/groupKey"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "label", "min", "group"],
+          "required": [
+            "kind",
+            "label",
+            "group"
+          ],
           "properties": {
-            "kind": { "const": "integer" },
-            "label": { "type": "string", "minLength": 1 },
-            "min": { "type": "integer" },
-            "group": { "$ref": "#/$defs/groupKey" }
+            "kind": {
+              "const": "integer"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "group": {
+              "$ref": "#/$defs/groupKey"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "label", "maxLen", "group"],
+          "required": [
+            "kind",
+            "label",
+            "maxLen",
+            "group"
+          ],
           "properties": {
-            "kind": { "const": "string" },
-            "label": { "type": "string", "minLength": 1 },
-            "maxLen": { "type": "integer", "minimum": 1 },
-            "group": { "$ref": "#/$defs/groupKey" }
+            "kind": {
+              "const": "string"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxLen": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "group": {
+              "$ref": "#/$defs/groupKey"
+            }
           }
         }
       ]

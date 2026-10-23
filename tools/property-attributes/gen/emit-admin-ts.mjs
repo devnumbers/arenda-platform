@@ -78,9 +78,9 @@ function emitFieldList(typeKey, catalog) {
         return `  { key: ${JSON.stringify(key)}, kind: 'enum', options: [${opts}], group: ${groupLit(def.group)} },`;
       }
       case 'number':
-        return `  { key: ${JSON.stringify(key)}, kind: 'number', unit: ${JSON.stringify(def.unit)}, min: ${def.min}, decimals: ${def.decimals}, group: ${groupLit(def.group)} },`;
+        return `  { key: ${JSON.stringify(key)}, kind: 'number', unit: ${JSON.stringify(def.unit)}, decimals: ${def.decimals}, group: ${groupLit(def.group)} },`;
       case 'integer':
-        return `  { key: ${JSON.stringify(key)}, kind: 'integer', min: ${def.min}, group: ${groupLit(def.group)} },`;
+        return `  { key: ${JSON.stringify(key)}, kind: 'integer', group: ${groupLit(def.group)} },`;
       case 'string':
         return `  { key: ${JSON.stringify(key)}, kind: 'string', maxLen: ${def.maxLen}, group: ${groupLit(def.group)} },`;
       default:
@@ -115,8 +115,8 @@ export type AttrGroup = 'about_object' | 'about_building' | 'about_house' | 'abo
 
 export type AttrField =
   | { readonly key: AttrKey; readonly kind: 'enum'; readonly options: readonly string[]; readonly group: AttrGroup | null }
-  | { readonly key: AttrKey; readonly kind: 'number'; readonly unit: 'м²' | 'сотки' | 'м'; readonly min: number; readonly decimals: number; readonly group: AttrGroup | null }
-  | { readonly key: AttrKey; readonly kind: 'integer'; readonly min: number; readonly group: AttrGroup | null }
+  | { readonly key: AttrKey; readonly kind: 'number'; readonly unit: 'м²' | 'сотки' | 'м'; readonly decimals: number; readonly group: AttrGroup | null }
+  | { readonly key: AttrKey; readonly kind: 'integer'; readonly group: AttrGroup | null }
   | { readonly key: AttrKey; readonly kind: 'string'; readonly maxLen: number; readonly group: AttrGroup | null };
 
 export type AttrFieldList = readonly AttrField[];

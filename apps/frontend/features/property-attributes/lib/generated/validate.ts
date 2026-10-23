@@ -53,8 +53,8 @@ export function validateField(
 
   if (def.kind === 'number') {
     const parsed = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(parsed) || parsed < def.min) {
-      return `не менее ${def.min} ${def.unit}`;
+    if (Number.isNaN(parsed)) {
+      return 'значение некорректно';
     }
     if (fractionDigits(value) > def.decimals) {
       return `не более ${def.decimals} знаков после запятой`;
@@ -64,8 +64,8 @@ export function validateField(
 
   if (def.kind === 'integer') {
     const parsed = typeof value === 'number' ? value : Number(value);
-    if (!Number.isInteger(parsed) || parsed < def.min) {
-      return `не менее ${def.min}`;
+    if (!Number.isInteger(parsed)) {
+      return 'значение некорректно';
     }
     return undefined;
   }

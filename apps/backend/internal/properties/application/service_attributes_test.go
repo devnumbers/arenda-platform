@@ -104,10 +104,10 @@ func TestCreateProperty_WithValidAttributes(t *testing.T) {
 	}
 }
 
-// TestCreateProperty_WithInvalidAttributes verifies that a below-minimum floor
+// TestCreateProperty_WithInvalidAttributes verifies that a non-integer floor
 // yields an *AttributeValidationErrors that unwraps to ErrInvalidInput and
-// reports exactly one error bound to the "floor" field (потолка нет —
-// решение владельца 23.10.2026, минимум остался).
+// reports exactly one error bound to the "floor" field (границ нет —
+// ADR 0069; ошибки только по типу значения).
 func TestCreateProperty_WithInvalidAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -122,7 +122,7 @@ func TestCreateProperty_WithInvalidAttributes(t *testing.T) {
 		Type:    string(domain.PropertyTypeApartment),
 		Address: attrTestCreateAddress,
 		Attributes: map[string]any{
-			attrFloor: float64(-4), // Out of range (min -3).
+			attrFloor: float64(5.5), // Not an integer.
 		},
 	})
 	if err == nil {
