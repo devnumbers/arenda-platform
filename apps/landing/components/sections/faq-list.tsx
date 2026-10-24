@@ -13,7 +13,11 @@ import type { FaqGroup } from "@/lib/content";
 // ряд (категория 36/40 Medium в колонке w-240 вне карточки), а карточкой
 // (r40, px-40/py-20) становится контейнер вопросов. Вопрос 18/22 на всех
 // ярусах, шеврон 24×24 #6f787c, зазор текст-иконка 16, строка py 14
-// (мобайл) / 18 (планшет+). Ответ в макетах не нарисован — стили не тронуты.
+// (мобайл) / 18 (планшет+). Паддинг строки лежит на обёртке (раскладка —
+// строго по макетам, включая отступ под раскрытым ответом), а кнопка теми
+// же py с компенсирующими -my расширяется на него: кликабельна вся высота
+// свернутой строки, без задвоения отступов (решение владельца 24.10).
+// Ответ в макетах не нарисован — стили не тронуты.
 export function FaqList({ groups }: { groups: FaqGroup[] }) {
   const [open, setOpen] = useState<string | null>(null);
 
@@ -37,7 +41,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
                       aria-expanded={expanded}
                       aria-controls={panelId}
                       onClick={() => setOpen(expanded ? null : key)}
-                      className="flex w-full cursor-pointer items-center gap-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:opacity-80"
+                      className="-my-[14px] flex w-full cursor-pointer items-center gap-4 py-[14px] text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-primary/40 active:opacity-80 tab:-my-[18px] tab:py-[18px]"
                     >
                       <span className="min-h-6 flex-1 text-r text-ink">
                         {item.question}
