@@ -1,5 +1,5 @@
 import { ROUTES } from '@/shared/config/routes';
-import { ArrowLeft, Cancel, Check, Search, TrashBin } from '@/shared/assets/icons';
+import { ArrowLeft, Cancel, Check, Kebab, Search, TrashBin } from '@/shared/assets/icons';
 import {
   IconButton,
   SearchField,
@@ -488,18 +488,16 @@ const ENTRIES: readonly TopNavRouteEntry[] = [
     pattern: ROUTES.participantsInvite,
     build: () => ({ leading: <TopNavBackButton fallbackHref={ROUTES.participants} /> }),
   },
-  // Страница участника (/participants/[participantId]) — БЕЗ записи
-  // реестра (шим приносит шапку после гидратации, паритет с
-  // до-реестровым днём). Причина: SSR-хедер на этом маршруте обостряет
-  // гонку стриминга и гидратации Next.js — контент ServerPrefetchBoundary
-  // (#887) приходит вторым флушем в шаблоне div#S:0[hidden], и при
-  // гидратации поверх уже заменённого $RC-фолбэка React на ~200 мс
-  // вставляет контент повторно (дубль hero-блока страницы; e2e
-  // participants-page.spec.ts:34 ловит strict-mode на тексте). На остальных
-  // #887-страницах с SSR-шапкой (/profile, /properties/[id]) гонка
-  // зондируется чисто; здесь $RC стоит в самом хвосте HTML — окно
-  // максимальное. Разбирается отдельно от реестра (стриминг Next.js,
-  // владелец).
+  {
+    // Страница участника: кебаб — право-гейтнутый у экрана (появляется с
+    // данными); плейсхолдер кебаба — хром фазы загрузки (ParticipantLoading).
+    pattern: '/participants/[participantId]',
+    build: () => ({
+      leading: <TopNavBackButton fallbackHref={ROUTES.participants} />,
+      trailing: <IconButton icon={<Kebab />} label="Еще — действия с участником" />,
+      children: <TopNavTitle title="Участник" />,
+    }),
+  },
   {
     pattern: '/participants/[participantId]/invite',
     build: () => ({

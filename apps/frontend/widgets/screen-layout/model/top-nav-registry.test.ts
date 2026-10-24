@@ -47,8 +47,6 @@ type RouteExpectation = {
   readonly backLabel?: string;
   /** trailing — IconButton-глиф: ожидаемая aria-label. */
   readonly trailingLabel?: string;
-  /** Записи быть не должно (matchTopNavRoute → undefined). */
-  readonly noEntry?: boolean;
 };
 
 function propsOf(node: ReactNode): Record<string, unknown> | undefined {
@@ -414,12 +412,11 @@ describe('matchTopNavRoute — полный каталог маршрутов', 
       noChildren: true,
     },
     {
-      // Без записи реестра: SSR-хедер на этом маршруте обостряет гонку
-      // стриминга Next.js (div#S:0[hidden], дубль контента при гидратации
-      // — см. комментарий в top-nav-registry.tsx); шапку приносит шим.
       pattern: '/participants/[participantId]',
       segments: [PARTICIPANT],
-      noEntry: true,
+      backHref: '/participants',
+      trailingLabel: 'Еще — действия с участником',
+      title: 'Участник',
     },
     {
       pattern: '/participants/[participantId]/invite',
@@ -641,10 +638,6 @@ describe('matchTopNavRoute — полный каталог маршрутов', 
       pathname = pathname.replace(/\[[^\]]+\]/, segment);
     }
     const config = matchTopNavRoute(pathname);
-    if (expected.noEntry) {
-      expect(config, `запись не ожидается для ${pathname}`).toBeUndefined();
-      return;
-    }
     expect(config, `нет записи для ${pathname}`).toBeDefined();
 
     expect(config?.mobileWings ?? false).toBe(expected.mobileWings ?? false);

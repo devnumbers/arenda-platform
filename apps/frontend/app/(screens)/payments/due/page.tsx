@@ -1,13 +1,17 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import {
   PaymentsDueGlobalScreen,
-  PaymentsDueLoading,
   parseDueSortParams,
 } from '@/widgets/payments';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
 import { paymentsDueQueryOptions } from '@/features/payments';
+
+// Кабинетная страница: куки-сессия и URL-состояние — всегда динамический
+// рендер; force-dynamic снимает требование Suspense-границы для
+// useSearchParams при статическом экспорте (аменда #1605 — in-page
+// Suspense убран ради однофлушного HTML, react/react#37014).
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = { title: 'Платежи на оплату — Рентли' };
 
@@ -25,14 +29,12 @@ export default async function PaymentsDueRoutePage({
   const sort = parseDueSortParams(resolved.sort);
 
   return (
-    <Suspense fallback={<PaymentsDueLoading />}>
-      <ServerPrefetchBoundary
-        prefetch={(queryClient) => {
-          void queryClient.prefetchQuery(paymentsDueQueryOptions(serverApiClient));
-        }}
-      >
-        <PaymentsDueGlobalScreen initialSort={sort} />
-      </ServerPrefetchBoundary>
-    </Suspense>
+<ServerPrefetchBoundary
+  prefetch={(queryClient) => {
+    void queryClient.prefetchQuery(paymentsDueQueryOptions(serverApiClient));
+  }}
+>
+  <PaymentsDueGlobalScreen initialSort={sort} />
+</ServerPrefetchBoundary>
   );
 }
