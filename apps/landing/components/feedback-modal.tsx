@@ -28,7 +28,8 @@ type Phase = "form" | "sending" | "sent";
 // не вешаем: у дизайн-полей они рисуют счётчик, которого в кадре нет —
 // длину сторожат клиентская валидация + прокси + бекенд). Ошибка отправки
 // — инлайн text-error под кнопкой (решение владельца), поля сохраняются.
-// Успех — «Сообщение отправлено» + «Хорошо» по центру. Отправка на свой
+// Успех (кадр 3013-82245) — только «Сообщение отправлено» + «Хорошо»,
+// детали у ветки sent. Отправка на свой
 // /api/feedback (прокси в бекенд, почту шлёт он); honeypot «website»
 // невидим для людей и читается из FormData. Триггеров два (FAQ и футер) —
 // каждый экземпляр независим; закрытие сбрасывает форму.
@@ -188,27 +189,11 @@ export function FeedbackModal({
         }}
       >
         <div className="flex flex-col gap-8">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex flex-col gap-2">
-              {/* A11y-имя диалога даёт sr-only DialogTitle шелла; видимый
-                   заголовок — по кадру 3012-82067, от скринридеров скрыт. */}
-              <h2 aria-hidden className="m-0 text-l font-semibold text-ink">
-                Свяжитесь с нами
-              </h2>
-              <p className="m-0 text-[16px] leading-[18px] text-content-secondary">
-                Напишите нам, если у вас есть вопросы
-              </p>
-            </div>
-            {/* Крестик — канон шелла: только в карточке ≥768; в шите
-                закрывают свайп вниз или тап по оверлею. */}
-            <IconButton
-              icon={<Cancel />}
-              label="Закрыть"
-              className="hidden min-[768px]:flex"
-              onClick={close}
-            />
-          </div>
           {phase === "sent" ? (
+            /* Успех — кадр 3013-82245: остаются только «Сообщение отправлено»
+               и «Хорошо»; шапка формы «Свяжитесь с нами» (подзаголовок и
+               крестик) в успехе не показывается (решение владельца 24.10).
+               A11y-имя диалога живёт в sr-only DialogTitle шелла. */
             <div className="flex flex-col items-stretch gap-8">
               <p className="m-0 text-center text-l font-semibold text-ink">Сообщение отправлено</p>
               <LandingButton size="sm" className="w-full" onClick={close}>
@@ -216,54 +201,78 @@ export function FeedbackModal({
               </LandingButton>
             </div>
           ) : (
-            <form
-              className="flex flex-col items-stretch gap-8"
-              onSubmit={(e) => {
-                void submit(e);
-              }}
-              noValidate
-            >
-              <div className="flex flex-col gap-6">
-                <TextField
-                  title="Электронная почта"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-                <Textarea
-                  title="Сообщение"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                />
-                {/* Honeypot: люди поля не видят, боты заполняют — прокси
-                    отвечает успехом, бекенд не дёргается. */}
-                <input
-                  type="text"
-                  name="website"
-                  hidden
-                  tabIndex={-1}
-                  autoComplete="off"
-                  aria-hidden="true"
-                />
-              </div>
-              <div className="flex flex-col items-stretch gap-3">
-                {error && (
-                  <p role="alert" className="m-0 text-center text-s leading-5 text-error">
-                    {error}
+            /* Шапка + форма — прямые дети gap-8-колонки (фрагмент прозрачен
+               для flex): обёртка внутри ветки дала бы дубль внешнего gap. */
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-2">
+                  {/* A11y-имя диалога даёт sr-only DialogTitle шелла; видимый
+                       заголовок — по кадру 3012-82067, от скринридеров скрыт. */}
+                  <h2 aria-hidden className="m-0 text-l font-semibold text-ink">
+                    Свяжитесь с нами
+                  </h2>
+                  <p className="m-0 text-[16px] leading-[18px] text-content-secondary">
+                    Напишите нам, если у вас есть вопросы
                   </p>
-                )}
-                <LandingButton
-                  size="sm"
-                  className="w-full disabled:bg-primary-disabled"
-                  type="submit"
-                  disabled={phase === "sending"}
-                  aria-busy={phase === "sending"}
-                >
-                  Отправить
-                </LandingButton>
+                </div>
+                {/* Крестик — канон шелла: только в карточке ≥768; в шите
+                    закрывают свайп вниз или тап по оверлею. */}
+                <IconButton
+                  icon={<Cancel />}
+                  label="Закрыть"
+                  className="hidden min-[768px]:flex"
+                  onClick={close}
+                />
               </div>
-            </form>
+              <form
+                className="flex flex-col items-stretch gap-8"
+                onSubmit={(e) => {
+                  void submit(e);
+                }}
+                noValidate
+              >
+                <div className="flex flex-col gap-6">
+                  <TextField
+                    title="Электронная почта"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                  <Textarea
+                    title="Сообщение"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                  />
+                  {/* Honeypot: люди поля не видят, боты заполняют — прокси
+                      отвечает успехом, бекенд не дёргается. */}
+                  <input
+                    type="text"
+                    name="website"
+                    hidden
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                  />
+                </div>
+                <div className="flex flex-col items-stretch gap-3">
+                  {error && (
+                    <p role="alert" className="m-0 text-center text-s leading-5 text-error">
+                      {error}
+                    </p>
+                  )}
+                  <LandingButton
+                    size="sm"
+                    className="w-full disabled:bg-primary-disabled"
+                    type="submit"
+                    disabled={phase === "sending"}
+                    aria-busy={phase === "sending"}
+                  >
+                    Отправить
+                  </LandingButton>
+                </div>
+              </form>
+            </>
           )}
         </div>
       </ModalContent>
