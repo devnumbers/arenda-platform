@@ -1,7 +1,6 @@
 import Image from "next/image";
 import { LandingLink } from "@/components/button";
 import { CTA_PANEL_FILL } from "@/components/glass";
-import { Reveal } from "@/components/reveal";
 import ctaLogo from "@/assets/sections/cta-logo-3d.webp";
 
 // Финальный CTA — макеты 2814-1142 (десктоп: панель r40 с полями 8,
@@ -25,7 +24,7 @@ export function Cta() {
       id="cta"
       className="mt-24 mb-24 scroll-mt-[88px] desk:mt-[156px] desk:mb-[156px] desk:scroll-mt-[104px] desk:px-2"
     >
-      <Reveal className="w-full">
+      <div className="w-full">
         <div
           className="flex flex-col items-center rounded-[40px] px-8 py-24 desk:py-[156px]"
           style={{ backgroundImage: CTA_PANEL_FILL }}
@@ -40,7 +39,7 @@ export function Cta() {
               className="size-39"
             />
             <div className="flex flex-col items-center gap-4 text-center text-white">
-              <h2 className="text-balance text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
+              <h2 className="text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
                 Попробуйте Рентли в деле
               </h2>
               <p className="text-s leading-5 opacity-80 desk:text-l desk:leading-[26px]">
@@ -52,7 +51,7 @@ export function Cta() {
             </LandingLink>
           </div>
         </div>
-      </Reveal>
+      </div>
     </section>
   );
 }

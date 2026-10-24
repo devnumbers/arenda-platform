@@ -45,7 +45,7 @@ export function CookieBanner() {
         aria-label="Использование файлов cookie"
         className="flex w-full flex-col gap-4 rounded-card bg-white p-4 shadow-card tab:flex-row tab:items-center tab:pl-5 desk:w-[700px] desk:gap-6 desk:py-6 desk:pr-6 desk:pl-8"
       >
-        <p className="m-0 flex-1 text-balance text-xs text-ink desk:text-r">
+        <p className="m-0 flex-1 text-xs text-ink desk:text-r">
           Мы используем файлы cookie, чтобы сделать работу с сайтом удобнее.
           Продолжая использовать сайт, вы соглашаетесь с нашей{" "}
           <Link href="/privacy" className="text-primary">

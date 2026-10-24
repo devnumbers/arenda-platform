@@ -79,14 +79,24 @@ function HeaderFallback() {
 
 export function SiteHeader() {
   return (
-    // Горизонтальные отступы уважают safe-area (viewport-fit=cover):
-    // в ландшафте на «чёлке» плашка не уходит под вырез.
-    <header className="sticky top-0 z-50 pt-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
-      <ScrollShadow className="group mx-auto max-w-[1520px]">
-        <Suspense fallback={<HeaderFallback />}>
-          <HeaderContent />
-        </Suspense>
-      </ScrollShadow>
-    </header>
+    <>
+      {/* Горизонтальные отступы уважают safe-area (viewport-fit=cover):
+          в ландшафте на «чёлке» плашка не уходит под вырез. Хедер —
+          fixed на мобиле/планшете и sticky на десктопе (решение владельца
+          24.10): меню <1200 растёт внутри карточки хедера, и in-flow
+          sticky при открытии двигал бы страницу — поток терял/набирал
+          высоту меню (хиро уезжал на 389px вверху, докрутка при
+          прокрутке); fixed — вне потока, механика референса Figma Make
+          (его хедер тоже fixed). Освободившиеся 72px резервирует спейсер
+          (desk:hidden — на десктопе sticky резервирует высоту сам). */}
+      <header className="fixed inset-x-0 top-0 z-50 pt-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] desk:sticky">
+        <ScrollShadow className="group mx-auto max-w-[1520px]">
+          <Suspense fallback={<HeaderFallback />}>
+            <HeaderContent />
+          </Suspense>
+        </ScrollShadow>
+      </header>
+      <div aria-hidden="true" className="h-[72px] desk:hidden" />
+    </>
   );
 }

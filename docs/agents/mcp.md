@@ -16,4 +16,10 @@ When a task depends on MCP tools, check that the server's tools are present in t
 
 ## Config locations
 
-The harness MCP config is the ZCode user config `~/.zcode/cli/config.json` (`mcp.servers`); `~/.kimi-code/mcp.json` is the Kimi Code equivalent (not used by the current ZCode-only setup); playwright and postgres additionally come from the committed repo workspace config `.zcode/config.json` (ZCode; auto-connects in every session and worktree). The `figma:*` skills (design-to-code, use, generate-*) come from the installed plugin `figma@claude-plugins-official`; the plugin also bundles the official remote server under the `figma` name, but the user config shadows it with the local Dev Mode server (same tool names). Config changes apply after a session restart.
+MCP configs are per harness, both wired for the same server set:
+
+- ZCode — user config `~/.zcode/cli/config.json` (`mcp.servers`); playwright and postgres additionally come from the committed repo workspace config `.zcode/config.json` (auto-connects in every session and worktree). Config changes apply after a session restart.
+- OpenCode — global config `~/.config/opencode/opencode.json`; playwright and postgres come from the committed repo config `.opencode/opencode.json`. Format differs from ZCode: stdio servers are `type: "local"` with `command` as one array, `env` is `environment`, a server-level `timeoutMs` maps to `timeout.execution`; an HTTP server is `type: "remote"` with `oauth: false` for the local `figma`. Config changes hot-reload on save.
+- The postgres allowlist is shared by both harnesses: `.zcode/postgres-mcp.tools.json` — referenced by relative path from each config (cwd is the workspace) and committed.
+
+`~/.kimi-code/mcp.json` is the Kimi Code equivalent (not used by the current setup). The `figma:*` skills (design-to-code, use, generate-*) come from the installed ZCode plugin `figma@claude-plugins-official`; for OpenCode the same skill set is copied from the plugin cache into `~/.config/opencode/skills/`. In both harnesses the `figma` name is the local Dev Mode server — the official remote server bundled with the plugin stays shadowed (same tool names).

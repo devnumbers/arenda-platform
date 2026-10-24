@@ -6,7 +6,7 @@ import type {
   RentalUpdateCommand,
   RentalUtilities,
 } from '@/entities/rental';
-import { endCoversSchedule, RENTAL_AMOUNT_MAX_KOPECKS } from './wizard-model';
+import { endCoversSchedule } from './wizard-model';
 
 /**
  * Чистая логика правки условий аренды (#532, Figma 1302:53055): форма,
@@ -113,7 +113,6 @@ export function buildRentalUpdateCommand(
   if (
     amountKopecks === undefined
     || amountKopecks <= 0
-    || amountKopecks > RENTAL_AMOUNT_MAX_KOPECKS
     || paymentDay === undefined
   ) {
     return undefined;
@@ -175,7 +174,8 @@ export function buildRentalUpdateCommand(
   return Object.keys(patch).length === 0 ? undefined : patch;
 }
 
-/** Залог/комиссия в границах контракта: 0…10⁹ копеек либо null. */
+/** Залог/комиссия неотрицательны либо null (минимум 0; потолка нет —
+ * ADR 0069, решение владельца 23.10.2026). */
 function amountWithinContract(kopecks: number | null): boolean {
-  return kopecks === null || (kopecks >= 0 && kopecks <= RENTAL_AMOUNT_MAX_KOPECKS);
+  return kopecks === null || kopecks >= 0;
 }

@@ -7277,7 +7277,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         recurrence:
           $ref: '#/components/schemas/Recurrence'
         categorySlug:
@@ -7342,7 +7341,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         recurrence:
           $ref: '#/components/schemas/Recurrence'
         categorySlug:
@@ -8015,7 +8013,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         categorySlug:
           type: string
           description: Slug of the default category catalog; frozen as the operation's snapshot.
@@ -9356,7 +9353,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         paymentDay:
           $ref: '#/components/schemas/RentalPaymentDay'
         startDate:
@@ -9377,13 +9373,11 @@ components:
           type: integer
           format: int64
           minimum: 0
-          maximum: 1000000000
           nullable: true
         commissionKopecks:
           type: integer
           format: int64
           minimum: 0
-          maximum: 1000000000
           nullable: true
         contactId:
           type: string
@@ -9431,7 +9425,6 @@ components:
           type: integer
           format: int64
           minimum: 1
-          maximum: 1000000000
         paymentDay:
           $ref: '#/components/schemas/RentalPaymentDay'
         autoPay:
@@ -9472,13 +9465,11 @@ components:
           type: integer
           format: int64
           minimum: 0
-          maximum: 1000000000
           nullable: true
         commissionKopecks:
           type: integer
           format: int64
           minimum: 0
-          maximum: 1000000000
           nullable: true
         contactId:
           type: string
@@ -9508,7 +9499,6 @@ components:
               type: integer
               format: int64
               minimum: 0
-              maximum: 1000000000
               description: 0 валиден — «не вернул».
             comment:
               type: string

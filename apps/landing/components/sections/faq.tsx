@@ -1,4 +1,3 @@
-import { Reveal } from "@/components/reveal";
 import { FaqList } from "@/components/sections/faq-list";
 import { FeedbackModal } from "@/components/feedback-modal";
 import { FAQ } from "@/lib/content";
@@ -24,23 +23,21 @@ export function Faq() {
   return (
     <section id="faq" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
-        <Reveal>
-          <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
-            Ответы на вопросы
-          </h2>
-        </Reveal>
+        <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
+          Ответы на вопросы
+        </h2>
         <div className="mt-8 flex flex-col gap-3 desk:mt-14 desk:gap-5">
           <FaqList groups={FAQ} />
         </div>
-        <Reveal delay={120} className="w-full">
+        <div className="w-full">
           <div className="mt-24 flex flex-col items-center gap-8 text-center desk:mt-14 desk:ml-[264px] desk:items-start desk:text-left">
-            <p className="text-h4 text-balance">Не нашли ответ на свой вопрос?</p>
+            <p className="text-h4">Не нашли ответ на свой вопрос?</p>
             {/* Кнопка открывает модалку «Задать вопрос» (форма уходит письмом
                 через /api/feedback → бекенд); размер sm — инстанс LandingButton
                 177×56 из кадра 2967-76035. */}
             <FeedbackModal label="Задать вопрос" size="sm" />
           </div>
-        </Reveal>
+        </div>
       </div>
     </section>
   );

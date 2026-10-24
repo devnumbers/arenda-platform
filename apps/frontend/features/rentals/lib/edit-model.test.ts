@@ -181,15 +181,19 @@ describe('buildRentalUpdateCommand', () => {
     });
   });
 
-  it('невалидная сумма (пустая, ноль, сверх лимита) команду роняет', () => {
+  it('невалидная сумма (пустая, ноль) команду роняет', () => {
     const base = rentalEditFormFromRental(RENTAL);
     expect(
       buildRentalUpdateCommand(RENTAL, { ...base, amountKopecks: undefined }),
     ).toBeUndefined();
     expect(buildRentalUpdateCommand(RENTAL, { ...base, amountKopecks: 0 })).toBeUndefined();
+  });
+
+  it('сумма сверх прежнего потолка валидна — потолка нет (решение владельца 23.10.2026)', () => {
+    const base = rentalEditFormFromRental(RENTAL);
     expect(
-      buildRentalUpdateCommand(RENTAL, { ...base, amountKopecks: 1_000_000_001 }),
-    ).toBeUndefined();
+      buildRentalUpdateCommand(RENTAL, { ...base, amountKopecks: 9_000_000_000_000_000 }),
+    ).toStrictEqual({ amountKopecks: 9_000_000_000_000_000 });
   });
 
   it('неизвестный день оплаты команду роняет', () => {
@@ -220,14 +224,14 @@ describe('buildRentalUpdateCommand', () => {
     });
   });
 
-  it('залог/комиссия сверх лимита команду роняют, ноль валиден', () => {
+  it('залог/комиссия за прежним потолком валидны, ноль валиден', () => {
     const base = rentalEditFormFromRental(RENTAL);
     expect(
-      buildRentalUpdateCommand(RENTAL, { ...base, depositKopecks: 1_000_000_001 }),
-    ).toBeUndefined();
+      buildRentalUpdateCommand(RENTAL, { ...base, depositKopecks: 1_500_000_000 }),
+    ).toStrictEqual({ depositKopecks: 1_500_000_000 });
     expect(
-      buildRentalUpdateCommand(RENTAL, { ...base, commissionKopecks: 1_000_000_001 }),
-    ).toBeUndefined();
+      buildRentalUpdateCommand(RENTAL, { ...base, commissionKopecks: 2_000_000_000 }),
+    ).toStrictEqual({ commissionKopecks: 2_000_000_000 });
     expect(
       buildRentalUpdateCommand(RENTAL, { ...base, depositKopecks: 0 })?.depositKopecks,
     ).toBe(0);

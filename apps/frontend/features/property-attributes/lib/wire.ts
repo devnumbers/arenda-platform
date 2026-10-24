@@ -9,9 +9,10 @@ import { type AttrField, fieldsForType } from './catalog';
  */
 
 /** Живая фильтрация ввода по типу поля: в число вводятся только цифры
- * (плюс один разделитель для дробных и ведущий минус там, где каталог
- * допускает отрицательные), строковые поля не фильтруются. Запрещённый
- * символ не вводится вовсе — пользователь не видит его мигания. */
+ * (плюс один разделитель для дробных и ведущий минус — границы нет, ADR
+ * 0069: отрицательные значения допустимы во всех числовых полях), строковые
+ * поля не фильтруются. Запрещённый символ не вводится вовсе — пользователь
+ * не видит его мигания. */
 export function sanitizeAttributeInput(field: AttrField, raw: string): string {
   if (field.kind !== 'number' && field.kind !== 'integer') {
     return raw;
@@ -28,7 +29,7 @@ export function sanitizeAttributeInput(field: AttrField, raw: string): string {
       separatorSeen = true;
       continue;
     }
-    if (char === '-' && field.min < 0 && out.length === 0) {
+    if (char === '-' && out.length === 0) {
       out += char;
     }
   }

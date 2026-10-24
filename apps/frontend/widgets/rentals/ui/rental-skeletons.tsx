@@ -270,9 +270,11 @@ function SkeletonSummarySection({ titleWidth, fields }: {
 /** Скелетон «Итогов аренды» (#535): секции «Период аренды» (3 поля),
  * «Финансы за время аренды» (3 поля), «Возвращение залога» (поле и блок
  * комментария) — обёртка контента (зазор 48, боковые 24), ниже «Данные
- * аренды» (три строки канона с ведущим кругом) с отступом 64. Тон блоков
- * базовый: секции лежат на белом (§7 — muted только внутри серых
- * карточек). */
+ * аренды» (три строки канона с ведущим кругом) по канону Heading —
+ * зазор 24, заголовок 24/24/0, до строк 8; ряды на всю ширину —
+ * базовый px-6 скелетонного ряда (круг в 24, как иконка контента),
+ * py-3 — высота 68 (макеты 1433:61927/1433:61074). Тон блоков базовый:
+ * секции лежат на белом (§7 — muted только внутри серых карточек). */
 export function RentalSummarySkeleton(): JSX.Element {
   return (
     <div aria-hidden className="pb-6">
@@ -291,14 +293,14 @@ export function RentalSummarySkeleton(): JSX.Element {
           </div>
         </section>
       </div>
-      <div className="pt-16">
-        <div className="px-6">
+      <div className="pt-6">
+        <div className="px-6 pt-6">
           <Skeleton className="h-6 w-36" />
         </div>
-        <div className="flex flex-col px-3 pt-2">
-          <SkeletonListRow leading className="px-3 py-2" />
-          <SkeletonListRow leading className="px-3 py-2" />
-          <SkeletonListRow leading className="px-3 py-2" />
+        <div className="flex flex-col pt-2">
+          <SkeletonListRow leading className="py-3" />
+          <SkeletonListRow leading className="py-3" />
+          <SkeletonListRow leading className="py-3" />
         </div>
       </div>
     </div>

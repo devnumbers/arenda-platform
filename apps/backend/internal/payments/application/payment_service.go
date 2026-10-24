@@ -16,10 +16,6 @@ import (
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 )
 
-// MaxAmountKopecks is the create/update amount ceiling: 10⁹ kopecks = 10
-// million rubles (ADR 0049 §4).
-const MaxAmountKopecks = 1_000_000_000
-
 // MaxTitleLength bounds the rule title, counted in characters — a product
 // copy limit, not a byte limit.
 const MaxTitleLength = 255
@@ -676,7 +672,8 @@ const auditFieldsKey = "fields"
 // invariants — the transport decodes and delegates here, so the rules cannot
 // drift between layers. It enforces: the direction enum, a
 // non-empty title within MaxTitleLength characters (counted in runes: the
-// limit is a product copy limit, not a byte limit), kopecks within 1..10⁹,
+// limit is a product copy limit, not a byte limit), kopecks of at least 1
+// with no ceiling (ADR 0069),
 // a resolvable category reference (a default-catalog slug or a user category
 // — the XOR is a durable schema invariant), a constructed non-zero
 // recurrence and an end date no earlier than the rule's lower bound.
@@ -687,7 +684,7 @@ func validateRule(rule domain.Payment) error {
 	if title := strings.TrimSpace(rule.Title); title == "" || utf8.RuneCountInString(title) > MaxTitleLength {
 		return ErrInvalidInput
 	}
-	if rule.AmountKopecks < 1 || rule.AmountKopecks > MaxAmountKopecks {
+	if rule.AmountKopecks < 1 {
 		return ErrInvalidInput
 	}
 	if err := validateCategory(rule.Category); err != nil {

@@ -1,5 +1,4 @@
 import Image from "next/image";
-import { Reveal } from "@/components/reveal";
 import sharingPhoto1 from "@/assets/sections/sharing-photo-1.webp";
 import sharingPhoto2 from "@/assets/sections/sharing-photo-2.webp";
 
@@ -20,34 +19,30 @@ export function Sharing() {
   return (
     <section id="sharing" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
-        <Reveal>
-          <div className="flex flex-col items-center gap-3 text-center">
-            <h2 className="text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
-              Делитесь объектом
-            </h2>
-            <p className="text-s leading-5 text-gray-2 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:text-[28px] desk:leading-8">
-              Приглашайте партнеров и управляйте объектом вместе
-            </p>
-          </div>
-        </Reveal>
-        <Reveal delay={80}>
-          {/* Планшет/мобайл — свои размеры и позиции фото (в процентах от
-              ширины панели); на десктопе — абсолютная композиция по макету. */}
-          <div className="relative mt-8 h-[500px] rounded-[32px] bg-primary-light tab:h-[450px] desk:mt-14 desk:h-[450px] desk:rounded-[40px]">
-            <Image
-              src={sharingPhoto2}
-              alt="Партнеры работают с объектом вместе"
-              sizes="(min-width: 1200px) 400px, (min-width: 481px) 326px, 223px"
-              className="absolute left-1/2 top-[45px] h-[223px] w-[223px] -translate-x-1/2 rounded-[24px] shadow-[0_8px_24px_rgba(43,127,255,0.08)] tab:left-[8%] tab:top-[62px] tab:h-auto tab:w-[min(326px,45.3%)] tab:translate-x-0 tab:rounded-[32px] desk:left-[72px] desk:top-[72px] desk:h-[400px] desk:w-[400px] desk:rounded-[40px]"
-            />
-            <Image
-              src={sharingPhoto1}
-              alt="Совместный доступ к объекту в Рентли"
-              sizes="(min-width: 1200px) 380px, (min-width: 481px) 380px, 260px"
-              className="absolute bottom-0 left-1/2 h-[260px] w-[260px] -translate-x-1/2 tab:left-auto tab:right-[6%] tab:h-auto tab:w-[min(380px,52.8%)] tab:translate-x-0 desk:left-[542px] desk:right-auto desk:h-[380px] desk:w-[380px]"
-            />
-          </div>
-        </Reveal>
+        <div className="flex flex-col items-center gap-3 text-center">
+          <h2 className="text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
+            Делитесь объектом
+          </h2>
+          <p className="text-s leading-5 text-gray-2 [text-shadow:0_8px_24px_rgba(0,0,0,0.12)] desk:text-[28px] desk:leading-8">
+            Приглашайте партнеров и управляйте объектом вместе
+          </p>
+        </div>
+        {/* Планшет/мобайл — свои размеры и позиции фото (в процентах от
+            ширины панели); на десктопе — абсолютная композиция по макету. */}
+        <div className="relative mt-8 h-[500px] rounded-[32px] bg-primary-light tab:h-[450px] desk:mt-14 desk:h-[450px] desk:rounded-[40px]">
+          <Image
+            src={sharingPhoto2}
+            alt="Партнеры работают с объектом вместе"
+            sizes="(min-width: 1200px) 400px, (min-width: 481px) 326px, 223px"
+            className="absolute left-1/2 top-[45px] h-[223px] w-[223px] -translate-x-1/2 rounded-[24px] shadow-[0_8px_24px_rgba(43,127,255,0.08)] tab:left-[8%] tab:top-[62px] tab:h-auto tab:w-[min(326px,45.3%)] tab:translate-x-0 tab:rounded-[32px] desk:left-[72px] desk:top-[72px] desk:h-[400px] desk:w-[400px] desk:rounded-[40px]"
+          />
+          <Image
+            src={sharingPhoto1}
+            alt="Совместный доступ к объекту в Рентли"
+            sizes="(min-width: 1200px) 380px, (min-width: 481px) 380px, 260px"
+            className="absolute bottom-0 left-1/2 h-[260px] w-[260px] -translate-x-1/2 tab:left-auto tab:right-[6%] tab:h-auto tab:w-[min(380px,52.8%)] tab:translate-x-0 desk:left-[542px] desk:right-auto desk:h-[380px] desk:w-[380px]"
+          />
+        </div>
       </div>
     </section>
   );

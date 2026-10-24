@@ -4,7 +4,6 @@ import Image, { type StaticImageData } from "next/image";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { LandingLink } from "@/components/button";
 import { easeOut } from "@/components/carousel-ease";
-import { Reveal } from "@/components/reveal";
 import house from "@/assets/sections/carousel-house.webp";
 import warehouse from "@/assets/sections/carousel-warehouse.webp";
 import flat from "@/assets/sections/carousel-flat.webp";
@@ -733,17 +732,17 @@ export function Showcase() {
   return (
     <section id="showcase" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto flex max-w-[1048px] flex-col items-center gap-8 px-10 desk:max-w-[1000px] desk:gap-14 desk:px-0">
-        <Reveal className="w-full">
+        <div className="w-full">
           <div className="flex w-full flex-col items-center gap-3 text-center desk:gap-6">
-            <h2 className="text-balance text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
+            <h2 className="text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
               Создайте карточку своей недвижимости
             </h2>
-            <p className="text-balance text-s leading-5 text-gray-2 desk:text-[28px] desk:leading-8 desk:font-medium">
+            <p className="text-s leading-5 text-gray-2 desk:text-[28px] desk:leading-8 desk:font-medium">
               Добавьте квартиру, дом, помещение
             </p>
           </div>
-        </Reveal>
-        <Reveal delay={80} className="w-full">
+        </div>
+        <div className="w-full">
           <div
             ref={zoneRef}
             data-carousel-canvas
@@ -842,10 +841,8 @@ export function Showcase() {
               <div className={s.fadePhotoRight} />
             </div>
           </div>
-        </Reveal>
-        <Reveal delay={120}>
-          <LandingLink href="/login">Попробовать</LandingLink>
-        </Reveal>
+        </div>
+        <LandingLink href="/login">Попробовать</LandingLink>
       </div>
     </section>
   );

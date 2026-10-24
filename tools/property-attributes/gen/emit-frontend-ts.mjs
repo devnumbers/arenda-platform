@@ -44,11 +44,9 @@ function emitFieldList(typeKey, catalog) {
         return `  { key: ${JSON.stringify(key)}, kind: 'enum', options: [${opts}], group: ${groupLit(def.group)} },`;
       }
       case 'number':
-        return `  { key: ${JSON.stringify(key)}, kind: 'number', unit: ${JSON.stringify(def.unit)}, min: ${def.min}, max: ${def.max}, decimals: ${def.decimals}, group: ${groupLit(def.group)} },`;
-      case 'integer': {
-        const maxExpr = def.yearBuiltMaxDynamic === true ? 'yearBuiltMax' : JSON.stringify(def.max);
-        return `  { key: ${JSON.stringify(key)}, kind: 'integer', min: ${def.min}, max: ${maxExpr}, group: ${groupLit(def.group)} },`;
-      }
+        return `  { key: ${JSON.stringify(key)}, kind: 'number', unit: ${JSON.stringify(def.unit)}, decimals: ${def.decimals}, group: ${groupLit(def.group)} },`;
+      case 'integer':
+        return `  { key: ${JSON.stringify(key)}, kind: 'integer', group: ${groupLit(def.group)} },`;
       case 'string':
         return `  { key: ${JSON.stringify(key)}, kind: 'string', maxLen: ${def.maxLen}, group: ${groupLit(def.group)} },`;
       default:
@@ -98,16 +96,12 @@ export type AttrField =
       readonly key: AttrKey;
       readonly kind: 'number';
       readonly unit: 'м²' | 'сотки' | 'м';
-      readonly min: number;
-      readonly max: number;
       readonly decimals: number;
       readonly group: AttrGroup | null;
     }
   | {
       readonly key: AttrKey;
       readonly kind: 'integer';
-      readonly min: number;
-      readonly max: number;
       readonly group: AttrGroup | null;
     }
   | {
@@ -118,8 +112,6 @@ export type AttrField =
     };
 
 export type AttrFieldList = readonly AttrField[];
-
-const yearBuiltMax = new Date().getFullYear() + 5;
 
 ${listBlocks.join('\n\n')}
 
@@ -194,41 +186,9 @@ function findFieldLabel(catalog, fieldKey) {
 }
 
 // ----- validate.ts -----
-// Semantically identical to the hand-written validate.ts. The cross-field rules
-// are generated from catalog.rules (driving which comparisons exist), but the
-// error strings and numeric-parsing helpers are emitted verbatim to match the
-// existing contract tests exactly.
+// Кросс-правила согласованности полей сняты (решение владельца 23.10.2026):
+// валидируются только минимумы, точность и принадлежность enum.
 export function emitValidate(catalog) {
-  // Determine which cross-field comparisons exist (by field), and which types
-  // each applies to. We emit a block per distinct (field) since the TS validate
-  // applies rules keyed by field (not by type), matching the hand-written code.
-  const rulesByField = new Map();
-  for (const r of catalog.rules) {
-    if (!rulesByField.has(r.field)) rulesByField.set(r.field, { lte: r.lte, types: r.types });
-    const entry = rulesByField.get(r.field);
-    if (entry.lte !== r.lte) {
-      throw new Error(`rule conflict on field ${r.field}: ${entry.lte} vs ${r.lte}`);
-    }
-    // union types
-    entry.types = Array.from(new Set([...entry.types, ...r.types]));
-  }
-
-  const crossBlocks = [];
-  for (const [field, { lte }] of rulesByField) {
-    const fieldVar = tsVar(field);
-    const lteVar = tsVar(lte);
-    const errorStr = tsCrossErrorString(field);
-    crossBlocks.push(
-      `  if (errors.${field} === undefined && errors.${lte} === undefined) {
-    const ${fieldVar} = numericValue(attrs, ${JSON.stringify(field)});
-    const ${lteVar} = numericValue(attrs, ${JSON.stringify(lte)});
-    if (${fieldVar} !== undefined && ${lteVar} !== undefined && ${fieldVar} > ${lteVar}) {
-      errors.${field} = ${JSON.stringify(errorStr)};
-    }
-  }`,
-    );
-  }
-
   return `${HEADER}
 
 import type { PropertyType, PropertyAttributes } from '@/entities/property';
@@ -259,21 +219,6 @@ function fractionDigits(value: string | number): number {
   return str.length - dot - 1;
 }
 
-function numericValue(
-  attrs: PropertyAttributes,
-  key: AttrKey,
-): number | undefined {
-  const value = attrs[key];
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
 export function validateField(
   type: PropertyType,
   key: AttrKey,
@@ -299,8 +244,8 @@ export function validateField(
 
   if (def.kind === 'number') {
     const parsed = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(parsed) || parsed < def.min || parsed > def.max) {
-      return \`от \${def.min} до \${def.max} \${def.unit}\`;
+    if (Number.isNaN(parsed)) {
+      return 'значение некорректно';
     }
     if (fractionDigits(value) > def.decimals) {
       return \`не более \${def.decimals} знаков после запятой\`;
@@ -310,8 +255,8 @@ export function validateField(
 
   if (def.kind === 'integer') {
     const parsed = typeof value === 'number' ? value : Number(value);
-    if (!Number.isInteger(parsed) || parsed < def.min || parsed > def.max) {
-      return \`от \${def.min} до \${def.max}\`;
+    if (!Number.isInteger(parsed)) {
+      return 'значение некорректно';
     }
     return undefined;
   }
@@ -345,28 +290,7 @@ export function validateAttributes(
     }
   }
 
-  // Cross-field rules: only applied when both sides present and individually valid.
-${crossBlocks.join('\n\n')}
-
   return errors;
 }
 `;
-}
-
-function tsVar(name) {
-  return (
-    {
-      floor: 'floor',
-      floors_total: 'floorsTotal',
-      area_living: 'areaLiving',
-      area_kitchen: 'areaKitchen',
-      area_total: 'areaTotal',
-    }[name] ?? 'v_' + name
-  );
-}
-
-function tsCrossErrorString(field) {
-  if (field === 'floor') return 'этаж не может превышать этажность';
-  // area_living / area_kitchen share the same message in the hand-written code.
-  return 'не может превышать общую площадь';
 }

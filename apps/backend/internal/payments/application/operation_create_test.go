@@ -55,7 +55,10 @@ func TestValidateManualOperation(t *testing.T) {
 			false,
 		},
 		{"zero amount", func(op *domain.Operation) { op.AmountKopecks = 0 }, true},
-		{"amount over 10^9", func(op *domain.Operation) { op.AmountKopecks = 1_000_000_001 }, true},
+		// Потолка сумм больше нет (решение владельца 23.10.2026): за прежним
+		// потолком 10⁹ — произвольные суммы; минимум остаётся.
+		{"amount over 10^9", func(op *domain.Operation) { op.AmountKopecks = 1_000_000_001 }, false},
+		{"huge amount", func(op *domain.Operation) { op.AmountKopecks = 9_000_000_000_000_000 }, false},
 		{"negative amount", func(op *domain.Operation) { op.AmountKopecks = -5 }, true},
 		{"unknown category slug", func(op *domain.Operation) { op.CategorySlug = new("not-a-catalog-slug") }, true},
 		{"nil category slug", func(op *domain.Operation) { op.CategorySlug = nil }, true},

@@ -583,7 +583,6 @@ func TestCreateRental_Validation(t *testing.T) {
 		mut  func(*CreateRentalCommand)
 	}{
 		{"zero amount", func(c *CreateRentalCommand) { c.AmountKopecks = 0 }},
-		{"over the ceiling", func(c *CreateRentalCommand) { c.AmountKopecks = MaxAmountKopecks + 1 }},
 		{"start in the past", func(c *CreateRentalCommand) { c.StartDate = today.AddDate(0, 0, -1) }},
 		{"planned end at start", func(c *CreateRentalCommand) {
 			c.PlannedEndDate = new(c.StartDate)
@@ -611,6 +610,51 @@ func strings2001() string {
 		s[i] = 'а'
 	}
 	return string(s)
+}
+
+// Потолка сумм больше нет (решение владельца 23.10.2026): суммы контракта
+// произвольные — арендная плата, залог, комиссия, возврат залога. Минимумы
+// остаются: плата ≥ 1 копейки, залог/комиссия/возврат ≥ 0.
+func TestRentalAmountsHaveNoCeiling(t *testing.T) {
+	t.Parallel()
+	t.Run("create with amounts above the old 10⁹ bound", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		cmd := createCmd()
+		cmd.AmountKopecks = 5_000_000_000 // 50 млн ₽ — за прежним потолком.
+		cmd.DepositKopecks = new(int64(3_000_000_000))
+		cmd.CommissionKopecks = new(int64(2_000_000_000))
+
+		_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+		require.NoError(t, err)
+		assert.Equal(t, 5_000_000_000, int(h.gateway.createSeed.AmountKopecks))
+	})
+
+	t.Run("terms edit above the old bound syncs the payment", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		cmd := UpdateRentalCommand{AmountKopecks: new(int64(9_000_000_000_000_000))}
+		_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+		require.NoError(t, err)
+		require.Len(t, h.gateway.changes, 1)
+		require.NotNil(t, h.gateway.changes[0].AmountKopecks)
+		assert.Equal(t, int64(9_000_000_000_000_000), *h.gateway.changes[0].AmountKopecks)
+	})
+
+	t.Run("deposit return above the old bound", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		rentalID := h.seedRental(nil)
+
+		_, err := h.svc.CompleteRental(t.Context(), h.owner, h.property, rentalID,
+			CompleteRentalCommand{
+				CompletedDate: today,
+				DepositReturn: &DepositReturn{AmountKopecks: 1_500_000_000},
+			})
+		require.NoError(t, err)
+	})
 }
 
 func TestCreateRental_SecondUnfinishedIs409(t *testing.T) {

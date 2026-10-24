@@ -91,8 +91,5 @@ export function mergedEnumOptions(catalog) {
   return map;
 }
 
-// Group rules by field (the LHS of the `lte` comparison). Each rule becomes a
-// cross-field check. Returns [{ field, lte, types: [...] }] preserving catalog order.
-export function rulesGrouped(catalog) {
-  return catalog.rules.map((r) => ({ field: r.field, lte: r.lte, types: r.types }));
-}
+// Кросс-правила согласованности полей сняты (решение владельца 23.10.2026):
+// catalog.json больше не несёт секции rules, эмиттеры её не читают.

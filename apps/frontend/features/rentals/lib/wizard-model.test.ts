@@ -327,6 +327,22 @@ describe('buildRentalCreateCommand', () => {
     expect(buildRentalCreateCommand({ amountKopecks: -1, paymentDay: 5, startDate: TODAY }, TODAY)).toBeUndefined();
   });
 
+  it('суммы сверх прежнего потолка 10⁹ валидны — потолка нет (решение владельца 23.10.2026)', () => {
+    const cmd = buildRentalCreateCommand(
+      {
+        amountKopecks: 9_000_000_000_000_000,
+        paymentDay: 5,
+        startDate: TODAY,
+        depositKopecks: 1_500_000_000,
+        commissionKopecks: 2_000_000_000,
+      },
+      TODAY,
+    );
+    expect(cmd?.amountKopecks).toBe(9_000_000_000_000_000);
+    expect(cmd?.depositKopecks).toBe(1_500_000_000);
+    expect(cmd?.commissionKopecks).toBe(2_000_000_000);
+  });
+
   it('некорректные даты команду роняют', () => {
     expect(
       buildRentalCreateCommand({ amountKopecks: 100, paymentDay: 5, startDate: '2026-09-04' }, TODAY),

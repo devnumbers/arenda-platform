@@ -10,7 +10,6 @@ import {
   GLASS_GRADIENT,
   GLASS_SKIN,
 } from "@/components/glass";
-import { Reveal } from "@/components/reveal";
 import { TabletStrip } from "@/components/tablet-strip";
 import { useSwapPhase } from "@/components/use-swap-phase";
 import iconHomeMain from "@/assets/icons/icon-home-main.svg";
@@ -113,7 +112,7 @@ export function TariffCards({
   // дорожки, поэтому в активном режиме карточки идут в неё напрямую,
   // без сетки-обёртки (иначе снап и бросок перескакивали бы по две
   // карточки на узких планшетах, где ход длиннее шага).
-  const cards = tariffs.map((tariff, index) => {
+  const cards = tariffs.map((tariff) => {
     // «Ваш тариф» — только на текущем тарифе. У платных маркер живёт
     // только на периоде самой подписки: на другом периоде карточка снова
     // покупается — её CTA и есть способ сменить период (решение владельца
@@ -146,9 +145,8 @@ export function TariffCards({
             billing === "yearly" ? "year" : "month"
           }`;
     return (
-      <Reveal
+      <div
         key={tariff.id}
-        delay={index * 80}
         /* self-stretch, не h-full: в авторазмерном ряду (планшетная
            полоса, сетки мобайл/десктоп) процентная высота против
            неопределённой строки даёт auto — «Базовый» оставался ниже
@@ -234,7 +232,7 @@ export function TariffCards({
             ))}
           </div>
         </article>
-      </Reveal>
+      </div>
     );
   });
 
