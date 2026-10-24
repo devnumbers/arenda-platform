@@ -12,7 +12,7 @@ Rules for the public landing in `apps/landing` — a standalone Next.js applicat
 
 ## Design Conventions
 
-Before building or changing any landing section, read `DESIGN.md` (same directory): window-width tiers (mobile ≤480 stacks, `tab:` 481+, `desk:` 1200+), the strip/carousel engine canon and its Yandex reference measurements, the photo pipeline (original bytes → webp q100 → AVIF; the `deviceSizes`/`imageSizes` ladder is an owner decision — do not retune), the stand and standalone-rebuild recipe, walkthrough and Figma extraction recipes, tablet H2 sizing, the portable UI canon, and the Radix scroll-lock fix.
+Before building or changing any landing section, read `DESIGN.md` (same directory): window-width tiers (mobile ≤480 stacks, `tab:` 481+, `desk:` 1200+), the strip/carousel engine canon and its Yandex reference measurements, the photo pipeline (original bytes → webp q100 → AVIF), the stand and standalone-rebuild recipe, walkthrough and Figma extraction recipes, tablet H2 sizing, the portable UI canon, and the Radix scroll-lock fix.
 
 ## Anatomy
 
