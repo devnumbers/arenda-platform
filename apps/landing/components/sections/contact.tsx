@@ -42,13 +42,13 @@ export function Contact() {
             <div className="relative flex w-full flex-col gap-8 tab:h-full tab:w-[350px] tab:shrink-0 tab:justify-between desk:w-auto desk:flex-1">
               <div className="flex flex-col gap-3 desk:gap-6">
                 {/* Переносы явные только на планшете: браузерный Onest уже
-                    фиргинского (паттерн прежнего блока; на мобиле и
-                    десктопе — естественный + text-balance по кадрам). */}
-                <p className="text-balance text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h3 desk:font-medium desk:leading-10">
+                    фиргинского (паттерн прежнего блока; баланс строк —
+                    глобально в globals.css, text-wrap-style: balance). */}
+                <p className="text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h3 desk:font-medium desk:leading-10">
                   Установите сайт
                   <br className="hidden tab:block desk:hidden" /> как приложение
                 </p>
-                <p className="text-balance text-s leading-5 text-ink opacity-60 desk:text-r desk:leading-[22px]">
+                <p className="text-s leading-5 text-ink opacity-60 desk:text-r desk:leading-[22px]">
                   Доступно для Google Chrome, Яндекс Бразера, Safari и других
                   браузеров. Для компьютеров и телефонов
                 </p>

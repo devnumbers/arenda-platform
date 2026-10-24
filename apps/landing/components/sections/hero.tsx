@@ -56,11 +56,11 @@ export function Hero() {
                 (3005-78026): на ярусе 481–1199 заголовок влезает в одну
                 строку до ~1199 и balance не срабатывает, поэтому перенос
                 явный; на мобиле (3 строки) и десктопе — естественный. */}
-            <h1 className="text-balance text-[28px] font-semibold leading-8 text-white tab:text-[36px] tab:font-medium tab:leading-10 desk:text-h1 desk:font-semibold desk:leading-[76px]">
+            <h1 className="text-[28px] font-semibold leading-8 text-white tab:text-[36px] tab:font-medium tab:leading-10 desk:text-h1 desk:font-semibold desk:leading-[76px]">
               Сервис управления
               <br className="hidden tab:block desk:hidden" /> арендой недвижимости
             </h1>
-            <p className="text-balance text-s font-normal leading-5 text-white/70 tab:text-m tab:font-medium tab:leading-6 desk:text-h4 desk:font-medium desk:leading-8 desk:text-white">
+            <p className="text-s font-normal leading-5 text-white/70 tab:text-m tab:font-medium tab:leading-6 desk:text-h4 desk:font-medium desk:leading-8 desk:text-white">
               Управляйте сдачей жилья без таблиц и заметок
             </p>
           </div>

@@ -6,13 +6,15 @@ import { LandingLink } from "@/components/button";
 import { useSwapPhase } from "@/components/use-swap-phase";
 import { STEPS } from "@/lib/content";
 
-// «Как начать пользоваться» — макеты 2859-2531 (десктоп), 2859-3647
+// «Как начать пользоваться» — макеты 2967-75958 (десктоп: подложка во
+// всю ширину блока, r40, тень низа — слой 2967-75969; прежний десктоп
+// 2859-2531 с полями 8 заменён решением владельца 24.10), 2859-3647
 // (планшет), 2826-152026 (мобайл): градиентная подложка (прозрачный →
-// синий 10%, r32, контент прижат к низу — на десктопе с боковыми
-// полями 8, на планшете/мобайле во всю ширину страницы), H2 + 4 круглых
-// StepButton 44×44 + текст шага (десктоп 22/26, планшет/мобайл 16/20,
-// цвет ink/50), мокап телефона 273×400; синяя кнопка — ПОД подложкой
-// (шаг 32, десктоп 56).
+// синий 10%, контент прижат к низу — на всех ярусах во всю ширину
+// страницы; тень низа — на всех ярусах, решение владельца 24.10),
+// H2 + 4 круглых StepButton 44×44 + текст шага (десктоп 22/26,
+// планшет/мобайл 16/20, цвет ink/50), мокап телефона 273×400; синяя
+// кнопка — ПОД подложкой (шаг 32, десктоп 56).
 
 // Переходы — в духе apple.com: фото кроссфейдится 600мс на ease-in-out
 // сразу по клику, текст меняется следом (180мс уход → подмена → 280мс
@@ -52,76 +54,84 @@ export function Steps() {
   return (
     <section id="steps" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="flex flex-col items-center gap-8 desk:gap-14">
-        <div className="w-full px-0 desk:px-2">
-          <div className="relative flex w-full flex-col items-center justify-end overflow-hidden rounded-[32px] bg-[linear-gradient(180deg,rgba(43,127,255,0)_0%,rgba(43,127,255,0.1)_100%)] px-8 desk:px-10">
-            <div className="w-full">
-              <div className="flex w-full flex-col items-center gap-6 desk:gap-8">
-                <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
-                  Как начать пользоваться
-                </h2>
-                {/* Группа кнопок-переключателей шагов: панельной семантики
-                    (стрелки, roving tabindex, tabpanel) нет, поэтому роль —
-                    group, а выбор шага выражается aria-pressed на кнопке. */}
-                <div className="flex items-center gap-4" role="group" aria-label="Шаги">
-                  {STEPS.map((item, index) => (
-                    <button
-                      key={item.text}
-                      type="button"
-                      aria-pressed={active === index}
-                      aria-label={`Шаг ${index + 1}`}
-                      onClick={() => selectStep(index)}
-                      className={`flex size-11 cursor-pointer items-center justify-center rounded-[100px] text-xl font-bold transition-colors duration-200 active:duration-75 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [text-shadow:0_8px_24px_rgba(43,127,255,0.08)] ${
-                        active === index
-                          ? "bg-primary text-white"
-                          : "bg-primary-light text-primary-disabled hover:text-primary active:text-primary-active"
-                      }`}
-                    >
-                      {index + 1}
-                    </button>
-                  ))}
-                </div>
-                <p
-                  key={textStep}
-                  onAnimationEnd={settleText}
-                  className={`mx-auto max-w-[250px] text-center text-s leading-5 text-ink/50 tab:max-w-none desk:text-l desk:leading-[26px] ${
-                    textPhase === "leaving"
-                      ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout"
-                      : textPhase === "entering"
-                        ? "animate-steps-text-in"
-                        : ""
-                  }`}
-                >
-                  {text.text}
-                </p>
+        <div className="relative flex w-full flex-col items-center justify-end overflow-hidden rounded-[32px] desk:rounded-[40px] bg-[linear-gradient(180deg,rgba(43,127,255,0)_0%,rgba(43,127,255,0.1)_100%)] px-8 desk:px-10">
+          <div className="w-full">
+            <div className="flex w-full flex-col items-center gap-6 desk:gap-8">
+              <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
+                Как начать пользоваться
+              </h2>
+              {/* Группа кнопок-переключателей шагов: панельной семантики
+                  (стрелки, roving tabindex, tabpanel) нет, поэтому роль —
+                  group, а выбор шага выражается aria-pressed на кнопке. */}
+              <div className="flex items-center gap-4" role="group" aria-label="Шаги">
+                {STEPS.map((item, index) => (
+                  <button
+                    key={item.text}
+                    type="button"
+                    aria-pressed={active === index}
+                    aria-label={`Шаг ${index + 1}`}
+                    onClick={() => selectStep(index)}
+                    className={`flex size-11 cursor-pointer items-center justify-center rounded-[100px] text-xl font-bold transition-colors duration-200 active:duration-75 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [text-shadow:0_8px_24px_rgba(43,127,255,0.08)] ${
+                      active === index
+                        ? "bg-primary text-white"
+                        : "bg-primary-light text-primary-disabled hover:text-primary active:text-primary-active"
+                    }`}
+                  >
+                    {index + 1}
+                  </button>
+                ))}
               </div>
-            </div>
-            <div className="mt-14">
-              <div className="relative h-[400px] w-[273px]">
-                {STEPS.map((item, index) => {
-                  const isActive = active === index;
-                  const isPrev = prev === index;
-                  return (
-                    <Image
-                      key={item.text}
-                      src={item.image}
-                      alt={item.alt}
-                      width={273}
-                      height={400}
-                      sizes="273px"
-                      priority={false}
-                      className={`absolute inset-0 ${
-                        isActive
-                          ? "z-10 opacity-100 transition-opacity duration-[600ms] ease-inout"
-                          : isPrev
-                            ? "z-0 opacity-100"
-                            : "z-0 opacity-0"
-                      }`}
-                    />
-                  );
-                })}
-              </div>
+              <p
+                key={textStep}
+                onAnimationEnd={settleText}
+                className={`mx-auto max-w-[250px] text-center text-s leading-5 text-ink/50 tab:max-w-none desk:text-l desk:leading-[26px] ${
+                  textPhase === "leaving"
+                    ? "-translate-y-1 opacity-0 transition-[opacity,translate] duration-[180ms] ease-inout"
+                    : textPhase === "entering"
+                      ? "animate-steps-text-in"
+                      : ""
+                }`}
+              >
+                {text.text}
+              </p>
             </div>
           </div>
+          <div className="mt-14">
+            <div className="relative h-[400px] w-[273px]">
+              {STEPS.map((item, index) => {
+                const isActive = active === index;
+                const isPrev = prev === index;
+                return (
+                  <Image
+                    key={item.text}
+                    src={item.image}
+                    alt={item.alt}
+                    width={273}
+                    height={400}
+                    sizes="273px"
+                    priority={false}
+                    className={`absolute inset-0 ${
+                      isActive
+                        ? "z-10 opacity-100 transition-opacity duration-[600ms] ease-inout"
+                        : isPrev
+                          ? "z-0 opacity-100"
+                          : "z-0 opacity-0"
+                    }`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+          {/* Тень низа панели — слой 2967-75969 из макета 2967-75958:
+              градиент #F3F4F6 2% → #171A1C 2% на высоту 128 от низа,
+              поверх контента (z-20 — над мокапом z-10, в макете слой
+              самый верхний); ширина — вся ширина панели (в макете слой
+              тянется за контекстом, не фикс), на всех ярусах (решение
+              владельца 24.10). */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-32 bg-[linear-gradient(180deg,rgba(243,244,246,0.02)_0%,rgba(23,26,28,0.02)_100%)]"
+          />
         </div>
         <LandingLink href="/login">Начать пользоваться</LandingLink>
       </div>

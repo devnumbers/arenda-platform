@@ -9,9 +9,10 @@ import { TabletStrip } from "@/components/tablet-strip";
 // Shift+Scroll — шаг; решение владельца 02.10 «как у аренды» — замена
 // нативного моментума от 28.09); мобайл — стопка по ширине колонки,
 // высота по контенту (r32, p-32, шаг текст→моки 48); заголовок карточки
-// 22/26, текст 16/20 (десктоп 28/32 и 18/22); text-balance на заголовке
-// секции и текстах карточек — свойство стоит в узлах Figma
-// (2814-923/937).
+// 22/26, текст 16/20 (десктоп 28/32 и 18/22); баланс строк заголовков и
+// абзацев — глобально (globals.css, text-wrap-style: balance, решение
+// владельца 24.10; в узлах Figma 2814-923/937 свойство стоит у тех же
+// текстов).
 export type CardTrioCard = {
   title: string;
   text: string;
@@ -30,7 +31,7 @@ export function CardTrio({
   return (
     <section id={id} className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
-        <h2 className="text-center text-[28px] font-semibold leading-8 text-balance tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
+        <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
           {title}
         </h2>
       </div>
@@ -49,10 +50,10 @@ export function CardTrio({
           >
             <article className="flex h-auto w-full flex-col gap-12 overflow-clip rounded-[32px] bg-surface p-8 tab:h-[500px] tab:justify-between desk:h-[550px] desk:rounded-[40px] desk:p-10">
               <div className="flex flex-col gap-2 desk:gap-3">
-                <h3 className="text-[22px] font-medium leading-[26px] text-balance desk:text-[28px] desk:leading-8">
+                <h3 className="text-[22px] font-medium leading-[26px] desk:text-[28px] desk:leading-8">
                   {card.title}
                 </h3>
-                <p className="text-s leading-5 text-gray-2 text-balance desk:text-r desk:leading-[22px]">
+                <p className="text-s leading-5 text-gray-2 desk:text-r desk:leading-[22px]">
                   {card.text}
                 </p>
               </div>
