@@ -1,42 +1,67 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "./logo";
+import { Cancel } from "./ui/icons";
 import type { NavItem } from "@/lib/nav";
 
 // Мобильный/планшетный хедер (<1200px) — макеты 2859-4421 (закрыт) и
-// 2862-4943 (открыт): плавающая белая плашка radius-24, при открытии под
-// строкой хедера панель-оверлей с пунктами 52px (16/20, px-24, radius-12,
-// pressed → surface); страница за меню неподвижна.
+// 2862-4943 (открыт): плавающая белая плашка radius-24, пункты меню 52px
+// (px-24, radius-12, pressed → surface); страница за меню неподвижна.
 //
-// Анимация — по приёмам apple.com (замер их globalnav 29.09): одна кривая на
-// всё cubic-bezier(0.4, 0, 0.6, 1); открытие — панель-шторка 400мс
-// (grid-rows) и каскад пунктов — фейд 240мс с подъёмом 10px, шаг 45мс.
-// Закрытие — ЗЕРКАЛО открытия (решение владельца 29.09 после живого
-// просмотра Apple-асимметрии «гаснет на месте + срез»): та же шторка вниз и
-// обратный каскад пунктов (нижние гаснут первыми — поднимающийся край шторки
-// их догоняет). Форма карточки (прямые нижние углы + тень) держится до
-// самого среза — скругление возвращается в конце, как было: живой радиус при
-// висящей панели давал клинья в стыке (решение владельца 29.09 позднее —
-// откат эксперимента со скруглением на старте закрытия).
-// Морф иконки: средняя линия гаснет, крайние съезжаются в крест (240мс).
-// Страница под открытым меню блокируется от скролла без смены overflow
-// html (класс menu-scroll-locked: touch-action/overscroll + гвард колеса
-// — смена overflow инвалидирует лэйаут всего документа, аудит #1483).
-// Esc закрывает меню.
+// Анимация открытия — решение владельца 24.10, перенос из референса
+// Figma Make (прототип лендинга, header.tsx): меню — часть той же белой
+// карточки, отдельной панели больше нет — карточка «растёт» вниз
+// (grid-template-rows 0fr↔1fr, 300ms ease-out), содержимое появляется и
+// гаснет одним блоком (opacity 300ms), сепаратор border-t живёт в том же
+// гаснущем блоке. Закрытие — то же в обратную сторону: transition
+// симметричен, машина фаз closing (таймер среза, зеркальный каскад,
+// углы/тень до среза — хореография шторки apple.com от 29.09) снята
+// целиком. Бургер морфится в крест кроссфейдом двух слоёв с поворотом
+// (300ms); иконки — инлайн-SVG (канон лендинга), пара «бургер/крест» в
+// одном габарите 6..18 со штрихом 1.5. Тень карточки — только по скроллу
+// (ScrollShadow), как в референсе: открытому меню у верхней позиции тень
+// не положена.
 //
-// Машина состояний: open («раскрыто» — высота, каскад), closing (свёртывание:
-// open уже false, панель едет вниз до среза; срез — таймаутом на шаг длиннее
-// свёртывания: transitionend в фоновом табе ненадёжен). Форма карточки —
-// прямые нижние углы и тень — живёт на open||closing до самого среза.
-// Повторное открытие посреди closing продолжает высоту с текущего кадра и
-// перезапускает каскад.
-const EASE = "ease-menu";
-const CLOSE_CUT_MS = 440;
+// Функциональность прежняя: страница под открытым меню блокируется без
+// смены overflow html (класс menu-scroll-locked: touch-action/overscroll +
+// гвард колеса — смена overflow инвалидирует лэйаут всего документа,
+// аудит #1483; клавиатурный скролл фона остаётся — осознанный компромисс);
+// Esc закрывает меню; меню, открытое на планшете, при переходе окна в desk
+// гаснет мгновенно — иначе лок html переживает уход UI из DOM-видимости
+// (бургер и панель уже скрыты desk:hidden, закрыть нечем). Это teardown
+// при уходе UI, а не пользовательское закрытие.
+//
+// visibility в transition-списке свёртывания: дискретное свойство — между
+// visible и hidden значение держится visible всю длину перехода, поэтому
+// свёртывание доигрывает видимым, а в конце уходит в hidden (пункты
+// закрытого меню не табабельны); при открытии видимость возвращается сразу.
 // Зеркало --breakpoint-desk (globals.css) — та же строка, что в
 // rentals-carousel.tsx: tailwind-классы desk:* из JS не прочитать.
 const DESK_QUERY = "(min-width: 1200px)";
+
+// Бургер трёх линий в габарите креста Cancel (6..18, штрих 1.5).
+function MenuIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M6 7H18M6 12H18M6 17H18"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 export function MobileMenu({
   nav,
@@ -46,55 +71,28 @@ export function MobileMenu({
   action: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [closing, setClosing] = useState(false);
 
-  useEffect(() => {
-    if (!closing) {
-      return;
-    }
-    const timer = setTimeout(() => setClosing(false), CLOSE_CUT_MS);
-    return () => clearTimeout(timer);
-  }, [closing]);
-
-  // Меню, открытое на планшете, при переходе окна в desk гаснет мгновенно —
-  // иначе лок html overflow:hidden переживает переход: бургер и панель уже
-  // скрыты desk:hidden, и закрыть меню, вернув скролл, нечем. Это teardown
-  // при уходе UI из DOM-видимости, а не пользовательское закрытие — фаза
-  // closing не заводится, таймер среза отменяет свой cleanup.
+  // Меню, открытое на планшете, при переходе окна в desk гаснет мгновенно:
+  // лок html overflow иначе переживает переход — бургер и панель уже
+  // скрыты desk:hidden, и закрыть меню, вернув скролл, нечем.
   useEffect(() => {
     const mq = window.matchMedia(DESK_QUERY);
     const onDesk = () => {
       if (mq.matches) {
         setOpen(false);
-        setClosing(false);
       }
     };
     mq.addEventListener("change", onDesk);
     return () => mq.removeEventListener("change", onDesk);
   }, []);
 
-  const startClose = useCallback(() => {
-    if (open && !closing) {
-      setOpen(false);
-      setClosing(true);
-    }
-  }, [open, closing]);
-  // Мост в эффект лока: листенеры зовут свежий startClose, не включая
-  // его в зависимости (канон goToRef в testimonials-carousel).
-  const startCloseRef = useRef<() => void>(() => {});
+  // Блокировка фона на всё открытое состояние — без смены overflow
+  // корневого скроллера: она инвалидирует лэйаут всего документа и стоила
+  // старту анимации кадр до 425мс на CPU×4 (аудит #1483). touch-action/
+  // overscroll лэйаут не трогают; колесо и трекпад (планшет) гасит
+  // слушатель, Esc закрывает меню.
   useEffect(() => {
-    startCloseRef.current = startClose;
-  }, [startClose]);
-
-  // Блокировка фона на всё открытое состояние (включая свёртывание) —
-  // без смены overflow корневого скроллера: она инвалидирует лэйаут
-  // всего документа и стоила старту шторки кадр до 425мс на CPU×4
-  // (аудит #1483). touch-action/overscroll лэйаут не трогают; колесо и
-  // трекпад (планшет) гасит слушатель, Esc закрывает меню. Клавиатурный
-  // скролл фона (space/стрелки) остаётся возможным — осознанный
-  // компромисс.
-  useEffect(() => {
-    if (!open && !closing) {
+    if (!open) {
       return;
     }
     const html = document.documentElement;
@@ -103,7 +101,7 @@ export function MobileMenu({
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        startCloseRef.current();
+        setOpen(false);
       }
     };
     html.classList.add("menu-scroll-locked");
@@ -114,34 +112,11 @@ export function MobileMenu({
       document.removeEventListener("wheel", onWheel);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, closing]);
-
-  const toggle = () => {
-    if (closing) {
-      setClosing(false);
-      setOpen(true);
-      return;
-    }
-    if (open) {
-      startClose();
-      return;
-    }
-    setOpen(true);
-  };
+  }, [open]);
 
   return (
-    <div
-      className={`relative bg-white transition-shadow duration-300 ${
-        open || closing
-          ? "rounded-t-3xl shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
-          : "rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0)] group-data-scrolled:shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
-      }`}
-    >
-      <div
-        className={`flex h-16 items-center border-b pl-4 pr-2.5 transition-colors duration-[240ms] ${EASE} ${
-          open ? "border-line" : "border-transparent"
-        }`}
-      >
+    <div className="rounded-3xl bg-white transition-shadow duration-300 group-data-scrolled:shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+      <div className="flex h-16 items-center pl-4 pr-2.5">
         <Link
           href="/"
           aria-label="Рентли — на главную"
@@ -153,28 +128,26 @@ export function MobileMenu({
           {action}
           <button
             type="button"
-            onClick={toggle}
+            onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-controls="mobile-menu"
             aria-label={open ? "Закрыть меню" : "Открыть меню"}
             className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl bg-surface transition-colors duration-200 active:duration-75 outline-none hover:bg-surface-hover active:bg-surface-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
-            {/* Бургер 2859-4421 (3 линии 16×1.5 с шагом 7) морфится в крест:
-                средняя гаснет, крайние съезжаются на центральную ось. */}
-            <span aria-hidden="true" className="relative block h-6 w-6">
-              <span
-                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate,opacity] duration-[240ms] ${EASE} ${
-                  open ? "opacity-0" : ""
+            {/* Кроссфейд бургер↔крест (референс): уходящий слой гаснет с
+                поворотом ±90 и сжатием, приходящий — раскрывается из
+                зеркального поворота. В Tailwind v4 rotate/scale — нативные
+                CSS-свойства, список перехода сужен до точного набора
+                (аудит анимаций DESIGN.md §8). */}
+            <span aria-hidden="true" className="relative block h-6 w-6 text-ink">
+              <MenuIcon
+                className={`absolute inset-0 transition-[rotate,scale,opacity] duration-300 ${
+                  open ? "rotate-90 scale-75 opacity-0" : "rotate-0 scale-100 opacity-100"
                 }`}
               />
-              <span
-                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate] duration-[240ms] ${EASE} ${
-                  open ? "translate-y-0 rotate-45" : "-translate-y-[7px]"
-                }`}
-              />
-              <span
-                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate] duration-[240ms] ${EASE} ${
-                  open ? "translate-y-0 -rotate-45" : "translate-y-[7px]"
+              <Cancel
+                className={`absolute inset-0 transition-[rotate,scale,opacity] duration-300 ${
+                  open ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-75 opacity-0"
                 }`}
               />
             </span>
@@ -183,35 +156,32 @@ export function MobileMenu({
       </div>
       <div
         id="mobile-menu"
-        className={`absolute inset-x-0 top-full grid rounded-b-3xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-[grid-template-rows] duration-[400ms] ${EASE} ${
-          open || closing ? "visible" : "invisible"
-        } ${open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]"}`}
+        className={`grid transition-[grid-template-rows,visibility] duration-300 ease-out ${
+          open
+            ? "visible [grid-template-rows:1fr]"
+            : "invisible [grid-template-rows:0fr]"
+        }`}
       >
         <nav className="overflow-hidden" aria-label="Разделы">
-          <ul className="p-3">
-            {nav.map((item, i) => (
-              <li key={item.href}>
-                <a
-                  href={item.href}
-                  onClick={startClose}
-                  style={{
-                    transitionDelay: open
-                      ? `${i * 45}ms`
-                      : closing
-                        ? `${(nav.length - 1 - i) * 45}ms`
-                        : "0ms",
-                  }}
-                  className={`flex min-h-[52px] items-center rounded-xl px-6 text-s text-ink transition-[opacity,translate] duration-[240ms] ${EASE} hover:bg-surface active:bg-surface ${
-                    open
-                      ? "translate-y-0 opacity-100"
-                      : "translate-y-2.5 opacity-0"
-                  }`}
-                >
-                  {item.label}
-                </a>
-              </li>
-            ))}
-          </ul>
+          <div
+            className={`border-t border-line p-3 transition-opacity duration-300 ${
+              open ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <ul className="flex flex-col">
+              {nav.map((item) => (
+                <li key={item.href}>
+                  <a
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="flex min-h-[52px] items-center rounded-xl px-6 text-s text-ink transition-colors duration-200 active:duration-75 hover:bg-surface active:bg-surface"
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
         </nav>
       </div>
     </div>
