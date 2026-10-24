@@ -114,13 +114,6 @@ export function OperationCreateWizardFlow({
     editableProperties,
   );
 
-  // Открытие поиска сразу делает поле активным (программный фокус —
-  // устоявшийся a11y-паттерн вместо autoFocus).
-  useEffect(() => {
-    if (categorySearchOpen) {
-      searchInputRef.current?.focus();
-    }
-  }, [categorySearchOpen]);
 
   // Клик вне хедера при пустом запросе закрывает поиск (канон платежного
   // визарда); с непустым поиск остаётся открытым.
@@ -215,6 +208,7 @@ export function OperationCreateWizardFlow({
       >
         {step === 4 && categorySearchOpen ? (
           <SearchField
+            focusOnMount
             ref={searchInputRef}
             value={categoryQuery}
             onChange={(event) => setCategoryQuery(event.target.value)}

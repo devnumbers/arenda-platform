@@ -285,13 +285,6 @@ export function HistoryFeedScreen({
         : undefined;
   const filters = pinnedHistoryFilters(urlFilters, pins);
 
-  // Открытие поиска сразу делает поле активным (программный фокус —
-  // устоявшийся a11y-паттерн вместо autoFocus).
-  useEffect(() => {
-    if (searchMode) {
-      searchInputRef.current?.focus();
-    }
-  }, [searchMode]);
 
   // Канон поиска #601: серверный запрос догоняет ввод с дебаунсом, в
   // запрос идёт трим; пустой трим — не поиск, а лента (запроса нет).
@@ -527,7 +520,12 @@ export function HistoryFeedScreen({
           }
         >
           <SearchField
-            ref={searchInputRef}
+            focusOnMount
+            ref={(node: HTMLInputElement | null) => {
+              const log = (window as unknown as { __focusLog?: Array<Record<string, unknown>> }).__focusLog;
+              log?.push({ t: Math.round(performance.now()), ev: node === null ? 'ref-detach' : 'ref-attach', inHeader: node !== null && (document.querySelector('header[aria-label="Навигация экрана"]')?.contains(node) ?? false) });
+              searchInputRef.current = node;
+            }}
             aria-label="Поиск по истории"
             placeholder="Поиск действий"
             value={search}

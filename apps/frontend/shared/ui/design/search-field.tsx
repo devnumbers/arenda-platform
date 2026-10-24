@@ -1,6 +1,6 @@
 'use client';
 
-import type { ComponentProps, JSX } from 'react';
+import { useRef, type ComponentProps, type JSX } from 'react';
 import { Cancel, Search } from '@/shared/assets/icons';
 import { cn } from '@/shared/lib/cn';
 import { IconButton } from './icon-button';
@@ -14,6 +14,14 @@ import { IconButton } from './icon-button';
  * владельца 2026-08-26): видимый признак фокуса — каретка. */
 export type SearchFieldProps = Omit<ComponentProps<'input'>, 'type' | 'size'> & {
   readonly onClear?: () => void;
+  /** Программный фокус при монтировании поля (канон поисков — «открылось
+   * значит в фокусе» вместо autoFocus, a11y-паттерн #601). Фокус ставится
+   * в ref-callback — синхронно в коммите, где поле появилось, где бы оно
+   * ни рисовалось: локально или в персистентной шапке через реестр
+   * регистраций (#1592). Эффекты экрана здесь промахиваются: шапка
+   * коммитит поле после пассивных эффектов экрана (issue #1609,
+   * react/react#37014 — отложенный ревил стриминг-границ). */
+  readonly focusOnMount?: boolean;
 };
 
 export function SearchField({
@@ -22,10 +30,13 @@ export function SearchField({
   value,
   disabled,
   onClear,
+  focusOnMount = false,
+  ref,
   ...props
 }: SearchFieldProps): JSX.Element {
   const hasValue = typeof value === 'string' && value.length > 0;
   const showClear = onClear !== undefined && hasValue && !disabled;
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <div
@@ -36,6 +47,17 @@ export function SearchField({
       )}
     >
       <input
+        ref={(node) => {
+          inputRef.current = node;
+          if (typeof ref === 'function') {
+            ref(node);
+          } else if (ref) {
+            ref.current = node;
+          }
+          if (node !== null && focusOnMount) {
+            node.focus();
+          }
+        }}
         type="search"
         enterKeyHint="search"
         /* Кегль — гард-токен --font-size-input (16px), не шкала текста:

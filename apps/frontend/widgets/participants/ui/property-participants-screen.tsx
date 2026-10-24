@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
@@ -139,11 +139,6 @@ export function PropertyParticipantsScreen({
   const [leaveOpen, setLeaveOpen] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    if (searchMode) {
-      searchInputRef.current?.focus();
-    }
-  }, [searchMode]);
 
   const membersQuery = usePropertyAccessMembers(propertyId);
   // Свой доступ отозван/приостановлен в открытой сессии (#719) — перечитывание
@@ -344,6 +339,7 @@ export function PropertyParticipantsScreen({
           }
         >
           <SearchField
+            focusOnMount
             ref={searchInputRef}
             aria-label="Поиск участников"
             placeholder="Найти участника"
