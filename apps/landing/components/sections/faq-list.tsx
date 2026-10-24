@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Reveal } from "@/components/reveal";
 import type { FaqGroup } from "@/lib/content";
 
 // Раскрытый вопрос аккордеона: один на всю секцию, ключ —
@@ -21,7 +20,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
   return (
     <>
       {groups.map((group, groupIndex) => (
-        <Reveal key={group.category} delay={groupIndex * 80} className="w-full">
+        <div key={group.category} className="w-full">
           <div className="flex flex-col gap-4 rounded-[32px] bg-surface px-8 pb-4 pt-8 tab:rounded-[40px] tab:px-10 tab:pb-5 tab:pt-10 desk:flex-row desk:gap-6 desk:rounded-none desk:bg-transparent desk:p-0">
             <p className="shrink-0 text-l font-semibold tab:text-h4 desk:w-[240px] desk:text-h3 desk:font-medium">
               {group.category}
@@ -82,7 +81,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
               })}
             </div>
           </div>
-        </Reveal>
+        </div>
       ))}
     </>
   );

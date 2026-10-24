@@ -57,11 +57,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {/* Reveal-секции до гидратации прозрачны — без JS показываем сразу.
-            translate-y-6 в Tailwind v4 — отдельное свойство translate,
-            transform: none его не снимает. */}
+        {/* Карусель showcase до гидратации visibility:hidden — без JS
+            показываем сразу. */}
         <noscript>
-          <style>{`[data-reveal]{opacity:1!important;transform:none!important;translate:none!important}[data-carousel-canvas]{visibility:visible!important}`}</style>
+          <style>{`[data-carousel-canvas]{visibility:visible!important}`}</style>
         </noscript>
         <SmoothScroll />
         {children}

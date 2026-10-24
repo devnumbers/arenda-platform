@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { useState } from "react";
 import { LandingLink } from "@/components/button";
-import { Reveal } from "@/components/reveal";
 import { useSwapPhase } from "@/components/use-swap-phase";
 import { STEPS } from "@/lib/content";
 
@@ -55,7 +54,7 @@ export function Steps() {
       <div className="flex flex-col items-center gap-8 desk:gap-14">
         <div className="w-full px-0 desk:px-2">
           <div className="relative flex w-full flex-col items-center justify-end overflow-hidden rounded-[32px] bg-[linear-gradient(180deg,rgba(43,127,255,0)_0%,rgba(43,127,255,0.1)_100%)] px-8 desk:px-10">
-            <Reveal className="w-full">
+            <div className="w-full">
               <div className="flex w-full flex-col items-center gap-6 desk:gap-8">
                 <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
                   Как начать пользоваться
@@ -95,8 +94,8 @@ export function Steps() {
                   {text.text}
                 </p>
               </div>
-            </Reveal>
-            <Reveal delay={80} className="mt-14">
+            </div>
+            <div className="mt-14">
               <div className="relative h-[400px] w-[273px]">
                 {STEPS.map((item, index) => {
                   const isActive = active === index;
@@ -121,12 +120,10 @@ export function Steps() {
                   );
                 })}
               </div>
-            </Reveal>
+            </div>
           </div>
         </div>
-        <Reveal delay={120}>
-          <LandingLink href="/login">Начать пользоваться</LandingLink>
-        </Reveal>
+        <LandingLink href="/login">Начать пользоваться</LandingLink>
       </div>
     </section>
   );

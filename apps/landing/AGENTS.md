@@ -17,13 +17,13 @@ Before building or changing any landing section, read `DESIGN.md` (same director
 ## Anatomy
 
 - `components/sections/` — one file per landing section (hero, showcase, rentals, tariff-cards, faq, …).
-- `components/` — site chrome and cross-section blocks: `site-header`, `site-footer`, `button` (LandingButton), `reveal`, `tablet-strip` + `strip-engine.ts` (the shared strip/carousel engine), `feedback-modal`, `json-ld`.
+- `components/` — site chrome and cross-section blocks: `site-header`, `site-footer`, `button` (LandingButton), `tablet-strip` + `strip-engine.ts` (the shared strip/carousel engine), `feedback-modal`, `json-ld`.
 - `components/ui/` — portable product UI ported from `apps/frontend/shared/ui/design`: `modal` (Radix Dialog ≥768 / vaul sheet <768, with the managed `closing` phase — Radix Presence drops exit animations on React 19), `text-field`, `text-area`, `icon-button`, `sheet-drag-handle`. Keep these in sync with the frontend originals only via an explicit decision, not silent drift.
 - `lib/` — small helpers (`cn`, nav, content, auth). `public/` — static assets; photo provenance is recorded in `ATTRIBUTIONS.md`.
 
 ## Acceptance (walkthrough)
 
-Screens close through `/ui-walkthrough` like the frontend. The landing stand is the lightweight pattern: `next build` + `next start -p PORT` from `apps/landing` (PORT from the checkout's `.env` slot values — never a hardcoded port), verify on 375 / 768 / 1440, keep viewport screenshots only (full-page captures blank out Reveal sections — DESIGN.md). Browser automation goes through the playwright MCP (`docs/agents/mcp.md`); Figma work follows the server roles defined there (`figma` for context/screenshot, `figma-context` for file exports).
+Screens close through `/ui-walkthrough` like the frontend. The landing stand is the lightweight pattern: `next build` + `next start -p PORT` from `apps/landing` (PORT from the checkout's `.env` slot values — never a hardcoded port), verify on 375 / 768 / 1440. Browser automation goes through the playwright MCP (`docs/agents/mcp.md`); Figma work follows the server roles defined there (`figma` for context/screenshot, `figma-context` for file exports).
 
 ## Gotchas
 

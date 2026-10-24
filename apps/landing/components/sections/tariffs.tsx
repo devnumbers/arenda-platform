@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Reveal } from "@/components/reveal";
 import { TariffCards } from "@/components/sections/tariff-cards";
 import { TARIFFS } from "@/lib/content";
 import { getMe } from "@/lib/auth";
@@ -27,13 +26,13 @@ export async function Tariffs() {
 
   return (
     <TariffsShell>
-      <Reveal delay={80} className="flex w-full flex-col items-center">
+      <div className="flex w-full flex-col items-center">
         <TariffCards
           tariffs={TARIFFS}
           currentTariff={me?.tariff}
           currentPeriod={me?.period}
         />
-      </Reveal>
+      </div>
     </TariffsShell>
   );
 }
@@ -44,9 +43,9 @@ export async function Tariffs() {
 export function TariffsFallback() {
   return (
     <TariffsShell>
-      <Reveal delay={80} className="flex w-full flex-col items-center">
+      <div className="flex w-full flex-col items-center">
         <TariffCards tariffs={TARIFFS} />
-      </Reveal>
+      </div>
     </TariffsShell>
   );
 }

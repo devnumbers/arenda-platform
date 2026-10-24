@@ -6,7 +6,6 @@ import {
   GLASS_GRADIENT,
   GLASS_SKIN,
 } from "@/components/glass";
-import { Reveal } from "@/components/reveal";
 import { TabletStrip } from "@/components/tablet-strip";
 import iconBriefcase01 from "@/assets/icons/icon-briefcase-01.svg";
 import iconBuilding05 from "@/assets/icons/icon-building-05.svg";
@@ -62,11 +61,9 @@ export function Audience() {
   return (
     <section id="audience" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
-        <Reveal>
-          <h2 className="text-center text-[28px] font-semibold leading-8 text-balance tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
-            Для кого сервис
-          </h2>
-        </Reveal>
+        <h2 className="text-center text-[28px] font-semibold leading-8 text-balance tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
+          Для кого сервис
+        </h2>
       </div>
       {/* Планшет: полоса во всю ширину окна — поведение CardTrio
           («Организуйте дела»), движок «Управляйте арендой» (TabletStrip:
@@ -80,10 +77,9 @@ export function Audience() {
         nativeClassName="strip-scroll flex flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row desk:gap-5 desk:px-0"
         centerWhenFit
       >
-        {CARDS.map((card, index) => (
-          <Reveal
+        {CARDS.map((card) => (
+          <div
             key={card.title}
-            delay={index * 80}
             className="h-full tab:w-[320px] tab:shrink-0"
           >
             <article
@@ -117,7 +113,7 @@ export function Audience() {
                 </p>
               </div>
             </article>
-          </Reveal>
+          </div>
         ))}
       </TabletStrip>
     </section>

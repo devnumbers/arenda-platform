@@ -7,7 +7,6 @@ import {
   useInstallModal,
   type BrowserId,
 } from "@/components/install-instructions";
-import { Reveal } from "@/components/reveal";
 import contactBg from "@/assets/sections/contact-bg.webp";
 import contactIphone from "@/assets/sections/contact-iphone.webp";
 
@@ -28,7 +27,7 @@ export function Contact() {
   return (
     <section id="contact" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
-        <Reveal className="w-full">
+        <div className="w-full">
           <div className="relative flex h-[700px] flex-col gap-8 overflow-clip rounded-[32px] p-8 tab:h-[600px] tab:flex-row tab:rounded-[40px] tab:p-[52px] desk:h-[450px]">
             <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[32px] tab:rounded-[40px]">
               <Image
@@ -89,7 +88,7 @@ export function Contact() {
               className="pointer-events-none absolute right-0 top-[409px] h-[302px] w-[302px] tab:top-[191px] tab:h-[458px] tab:w-[458px] desk:bottom-0 desk:top-auto desk:h-[406px] desk:w-[406px]"
             />
           </div>
-        </Reveal>
+        </div>
       </div>
       {browser !== null && (
         <InstallModal browser={browser} closing={closing} onClose={close} />
