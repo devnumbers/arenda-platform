@@ -195,6 +195,7 @@ export function Showcase() {
   const photoElRef = useRef<HTMLDivElement>(null); // контейнер фотоленты
   const photoSwRef = useRef<SwiperType | null>(null);
   const platesSwRef = useRef<SwiperType | null>(null);
+  const resizePendingRef = useRef(false); // ресайз случился, пока юзер держал ленту
 
   // Клавиатурная активация: Enter/Space ведут ленту к слайду (DOM
   // статичен — копии не переставляются, индекс рендера валиден всегда).
@@ -216,13 +217,20 @@ export function Showcase() {
   // полёте ядро синхронно диспетчит синтетический transitionend (гася
   // animating), и его JS-translate — ещё целевой, не визуальный;
   // пересадка по нему телепортировала бы ленту из-под пальца. Догоняет
-  // пересадку transitionEnd посадочного перехода после релиза.
+  // пересадку transitionEnd посадочного перехода после релиза. Здесь же
+  // дожимается отложенный ресайз (resizePending): update() на покое
+  // перестраивает сетки до пересадки.
   const renormalizeAll = useCallback(() => {
     const ps = photoSwRef.current;
     const qs = platesSwRef.current;
     if (!ps || ps.destroyed || !qs || qs.destroyed) return;
     const touched = (sw: SwiperType) => sw.touchEventsData.isTouched === true;
     if (touched(ps) || touched(qs) || ps.animating || qs.animating) return;
+    if (resizePendingRef.current) {
+      resizePendingRef.current = false;
+      ps.update();
+      qs.update();
+    }
     // запас в 2 слота с каждого края: у самого края копии сосед с той
     // стороны уже пуст, а подготовка к переходу занимает до слота
     const RENORM_MARGIN = 2;
@@ -268,6 +276,30 @@ export function Showcase() {
       sw.setTransition(0);
     };
 
+    // window-resize: обновляем геометрию обеих лент сами (у ядра
+    // updateOnWindowResize выключен параметром). Пока юзер держит
+    // ленту — только флаг: ядерный update() в этот момент телепортировал
+    // бы ленту под пальцем, а ведомая через кольцо контроллеров
+    // ответным телепортом дёргала бы мастеровую (замер 26.10); отложенный
+    // вызов догоняет renormalizeAll'ом на первой остановке, а релиз без
+    // полёта — таймером в touchEnd (transitionEnd там не придёт).
+    const applyResizeUpdate = () => {
+      const ps = photoSwRef.current;
+      const qs = platesSwRef.current;
+      if (!ps || ps.destroyed || !qs || qs.destroyed) return;
+      const touched = (sw: SwiperType) => sw.touchEventsData.isTouched === true;
+      if (touched(ps) || touched(qs) || ps.animating || qs.animating) {
+        resizePendingRef.current = true;
+        return;
+      }
+      ps.update();
+      qs.update();
+      renormalizeAll();
+    };
+    const applyResizeDeferred = () => {
+      window.setTimeout(applyResizeUpdate, SPEED_MS + 100);
+    };
+
     const plates = new Swiper(stripEl, {
       modules: [Controller, EffectCoverflow],
       effect: "coverflow",
@@ -288,6 +320,10 @@ export function Showcase() {
       // зовёт update() со мгновенным slideTo(*, 0) — телепорт ленты
       // под пальцем; картинки секции грузятся eagerly, слушатель не нужен
       lazyPreload: false,
+      // window-resize обновляет геометрию наш хендлер (ниже): ядерный
+      // update() на ресайзе телепортировал бы ленту под удержанным
+      // пальцем и через кольцо контроллеров дёргал вторую ленту
+      updateOnWindowResize: false,
       preventClicks: true,
       // клик по плашке ведёт её копию в центр; фотолента едет следом
       // через контроллер (клик после драга ядро гасит сам)
@@ -296,7 +332,10 @@ export function Showcase() {
         transitionEnd: () => renormalizeAll(),
         touchStart: () => killFlightOnGrab(plates),
         sliderFirstMove: () => stripEl.classList.add(s.dragging ?? ""),
-        touchEnd: () => stripEl.classList.remove(s.dragging ?? ""),
+        touchEnd: () => {
+          stripEl.classList.remove(s.dragging ?? "");
+          applyResizeDeferred();
+        },
       },
     });
     platesSwRef.current = plates;
@@ -321,6 +360,10 @@ export function Showcase() {
       // зовёт update() со мгновенным slideTo(*, 0) — телепорт ленты
       // под пальцем; картинки секции грузятся eagerly, слушатель не нужен
       lazyPreload: false,
+      // window-resize обновляет геометрию наш хендлер (ниже): ядерный
+      // update() на ресайзе телепортировал бы ленту под удержанным
+      // пальцем и через кольцо контроллеров дёргал вторую ленту
+      updateOnWindowResize: false,
       preventClicks: true,
       slideToClickedSlide: true,
       // ведёт плашечную ленту (создана выше); плашки ведут фотоленту
@@ -338,7 +381,10 @@ export function Showcase() {
         transitionEnd: () => renormalizeAll(),
         touchStart: () => killFlightOnGrab(photos),
         sliderFirstMove: () => photoEl.classList.add(s.dragging ?? ""),
-        touchEnd: () => photoEl.classList.remove(s.dragging ?? ""),
+        touchEnd: () => {
+          photoEl.classList.remove(s.dragging ?? "");
+          applyResizeDeferred();
+        },
       },
     });
     photoSwRef.current = photos;
@@ -369,10 +415,22 @@ export function Showcase() {
     mmDesk.addEventListener("change", onTierChange);
     mmTab.addEventListener("change", onTierChange);
 
+    let resizeRaf = 0;
+    const onWindowResize = () => {
+      if (resizeRaf !== 0) return;
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        applyResizeUpdate();
+      });
+    };
+    window.addEventListener("resize", onWindowResize);
+
     setMounted(true);
     return () => {
       mmDesk.removeEventListener("change", onTierChange);
       mmTab.removeEventListener("change", onTierChange);
+      window.removeEventListener("resize", onWindowResize);
+      if (resizeRaf !== 0) cancelAnimationFrame(resizeRaf);
       photoEl.classList.remove(s.dragging ?? "");
       stripEl.classList.remove(s.dragging ?? "");
       photos.destroy(true, true);
