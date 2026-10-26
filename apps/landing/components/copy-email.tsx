@@ -6,14 +6,14 @@ import { cn } from "@/lib/cn";
 import { LandingButton } from "./button";
 
 // Копирование почты поддержки в буфер с тостом «Почта скопирована»
-// (решение владельца 26.10). Пилюля тоста — кадр 3647-162423, раскладки
-// 3647-88916 (ПК) и 3647-162433 (мобайл): 188×40, белый фон, тень
-// shadow-card (совпадает с переменной кадра: 0 8px 24px rgb(0 0 0/0.12)),
-// текст 14/18 ink, паддинги 16 слева / 12 справа, иконка 24×24 с зазором 4.
-// На ПК/планшете тост прилетает вверху справа (top 104 — 32 под нижним
-// краем хедер-бара 72px; right 32), на мобайле — вверху по центру.
+// (решение владельца 26.10). Пилюля тоста — компонент 3647-90729
+// (раскладки 3647-88916 ПК / 3647-162433 мобайл): радиус 12, белый фон,
+// тень shadow-card (совпадает с переменной кадра: 0 8px 24px rgb(0 0 0/0.12)),
+// текст 12/15 ink, паддинги 16 слева / 12 справа / 8 по вертикали,
+// иконка 24×24 с зазором 4. На ПК/планшете тост прилетает вверху справа
+// (top 104 — 32 под нижним краем хедер-бара 72px; right 32), на мобайле —
+// вверху по центру.
 const SUPPORT_EMAIL = "hello@rentlee.ru";
-const TOAST_ID = "email-copied";
 const TOAST_DURATION_MS = 3000;
 // Отступы тоста от краёв вьюпорта — по кадрам раскладок; дублируются в
 // mobileOffset, потому что медиа sonner ≤600px переопределяет var-ы.
@@ -48,13 +48,11 @@ async function copySupportEmail(): Promise<void> {
   if (await copyToClipboard(SUPPORT_EMAIL)) showCopiedToast();
 }
 
-// Стабильный id — апсёрт: повторный клик заменяет висящий тост и
-// перезапускает его таймер, на экране всегда один тост.
+// Без стабильного id каждый клик рождает свой тост — стопка до 3
+// видимых (visibleToasts sonner по умолчанию), у каждого свой таймер,
+// лишние ждут в очереди (решение владельца 26.10 — наслаивание).
 function showCopiedToast(): void {
-  toast.custom(() => <CopiedToast />, {
-    id: TOAST_ID,
-    duration: TOAST_DURATION_MS,
-  });
+  toast.custom(() => <CopiedToast />, { duration: TOAST_DURATION_MS });
 }
 
 // Обёртка держит выравнивание: у sonner на ≤600px тост-контейнер
@@ -64,8 +62,8 @@ function showCopiedToast(): void {
 function CopiedToast() {
   return (
     <div className="flex justify-end max-tab:justify-center">
-      <div className="flex h-10 items-center gap-1 rounded-full bg-white pr-3 pl-4 shadow-card">
-        <span className="text-xs leading-[18px] text-ink">
+      <div className="flex h-10 items-center gap-1 rounded-xl bg-white py-2 pr-3 pl-4 shadow-card">
+        <span className="text-[12px] leading-[15px] text-ink">
           Почта скопирована
         </span>
         <GoodCheck className="size-6 shrink-0" />
