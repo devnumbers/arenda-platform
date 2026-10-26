@@ -211,13 +211,22 @@ export function Showcase() {
   // translate ровно на шаг копии; контроллер зеркалит её ведомой — тоже
   // ровно на её N слотов (диапазоны аффинны, дрейфа нет), так что
   // логическое соответствие лент не расходится. Повторный вход после
-  // пересадки уже в средней копии — второй вызов no-op.
+  // пересадки уже в средней копии — второй вызов no-op. Пока палец на
+  // ленте или переход в полёте, пересадка запрещена: при захвате в
+  // полёте ядро синхронно диспетчит синтетический transitionend (гася
+  // animating), и его JS-translate — ещё целевой, не визуальный;
+  // пересадка по нему телепортировала бы ленту из-под пальца. Догоняет
+  // пересадку transitionEnd посадочного перехода после релиза.
   const renormalizeAll = useCallback(() => {
+    const ps = photoSwRef.current;
+    const qs = platesSwRef.current;
+    if (!ps || ps.destroyed || !qs || qs.destroyed) return;
+    const touched = (sw: SwiperType) => sw.touchEventsData.isTouched === true;
+    if (touched(ps) || touched(qs) || ps.animating || qs.animating) return;
     // запас в 2 слота с каждого края: у самого края копии сосед с той
     // стороны уже пуст, а подготовка к переходу занимает до слота
     const RENORM_MARGIN = 2;
-    for (const sw of [photoSwRef.current, platesSwRef.current]) {
-      if (!sw || sw.destroyed) continue;
+    for (const sw of [ps, qs]) {
       let nearest = 0;
       let bestDist = Infinity;
       for (let j = 0; j < sw.snapGrid.length; j += 1) {
@@ -247,6 +256,18 @@ export function Showcase() {
     let tier = tierOf();
     const m = METRICS[tier];
 
+    // Канон «захват в полёте подхватывает ленту с текущей позиции»:
+    // гасим активный переход в момент нажатия, синхронно перенося
+    // JS-позицию в визуальную — иначе на первом move ядро убивает
+    // CSS-переход, и тот на кадр вспыхивает целевой позицией полёта
+    // (рывок под пальцем, замер 26.10). Тот же паттерн, что у ядра
+    // в freeMode.onTouchStart.
+    const killFlightOnGrab = (sw: SwiperType) => {
+      if (!sw.animating) return;
+      sw.setTranslate(sw.getTranslate());
+      sw.setTransition(0);
+    };
+
     const plates = new Swiper(stripEl, {
       modules: [Controller, EffectCoverflow],
       effect: "coverflow",
@@ -256,12 +277,21 @@ export function Showcase() {
       slidesPerView: "auto",
       centeredSlides: true,
       spaceBetween: 0,
+      // полшага для медленных драгов: без longSwipes ядро любой релиз
+      // длиннее 300ms ведёт в slideTo(activeIndex) — всегда откат,
+      // порог половины шага не существует (приёмка 26.10)
+      longSwipes: true,
+      // догруз картинки внутри контейнера (дефолт lazyPreload: true)
+      // зовёт update() со мгновенным slideTo(*, 0) — телепорт ленты
+      // под пальцем; картинки секции грузятся eagerly, слушатель не нужен
+      lazyPreload: false,
       preventClicks: true,
       // клик по плашке ведёт её копию в центр; фотолента едет следом
       // через контроллер (клик после драга ядро гасит сам)
       slideToClickedSlide: true,
       on: {
         transitionEnd: () => renormalizeAll(),
+        touchStart: () => killFlightOnGrab(plates),
         sliderFirstMove: () => stripEl.classList.add(s.dragging ?? ""),
         touchEnd: () => stripEl.classList.remove(s.dragging ?? ""),
       },
@@ -277,6 +307,14 @@ export function Showcase() {
       slidesPerView: "auto",
       centeredSlides: true,
       spaceBetween: 0,
+      // полшага для медленных драгов: без longSwipes ядро любой релиз
+      // длиннее 300ms ведёт в slideTo(activeIndex) — всегда откат,
+      // порог половины шага не существует (приёмка 26.10)
+      longSwipes: true,
+      // догруз картинки внутри контейнера (дефолт lazyPreload: true)
+      // зовёт update() со мгновенным slideTo(*, 0) — телепорт ленты
+      // под пальцем; картинки секции грузятся eagerly, слушатель не нужен
+      lazyPreload: false,
       preventClicks: true,
       slideToClickedSlide: true,
       // ведёт плашечную ленту (создана выше); плашки ведут фотоленту
@@ -292,6 +330,7 @@ export function Showcase() {
       },
       on: {
         transitionEnd: () => renormalizeAll(),
+        touchStart: () => killFlightOnGrab(photos),
         sliderFirstMove: () => photoEl.classList.add(s.dragging ?? ""),
         touchEnd: () => photoEl.classList.remove(s.dragging ?? ""),
       },
@@ -412,15 +451,18 @@ export function Showcase() {
                             }
                           }}
                         >
-                          <Image
-                            src={card.photo}
-                            alt=""
-                            fill
-                            draggable={false}
-                            loading={near ? "eager" : "lazy"}
-                            sizes="(min-width: 1200px) 1000px, (min-width: 481px) 500px, 300px"
-                            className={s.slidePhoto}
-                          />
+                      <Image
+                        src={card.photo}
+                        alt=""
+                        fill
+                        draggable={false}
+                        // eagerly все пять: боковые копии переиспользуют те
+                        // же URL, ленивость здесь давала только поп-ины и
+                        // догрузки посреди жеста (приёмка 26.10)
+                        loading="eager"
+                        sizes="(min-width: 1200px) 1000px, (min-width: 481px) 500px, 300px"
+                        className={s.slidePhoto}
+                      />
                           <div className={s.card}>
                             <div className={s.cardGlass} />
                             <div className={s.cardName}>{card.name}</div>
