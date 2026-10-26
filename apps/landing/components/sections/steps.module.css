@@ -8,3 +8,19 @@
 :global(.swiper).zone {
   overflow: clip;
 }
+
+/* Кривые половинок out-in (решение владельца 26.10 — резкий финал
+   против призрачного хвоста ease): уходящий кадр (класс active уже
+   снят) доигрывает с ускорением ease-in, въезжающий (active уже на
+   нём — классы ядро переворачивает в начале перехода) — с ease-out.
+   Касается только opacity: transition-property слайдов в fade
+   ограничена ядром; в драге кривые не участвуют (opacity пишет
+   setTranslate с нулевой длительностью). Специфичность — над
+   эффектным CSS ядра (.swiper-fade .swiper-slide). */
+:global(.swiper-fade).zone :global(.swiper-slide) {
+  transition-timing-function: ease-in;
+}
+
+:global(.swiper-fade).zone :global(.swiper-slide-active) {
+  transition-timing-function: ease-out;
+}
