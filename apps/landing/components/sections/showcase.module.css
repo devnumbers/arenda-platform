@@ -1,70 +1,49 @@
 /* Карусель «Создайте карточку своей недвижимости» — размерная система
    по макетам 2967-75653 (ПК), 3005-78445 (планшет), 3008-79114 (мобила).
-   Каждая карточка/плашка несёт --k ∈ [0..1] (0 — боковое состояние,
-   1 — центральное), все размеры интерполируются calc'ом от --k, поэтому
-   морфинг при прокрутке непрерывный. Ярусы: мобайл <481, планшет
-   481–1199 (макет = ПК-контент, карточки уже по ширине), десктоп ≥1200. */
+   Переписано на transform-морф (решение владельца 24.10, движок — ядро
+   Swiper, showcase.tsx): в CSS живут только ЦЕНТРАЛЬНЫЕ размеры яруса;
+   боковое состояние — это центр × 0.8 чистым transform: scale
+   (переменная --k ∈ [0..1] ставится движком, scale = 0.8 + 0.2·k
+   считается в CSS). Внутренние размеры макета — стекло, шрифты, блюр,
+   радиусы — ровно 0.8 от центральных на всех ярусах, поэтому масштаб
+   воспроизводит их точно; подсматривающие края боковых на планшете и
+   мобиле почти целиком за экраном (позиция края = зазор макета),
+   невидимый дальний край роли не играет. Никаких layout-свойств в
+   кадре — морф едет на композиторе, перерасчёта лэйаута нет. */
 
 .carousel {
-  /* мобайл (макет 393 = планшет × 0.6) */
+  /* Кривая перехода — замер блока «Опыт партнёров» Яндекса */
+  --showcase-ease: cubic-bezier(0.33, 1, 0.68, 1);
+  /* мобайл (макет 393 = планшет × 0.6): центральные состояния */
   --w: 300px;
-  --side-w: 300px;
   --h: 240px;
-  --side-h: 192px;
   --p: 24px;
-  --side-p: 19.2px;
   --r: 24px;
-  --side-r: 19.2px;
   --glass-w: 210px;
-  --glass-side-w: 168px;
   --glass-p: 14.4px;
-  --glass-side-p: 11.52px;
   --glass-r: 14.4px;
-  --glass-side-r: 11.52px;
   --blur: 9.6px;
-  --blur-side: 7.68px;
   --ring: 0.6px;
-  --ring-side: 0.48px;
   --glass-gap: 9.6px;
-  --glass-gap-side: 7.68px;
   --rows-gap: 2.4px;
-  --rows-gap-side: 1.92px;
   --row-gap: 7.2px;
-  --row-gap-side: 5.76px;
   --title-s: 12px;
   --title-lh: 14.4px;
-  --title-side-s: 9.6px;
-  --title-side-lh: 11.52px;
   --row-s: 8.4px;
   --row-lh: 10.8px;
-  --row-side-s: 6.72px;
-  --row-side-lh: 8.64px;
   --gap: 12px;
   --plate-w: 240px;
-  --plate-side-w: 207px;
   --plate-h: 60px;
-  --plate-side-h: 48px;
   --plate-p: 14.4px;
-  --plate-side-p: 11.52px;
   --plate-pr: 19.2px;
-  --plate-side-pr: 15.36px;
   --plate-icon: 31.2px;
-  --plate-side-icon: 24.96px;
-  --plate-gap: 9.6px;
-  --plate-gap-side: 7.68px;
+  --plate-content-gap: 9.6px;
   --plate-text-gap: 2.4px;
-  --plate-text-gap-side: 1.92px;
   --plate-title-s: 12px;
   --plate-title-lh: 14.4px;
-  --plate-title-side-s: 9.6px;
-  --plate-title-side-lh: 11.52px;
   --plate-sub-s: 8.4px;
   --plate-sub-lh: 10.8px;
-  --plate-sub-side-s: 6.72px;
-  --plate-sub-side-lh: 8.64px;
   --plate-arrow: 14.4px;
-  --plate-side-arrow: 11.52px;
-  --plate-gap-y: 8px;
   --strip-gap: 24px;
   --photo-fade-w: 624px;
   --strip-fade-w: 50px;
@@ -74,63 +53,34 @@
   .carousel {
     /* планшет: контент ПК-масштаба, карточки/плашки уже по ширине */
     --w: 500px;
-    --side-w: 500px;
     --h: 400px;
-    --side-h: 320px;
     --p: 40px;
-    --side-p: 32px;
     --r: 40px;
-    --side-r: 32px;
     --glass-w: 350px;
-    --glass-side-w: 280px;
     --glass-p: 24px;
-    --glass-side-p: 19.2px;
     --glass-r: 24px;
-    --glass-side-r: 19.2px;
     --blur: 16px;
-    --blur-side: 12.8px;
     --ring: 1px;
-    --ring-side: 0.8px;
     --glass-gap: 16px;
-    --glass-gap-side: 12.8px;
     --rows-gap: 4px;
-    --rows-gap-side: 3.2px;
     --row-gap: 12px;
-    --row-gap-side: 9.6px;
     --title-s: 20px;
     --title-lh: 24px;
-    --title-side-s: 16px;
-    --title-side-lh: 19.2px;
     --row-s: 14px;
     --row-lh: 18px;
-    --row-side-s: 11.2px;
-    --row-side-lh: 14.4px;
     --gap: 12px;
     --plate-w: 400px;
-    --plate-side-w: 345px;
     --plate-h: 100px;
-    --plate-side-h: 80px;
     --plate-p: 24px;
-    --plate-side-p: 19.2px;
     --plate-pr: 32px;
-    --plate-side-pr: 25.6px;
     --plate-icon: 52px;
-    --plate-side-icon: 41.6px;
-    --plate-gap: 16px;
-    --plate-gap-side: 12.8px;
+    --plate-content-gap: 16px;
     --plate-text-gap: 4px;
-    --plate-text-gap-side: 3.2px;
     --plate-title-s: 20px;
     --plate-title-lh: 24px;
-    --plate-title-side-s: 16px;
-    --plate-title-side-lh: 19.2px;
     --plate-sub-s: 14px;
     --plate-sub-lh: 18px;
-    --plate-sub-side-s: 11.2px;
-    --plate-sub-side-lh: 14.4px;
     --plate-arrow: 24px;
-    --plate-side-arrow: 19.2px;
-    --plate-gap-y: 12px;
     --strip-gap: 56px;
     --photo-fade-w: 1099px;
     --strip-fade-w: 50px;
@@ -139,18 +89,11 @@
 
 @media (min-width: 1200px) {
   .carousel {
-    /* ПК: боковые = 80% центральной по всем осям. На широких экранах
-       боковые растут (clamp зеркалит JS-метрики в showcase.tsx), чтобы
-       их внешний край всегда уходил за границу экрана */
+    /* ПК: ширины центральной карточки и плашки, зазор и шторки макета;
+       остальное наследуется от планшетного яруса (контент тот же) */
     --w: 1000px;
-    --side-w: clamp(800px, calc(100vw - 1640px), 960px);
-    --h: 400px;
-    --side-h: 320px;
     --gap: 20px;
     --plate-w: 450px;
-    --plate-side-w: 360px;
-    --plate-gap-y: 16px;
-    --strip-gap: 56px;
     /* Шторка 1640px впритык к центральной карточке и ЗА экран — как в
        Figma (SVG: transparent → белый на 30% = 492px от центра).
        Белое не дотягивается до края экрана на родных ширинах макета,
@@ -172,40 +115,45 @@
 .strip {
   position: relative;
   height: var(--plate-h);
-  overflow: hidden;
-  /* Морф плашек меняет лэйаут каждый кадр: контейнменты держат
-     перерасчёт внутри полосы — наружу (колонка, секции ниже) при
-     морфинге не выходит ничего, высота полосы зафиксирована */
+  /* Канон «клип без скролла»; pan-y оставляет вертикальный жест
+     скроллу страницы — плашки — drag-поверхность */
+  overflow: clip;
+  touch-action: pan-y;
   contain: layout paint;
 }
 
-.stripTrack {
-  position: absolute;
-  left: 0;
-  top: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--plate-gap-y);
+/* Лента плашек — второе ядро Swiper (showcase.tsx), связано с
+   фотолентой модулем Controller: драг, флик, снап, клик-в-центр —
+   библиотечные. Контейнер полосы: высота строки, клип без скролла,
+   grab-курсор drag-поверхности; кривая обёртки — та же яндексовская. */
+.plateSwiper {
   height: 100%;
-  width: max-content;
-  /* Слой (will-change: transform) вешается на время движения движком в
-     showcase.tsx (паттерн armLayers): постоянный держит слой всей ленты
-     (~15 плашек) впустую — память на дешёвых телефонах. */
+  cursor: grab;
+  touch-action: pan-y;
+  --swiper-wrapper-transition-timing-function: var(--showcase-ease);
 }
 
-.plate {
-  flex-shrink: 0;
+/* Плашка — слайд: ширина — центральный размер яруса, шаг между
+   копиями ставит ядро (отрицательный spaceBetween = зазор − 0.1·ширины,
+   inline-маржином), на покое между центральной плашкой и соседней
+   (×0.8) остаётся зазор макета. Селектор с контейнером перекрывает
+   дефолт .swiper-slide swiper.css независимо от порядка бандла. */
+.plateSwiper .plate {
   display: flex;
   align-items: center;
-  gap: calc(var(--plate-gap-side) + (var(--plate-gap) - var(--plate-gap-side)) * var(--k));
-  width: calc(var(--plate-side-w) + (var(--plate-w) - var(--plate-side-w)) * var(--k));
-  height: calc(var(--plate-side-h) + (var(--plate-h) - var(--plate-side-h)) * var(--k));
-  padding-left: calc(var(--plate-side-p) + (var(--plate-p) - var(--plate-side-p)) * var(--k));
-  padding-right: calc(var(--plate-side-pr) + (var(--plate-pr) - var(--plate-side-pr)) * var(--k));
+  gap: var(--plate-content-gap);
+  width: var(--plate-w);
+  height: 100%;
+  padding-left: var(--plate-p);
+  padding-right: var(--plate-pr);
   background: var(--surface, #f3f4f6);
   border-radius: 999px;
   cursor: pointer;
-  transition: background-color 200ms ease;
+  transform: scale(calc(0.8 + 0.2 * var(--k, 0)));
+  /* transform — движение (длительность ставит движок), фон — нажатие */
+  transition-property: transform, background-color;
+  transition-duration: 0ms, 200ms;
+  transition-timing-function: var(--showcase-ease), ease;
 }
 
 /* Hover — только для мыши: на таче :hover залипает серым до чужого тапа
@@ -223,8 +171,8 @@
 
 .plateIcon {
   flex-shrink: 0;
-  width: calc(var(--plate-side-icon) + (var(--plate-icon) - var(--plate-side-icon)) * var(--k));
-  height: calc(var(--plate-side-icon) + (var(--plate-icon) - var(--plate-side-icon)) * var(--k));
+  width: var(--plate-icon);
+  height: var(--plate-icon);
   border-radius: 999px;
   object-fit: cover;
 }
@@ -232,7 +180,7 @@
 .plateText {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--plate-text-gap-side) + (var(--plate-text-gap) - var(--plate-text-gap-side)) * var(--k));
+  gap: var(--plate-text-gap);
   flex: 1 0 0;
   min-width: 0;
 }
@@ -240,8 +188,8 @@
 .plateName {
   font-weight: 500;
   color: var(--ink, #171a1c);
-  font-size: calc(var(--plate-title-side-s) + (var(--plate-title-s) - var(--plate-title-side-s)) * var(--k));
-  line-height: calc(var(--plate-title-side-lh) + (var(--plate-title-lh) - var(--plate-title-side-lh)) * var(--k));
+  font-size: var(--plate-title-s);
+  line-height: var(--plate-title-lh);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -250,8 +198,8 @@
 .plateAddress {
   font-weight: 400;
   color: var(--gray-2, #6f787c);
-  font-size: calc(var(--plate-sub-side-s) + (var(--plate-sub-s) - var(--plate-sub-side-s)) * var(--k));
-  line-height: calc(var(--plate-sub-side-lh) + (var(--plate-sub-lh) - var(--plate-sub-side-lh)) * var(--k));
+  font-size: var(--plate-sub-s);
+  line-height: var(--plate-sub-lh);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -259,8 +207,8 @@
 
 .plateArrow {
   flex-shrink: 0;
-  width: calc(var(--plate-side-arrow) + (var(--plate-arrow) - var(--plate-side-arrow)) * var(--k));
-  height: calc(var(--plate-side-arrow) + (var(--plate-arrow) - var(--plate-side-arrow)) * var(--k));
+  width: var(--plate-arrow);
+  height: var(--plate-arrow);
 }
 
 /* ── Ряд фотокарточек ───────────────────────────────────────── */
@@ -269,56 +217,49 @@
   position: relative;
   /* Фотолента — вылезающая за колонку на всю ширину страницы
      (макет: боковые карточки уходят за края вьюпорта); колонка
-     остаётся только у заголовка, плашек и кнопки. */
+     остаётся только у заголовка, плашек и кнопки. Клип — канон
+     «клип без скролла»: у контейнера Swiper overflow из библиотечного
+     css (hidden), каноничный clip держит обёртка — селектор здесь
+     локальный и не зависит от порядка бандла. */
   left: 50%;
   width: 100vw;
   transform: translateX(-50%);
+  overflow: clip;
 }
 
-/* Окно ленты: высота зафиксирована по центральной карточке — морфинг
-   боковых размеров не двигает контент под каруселью (фикс прыжка
-   кнопки «Попробовать»). Нативного скролла нет: позицию кладёт
-   translate3d дорожки (движок в showcase.tsx). touch-action: pan-y —
-   вертикальный жест на таче остаётся скроллом страницы. */
+/* Окно ленты: высота зафиксирована по центральной карточке, морф
+   боковых (scale) лэйаут не двигает — контент под каруселью стоит на
+   месте. Контейнер Swiper: pan-y от swiper-horizontal оставляет
+   вертикальный жест странице. */
 .scroller {
   height: var(--h);
-  overflow: hidden;
   cursor: grab;
   touch-action: pan-y;
-  /* Контейнменты морфа: перерасчёт лэйаута карточек не выходит за
-     окно ленты (высота зафиксирована, клип уже был) — колонка и контент
-     под каруселью не перестраиваются в кадрах движения */
   contain: layout paint;
+  /* Кривая обёртки Swiper'а — та же яндексовская, что у слайдов */
+  --swiper-wrapper-transition-timing-function: var(--showcase-ease);
 }
 
-.track {
-  display: flex;
-  align-items: center;
-  gap: var(--gap);
-  height: 100%;
-  width: max-content;
-  /* Слой — на время движения, как у .stripTrack выше: постоянный
-     will-change держит слой всей фотоленты (~15 карточек 300px на мобиле)
-     впустую. */
-}
-
-.dragging {
-  cursor: grabbing;
-  user-select: none;
-}
-
-.slide {
+/* Слайды лежат в слотах центрального размера (ширина обязана быть
+   фиксированной — Swiper меряет её для снапа), боковые сжимаются
+   масштабом; селектор с контейнером перекрывает дефолт .swiper-slide
+   swiper.css независимо от порядка бандла */
+.scroller .slide {
   position: relative;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  width: calc(var(--side-w) + (var(--w) - var(--side-w)) * var(--k));
-  height: calc(var(--side-h) + (var(--h) - var(--side-h)) * var(--k));
-  padding: calc(var(--side-p) + (var(--p) - var(--side-p)) * var(--k));
-  border-radius: calc(var(--side-r) + (var(--r) - var(--side-r)) * var(--k));
+  width: var(--w);
+  height: 100%;
+  padding: var(--p);
+  border-radius: var(--r);
   cursor: pointer;
+  transform: scale(calc(0.8 + 0.2 * var(--k, 0)));
+  transition-property: transform;
+  transition-duration: 0ms;
+  transition-timing-function: var(--showcase-ease);
 }
 
 .slidePhoto {
@@ -334,20 +275,26 @@
 /* Нажатие по карточке-кнопке: лёгкое притухание вместо вспышки тапа
    (тач; при drag-захвате :active уходит на .scroller — на движение
    не влияет). */
-.slide:active {
+.scroller .slide:active {
   opacity: 0.92;
 }
 
-/* Стеклянная карточка характеристик */
+.dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Стеклянная карточка характеристик — центральные размеры; на боковых
+   честно сжимается масштабом, отдельной боковой арифметики больше нет */
 .card {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: calc(var(--glass-gap-side) + (var(--glass-gap) - var(--glass-gap-side)) * var(--k));
-  width: calc(var(--glass-side-w) + (var(--glass-w) - var(--glass-side-w)) * var(--k));
-  padding: calc(var(--glass-side-p) + (var(--glass-p) - var(--glass-side-p)) * var(--k));
-  border-radius: calc(var(--glass-side-r) + (var(--glass-r) - var(--glass-side-r)) * var(--k));
+  gap: var(--glass-gap);
+  width: var(--glass-w);
+  padding: var(--glass-p);
+  border-radius: var(--glass-r);
   overflow: hidden;
 }
 
@@ -355,29 +302,22 @@
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.24);
-  /* Порядок важен: Lightning CSS при минификации оставляет из пары
-     алиасов последнюю декларацию — стандартный backdrop-filter должен
-     быть последним, иначе из бандла уезжает и блюр пропадает */
-  -webkit-backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
-  backdrop-filter: blur(calc(var(--blur-side) + (var(--blur) - var(--blur-side)) * var(--k)));
+  /* Блюр постоянный: внутри scale(0.8) он и так ужимается до бокового
+     значения макета, интерполяции не нужно — и перерастеризации стекла
+     в кадрах движения больше нет (в прежнем движке её приходилось
+     замораживать классом .moving). Порядок важен: Lightning CSS при
+     минификации оставляет из пары алиасов последнюю декларацию —
+     стандартный backdrop-filter должен быть последним, иначе из бандла
+     уезжает и блюр пропадает */
+  -webkit-backdrop-filter: blur(var(--blur));
+  backdrop-filter: blur(var(--blur));
   border-radius: inherit;
 }
 
-/* В движении (драг/переход, класс ставит render() в showcase.tsx) блюр
-   стекла заморожен на покойном центральном значении: интерполяция блюра
-   перерастеризует стекло каждый кадр — самая дорогая часть морфа (в
-   Safari особенно), а ступеньку приезда глаз в движении не читает. */
-.moving .cardGlass {
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
-}
-
 /* Стекло характеристик для тех, кто просит меньше прозрачности или
-   больший контраст: почти сплошная подложка, блюр снят целиком —
-   включая motion-фриз выше (селектор .moving .cardGlass специфичнее). */
+   больший контраст: почти сплошная подложка, блюр снят целиком. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .cardGlass,
-  .moving .cardGlass {
+  .cardGlass {
     background: rgba(0, 0, 0, 0.82);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -395,15 +335,15 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: inset 0 0 0 calc(var(--ring-side) + (var(--ring) - var(--ring-side)) * var(--k)) rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 0 var(--ring) rgba(255, 255, 255, 0.32);
 }
 
 .cardName {
   position: relative;
   font-weight: 500;
   color: #fff;
-  font-size: calc(var(--title-side-s) + (var(--title-s) - var(--title-side-s)) * var(--k));
-  line-height: calc(var(--title-side-lh) + (var(--title-lh) - var(--title-side-lh)) * var(--k));
+  font-size: var(--title-s);
+  line-height: var(--title-lh);
 }
 
 .cardRows {
@@ -411,14 +351,14 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: calc(var(--rows-gap-side) + (var(--rows-gap) - var(--rows-gap-side)) * var(--k));
+  gap: var(--rows-gap);
   align-self: stretch;
 }
 
 .cardRow {
   display: flex;
   align-items: flex-start;
-  gap: calc(var(--row-gap-side) + (var(--row-gap) - var(--row-gap-side)) * var(--k));
+  gap: var(--row-gap);
   align-self: stretch;
 }
 
@@ -428,8 +368,8 @@
   min-width: 0;
   color: #fff;
   font-weight: 400;
-  font-size: calc(var(--row-side-s) + (var(--row-s) - var(--row-side-s)) * var(--k));
-  line-height: calc(var(--row-side-lh) + (var(--row-lh) - var(--row-side-lh)) * var(--k));
+  font-size: var(--row-s);
+  line-height: var(--row-lh);
 }
 
 .cardLabel {

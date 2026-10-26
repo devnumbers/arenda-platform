@@ -31,3 +31,13 @@ Screens close through `/ui-walkthrough` like the frontend. The landing stand is 
 - The standalone layout is FLAT: after a build copy `.next/static` → `.next/standalone/.next/` and `public` → `.next/standalone/`, then restart `node server.js` — a running server keeps serving 404s until restarted (symptoms: 404 on `/fonts/*.woff2` = `public` not copied; 400 "isn't a valid image" = `static` not copied).
 - Write asset files atomically; a non-atomic replace under a running dev server fails decodes with "unable to decode image data" until restart.
 - The header sits behind the feedback-modal overlay by design (`z-50`, owner decision) — do not raise it above the overlay.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
