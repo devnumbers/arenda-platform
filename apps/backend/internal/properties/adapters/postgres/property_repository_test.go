@@ -603,7 +603,7 @@ func TestPropertyRepository_ClearPhotoIfKey_Conditional(t *testing.T) {
 
 	key := "photos/" + uuid.Must(uuid.NewV7()).String() + ".jpg"
 	contentType := "image/jpeg"
-	if _, err := repo.SetPropertyPhoto(ctx, created.ID, ownerID, &key, &contentType); err != nil {
+	if _, err := repo.SetPropertyPhoto(ctx, created.ID, ownerID, &key, &contentType, nil); err != nil {
 		t.Fatalf("set photo: %v", err)
 	}
 

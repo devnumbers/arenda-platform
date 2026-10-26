@@ -50,6 +50,7 @@ func (r *ParticipantRepository) ListScopeProperties(
 			Title:     row.Title,
 			Type:      row.Type,
 			PhotoPath: row.PhotoPath,
+			PhotoBlur: row.PhotoBlur,
 		})
 	}
 	return out, nil

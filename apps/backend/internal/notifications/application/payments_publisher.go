@@ -50,8 +50,11 @@ type PaymentScanTarget struct {
 	// PropertyType is the snapshot's glyph key (карта #1217, #1244) — the
 	// payload card avatar's placeholder; PropertyPhoto is the snapshot's
 	// same-origin streaming path, '' when the object has no photo (#1275).
-	PropertyType  string
-	PropertyPhoto string
+	// PropertyPhotoBlur is the frame's ready base64 (ADR 0065 аменд,
+	// #1603), '' — кадра нет.
+	PropertyType      string
+	PropertyPhoto     string
+	PropertyPhotoBlur string
 	// Category is the rule's category snapshot (решение владельца
 	// 14.10.2026) — the payload's icon key. A live rule always carries
 	// exactly one category reference (the payments category constraint pins
@@ -409,11 +412,12 @@ func (p *PaymentsPublisher) publish(ctx context.Context, eventType domain.EventT
 		ContextLabel: target.PropertyName,
 		Payload: domain.Payload{
 			Property: &domain.EntityRef{
-				ID:      target.PropertyID,
-				Name:    target.PropertyName,
-				Address: target.PropertyAddress,
-				Type:    target.PropertyType,
-				Photo:   target.PropertyPhoto,
+				ID:        target.PropertyID,
+				Name:      target.PropertyName,
+				Address:   target.PropertyAddress,
+				Type:      target.PropertyType,
+				Photo:     target.PropertyPhoto,
+				PhotoBlur: target.PropertyPhotoBlur,
 			},
 			PaymentID:   &target.PaymentID,
 			PaymentDate: &dueDate,

@@ -111,8 +111,12 @@ func (r *searchWireRepo) ActorPins(context.Context, uuid.UUID, []uuid.UUID) (map
 	return map[uuid.UUID]time.Time{}, nil
 }
 
-func (r *searchWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
+func (r *searchWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType, blur *string) (domain.Property, error) {
 	return domain.Property{}, nil
+}
+
+func (r *searchWireRepo) SetPropertyPhotoBlurIfKey(context.Context, uuid.UUID, uuid.UUID, string, string) (int64, error) {
+	return 0, nil
 }
 
 func (r *searchWireRepo) ClearPhotoIfKey(context.Context, uuid.UUID, uuid.UUID, string) (int64, error) {

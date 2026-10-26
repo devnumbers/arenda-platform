@@ -87,6 +87,9 @@ type MemberUser struct {
 	Name     *string
 	Surname  *string
 	PhotoKey *string
+	// PhotoBlur is the profile photo's blur frame's ready base64 (ADR 0065
+	// аменд, #1603); nil — кадра нет.
+	PhotoBlur *string
 }
 
 // UserLookup resolves registered users by id for member display.

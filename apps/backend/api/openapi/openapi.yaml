@@ -5859,6 +5859,15 @@ components:
             photo is a new URL — the browser never serves previous bytes),
             served with the session cookie; null when the profile has no
             photo. Only the owner reads it.
+        photoBlur:
+          type: string
+          nullable: true
+          description: >
+            The profile photo's inline blur placeholder (ADR 0065 аменд,
+            решение #1594, #1603): a 16px opaque jpeg as ready base64, painted
+            over the placeholder while photoUrl loads; null when the photo has
+            no frame (webp, a within-16px image, a pre-blur photo not yet
+            materialized).
         subscription:
           $ref: '#/components/schemas/Subscription'
           nullable: true
@@ -6925,6 +6934,15 @@ components:
             owner has no photo or the resolution failed; present in the
             detail response and on the shared list rows.
 
+        owner_photo_blur:
+          type: string
+          nullable: true
+          description: >
+            The owner photo's inline blur placeholder (ADR 0065 аменд,
+            решение #1594, #1603): a 16px opaque jpeg as ready base64; null
+            when the photo has no frame (webp, a within-16px image, a
+            pre-blur photo not yet materialized — the frame writes back on
+            the next photo read).
     PropertyResponse:
       type: object
       required: [id, name, type, address, status, attributes, created_at, updated_at, pinned_at]
@@ -6954,6 +6972,15 @@ components:
             The property photo's same-origin streaming path (ADR 0065):
             /api/properties/{id}/photo, served with the session cookie;
             null when the object has no photo.
+        photo_blur:
+          type: string
+          nullable: true
+          description: >
+            The photo's inline blur placeholder (ADR 0065 аменд, решение
+            #1594, #1603): a 16px opaque jpeg as ready base64, painted over
+            the placeholder while the photo loads; null when the photo has
+            no frame (webp, a within-16px image, a pre-blur photo not yet
+            materialized).
         created_at:
           type: string
           format: date-time
@@ -7130,6 +7157,15 @@ components:
             /api/contacts/{id}/photo with the key's cache version as ?v=
             (a replaced photo is a new URL), served with the session
             cookie; null when the card has no photo.
+        photoBlur:
+          type: string
+          nullable: true
+          description: >
+            The card photo's inline blur placeholder (ADR 0065 аменд,
+            решение #1594, #1603): a 16px opaque jpeg as ready base64,
+            painted over the placeholder while photoUrl loads; null when
+            the photo has no frame (webp, a within-16px image, a pre-blur
+            photo not yet materialized).
         firstName:
           type: string
         lastName:
@@ -7950,6 +7986,15 @@ components:
             photos (ADR 0065) one image per object, streamed by the backend,
             the key's cache version riding as ?v=; null when the object has
             no photo.
+        photoBlur:
+          type: string
+          nullable: true
+          description: >
+            The card avatar's inline blur placeholder (ADR 0065 аменд,
+            решение #1594, #1603): a 16px opaque jpeg as ready base64, painted
+            over the placeholder while photoUrl loads; null when the photo
+            has no frame (webp, a within-16px image, a pre-blur photo not yet
+            materialized).
         autoPayRules:
           type: array
           description: The «Автоплатежи» group — the object's auto-pay rules.
@@ -8408,6 +8453,15 @@ components:
             or a user without a photo; a suspended member's path answers 404
             (suspended access sees nothing) and the client falls back to the
             placeholder.
+        photo_blur:
+          type: string
+          nullable: true
+          description: >
+            The photo's inline blur placeholder (ADR 0065 аменд, решение
+            #1594, #1603): a 16px opaque jpeg as ready base64, painted over
+            the placeholder while the photo loads; null when the photo has
+            no frame (webp, a within-16px image, a pre-blur photo not yet
+            materialized).
         status:
           type: string
           enum: [active, suspended, pending]
@@ -8513,6 +8567,15 @@ components:
             readable while the reader shares a readable property with the
             user; a revoked access answers 404 and the client falls back to
             the placeholder. Null for a pending row or a user without a photo.
+        photo_blur:
+          type: string
+          nullable: true
+          description: >
+            The photo's inline blur placeholder (ADR 0065 аменд, решение
+            #1594, #1603): a 16px opaque jpeg as ready base64, painted over
+            the placeholder while the photo loads; null when the photo has
+            no frame (webp, a within-16px image, a pre-blur photo not yet
+            materialized).
         aggregate_status:
           type: string
           enum: [all_properties, partial, limit_exceeded]
@@ -8561,6 +8624,15 @@ components:
             is self-sufficient — the client needs no /properties join for
             the avatar (остаток #1244 п.3, решение #1286).
 
+        photo_blur:
+          type: string
+          nullable: true
+          description: >
+            The photo's inline blur placeholder (ADR 0065 аменд, решение
+            #1594, #1603): a 16px opaque jpeg as ready base64, painted over
+            the placeholder while the photo loads; null when the photo has
+            no frame (webp, a within-16px image, a pre-blur photo not yet
+            materialized).
     PropertyAccessMemberUpdateRequest:
       type: object
       required: [role]
@@ -9103,6 +9175,14 @@ components:
             запись обезличена. Чтение эндпоинта регулируется связью по общему
             объекту: у отозванного участника путь отвечает 404, строка
             откатывается на заглушку.
+        actor_photo_blur:
+          type: string
+          nullable: true
+          description: >
+            Blur-кадр аватара актёра (ADR 0065 аменд, решение #1594, #1603):
+            непрозрачный jpeg 16px готовым base64, рисуется поверх заглушки,
+            пока грузится actor_photo_url; null — кадра нет (webp, кадр в
+            пределах 16px, старое фото до ленивой материализации).
         actor_role:
           type: string
           enum: [owner, full_access, viewer]
@@ -9235,6 +9315,15 @@ components:
             (ADR 0065, решение #1286), живой на чтение; null — фото нет.
             Отозванный участник остаётся опцией фильтра: его путь отвечает
             404, строка откатывается на заглушку.
+        photo_blur:
+          type: string
+          nullable: true
+          description: >
+            The photo's inline blur placeholder (ADR 0065 аменд, решение
+            #1594, #1603): a 16px opaque jpeg as ready base64, painted over
+            the placeholder while the photo loads; null when the photo has
+            no frame (webp, a within-16px image, a pre-blur photo not yet
+            materialized).
         role:
           type: string
           enum: [owner, full_access, viewer]
@@ -9266,6 +9355,15 @@ components:
         photo_url:
           type: string
           description: URL первого по времени фото; '' — фото нет.
+        photo_blur:
+          type: string
+          nullable: true
+          description: >
+            The photo's inline blur placeholder (ADR 0065 аменд, решение
+            #1594, #1603): a 16px opaque jpeg as ready base64, painted over
+            the placeholder while the photo loads; null when the photo has
+            no frame (webp, a within-16px image, a pre-blur photo not yet
+            materialized).
         type:
           $ref: '#/components/schemas/PropertyType'
 

@@ -83,6 +83,7 @@ type userRow struct {
 	Timezone         string
 	PhotoKey         pgtype.Text
 	PhotoContentType pgtype.Text
+	PhotoBlur        pgtype.Text
 }
 
 // userSourceFromUser adapts a pgen.User model row.
@@ -100,6 +101,7 @@ func (s userSourceFromUser) toUserRow() userRow {
 		Timezone:         s.Timezone,
 		PhotoKey:         s.PhotoKey,
 		PhotoContentType: s.PhotoContentType,
+		PhotoBlur:        s.PhotoBlur,
 	}
 }
 

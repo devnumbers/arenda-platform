@@ -16,6 +16,7 @@ const clearUserPhotoIfKey = `-- name: ClearUserPhotoIfKey :execrows
 UPDATE users
 SET photo_key = NULL,
     photo_content_type = NULL,
+    photo_blur = NULL,
     updated_at = now()
 WHERE id = $1 AND photo_key = $2
 `
@@ -633,7 +634,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, arg GetSessionByTok
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE LOWER(email) = LOWER($1::text)
+SELECT id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type, photo_blur FROM users WHERE LOWER(email) = LOWER($1::text)
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, error) {
@@ -652,12 +653,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (User, er
 		&i.Timezone,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
 
 const getUserByEmailForUpdate = `-- name: GetUserByEmailForUpdate :one
-SELECT id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE
+SELECT id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type, photo_blur FROM users WHERE LOWER(email) = LOWER($1::text) FOR UPDATE
 `
 
 func (q *Queries) GetUserByEmailForUpdate(ctx context.Context, dollar_1 string) (User, error) {
@@ -676,12 +678,13 @@ func (q *Queries) GetUserByEmailForUpdate(ctx context.Context, dollar_1 string) 
 		&i.Timezone,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE id = $1
+SELECT id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type, photo_blur FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -700,12 +703,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.Timezone,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
 
 const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
-SELECT id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type FROM users WHERE id = $1 FOR UPDATE
+SELECT id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type, photo_blur FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -724,6 +728,7 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (Use
 		&i.Timezone,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
@@ -901,7 +906,7 @@ func (q *Queries) ListSessionsByUserID(ctx context.Context, arg ListSessionsByUs
 }
 
 const listUsersAdmin = `-- name: ListUsersAdmin :many
-SELECT u.id, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.email_verified_at, u.timezone, u.photo_key, u.photo_content_type, us.status AS subscription_status
+SELECT u.id, u.role, u.name, u.surname, u.patronymic, u.email, u.created_at, u.updated_at, u.email_verified_at, u.timezone, u.photo_key, u.photo_content_type, u.photo_blur, us.status AS subscription_status
 FROM users u
 LEFT JOIN user_subscriptions us ON us.user_id = u.id
 WHERE ($1::text = '' OR LOWER(u.email) LIKE LOWER('%' || $1 || '%'))
@@ -940,6 +945,7 @@ type ListUsersAdminRow struct {
 	Timezone           string             `json:"timezone"`
 	PhotoKey           pgtype.Text        `json:"photo_key"`
 	PhotoContentType   pgtype.Text        `json:"photo_content_type"`
+	PhotoBlur          pgtype.Text        `json:"photo_blur"`
 	SubscriptionStatus pgtype.Text        `json:"subscription_status"`
 }
 
@@ -973,6 +979,7 @@ func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) 
 			&i.Timezone,
 			&i.PhotoKey,
 			&i.PhotoContentType,
+			&i.PhotoBlur,
 			&i.SubscriptionStatus,
 		); err != nil {
 			return nil, err
@@ -1074,22 +1081,30 @@ const setUserPhoto = `-- name: SetUserPhoto :one
 UPDATE users
 SET photo_key = $2,
     photo_content_type = $3,
+    photo_blur = $4,
     updated_at = now()
 WHERE id = $1
-RETURNING id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type
+RETURNING id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type, photo_blur
 `
 
 type SetUserPhotoParams struct {
 	ID               pgtype.UUID `json:"id"`
 	PhotoKey         pgtype.Text `json:"photo_key"`
 	PhotoContentType pgtype.Text `json:"photo_content_type"`
+	PhotoBlur        pgtype.Text `json:"photo_blur"`
 }
 
-// The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
-// content type move together; a NULL key clears the photo. Existence and the
+// The profile photo write (ADR 0065, ticket #1227): the key, the sniffed
+// content type and the blur frame's base64 (решение #1594, #1603) move
+// together; a NULL key clears the photo and its frame. Existence and the
 // self-only access are proven by the caller under the row lock.
 func (q *Queries) SetUserPhoto(ctx context.Context, arg SetUserPhotoParams) (User, error) {
-	row := q.db.QueryRow(ctx, setUserPhoto, arg.ID, arg.PhotoKey, arg.PhotoContentType)
+	row := q.db.QueryRow(ctx, setUserPhoto,
+		arg.ID,
+		arg.PhotoKey,
+		arg.PhotoContentType,
+		arg.PhotoBlur,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -1104,8 +1119,34 @@ func (q *Queries) SetUserPhoto(ctx context.Context, arg SetUserPhotoParams) (Use
 		&i.Timezone,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
+}
+
+const setUserPhotoBlurIfKey = `-- name: SetUserPhotoBlurIfKey :execrows
+UPDATE users
+SET photo_blur = $3
+WHERE id = $1 AND photo_key = $2
+`
+
+type SetUserPhotoBlurIfKeyParams struct {
+	ID        pgtype.UUID `json:"id"`
+	PhotoKey  pgtype.Text `json:"photo_key"`
+	PhotoBlur pgtype.Text `json:"photo_blur"`
+}
+
+// The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+// from this request's decode lands only while the row still advertises the
+// key it was computed from — a concurrent re-upload wins, the fresh photo
+// carries its own blur. 0 affected rows is the race verdict; the write is
+// best-effort on the caller's side.
+func (q *Queries) SetUserPhotoBlurIfKey(ctx context.Context, arg SetUserPhotoBlurIfKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserPhotoBlurIfKey, arg.ID, arg.PhotoKey, arg.PhotoBlur)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const touchSession = `-- name: TouchSession :exec
@@ -1160,7 +1201,7 @@ SET name = $2,
     timezone = $7,
     updated_at = now()
 WHERE id = $1
-RETURNING id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type
+RETURNING id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type, photo_blur
 `
 
 type UpdateUserParams struct {
@@ -1197,6 +1238,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.Timezone,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
@@ -1207,7 +1249,7 @@ SET email = $2,
     email_verified_at = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type
+RETURNING id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type, photo_blur
 `
 
 type UpdateUserEmailVerifiedParams struct {
@@ -1232,6 +1274,7 @@ func (q *Queries) UpdateUserEmailVerified(ctx context.Context, arg UpdateUserEma
 		&i.Timezone,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
@@ -1241,7 +1284,7 @@ UPDATE users
 SET email_verified_at = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type
+RETURNING id, role, name, surname, patronymic, email, created_at, updated_at, email_verified_at, timezone, photo_key, photo_content_type, photo_blur
 `
 
 type UpdateUserEmailVerifiedAtParams struct {
@@ -1265,6 +1308,7 @@ func (q *Queries) UpdateUserEmailVerifiedAt(ctx context.Context, arg UpdateUserE
 		&i.Timezone,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }

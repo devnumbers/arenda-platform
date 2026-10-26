@@ -210,16 +210,28 @@ SELECT COUNT(*) FROM contacts
 WHERE property_id = $1;
 
 -- name: SetContactPhoto :one
--- The card photo write (ADR 0065, ticket #1227): the key and the sniffed
--- content type move together; a NULL key clears the photo. The full-row
+-- The card photo write (ADR 0065, ticket #1227): the key, the sniffed
+-- content type and the blur frame's base64 (решение #1594, #1603) move
+-- together; a NULL key clears the photo and its frame. The full-row
 -- rewrite of the editable fields is untouched — the photo is not an
 -- UpdateContact field. Existence and the edit capability are proven by the
 -- caller; the scope is the book owner (ADR 0028).
 UPDATE contacts
 SET photo_key = $3,
-    photo_content_type = $4
+    photo_content_type = $4,
+    photo_blur = $5
 WHERE id = $1 AND owner_id = $2
 RETURNING *;
+
+-- name: SetContactPhotoBlurIfKey :execrows
+-- The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+-- from this request's decode lands only while the row still advertises the
+-- key it was computed from — a concurrent re-upload wins, the fresh photo
+-- carries its own blur. 0 affected rows is the race verdict; the write is
+-- best-effort on the caller's side.
+UPDATE contacts
+SET photo_blur = $4
+WHERE id = $1 AND owner_id = $2 AND photo_key = $3;
 
 -- name: ClearContactPhotoIfKey :execrows
 -- The dangling-card-photo self-heal (ADR 0065): the storage no longer has
@@ -231,5 +243,6 @@ RETURNING *;
 -- already decided the 404 when it calls this.
 UPDATE contacts
 SET photo_key = NULL,
-    photo_content_type = NULL
+    photo_content_type = NULL,
+    photo_blur = NULL
 WHERE id = $1 AND owner_id = $2 AND photo_key = $3;

@@ -48,15 +48,23 @@ type UserRepository interface {
 	// confirms the current address, #721).
 	MarkEmailVerified(ctx context.Context, id uuid.UUID, verifiedAt time.Time) (domain.User, error)
 	// SetPhoto writes the profile photo columns in one UPDATE (ADR 0065): a
-	// key and the sniffed content type, or nils to clear. Existence and the
-	// self-only access are proven by the caller under the row lock.
-	SetPhoto(ctx context.Context, id uuid.UUID, key, contentType *string) (domain.User, error)
+	// key, the sniffed content type and the blur-up frame's base64 (решение
+	// #1594, тикет #1603; nil blur — no frame), or nils to clear. Existence
+	// and the self-only access are proven by the caller under the row lock.
+	SetPhoto(ctx context.Context, id uuid.UUID, key, contentType, blur *string) (domain.User, error)
 	// ClearPhotoIfKey repairs a dangling photo (ADR 0065): the storage has
 	// lost the advertised object, so the columns are cleared — but only
 	// while they still advertise the given key: a concurrent re-upload (a
 	// fresh key under the row lock) wins. The affected-row count is the
 	// race verdict.
 	ClearPhotoIfKey(ctx context.Context, id uuid.UUID, key string) (int64, error)
+	// SetPhotoBlurIfKey lands the lazily materialized blur frame (тикет
+	// #1603): the frame computed from this request's decode is written only
+	// while the row still advertises the key the frame was computed from —
+	// a concurrent re-upload wins, the fresh photo carries its own blur.
+	// The affected-row count is the race verdict; the write is best-effort
+	// on the caller's side.
+	SetPhotoBlurIfKey(ctx context.Context, id uuid.UUID, key, blur string) (int64, error)
 	WithTx(tx transaction.Tx) (UserRepository, error)
 }
 

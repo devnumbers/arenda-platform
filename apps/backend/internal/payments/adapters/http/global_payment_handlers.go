@@ -304,6 +304,7 @@ func paymentObjectsGlobalResponse(cards []application.GlobalPaymentObjectCard) o
 			Type:         openapi.PropertyType(card.Type),
 			PinnedAt:     card.PinnedAt,
 			PhotoUrl:     card.PhotoURL,
+			PhotoBlur:    card.PhotoBlur,
 			AutoPayRules: paymentObjectKeys(card.AutoPayKeys),
 			OtherRules:   paymentObjectKeys(card.OtherKeys),
 		})

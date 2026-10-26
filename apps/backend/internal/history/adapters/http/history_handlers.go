@@ -175,14 +175,21 @@ func (h *HistoryHandlers) GetHistoryFilters(w http.ResponseWriter, r *http.Reque
 			// '' (фото нет) → null: контракт nullable (ADR 0065), пустая
 			// строка на проводе глушит фолбэк заглушки клиента.
 			PhotoUrl: httpsupport.StringPtr(p.PhotoURL),
-			IsOwner:  p.IsOwner,
-			Role:     openapi.HistoryParticipantRole(p.Role),
-			Status:   openapi.HistoryParticipantStatus(p.Status),
+			// '' (кадра нет) → null: тот же контракт nullable, что у
+			// photoUrl (ADR 0065 аменд, #1603).
+			PhotoBlur: httpsupport.StringPtr(p.PhotoBlur),
+			IsOwner:   p.IsOwner,
+			Role:      openapi.HistoryParticipantRole(p.Role),
+			Status:    openapi.HistoryParticipantStatus(p.Status),
 		}
 	}
 	objects := make([]openapi.HistoryObject, len(options.Objects))
 	for i, o := range options.Objects {
-		objects[i] = openapi.HistoryObject{Id: o.ID, Name: o.Name, Address: o.Address, PhotoUrl: o.PhotoURL, Type: openapi.PropertyType(o.Type)}
+		objects[i] = openapi.HistoryObject{
+			Id: o.ID, Name: o.Name, Address: o.Address,
+			PhotoUrl: o.PhotoURL, PhotoBlur: httpsupport.StringPtr(o.PhotoBlur),
+			Type: openapi.PropertyType(o.Type),
+		}
 	}
 	httpsupport.WriteJSON(r.Context(), w, http.StatusOK, openapi.HistoryFiltersResponse{
 		Participants: participants,
@@ -244,13 +251,16 @@ func historyPageResponse(page historyapp.FeedPage) openapi.HistoryPageResponse {
 			// '' (фото нет) → null: контракт nullable (ADR 0065), пустая
 			// строка на проводе глушит фолбэк заглушки клиента.
 			ActorPhotoUrl: httpsupport.StringPtr(entry.ActorPhotoURL),
-			ActorRole:     openapi.HistoryItemActorRole(entry.ActorRole),
-			Kind:          openapi.HistoryItemKind(entry.Kind),
-			Action:        string(entry.Action),
-			BaseAction:    openapi.HistoryItemBaseAction(entry.BaseAction),
-			Segments:      segments,
-			Context:       entry.Context,
-			CreatedAt:     entry.CreatedAt,
+			// '' (кадра нет) → null: тот же контракт nullable, что у
+			// actor_photo_url (ADR 0065 аменд, #1603).
+			ActorPhotoBlur: httpsupport.StringPtr(entry.ActorPhotoBlur),
+			ActorRole:      openapi.HistoryItemActorRole(entry.ActorRole),
+			Kind:           openapi.HistoryItemKind(entry.Kind),
+			Action:         string(entry.Action),
+			BaseAction:     openapi.HistoryItemBaseAction(entry.BaseAction),
+			Segments:       segments,
+			Context:        entry.Context,
+			CreatedAt:      entry.CreatedAt,
 		}
 		// Легаси-строки (details NULL) уходят без поля — «не пишется», а не
 		// пустой массив (решение #1317 §2).

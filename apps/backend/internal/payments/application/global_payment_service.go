@@ -113,8 +113,11 @@ type GlobalPaymentObjectCard struct {
 	// then; the objects read orders the pinned first.
 	PinnedAt *time.Time
 	// PhotoURL is the card avatar's photo — the object's first (oldest) one
-	// (ticket #582); nil when the object has no photos.
-	PhotoURL *string
+	// (ticket #582); nil when the object has no photos. PhotoBlur is the
+	// avatar's blur frame's ready base64 (ADR 0065 аменд, #1603); nil when
+	// the photo has no frame.
+	PhotoURL  *string
+	PhotoBlur *string
 	// Type is the property's type — the avatar placeholder glyph's key
 	// (карта #1217, #1244).
 	Type        string
@@ -341,6 +344,7 @@ func (s *GlobalPaymentService) ListGlobalPaymentObjects(
 			Type:        object.Type,
 			PinnedAt:    object.PinnedAt,
 			PhotoURL:    object.PhotoURL,
+			PhotoBlur:   object.PhotoBlur,
 			AutoPayKeys: []GlobalPaymentObjectKey{},
 			OtherKeys:   []GlobalPaymentObjectKey{},
 		}

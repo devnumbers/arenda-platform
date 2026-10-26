@@ -136,8 +136,13 @@ type Property struct {
 	// header.
 	PhotoKey         *string
 	PhotoContentType *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// PhotoBlur is the blur-up frame's ready base64 (ADR 0065 аменд,
+	// решение #1594, тикет #1603); nil — штатное состояние: webp кадра не
+	// даёт, кадр в пределах 16px сам себе blur, старое фото ждёт ленивой
+	// материализации на выдаче фото.
+	PhotoBlur *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 	// AccessRole is the role of the requesting actor on this property
 	// (issue T11): RoleOwner for own properties, the membership role for
 	// shared ones. Empty when not populated (internal use). Filled by the
@@ -176,6 +181,9 @@ type Property struct {
 	// решение #1286), filled like OwnerName — by the detail read and the
 	// shared list rows; empty otherwise (no photo, resolver failure).
 	OwnerPhotoURL string
+	// OwnerPhotoBlur is the owner avatar's blur frame's ready base64 (ADR
+	// 0065 аменд, #1603), filled like OwnerPhotoURL; '' — кадра нет.
+	OwnerPhotoBlur string
 }
 
 var (

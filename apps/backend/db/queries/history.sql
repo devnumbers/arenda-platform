@@ -63,6 +63,7 @@ SELECT aj.id,
                      THEN '/api/users/' || aj.actor_id::text || '/photo'
                      || '?v=' || left(encode(sha256(u.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS actor_photo_url,
+       COALESCE(u.photo_blur, '')::text AS actor_photo_blur,
        aj.kind,
        aj.action,
        aj.base_action,
@@ -138,6 +139,7 @@ SELECT aj.id,
                      THEN '/api/users/' || aj.actor_id::text || '/photo'
                      || '?v=' || left(encode(sha256(u.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS actor_photo_url,
+       COALESCE(u.photo_blur, '')::text AS actor_photo_blur,
        aj.kind,
        aj.action,
        aj.base_action,
@@ -252,6 +254,7 @@ SELECT u.id, u.name, u.surname, u.email,
                      THEN '/api/users/' || u.id::text || '/photo'
                      || '?v=' || left(encode(sha256(u.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS photo_path,
+       COALESCE(u.photo_blur, '')::text AS photo_blur,
        COALESCE(u.name, '') AS first_name,
        bool_or(s.is_owner) AS is_owner,
        CASE WHEN bool_or(s.is_owner) THEN 'owner'
@@ -281,7 +284,8 @@ SELECT p.id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
-                     END, '')::text AS photo_url
+                     END, '')::text AS photo_url,
+       COALESCE(p.photo_blur, '')::text AS photo_blur
 FROM properties p
 WHERE CASE WHEN sqlc.arg('property_ids')::text = ''
            THEN p.owner_id = sqlc.arg('actor')::uuid

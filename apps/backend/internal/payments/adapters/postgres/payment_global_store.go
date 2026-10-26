@@ -268,6 +268,13 @@ func (s *GlobalPaymentStore) ListGlobalPaymentObjects(
 			url := row.PhotoUrl
 			photoURL = &url
 		}
+		// The blur frame rides the same row (ADR 0065 аменд, #1603): '' — no
+		// frame, the port speaks nil.
+		var photoBlur *string
+		if row.PhotoBlur != "" {
+			blur := row.PhotoBlur
+			photoBlur = &blur
+		}
 		out = append(out, application.GlobalPaymentObject{
 			PropertyID: pgconv.UUIDFromPgtype(row.ID),
 			Name:       row.Name,
@@ -275,6 +282,7 @@ func (s *GlobalPaymentStore) ListGlobalPaymentObjects(
 			Type:       row.Type,
 			PinnedAt:   pgconv.TimestamptzToPtrTime(row.PinnedAt),
 			PhotoURL:   photoURL,
+			PhotoBlur:  photoBlur,
 		})
 	}
 	return out, nil

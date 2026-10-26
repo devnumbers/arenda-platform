@@ -627,7 +627,7 @@ func TestProcess_PNGThumbIsJPEG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("thumb does not decode: %v", err)
 	}
-	if format != "jpeg" || max(cfg.Width, cfg.Height) != ThumbMaxEdge {
+	if format != testThumbFormat || max(cfg.Width, cfg.Height) != ThumbMaxEdge {
 		t.Fatalf("thumb = %s %dx%d, want %s capped at %d", format, cfg.Width, cfg.Height, testThumbFormat, ThumbMaxEdge)
 	}
 }

@@ -46,7 +46,7 @@ func TestContactService_OpenContactPhoto_HealsDanglingKey(t *testing.T) {
 	key := "photos/" + uuid.Must(uuid.NewV7()).String() + ".jpg"
 	contentType := photo.ContentTypeJPEG
 	require.NoError(t, photos.Put(context.Background(), key, strings.NewReader("jpeg-bytes"), contentType, 10))
-	_, err = h.contacts.SetPhoto(context.Background(), created.ID, h.owner, &key, &contentType)
+	_, err = h.contacts.SetPhoto(context.Background(), created.ID, h.owner, &key, &contentType, nil)
 	require.NoError(t, err, "seed photo")
 
 	// The object vanishes behind the backend's back.
@@ -155,7 +155,7 @@ func TestContactService_MaterializesThumbLazily(t *testing.T) {
 	contentType := photo.ContentTypeJPEG
 	full := realContactJPEG(t, 1200, 900)
 	require.NoError(t, photos.Put(context.Background(), key, bytes.NewReader(full), contentType, int64(len(full))))
-	_, err = h.contacts.SetPhoto(context.Background(), created.ID, h.owner, &key, &contentType)
+	_, err = h.contacts.SetPhoto(context.Background(), created.ID, h.owner, &key, &contentType, nil)
 	require.NoError(t, err, "seed photo")
 
 	body, _, servedType, servedKey, err := h.svc.OpenContactPhoto(context.Background(), h.owner, created.ID, true)
@@ -186,7 +186,7 @@ func TestContactService_WebPFallsBackToFull(t *testing.T) {
 	key := "photos/" + uuid.Must(uuid.NewV7()).String() + ".webp"
 	contentType := photo.ContentTypeWebP
 	require.NoError(t, photos.Put(context.Background(), key, strings.NewReader("webp-bytes"), contentType, 10))
-	_, err = h.contacts.SetPhoto(context.Background(), created.ID, h.owner, &key, &contentType)
+	_, err = h.contacts.SetPhoto(context.Background(), created.ID, h.owner, &key, &contentType, nil)
 	require.NoError(t, err, "seed photo")
 
 	body, _, _, servedKey, err := h.svc.OpenContactPhoto(context.Background(), h.owner, created.ID, true)
@@ -211,7 +211,7 @@ func TestContactService_HealRemovesStrayThumbToo(t *testing.T) {
 
 	key := "photos/" + uuid.Must(uuid.NewV7()).String() + ".jpg"
 	contentType := photo.ContentTypeJPEG
-	_, err = h.contacts.SetPhoto(context.Background(), created.ID, h.owner, &key, &contentType)
+	_, err = h.contacts.SetPhoto(context.Background(), created.ID, h.owner, &key, &contentType, nil)
 	require.NoError(t, err, "seed photo")
 
 	// The main object is gone, its thumb lingers: the heal takes both.

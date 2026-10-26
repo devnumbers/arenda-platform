@@ -119,15 +119,29 @@ func (s *fakeContactStore) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (
 	return s.GetByID(ctx, id)
 }
 
-func (s *fakeContactStore) SetPhoto(_ context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error) {
+func (s *fakeContactStore) SetPhoto(_ context.Context, id, ownerID uuid.UUID, key, contentType, blur *string) (domain.Contact, error) {
 	c, ok := s.byID[id]
 	if !ok || c.OwnerID != ownerID {
 		return domain.Contact{}, ErrNotFound
 	}
 	c.PhotoKey = key
 	c.PhotoContentType = contentType
+	c.PhotoBlur = blur
 	s.byID[id] = c
 	return c, nil
+}
+
+// SetPhotoBlurIfKey mirrors the conditional UPDATE of the lazy blur
+// materialization: the frame lands only while the row still advertises the
+// key it was computed from.
+func (s *fakeContactStore) SetPhotoBlurIfKey(_ context.Context, id, ownerID uuid.UUID, key, blur string) (int64, error) {
+	c, ok := s.byID[id]
+	if !ok || c.OwnerID != ownerID || c.PhotoKey == nil || *c.PhotoKey != key {
+		return 0, nil
+	}
+	c.PhotoBlur = &blur
+	s.byID[id] = c
+	return 1, nil
 }
 
 // ClearPhotoIfKey mirrors the conditional UPDATE: only the still-advertised

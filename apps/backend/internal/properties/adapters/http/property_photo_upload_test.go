@@ -90,10 +90,15 @@ func (r *photoWireRepo) ActorPins(context.Context, uuid.UUID, []uuid.UUID) (map[
 	return map[uuid.UUID]time.Time{}, nil
 }
 
-func (r *photoWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
+func (r *photoWireRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType, blur *string) (domain.Property, error) {
 	r.property.PhotoKey = key
 	r.property.PhotoContentType = contentType
+	r.property.PhotoBlur = blur
 	return r.property, nil
+}
+
+func (r *photoWireRepo) SetPropertyPhotoBlurIfKey(context.Context, uuid.UUID, uuid.UUID, string, string) (int64, error) {
+	return 0, nil
 }
 
 func (r *photoWireRepo) ClearPhotoIfKey(context.Context, uuid.UUID, uuid.UUID, string) (int64, error) {

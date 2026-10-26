@@ -72,15 +72,33 @@ func newLockingFakePropertyRepo(properties ...domain.Property) *lockingFakePrope
 	}
 }
 
-func (r *lockingFakePropertyRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
+func (r *lockingFakePropertyRepo) SetPropertyPhoto(
+	_ context.Context, id, _ uuid.UUID, key, contentType, blur *string,
+) (domain.Property, error) {
 	p, ok := r.data[id]
 	if !ok {
 		return domain.Property{}, ErrNotFound
 	}
 	p.PhotoKey = key
 	p.PhotoContentType = contentType
+	p.PhotoBlur = blur
 	r.data[id] = p
 	return p, nil
+}
+
+// SetPropertyPhotoBlurIfKey mirrors the conditional UPDATE of the lazy blur
+// materialization: the frame lands only while the row still advertises the
+// key it was computed from.
+func (r *lockingFakePropertyRepo) SetPropertyPhotoBlurIfKey(
+	_ context.Context, id, _ uuid.UUID, key, blur string,
+) (int64, error) {
+	p, ok := r.data[id]
+	if !ok || p.PhotoKey == nil || *p.PhotoKey != key {
+		return 0, nil
+	}
+	p.PhotoBlur = &blur
+	r.data[id] = p
+	return 1, nil
 }
 
 // ClearPhotoIfKey mirrors the conditional UPDATE: only the still-advertised
@@ -512,6 +530,7 @@ var _ SubscriptionLimiter = fakeSubscriptionLimiter{}
 type fakePropertyPhotoStorage struct {
 	mu      sync.Mutex
 	objects map[string][]byte
+	types   map[string]string
 	puts    []string
 	deletes []string
 	putErr  error
@@ -521,7 +540,7 @@ func newFakePropertyPhotoStorage() *fakePropertyPhotoStorage {
 	return &fakePropertyPhotoStorage{objects: make(map[string][]byte)}
 }
 
-func (s *fakePropertyPhotoStorage) Put(_ context.Context, key string, data io.Reader, _ string, _ int64) error {
+func (s *fakePropertyPhotoStorage) Put(_ context.Context, key string, data io.Reader, contentType string, _ int64) error {
 	if s.putErr != nil {
 		return s.putErr
 	}
@@ -535,6 +554,10 @@ func (s *fakePropertyPhotoStorage) Put(_ context.Context, key string, data io.Re
 		s.objects = make(map[string][]byte)
 	}
 	s.objects[key] = b
+	if s.types == nil {
+		s.types = make(map[string]string)
+	}
+	s.types[key] = contentType
 	s.puts = append(s.puts, key)
 	return nil
 }
@@ -545,6 +568,11 @@ func (s *fakePropertyPhotoStorage) Open(_ context.Context, key string) (body io.
 	b, ok := s.objects[key]
 	if !ok {
 		return nil, 0, "", storageshared.ErrNotFound
+	}
+	// The stored content type comes back: the serve branches on it (the
+	// thumb fallback, the blur frame's possibility).
+	if ct := s.types[key]; ct != "" {
+		return io.NopCloser(bytes.NewReader(b)), int64(len(b)), ct, nil
 	}
 	return io.NopCloser(bytes.NewReader(b)), int64(len(b)), "image/jpeg", nil
 }
@@ -731,15 +759,33 @@ func (r *fakePropertyRepo) ActorPins(_ context.Context, actor uuid.UUID, propert
 	return out, nil
 }
 
-func (r *fakePropertyRepo) SetPropertyPhoto(_ context.Context, id, _ uuid.UUID, key, contentType *string) (domain.Property, error) {
+func (r *fakePropertyRepo) SetPropertyPhoto(
+	_ context.Context, id, _ uuid.UUID, key, contentType, blur *string,
+) (domain.Property, error) {
 	p, ok := r.data[id]
 	if !ok {
 		return domain.Property{}, ErrNotFound
 	}
 	p.PhotoKey = key
 	p.PhotoContentType = contentType
+	p.PhotoBlur = blur
 	r.data[id] = p
 	return p, nil
+}
+
+// SetPropertyPhotoBlurIfKey mirrors the conditional UPDATE of the lazy blur
+// materialization: the frame lands only while the row still advertises the
+// key it was computed from.
+func (r *fakePropertyRepo) SetPropertyPhotoBlurIfKey(
+	_ context.Context, id, _ uuid.UUID, key, blur string,
+) (int64, error) {
+	p, ok := r.data[id]
+	if !ok || p.PhotoKey == nil || *p.PhotoKey != key {
+		return 0, nil
+	}
+	p.PhotoBlur = &blur
+	r.data[id] = p
+	return 1, nil
 }
 
 // ClearPhotoIfKey is the conditional clear the dangling-photo heal calls:

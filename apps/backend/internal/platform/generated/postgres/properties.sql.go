@@ -73,7 +73,7 @@ func (q *Queries) ActorPins(ctx context.Context, arg ActorPinsParams) ([]ActorPi
 const archiveProperty = `-- name: ArchiveProperty :one
 UPDATE properties SET status = 'archived'
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type, photo_blur
 `
 
 type ArchivePropertyParams struct {
@@ -101,6 +101,7 @@ func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
@@ -108,7 +109,8 @@ func (q *Queries) ArchiveProperty(ctx context.Context, arg ArchivePropertyParams
 const clearPropertyPhotoIfKey = `-- name: ClearPropertyPhotoIfKey :execrows
 UPDATE properties
 SET photo_key = NULL,
-    photo_content_type = NULL
+    photo_content_type = NULL,
+    photo_blur = NULL
 WHERE id = $1 AND owner_id = $2 AND photo_key = $3
 `
 
@@ -225,7 +227,7 @@ func (q *Queries) CountPropertiesByOwnerAndType(ctx context.Context, arg CountPr
 const createProperty = `-- name: CreateProperty :one
 INSERT INTO properties (id, owner_id, name, type, address, description, attributes, status)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type, photo_blur
 `
 
 type CreatePropertyParams struct {
@@ -264,6 +266,7 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
@@ -321,7 +324,7 @@ func (q *Queries) GetPropertiesStatsAdmin(ctx context.Context) (GetPropertiesSta
 }
 
 const getPropertyByID = `-- name: GetPropertyByID :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type, properties.photo_blur
 FROM properties
 WHERE properties.id = $1
 `
@@ -348,12 +351,13 @@ func (q *Queries) GetPropertyByID(ctx context.Context, id pgtype.UUID) (Property
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
 
 const getPropertyByIDAdmin = `-- name: GetPropertyByIDAdmin :one
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.email AS owner_email
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, p.photo_blur, u.email AS owner_email
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE p.id = $1
@@ -372,6 +376,7 @@ type GetPropertyByIDAdminRow struct {
 	Attributes       []byte             `json:"attributes"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
+	PhotoBlur        pgtype.Text        `json:"photo_blur"`
 	OwnerEmail       string             `json:"owner_email"`
 }
 
@@ -391,13 +396,14 @@ func (q *Queries) GetPropertyByIDAdmin(ctx context.Context, id pgtype.UUID) (Get
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 		&i.OwnerEmail,
 	)
 	return i, err
 }
 
 const getPropertyByIDAndOwner = `-- name: GetPropertyByIDAndOwner :one
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type, properties.photo_blur
 FROM properties
 WHERE properties.id = $1 AND properties.owner_id = $2
 `
@@ -423,12 +429,13 @@ func (q *Queries) GetPropertyByIDAndOwner(ctx context.Context, arg GetPropertyBy
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
 
 const getPropertyByIDAndOwnerForUpdate = `-- name: GetPropertyByIDAndOwnerForUpdate :one
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type FROM properties WHERE id = $1 AND owner_id = $2
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type, photo_blur FROM properties WHERE id = $1 AND owner_id = $2
 FOR UPDATE
 `
 
@@ -453,12 +460,13 @@ func (q *Queries) GetPropertyByIDAndOwnerForUpdate(ctx context.Context, arg GetP
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
 
 const getPropertyByIDForUpdate = `-- name: GetPropertyByIDForUpdate :one
-SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type FROM properties WHERE id = $1 FOR UPDATE
+SELECT id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type, photo_blur FROM properties WHERE id = $1 FOR UPDATE
 `
 
 // Unscoped pessimistic-lock lookup by id, for write paths that resolve access
@@ -479,6 +487,7 @@ func (q *Queries) GetPropertyByIDForUpdate(ctx context.Context, id pgtype.UUID) 
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
@@ -529,7 +538,7 @@ func (q *Queries) InsertActorPin(ctx context.Context, arg InsertActorPinParams) 
 }
 
 const listActivePropertiesByOwner = `-- name: ListActivePropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type, properties.photo_blur
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status IN ('active', 'maintenance')
 ORDER BY properties.updated_at DESC
@@ -566,6 +575,7 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 			&i.Property.Attributes,
 			&i.Property.PhotoKey,
 			&i.Property.PhotoContentType,
+			&i.Property.PhotoBlur,
 		); err != nil {
 			return nil, err
 		}
@@ -578,7 +588,7 @@ func (q *Queries) ListActivePropertiesByOwner(ctx context.Context, ownerID pgtyp
 }
 
 const listArchivedPropertiesByOwner = `-- name: ListArchivedPropertiesByOwner :many
-SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type
+SELECT properties.id, properties.owner_id, properties.name, properties.type, properties.address, properties.description, properties.status, properties.created_at, properties.updated_at, properties.attributes, properties.photo_key, properties.photo_content_type, properties.photo_blur
 FROM properties
 WHERE properties.owner_id = $1 AND properties.status = 'archived'
 ORDER BY properties.updated_at DESC
@@ -610,6 +620,7 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 			&i.Property.Attributes,
 			&i.Property.PhotoKey,
 			&i.Property.PhotoContentType,
+			&i.Property.PhotoBlur,
 		); err != nil {
 			return nil, err
 		}
@@ -622,7 +633,7 @@ func (q *Queries) ListArchivedPropertiesByOwner(ctx context.Context, ownerID pgt
 }
 
 const listPropertiesAdmin = `-- name: ListPropertiesAdmin :many
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, u.email AS owner_email
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, p.photo_blur, u.email AS owner_email
 FROM properties p
 JOIN users u ON p.owner_id = u.id
 WHERE ($1::uuid IS NULL OR p.owner_id = $1::uuid)
@@ -665,6 +676,7 @@ type ListPropertiesAdminRow struct {
 	Attributes       []byte             `json:"attributes"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
+	PhotoBlur        pgtype.Text        `json:"photo_blur"`
 	OwnerEmail       string             `json:"owner_email"`
 }
 
@@ -698,6 +710,7 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 			&i.Attributes,
 			&i.PhotoKey,
 			&i.PhotoContentType,
+			&i.PhotoBlur,
 			&i.OwnerEmail,
 		); err != nil {
 			return nil, err
@@ -711,7 +724,7 @@ func (q *Queries) ListPropertiesAdmin(ctx context.Context, arg ListPropertiesAdm
 }
 
 const searchVisibleProperties = `-- name: SearchVisibleProperties :many
-SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type,
+SELECT p.id, p.owner_id, p.name, p.type, p.address, p.description, p.status, p.created_at, p.updated_at, p.attributes, p.photo_key, p.photo_content_type, p.photo_blur,
        CASE WHEN p.owner_id = $1::uuid
             THEN 'owner'
             ELSE pm.role END::text AS access_role
@@ -753,6 +766,7 @@ type SearchVisiblePropertiesRow struct {
 	Attributes       []byte             `json:"attributes"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
+	PhotoBlur        pgtype.Text        `json:"photo_blur"`
 	AccessRole       string             `json:"access_role"`
 }
 
@@ -802,6 +816,7 @@ func (q *Queries) SearchVisibleProperties(ctx context.Context, arg SearchVisible
 			&i.Attributes,
 			&i.PhotoKey,
 			&i.PhotoContentType,
+			&i.PhotoBlur,
 			&i.AccessRole,
 		); err != nil {
 			return nil, err
@@ -817,9 +832,10 @@ func (q *Queries) SearchVisibleProperties(ctx context.Context, arg SearchVisible
 const setPropertyPhoto = `-- name: SetPropertyPhoto :one
 UPDATE properties
 SET photo_key = $3,
-    photo_content_type = $4
+    photo_content_type = $4,
+    photo_blur = $5
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type, photo_blur
 `
 
 type SetPropertyPhotoParams struct {
@@ -827,10 +843,12 @@ type SetPropertyPhotoParams struct {
 	OwnerID          pgtype.UUID `json:"owner_id"`
 	PhotoKey         pgtype.Text `json:"photo_key"`
 	PhotoContentType pgtype.Text `json:"photo_content_type"`
+	PhotoBlur        pgtype.Text `json:"photo_blur"`
 }
 
-// The object photo write (ADR 0065, ticket #1227): the key and the sniffed
-// content type move together; a NULL key clears the photo — one image per
+// The object photo write (ADR 0065, ticket #1227): the key, the sniffed
+// content type and the blur frame's base64 (решение #1594, #1603) move
+// together; a NULL key clears the photo and its frame — one image per
 // entity, no gallery. The scope is the property's owner (ADR 0028): the
 // actor may be the full-access member; existence and the edit capability
 // (plus the archived-object guard) are proven by the caller under the row
@@ -841,6 +859,7 @@ func (q *Queries) SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoPara
 		arg.OwnerID,
 		arg.PhotoKey,
 		arg.PhotoContentType,
+		arg.PhotoBlur,
 	)
 	var i Property
 	err := row.Scan(
@@ -856,14 +875,46 @@ func (q *Queries) SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoPara
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
+}
+
+const setPropertyPhotoBlurIfKey = `-- name: SetPropertyPhotoBlurIfKey :execrows
+UPDATE properties
+SET photo_blur = $4
+WHERE id = $1 AND owner_id = $2 AND photo_key = $3
+`
+
+type SetPropertyPhotoBlurIfKeyParams struct {
+	ID        pgtype.UUID `json:"id"`
+	OwnerID   pgtype.UUID `json:"owner_id"`
+	PhotoKey  pgtype.Text `json:"photo_key"`
+	PhotoBlur pgtype.Text `json:"photo_blur"`
+}
+
+// The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+// from this request's decode lands only while the row still advertises the
+// key it was computed from — a concurrent re-upload wins, the fresh photo
+// carries its own blur. 0 affected rows is the race verdict; the write is
+// best-effort on the caller's side.
+func (q *Queries) SetPropertyPhotoBlurIfKey(ctx context.Context, arg SetPropertyPhotoBlurIfKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPropertyPhotoBlurIfKey,
+		arg.ID,
+		arg.OwnerID,
+		arg.PhotoKey,
+		arg.PhotoBlur,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const unarchiveProperty = `-- name: UnarchiveProperty :one
 UPDATE properties SET status = 'active'
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type, photo_blur
 `
 
 type UnarchivePropertyParams struct {
@@ -887,6 +938,7 @@ func (q *Queries) UnarchiveProperty(ctx context.Context, arg UnarchivePropertyPa
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
@@ -895,7 +947,7 @@ const updateProperty = `-- name: UpdateProperty :one
 UPDATE properties
 SET name = $3, type = $4, address = $5, description = $6, attributes = $7, status = $8
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type
+RETURNING id, owner_id, name, type, address, description, status, created_at, updated_at, attributes, photo_key, photo_content_type, photo_blur
 `
 
 type UpdatePropertyParams struct {
@@ -934,6 +986,7 @@ func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) 
 		&i.Attributes,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
