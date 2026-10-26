@@ -651,6 +651,7 @@ export function HistoryFeedScreen({
                           <PropertyHeaderContent
                             name={object_.propertyName}
                             photoUrl={objectOptions?.photoUrl ?? ''}
+                            photoBlur={objectOptions?.photoBlur ?? null}
                             type={objectOptions?.type}
                             address={objectOptions?.address}
                           />
@@ -781,7 +782,13 @@ function ActorCard({
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-2 rounded-m bg-surface-muted p-3">
-      <ActorHeader name={actor.name} photoUrl={actor.photoUrl} isSelf={isSelf} href={headerHref} />
+      <ActorHeader
+        name={actor.name}
+        photoUrl={actor.photoUrl}
+        photoBlur={actor.photoBlur}
+        isSelf={isSelf}
+        href={headerHref}
+      />
       <div className="flex flex-col gap-2">
         {actor.entries.map((entry) => (
           <HistoryRow key={entry.id} entry={entry} fresh={freshIds.has(entry.id)} />
@@ -796,17 +803,19 @@ function ActorCard({
 function PropertyHeaderContent({
   name,
   photoUrl,
+  photoBlur,
   type,
   address,
 }: {
   readonly name: string;
   readonly photoUrl: string;
+  readonly photoBlur: string | null;
   readonly type?: PropertyType;
   readonly address?: string;
 }): JSX.Element {
   return (
     <>
-      <PropertyAvatar photoUrl={photoUrl} type={type} surface="feed" />
+      <PropertyAvatar photoUrl={photoUrl} photoBlur={photoBlur} type={type} surface="feed" />
       <span className="min-w-0">
         <h2 className="truncate text-xs font-medium leading-[15px] text-content">{name}</h2>
         {address && (
@@ -824,7 +833,13 @@ function PropertyHeaderContent({
  * иначе — и при битом фото (404 стрима) — заглушка BoldUser. Механика
  * «глиф под фото + onLoad» и гард '' — примитив CirclePhoto (#1423);
  * лента — ленивая подача, аватары за экраном не запрашиваются. */
-function ActorFeedAvatar({ photoUrl }: { readonly photoUrl: string | null }): JSX.Element {
+function ActorFeedAvatar({
+  photoUrl,
+  photoBlur,
+}: {
+  readonly photoUrl: string | null;
+  readonly photoBlur: string | null;
+}): JSX.Element {
   return (
     <span
       aria-hidden
@@ -835,6 +850,7 @@ function ActorFeedAvatar({ photoUrl }: { readonly photoUrl: string | null }): JS
     >
       <CirclePhoto
         photoUrl={photoUrl}
+        photoBlur={photoBlur}
         loading="lazy"
         glyph={<BoldUser className="h-3.5 w-3.5" />}
       />
@@ -845,17 +861,19 @@ function ActorFeedAvatar({ photoUrl }: { readonly photoUrl: string | null }): JS
 function ActorHeader({
   name,
   photoUrl,
+  photoBlur,
   isSelf,
   href,
 }: {
   readonly name: string;
   readonly photoUrl: string | null;
+  readonly photoBlur: string | null;
   readonly isSelf: boolean;
   readonly href: string | null;
 }): JSX.Element {
   const content: ReactNode = (
     <>
-      <ActorFeedAvatar photoUrl={photoUrl} />
+      <ActorFeedAvatar photoUrl={photoUrl} photoBlur={photoBlur} />
       <h3 className="min-w-0 truncate text-xs font-medium leading-[15px] text-content">
         {name}
         {isSelf && <MeSuffix />}
@@ -875,10 +893,18 @@ function ActorHeader({
  * плейсхолдер). */
 function propertyOptions(
   options: HistoryFilterOptions | undefined,
-): Map<string, { photoUrl: string; type: PropertyType; address: string }> {
-  const map = new Map<string, { photoUrl: string; type: PropertyType; address: string }>();
+): Map<string, { photoUrl: string; photoBlur: string | null; type: PropertyType; address: string }> {
+  const map = new Map<
+    string,
+    { photoUrl: string; photoBlur: string | null; type: PropertyType; address: string }
+  >();
   for (const object_ of options?.objects ?? []) {
-    map.set(object_.id, { photoUrl: object_.photoUrl, type: object_.type, address: object_.address });
+    map.set(object_.id, {
+      photoUrl: object_.photoUrl,
+      photoBlur: object_.photoBlur,
+      type: object_.type,
+      address: object_.address,
+    });
   }
   return map;
 }

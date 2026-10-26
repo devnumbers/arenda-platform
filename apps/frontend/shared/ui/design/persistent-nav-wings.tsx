@@ -57,7 +57,12 @@ export function PersistentNavWings(): JSX.Element {
         <HeaderLogo />
       </Link>
       <div className="pointer-events-auto absolute right-0 top-0 flex h-[72px] items-center">
-        <UserButton name={wingName} photoUrl={user?.photoUrl ?? null} pending={pending} />
+        <UserButton
+          name={wingName}
+          photoUrl={user?.photoUrl ?? null}
+          photoBlur={user?.photoBlur ?? null}
+          pending={pending}
+        />
       </div>
     </div>
   );

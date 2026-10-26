@@ -232,6 +232,7 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
               (решение владельца 08.10). */}
           <PropertyPhotoSlot
             photoUrl={property.photoUrl}
+            photoBlur={property.photoBlur}
             stage={photoStage}
             busy={photoBusy}
             progress={photoProgress}

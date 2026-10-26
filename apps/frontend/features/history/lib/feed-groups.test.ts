@@ -24,6 +24,7 @@ function entry(overrides: {
     actorFirstName: 'Иван',
     actorLastName: 'Иванов',
     actorPhotoUrl: null,
+    actorPhotoBlur: null,
     actorRole: 'owner',
     baseAction: 'added',
     action: 'payment.created',

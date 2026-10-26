@@ -31,12 +31,16 @@ export type UserButtonProps = Omit<ComponentProps<'a'>, 'href'> & {
   /** Путь стриминга фото профиля (ADR 0065, решение #1286): есть — круг
    * несёт фото, нет — заглушка BoldUser. */
   readonly photoUrl?: string | null;
+  /** Blur-кадр первого показа (ADR 0065 аменд, решение #1594) — сестра
+   * photoUrl. */
+  readonly photoBlur?: string | null;
   readonly pending?: boolean;
 };
 
 export function UserButton({
   name,
   photoUrl,
+  photoBlur,
   pending = false,
   className,
   ...props
@@ -68,7 +72,7 @@ export function UserButton({
        * 4 перехода с eager). Видимые экземпляры (постоянное крыло, хабы
        * мобайла) — above the fold: обсервер стреляет на монтировании,
        * мгновенный показ даёт реестр photo-session-cache. */}
-      <UserAvatar photoUrl={pending ? null : photoUrl} aria-hidden />
+      <UserAvatar photoUrl={pending ? null : photoUrl} photoBlur={pending ? null : photoBlur} aria-hidden />
     </Link>
   );
 }

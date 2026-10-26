@@ -111,6 +111,7 @@ function PastRentalCard({
         <PastTenantRow
           name={rentalTenantTitle(tenant)}
           photoUrl={tenantContactQuery.data?.photoUrl}
+          photoBlur={tenantContactQuery.data?.photoBlur}
         />
       )}
     </RentalGroup>
@@ -122,15 +123,17 @@ function PastRentalCard({
 function PastTenantRow({
   name,
   photoUrl,
+  photoBlur,
 }: {
   readonly name: string;
   readonly photoUrl?: string | null;
+  readonly photoBlur?: string | null;
 }): JSX.Element {
   return (
     <PaymentRowButton
       variant="gray"
       className="pointer-events-none px-3 py-2"
-      categoryIcon={<UserAvatar variant="muted" photoUrl={photoUrl} />}
+      categoryIcon={<UserAvatar variant="muted" photoUrl={photoUrl} photoBlur={photoBlur} />}
       title={name}
       subtitle="Арендатор"
     />

@@ -70,6 +70,7 @@ export function PropertyCard({ property, today, variant = 'list', nonInteractive
       <div className={styles.body}>
         <PropertyAvatar
           photoUrl={property.photoUrl}
+          photoBlur={property.photoBlur}
           type={property.type}
           withAttentionDot={!isArchived && hasPropertyAttentionDot(property)}
         />
@@ -89,7 +90,10 @@ export function PropertyCard({ property, today, variant = 'list', nonInteractive
           {ownerName !== null && (
             <ul className={styles.participants} data-testid="property-owner">
               <li className={styles.participant}>
-                <OwnerChipAvatar photoUrl={property.access?.ownerPhotoUrl} />
+                <OwnerChipAvatar
+                  photoUrl={property.access?.ownerPhotoUrl}
+                  photoBlur={property.access?.ownerPhotoBlur}
+                />
                 <span className={styles.participantName}>{ownerName}</span>
               </li>
             </ul>
@@ -104,11 +108,18 @@ export function PropertyCard({ property, today, variant = 'list', nonInteractive
 /** Аватар владельца в чипе карточки (решение #1286): фото профиля 24,
  * иначе — и при битом фото (404 стрима) — заглушка BoldUser. Механика
  * показа — примитив CirclePhoto (#1423); карточки хаба — ленивая подача. */
-function OwnerChipAvatar({ photoUrl }: { readonly photoUrl?: string | null }): JSX.Element {
+function OwnerChipAvatar({
+  photoUrl,
+  photoBlur,
+}: {
+  readonly photoUrl?: string | null;
+  readonly photoBlur?: string | null;
+}): JSX.Element {
   return (
     <span className={styles.participantAvatar} aria-hidden>
       <CirclePhoto
         photoUrl={photoUrl}
+        photoBlur={photoBlur}
         loading="lazy"
         glyph={<BoldUser className={styles.participantGlyph} />}
       />

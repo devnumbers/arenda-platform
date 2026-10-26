@@ -98,11 +98,13 @@ export function GlobalCardIcon({
  */
 export function PaymentObjectAvatar({
   photoUrl,
+  photoBlur,
   type,
   surface,
   hasNotification = false,
 }: {
   readonly photoUrl: string | null;
+  readonly photoBlur?: string | null;
   readonly type?: PropertyType;
   readonly surface: 'card' | 'row';
   /** Красная точка просрочки (карточки объектов хаба «Платежей», 879:9712). */
@@ -121,6 +123,7 @@ export function PaymentObjectAvatar({
       >
         <CirclePhoto
           photoUrl={photoUrl}
+          photoBlur={photoBlur}
           loading="lazy"
           glyph={<Glyph className="h-6 w-6 text-[#D3D7D9]" />}
         />

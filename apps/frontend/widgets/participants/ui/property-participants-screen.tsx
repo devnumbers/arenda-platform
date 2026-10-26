@@ -538,7 +538,7 @@ function PropertyParticipantRowView({
           : 'cursor-default',
       )}
     >
-      <UserAvatar photoUrl={row.photoUrl} />
+      <UserAvatar photoUrl={row.photoUrl} photoBlur={row.photoBlur} />
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">
           {row.title}

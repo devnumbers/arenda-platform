@@ -113,6 +113,8 @@ export type PropertyParticipantRow = {
   /** Путь стриминга фото профиля участника (ADR 0065, решение #1286);
    * undefined — pending или у юзера нет фото. */
   readonly photoUrl: string | undefined;
+  /** Blur-кадр фото (ADR 0065 аменд, решение #1594) — сестра photoUrl. */
+  readonly photoBlur: string | undefined;
   /** Почта; у pending-строки почта уходит в подзаголовок под титулом
    * «Пользователь» (D6, 3298-75434). */
   readonly subtitle: string | undefined;
@@ -192,6 +194,7 @@ function toPropertyParticipantRow(reader: PropertyParticipantsReader | undefined
       key: member.id ?? member.userId ?? (email !== '' ? email : 'unknown'),
       title,
       photoUrl: member.photoUrl ?? undefined,
+      photoBlur: member.photoBlur ?? undefined,
       subtitle:
         (isPending || displayName !== undefined) && email !== '' ? email : undefined,
       emailIcon: emailRoleIcon(member.role),

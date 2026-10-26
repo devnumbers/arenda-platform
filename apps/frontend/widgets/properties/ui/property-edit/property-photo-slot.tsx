@@ -39,6 +39,10 @@ const PHOTO_BUTTON_CLASS =
 export type PropertyPhotoSlotProps = {
   /** same-origin стриминговый путь выдачи (ADR 0065), null — фото нет. */
   readonly photoUrl?: string | null;
+  /** Blur-кадр серверного фото (ADR 0065 аменд, решение #1594); при
+   * незавершённом стейдже не рисуется — в круге staged-превью, байты
+   * уже на руках. */
+  readonly photoBlur?: string | null;
   /** Незавершённое изменение фото из черновика экрана (см. выше). */
   readonly stage: PropertyPhotoStage | null;
   /** Фото-мутация сохранения в полёте — управление слота глушится. */
@@ -55,6 +59,7 @@ export type PropertyPhotoSlotProps = {
 
 export function PropertyPhotoSlot({
   photoUrl,
+  photoBlur,
   stage,
   busy,
   progress = null,
@@ -101,6 +106,7 @@ export function PropertyPhotoSlot({
         surface="hero"
         type={type}
         photoUrl={displayUrl}
+        photoBlur={stage === null ? photoBlur : null}
         className={hasPhoto ? circleIconRing.white : undefined}
       />
     </button>

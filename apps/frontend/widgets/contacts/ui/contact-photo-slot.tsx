@@ -35,6 +35,10 @@ const PHOTO_BUTTON_CLASS =
 export type ContactPhotoSlotProps = {
   /** same-origin стриминговый путь выдачи (ADR 0065), null/undefined — фото нет. */
   readonly photoUrl?: string | null;
+  /** Blur-кадр серверного фото (ADR 0065 аменд, решение #1594); при
+   * незавершённом стейдже не рисуется — в круге staged-превью, байты
+   * уже на руках. */
+  readonly photoBlur?: string | null;
   /** Незавершённое изменение фото из черновика экрана (см. выше). */
   readonly stage: ContactPhotoStage | null;
   /** Фото-мутация сохранения в полёте — управление слота глушится. */
@@ -49,6 +53,7 @@ export type ContactPhotoSlotProps = {
 
 export function ContactPhotoSlot({
   photoUrl,
+  photoBlur,
   stage,
   busy,
   progress = null,
@@ -103,6 +108,7 @@ export function ContactPhotoSlot({
       >
         <CirclePhoto
           photoUrl={displayUrl}
+          photoBlur={stage === null ? photoBlur : null}
           glyph={<BoldUser className="h-13 w-13 text-content-tertiary" />}
         />
       </span>

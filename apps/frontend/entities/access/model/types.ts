@@ -14,6 +14,9 @@ export type PropertyAccessMember = {
     /** Путь стриминга фото профиля участника (ADR 0065, решение #1286);
      * null — pending-строка или у юзера нет фото. */
     readonly photoUrl: string | null;
+    /** Blur-кадр фото первого показа (ADR 0065 аменд, решение #1594);
+     * null — кадра нет. */
+    readonly photoBlur: string | null;
     readonly status: AccessMemberStatus;
     readonly suspendedAt?: string | null;
     readonly lastSentAt?: string | null;

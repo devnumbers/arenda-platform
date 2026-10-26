@@ -167,7 +167,7 @@ export function ProfileHub(): JSX.Element {
   return (
     <div className="flex flex-col gap-8 px-6 pb-6">
       <div className="flex flex-col items-center gap-4">
-        <ProfileAvatar photoUrl={mePhotoDisplay(me.photoUrl, null)} />
+        <ProfileAvatar photoUrl={mePhotoDisplay(me.photoUrl, null)} photoBlur={me.photoBlur} />
         <div className="flex flex-col items-center gap-2">
           <h1 className="m-0 text-[28px] font-semibold leading-8 text-content">
             {getProfileDisplayName(me)}

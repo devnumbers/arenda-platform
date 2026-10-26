@@ -25,6 +25,9 @@ export type PropertyAccess = {
   readonly ownerName?: string;
   readonly ownerEmail?: string;
   readonly ownerPhotoUrl?: string | null;
+  /** Blur-кадр фото владельца (ADR 0065 аменд, решение #1594) — сестра
+   * ownerPhotoUrl; null — кадра нет. */
+  readonly ownerPhotoBlur?: string | null;
 };
 
 /**
@@ -58,6 +61,9 @@ export type Property = {
   /** Путь приватного фото объекта (ADR 0065): same-origin стриминг через
    * бэкенд; null — фото нет. */
   readonly photoUrl?: string | null;
+  /** Blur-кадр фото первого показа (ADR 0065 аменд, решение #1594):
+   * готовый base64 из DTO; null — кадра нет (webp, старые фото). */
+  readonly photoBlur?: string | null;
   readonly access?: PropertyAccess;
   /** Момент создания (ISO date-time) — сортировка «По дате создания» (#586). */
   readonly created_at: string;

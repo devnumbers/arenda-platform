@@ -195,6 +195,30 @@ describe('mapNotificationDetail', () => {
     });
   });
 
+  it('photo_blur объекта — снимок blur-кадра (ADR 0065 аменд, решение #1594): строка проходит, не-строка нет', () => {
+    const mapped = mapNotificationDetail(
+      detailDto({
+        payload: {
+          property: {
+            id: '0194a3f8-0000-7000-8000-000000000001',
+            name: 'Гараж',
+            photo_blur: 'data:image/jpeg;base64, blur',
+          },
+        },
+      }),
+    );
+    expect(mapped.payload.property?.photoBlur).toBe('data:image/jpeg;base64, blur');
+
+    const mappedGarbage = mapNotificationDetail(
+      detailDto({
+        payload: {
+          property: { id: '0194a3f8-0000-7000-8000-000000000001', name: 'Объект', photo_blur: 42 },
+        },
+      }),
+    );
+    expect(mappedGarbage.payload.property?.photoBlur).toBeUndefined();
+  });
+
   it('payment_category — снимок категории правила (решение 14.10.2026): дефолт слагом, пользовательская именем, мусор не проходит', () => {
     const mapped = mapNotificationDetail(
       detailDto({

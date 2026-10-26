@@ -231,6 +231,7 @@ function PropertyPickRow({
         <CircleIcon variant="muted" aria-hidden className="relative overflow-hidden rounded-full">
           <CirclePhoto
             photoUrl={photoUrl}
+            photoBlur={property.photoBlur}
             loading="lazy"
             glyph={<Glyph className="h-6 w-6 text-[#D3D7D9]" />}
           />

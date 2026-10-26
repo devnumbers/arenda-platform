@@ -302,6 +302,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                             name: object.name,
                             type: object.type,
                             photoUrl: object.photoUrl,
+                            photoBlur: object.photoBlur,
                             hasOverdue: globalPaymentObjectHasOverdue(object),
                           }))
                           .slice(0, SECTION_CARDS_LIMIT)}
@@ -623,6 +624,7 @@ function ObjectsSectionBody({
       name: string;
       type: PropertyType;
       photoUrl: string | null;
+      photoBlur: string | null;
       hasOverdue: boolean;
     }>
   >;
@@ -641,6 +643,7 @@ function ObjectsSectionBody({
             // откатывается к глифу, канон #1275. Точка просрочки — у аватара.
             <PaymentObjectAvatar
               photoUrl={object.photoUrl}
+              photoBlur={object.photoBlur}
               type={object.type}
               surface="card"
               hasNotification={object.hasOverdue}

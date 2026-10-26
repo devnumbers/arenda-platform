@@ -50,6 +50,7 @@ export function PropertyStep({
             title={property.name}
             subtitle={property.address}
             photoUrl={property.photoUrl ?? undefined}
+            photoBlur={property.photoBlur}
             type={property.type}
             checked={selectedPropertyId === property.id}
             onCheck={() => onSelect(property.id)}
@@ -67,6 +68,7 @@ function ObjectRowButton({
   title,
   subtitle,
   photoUrl,
+  photoBlur,
   type,
   checked,
   onCheck,
@@ -74,6 +76,7 @@ function ObjectRowButton({
   readonly title: string;
   readonly subtitle: string;
   readonly photoUrl?: string;
+  readonly photoBlur?: string | null;
   readonly type?: PropertyType;
   readonly checked: boolean;
   readonly onCheck: () => void;
@@ -93,6 +96,7 @@ function ObjectRowButton({
       <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
         <CirclePhoto
           photoUrl={photoUrl}
+          photoBlur={photoBlur}
           loading="lazy"
           glyph={
             Glyph !== undefined ? (

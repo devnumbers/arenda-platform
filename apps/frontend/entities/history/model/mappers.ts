@@ -39,6 +39,7 @@ export function mapHistoryItem(dto: HistoryItemDto): HistoryEntry {
     // '' — легаси-форма «фото нет» (бэк до StringPtr-фикса шлёт пустую
     // строку вопреки nullable-контракту): нормализуем к null, канону заглушек.
     actorPhotoUrl: dto.actor_photo_url === '' ? null : dto.actor_photo_url,
+    actorPhotoBlur: dto.actor_photo_blur === '' ? null : (dto.actor_photo_blur ?? null),
     actorRole: dto.actor_role,
     baseAction: dto.base_action,
     action: dto.action,
@@ -59,6 +60,7 @@ export function mapHistoryFilterOptions(dto: HistoryFiltersDto): HistoryFilterOp
       email: participant.email,
       firstName: participant.first_name,
       photoUrl: participant.photo_url ?? null,
+      photoBlur: participant.photo_blur ?? null,
       isOwner: participant.is_owner,
       role: participant.role,
       status: participant.status,
@@ -68,6 +70,7 @@ export function mapHistoryFilterOptions(dto: HistoryFiltersDto): HistoryFilterOp
       name: object_.name,
       address: object_.address,
       photoUrl: object_.photo_url,
+      photoBlur: object_.photo_blur ?? null,
       type: object_.type,
     })),
   };

@@ -333,7 +333,7 @@ export function useDeletePropertyPhoto(): UseMutationResult<
     mutationFn: ({ id }) => deletePropertyPhoto({ id }),
     onSuccess: (_, { id }) => {
       queryClient.setQueryData<Property>(propertyKeys.detail(id), (prev) =>
-        prev === undefined ? prev : { ...prev, photoUrl: null },
+        prev === undefined ? prev : { ...prev, photoUrl: null, photoBlur: null },
       );
       void queryClient.invalidateQueries({ queryKey: propertyKeys.list });
       void queryClient.invalidateQueries({ queryKey: propertyKeys.detail(id) });

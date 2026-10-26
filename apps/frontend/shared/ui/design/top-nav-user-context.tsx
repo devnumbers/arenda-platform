@@ -14,6 +14,9 @@ export type TopNavUser = {
   /** Путь стриминга фото профиля (ADR 0065, решение #1286): крыло несёт
    * фото, пока оно есть; null — фото нет или юзер не прочитан. */
   readonly photoUrl?: string | null;
+  /** Blur-кадр первого показа (ADR 0065 аменд, решение #1594) — сестра
+   * photoUrl. */
+  readonly photoBlur?: string | null;
   readonly pending?: boolean;
 };
 

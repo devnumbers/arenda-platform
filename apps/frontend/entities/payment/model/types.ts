@@ -344,6 +344,9 @@ export type GlobalPaymentObject = {
   readonly type: components['schemas']['PropertyType'];
   readonly pinnedAt: string | null;
   readonly photoUrl: string | null;
+  /** Blur-кадр фото первого показа (ADR 0065 аменд, решение #1594);
+   * null — кадра нет. */
+  readonly photoBlur: string | null;
   readonly autoPayRules: ReadonlyArray<GlobalPaymentObjectKey>;
   readonly otherRules: ReadonlyArray<GlobalPaymentObjectKey>;
 };

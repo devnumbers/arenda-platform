@@ -111,6 +111,7 @@ export function PropertiesSearchScreen(): JSX.Element {
                     <PropertyAvatar
                       surface="row"
                       photoUrl={property.photoUrl}
+                      photoBlur={property.photoBlur}
                       type={property.type}
                     />
                   </span>

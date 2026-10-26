@@ -153,6 +153,7 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
                 leading={
                   <SelectAvatar
                     photoUrl={property.photoUrl ?? undefined}
+                    photoBlur={property.photoBlur}
                     fallback={<Glyph className="h-6 w-6 text-[#D3D7D9]" />}
                   />
                 }
@@ -210,15 +211,16 @@ export function OperationsObjectsSelectScreen(): JSX.Element {
  * BoldArchive у опции архива (#549). Цвет плейсхолдеров — #D3D7D9 по макету
  * (1733-26805/26831, пиксельная сверка 07.09), не text-content-tertiary.
  * Экспорт для route-loading (#609). */
-export function SelectAvatar({ photoUrl, fallback }: {
+export function SelectAvatar({ photoUrl, photoBlur, fallback }: {
   readonly photoUrl?: string;
+  readonly photoBlur?: string | null;
   readonly fallback: JSX.Element;
 }): JSX.Element {
   // Механика показа (битое фото — канон #1275/#1286, гард '', ожидание) —
   // примитив CirclePhoto (#1423); строки выбора — ленивая подача.
   return (
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
-      <CirclePhoto photoUrl={photoUrl} loading="lazy" glyph={fallback} />
+      <CirclePhoto photoUrl={photoUrl} photoBlur={photoBlur} loading="lazy" glyph={fallback} />
     </CircleIcon>
   );
 }

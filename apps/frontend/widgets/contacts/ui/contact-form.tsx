@@ -30,6 +30,7 @@ const NOTE_MAX = 1024;
 export function ContactForm({
   form,
   photoUrl,
+  photoBlur,
   photoStage,
   photoBusy,
   photoProgress,
@@ -44,6 +45,8 @@ export function ContactForm({
   readonly form: ContactFormFields;
   /** Серверное фото карточки; на создании карточки нет — null. */
   readonly photoUrl?: string | null;
+  /** Blur-кадр серверного фото (ADR 0065 аменд, решение #1594). */
+  readonly photoBlur?: string | null;
   /** Незавершённое изменение фото из черновика экрана (ContactPhotoStage). */
   readonly photoStage: ContactPhotoStage | null;
   /** Фото-мутация сохранения в полёте — управление слота глушится. */
@@ -88,6 +91,7 @@ export function ContactForm({
       <div className="flex justify-center">
         <ContactPhotoSlot
           photoUrl={photoUrl}
+          photoBlur={photoBlur}
           stage={photoStage}
           busy={photoBusy}
           progress={photoProgress}

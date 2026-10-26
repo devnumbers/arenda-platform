@@ -13,6 +13,9 @@ export type Contact = {
   /** Путь приватного фото карточки (ADR 0065): same-origin стриминг через
    * бэкенд; undefined — фото нет. */
   readonly photoUrl?: string | undefined;
+  /** Blur-кадр фото первого показа (ADR 0065 аменд, решение #1594):
+   * готовый base64 из DTO; undefined — кадра нет (webp, старые фото). */
+  readonly photoBlur?: string | undefined;
   readonly firstName: string;
   readonly lastName: string;
   readonly patronymic: string;

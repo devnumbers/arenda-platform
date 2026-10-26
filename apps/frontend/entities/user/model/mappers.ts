@@ -13,6 +13,7 @@ export function mapMeResponse(response: MeResponse): User {
     email: response.email ?? null,
     timezone: response.timezone ?? null,
     photoUrl: response.photoUrl ?? null,
+    photoBlur: response.photoBlur ?? null,
     subscription: response.subscription
       ? {
           tariff: {

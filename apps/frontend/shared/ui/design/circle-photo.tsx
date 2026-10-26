@@ -23,10 +23,18 @@ export type CirclePhotoFlags = {
  * логику (node, без DOM; прецедент circle-icon-variants). */
 export function circlePhotoView(
   photoUrl: string | null | undefined,
+  photoBlur: string | null | undefined,
   flags: CirclePhotoFlags,
-): { readonly imgSrc: string | null; readonly imgHidden: boolean } {
+): {
+  readonly imgSrc: string | null;
+  readonly imgHidden: boolean;
+  /** Blur-фаза активна: кадр из DTO красится поверх глифа, пока thumb не
+   * готов (blur-up, решение #1594). Кеш-попадание (photoReady с первого
+   * рендера), битое фото и отсутствие кадра фазу не дают. */
+  readonly blurActive: boolean;
+} {
   if (photoUrl == null || photoUrl === '' || flags.photoBroken) {
-    return { imgSrc: null, imgHidden: false };
+    return { imgSrc: null, imgHidden: false, blurActive: false };
   }
   // Круг — всегда мал (≤96 CSS px): запрашивается thumbnail-вариант выдачи
   // (?size=thumb, ADR 0065 тикет миниатюр), полный объект живёт за тем же
@@ -35,13 +43,34 @@ export function circlePhotoView(
   const thumbSrc = photoThumbKey(photoUrl);
   const retryNonce = flags.retryNonce ?? 0;
   const imgSrc = retryNonce > 0 ? `${thumbSrc}&r=${retryNonce}` : thumbSrc;
-  return { imgSrc, imgHidden: !flags.photoReady };
+  const imgHidden = !flags.photoReady;
+  // Кадр уже в DTO (base64, #1603) — рисуется с первого кадра, без
+  // ожидания; photoReady=true (кеш-попадание или готовый thumb) гасит фазу.
+  const blurActive = imgHidden && photoBlur != null && photoBlur !== '';
+  return { imgSrc, imgHidden, blurActive };
+}
+
+/** src blur-слоя из кадра DTO: бэк (#1603) едет голым base64 jpeg —
+ * оборачивается в data-URL; готовый data-URL (на будущее) проходит как
+ * есть. null/'' — кадра нет. Чистая функция — канон node-тестов. */
+export function photoBlurSrc(photoBlur: string | null | undefined): string | null {
+  if (photoBlur == null || photoBlur === '') {
+    return null;
+  }
+  return photoBlur.startsWith('data:')
+    ? photoBlur
+    : `data:image/jpeg;base64,${photoBlur}`;
 }
 
 export type CirclePhotoProps = {
   /** Версионированный стриминговый путь выдачи (ADR 0065);
    * null/undefined/'' — только глиф. */
   readonly photoUrl?: string | null;
+  /** Blur-кадр первого показа (ADR 0065 аменд, решение #1594): готовый
+   * base64 16px jpeg из DTO (#1603). Рисуется поверх глифа с первого кадра,
+   * пока thumb не готов; null — деградация к «глиф → fade» (старые фото,
+   * webp). */
+  readonly photoBlur?: string | null;
   /** Глиф-подложка: тип объекта / BoldUser — выбирает вызывающий; живёт
    * и в ожидании байтов, и при битом фото (фолбэк #1275). */
   readonly glyph: ReactElement;
@@ -84,8 +113,27 @@ export type CirclePhotoProps = {
  * по реестру, img виден с первого рендера. Персистентное крыло ПК
  * (PersistentNavWings) снимает сам перемонтаж шапки на десктопе; реестр
  * закрывает мобайл, планшет и все прочие круги.
+ *
+ * Blur-up первого показа (решение владельца 25.10.2026, #1594/#1604):
+ * пока thumb не готов, поверх глифа с первого кадра красится blur-кадр
+ * из DTO (base64 приехал вместе с photoUrl — ожидания нет); готовый
+ * thumb вытесняет его существующим fade 250ms на дефолтных токенах —
+ * blur гаснет тем же opacity-only переходом (появление — без анимации).
+ * Кеш-попадание по реестру (photoReady с первого рендера) фазу пропускает
+ * целиком — blur не красится никогда (анти-мигание); после полной
+ * перезагрузки (реестр пуст) blur честно показывается, даже когда байты
+ * едут из immutable HTTP-кеша. photoBlur NULL — деградация к сегодняшнему
+ * «глиф → fade». Ошибка загрузки при активной фазе — чистый фолбэк:
+ * blur снимается вместе с thumb. Скелетона по-прежнему нет (канон #1423) —
+ * blur контентный, не скелетон.
  */
-export function CirclePhoto({ photoUrl, glyph, loading, className }: CirclePhotoProps): JSX.Element {
+export function CirclePhoto({
+  photoUrl,
+  photoBlur,
+  glyph,
+  loading,
+  className,
+}: CirclePhotoProps): JSX.Element {
   const [photoBroken, setPhotoBroken] = useState(false);
   // Старт по реестру: фото уже показывалось в этой жизни страницы — img
   // виден с первого рендера, без кадра с глифом и transition-opacity.
@@ -98,12 +146,20 @@ export function CirclePhoto({ photoUrl, glyph, loading, className }: CirclePhoto
   // заменённое до перемонтирования). photoReady при смене src не сбрасывается —
   // инвариант анти-мигания (живой <img> держит старый кадр до декода нового).
   const [prevPhotoUrl, setPrevPhotoUrl] = useState(photoUrl);
+  // Слой blur живёт с момента первого показа фазы: когда photoReady гасит
+  // blurActive, слой остаётся смонтированным и уходит в opacity-0 — fade
+  // «blur → thumb» успевает отыграться (мгновенный демонтаж фазу рвал бы).
+  const [blurShown, setBlurShown] = useState(false);
   if (prevPhotoUrl !== photoUrl) {
     setPrevPhotoUrl(photoUrl);
     setRetryNonce(0);
     setPhotoBroken(false);
+    setBlurShown(false);
   }
-  const view = circlePhotoView(photoUrl, { photoBroken, photoReady, retryNonce });
+  const view = circlePhotoView(photoUrl, photoBlur, { photoBroken, photoReady, retryNonce });
+  if (view.blurActive && !blurShown) {
+    setBlurShown(true);
+  }
 
   // Успех загрузки — и в стейт, и в сессионный реестр: следующий смонтированный
   // круг с этим URL (после навигации) стартует сразу с видимым фото.
@@ -131,6 +187,21 @@ export function CirclePhoto({ photoUrl, glyph, loading, className }: CirclePhoto
       )}
     >
       {glyph}
+      {blurShown && view.imgSrc !== null && (
+        <img
+          src={photoBlurSrc(photoBlur) ?? undefined}
+          alt=""
+          decoding="async"
+          // Кадр 16px растянут за край круга на запас кернела CSS-размытия
+          // (6px — конвенция LiveValue) — бахромы по ободу клипа нет. Размер
+          // бокса явный: replaced-элемент с auto-шириной взял бы интринсик
+          // 16px и лёг точкой в углу.
+          className={cn(
+            'absolute -inset-2 h-[calc(100%+1rem)] w-[calc(100%+1rem)] object-cover blur-[6px] transition-opacity',
+            view.blurActive ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+      )}
       {view.imgSrc !== null && (
         <img
           src={view.imgSrc}

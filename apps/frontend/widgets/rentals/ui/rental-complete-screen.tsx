@@ -130,6 +130,7 @@ export function RentalCompleteScreen({
             propertyName={property.name}
             propertyType={property.type}
             propertyPhotoUrl={property.photoUrl}
+            propertyPhotoBlur={property.photoBlur}
             onClose={close}
           />
         )}

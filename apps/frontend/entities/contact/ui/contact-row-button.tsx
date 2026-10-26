@@ -56,7 +56,7 @@ export function ContactRowButton({
         className,
       )}
     >
-      <UserAvatar variant={surface} photoUrl={contact.photoUrl} />
+      <UserAvatar variant={surface} photoUrl={contact.photoUrl} photoBlur={contact.photoBlur} />
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">{contactFullName(contact)}</span>
         {rowSubtitle !== undefined && (
