@@ -39,7 +39,8 @@ import s from "./steps.module.css";
 // прежняя семантика секции (панельной семантики — стрелки, roving
 // tabindex, tabpanel — нет).
 //
-// Текстовая зона слайда — min-h на три строки: в fade слайды лежат
+// Текстовая зона слайда — min-h на две строки на мобиле и одну на
+// планшете-десктопе (решение владельца 26.10): в fade слайды лежат
 // стопкой в точке активного (ядро контр-транслейтит), без равной
 // высоты мокапы шагов прыгали бы по вертикали при кроссфейде; у
 // эталона слайды тоже равной высоты (inline height 534px, замер).
@@ -140,7 +141,7 @@ export function Steps() {
             <div className="swiper-wrapper">
               {STEPS.map((item, index) => (
                 <div key={item.text} className="swiper-slide" aria-hidden={active !== index}>
-                  <p className="mx-auto min-h-[60px] max-w-[250px] text-center text-s leading-5 text-ink/50 tab:max-w-none desk:min-h-[78px] desk:text-l desk:leading-[26px]">
+                  <p className="mx-auto min-h-[40px] max-w-[250px] text-center text-s leading-5 text-ink/50 tab:max-w-none tab:min-h-[20px] desk:text-l desk:leading-[26px]">
                     {item.text}
                   </p>
                   <div className="mt-14 flex justify-center">
