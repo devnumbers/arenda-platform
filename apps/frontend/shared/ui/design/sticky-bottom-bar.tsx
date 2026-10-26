@@ -2,6 +2,7 @@
 
 import type { JSX, ReactNode } from 'react';
 import { cn } from '@/shared/lib/cn';
+import { useVirtualKeyboardOpen } from '@/shared/lib/hooks/useVirtualKeyboardOpen';
 import { SheetDragHandle } from './sheet-drag-handle';
 import { useTabBarSuppression } from './tab-bar';
 
@@ -39,17 +40,22 @@ export function StickyBottomBar({
   aboveTabBar = false,
 }: StickyBottomBarProps): JSX.Element {
   useTabBarSuppression(!aboveTabBar);
+  const keyboardOpen = useVirtualKeyboardOpen();
 
   return (
     <div
       className={cn(
         'fixed inset-x-0 z-40 rounded-t-sheet bg-surface font-sans',
+        'bottom-0',
         // Оффсет над футером — только ниже ПК: ряд табов 72 + его нижний
         // паддинг (тот же расчёт, что у history-чипа #718); на ПК TabBar
-        // скрыт — панель остаётся у нижнего края.
-        aboveTabBar
-          ? 'bottom-0 max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom))]'
-          : 'bottom-0',
+        // скрыт — панель остаётся у нижнего края. Пока открыта виртуальная
+        // клавиатура, футер снят с экрана (решение владельца 24.10.2026) —
+        // оффсет над несуществующим рядом снят вместе с ним, панель стоит
+        // на дне над клавиатурой.
+        aboveTabBar &&
+          !keyboardOpen &&
+          'max-desktop:bottom-[calc(72px_+_env(safe-area-inset-bottom))]',
         // «Хром ПК постоянен» (решение владельца 25.09, правка канона
         // #561, тикет #865): шит панели на ПК — колонка 560 по центру
         // (left/right уже нулевые, margin auto центрирует при capped
