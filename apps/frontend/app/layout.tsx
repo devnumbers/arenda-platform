@@ -47,10 +47,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
     width: 'device-width',
     initialScale: 1,
-    // Android Chrome: клавиатура сжимает layout viewport (как на iOS), а не
-    // рисуется поверх него — fixed-низ (StickyBottomBar, TabBar) и dvh-шелл
-    // реагируют на клавиатуру. WebKit директиву игнорирует: iOS и так
-    // сжимает. Канон mobile-native (Baseline), тикет #1421.
+    // Android Chrome: клавиатура сжимает layout viewport, а не рисуется
+    // поверх него — fixed-низ (StickyBottomBar) и dvh-шелл реагируют на
+    // клавиатуру. WebKit директиву игнорирует: iOS рисует клавиатуру
+    // поверх страницы, layout viewport не трогает — fixed-низ на iPhone
+    // не двигается. TabBar на время открытой клавиатуры снят с экрана
+    // (useVirtualKeyboardOpen), решение владельца 24.10.2026. Канон
+    // mobile-native (Baseline), тикет #1421.
     interactiveWidget: 'resizes-content',
     // maximumScale is intentionally omitted: capping zoom breaks accessibility
     // (WCAG 1.4.4 Resize text). iOS auto-zoom-on-focus is prevented instead by

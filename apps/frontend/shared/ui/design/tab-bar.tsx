@@ -11,6 +11,7 @@ import {
   type JSX,
   type ReactNode,
 } from 'react';
+import { useVirtualKeyboardOpen } from '@/shared/lib/hooks/useVirtualKeyboardOpen';
 import { MoreSheet } from './more-sheet';
 import { TabBarRow } from './tab-bar-row';
 
@@ -33,7 +34,17 @@ import { TabBarRow } from './tab-bar-row';
  * листом шита «Еще» — не темнеет, не дублируется и остаётся живым при
  * открытом шите: «Еще» — тумблер (подсвечен активным, пока шит открыт),
  * табы-ссылки ведут на разделы и закрывают шит; лист поднимается
- * из-за бара. */
+ * из-за бара.
+ *
+ * Виртуальная клавиатура бар не едет (решение владельца 24.10.2026):
+ * канон mobile-native держит мету resizes-content (клавиатура сжимает
+ * layout viewport, тикет #1421), поэтому открытый фокус editable раньше
+ * уносил футер вверх вместе с клавиатурой. Теперь на время открытой
+ * клавиатуры (useVirtualKeyboardOpen) бар снят с экрана вовсе — при
+ * закрытии возвращается; StickyBottomBar не снимается (кнопка действия
+ * остаётся над клавиатурой) — с клавиатурой согласуется только его
+ * aboveTabBar-оффсет. Шит «Еще» гасится вместе с баром: при открытой
+ * клавиатуре он недостижим (редактируемых полей в шите нет). */
 type TabBarSuppression = {
   /** Провайдер в дереве есть; без него TabBar считается неуместным. */
   readonly present: boolean;
@@ -91,9 +102,10 @@ export function TabBar({
   readonly notificationsUnread?: boolean;
 } = {}): JSX.Element | null {
   const { present, bars } = useContext(TabBarSuppressionContext);
+  const keyboardOpen = useVirtualKeyboardOpen();
   const [moreOpen, setMoreOpen] = useState(false);
 
-  if (!present || bars > 0) return null;
+  if (!present || bars > 0 || keyboardOpen) return null;
 
   return (
     <>
