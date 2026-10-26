@@ -9,6 +9,14 @@
  * to the network untouched. See docs/research/pwa-manifest-installability.md
  * §4 "Подводные камни scope на общем origin с лендингом".
  *
+ * PWA-изоляция (standalone-клиент не видит лендинг) живёт НЕ здесь: SW не
+ * может узнать display-mode навигационного запроса, а прежний механизм с
+ * IndexedDB-флагом навсегда закрывал лендинг в браузере на Android (WebAPK
+ * делит хранилище профиля с вкладками; флаг писался только в true — карта
+ * #1610, research #1611). Гард — инлайн-скрипт в layout лендинга
+ * (apps/landing/app/layout.tsx, display-mode + navigator.standalone);
+ * activate ниже лишь сносит легаси-БД флага у уже пострадавших.
+ *
  * The app route prefixes below mirror
  * `apps/frontend/shared/lib/pwa/app-routes.ts` — the TS source of truth.
  * The unit test `app-routes.test.ts` guards against drift between the TS
@@ -18,64 +26,6 @@
 const CACHE_VERSION = 'v2';
 const CACHE_NAME = `rentli-offline-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
-
-// Standalone-flag persistence — the page writes the flag via
-// `shared/lib/pwa/standalone-store.ts` and the SW reads it here to redirect
-// PWA navigations to `/` back into the app. Constants MUST match
-// standalone-store.ts; the guard test `standalone-store marker sync with
-// service worker` catches drift on all three markers (DB name, store, key).
-var STANDALONE_DB_NAME = 'rentli-pwa';
-var STANDALONE_DB_STORE = 'pwa';
-var STANDALONE_DB_KEY = 'standalone';
-
-// Reads the standalone flag. Resolves `false` on any error / missing DB so a
-// broken IndexedDB never blocks navigation — the worst case is the redirect
-// not firing and the user seeing the landing once.
-function readStandaloneFlag() {
-  return new Promise(function (resolve) {
-    if (!('indexedDB' in self)) {
-      resolve(false);
-      return;
-    }
-    var open;
-    try {
-      open = indexedDB.open(STANDALONE_DB_NAME, 1);
-    } catch (error) {
-      void error;
-      resolve(false);
-      return;
-    }
-    open.onupgradeneeded = function () {
-      var db = open.result;
-      if (!db.objectStoreNames.contains(STANDALONE_DB_STORE)) {
-        db.createObjectStore(STANDALONE_DB_STORE);
-      }
-    };
-    open.onsuccess = function () {
-      var db = open.result;
-      try {
-        var tx = db.transaction(STANDALONE_DB_STORE, 'readonly');
-        var store = tx.objectStore(STANDALONE_DB_STORE);
-        var req = store.get(STANDALONE_DB_KEY);
-        req.onsuccess = function () {
-          db.close();
-          resolve(req.result === true);
-        };
-        req.onerror = function () {
-          db.close();
-          resolve(false);
-        };
-      } catch (error) {
-        void error;
-        db.close();
-        resolve(false);
-      }
-    };
-    open.onerror = function () {
-      resolve(false);
-    };
-  });
-}
 
 // App route prefixes — keep in sync with shared/lib/pwa/app-routes.ts.
 // Легаси /dashboard снесён (карта #862, тикет #865): start_url манифеста
@@ -111,17 +61,46 @@ self.addEventListener('install', function (event) {
 
 self.addEventListener('activate', function (event) {
   event.waitUntil(
-    caches.keys().then(function (keys) {
-      return Promise.all(
-        keys
-          .filter(function (key) {
-            return key !== CACHE_NAME;
-          })
-          .map(function (key) {
-            return caches.delete(key);
-          })
-      );
-    })
+    Promise.all([
+      caches.keys().then(function (keys) {
+        return Promise.all(
+          keys
+            .filter(function (key) {
+              return key !== CACHE_NAME;
+            })
+            .map(function (key) {
+              return caches.delete(key);
+            })
+        );
+      }),
+      // Снос легаси-БД флага изоляции «rentli-pwa» (standalone-store.ts
+      // снесён): больше ничего её не читает, а залипший флаг у пострадавших
+      // (Android WebAPK) не должен ожить при откате старого кода из
+      // HTTP-кеша. Ошибки удаления не блокируют активацию.
+      new Promise(function (resolve) {
+        if (!('indexedDB' in self)) {
+          resolve();
+          return;
+        }
+        var del;
+        try {
+          del = indexedDB.deleteDatabase('rentli-pwa');
+        } catch (error) {
+          void error;
+          resolve();
+          return;
+        }
+        del.onsuccess = function () {
+          resolve();
+        };
+        del.onerror = function () {
+          resolve();
+        };
+        del.onblocked = function () {
+          resolve();
+        };
+      }),
+    ])
   );
   self.clients.claim();
 });
@@ -137,26 +116,10 @@ self.addEventListener('fetch', function (event) {
 
   const url = new URL(request.url);
 
-  // PWA hard-isolation: when an installed-PWA client lands on `/` (via
-  // history, an external link, or manual URL entry), bounce it back into the
-  // app. The standalone flag is written by the page after SW registration
-  // (see ServiceWorkerRegister.tsx + standalone-store.ts). Non-standalone
-  // (browser) clients fall through and see the landing as normal.
-  if (url.origin === self.location.origin && url.pathname === '/') {
-    event.respondWith(
-      readStandaloneFlag().then(function (isStandalone) {
-        if (isStandalone) {
-          return Response.redirect('/properties', 302);
-        }
-        // Not a PWA client — let the request go to the network (landing).
-        return fetch(request);
-      })
-    );
-    return;
-  }
-
   // Only intercept navigations to app routes; landing routes and other
-  // origins go straight to the network.
+  // origins go straight to the network. Изоляция standalone-клиента от
+  // лендинга — на странице лендинга (layout.tsx): SW не знает display-mode
+  // навигации, прежний редирект снесён (карта #1610, research #1611).
   if (url.origin !== self.location.origin || !isAppPath(url.pathname)) {
     return;
   }
