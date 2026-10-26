@@ -93,12 +93,13 @@
 
 	# Публичные пути лендинга: корень, юрстраницы, robots/sitemap, шрифты
 	# (self-hosted Onest) и метадата-маршруты Next — OG-картинка
-	# /opengraph-image, apple-touch-icon /apple-icon.png, favicon /favicon.ico
+	# /opengraph-image.png (статичный файл, file-convention добавляет
+	# расширение), apple-touch-icon /apple-icon.png, favicon /favicon.ico
 	# и /icon.png — конечные пути, выписаны точно: промах ушёл бы в кабинетный
 	# catch-all. handle, НЕ handle_path: контейнер лендинга (Next standalone,
 	# ADR 0063) ждёт полный путь. Форма префиксов — только /prefix/* (со слешем
 	# перед *), не /prefix*.
-	@landing path / /privacy /terms /robots.txt /sitemap.xml /fonts/* /icon.png /opengraph-image /apple-icon.png /favicon.ico
+	@landing path / /privacy /terms /robots.txt /sitemap.xml /fonts/* /icon.png /opengraph-image.png /apple-icon.png /favicon.ico
 	handle @landing {
 		reverse_proxy 127.0.0.1:{args[1]}
 	}
