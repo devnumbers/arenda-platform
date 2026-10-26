@@ -1,9 +1,9 @@
 "use client";
 
 import Image, { type StaticImageData } from "next/image";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Swiper, { type Swiper as SwiperType } from "swiper";
-import { Controller, Mousewheel } from "swiper/modules";
+import { Controller, EffectCoverflow, Mousewheel } from "swiper/modules";
 import "swiper/css";
 import { LandingLink } from "@/components/button";
 import house from "@/assets/sections/carousel-house.webp";
@@ -16,48 +16,56 @@ import arrowRight from "@/assets/icons/icon-arrow-right-small.svg";
 import s from "./showcase.module.css";
 
 // «Создайте карточку своей недвижимости» — макеты 2967-75653 (ПК),
-// 3005-78445 (планшет), 3008-79114 (мобила) + аннотация владельца:
-// бесконечная прокрутка, Shift+Scroll, drag мышью, клик по боковой
-// картинке или плашке приводит её к центру, плашка к центру
-// увеличивается, боковые уменьшены до 80% (мобила = планшет × 0.6).
+// 3005-78445 (планшет), 3008-79114 (мобила). Движок — ядро Swiper,
+// всё движение библиотечное (решение владельца 26.10 после лагов
+// версии с самописным морфом --k на setTranslate; референс — «Опыт
+// партнёров» yandex.ru/id/business, живой замер 26.10): блок собран
+// на эффекте coverflow (rotate 0, depth, scale, stretch, slideShadows
+// false) с speed 600 и Mousewheel forceToAxis — у нас то же самое.
 //
-// Вся жестовая механика — библиотечная, ни одного самописного
-// перехватчика событий (решение владельца 24.10 после краха версии
-// с нативной петлёй и форвардом тача; референс — «Опыт партнёров»
-// yandex.ru/id/business: core Swiper + coverflow, speed 600, боковые
-// карточки уменьшены чистым transform'ом, кривая
-// cubic-bezier(0.33, 1, 0.68, 1)).
+// Морф боковых считает сам coverflow: scale = 1 − (1−0.8)·|дистанция|
+// в слотах (сосед ровно 0.8, как в макетах; дальний план 0.6 — на всех
+// ярусах за клипом/шторкой, решение владельца 26.10). Геометрия покоя
+// прежняя: слайды лежат в слотах полной ширины (spaceBetween 0), а
+// stretch = зазор макета − 0.1·ширины (внутрь, отрицательный) ставит
+// боковую (×0.8) ровно на 0.9·ширины + зазор от центральной. Ни одного
+// самописного обработчика движения: никаких setTranslate-пайплайнов,
+// rAF и записи --k — ядро пишет transform слайдов и
+// transition-duration само, в полёте интерполирует композитор.
+//
+// Тайминг — плоский CSS ease @ 600ms (замер 26.10: computed
+// transition-timing-function обёртки Яндекса в полёте = ease, подгонка
+// по 60 кадрам RMS 0.070 против 0.164 у кривой 24.10 — прежний «замер»
+// cubic-bezier(0.33,1,0.68,1) живой анимацией не подтверждается;
+// поправка зафиксирована в DESIGN.md §3). Кривая и свойство перехода
+// слайдов живут в CSS-модуле — coverflow пишет слайдам только инлайн
+// transform и transition-duration.
+//
+// Бесконечность — 3 копии набора с тихой пересадкой slideTo(±N, 0)
+// на покое (renormalizeAll). Нативный loop: true невозможен и на
+// Swiper 14.3.0 — воспроизведено живой приёмкой 26.10: петля
+// переставляет DOM-слайды в каждой ленте независимо (у лент разные
+// шаги 920/421px и контейнеры → разные buffers loopFix), Controller
+// сопоставляет ленты позициями сеток и перестановки не передаёт —
+// пары «фото↔плашка» перекрещиваются сразу после инициализации
+// (photos realIndex 2 при plates realIndex 0). Запрет из DESIGN.md
+// §3 подтверждён; пересадка на покое — единственный не-библиотечный
+// ход, невидимый (0мс по обеим лентам, только из состояния покоя).
 //
 // Две ленты — два ядра Swiper, связаны штатным модулем Controller
-// (by: 'slide'): сплайн snapGrid→snapGrid на равномерных сетках копий —
-// точный аффинный маппинг (шаг целевой ленты = ровно её N слотов на
-// каждые N слотов ведущей), контроллер сам ведёт ведомую (translate,
-// индексы, классы, transitionEnd) и не зацикливается (byController-guard).
-// Фотолента и плашки драгаются каждая сама: drag 1:1, флик-бросок, снап,
-// резинка — release-механика ядра; клик-в-центр — slideToClickedSlide
-// (только tap: после драга ядро гасит клик сам); Shift+Scroll и
-// горизонтальный трекпад — модуль Mousewheel (forceToAxis) на всей зоне
-// секции: вертикальное колесо скроллит страницу, листание — из ядра.
-// Enter/Space по фокусу: слайд — onKeyDown, плашка — кнопка, чей
-// клавиатурный клик (e.detail === 0) ведёт ленту в центр.
-//
-// Бесконечность — 3 копии набора с тихой пересадкой slideTo(±N, 0) на
-// покое. Нативная петля снята тем же решением: slideToLoop через границу
-// обнулял realIndex/классы инстанса, серия колеса валила вкладку.
-// С копиями у Controller нет дрейфа: диапазоны translate обеих лент —
-// ровно (G−1)·шаг, пересадка на N слотов меняет прогресс на N/(G−1) —
-// ведомая уезжает ровно на свои N слотов.
-//
-// Морф — эффект на штатных событиях (как собственные эффекты Swiper'а):
-// k = 1 − |p − snapGrid[i]| / шаг, scale(0.8 + 0.2·k) — слайды лежат в
-// слотах центрального размера, боковые сжимаются чистым transform'ом;
-// ни одного layout-свойства в кадре (первопричина лагов прежнего
-// движка, не возвращать). JS пишет целевые значения (setTranslate) и
-// длительности (setTransition), в полёте интерполирует композитор.
-// spaceBetween отрицательный — зазор макета между центральной и боковой
-// (×0.8): gap − 0.1·ширины, шаг слотов = 0.9·ширины + gap (ставит ядро
-// inline-маржином). Автоплея и стрелок клавиатуры нет (решение
-// владельца 24.10); лейауты DOM статичны — refs стабильны.
+// (by: 'slide', кольцо в обе стороны): сплайн snapGrid→snapGrid на
+// равномерных сетках копий — точный аффинный маппинг; драг 1:1,
+// флик-бросок, снап, резинка, синхронный перелёт ведомой — ядро.
+// Колесо — модуль Mousewheel (forceToAxis, eventsTarget на зоне
+// секции): Shift+Scroll и горизонтальный трекпад листают (события
+// в полёте ядро глотает — guard !animating), вертикальное колесо
+// скроллит страницу. Клик-в-центр — slideToClickedSlide. Автоплея и
+// стрелок клавиатуры нет (решение владельца 24.10); Enter/Space по
+// фокусу — slideTo активного слайда (DOM статичен, копии не
+// переставляются). Ярусы — по ширине окна (как CSS-медиазапросы
+// модуля): на смене яруса пересчитывается только stretch; breakpoints
+// Swiper'а не подходят — меряют контейнер, а плашечный контейнер
+// уже окна.
 
 type Spec = readonly [label: string, value: string];
 
@@ -152,12 +160,11 @@ const N = CARDS.length;
 const COPIES = 3;
 const G = N * COPIES; // узлов в каждой ленте
 const INITIAL = N + 2; // «2-комнатная на Ленина»: средняя копия, карта 2
-const SPEED_MS = 600; // любой программный переход — как у Яндекса (замер 24.10)
+const SPEED_MS = 600; // любой программный переход — как у Яндекса (замер 26.10)
 
 // Метрики центральных состояний по ярусам — зеркало CSS-переменных
-// showcase.module.css. Боковых размеров нет: боковое состояние =
-// центральное × 0.8 чистым scale (внутренние размеры макета — стекло,
-// шрифты, блюр, радиусы — ровно 0.8 от центральных на всех ярусах).
+// showcase.module.css. Боковое состояние = центральное × 0.8 — его
+// считает coverflow (scale 0.8), внутренних арифметик больше нет.
 const METRICS = {
   desk: { card: 1000, gap: 20, plate: 450, plateGap: 16 },
   tab: { card: 500, gap: 12, plate: 400, plateGap: 12 },
@@ -166,28 +173,21 @@ const METRICS = {
 type Tier = keyof typeof METRICS;
 type Metrics = (typeof METRICS)[Tier];
 
-// spaceBetween отрицательный: центры соседних слотов встают так, чтобы
-// на покое между центральной карточкой и боковой (×0.8) оставался зазор
-// макета: spaceBetween = gap − 0.1·ширины, шаг слотов = 0.9·ширины + gap.
-const photoSpaceOf = (m: Metrics) => m.gap - 0.1 * m.card;
-const plateSpaceOf = (m: Metrics) => m.plateGap - 0.1 * m.plate;
-const photoStepOf = (m: Metrics) => 0.9 * m.card + m.gap;
-const plateStepOf = (m: Metrics) => 0.9 * m.plate + m.plateGap;
+// stretch подтягивает боковой слайд (×0.8) из слота полной ширины на
+// позицию макета: центр боковой = 0.9·ширины + зазор от центра
+// центральной → сдвиг внутрь на 0.1·ширины − зазор (у coverflow
+// сдвиг умножается на знак дистанции — правый сосед получает −stretch).
+const photoStretchOf = (m: Metrics) => 0.1 * m.card - m.gap;
+const plateStretchOf = (m: Metrics) => 0.1 * m.plate - m.plateGap;
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-
-// Буферы изменённых узлов за кадр — по одному на ленту, без аллокаций
-const photoIdx = new Array<number>(G);
-const plateIdx = new Array<number>(G);
-
-// Мутабельное состояние — создается в mount-эффекте и меняется только
-// в обработчиках (канон refs лендинга: никакого доступа в рендере)
-type ShowcaseState = {
-  raf: number; // отложенный рендер (коалинг setTranslate в один кадр)
-  tier: Tier;
-  photoK: number[]; // последние записанные k слотов фотоленты
-  plateK: number[]; // …и плашек
-};
+const coverflowOf = (stretch: number) => ({
+  rotate: 0,
+  stretch,
+  depth: 0,
+  scale: 0.8,
+  modifier: 1,
+  slideShadows: false,
+});
 
 export function Showcase() {
   const [mounted, setMounted] = useState(false);
@@ -195,62 +195,14 @@ export function Showcase() {
   const photoElRef = useRef<HTMLDivElement>(null); // контейнер фотоленты
   const photoSwRef = useRef<SwiperType | null>(null);
   const platesSwRef = useRef<SwiperType | null>(null);
-  const stateRef = useRef<ShowcaseState | null>(null);
 
-  // Один проход отрисовки: k по дистанции до позиций покоя обеих лент.
-  // Источник истины — translate и snapGrid Swiper'а (кеш, без чтений
-  // лэйаута). Стиль меняют только узлы, чей k ушёл за порог; точные 0/1
-  // пишутся всегда: хвост ease затухает ниже порога, и без этого на
-  // покое залипает k=0.999 (масштаб до 0.4px мимо).
-  const writeK = useCallback((sw: SwiperType, step: number, kBuf: number[], idxBuf: number[]) => {
-    let changed = 0;
-    for (let j = 0; j < G; j += 1) {
-      const nk = clamp(1 - Math.abs(-sw.translate - (sw.snapGrid[j] ?? 0)) / step, 0, 1);
-      if (nk === 0 || nk === 1 || Math.abs(nk - (kBuf[j] ?? 0)) > 0.002) {
-        kBuf[j] = nk;
-        idxBuf[changed] = j;
-        changed += 1;
-      }
-    }
-    for (let i = 0; i < changed; i += 1) {
-      const j = idxBuf[i] ?? 0;
-      sw.slides[j]?.style.setProperty("--k", (kBuf[j] ?? 0).toFixed(3));
-    }
-  }, []);
-
-  const apply = useCallback(() => {
-    const st = stateRef.current;
-    const ps = photoSwRef.current;
+  // Клавиатурная активация: Enter/Space ведут ленту к слайду (DOM
+  // статичен — копии не переставляются, индекс рендера валиден всегда).
+  const onPlateKeyDown = useCallback((g: number, e: React.KeyboardEvent) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
     const qs = platesSwRef.current;
-    if (!st) return;
-    // флаг снимается до guard'ов по рефам: apply зовётся из rAF-колбэка,
-    // где pending-идентификатор ещё записан, — иначе конвейер глохнет
-    // после первого же scheduleApply
-    st.raf = 0;
-    if (!ps || ps.destroyed || !qs || qs.destroyed) return;
-    const m = METRICS[st.tier];
-    writeK(ps, photoStepOf(m), st.photoK, photoIdx);
-    writeK(qs, plateStepOf(m), st.plateK, plateIdx);
-  }, [writeK]);
-
-  // Рендер — не чаще кадра: setTranslate прилетает на каждый
-  // pointermove (мыши до 1000Гц), виден только последний кадр
-  const scheduleApply = useCallback(() => {
-    const st = stateRef.current;
-    if (!st || st.raf !== 0) return;
-    st.raf = requestAnimationFrame(() => apply());
-  }, [apply]);
-
-  // Длительности перехода своей ленты: в полёте едут CSS-transition
-  // слайдов синхронно с обёрткой (её ставит ядро), 0 — мгновенная
-  // запись (драг, ресайз, тихая пересадка). У плашек вторая ступень —
-  // 200ms фоновой подложки, список длительностей парный.
-  const setDurations = useCallback((sw: SwiperType, duration: number, plates: boolean) => {
-    const dur = duration > 0 ? `${duration}ms` : "0ms";
-    for (let j = 0; j < G; j += 1) {
-      const slide = sw.slides[j];
-      if (slide) slide.style.transitionDuration = plates ? `${dur}, 200ms` : dur;
-    }
+    if (qs && !qs.destroyed) qs.slideTo(g);
   }, []);
 
   // Тихая пересадка обеих лент в среднюю копию — только на покое.
@@ -258,9 +210,8 @@ export function Showcase() {
   // ведомую и мимо её активного индекса). Пересадка на N слотов меняет
   // translate ровно на шаг копии; контроллер зеркалит её ведомой — тоже
   // ровно на её N слотов (диапазоны аффинны, дрейфа нет), так что
-  // логическое соответствие лент не расходится. Вызов на transitionEnd
-  // обеих лент: обычная посадка стреляет в обе (свою и через контроллер
-  // — ведомую), повторный вход после пересадки уже в средней копии.
+  // логическое соответствие лент не расходится. Повторный вход после
+  // пересадки уже в средней копии — второй вызов no-op.
   const renormalizeAll = useCallback(() => {
     // запас в 2 слота с каждого края: у самого края копии сосед с той
     // стороны уже пуст, а подготовка к переходу занимает до слота
@@ -283,39 +234,33 @@ export function Showcase() {
     }
   }, []);
 
-  // Инициализация обеих лент, геометрия и слушатели окна.
+  // Инициализация обеих лент, геометрия и слушатели ярусов.
   useEffect(() => {
     const photoEl = photoElRef.current;
     const stripEl = stripElRef.current;
     if (!photoEl || !stripEl) return;
-    const st = (stateRef.current ??= {
-      raf: 0,
-      tier: "desk",
-      photoK: new Array<number>(G).fill(0),
-      plateK: new Array<number>(G).fill(0),
-    });
     // Ярусы — по ширине окна (как CSS-медиазапросы модуля), не
     // контейнера
     const mmDesk = window.matchMedia("(min-width: 1200px)");
     const mmTab = window.matchMedia("(min-width: 481px)");
     const tierOf = (): Tier => (mmDesk.matches ? "desk" : mmTab.matches ? "tab" : "mob");
-    st.tier = tierOf();
-    const m = METRICS[st.tier];
+    let tier = tierOf();
+    const m = METRICS[tier];
 
     const plates = new Swiper(stripEl, {
-      modules: [Controller],
+      modules: [Controller, EffectCoverflow],
+      effect: "coverflow",
+      coverflowEffect: coverflowOf(plateStretchOf(m)),
       initialSlide: INITIAL,
       speed: SPEED_MS,
       slidesPerView: "auto",
       centeredSlides: true,
-      spaceBetween: plateSpaceOf(m),
+      spaceBetween: 0,
       preventClicks: true,
       // клик по плашке ведёт её копию в центр; фотолента едет следом
       // через контроллер (клик после драга ядро гасит сам)
       slideToClickedSlide: true,
       on: {
-        setTranslate: () => scheduleApply(),
-        setTransition: (swiper, duration) => setDurations(swiper, duration, true),
         transitionEnd: () => renormalizeAll(),
         sliderFirstMove: () => stripEl.classList.add(s.dragging ?? ""),
         touchEnd: () => stripEl.classList.remove(s.dragging ?? ""),
@@ -324,14 +269,14 @@ export function Showcase() {
     platesSwRef.current = plates;
 
     const photos = new Swiper(photoEl, {
-      modules: [Controller, Mousewheel],
+      modules: [Controller, EffectCoverflow, Mousewheel],
+      effect: "coverflow",
+      coverflowEffect: coverflowOf(photoStretchOf(m)),
       initialSlide: INITIAL,
       speed: SPEED_MS,
       slidesPerView: "auto",
       centeredSlides: true,
-      // breakpoints Swiper'а меряют контейнер, а ярус канона (DESIGN.md
-      // §2) живёт на ширине окна — ставится вручную на смене яруса
-      spaceBetween: photoSpaceOf(m),
+      spaceBetween: 0,
       preventClicks: true,
       slideToClickedSlide: true,
       // ведёт плашечную ленту (создана выше); плашки ведут фотоленту
@@ -346,8 +291,6 @@ export function Showcase() {
         eventsTarget: "[data-carousel-canvas]",
       },
       on: {
-        setTranslate: () => scheduleApply(),
-        setTransition: (swiper, duration) => setDurations(swiper, duration, false),
         transitionEnd: () => renormalizeAll(),
         sliderFirstMove: () => photoEl.classList.add(s.dragging ?? ""),
         touchEnd: () => photoEl.classList.remove(s.dragging ?? ""),
@@ -358,42 +301,33 @@ export function Showcase() {
     // драг любой ленты ведёт другую
     plates.controller.control = photos;
 
-    // Ресайз окна и смены яруса: гриды пересчитывает update() обеих лент,
-    // затем точная пересадка активных слайдов в новые снапы и рендер
-    const onViewportChange = () => {
-      requestAnimationFrame(() => {
-        const s1 = stateRef.current;
-        if (!s1) return;
-        const nextTier = tierOf();
-        if (nextTier !== s1.tier) {
-          s1.tier = nextTier;
-          const nm = METRICS[nextTier];
-          for (const [sw, space] of [
-            [photoSwRef.current, photoSpaceOf(nm)],
-            [platesSwRef.current, plateSpaceOf(nm)],
-          ] as const) {
-            if (!sw || sw.destroyed) continue;
-            sw.params.spaceBetween = space;
-            sw.update();
-            sw.slideTo(sw.activeIndex, 0);
-          }
-        }
-        scheduleApply();
-      });
+    // Смена яруса: у обеих лент меняется только stretch (слоты полной
+    // ширины и spaceBetween 0 от яруса не зависят); update() строит
+    // сетки заново, пересадка возвращает активную карточку в центр.
+    const onTierChange = () => {
+      const nextTier = tierOf();
+      if (nextTier === tier) return;
+      tier = nextTier;
+      const nm = METRICS[nextTier];
+      for (const [sw, stretch] of [
+        [photos, photoStretchOf(nm)],
+        [plates, plateStretchOf(nm)],
+      ] as const) {
+        const cover = sw.params.coverflowEffect;
+        if (!cover) continue;
+        cover.stretch = stretch;
+        sw.update();
+        sw.slideTo(sw.activeIndex, 0);
+      }
+      renormalizeAll();
     };
-    window.addEventListener("resize", onViewportChange);
-    mmDesk.addEventListener("change", onViewportChange);
-    mmTab.addEventListener("change", onViewportChange);
+    mmDesk.addEventListener("change", onTierChange);
+    mmTab.addEventListener("change", onTierChange);
 
     setMounted(true);
     return () => {
-      window.removeEventListener("resize", onViewportChange);
-      mmDesk.removeEventListener("change", onViewportChange);
-      mmTab.removeEventListener("change", onViewportChange);
-      if (st.raf !== 0) {
-        cancelAnimationFrame(st.raf);
-        st.raf = 0;
-      }
+      mmDesk.removeEventListener("change", onTierChange);
+      mmTab.removeEventListener("change", onTierChange);
       photoEl.classList.remove(s.dragging ?? "");
       stripEl.classList.remove(s.dragging ?? "");
       photos.destroy(true, true);
@@ -401,20 +335,7 @@ export function Showcase() {
       if (photoSwRef.current === photos) photoSwRef.current = null;
       if (platesSwRef.current === plates) platesSwRef.current = null;
     };
-  }, [renormalizeAll, scheduleApply, setDurations]);
-
-  // Клавиатурная активация плашки: настоящий клик с e.detail === 0
-  // (Enter/Space на кнопке); мышиные и тачевые проходят через
-  // slideToClickedSlide ядра и сюда не доходят по смыслу
-  const onPlateKeyDown = useCallback(
-    (g: number, e: React.KeyboardEvent) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      e.preventDefault();
-      const qs = platesSwRef.current;
-      if (qs && !qs.destroyed) qs.slideTo(g);
-    },
-    [],
-  );
+  }, [renormalizeAll]);
 
   return (
     <section id="showcase" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
@@ -441,24 +362,25 @@ export function Showcase() {
                   {Array.from({ length: COPIES }, (_, c) =>
                     CARDS.map((card, i) => {
                       const g = c * N + i;
+                      const near = c === 1;
                       return (
-                        <button
-                          key={`${c}-${card.key}`}
-                          type="button"
-                          tabIndex={c === 1 ? 0 : -1}
-                          aria-hidden={c !== 1}
-                          aria-label={`Показать: ${card.name}`}
-                          className={`swiper-slide ${s.plate}`}
-                          style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
-                          onKeyDown={(e) => onPlateKeyDown(g, e)}
-                        >
-                          <Image src={card.avatar} alt="" className={s.plateIcon} sizes="52px" draggable={false} />
-                          <span className={s.plateText}>
-                            <span className={s.plateName}>{card.name}</span>
-                            <span className={s.plateAddress}>{card.address}</span>
-                          </span>
-                          <Image src={arrowRight} alt="" className={s.plateArrow} sizes="24px" draggable={false} />
-                        </button>
+                        <div key={`${c}-${card.key}`} className={`swiper-slide ${s.plateSlide}`}>
+                          <button
+                            type="button"
+                            tabIndex={near ? 0 : -1}
+                            aria-hidden={!near}
+                            aria-label={`Показать: ${card.name}`}
+                            className={s.plate}
+                            onKeyDown={(e) => onPlateKeyDown(g, e)}
+                          >
+                            <Image src={card.avatar} alt="" className={s.plateIcon} sizes="52px" draggable={false} />
+                            <span className={s.plateText}>
+                              <span className={s.plateName}>{card.name}</span>
+                              <span className={s.plateAddress}>{card.address}</span>
+                            </span>
+                            <Image src={arrowRight} alt="" className={s.plateArrow} sizes="24px" draggable={false} />
+                          </button>
+                        </div>
                       );
                     }),
                   )}
@@ -482,7 +404,6 @@ export function Showcase() {
                           aria-hidden={!near}
                           aria-label={`Показать: ${card.name}`}
                           className={`swiper-slide ${s.slide}`}
-                          style={{ "--k": g === INITIAL ? 1 : 0 } as CSSProperties}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
