@@ -2,7 +2,9 @@
 
 import Image, { type StaticImageData } from "next/image";
 import { useEffect, useRef } from "react";
-import { createStripEngine } from "@/components/strip-engine";
+import Swiper from "swiper";
+import { A11y, Mousewheel } from "swiper/modules";
+import "swiper/css";
 import rentalCalendar from "@/assets/sections/rental-calendar.webp";
 import rentalContacts from "@/assets/sections/rental-contacts.webp";
 import rentalContract from "@/assets/sections/rental-contract.webp";
@@ -19,13 +21,40 @@ import s from "./rentals-carousel.module.css";
 // правый край до обреза вьюпортом. Точек и «полки» нет — карточки
 // равные, без масштаба и приглушения.
 //
-// Движок — общий модуль лент лендинга (components/strip-engine.ts),
-// канон 1:1 с каруселью pay.yandex.ru/business/acquiring (замер 02.10):
-// drag 1:1 за указателем без инерции со снапом и броском, Shift+Scroll —
-// шаг на событие, резиновый край, 360мс ease-out (460мс <720). Ярусы
-// геометрии — зеркало CSS-модуля: ПК — колонка 1000px, планшет-мобайл —
-// колонка «ширина окна − 48» (поле 24px). Ширины карточек движку не
-// нужны — шаг и длина стрипа измеряются по живым детям дорожки.
+// Механика — полная копия эталона pay.yandex.ru/business/checkout,
+// блок «Чекаут Яндекс Пэй открывает возможности экосистемы Яндекса»
+// (живой дамп конфига и поведения Swiper 26.10): один инстанс,
+// slidesPerView auto; петли нет — за краем сопротивление ядра
+// (resistanceRatio 0.85) и возврат; drag 1:1 за мышью и пальцем
+// (simulateTouch как в эталоне, grabCursor выключен — курсора «руки»
+// нет), threshold 5, touchRatio 1, отпуск — снап к ближайшей позиции;
+// клик по карточке ничего не делает (preventClicks /
+// slideToClickedSlide: false — дефолты ядра, совпадают с эталоном).
+// Скорости эталона: 360мс при окне ≥720 и 460мс при <720, кривая —
+// дефолт ядра CSS ease; граница и уровни breakpoints живут на ширине
+// ОКНА (breakpointsBase 'window' — дефолт ядра и эталона, канон ярусов
+// DESIGN.md §2). Окно <720 — активная карточка по центру с
+// подглядывающими краями соседей (centeredSlides + centeredSlidesBounds:
+// первая карточка прижата к левому краю, последняя — к правому);
+// ≥720 — карточка у левого края колонки, как сейчас. Shift+колесо и
+// горизонтальный трекпад листают ленту — модуль Mousewheel forceToAxis
+// (eventsTarget — контейнер, как в эталоне), вертикальное колесо
+// скроллит страницу; вертикальный пан на таче — страница
+// (touch-action: pan-y в core-CSS .swiper-horizontal). Автоплея нет —
+// в конфиге эталона autoplay {delay: 3000} прописан, но фактически не
+// стартует (autoplayRunning: false, живой замер 26.10); решение
+// владельца 26.10. Буллетов пагинации нет — решение владельца 26.10
+// (макеты 2967-75818 точек не имеют), клавиатурных стрелок нет.
+// Метки слайдов «N / M» — модуль A11y с дефолтами ядра, как в эталоне.
+//
+// Уровни breakpoints ядра не каскадят: выбирается один — старший
+// совпавший, и он extend'ится поверх params (исходники setBreakpoint),
+// поэтому каждый уровень повторяет полный набор параметров. Смена
+// уровня на ресайзе пересчитывает снапы сама (resize-хендлер ядра);
+// геометрия карточек живёт в css-модуле на тех же границах окна.
+//
+// strip-engine из секции снят (сам движок остаётся в testimonials и
+// tablet-strip).
 type Card = {
   title: string;
   text: string;
@@ -98,71 +127,88 @@ const CARDS: Card[] = [
 ];
 
 export function RentalsCarousel() {
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const vp = viewportRef.current;
-    const track = trackRef.current;
-    if (!vp || !track) {
+    const el = scrollerRef.current;
+    if (!el) {
       return;
     }
-    const engine = createStripEngine(vp, track, {
-      tier: () =>
-        window.matchMedia("(min-width: 1200px)").matches
-          ? { gap: 20, column: () => 1000 }
-          : { gap: 12, column: (w) => w - 48 },
-      draggingClass: s.dragging,
+    const sw = new Swiper(el, {
+      // a11y — метки слайдов «N / M» как в эталоне (slideLabelMessage —
+      // дефолт модуля); в core-сборке модуль не включён по умолчанию
+      modules: [A11y, Mousewheel],
+      slidesPerView: "auto",
+      // мышиный драг на десктопе — как в эталоне; дефолт ядра true,
+      // ставим явно против смены дефолтов
+      simulateTouch: true,
+      mousewheel: {
+        enabled: true,
+        forceToAxis: true,
+      },
+      // База — ярус планшета-мобайла; уровни ниже повторяют полный
+      // набор (см. комментарий о не-каскаде уровней выше)
+      speed: 460,
+      centeredSlides: true,
+      centeredSlidesBounds: true,
+      spaceBetween: 12,
+      breakpoints: {
+        0: { speed: 460, centeredSlides: true, centeredSlidesBounds: true, spaceBetween: 12 },
+        720: { speed: 360, centeredSlides: false, centeredSlidesBounds: false, spaceBetween: 12 },
+        1200: { speed: 360, centeredSlides: false, centeredSlidesBounds: false, spaceBetween: 20 },
+      },
     });
     return () => {
-      engine.destroy();
+      sw.destroy(true, true);
     };
   }, []);
 
   return (
-    <div ref={viewportRef} className={s.viewport}>
-      <div ref={trackRef} className={s.track}>
-        {CARDS.map((card) => (
-          <article
-            key={card.title}
-            className="relative h-[500px] w-[320px] shrink-0 overflow-clip rounded-[32px] bg-surface px-6 pt-12 desk:h-[550px] desk:w-[380px] desk:rounded-[40px] desk:px-10 desk:pt-[52px]"
-          >
-            {/* Колонка текста — макет: 272 (карточка 320 минус паддинги
-                24×2) на планшете-мобиле, 300 на десктопе (380−2×40). При
-                прежних 220 заголовки «Напомним…» и «Добавляйте контакты…»
-                ломались на 3 строки вместо двух (#1517). */}
-            <div className="mx-auto flex w-full max-w-[272px] flex-col items-center gap-2 text-center desk:gap-3 desk:max-w-[300px]">
-              <h3 className="text-[22px] font-medium leading-[26px] desk:text-[28px] desk:leading-8">
-                {card.title}
-              </h3>
-              <p
-                className={`text-s leading-5 text-gray-2 ${
-                  card.textSmall
-                    ? "desk:text-xs desk:leading-[18px]"
-                    : "desk:text-r desk:leading-[22px]"
-                }`}
-              >
-                {card.text}
-              </p>
-            </div>
-              {/* max-width не выше карточки: в макете мобилы фото
-                  последних трёх карточек — ровно во всю ширину 320
-                  (верх y=180), а не 380 с обрезом краями карточки,
-                  поднимавший рисунок на текст (#1517). */}
-              <Image
-                src={card.img}
-                alt={card.alt}
-                width={card.imgWidth}
-                height={card.imgWidth}
-                sizes="(min-width: 1200px) 380px, 320px"
-                draggable={false}
-                className={`absolute bottom-0 left-1/2 h-auto -translate-x-1/2 ${
-                  card.imgBottomSub ? "mb-[50px] desk:mb-[70px]" : "mb-0"
-                }`}
-                style={{ maxWidth: `min(100%, ${card.imgWidth}px)` }}
-              />
-          </article>
-        ))}
+    <div className={s.viewport}>
+      <div ref={scrollerRef} className={`swiper swiper-horizontal select-none ${s.scroller}`}>
+        <div className="swiper-wrapper">
+          {CARDS.map((card) => (
+            <article
+              key={card.title}
+              className={`swiper-slide ${s.slide} relative overflow-clip rounded-[32px] bg-surface px-6 pt-12 desk:rounded-[40px] desk:px-10 desk:pt-[52px]`}
+            >
+              {/* Колонка текста — макет: 272 (карточка 320 минус паддинги
+                  24×2) на планшете-мобиле, 300 на десктопе (380−2×40). При
+                  прежних 220 заголовки «Напомним…» и «Добавляйте контакты…»
+                  ломались на 3 строки вместо двух (#1517). */}
+              <div className="mx-auto flex w-full max-w-[272px] flex-col items-center gap-2 text-center desk:gap-3 desk:max-w-[300px]">
+                <h3 className="text-[22px] font-medium leading-[26px] desk:text-[28px] desk:leading-8">
+                  {card.title}
+                </h3>
+                <p
+                  className={`text-s leading-5 text-gray-2 ${
+                    card.textSmall
+                      ? "desk:text-xs desk:leading-[18px]"
+                      : "desk:text-r desk:leading-[22px]"
+                  }`}
+                >
+                  {card.text}
+                </p>
+              </div>
+                {/* max-width не выше карточки: в макете мобилы фото
+                    последних трёх карточек — ровно во всю ширину 320
+                    (верх y=180), а не 380 с обрезом краями карточки,
+                    поднимавший рисунок на текст (#1517). */}
+                <Image
+                  src={card.img}
+                  alt={card.alt}
+                  width={card.imgWidth}
+                  height={card.imgWidth}
+                  sizes="(min-width: 1200px) 380px, 320px"
+                  draggable={false}
+                  className={`absolute bottom-0 left-1/2 h-auto -translate-x-1/2 ${
+                    card.imgBottomSub ? "mb-[50px] desk:mb-[70px]" : "mb-0"
+                  }`}
+                  style={{ maxWidth: `min(100%, ${card.imgWidth}px)` }}
+                />
+            </article>
+          ))}
+        </div>
       </div>
     </div>
   );

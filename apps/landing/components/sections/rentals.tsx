@@ -2,7 +2,8 @@ import { RentalsCarousel } from "@/components/sections/rentals-carousel";
 
 // «Управляйте арендой» — макеты 2967-75818/3005-78042/3008-79124:
 // заголовок по центру на ПК и влево на планшете-мобиле, лента без
-// точек и «полки» (механика — components/sections/rentals-carousel.tsx).
+// точек и «полки» (механика — components/sections/rentals-carousel.tsx,
+// Swiper 1:1 с эталоном pay.yandex.ru/business/checkout).
 export function Rentals() {
   return (
     <section id="rentals" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
