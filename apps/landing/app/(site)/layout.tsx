@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { CookieBanner } from "@/components/cookie-banner";
+import { EmailToastHost } from "@/components/copy-email";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -21,6 +22,8 @@ export default async function SiteLayout({
       <SiteHeader />
       <main className="flex-1">{children}</main>
       <SiteFooter />
+      {/* Хост тостов копирования почты (футер, FAQ, юрстраницы). */}
+      <EmailToastHost />
       {/* Точка гейта аналитики: когда на лендинге появятся скрипты метрик,
           их загрузку разрешать только при cookieConsentGiven. */}
       {!cookieConsentGiven && <CookieBanner />}
