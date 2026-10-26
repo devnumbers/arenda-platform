@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": [
+          "playwright-mcp",
+          "--isolated",
+          "--output-dir=.playwright-mcp/artifacts"
+        ],
+        "timeout": {
+          "execution": 180000
+        }
+      },
+      "postgres": {
+        "type": "local",
+        "command": ["postgres-mcp", "-tc", ".zcode/postgres-mcp.tools.json"],
+        "timeout": {
+          "execution": 60000
+        }
+      }
+    }
+  }
+}

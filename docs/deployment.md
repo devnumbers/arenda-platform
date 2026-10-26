@@ -328,7 +328,7 @@ localhost-порты контейнеров. Конфигурация — мод
   ломала кабинет на stage 30.09: HTML 200, каждый чанк 404;
 - лендинг (`@landing`): `/` (точный), `/privacy`, `/terms`, `/robots.txt`,
   `/sitemap.xml`, `/fonts/*` (self-hosted Onest), метадата-маршруты Next
-  `/icon.png`, `/opengraph-image`, `/apple-icon.png`, `/favicon.ico`
+  `/icon.png`, `/opengraph-image.png`, `/apple-icon.png`, `/favicon.ico`
   (OG-картинка, apple-touch-icon, favicon — конечные пути, точные) — через
   `handle`, НЕ `handle_path`: контейнер лендинга (Next standalone, ADR 0063)
   ждёт полный путь;

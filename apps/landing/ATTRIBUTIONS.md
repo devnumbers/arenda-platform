@@ -96,6 +96,27 @@ Figma Make-экспорту и описывал shadcn/ui + Unsplash — см. �
   imageRef не записан. Внешний источник не зафиксирован — требует проверки
   владельцем.
 
+### carousel-house.webp, carousel-avatar-house.webp, carousel-warehouse.webp,
+### carousel-flat.webp, carousel-room.webp, carousel-shop.webp
+- Использование: `components/sections/showcase.tsx` — фотокарточки карусели
+  «Создайте карточку своей недвижимости» (house/flat/room/shop/warehouse) и
+  аватар плашки дома (avatar-house; у остальных плашек аватаром служит само
+  карточное фото).
+- Коммиты: добавлены c3c489ac1 (блок по макетам 2967-75653/3005-78445/
+  3008-79114). 24.10.2026 carousel-warehouse.webp заменён на новый кадр
+  (ветка landing-showcase-swiper): оригинальные байты imageRef-заливки →
+  webp q100 (sharp, без ресайза, 1363×1023).
+- Figma: файл «Рентли. Сервис и лендинг», лист карточек секции
+  (`2993-77905`), imageRef фоновых заливок карточек: дом `f538907c…`
+  (узел `2993:77906`), склад `b7aff514…` (узел `2993:77928` — нижняя
+  заливка в стопе, новая; верхняя `3f87f76c…` — битмап, живший в проде
+  до 24.10, попиксельно совпадает с прежним ассетом), 2-комнатная
+  `b04e7016…` (`2993:77941`), комната `c609165c…` (`2993:77972`), магазин
+  `956df7f5…` (`2993:77997`). Аватар плашки дома лежит вне этого листа —
+  узел и imageRef не сняты.
+- Внешний источник: фотографии; провенанс не подтверждён — требует
+  проверки владельцем (как и все фото лендинга).
+
 ### rental-calendar.webp
 - Использование: `components/sections/rentals-carousel.tsx` — карточка
   «Отмечайте оплату аренды» (alt «Экран оплаты аренды в Рентли»).
@@ -388,10 +409,9 @@ Figma Make-экспорту и описывал shadcn/ui + Unsplash — см. �
 ## Метадата-битмапы `app/`
 
 ### app/icon.png
-- Использование: favicon (конвенция `app/icon.png` Metadata API Next.js) и
-  иконка на OG-картинке — `app/opengraph-image.tsx:17` читает файл как
-  data-URL (next/image в OG-рендере недоступен); это единственная кодовая
-  ссылка.
+- Использование: favicon (конвенция `app/icon.png` Metadata API Next.js);
+  кодовых ссылок нет — раньше генератор OG-картинки читал файл как data-URL,
+  генератор снят 26.10 (OG-баннер — статичный PNG из Figma).
 - Коммиты: исходно `apps/frontend/app/icon.png` — e9407576 «feat(frontend):
   replace favicon.ico with icon.png»; в лендинг пришёл 0bb522b3
   (`apps/landing/public/icon.png`), перенесён в `src/assets` 6141bb53
@@ -415,14 +435,21 @@ Figma Make-экспорту и описывал shadcn/ui + Unsplash — см. �
 - Внешний источник: производный от `app/icon.png`; провенанс исходного
   битмапа не подтверждён — требует проверки владельцем.
 
-## Шрифты
+### app/opengraph-image.png
+- Использование: og:image/twitter:image — файловая конвенция Metadata API
+  Next.js (alt — `app/opengraph-image.alt.txt`), явных ссылок в коде нет.
+  26.10 заменила генератор `app/opengraph-image.tsx` (Satori) — снят вместе
+  с его TTF-срезами `assets/onest-og-400/600.ttf`; публичный путь стал
+  `/opengraph-image.png` (file-convention добавляет расширение) — отражено
+  в Caddy-матчере `@landing`.
+- Коммиты: добавлен 26.10 — «og: баннер из Figma вместо генератора».
+- Figma: узел `3705:161543` «Рентли» (1200×630) — рендер фрейма: фон-градиент
+  с битмап-заливками (imageRef `253b396c…`, `cce51159…`), 3D-иконка
+  (imageRef `390a0b24…`, как у `app/icon.png`) и векторный логотип.
+- Внешний источник: рендер фрейма Figma-файла «Рентли. Сервис и лендинг»;
+  провенанс исходных заливок не подтверждён — требует проверки владельцем.
 
-### assets/onest-og-400.ttf, assets/onest-og-600.ttf
-- Шрифт Onest, лицензия SIL OFL (пометка «шрифт OFL» в комментарии
-  `app/opengraph-image.tsx:5-8`; файлы нужны Satori для OG-картинки, которая
-  не читает woff2).
-- Коммит: добавлены вместе с OG-картинкой (SEO-тикет, карта #888); срезы
-  конвертированы fonttools из woff2-срезов `public/fonts`.
+## Шрифты
 
 ### public/fonts/onest-cyrillic-ext.woff2, onest-cyrillic.woff2,
 ### onest-latin-ext.woff2, onest-latin.woff2

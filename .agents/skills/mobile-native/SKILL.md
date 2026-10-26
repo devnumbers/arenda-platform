@@ -275,7 +275,7 @@ button, a, [role="button"] {
 }
 ```
 
-`interactive-widget=resizes-content` makes the software keyboard shrink the layout viewport on Android Chrome, so `100dvh` and bottom-pinned inputs react to it the way they do on iOS. Drop `overscroll-behavior: none` from `html` if the app is a scrolling document where pull-to-refresh is welcome.
+`interactive-widget=resizes-content` makes the software keyboard shrink the layout viewport on Android Chrome, so `100dvh` and bottom-pinned inputs react to it. WebKit ignores the directive — iOS overlays the keyboard instead, so fixed bottoms on iOS stay put (hide bottom navigation while the keyboard is open if it must not be seen riding up on Android). Drop `overscroll-behavior: none` from `html` if the app is a scrolling document where pull-to-refresh is welcome.
 
 ## Never Ship
 

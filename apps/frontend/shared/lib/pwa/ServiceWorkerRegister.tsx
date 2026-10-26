@@ -2,8 +2,6 @@
 
 import { useEffect, type JSX } from 'react';
 import { resolveClickTarget } from './push-payload';
-import { isStandaloneMode } from './standalone';
-import { markStandaloneClient } from './standalone-store';
 
 /**
  * Registers the app service worker (`/sw.js`) with scope `/`.
@@ -13,9 +11,10 @@ import { markStandaloneClient } from './standalone-store';
  * avoid waking it up unnecessarily. The scope is still `/` (the origin root),
  * and the SW's fetch handler filters cabinet paths itself — see `public/sw.js`.
  *
- * When the app runs in PWA standalone mode, a standalone flag is written to
- * IndexedDB after registration. The SW reads it to redirect any navigation to
- * `/` back to `/properties`, keeping PWA users inside the app (hard isolation).
+ * PWA-изоляция (standalone-клиент не видит лендинг) живёт на лендинге —
+ * инлайн-гард по display-mode в его layout; персистентный IndexedDB-флаг
+ * снесён (карта #1610, research #1611 — WebAPK на Android делит хранилище
+ * с браузером, флаг навсегда закрывал лендинг).
  *
  * `updateViaCache: 'none'` guarantees the SW script bypasses the HTTP cache so
  * updates are picked up promptly. `public/` is already served with
@@ -35,15 +34,6 @@ export function ServiceWorkerRegister(): JSX.Element | null {
         const register = (): void => {
             navigator.serviceWorker
                 .register('/sw.js', { scope: '/', updateViaCache: 'none' })
-                .then(() => {
-                    // Mark this context as a PWA client so the SW can redirect
-                    // navigations to `/` back into the app. No-op outside
-                    // standalone mode. Failures are non-fatal: the worst case
-                    // is the hard-isolation redirect not firing.
-                    if (isStandaloneMode()) {
-                        void markStandaloneClient();
-                    }
-                })
                 .catch(() => {
                     // Registration failure is non-fatal: the app stays usable
                     // as a regular website; only the offline screen and future

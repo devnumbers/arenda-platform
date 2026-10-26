@@ -50,4 +50,43 @@ test.describe('Мобильный хром', () => {
     await tapCenter(page, nav.getByRole('button', { name: 'Еще', includeHidden: true }));
     await expect(page.getByRole('dialog', { name: 'Еще' })).toBeHidden();
   });
+
+  test('клавиатура не уносит футер: фокус в поле снимает TabBar, возврат возвращает', async ({
+    page,
+    seededUser,
+  }) => {
+    test.skip(
+      test.info().project.name !== 'mobile-chromium',
+      'детектор клавиатуры гейтится (pointer: coarse) — только мобильный проект',
+    );
+
+    await openCabinetWithSeededSession(page, seededUser);
+    await page.goto('/operations');
+
+    const nav = page.locator('nav[aria-label="Нижняя навигация"]');
+    await expect(nav).toBeVisible();
+
+    // Вход в поиск — пилюля хаба (на мобиле поисковой кнопки в шапке нет)
+    // и программный фокус поля на маунте (useEffect focus,
+    // jsx-a11y/no-autofocus): на устройстве это момент подъёма клавиатуры.
+    // Канон resizes-content (#1421) сжимает layout viewport — раньше футер
+    // уезжал вверх вместе с клавиатурой; теперь снимается с экрана
+    // (решение владельца 24.10.2026).
+    await tapCenter(page, page.getByRole('button', { name: 'Найти операцию' }));
+    await expect(page).toHaveURL(new RegExp('/operations/search$'));
+    await expect(page.getByRole('searchbox', { name: 'Найти операцию' })).toBeVisible();
+    await expect(nav).toHaveCount(0);
+
+    // Возврат в хаб историей: поле размонтируется вместе с фокусом — Chrome
+    // не шлёт focusout при удалении сфокусированного элемента; это ровно
+    // путь «клавиатура закрылась без blur» на устройстве («назад» Android),
+    // который ловит resize-страховка хука (вьюпорт растёт обратно). В
+    // эмуляции клавиатуры и resize нет — событие даём руками, контракт тот
+    // же: resize при открытом состоянии с высотой не ниже baseline закрывает
+    // его, футер возвращается.
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp('/operations$'));
+    await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+    await expect(nav).toBeVisible();
+  });
 });

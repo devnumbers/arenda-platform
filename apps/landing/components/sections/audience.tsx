@@ -6,7 +6,6 @@ import {
   GLASS_GRADIENT,
   GLASS_SKIN,
 } from "@/components/glass";
-import { Reveal } from "@/components/reveal";
 import { TabletStrip } from "@/components/tablet-strip";
 import iconBriefcase01 from "@/assets/icons/icon-briefcase-01.svg";
 import iconBuilding05 from "@/assets/icons/icon-building-05.svg";
@@ -15,9 +14,9 @@ import iconUser02 from "@/assets/icons/icon-user-02.svg";
 // «Для кого сервис» — макеты 2851-154065 (десктоп: три карточки
 // 320×320, r40, p-40, шаг 64 после заголовка), 2851-154111
 // (мобайл: стопка 345×280, r32, p-32, шаг 32); иконка 64×64, заголовок
-// карточки 28/32 Medium и текст 18/22, text-balance на заголовке секции
-// и текстах карточек (свойство стоит в узлах Figma) — на всех
-// брейкпоинтах.
+// карточки 28/32 Medium и текст 18/22; баланс строк заголовков и
+// абзацев — глобально (globals.css, text-wrap-style: balance, решение
+// владельца 24.10; в узлах Figma свойство стоит у тех же текстов).
 // Шкурки по новым кадрам 2967:75911 (десктоп) и карточек-спек
 // 2967:75914/75920/75926 разошлись: «Собственники» — плоская #F3F4F6,
 // обводка/стекло/блики/блюр сняты entirely; «Бизнес» и «Агентства»
@@ -62,11 +61,9 @@ export function Audience() {
   return (
     <section id="audience" className="mt-24 scroll-mt-[88px] desk:mt-[156px] desk:scroll-mt-[104px]">
       <div className="mx-auto w-full max-w-[1048px] px-6 desk:max-w-[1000px] desk:px-0">
-        <Reveal>
-          <h2 className="text-center text-[28px] font-semibold leading-8 text-balance tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
-            Для кого сервис
-          </h2>
-        </Reveal>
+        <h2 className="text-center text-[28px] font-semibold leading-8 tab:text-[32px] tab:leading-9 desk:text-h2 desk:leading-[60px]">
+          Для кого сервис
+        </h2>
       </div>
       {/* Планшет: полоса во всю ширину окна — поведение CardTrio
           («Организуйте дела»), движок «Управляйте арендой» (TabletStrip:
@@ -80,10 +77,9 @@ export function Audience() {
         nativeClassName="strip-scroll flex flex-col gap-3 px-6 tab:mx-auto tab:w-fit tab:max-w-full tab:flex-row desk:gap-5 desk:px-0"
         centerWhenFit
       >
-        {CARDS.map((card, index) => (
-          <Reveal
+        {CARDS.map((card) => (
+          <div
             key={card.title}
-            delay={index * 80}
             className="h-full tab:w-[320px] tab:shrink-0"
           >
             <article
@@ -105,11 +101,11 @@ export function Audience() {
                   card.light ? "text-ink" : "text-white"
                 }`}
               >
-                <h3 className="text-[28px] font-medium leading-8 text-balance">
+                <h3 className="text-[28px] font-medium leading-8">
                   {card.title}
                 </h3>
                 <p
-                  className={`text-r text-balance ${
+                  className={`text-r ${
                     card.light ? "text-gray-2" : "text-white"
                   }`}
                 >
@@ -117,7 +113,7 @@ export function Audience() {
                 </p>
               </div>
             </article>
-          </Reveal>
+          </div>
         ))}
       </TabletStrip>
     </section>
