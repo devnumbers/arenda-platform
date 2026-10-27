@@ -201,12 +201,15 @@ export function PaymentsGlobalScreen(): JSX.Element {
             />
 
             {pending && (
-              <>
+              /* Маркер pending-фазы data-слоя — гард e2e #1602 (холодный
+               * вход и возврат без скелетон-свопа); contents не меняет
+               * раскладку — секции остаются flex-детьми обёртки хаба. */
+              <div className="contents" data-testid="payments-hub-pending">
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
-              </>
+              </div>
             )}
 
             {!pending && (
