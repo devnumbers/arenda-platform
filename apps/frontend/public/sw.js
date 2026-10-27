@@ -6,7 +6,8 @@
  * registered, including the landing pages. To stay safe, the fetch handler
  * strictly filters by path and only intercepts app navigations — everything
  * else (landing routes, /api, /_next static, fonts, images) is passed through
- * to the network untouched. See docs/research/pwa-manifest-installability.md
+ * to the network untouched, with the single exception of the offline page's
+ * own fonts (cache-first below). See docs/research/pwa-manifest-installability.md
  * §4 "Подводные камни scope на общем origin с лендингом".
  *
  * PWA-изоляция (standalone-клиент не видит лендинг) живёт НЕ здесь: SW не
@@ -23,9 +24,20 @@
  * source and this inline copy.
  */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `rentli-offline-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
+
+// Шрифты офлайн-страницы — inline-копия
+// `apps/frontend/shared/lib/pwa/offline-fonts.ts` (TS source of truth).
+// Страница рисуется фирменным Onest (решение владельца 27.10.2026), но
+// /fonts отдаётся с max-age=0/must-revalidate: офлайн перевалидация умирает,
+// без прекэша @font-face падал бы в системный фолбэк. Синхронность сторожит
+// offline-fonts.test.ts.
+const OFFLINE_FONT_PATHS = [
+  '/fonts/onest-cyrillic.woff2',
+  '/fonts/onest-latin.woff2',
+];
 
 // App route prefixes — keep in sync with shared/lib/pwa/app-routes.ts.
 // Легаси /dashboard снесён (карта #862, тикет #865): start_url манифеста
@@ -54,7 +66,7 @@ function isAppPath(pathname) {
 self.addEventListener('install', function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.add(OFFLINE_URL);
+      return cache.addAll([OFFLINE_URL].concat(OFFLINE_FONT_PATHS));
     })
   );
 });
@@ -108,13 +120,28 @@ self.addEventListener('activate', function (event) {
 self.addEventListener('fetch', function (event) {
   const request = event.request;
 
+  const url = new URL(request.url);
+
+  // Шрифты офлайн-страницы — cache-first из прекэша install: офлайн у
+  // браузера нет другого способа достать их (см. комментарий у списка).
+  // Промах (старый SW до апгрейда, ручная чистка кэша) — в сеть.
+  if (
+    url.origin === self.location.origin &&
+    OFFLINE_FONT_PATHS.indexOf(url.pathname) !== -1
+  ) {
+    event.respondWith(
+      caches.match(request).then(function (cached) {
+        return cached ?? fetch(request);
+      })
+    );
+    return;
+  }
+
   // Only handle navigation (document) requests — leave API calls, static
   // assets, fonts, images, and everything else to the network.
   if (request.mode !== 'navigate') {
     return;
   }
-
-  const url = new URL(request.url);
 
   // Only intercept navigations to app routes; landing routes and other
   // origins go straight to the network. Изоляция standalone-клиента от

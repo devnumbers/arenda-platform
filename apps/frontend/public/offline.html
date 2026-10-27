@@ -5,86 +5,130 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Нет соединения — Рентли</title>
   <style>
+    /* Макет «Рентли» Figma 40000051:81613 (27.10.2026). Геометрия колонки —
+       канон сервиса (решение владельца 27.10: max-width 560 = --container-column,
+       паддинги 24 вместо 32 макета). Root-колонка макета держит трёх детей —
+       лого / блок «иллюстрация + текст» / кнопки — и space-between разводит
+       их: лого вверху, кнопки прижаты к низу, середина висит в центре
+       освободившегося пространства. */
     *,
     *::before,
     *::after {
       box-sizing: border-box;
     }
 
+    /* Onest — фирменный шрифт (решение владельца 27.10: не системный стек).
+       @font-face продублирован из app/globals.css: страница отдаётся из кэша SW
+       офлайн и не может импортировать CSS-бандл. Два сабсета — латиница («VPN»)
+       и кириллица (весь русский текст) — те же, что прелоадит app/layout.tsx;
+       сами файлы прекэшит public/sw.js (OFFLINE_FONT_PATHS): /fonts отдаётся с
+       max-age=0/must-revalidate, офлайн перевалидация умирает. Синхронность
+       трёх файлов сторожит shared/lib/pwa/offline-fonts.test.ts. */
+    @font-face {
+      font-family: 'Onest';
+      src: url('/fonts/onest-cyrillic.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+    }
+
+    @font-face {
+      font-family: 'Onest';
+      src: url('/fonts/onest-latin.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+
     html,
     body {
       margin: 0;
       padding: 0;
-      height: 100%;
     }
 
     body {
+      font-family: 'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #ffffff;
+      color: #1e1e1e;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
       display: flex;
-      align-items: center;
-      justify-content: center;
+      flex-direction: column;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
       /* dvh — видимая высота без адресной строки мобильного браузера:
-         100vh включает её, и блок уезжает вниз. */
+         100vh включает её, и нижний блок уезжает за пределы экрана. */
       min-height: 100vh;
       min-height: 100dvh;
       padding: 24px;
       padding-bottom: calc(24px + env(safe-area-inset-bottom));
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #ffffff;
-      color: #1e1e1e;
-      text-align: center;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* Колонка макета Figma 2353:50704: центрированный блок, зазоры 32/8.
-       400px — ширина карточки канона Modal, чтобы кнопки не расползались
-       на всю ширину десктопа. Сдвиг на −5vh — оптический центр (решение
-       владельца 21.09): на высоких экранах «мёртвый» центр оставляет
-       треть экрана пустоты сверху. */
-    .panel {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 32px;
-      width: 100%;
-      max-width: 400px;
-      transform: translateY(-5vh);
     }
 
     /* Лого — вектор HeaderLogo (shared/assets/icons/rently-logo.svg),
-       заинлайнен: страница отдаётся из кэша SW при выключенной сети и
-       должна работать с нулём сетевых запросов. */
+       заинлайнен: страница должна работать с нулём сетевых запросов. */
     .logo {
+      display: block;
       width: 112px;
       height: 28px;
       flex-shrink: 0;
     }
 
+    /* Средний блок макета (кадр 40000052:81661): иллюстрация → текст,
+       зазор 24. */
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Иллюстрация «нет интернета» — байт-копия
+       shared/assets/icons/no-internet.svg (Figma 40000051:81652), вне бареля
+       иконок: потребитель один — эта страница. Декоративная: смысл несёт
+       заголовок. */
+    .illustration {
+      display: block;
+      width: 96px;
+      height: 96px;
+    }
+
     .text-group {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 16px;
     }
 
     .title {
       margin: 0;
-      font-size: 28px;
-      line-height: 32px;
+      font-size: 32px;
+      line-height: 36px;
       font-weight: 600;
     }
 
-    .subtitle {
+    .paragraphs {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .paragraphs p {
       margin: 0;
       font-size: 16px;
-      line-height: 18px;
+      line-height: 20px;
       font-weight: 400;
       color: #6f787c;
     }
 
+    /* Кнопки в ряд, поровну (макет 40000053:81673): «Поддержка» слева,
+       «Обновить» справа. */
     .buttons {
       display: flex;
-      flex-direction: column;
       gap: 8px;
-      width: 100%;
     }
 
     /* Канон Button default (Figma 939:46118): 56px, паддинг 24, кегль
@@ -92,10 +136,11 @@
        из токенов дизайн-слоя. */
     .btn {
       display: flex;
+      flex: 1 1 0;
+      min-width: 0;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      width: 100%;
       min-height: 56px;
       padding: 0 24px;
       border: 0;
@@ -146,10 +191,20 @@
     .btn-secondary:active {
       background: #dfe0e2;
     }
+
+    /* На минимальной ширине поддержки (320, ярусы globals.css) ряд из двух
+       кнопок канона с боковым паддингом 24 физически не помещается
+       («Поддержка» не влезает в половину колонки) — ниже 360 паддинг
+       сжимается до 16, композиция макета (ряд поровну) сохраняется. */
+    @media (max-width: 359px) {
+      .btn {
+        padding: 0 16px;
+      }
+    }
   </style>
 </head>
 <body>
-  <main class="panel">
+  <main class="page">
     <svg class="logo" viewBox="0 0 112 28" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Рентли">
       <path d="M0 7.30621C0 3.2711 3.27113 0 7.30627 0H20.6938C24.7289 0 28 3.2711 28 7.30621V20.6936C28 24.7288 24.7289 27.9998 20.6938 27.9998H7.30627C3.27113 27.9998 0 24.7288 0 20.6936V7.30621Z" fill="#BCDCFF"/>
       <path d="M11.8697 16.7392H16.1305V22.9073C16.1305 23.2557 16.1971 23.601 16.3265 23.9246L17.9566 28H10.0436L11.6737 23.9246C11.8031 23.601 11.8697 23.2558 11.8697 22.9073V16.7392Z" fill="white"/>
@@ -162,14 +217,23 @@
       <path d="M101.033 8.2766H103.844V16.0638L109.125 8.2766H112V20.0638H109.189V12.2766L103.908 20.0638H101.033V8.2766Z" fill="#2B7FFF"/>
     </svg>
 
-    <div class="text-group">
-      <h1 class="title">Нет соединения</h1>
-      <p class="subtitle">Проверьте подключение к интернету и попробуйте снова</p>
-    </div>
+    <section class="content">
+      <svg class="illustration" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+        <path d="M64.9552 64.5165C65.2404 62.8844 64.1486 61.33 62.5165 61.0448C60.8844 60.7596 59.33 61.8514 59.0448 63.4835L62 64L64.9552 64.5165ZM35.9744 34.4435C36.2193 32.8048 35.0895 31.2779 33.4509 31.033C31.8122 30.788 30.2853 31.9179 30.0403 33.5565L33.0074 34L35.9744 34.4435ZM8 45C6.34315 45 5 46.3431 5 48C5 49.6569 6.34315 51 8 51V48V45ZM48 51C49.6569 51 51 49.6569 51 48C51 46.3431 49.6569 45 48 45V48V51ZM28.6482 9.591C27.1691 10.3376 26.5752 12.1419 27.3218 13.621C28.0684 15.1001 29.8727 15.6939 31.3518 14.9473L30 12.2692L28.6482 9.591ZM81.0508 64.6478C80.304 66.1268 80.8975 67.9312 82.3765 68.678C83.8555 69.4248 85.6599 68.8312 86.4067 67.3522L83.7287 66L81.0508 64.6478ZM64 48H61C61 49.6569 62.3431 51 64 51V48ZM33.2104 18.9048C32.6056 20.4473 33.3657 22.1881 34.9082 22.7929C36.4507 23.3978 38.1915 22.6377 38.7963 21.0952L36.0034 20L33.2104 18.9048ZM10.1213 5.87868C8.94975 4.70711 7.05025 4.70711 5.87868 5.87868C4.70711 7.05025 4.70711 8.94975 5.87868 10.1213L8 8L10.1213 5.87868ZM85.8804 90.1231C87.052 91.2947 88.9515 91.2947 90.1231 90.1231C91.2947 88.9515 91.2947 87.052 90.1231 85.8804L88.0018 88.0018L85.8804 90.1231ZM48 88V85C27.542 85 11 68.5589 11 48.33H8H5C5 71.9194 24.2752 91 48 91V88ZM8 48.33H11C11 38.0797 15.24 28.812 22.0912 22.151L20 20L17.9088 17.849C9.94913 25.5876 5 36.3858 5 48.33H8ZM76 76.6601L73.9088 74.5091C67.2336 80.9988 58.0932 85 48 85V88V91C59.7104 91 70.3364 86.3506 78.0912 78.8111L76 76.6601ZM48 88V85C46.8816 85 45.5125 84.4457 43.9517 82.7953C42.385 81.1385 40.8358 78.5802 39.4717 75.1701C36.7503 68.3665 35 58.7617 35 48H32H29C29 59.3297 30.8314 69.7249 33.9009 77.3984C35.4322 81.2269 37.3308 84.5264 39.5924 86.9179C41.86 89.3157 44.7002 91 48 91V88ZM62 64L59.0448 63.4835C57.8398 70.3785 56.0574 76.01 53.917 79.8318C51.7041 83.7833 49.6024 85 48 85V88V91C52.9586 91 56.6224 87.2803 59.152 82.7636C61.7541 78.1172 63.6912 71.7488 64.9552 64.5165L62 64ZM32 48H35C35 43.2172 35.3459 38.6482 35.9744 34.4435L33.0074 34L30.0403 33.5565C29.3662 38.0664 29 42.9322 29 48H32ZM8 48V51H48V48V45H8V48ZM48 8V11C68.4345 11 85 27.5655 85 48H88H91C91 24.2518 71.7482 5 48 5V8ZM30 12.2692L31.3518 14.9473C36.3526 12.4232 42.0058 11 48 11V8V5C41.0454 5 34.4682 6.6533 28.6482 9.591L30 12.2692ZM88 48H85C85 53.9943 83.5758 59.647 81.0508 64.6478L83.7287 66L86.4067 67.3522C89.3453 61.5325 91 54.9555 91 48H88ZM48 8V11C49.1184 11 50.4875 11.5543 52.0483 13.2047C53.615 14.8615 55.1642 17.4198 56.5283 20.8299C59.2497 27.6335 61 37.2383 61 48H64H67C67 36.6703 65.1686 26.2751 62.0991 18.6016C60.5678 14.7731 58.6692 11.4736 56.4076 9.08207C54.14 6.68426 51.2998 5 48 5V8ZM36.0034 20L38.7963 21.0952C40.1378 17.6742 41.8179 15.058 43.5323 13.3455C45.2643 11.6155 46.8195 11 48 11V8V5C44.7046 5 41.7135 6.68176 39.2921 9.10043C36.8532 11.5366 34.7729 14.9203 33.2104 18.9048L36.0034 20ZM64 48V51H88V48V45H64V48ZM8 8L5.87868 10.1213L85.8804 90.1231L88.0018 88.0018L90.1231 85.8804L10.1213 5.87868L8 8Z" fill="#2B7FFF"/>
+      </svg>
+
+      <div class="text-group">
+        <h1 class="title">Нет соединения</h1>
+        <div class="paragraphs">
+          <p>Проверьте подключение к сети. Если интернет работает, попробуйте отключить VPN и повторить попытку</p>
+          <p>Из-за VPN сервис может не загружаться или работать некорректно</p>
+        </div>
+      </div>
+    </section>
 
     <div class="buttons">
-      <button type="button" id="reload-button" class="btn btn-primary">Обновить страницу</button>
-      <a id="support-telegram" class="btn btn-secondary" href="https://t.me/smirnowwwivan" target="_blank" rel="noopener noreferrer">Обратиться в поддержку</a>
+      <a id="support-telegram" class="btn btn-secondary" href="https://t.me/smirnowwwivan" target="_blank" rel="noopener noreferrer">Поддержка</a>
+      <button type="button" id="reload-button" class="btn btn-primary">Обновить</button>
     </div>
   </main>
 
@@ -180,8 +244,7 @@
       // Ссылка поддержки — shared/config/support.ts; страница самодостаточна
       // и не может импортировать TS, адрес продублирован вручную, синхронность
       // сторожит shared/config/support.test.ts (решение владельца 21.09:
-      // «на тг ссылку просто» — без блока копирования, канон #766 тут не
-      // воспроизводится).
+      // «на тг ссылку просто» — без блока копирования).
 
       var reloadButton = document.getElementById('reload-button');
 
