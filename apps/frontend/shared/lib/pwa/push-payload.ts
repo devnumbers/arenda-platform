@@ -11,8 +11,15 @@
  * kept well under the 3993-byte push-message ceiling (RFC 8030).
  */
 
-/** Push notification icon delivered by the SW. Lives in `public/icons/`. */
-const PUSH_ICON_PATH = '/icons/icon-192.png';
+/**
+ * Push notification icon delivered by the SW. Lives in `public/icons/`.
+ *
+ * `?v=` is mandatory: `/icons/*` is served `immutable` for a year, so a new
+ * art under the same URL never reaches cached clients. Keep the version in
+ * sync with `app/manifest.ts` and the inline copy in `public/sw.js` (guard —
+ * `icon-urls.test.ts`).
+ */
+const PUSH_ICON_PATH = '/icons/icon-192.png?v=20261027';
 
 /** Fallback destination when the payload carries no `url`. */
 export const DEFAULT_PUSH_CLICK_URL = '/properties';

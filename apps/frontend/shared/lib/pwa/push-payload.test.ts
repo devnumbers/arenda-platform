@@ -87,11 +87,14 @@ describe('buildShowNotificationOptions', () => {
             url: '/profile/tariff',
             eventType: 'subscription_grace',
         });
+        // Иконка обязана быть версионированной (?v=): /icons/* раздаётся
+        // immutable — URL без версии доезжает до клиентов старыми байтами
+        // (guard версий — icon-urls.test.ts).
         expect(options).toEqual({
             body: 'Тело уведомления',
             tag: 'subscription_grace',
-            icon: '/icons/icon-192.png',
-            badge: '/icons/icon-192.png',
+            icon: expect.stringMatching(/^\/icons\/icon-192\.png\?v=\d{8}$/),
+            badge: expect.stringMatching(/^\/icons\/icon-192\.png\?v=\d{8}$/),
             data: { url: '/profile/tariff' },
         });
     });

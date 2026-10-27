@@ -89,6 +89,10 @@ const nextConfig: NextConfig = {
       headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
     },
     {
+      // Immutable год — смена арта под тем же URL до клиентов не доезжает
+      // (кэш браузера и WebAPK; переустановка PWA HTTP-кэш не чистит):
+      // новое содержимое = новый ?v= у потребителей URL (app/manifest.ts,
+      // push-payload.ts, sw.js; guard icon-urls.test.ts, README иконок).
       source: '/icons/:path*',
       headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
     },
