@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CopyEmailText } from "@/components/copy-email";
 import { TERMS_SECTIONS } from "@/lib/legal-content";
 
 export const metadata: Metadata = {
@@ -32,7 +33,11 @@ export default function TermsPage() {
         {TERMS_SECTIONS.map((section) => (
           <section key={section.heading} className="flex flex-col gap-2">
             <h2 className="text-m font-medium">{section.heading}</h2>
-            <p className="text-r text-gray-2">{section.body}</p>
+            {/* Почта поддержки в теле — синяя кнопка копирования (решение
+                владельца 26.10, как в ответе FAQ про возврат). */}
+            <p className="text-r text-gray-2">
+              <CopyEmailText text={section.body} />
+            </p>
           </section>
         ))}
       </div>

@@ -2,11 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { APP_ROUTE_PREFIXES, isAppRoute } from './app-routes';
-import {
-    STANDALONE_DB_KEY,
-    STANDALONE_DB_NAME,
-    STANDALONE_DB_STORE,
-} from './standalone-store';
 
 describe('isAppRoute', () => {
   it('returns true for exact app routes', () => {
@@ -171,25 +166,27 @@ describe('app route list sync with proxy matcher', () => {
   });
 });
 
-describe('standalone-store marker sync with service worker', () => {
-  // The SW keeps its own inline copy of the IndexedDB name/store/key to read
-  // the standalone flag written by standalone-store.ts. This test catches drift
-  // on all three markers, mirroring the prefix-list guard above.
-  it('public/sw.js references the standalone DB name, store, and key', () => {
-    const swPath = resolve(process.cwd(), 'public/sw.js');
+describe('service worker isolation without a persistent flag (карта #1610, research #1611)', () => {
+  // Изоляция PWA-режима переведена с IndexedDB-флага на display-mode page-guard:
+  // Android WebAPK делит хранилище профиля с обычными вкладками, и однажды
+  // записанный флаг навсегда закрывал лендинг в браузере. SW не может узнать
+  // display-mode навигационного запроса, поэтому редирект «/» → /properties
+  // из fetch-хендлера снесён; гард живёт на лендинге (landing-install.test.ts).
+  const swPath = resolve(process.cwd(), 'public/sw.js');
+
+  it('public/sw.js does not read the legacy standalone flag', () => {
     const swSource = readFileSync(swPath, 'utf8');
 
-    const markers: ReadonlyArray<[string, string]> = [
-      ['DB name', STANDALONE_DB_NAME],
-      ['store', STANDALONE_DB_STORE],
-      ['key', STANDALONE_DB_KEY],
-    ];
+    expect(swSource).not.toContain('readStandaloneFlag');
+    expect(swSource).not.toContain('STANDALONE_DB_STORE');
+    expect(swSource).not.toContain("Response.redirect('/properties'");
+  });
 
-    for (const [label, value] of markers) {
-      expect(
-        swSource,
-        `public/sw.js missing standalone ${label} '${value}'`,
-      ).toContain(`'${value}'`);
-    }
+  it('public/sw.js cleans up the legacy flag database on activate', () => {
+    const swSource = readFileSync(swPath, 'utf8');
+
+    // Залипшие флаги у уже пострадавших пользователей: БД rentli-pwa больше
+    // не читается, activate сносит её целиком.
+    expect(swSource).toContain("deleteDatabase('rentli-pwa')");
   });
 });

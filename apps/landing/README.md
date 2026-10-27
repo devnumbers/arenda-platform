@@ -49,7 +49,7 @@ make landing-typecheck   # tsc --noEmit
   (`@landing_optimizer`).
 - Caddy-матчер `@landing` (`deploy/caddy/rentlee.caddy`): `/`, `/privacy`,
   `/terms`, `/robots.txt`, `/sitemap.xml`, `/fonts/*`, `/icon.png`,
-  `/opengraph-image`, `/apple-icon.png`, `/favicon.ico`; ассеты идут мимо
+  `/opengraph-image.png`, `/apple-icon.png`, `/favicon.ico`; ассеты идут мимо
   матчера отдельным `handle /landing/_next/*` (Caddy снимает `/landing`).
   Новый публичный путь = app-маршрут `app/(site)/<путь>/page.tsx` (страница)
   или статика `public/` (ассет) **+ строка в матчере**: файл из `public/`

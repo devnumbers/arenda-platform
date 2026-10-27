@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CopyEmailText } from "@/components/copy-email";
 import type { FaqGroup } from "@/lib/content";
 
 // Раскрытый вопрос аккордеона: один на всю секцию, ключ —
@@ -17,7 +18,9 @@ import type { FaqGroup } from "@/lib/content";
 // строго по макетам, включая отступ под раскрытым ответом), а кнопка теми
 // же py с компенсирующими -my расширяется на него: кликабельна вся высота
 // свернутой строки, без задвоения отступов (решение владельца 24.10).
-// Ответ в макетах не нарисован — стили не тронуты.
+// Ответ в макетах не нарисован — стили не тронуты; исключение — почта
+// в ответе «Как оформить возврат средств»: синяя кнопка копирования
+// с тостом (решение владельца 26.10, кадры 3647-162423/88916/162433).
 export function FaqList({ groups }: { groups: FaqGroup[] }) {
   const [open, setOpen] = useState<string | null>(null);
 
@@ -76,7 +79,7 @@ export function FaqList({ groups }: { groups: FaqGroup[] }) {
                     >
                       <div className="overflow-hidden">
                         <p className="pt-3 text-s leading-5 text-gray-2 desk:pr-10 desk:text-r desk:leading-[22px]">
-                          {item.answer}
+                          <CopyEmailText text={item.answer} />
                         </p>
                       </div>
                     </div>

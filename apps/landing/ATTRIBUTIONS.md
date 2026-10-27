@@ -409,10 +409,9 @@ Figma Make-экспорту и описывал shadcn/ui + Unsplash — см. �
 ## Метадата-битмапы `app/`
 
 ### app/icon.png
-- Использование: favicon (конвенция `app/icon.png` Metadata API Next.js) и
-  иконка на OG-картинке — `app/opengraph-image.tsx:17` читает файл как
-  data-URL (next/image в OG-рендере недоступен); это единственная кодовая
-  ссылка.
+- Использование: favicon (конвенция `app/icon.png` Metadata API Next.js);
+  кодовых ссылок нет — раньше генератор OG-картинки читал файл как data-URL,
+  генератор снят 26.10 (OG-баннер — статичный PNG из Figma).
 - Коммиты: исходно `apps/frontend/app/icon.png` — e9407576 «feat(frontend):
   replace favicon.ico with icon.png»; в лендинг пришёл 0bb522b3
   (`apps/landing/public/icon.png`), перенесён в `src/assets` 6141bb53
@@ -436,14 +435,21 @@ Figma Make-экспорту и описывал shadcn/ui + Unsplash — см. �
 - Внешний источник: производный от `app/icon.png`; провенанс исходного
   битмапа не подтверждён — требует проверки владельцем.
 
-## Шрифты
+### app/opengraph-image.png
+- Использование: og:image/twitter:image — файловая конвенция Metadata API
+  Next.js (alt — `app/opengraph-image.alt.txt`), явных ссылок в коде нет.
+  26.10 заменила генератор `app/opengraph-image.tsx` (Satori) — снят вместе
+  с его TTF-срезами `assets/onest-og-400/600.ttf`; публичный путь стал
+  `/opengraph-image.png` (file-convention добавляет расширение) — отражено
+  в Caddy-матчере `@landing`.
+- Коммиты: добавлен 26.10 — «og: баннер из Figma вместо генератора».
+- Figma: узел `3705:161543` «Рентли» (1200×630) — рендер фрейма: фон-градиент
+  с битмап-заливками (imageRef `253b396c…`, `cce51159…`), 3D-иконка
+  (imageRef `390a0b24…`, как у `app/icon.png`) и векторный логотип.
+- Внешний источник: рендер фрейма Figma-файла «Рентли. Сервис и лендинг»;
+  провенанс исходных заливок не подтверждён — требует проверки владельцем.
 
-### assets/onest-og-400.ttf, assets/onest-og-600.ttf
-- Шрифт Onest, лицензия SIL OFL (пометка «шрифт OFL» в комментарии
-  `app/opengraph-image.tsx:5-8`; файлы нужны Satori для OG-картинки, которая
-  не читает woff2).
-- Коммит: добавлены вместе с OG-картинкой (SEO-тикет, карта #888); срезы
-  конвертированы fonttools из woff2-срезов `public/fonts`.
+## Шрифты
 
 ### public/fonts/onest-cyrillic-ext.woff2, onest-cyrillic.woff2,
 ### onest-latin-ext.woff2, onest-latin.woff2

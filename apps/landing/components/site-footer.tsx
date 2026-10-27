@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CopyEmailButton } from "./copy-email";
 import { LandingLink } from "./button";
 import { FeedbackModal } from "./feedback-modal";
 import { Logo } from "./logo";
@@ -32,9 +33,9 @@ export function SiteFooter() {
           >
             Написать в Telegram
           </LandingLink>
-          <LandingLink variant="gray" href="mailto:hello@rentlee.ru">
-            hello@rentlee.ru
-          </LandingLink>
+          {/* Почта — копирование в буфер с тостом, не mailto (решение
+              владельца 26.10, тост — кадр 3647-162423). */}
+          <CopyEmailButton />
           {/* Открывает модалку «Задать вопрос» (та же, что под вопросами
               FAQ; форма уходит письмом через /api/feedback → бекенд). */}
           <FeedbackModal label="Задать вопрос" variant="gray" />
