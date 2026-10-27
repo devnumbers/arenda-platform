@@ -192,12 +192,15 @@ export function CirclePhoto({
           src={photoBlurSrc(photoBlur) ?? undefined}
           alt=""
           decoding="async"
-          // Кадр 16px растянут за край круга на запас кернела CSS-размытия
-          // (6px — конвенция LiveValue) — бахромы по ободу клипа нет. Размер
-          // бокса явный: replaced-элемент с auto-шириной взял бы интринсик
-          // 16px и лёг точкой в углу.
+          data-blur-layer
+          // Кадр 16px растянут за край круга на запас кернела CSS-размытия —
+          // бахромы по ободу клипа нет. Размер бокса явный: replaced-элемент
+          // с auto-шириной взял бы интринсик 16px и лёг точкой в углу.
+          // Радиус размытия и запас — CSS-переменные с прод-дефолтами
+          // (6px/8px, решение #1604 приёмки): лаборатория /ui-kit крутит их
+          // каскадом, прод их не задаёт и рендерит дефолты.
           className={cn(
-            'absolute -inset-2 h-[calc(100%+1rem)] w-[calc(100%+1rem)] object-cover blur-[6px] transition-opacity',
+            'absolute inset-[calc(0px_-_var(--photo-blur-bleed,8px))] h-[calc(100%_+_2*var(--photo-blur-bleed,8px))] w-[calc(100%_+_2*var(--photo-blur-bleed,8px))] object-cover blur-[var(--photo-blur-radius,6px)] transition-opacity',
             view.blurActive ? 'opacity-100' : 'opacity-0',
           )}
         />
