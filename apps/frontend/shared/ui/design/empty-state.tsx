@@ -14,13 +14,19 @@ import { cn } from '@/shared/lib/cn';
  * Вертикальные отступы переопределяются className длинными руками
  * (например pt-16 pb-16 у пустого периода операций). `imageRounded` —
  * круглая иллюстрация (rounded-pill + object-cover), когда исходник круга.
- * Обязательное поле одно — imageSrc: бывают пустоты без заголовка. */
+ * Обязательное поле одно — imageSrc: бывают пустоты без заголовка.
+ * `titleClassName` — перекрытие класса заголовка через cn/tailwind-merge
+ * (прецедент `descriptionClassName`): service-титул 16/18 regular у пустых
+ * состояний «Уведомлений» (макеты 3178-86086/3187-88176, решение владельца
+ * 27.10.2026) — канон 24/28 остаётся дефолтом до макетов на экран. */
 export type EmptyStateProps = {
   readonly imageSrc: string;
   readonly imageAlt?: string;
   /** Круглая иллюстрация: скругление + object-cover (макет задач). */
   readonly imageRounded?: boolean;
   readonly title?: string;
+  /** Перекрытие класса заголовка (tailwind-merge, победа последнего). */
+  readonly titleClassName?: string;
   readonly description?: ReactNode;
   readonly descriptionClassName?: string;
   /** Действие под описанием — готовый элемент (кнопка/ссылка). */
@@ -33,6 +39,7 @@ export function EmptyState({
   imageAlt = '',
   imageRounded = false,
   title,
+  titleClassName,
   description,
   descriptionClassName,
   action,
@@ -63,7 +70,9 @@ export function EmptyState({
       {(title !== undefined || description !== undefined) && (
         <div className="mt-6 flex flex-col items-center gap-2">
           {title !== undefined && (
-            <h2 className="text-[24px] font-semibold leading-7 text-content">{title}</h2>
+            <h2 className={cn('text-[24px] font-semibold leading-7 text-content', titleClassName)}>
+              {title}
+            </h2>
           )}
           {description !== undefined && (
             <p

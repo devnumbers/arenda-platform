@@ -34,6 +34,12 @@ import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { pushPage } from '@/shared/lib/navigation';
 import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
 
+/** Титул пустых состояний — service-стиль 16/18 regular (Service/Text/R/400,
+ * макеты 3178-86086/3187-88176, решение владельца 27.10.2026): перекрытие
+ * канона 24/28 через `titleClassName` (tailwind-merge гасит размер/высоту
+ * строки/вес, цвет канона остаётся). */
+const EMPTY_TITLE_SERVICE = 'text-base leading-[18px] font-normal';
+
 /**
  * Экран «Уведомления» — центр уведомлений (карта #734; редизайн по макетам
  * 3178-79262 / 3178-85751, #1170, карта #1162): канон хабов — «крылья»
@@ -45,10 +51,15 @@ import { useUrlParams } from '@/shared/lib/hooks/use-url-params';
  * ?unread=1, канон страницы «Контакты»); «Прочитать все» — пункт кебаба
  * (макет 3183-86541, #1171), подтверждения не требует — тост успеха
  * «Все уведомления прочитаны» (2329-148575; тост вместо успех-попапа,
- * решение владельца 19.10.2026); кебаб — «Настроить
+ * решение владельца 19.10.2026); пункт прячется при точно известном
+ * нулевом счётчике непрочитанных (решение владельца 27.10.2026), пока
+ * счётчик не загружен/упал — остаётся; кебаб — «Настроить
  * уведомления» и красное «Удалить все уведомления» (подтверждение
- * 2329-152107, успех 2329-152324). Кебаб заменяется
- * шестерёнкой, когда удалять нечего — лента пуста (2329-152324).
+ * 2329-152107, успех 2329-152324). Кебаб заменяется шестерёнкой, когда
+ * удалять нечего — лента пуста (2329-152324). Титул пустых состояний —
+ * service-стиль 16/18 regular (Service/Text/R/400) через `titleClassName`
+ * канона EmptyState (макеты 3178-86086/3187-88176, решение владельца
+ * 27.10.2026).
  * Группировка «Сегодня / Вчера / даты» — клиентский день смотрящего;
  * у групп старше вчера время в строках скрыто (решение владельца #744).
  * Тап строки — страница уведомления /notifications/{id} (#745),
@@ -73,6 +84,10 @@ export function NotificationsFeedScreen({
 
   const notifications = feedQuery.data ?? [];
   const unreadCount = unreadCountQuery.data ?? 0;
+  // Пункт «Прочитать все» прячется при точно известном нуле счётчика
+  // (решение владельца 27.10.2026); пока счётчик не загружен или запрос
+  // упал — пункт остаётся: не знаем, что читать нечего.
+  const allRead = unreadCountQuery.isSuccess && unreadCount === 0;
 
   // Смена фильтра синхронно переписывает query строки (дефолт не пишется —
   // конвенция «Состояние страницы в адресе», DESIGN.md §3): канон
@@ -124,14 +139,18 @@ export function NotificationsFeedScreen({
       </MenuTrigger>
       <MenuContent>
         {/* Макет 3183-86541 (#1171): «Прочитать все» — первым пунктом;
-          * пейндинг мутации гасит пункт (канон двойного сабмита #1114). */}
-        <MenuItem
-          icon={<Readed />}
-          disabled={markAll.isPending}
-          onSelect={markAllRead}
-        >
-          Прочитать все
-        </MenuItem>
+          * пейндинг мутации гасит пункт (канон двойного сабмита #1114).
+          * Нулевой (известный) счётчик — пункта нет (решение владельца
+          * 27.10.2026), читать нечего. */}
+        {!allRead && (
+          <MenuItem
+            icon={<Readed />}
+            disabled={markAll.isPending}
+            onSelect={markAllRead}
+          >
+            Прочитать все
+          </MenuItem>
+        )}
         <MenuItem
           icon={<Setting />}
           onSelect={() => pushPage(router, ROUTES.profileNotifications)}
@@ -206,11 +225,13 @@ export function NotificationsFeedScreen({
             <EmptyState
               imageSrc="/images/notifications/empty-bell.webp"
               title="Нет уведомлений"
+              titleClassName={EMPTY_TITLE_SERVICE}
             />
           ) : showEmptyUnread ? (
             <EmptyState
               imageSrc="/images/notifications/empty-bell.webp"
               title="Все уведомления прочитаны"
+              titleClassName={EMPTY_TITLE_SERVICE}
             />
           ) : (
             <>
