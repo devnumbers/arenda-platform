@@ -206,39 +206,6 @@
   }
 }
 
-/* Полупрозрачные поверхности для тех, кто просит меньше прозрачности
-   (apple-design §14): стекло становится почти сплошным, блюр снимается —
-   маркерные классы .glass-plate (плашки отзывов) и .glass-card (стекло
-   тарифов/аудитории, skin из components/glass.ts). Unlayered — сильнее
-   утилит Tailwind. */
-@media (prefers-reduced-transparency: reduce) {
-  .glass-plate {
-    background: rgba(0, 0, 0, 0.82);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  .glass-card {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  :root {
-    --dl-overlay: rgba(23, 26, 28, 0.8);
-  }
-}
-
-/* Повышенный контраст: стекло — сплошное, обводки колец — плотные. */
-@media (prefers-contrast: more) {
-  .glass-plate {
-    background: rgba(0, 0, 0, 0.82);
-  }
-
-  .glass-ring::before {
-    background: rgba(255, 255, 255, 0.85);
-  }
-}
-
 @layer base {
   /* Стрипы-«вылезайки» (showcase) не должны расширять канву; база hidden
      для движков старее Safari 16, clip поверх — где поддержан (канон
