@@ -56,14 +56,15 @@ func (s *RentalScanStore) ListCompletedTargets(
 	targets := make([]application.RentalCompletedTarget, 0, len(rows))
 	for _, row := range rows {
 		targets = append(targets, application.RentalCompletedTarget{
-			RentalID:        pgconv.UUIDFromPgtype(row.RentalID),
-			PlannedEndDate:  pgconv.DateFromPgtype(row.PlannedEndDate),
-			PropertyID:      pgconv.UUIDFromPgtype(row.PropertyID),
-			PropertyName:    row.PropertyName,
-			PropertyAddress: row.PropertyAddress,
-			PropertyType:    row.PropertyType,
-			PropertyPhoto:   row.PropertyPhoto,
-			OwnerID:         pgconv.UUIDFromPgtype(row.OwnerID),
+			RentalID:          pgconv.UUIDFromPgtype(row.RentalID),
+			PlannedEndDate:    pgconv.DateFromPgtype(row.PlannedEndDate),
+			PropertyID:        pgconv.UUIDFromPgtype(row.PropertyID),
+			PropertyName:      row.PropertyName,
+			PropertyAddress:   row.PropertyAddress,
+			PropertyType:      row.PropertyType,
+			PropertyPhoto:     row.PropertyPhoto,
+			PropertyPhotoBlur: row.PropertyPhotoBlur,
+			OwnerID:           pgconv.UUIDFromPgtype(row.OwnerID),
 		})
 	}
 	return targets, nil
@@ -114,13 +115,14 @@ func (s *RentalScanStore) GetScheduledCompletedRental(
 		return application.RentalCompletedTarget{}, false, fmt.Errorf("load scheduled completed rental %s: %w", rentalID, err)
 	}
 	return application.RentalCompletedTarget{
-		RentalID:        pgconv.UUIDFromPgtype(row.RentalID),
-		PlannedEndDate:  pgconv.DateFromPgtype(row.PlannedEndDate),
-		PropertyID:      pgconv.UUIDFromPgtype(row.PropertyID),
-		PropertyName:    row.PropertyName,
-		PropertyAddress: row.PropertyAddress,
-		PropertyType:    row.PropertyType,
-		PropertyPhoto:   row.PropertyPhoto,
-		OwnerID:         pgconv.UUIDFromPgtype(row.OwnerID),
+		RentalID:          pgconv.UUIDFromPgtype(row.RentalID),
+		PlannedEndDate:    pgconv.DateFromPgtype(row.PlannedEndDate),
+		PropertyID:        pgconv.UUIDFromPgtype(row.PropertyID),
+		PropertyName:      row.PropertyName,
+		PropertyAddress:   row.PropertyAddress,
+		PropertyType:      row.PropertyType,
+		PropertyPhoto:     row.PropertyPhoto,
+		PropertyPhotoBlur: row.PropertyPhotoBlur,
+		OwnerID:           pgconv.UUIDFromPgtype(row.OwnerID),
 	}, true, nil
 }

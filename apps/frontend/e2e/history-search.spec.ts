@@ -66,7 +66,6 @@ test('вход с ленты: шапка меняется на поискову�
   await openCabinetWithSeededSession(page, seededUser);
   await page.goto('/history');
 
-  // Точка входа — лупа в шапке ленты (макет 2157-56876).
   await page.getByRole('button', { name: 'Поиск по истории' }).click();
 
   // Шапка сменилась: поле «Поиск действий» с программным фокусом (канон

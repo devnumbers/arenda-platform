@@ -677,11 +677,18 @@ func (h *PropertyHandlers) propertyResponse(property domain.Property) openapi.Pr
 			ownerPhoto := property.OwnerPhotoURL
 			resp.Access.OwnerPhotoUrl = &ownerPhoto
 		}
+		if property.OwnerPhotoBlur != "" {
+			ownerBlur := property.OwnerPhotoBlur
+			resp.Access.OwnerPhotoBlur = &ownerBlur
+		}
 	}
 	if property.Description != "" {
 		resp.Description = &property.Description
 	}
 	resp.PhotoUrl = propertyPhotoURL(property)
+	// '' (кадра нет) → null: тот же контракт nullable, что у photoUrl
+	// (ADR 0065 аменд, #1603).
+	resp.PhotoBlur = property.PhotoBlur
 	return resp
 }
 

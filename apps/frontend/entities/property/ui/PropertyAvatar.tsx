@@ -40,6 +40,9 @@ import type { PropertyType } from '../model/types';
  */
 export type PropertyAvatarProps = ComponentProps<'span'> & {
   readonly photoUrl?: string | null;
+  /** Blur-кадр первого показа (ADR 0065 аменд, решение #1594, #1604) —
+   * сестра photoUrl из того же DTO; механика фазы — CirclePhoto. */
+  readonly photoBlur?: string | null;
   /** card — 64 на серой карточке; row — 44 на белой странице; hero — 96 в шапках; feed — 24 в шапках групп лент; filter — 32 в шите фильтров истории. */
   readonly surface?: 'card' | 'row' | 'hero' | 'feed' | 'filter';
   /** Тип объекта — выбирает глиф-плейсхолдер (Category Icon 3099:151373…). Без типа — дом BoldHome. */
@@ -80,6 +83,7 @@ const SURFACE_ICON: Record<NonNullable<PropertyAvatarProps['surface']>, string> 
 
 export function PropertyAvatar({
   photoUrl,
+  photoBlur,
   surface = 'card',
   type,
   withAttentionDot = false,
@@ -105,6 +109,7 @@ export function PropertyAvatar({
       >
         <CirclePhoto
           photoUrl={photoUrl}
+          photoBlur={photoBlur}
           loading={effectiveLoading}
           glyph={<Glyph className={cn('text-[#D3D7D9]', SURFACE_ICON[surface])} aria-hidden />}
         />

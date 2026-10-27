@@ -166,6 +166,7 @@ func (s *ReadStore) FilterParticipants(ctx context.Context, actor uuid.UUID, pro
 			Email:     row.Email,
 			FirstName: row.FirstName,
 			PhotoURL:  row.PhotoPath,
+			PhotoBlur: row.PhotoBlur,
 			IsOwner:   row.IsOwner,
 			Role:      row.Role,
 			Status:    row.Status,
@@ -187,11 +188,12 @@ func (s *ReadStore) FilterObjects(ctx context.Context, actor uuid.UUID, property
 	out := make([]domain.FilterObject, len(rows))
 	for i, row := range rows {
 		out[i] = domain.FilterObject{
-			ID:       pgconv.UUIDFromPgtype(row.ID),
-			Name:     row.Name,
-			Address:  row.Address,
-			PhotoURL: row.PhotoUrl,
-			Type:     row.Type,
+			ID:        pgconv.UUIDFromPgtype(row.ID),
+			Name:      row.Name,
+			Address:   row.Address,
+			PhotoURL:  row.PhotoUrl,
+			PhotoBlur: row.PhotoBlur,
+			Type:      row.Type,
 		}
 	}
 	return out, nil
@@ -230,6 +232,7 @@ func feedEntryOf(row postgres.ListActionJournalRow) (domain.FeedEntry, error) {
 		ActorFirstName: row.ActorFirstName,
 		ActorLastName:  row.ActorLastName,
 		ActorPhotoURL:  row.ActorPhotoUrl,
+		ActorPhotoBlur: row.ActorPhotoBlur,
 		ActorRole:      domain.ActorRole(row.ActorRole),
 		Kind:           domain.Kind(row.Kind),
 		Action:         domain.Action(row.Action),

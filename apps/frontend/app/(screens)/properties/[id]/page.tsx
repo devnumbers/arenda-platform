@@ -1,8 +1,7 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
 import { DEFAULT_CONTACT_BOOK_ORDER, DEFAULT_CONTACT_BOOK_SORT } from '@/widgets/contacts';
-import { PropertyDetailPage, PropertyDetailRouteLoading } from '@/widgets/property-detail';
+import { PropertyDetailPage } from '@/widgets/property-detail';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
@@ -22,6 +21,12 @@ import { rentalsQueryOptions } from '@/features/rentals';
 import { subscriptionQueryOptions } from '@/features/subscription';
 import { contactsListQuery } from '@/features/contacts';
 import { activeTasksQueryOptions } from '@/features/tasks';
+
+// Кабинетная страница: куки-сессия и URL-состояние — всегда динамический
+// рендер; force-dynamic снимает требование Suspense-границы для
+// useSearchParams при статическом экспорте (аменда #1605 — in-page
+// Suspense убран ради однофлушного HTML, react/react#37014).
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Объект — Рентли',
@@ -79,10 +84,8 @@ export default async function PropertyDetailRoutePage({
   const { id } = await params;
 
   return (
-    <Suspense fallback={<PropertyDetailRouteLoading />}>
-      <ServerPrefetchBoundary prefetch={(queryClient) => prefetchPropertyScreen(queryClient, id)}>
-        <PropertyDetailPage />
-      </ServerPrefetchBoundary>
-    </Suspense>
+<ServerPrefetchBoundary prefetch={(queryClient) => prefetchPropertyScreen(queryClient, id)}>
+  <PropertyDetailPage />
+</ServerPrefetchBoundary>
   );
 }

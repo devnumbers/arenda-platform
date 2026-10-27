@@ -10,6 +10,7 @@ const pendingParticipant: Participant = {
   displayName: undefined,
   aggregateStatus: 'all_properties',
   photoUrl: null,
+  photoBlur: null,
   accessiblePropertiesCount: 1,
   properties: [
     {
@@ -19,6 +20,7 @@ const pendingParticipant: Participant = {
       status: 'pending',
       type: 'apartment',
       photoUrl: null,
+      photoBlur: null,
     },
   ],
 };
@@ -40,6 +42,7 @@ function memberOf(
     email: 'maksim@yandex.ru',
     displayName: '',
     photoUrl: null,
+    photoBlur: null,
     role: 'viewer',
     status: 'pending',
     isOwner: false,
@@ -55,6 +58,7 @@ describe('pendingParticipantRightsCard', () => {
       emailIcon: 'eye',
       badge: { tone: 'info', label: 'Аккаунт не создан', icon: 'lock' },
       photoUrl: undefined,
+      photoBlur: undefined,
     });
   });
 
@@ -100,6 +104,7 @@ describe('pendingMemberRightsCard — карточка pending в member-реж�
       emailIcon: 'eye',
       badge: { tone: 'info', label: 'Аккаунт не создан', icon: 'lock' },
       photoUrl: undefined,
+      photoBlur: undefined,
     });
   });
 

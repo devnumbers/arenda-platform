@@ -48,7 +48,7 @@ export function ParticipantRowButton({
         className,
       )}
     >
-      <UserAvatar photoUrl={participant.photoUrl} />
+      <UserAvatar photoUrl={participant.photoUrl} photoBlur={participant.photoBlur} />
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">
           {participantRowTitle(participant)}

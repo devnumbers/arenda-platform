@@ -221,7 +221,7 @@ export function useDeleteMePhoto(): UseMutationResult<void, ApiError, void> {
     },
     onSuccess: () => {
       queryClient.setQueryData<User>(authKeys.me, (prev) =>
-        prev === undefined ? prev : { ...prev, photoUrl: null },
+        prev === undefined ? prev : { ...prev, photoUrl: null, photoBlur: null },
       );
     },
   });

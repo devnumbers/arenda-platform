@@ -212,6 +212,7 @@ export function OperationDetailScreen({
               propertyTitle={property?.name ?? ''}
               propertyType={property?.type}
               propertyPhotoUrl={property?.photoUrl ?? null}
+              propertyPhotoBlur={property?.photoBlur ?? null}
               operation={operation}
               canMutate={canMutate}
               onPaid={setPaidResult}
@@ -257,6 +258,7 @@ function OperationDetailBody({
   propertyTitle,
   propertyType,
   propertyPhotoUrl,
+  propertyPhotoBlur,
   operation,
   canMutate,
   onPaid,
@@ -265,6 +267,7 @@ function OperationDetailBody({
   readonly propertyTitle: string;
   readonly propertyType: PropertyType | undefined;
   readonly propertyPhotoUrl: string | null;
+  readonly propertyPhotoBlur: string | null;
   readonly operation: PaymentOperation;
   readonly canMutate: boolean;
   readonly onPaid: (paid: PaymentOperation) => void;
@@ -307,6 +310,7 @@ function OperationDetailBody({
       propertyTitle={propertyTitle}
       propertyType={propertyType}
       propertyPhotoUrl={propertyPhotoUrl}
+      propertyPhotoBlur={propertyPhotoBlur}
       today={dateToIsoLocal(new Date())}
       payBar={canMutate && payable
         ? {
@@ -335,6 +339,7 @@ export function OperationView({
   propertyTitle,
   propertyType,
   propertyPhotoUrl,
+  propertyPhotoBlur,
   today,
   payBar,
 }: {
@@ -348,6 +353,8 @@ export function OperationView({
   /** Фото объекта строки «Объект» (ADR 0065, решение #1286); null — фото
    * нет, проекция без загрузки объекта. */
   readonly propertyPhotoUrl?: string | null;
+  /** Blur-кадр фото объекта (ADR 0065 аменд, решение #1594). */
+  readonly propertyPhotoBlur?: string | null;
   readonly today: IsoDate;
   readonly payBar?: { readonly onPay: () => void; readonly pending: boolean };
 }): JSX.Element {
@@ -392,7 +399,12 @@ export function OperationView({
           variant="white"
           className="px-6 py-3 [&>span]:px-0"
           categoryIcon={
-            <PropertyAvatar surface="row" photoUrl={propertyPhotoUrl ?? null} type={propertyType} />
+            <PropertyAvatar
+              surface="row"
+              photoUrl={propertyPhotoUrl ?? null}
+              photoBlur={propertyPhotoBlur}
+              type={propertyType}
+            />
           }
           title={propertyTitle !== '' ? propertyTitle : 'Объект'}
           subtitle="Объект"

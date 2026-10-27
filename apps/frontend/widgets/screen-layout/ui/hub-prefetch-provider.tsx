@@ -10,6 +10,7 @@ import {
   globalOperationsSummaryQueryOptions,
   globalPaymentObjectsQueryOptions,
   globalPaymentsFeedQueryOptions,
+  paymentsDueQueryOptions,
 } from '@/features/payments';
 import { globalTasksQueryOptions } from '@/features/tasks';
 import { contactBookQuery } from '@/features/contacts';
@@ -48,9 +49,14 @@ const HUB_ENTRIES: ReadonlyArray<HubPrefetchEntry> = [
   },
   {
     prefix: ROUTES.payments,
+    // Полный кадр хаба (#1602, зеркально серверному префетчу страницы):
+    // лента, стопки объектов, «На оплату» (#1346/#1347) и справочник
+    // объектов (кнопка «+», #703) — все четыре ключа первого кадра.
     prefetch: (client) => {
       void client.prefetchQuery(globalPaymentsFeedQueryOptions());
       void client.prefetchQuery(globalPaymentObjectsQueryOptions());
+      void client.prefetchQuery(paymentsDueQueryOptions());
+      void client.prefetchQuery(propertiesListQueryOptions());
     },
   },
   {

@@ -315,6 +315,7 @@ describe('mapGlobalPaymentObject — DTO → entity (карточка «Объе
       type: 'garage',
       pinnedAt: '2026-09-01T10:00:00Z',
       photoUrl: '/api/properties/0194a3f8-0000-7000-8000-000000000001/photo',
+      photoBlur: 'data:image/jpeg;base64, object-blur',
       autoPayRules: [{ paymentId: '0194a3f8-0000-7000-8000-000000000002', hasOverdue: true }],
       otherRules: [],
     };
@@ -325,6 +326,7 @@ describe('mapGlobalPaymentObject — DTO → entity (карточка «Объе
       type: 'garage',
       pinnedAt: dto.pinnedAt,
       photoUrl: dto.photoUrl,
+      photoBlur: 'data:image/jpeg;base64, object-blur',
       autoPayRules: [{ paymentId: dto.autoPayRules[0]?.paymentId, hasOverdue: true }],
       otherRules: [],
     });

@@ -7,7 +7,6 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
-	"image/png"
 	"io"
 	"log/slog"
 	"math"
@@ -39,23 +38,17 @@ func ThumbKeyOf(key string) string {
 // reports no thumb, as does an image already within the bound — the serve
 // path falls back to the full object for those.
 func ThumbFromStored(data []byte, contentType string) ([]byte, bool) {
-	var decoded image.Image
-	switch contentType {
-	case ContentTypeJPEG:
-		img, err := jpeg.Decode(bytes.NewReader(data))
-		if err != nil {
-			return nil, false
-		}
-		decoded = img
-	case ContentTypePNG:
-		img, err := png.Decode(bytes.NewReader(data))
-		if err != nil {
-			return nil, false
-		}
-		decoded = img
-	default:
+	decoded, ok := decodeStored(data, contentType)
+	if !ok {
 		return nil, false
 	}
+	return thumbFromDecoded(decoded)
+}
+
+// thumbFromDecoded encodes the thumbnail from the already-decoded pixels:
+// the area downscale, then the re-encode quality. A false result means "no
+// thumbnail" — a within-bound image or a frame that cannot encode.
+func thumbFromDecoded(decoded image.Image) ([]byte, bool) {
 	small := downscaleArea(decoded, ThumbMaxEdge)
 	if small == nil {
 		return nil, false
@@ -161,8 +154,18 @@ type ThumbStore interface {
 // retries), or the full bytes re-wrapped when no thumb is possible (webp, a
 // within-bound image) — isThumb=false, the caller serves the full body it
 // already holds. The full body is closed on every consumed path.
+//
+// The blurSink argument (тикет #1603, nil when the caller's blur column
+// is already filled) receives the blur-up frame built from the very decode the serving
+// runs: a materialization reports the frame it built from the main bytes it
+// already read; a stored-thumb hit reads the main bytes once for the frame
+// (jpeg/png only — webp never decodes); a failed frame costs nothing — the
+// column stays NULL and the next request retries. The sink owns its error
+// policy: the write is best-effort on the caller's side, a failed write is
+// logged there and never fails the serve.
 func ServeOrMaterializeThumb(
 	ctx context.Context, store ThumbStore, mainKey, contentType string, full io.ReadCloser, log *slog.Logger,
+	blurSink func(base64 string),
 ) (body io.ReadCloser, size int64, isThumb bool, err error) {
 	if contentType != ContentTypeJPEG && contentType != ContentTypePNG {
 		// An undecorable format: the full body must stay untouched — nil
@@ -180,13 +183,38 @@ func ServeOrMaterializeThumb(
 		}
 	}()
 	if tb, ts, _, err := store.Open(ctx, ThumbKeyOf(mainKey)); err == nil {
+		if blurSink != nil {
+			// The stored thumb answers this request; the frame still needs
+			// the main bytes — one read, one decode, then the sink carries
+			// it to the column. A failed read only skips the frame: the
+			// thumb serves either way, the next request retries.
+			if data, rerr := io.ReadAll(full); rerr == nil {
+				if frame, ok := BlurFromStored(data, contentType); ok {
+					blurSink(frame)
+				}
+			} else {
+				log.WarnContext(ctx, "failed to read photo main bytes for the blur frame",
+					slog.String("key", mainKey), slog.String("error", rerr.Error()))
+			}
+		}
 		return tb, ts, true, nil
 	}
 	data, err := io.ReadAll(full)
 	if err != nil {
 		return nil, 0, false, fmt.Errorf("read photo: %w", err)
 	}
-	thumb, buildable := ThumbFromStored(data, contentType)
+	// One decode feeds both artifacts: the thumb and the blur frame are the
+	// same pixels at two scales (тикет #1603 — «за тот же декод»).
+	decoded, decodable := decodeStored(data, contentType)
+	if !decodable {
+		return io.NopCloser(bytes.NewReader(data)), int64(len(data)), false, nil
+	}
+	if blurSink != nil {
+		if frame, ok := blurBase64(decoded); ok {
+			blurSink(frame)
+		}
+	}
+	thumb, buildable := thumbFromDecoded(decoded)
 	if !buildable {
 		return io.NopCloser(bytes.NewReader(data)), int64(len(data)), false, nil
 	}

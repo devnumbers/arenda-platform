@@ -117,11 +117,13 @@ export function PaymentsOfPropertyScreen({
       <PageContent>
         <div className="flex flex-col gap-4">
           {(paymentsQuery.isPending || overdueQuery.isPending) && (
-            <>
+            /* Маркер pending-фазы data-слоя — гард e2e #1602; contents не
+             * меняет раскладку — скелетоны остаются flex-детьми колонки. */
+            <div className="contents" data-testid="property-payments-pending">
               <PaymentsSkeleton withHeading />
               <PaymentsSkeleton withHeading />
               <PaymentsSkeleton withHeading />
-            </>
+            </div>
           )}
 
           {!paymentsQuery.isPending && !overdueQuery.isPending && (

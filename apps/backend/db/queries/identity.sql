@@ -258,15 +258,27 @@ ORDER BY created_at DESC, id DESC
 LIMIT 5;
 
 -- name: SetUserPhoto :one
--- The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
--- content type move together; a NULL key clears the photo. Existence and the
+-- The profile photo write (ADR 0065, ticket #1227): the key, the sniffed
+-- content type and the blur frame's base64 (решение #1594, #1603) move
+-- together; a NULL key clears the photo and its frame. Existence and the
 -- self-only access are proven by the caller under the row lock.
 UPDATE users
 SET photo_key = $2,
     photo_content_type = $3,
+    photo_blur = $4,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: SetUserPhotoBlurIfKey :execrows
+-- The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+-- from this request's decode lands only while the row still advertises the
+-- key it was computed from — a concurrent re-upload wins, the fresh photo
+-- carries its own blur. 0 affected rows is the race verdict; the write is
+-- best-effort on the caller's side.
+UPDATE users
+SET photo_blur = $3
+WHERE id = $1 AND photo_key = $2;
 
 -- name: ClearUserPhotoIfKey :execrows
 -- The dangling-photo self-heal (ADR 0065): the storage no longer has the
@@ -279,6 +291,7 @@ RETURNING *;
 UPDATE users
 SET photo_key = NULL,
     photo_content_type = NULL,
+    photo_blur = NULL,
     updated_at = now()
 WHERE id = $1 AND photo_key = $2;
 

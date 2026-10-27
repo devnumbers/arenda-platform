@@ -21,9 +21,13 @@ type User struct {
 	// PhotoKey is the storage key of the profile photo (ADR 0065): nil — no
 	// photo, a key — the private object streamed by GET /me/photo. The
 	// content type travels alongside (PhotoContentType) — the sniffed value
-	// of the upload, never a client header.
+	// of the upload, never a client header. PhotoBlur is the blur-up frame's
+	// ready base64 (ADR 0065 аменд, решение #1594, тикет #1603); nil —
+	// штатное состояние: webp кадра не даёт, кадр в пределах 16px сам себе
+	// blur, старое фото ждёт ленивой материализации на выдаче фото.
 	PhotoKey         *string
 	PhotoContentType *string
+	PhotoBlur        *string
 }
 
 func NewOwner(email Email) (User, error) {

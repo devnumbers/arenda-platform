@@ -620,6 +620,9 @@ func meResponse(user domain.User) openapi.MeResponse {
 		Email:      email,
 		Timezone:   timezonePtrFromUser(user.Timezone),
 		PhotoUrl:   mePhotoURL(user),
+		// '' (кадра нет) → null: тот же контракт nullable, что у photoUrl
+		// (ADR 0065 аменд, #1603).
+		PhotoBlur: user.PhotoBlur,
 	}
 }
 

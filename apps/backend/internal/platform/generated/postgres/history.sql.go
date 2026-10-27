@@ -73,6 +73,7 @@ SELECT aj.id,
                      THEN '/api/users/' || aj.actor_id::text || '/photo'
                      || '?v=' || left(encode(sha256(u.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS actor_photo_url,
+       COALESCE(u.photo_blur, '')::text AS actor_photo_blur,
        aj.kind,
        aj.action,
        aj.base_action,
@@ -150,6 +151,7 @@ type ListActionJournalRow struct {
 	ActorLastName  string             `json:"actor_last_name"`
 	ActorRole      string             `json:"actor_role"`
 	ActorPhotoUrl  string             `json:"actor_photo_url"`
+	ActorPhotoBlur string             `json:"actor_photo_blur"`
 	Kind           string             `json:"kind"`
 	Action         string             `json:"action"`
 	BaseAction     string             `json:"base_action"`
@@ -236,6 +238,7 @@ func (q *Queries) ListActionJournal(ctx context.Context, arg ListActionJournalPa
 			&i.ActorLastName,
 			&i.ActorRole,
 			&i.ActorPhotoUrl,
+			&i.ActorPhotoBlur,
 			&i.Kind,
 			&i.Action,
 			&i.BaseAction,
@@ -268,6 +271,7 @@ SELECT aj.id,
                      THEN '/api/users/' || aj.actor_id::text || '/photo'
                      || '?v=' || left(encode(sha256(u.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS actor_photo_url,
+       COALESCE(u.photo_blur, '')::text AS actor_photo_blur,
        aj.kind,
        aj.action,
        aj.base_action,
@@ -338,6 +342,7 @@ type ListActionJournalAfterRow struct {
 	ActorLastName  string             `json:"actor_last_name"`
 	ActorRole      string             `json:"actor_role"`
 	ActorPhotoUrl  string             `json:"actor_photo_url"`
+	ActorPhotoBlur string             `json:"actor_photo_blur"`
 	Kind           string             `json:"kind"`
 	Action         string             `json:"action"`
 	BaseAction     string             `json:"base_action"`
@@ -392,6 +397,7 @@ func (q *Queries) ListActionJournalAfter(ctx context.Context, arg ListActionJour
 			&i.ActorLastName,
 			&i.ActorRole,
 			&i.ActorPhotoUrl,
+			&i.ActorPhotoBlur,
 			&i.Kind,
 			&i.Action,
 			&i.BaseAction,
@@ -418,7 +424,8 @@ SELECT p.id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
-                     END, '')::text AS photo_url
+                     END, '')::text AS photo_url,
+       COALESCE(p.photo_blur, '')::text AS photo_blur
 FROM properties p
 WHERE CASE WHEN $1::text = ''
            THEN p.owner_id = $2::uuid
@@ -434,11 +441,12 @@ type ListHistoryFilterObjectsParams struct {
 }
 
 type ListHistoryFilterObjectsRow struct {
-	ID       pgtype.UUID `json:"id"`
-	Name     string      `json:"name"`
-	Address  string      `json:"address"`
-	Type     string      `json:"type"`
-	PhotoUrl string      `json:"photo_url"`
+	ID        pgtype.UUID `json:"id"`
+	Name      string      `json:"name"`
+	Address   string      `json:"address"`
+	Type      string      `json:"type"`
+	PhotoUrl  string      `json:"photo_url"`
+	PhotoBlur string      `json:"photo_blur"`
 }
 
 // Объекты области для шита фильтров: те же свойства, что отдаёт лента,
@@ -465,6 +473,7 @@ func (q *Queries) ListHistoryFilterObjects(ctx context.Context, arg ListHistoryF
 			&i.Address,
 			&i.Type,
 			&i.PhotoUrl,
+			&i.PhotoBlur,
 		); err != nil {
 			return nil, err
 		}
@@ -506,6 +515,7 @@ SELECT u.id, u.name, u.surname, u.email,
                      THEN '/api/users/' || u.id::text || '/photo'
                      || '?v=' || left(encode(sha256(u.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS photo_path,
+       COALESCE(u.photo_blur, '')::text AS photo_blur,
        COALESCE(u.name, '') AS first_name,
        bool_or(s.is_owner) AS is_owner,
        CASE WHEN bool_or(s.is_owner) THEN 'owner'
@@ -529,6 +539,7 @@ type ListHistoryFilterParticipantsRow struct {
 	Surname   pgtype.Text `json:"surname"`
 	Email     string      `json:"email"`
 	PhotoPath string      `json:"photo_path"`
+	PhotoBlur string      `json:"photo_blur"`
 	FirstName string      `json:"first_name"`
 	IsOwner   bool        `json:"is_owner"`
 	Role      string      `json:"role"`
@@ -590,6 +601,7 @@ func (q *Queries) ListHistoryFilterParticipants(ctx context.Context, arg ListHis
 			&i.Surname,
 			&i.Email,
 			&i.PhotoPath,
+			&i.PhotoBlur,
 			&i.FirstName,
 			&i.IsOwner,
 			&i.Role,

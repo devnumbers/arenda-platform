@@ -45,10 +45,13 @@ export const RIGHTS_ROW_ACTION_CLASS = cn(
  * (канон #1275, #1286) там же; строки участников — ленивая подача. */
 export function ObjectAvatarGlyph({
   photoUrl,
+  photoBlur,
   type,
   isAll = false,
 }: {
   readonly photoUrl: string | undefined;
+  /** Blur-кадр фото объекта (ADR 0065 аменд, решение #1594). */
+  readonly photoBlur?: string | null;
   readonly type?: PropertyType;
   readonly isAll?: boolean;
 }): JSX.Element {
@@ -58,6 +61,7 @@ export function ObjectAvatarGlyph({
     <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
       <CirclePhoto
         photoUrl={photoUrl}
+        photoBlur={photoBlur}
         loading="lazy"
         glyph={
           isAll ? (

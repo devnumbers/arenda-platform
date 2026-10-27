@@ -9,6 +9,8 @@ export type PropertyMediaBlockProps = {
    * типа (канон PropertyAvatar). Рендер реального фото — решение владельца
    * в баге «фото на странице объекта» (намерение #588). */
   readonly photoUrl?: string | null;
+  /** Blur-кадр первого показа (ADR 0065 аменд, решение #1594) — сестра photoUrl. */
+  readonly photoBlur?: string | null;
   /** Тип объекта — глиф-плейсхолдер hero-круга (Category Icon). */
   readonly type?: PropertyType;
   /** Пилюли шапки propertyHeaderPills (#773) под адресом: «В архиве» —
@@ -26,6 +28,7 @@ export function PropertyMediaBlock({
   name,
   address,
   photoUrl,
+  photoBlur,
   type,
   children,
 }: PropertyMediaBlockProps): JSX.Element {
@@ -35,6 +38,7 @@ export function PropertyMediaBlock({
         <PropertyAvatar
           surface="hero"
           photoUrl={photoUrl}
+          photoBlur={photoBlur}
           type={type}
           data-testid="property-hero-avatar"
         />

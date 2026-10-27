@@ -2,10 +2,20 @@ package photo
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
+	"io"
+	"log/slog"
 	"testing"
+
+	storageshared "github.com/nambers/arenda-planform/apps/backend/internal/shared/storage"
 )
+
+// testServingLogger keeps the serving tests' warnings out of the output.
+func testServingLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
 
 // The downscaler is pure pixel math, so the tests pin exact values: an area
 // filter averages the covered source box, premultiplied over white (avatar
@@ -140,7 +150,7 @@ func TestThumbFromStored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("thumb does not decode: %v", err)
 	}
-	if format != "jpeg" || max(cfg.Width, cfg.Height) != ThumbMaxEdge {
+	if format != testThumbFormat || max(cfg.Width, cfg.Height) != ThumbMaxEdge {
 		t.Fatalf("thumb = %s %dx%d, want jpeg capped at %d", format, cfg.Width, cfg.Height, ThumbMaxEdge)
 	}
 
@@ -152,5 +162,158 @@ func TestThumbFromStored(t *testing.T) {
 	small := mustJPEG(t, 200, 100)
 	if _, ok := ThumbFromStored(small, ContentTypeJPEG); ok {
 		t.Fatal("within-bound image must report no thumb")
+	}
+}
+
+// servingStore is the in-memory ThumbStore behind the ServeOrMaterializeThumb
+// tests.
+type servingStore struct {
+	objects map[string][]byte
+	types   map[string]string
+}
+
+func newServingStore() *servingStore {
+	return &servingStore{objects: map[string][]byte{}, types: map[string]string{}}
+}
+
+func (s *servingStore) put(key string, data []byte, contentType string) {
+	s.objects[key] = data
+	s.types[key] = contentType
+}
+
+func (s *servingStore) Open(_ context.Context, key string) (body io.ReadCloser, size int64, contentType string, err error) {
+	data, ok := s.objects[key]
+	if !ok {
+		return nil, 0, "", storageshared.ErrNotFound
+	}
+	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), s.types[key], nil
+}
+
+func (s *servingStore) Put(_ context.Context, key string, data io.Reader, contentType string, _ int64) (err error) {
+	raw, err := io.ReadAll(data)
+	if err != nil {
+		return err
+	}
+	s.put(key, raw, contentType)
+	return nil
+}
+
+// The blur sink rides the same decode the thumb serving runs (тикет
+// #1603): a materialization reports the frame it built, a stored-thumb hit
+// reads the main bytes once for the frame when the caller asks (the column
+// is NULL — the next request retries), no ask means no frame work. WebP
+// reports nothing.
+func TestServeOrMaterializeThumb_BlurSinkFreshMaterialization(t *testing.T) {
+	t.Parallel()
+	store := newServingStore()
+	main := mustJPEG(t, 1200, 900)
+	store.put("p/a.jpg", main, ContentTypeJPEG)
+	body, _, _, err := store.Open(t.Context(), "p/a.jpg")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	var frames []string
+	served, size, isThumb, err := ServeOrMaterializeThumb(
+		t.Context(), store, "p/a.jpg", ContentTypeJPEG, body, testServingLogger(),
+		func(f string) { frames = append(frames, f) })
+	if err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+	if !isThumb || size <= 0 {
+		t.Fatalf("isThumb=%v size=%d", isThumb, size)
+	}
+	if len(frames) != 1 || frames[0] == "" {
+		t.Fatalf("blur frames = %d, want the fresh frame", len(frames))
+	}
+	if _, ok := BlurFromStored(main, ContentTypeJPEG); !ok {
+		t.Fatal("test precondition: the main bytes must carry a frame")
+	}
+	_ = served
+}
+
+func TestServeOrMaterializeThumb_BlurSinkStoredThumb(t *testing.T) {
+	t.Parallel()
+	store := newServingStore()
+	store.put("p/b.jpg", mustJPEG(t, 1200, 900), ContentTypeJPEG)
+	body, _, _, err := store.Open(t.Context(), "p/b.jpg")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, _, isThumb, err := ServeOrMaterializeThumb(
+		t.Context(), store, "p/b.jpg", ContentTypeJPEG, body, testServingLogger(), nil,
+	); err != nil || !isThumb {
+		t.Fatalf("materialize: isThumb=%v err=%v", isThumb, err)
+	}
+	body, _, _, err = store.Open(t.Context(), "p/b.jpg")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	var frames []string
+	_, _, isThumb, err := ServeOrMaterializeThumb(
+		t.Context(), store, "p/b.jpg", ContentTypeJPEG, body, testServingLogger(),
+		func(f string) { frames = append(frames, f) })
+	if err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+	if !isThumb {
+		t.Fatal("the stored thumb must serve")
+	}
+	if len(frames) != 1 || frames[0] == "" {
+		t.Fatalf("blur frames = %d, want the frame from the main bytes", len(frames))
+	}
+}
+
+func TestServeOrMaterializeThumb_BlurSinkAbsentServesUntouched(t *testing.T) {
+	t.Parallel()
+	store := newServingStore()
+	store.put("p/c.jpg", mustJPEG(t, 1200, 900), ContentTypeJPEG)
+	body, _, _, err := store.Open(t.Context(), "p/c.jpg")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, _, isThumb, err := ServeOrMaterializeThumb(
+		t.Context(), store, "p/c.jpg", ContentTypeJPEG, body, testServingLogger(), nil,
+	); err != nil || !isThumb {
+		t.Fatalf("serve: isThumb=%v err=%v", isThumb, err)
+	}
+}
+
+func TestServeOrMaterializeThumb_BlurSinkWebpReportsNothing(t *testing.T) {
+	t.Parallel()
+	store := newServingStore()
+	store.put("p/d.webp", []byte("RIFF....WEBPVP8 ...."), ContentTypeWebP)
+	body, _, _, err := store.Open(t.Context(), "p/d.webp")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	var frames []string
+	_, _, isThumb, err := ServeOrMaterializeThumb(
+		t.Context(), store, "p/d.webp", ContentTypeWebP, body, testServingLogger(),
+		func(f string) { frames = append(frames, f) })
+	if err != nil || isThumb {
+		t.Fatalf("serve: isThumb=%v err=%v", isThumb, err)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("blur frames = %d, want 0", len(frames))
+	}
+}
+
+func TestServeOrMaterializeThumb_BlurSinkWithinThumbBound(t *testing.T) {
+	t.Parallel()
+	store := newServingStore()
+	store.put("p/e.jpg", mustJPEG(t, 200, 100), ContentTypeJPEG)
+	body, _, _, err := store.Open(t.Context(), "p/e.jpg")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	var frames []string
+	_, _, isThumb, err := ServeOrMaterializeThumb(
+		t.Context(), store, "p/e.jpg", ContentTypeJPEG, body, testServingLogger(),
+		func(f string) { frames = append(frames, f) })
+	if err != nil || isThumb {
+		t.Fatalf("serve: isThumb=%v err=%v", isThumb, err)
+	}
+	if len(frames) != 1 || frames[0] == "" {
+		t.Fatalf("blur frames = %d, want the frame from the full bytes", len(frames))
 	}
 }

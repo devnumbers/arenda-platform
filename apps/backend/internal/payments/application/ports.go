@@ -509,6 +509,9 @@ type GlobalPaymentObject struct {
 	Type       string
 	PinnedAt   *time.Time
 	PhotoURL   *string
+	// PhotoBlur is the avatar's blur frame's ready base64 (ADR 0065 аменд,
+	// #1603); nil when the photo has no frame.
+	PhotoBlur *string
 }
 
 // GlobalPaymentReader is the persistence port of the global payment rules

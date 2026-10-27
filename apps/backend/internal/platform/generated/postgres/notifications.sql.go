@@ -73,16 +73,18 @@ SELECT p.name, p.address, p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
-                     END, '')::text AS property_photo
+                     END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur
 FROM properties p
 WHERE p.id = $1
 `
 
 type GetAccessEventPropertyViewRow struct {
-	Name          string `json:"name"`
-	Address       string `json:"address"`
-	Type          string `json:"type"`
-	PropertyPhoto string `json:"property_photo"`
+	Name              string `json:"name"`
+	Address           string `json:"address"`
+	Type              string `json:"type"`
+	PropertyPhoto     string `json:"property_photo"`
+	PropertyPhotoBlur string `json:"property_photo_blur"`
 }
 
 // The access events' property snapshot (#751): the display name and the
@@ -99,6 +101,7 @@ func (q *Queries) GetAccessEventPropertyView(ctx context.Context, id pgtype.UUID
 		&i.Address,
 		&i.Type,
 		&i.PropertyPhoto,
+		&i.PropertyPhotoBlur,
 	)
 	return i, err
 }
@@ -283,6 +286,7 @@ SELECT pay.id AS payment_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
        o.owner_id
@@ -317,6 +321,7 @@ type GetScheduledAutoPaidPaymentRow struct {
 	PropertyAddress     string      `json:"property_address"`
 	PropertyType        string      `json:"property_type"`
 	PropertyPhoto       string      `json:"property_photo"`
+	PropertyPhotoBlur   string      `json:"property_photo_blur"`
 	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
 	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
 	OwnerID             pgtype.UUID `json:"owner_id"`
@@ -347,6 +352,7 @@ func (q *Queries) GetScheduledAutoPaidPayment(ctx context.Context, arg GetSchedu
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PropertyPhotoBlur,
 		&i.PaymentCategorySlug,
 		&i.PaymentCategoryName,
 		&i.OwnerID,
@@ -365,6 +371,7 @@ SELECT r.id AS rental_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        p.owner_id
 FROM rentals r
 JOIN properties p ON p.id = r.property_id
@@ -383,14 +390,15 @@ type GetScheduledCompletedRentalParams struct {
 }
 
 type GetScheduledCompletedRentalRow struct {
-	RentalID        pgtype.UUID `json:"rental_id"`
-	PlannedEndDate  pgtype.Date `json:"planned_end_date"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	RentalID          pgtype.UUID `json:"rental_id"`
+	PlannedEndDate    pgtype.Date `json:"planned_end_date"`
+	PropertyID        pgtype.UUID `json:"property_id"`
+	PropertyName      string      `json:"property_name"`
+	PropertyAddress   string      `json:"property_address"`
+	PropertyType      string      `json:"property_type"`
+	PropertyPhoto     string      `json:"property_photo"`
+	PropertyPhotoBlur string      `json:"property_photo_blur"`
+	OwnerID           pgtype.UUID `json:"owner_id"`
 }
 
 // The completed boundary job's delivery-time resolution (issue #777): the
@@ -412,6 +420,7 @@ func (q *Queries) GetScheduledCompletedRental(ctx context.Context, arg GetSchedu
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PropertyPhotoBlur,
 		&i.OwnerID,
 	)
 	return i, err
@@ -430,6 +439,7 @@ SELECT pay.id AS payment_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
        o.owner_id
@@ -462,6 +472,7 @@ type GetScheduledDuePaymentRow struct {
 	PropertyAddress     string      `json:"property_address"`
 	PropertyType        string      `json:"property_type"`
 	PropertyPhoto       string      `json:"property_photo"`
+	PropertyPhotoBlur   string      `json:"property_photo_blur"`
 	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
 	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
 	OwnerID             pgtype.UUID `json:"owner_id"`
@@ -490,6 +501,7 @@ func (q *Queries) GetScheduledDuePayment(ctx context.Context, arg GetScheduledDu
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PropertyPhotoBlur,
 		&i.PaymentCategorySlug,
 		&i.PaymentCategoryName,
 		&i.OwnerID,
@@ -510,6 +522,7 @@ SELECT pay.id AS payment_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
        o.owner_id
@@ -541,6 +554,7 @@ type GetScheduledOverduePaymentRow struct {
 	PropertyAddress     string      `json:"property_address"`
 	PropertyType        string      `json:"property_type"`
 	PropertyPhoto       string      `json:"property_photo"`
+	PropertyPhotoBlur   string      `json:"property_photo_blur"`
 	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
 	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
 	OwnerID             pgtype.UUID `json:"owner_id"`
@@ -565,6 +579,7 @@ func (q *Queries) GetScheduledOverduePayment(ctx context.Context, arg GetSchedul
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PropertyPhotoBlur,
 		&i.PaymentCategorySlug,
 		&i.PaymentCategoryName,
 		&i.OwnerID,
@@ -585,6 +600,7 @@ SELECT t.id AS task_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        t.rule_id,
        t.owner_id,
        CAST(((t.due_date + COALESCE(t.due_time, '24:00'::time)) AT TIME ZONE u.timezone) AS timestamptz) AS due_at
@@ -598,18 +614,19 @@ WHERE t.id = $1
 `
 
 type GetScheduledOverdueTaskRow struct {
-	TaskID          pgtype.UUID        `json:"task_id"`
-	Title           string             `json:"title"`
-	DueDate         pgtype.Date        `json:"due_date"`
-	DueTime         pgtype.Time        `json:"due_time"`
-	PropertyID      pgtype.UUID        `json:"property_id"`
-	PropertyName    pgtype.Text        `json:"property_name"`
-	PropertyAddress pgtype.Text        `json:"property_address"`
-	PropertyType    pgtype.Text        `json:"property_type"`
-	PropertyPhoto   string             `json:"property_photo"`
-	RuleID          pgtype.UUID        `json:"rule_id"`
-	OwnerID         pgtype.UUID        `json:"owner_id"`
-	DueAt           pgtype.Timestamptz `json:"due_at"`
+	TaskID            pgtype.UUID        `json:"task_id"`
+	Title             string             `json:"title"`
+	DueDate           pgtype.Date        `json:"due_date"`
+	DueTime           pgtype.Time        `json:"due_time"`
+	PropertyID        pgtype.UUID        `json:"property_id"`
+	PropertyName      pgtype.Text        `json:"property_name"`
+	PropertyAddress   pgtype.Text        `json:"property_address"`
+	PropertyType      pgtype.Text        `json:"property_type"`
+	PropertyPhoto     string             `json:"property_photo"`
+	PropertyPhotoBlur string             `json:"property_photo_blur"`
+	RuleID            pgtype.UUID        `json:"rule_id"`
+	OwnerID           pgtype.UUID        `json:"owner_id"`
+	DueAt             pgtype.Timestamptz `json:"due_at"`
 }
 
 // The boundary job's delivery-time resolution (issues #750, #777): the task
@@ -634,6 +651,7 @@ func (q *Queries) GetScheduledOverdueTask(ctx context.Context, id pgtype.UUID) (
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PropertyPhotoBlur,
 		&i.RuleID,
 		&i.OwnerID,
 		&i.DueAt,
@@ -654,6 +672,7 @@ SELECT pay.id AS payment_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
        o.owner_id
@@ -686,6 +705,7 @@ type GetScheduledReminderPaymentRow struct {
 	PropertyAddress     string      `json:"property_address"`
 	PropertyType        string      `json:"property_type"`
 	PropertyPhoto       string      `json:"property_photo"`
+	PropertyPhotoBlur   string      `json:"property_photo_blur"`
 	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
 	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
 	OwnerID             pgtype.UUID `json:"owner_id"`
@@ -711,6 +731,7 @@ func (q *Queries) GetScheduledReminderPayment(ctx context.Context, arg GetSchedu
 		&i.PropertyAddress,
 		&i.PropertyType,
 		&i.PropertyPhoto,
+		&i.PropertyPhotoBlur,
 		&i.PaymentCategorySlug,
 		&i.PaymentCategoryName,
 		&i.OwnerID,
@@ -873,6 +894,7 @@ SELECT pay.id AS payment_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
        o.owner_id
@@ -909,6 +931,7 @@ type ListPaymentAutoPaidTargetsRow struct {
 	PropertyAddress     string      `json:"property_address"`
 	PropertyType        string      `json:"property_type"`
 	PropertyPhoto       string      `json:"property_photo"`
+	PropertyPhotoBlur   string      `json:"property_photo_blur"`
 	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
 	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
 	OwnerID             pgtype.UUID `json:"owner_id"`
@@ -946,6 +969,7 @@ func (q *Queries) ListPaymentAutoPaidTargets(ctx context.Context, arg ListPaymen
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PropertyPhotoBlur,
 			&i.PaymentCategorySlug,
 			&i.PaymentCategoryName,
 			&i.OwnerID,
@@ -973,6 +997,7 @@ SELECT pay.id AS payment_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
        o.owner_id
@@ -1006,6 +1031,7 @@ type ListPaymentDueTargetsRow struct {
 	PropertyAddress     string      `json:"property_address"`
 	PropertyType        string      `json:"property_type"`
 	PropertyPhoto       string      `json:"property_photo"`
+	PropertyPhotoBlur   string      `json:"property_photo_blur"`
 	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
 	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
 	OwnerID             pgtype.UUID `json:"owner_id"`
@@ -1042,6 +1068,7 @@ func (q *Queries) ListPaymentDueTargets(ctx context.Context, arg ListPaymentDueT
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PropertyPhotoBlur,
 			&i.PaymentCategorySlug,
 			&i.PaymentCategoryName,
 			&i.OwnerID,
@@ -1069,6 +1096,7 @@ SELECT pay.id AS payment_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
        o.owner_id
@@ -1101,6 +1129,7 @@ type ListPaymentOverdueTargetsRow struct {
 	PropertyAddress     string      `json:"property_address"`
 	PropertyType        string      `json:"property_type"`
 	PropertyPhoto       string      `json:"property_photo"`
+	PropertyPhotoBlur   string      `json:"property_photo_blur"`
 	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
 	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
 	OwnerID             pgtype.UUID `json:"owner_id"`
@@ -1136,6 +1165,7 @@ func (q *Queries) ListPaymentOverdueTargets(ctx context.Context, arg ListPayment
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PropertyPhotoBlur,
 			&i.PaymentCategorySlug,
 			&i.PaymentCategoryName,
 			&i.OwnerID,
@@ -1163,6 +1193,7 @@ SELECT pay.id AS payment_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        pay.category_slug AS payment_category_slug,
        pc.name AS payment_category_name,
        o.owner_id
@@ -1196,6 +1227,7 @@ type ListPaymentReminderTargetsRow struct {
 	PropertyAddress     string      `json:"property_address"`
 	PropertyType        string      `json:"property_type"`
 	PropertyPhoto       string      `json:"property_photo"`
+	PropertyPhotoBlur   string      `json:"property_photo_blur"`
 	PaymentCategorySlug pgtype.Text `json:"payment_category_slug"`
 	PaymentCategoryName pgtype.Text `json:"payment_category_name"`
 	OwnerID             pgtype.UUID `json:"owner_id"`
@@ -1229,6 +1261,7 @@ func (q *Queries) ListPaymentReminderTargets(ctx context.Context, arg ListPaymen
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PropertyPhotoBlur,
 			&i.PaymentCategorySlug,
 			&i.PaymentCategoryName,
 			&i.OwnerID,
@@ -1576,6 +1609,7 @@ SELECT r.id AS rental_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        p.owner_id
 FROM rentals r
 JOIN properties p ON p.id = r.property_id
@@ -1594,14 +1628,15 @@ type ListRentalCompletedTargetsParams struct {
 }
 
 type ListRentalCompletedTargetsRow struct {
-	RentalID        pgtype.UUID `json:"rental_id"`
-	PlannedEndDate  pgtype.Date `json:"planned_end_date"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    string      `json:"property_name"`
-	PropertyAddress string      `json:"property_address"`
-	PropertyType    string      `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	RentalID          pgtype.UUID `json:"rental_id"`
+	PlannedEndDate    pgtype.Date `json:"planned_end_date"`
+	PropertyID        pgtype.UUID `json:"property_id"`
+	PropertyName      string      `json:"property_name"`
+	PropertyAddress   string      `json:"property_address"`
+	PropertyType      string      `json:"property_type"`
+	PropertyPhoto     string      `json:"property_photo"`
+	PropertyPhotoBlur string      `json:"property_photo_blur"`
+	OwnerID           pgtype.UUID `json:"owner_id"`
 }
 
 // One zone's needs_attention rentals as of the zone's today (решение #737,
@@ -1626,6 +1661,7 @@ func (q *Queries) ListRentalCompletedTargets(ctx context.Context, arg ListRental
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PropertyPhotoBlur,
 			&i.OwnerID,
 		); err != nil {
 			return nil, err
@@ -1703,6 +1739,7 @@ SELECT t.id AS task_id,
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
                      END, '')::text AS property_photo,
+       COALESCE(p.photo_blur, '')::text AS property_photo_blur,
        t.rule_id,
        t.owner_id
 FROM tasks t
@@ -1726,17 +1763,18 @@ type ListTaskOverdueTargetsParams struct {
 }
 
 type ListTaskOverdueTargetsRow struct {
-	TaskID          pgtype.UUID `json:"task_id"`
-	Title           string      `json:"title"`
-	DueDate         pgtype.Date `json:"due_date"`
-	DueTime         pgtype.Time `json:"due_time"`
-	PropertyID      pgtype.UUID `json:"property_id"`
-	PropertyName    pgtype.Text `json:"property_name"`
-	PropertyAddress pgtype.Text `json:"property_address"`
-	PropertyType    pgtype.Text `json:"property_type"`
-	PropertyPhoto   string      `json:"property_photo"`
-	RuleID          pgtype.UUID `json:"rule_id"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
+	TaskID            pgtype.UUID `json:"task_id"`
+	Title             string      `json:"title"`
+	DueDate           pgtype.Date `json:"due_date"`
+	DueTime           pgtype.Time `json:"due_time"`
+	PropertyID        pgtype.UUID `json:"property_id"`
+	PropertyName      pgtype.Text `json:"property_name"`
+	PropertyAddress   pgtype.Text `json:"property_address"`
+	PropertyType      pgtype.Text `json:"property_type"`
+	PropertyPhoto     string      `json:"property_photo"`
+	PropertyPhotoBlur string      `json:"property_photo_blur"`
+	RuleID            pgtype.UUID `json:"rule_id"`
+	OwnerID           pgtype.UUID `json:"owner_id"`
 }
 
 // One zone's overdue tasks as of the sweep's instant (решение #737, тип №4):
@@ -1765,6 +1803,7 @@ func (q *Queries) ListTaskOverdueTargets(ctx context.Context, arg ListTaskOverdu
 			&i.PropertyAddress,
 			&i.PropertyType,
 			&i.PropertyPhoto,
+			&i.PropertyPhotoBlur,
 			&i.RuleID,
 			&i.OwnerID,
 		); err != nil {

@@ -2400,6 +2400,8 @@ export interface components {
             timezone?: string | null;
             /** @description The profile photo's same-origin streaming path (ADR 0065): /api/me/photo with the key's cache version as ?v= (a replaced photo is a new URL — the browser never serves previous bytes), served with the session cookie; null when the profile has no photo. Only the owner reads it. */
             photoUrl?: string | null;
+            /** @description The profile photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while photoUrl loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photoBlur?: string | null;
             subscription?: components["schemas"]["Subscription"];
         };
         SessionListResponse: {
@@ -2925,6 +2927,8 @@ export interface components {
             owner_email?: string;
             /** @description The owner's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/users/{userId}/photo — readable while the reader shares a readable property with the owner. Null when the owner has no photo or the resolution failed; present in the detail response and on the shared list rows. */
             owner_photo_url?: string | null;
+            /** @description The owner photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized — the frame writes back on the next photo read). */
+            owner_photo_blur?: string | null;
         };
         PropertyResponse: {
             /** Format: uuid */
@@ -2938,6 +2942,8 @@ export interface components {
             access?: components["schemas"]["PropertyAccessContext"];
             /** @description The property photo's same-origin streaming path (ADR 0065): /api/properties/{id}/photo, served with the session cookie; null when the object has no photo. */
             photo_url?: string | null;
+            /** @description The photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while the photo loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photo_blur?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -3009,6 +3015,8 @@ export interface components {
             propertyName?: string | null;
             /** @description The card photo's same-origin streaming path (ADR 0065): /api/contacts/{id}/photo with the key's cache version as ?v= (a replaced photo is a new URL), served with the session cookie; null when the card has no photo. */
             photoUrl?: string | null;
+            /** @description The card photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while photoUrl loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photoBlur?: string | null;
             firstName: string;
             lastName: string;
             patronymic: string;
@@ -3399,6 +3407,8 @@ export interface components {
             pinnedAt: string | null;
             /** @description The object card's photo avatar (ticket #582); with the private photos (ADR 0065) one image per object, streamed by the backend, the key's cache version riding as ?v=; null when the object has no photo. */
             photoUrl: string | null;
+            /** @description The card avatar's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while photoUrl loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photoBlur?: string | null;
             /** @description The «Автоплатежи» group — the object's auto-pay rules. */
             autoPayRules: components["schemas"]["PaymentObjectKey"][];
             /** @description The «Платежи» group — the object's non-auto-pay rules. */
@@ -3620,6 +3630,8 @@ export interface components {
             display_name?: string;
             /** @description The participant's profile photo same-origin streaming path (ADR 0065, решение #1286): /api/users/{userId}/photo — every reader of the list shares this property with every listed participant. Null for a pending row, the synthesized owner without a photo, or a user without a photo; a suspended member's path answers 404 (suspended access sees nothing) and the client falls back to the placeholder. */
             photo_url?: string | null;
+            /** @description The photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while the photo loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photo_blur?: string | null;
             /**
              * @description Membership lifecycle status. "suspended" means the recipient's tariff slot was exceeded, so the object is hidden from the recipient's list and grants no access until a slot frees up. "pending" is an email invitation waiting for the invitee to register.
              * @enum {string}
@@ -3677,6 +3689,8 @@ export interface components {
             display_name?: string | null;
             /** @description The registered user's profile photo same-origin streaming path (ADR 0065; решение владельца #1286): /api/users/{userId}/photo, readable while the reader shares a readable property with the user; a revoked access answers 404 and the client falls back to the placeholder. Null for a pending row or a user without a photo. */
             photo_url?: string | null;
+            /** @description The photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while the photo loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photo_blur?: string | null;
             /**
              * @description The aggregate badge (issue #693): "all_properties" — active access to every property in the reading scope; "partial" — active access to accessible_properties_count of them; "limit_exceeded" — at least one suspended membership (the recipient's tariff limit was hit). Display copy: «Доступ ко всем объектам» / «Доступно N объектов» / «Превышен лимит объектов».
              * @enum {string}
@@ -3701,6 +3715,8 @@ export interface components {
             type: components["schemas"]["PropertyType"];
             /** @description The property photo's same-origin streaming path (ADR 0065), live at read; null when the property has no photo. The leg row is self-sufficient — the client needs no /properties join for the avatar (остаток #1244 п.3, решение #1286). */
             photo_url: string | null;
+            /** @description The photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while the photo loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photo_blur?: string | null;
         };
         PropertyAccessMemberUpdateRequest: {
             /** @enum {string} */
@@ -3985,6 +4001,8 @@ export interface components {
             actor_last_name: string;
             /** @description Аватар актёра — same-origin путь стриминга фото профиля (ADR 0065, решение #1286), живой на чтение; null — у актёра нет фото или запись обезличена. Чтение эндпоинта регулируется связью по общему объекту: у отозванного участника путь отвечает 404, строка откатывается на заглушку. */
             actor_photo_url: string | null;
+            /** @description Blur-кадр аватара актёра (ADR 0065 аменд, решение #1594, #1603): непрозрачный jpeg 16px готовым base64, рисуется поверх заглушки, пока грузится actor_photo_url; null — кадра нет (webp, кадр в пределах 16px, старое фото до ленивой материализации). */
+            actor_photo_blur?: string | null;
             /**
              * @description Роль актёра на объекте в момент действия (снимок, ADR 0061 §4).
              * @enum {string}
@@ -4089,6 +4107,8 @@ export interface components {
             is_owner: boolean;
             /** @description Аватар участника — same-origin путь стриминга фото профиля (ADR 0065, решение #1286), живой на чтение; null — фото нет. Отозванный участник остаётся опцией фильтра: его путь отвечает 404, строка откатывается на заглушку. */
             photo_url: string | null;
+            /** @description The photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while the photo loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photo_blur?: string | null;
             /**
              * @description Максимальная роль в области чтения (owner совпадает с is_owner по построению).
              * @enum {string}
@@ -4114,6 +4134,8 @@ export interface components {
             address: string;
             /** @description URL первого по времени фото; '' — фото нет. */
             photo_url: string;
+            /** @description The photo's inline blur placeholder (ADR 0065 аменд, решение #1594, #1603): a 16px opaque jpeg as ready base64, painted over the placeholder while the photo loads; null when the photo has no frame (webp, a within-16px image, a pre-blur photo not yet materialized). */
+            photo_blur?: string | null;
             type: components["schemas"]["PropertyType"];
         };
         UnreadCountResponse: {

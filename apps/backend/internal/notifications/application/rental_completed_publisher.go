@@ -35,6 +35,9 @@ type RentalCompletedTarget struct {
 	PropertyName    string
 	PropertyAddress string
 	PropertyType    string
+	// PropertyPhotoBlur is the frame's ready base64 (ADR 0065 аменд,
+	// #1603), '' — кадра нет.
+	PropertyPhotoBlur string
 	// PropertyPhoto is the snapshot's same-origin streaming path, '' when
 	// the object has no photo (#1275).
 	PropertyPhoto string
@@ -219,11 +222,12 @@ func (p *RentalCompletedPublisher) publish(ctx context.Context, target RentalCom
 		ContextLabel: target.PropertyName,
 		Payload: domain.Payload{
 			Property: &domain.EntityRef{
-				ID:      target.PropertyID,
-				Name:    target.PropertyName,
-				Address: target.PropertyAddress,
-				Type:    target.PropertyType,
-				Photo:   target.PropertyPhoto,
+				ID:        target.PropertyID,
+				Name:      target.PropertyName,
+				Address:   target.PropertyAddress,
+				Type:      target.PropertyType,
+				Photo:     target.PropertyPhoto,
+				PhotoBlur: target.PropertyPhotoBlur,
 			},
 			RentalID: &rentalID,
 		},

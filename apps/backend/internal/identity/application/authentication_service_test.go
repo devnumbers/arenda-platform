@@ -152,13 +152,14 @@ func (r *fakeUserRepo) MarkEmailVerified(
 	return u, nil
 }
 
-func (r *fakeUserRepo) SetPhoto(ctx context.Context, id uuid.UUID, key, contentType *string) (domain.User, error) {
+func (r *fakeUserRepo) SetPhoto(ctx context.Context, id uuid.UUID, key, contentType, blur *string) (domain.User, error) {
 	u, err := r.GetByID(ctx, id)
 	if err != nil {
 		return domain.User{}, err
 	}
 	u.PhotoKey = key
 	u.PhotoContentType = contentType
+	u.PhotoBlur = blur
 	if u.Email != nil {
 		r.byEmail[u.Email.String()] = u
 	}
@@ -175,7 +176,24 @@ func (r *fakeUserRepo) ClearPhotoIfKey(ctx context.Context, id uuid.UUID, key st
 	if u.PhotoKey == nil || *u.PhotoKey != key {
 		return 0, nil
 	}
-	if _, err := r.SetPhoto(ctx, id, nil, nil); err != nil {
+	if _, err := r.SetPhoto(ctx, id, nil, nil, nil); err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
+// SetPhotoBlurIfKey mirrors the conditional UPDATE of the lazy blur
+// materialization: the frame lands only while the row still advertises the
+// key it was computed from.
+func (r *fakeUserRepo) SetPhotoBlurIfKey(ctx context.Context, id uuid.UUID, key, blur string) (int64, error) {
+	u, err := r.GetByID(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	if u.PhotoKey == nil || *u.PhotoKey != key {
+		return 0, nil
+	}
+	if _, err := r.SetPhoto(ctx, id, u.PhotoKey, u.PhotoContentType, &blur); err != nil {
 		return 0, err
 	}
 	return 1, nil
@@ -947,8 +965,12 @@ func (r *errorUserRepo) MarkEmailVerified(context.Context, uuid.UUID, time.Time)
 	return domain.User{}, nil
 }
 
-func (r *errorUserRepo) SetPhoto(context.Context, uuid.UUID, *string, *string) (domain.User, error) {
+func (r *errorUserRepo) SetPhoto(context.Context, uuid.UUID, *string, *string, *string) (domain.User, error) {
 	return domain.User{}, r.err
+}
+
+func (r *errorUserRepo) SetPhotoBlurIfKey(context.Context, uuid.UUID, string, string) (int64, error) {
+	return 0, r.err
 }
 
 func (r *errorUserRepo) ClearPhotoIfKey(context.Context, uuid.UUID, string) (int64, error) {

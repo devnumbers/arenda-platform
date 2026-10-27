@@ -176,7 +176,11 @@ export function ParticipantsInviteScreen(): JSX.Element {
                 </>
               ) : (
                 <>
-                  <ObjectAvatarGlyph photoUrl={row.option.photoUrl} type={row.option.type} />
+                  <ObjectAvatarGlyph
+                    photoUrl={row.option.photoUrl}
+                    photoBlur={row.option.photoBlur}
+                    type={row.option.type}
+                  />
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="truncate text-base font-medium leading-[18px] text-content">
                       {row.option.name}

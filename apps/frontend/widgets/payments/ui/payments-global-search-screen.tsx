@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Star } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -54,11 +54,6 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Полевой фокус при входе на экран (поисковая шапка — каретка в поле);
-  // jsx-a11y/no-autofocus запрещает сам проп.
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   // Чипы — из лёгкого отдельного запроса (сервер считает matchedCategories
   // по всему скоупу), список — из бесконечного с серверным фильтром чипа:
@@ -115,6 +110,7 @@ export function PaymentsGlobalSearchScreen(): JSX.Element {
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={() => goBack(router, ROUTES.payments)} />}
       >
         <SearchField
+            focusOnMount
           ref={inputRef}
           placeholder="Поиск платежа"
           aria-label="Поиск платежа"

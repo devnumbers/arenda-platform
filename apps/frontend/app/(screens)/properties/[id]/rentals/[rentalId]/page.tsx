@@ -1,7 +1,6 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
-import { RentalCompletedLoading, RentalCompletedScreen } from '@/widgets/rentals';
+import { RentalCompletedScreen } from '@/widgets/rentals';
 import { propertyDetailQueryOptions } from '@/features/properties';
 import { rentalsQueryOptions } from '@/features/rentals';
 import { paymentOperationsPagedQueryOptions } from '@/features/payments';
@@ -9,6 +8,12 @@ import { OPERATIONS_FEED_SORT, rentalKeys } from '@/shared/api/query-keys';
 import type { Rental } from '@/entities/rental';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
+
+// Кабинетная страница: куки-сессия и URL-состояние — всегда динамический
+// рендер; force-dynamic снимает требование Suspense-границы для
+// useSearchParams при статическом экспорте (аменда #1605 — in-page
+// Suspense убран ради однофлушного HTML, react/react#37014).
+export const dynamic = 'force-dynamic';
 
 /**
  * Завершённая детализация «Прошлых аренд» (#535): карточка прошлой аренды
@@ -57,10 +62,8 @@ export default async function RentalCompletedRoutePage({
   const { id, rentalId } = await params;
 
   return (
-    <Suspense fallback={<RentalCompletedLoading propertyId={id} />}>
-      <ServerPrefetchBoundary prefetch={(queryClient) => prefetchRentalScreen(queryClient, id, rentalId)}>
-        <RentalCompletedScreen propertyId={id} rentalId={rentalId} />
-      </ServerPrefetchBoundary>
-    </Suspense>
+<ServerPrefetchBoundary prefetch={(queryClient) => prefetchRentalScreen(queryClient, id, rentalId)}>
+  <RentalCompletedScreen propertyId={id} rentalId={rentalId} />
+</ServerPrefetchBoundary>
   );
 }

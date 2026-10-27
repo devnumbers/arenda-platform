@@ -153,7 +153,8 @@ SELECT p.id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
-                     END, '')::text AS photo_url
+                     END, '')::text AS photo_url,
+       COALESCE(p.photo_blur, '')::text AS photo_blur
 FROM properties p
 LEFT JOIN user_property_pins up
        ON up.property_id = p.id
@@ -172,12 +173,13 @@ type ListGlobalPaymentObjectsParams struct {
 }
 
 type ListGlobalPaymentObjectsRow struct {
-	ID       pgtype.UUID        `json:"id"`
-	Name     string             `json:"name"`
-	Address  string             `json:"address"`
-	Type     string             `json:"type"`
-	PinnedAt pgtype.Timestamptz `json:"pinned_at"`
-	PhotoUrl string             `json:"photo_url"`
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Address   string             `json:"address"`
+	Type      string             `json:"type"`
+	PinnedAt  pgtype.Timestamptz `json:"pinned_at"`
+	PhotoUrl  string             `json:"photo_url"`
+	PhotoBlur string             `json:"photo_blur"`
 }
 
 // The actor's visible non-archived properties — the «Объекты» screen's
@@ -208,6 +210,7 @@ func (q *Queries) ListGlobalPaymentObjects(ctx context.Context, arg ListGlobalPa
 			&i.Type,
 			&i.PinnedAt,
 			&i.PhotoUrl,
+			&i.PhotoBlur,
 		); err != nil {
 			return nil, err
 		}

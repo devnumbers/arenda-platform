@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -37,11 +37,6 @@ export function ParticipantsSearchScreen(): JSX.Element {
   const [search, setSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Открытие поиска сразу делает поле активным (программный фокус —
-  // устоявшийся a11y-паттерн поисковых шапок).
-  useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
 
   const participantsQuery = useParticipantsList();
   const participants = participantsQuery.data ?? [];
@@ -62,6 +57,7 @@ export function ParticipantsSearchScreen(): JSX.Element {
         }
       >
         <SearchField
+            focusOnMount
           ref={searchInputRef}
           aria-label="Поиск участников"
           placeholder="Найти участника"

@@ -34,9 +34,13 @@ export type RentalSummaryContentProps = {
   /** Фото объекта строки «Объект» (ADR 0065, решение #1286); null — фото
    * нет. */
   readonly propertyPhotoUrl?: string | null;
+  /** Blur-кадр фото объекта (ADR 0065 аменд, решение #1594). */
+  readonly propertyPhotoBlur?: string | null;
   /** Фото контакта-арендатора из книги (ADR 0065, решение #1286);
    * undefined — контакта нет в книге или у него нет фото. */
   readonly tenantPhotoUrl?: string | undefined;
+  /** Blur-кадр фото арендатора (ADR 0065 аменд, решение #1594). */
+  readonly tenantPhotoBlur?: string | undefined;
   /** Запись возврата залога: в мастере — из черновика (сумма + комментарий),
    * на итогах завершённой — из записанного; null — записи нет (у аренды без
    * залога пустой комментарий, #1386): секция не выводится вовсе (канон:
@@ -51,7 +55,9 @@ export function RentalSummaryContent({
   propertyName,
   propertyType,
   propertyPhotoUrl,
+  propertyPhotoBlur,
   tenantPhotoUrl,
+  tenantPhotoBlur,
   depositReturn,
 }: RentalSummaryContentProps): JSX.Element {
   const tenant = rental.tenant;
@@ -118,7 +124,9 @@ export function RentalSummaryContent({
             <PaymentRowButton
               variant="white"
               className="pointer-events-none"
-              categoryIcon={<UserAvatar variant="white" photoUrl={tenantPhotoUrl} />}
+              categoryIcon={
+                <UserAvatar variant="white" photoUrl={tenantPhotoUrl} photoBlur={tenantPhotoBlur} />
+              }
               title={rentalTenantTitle(tenant)}
               subtitle="Арендатор"
             />
@@ -127,7 +135,12 @@ export function RentalSummaryContent({
             variant="white"
             className="pointer-events-none"
             categoryIcon={
-              <PropertyAvatar surface="row" photoUrl={propertyPhotoUrl ?? null} type={propertyType} />
+              <PropertyAvatar
+                surface="row"
+                photoUrl={propertyPhotoUrl ?? null}
+                photoBlur={propertyPhotoBlur}
+                type={propertyType}
+              />
             }
             title={propertyName}
             subtitle="Объект"

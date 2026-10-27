@@ -10,6 +10,7 @@ const registeredDto: ParticipantDto = {
   email: 'e2e-member@example.com',
   display_name: 'Мария Петрова',
   photo_url: '/api/users/12111111-1111-4111-8111-111111111121/photo',
+  photo_blur: 'data:image/jpeg;base64, participant-blur',
   aggregate_status: 'all_properties',
   accessible_properties_count: 1,
   properties: [
@@ -20,6 +21,7 @@ const registeredDto: ParticipantDto = {
       status: 'active',
       type: 'apartment',
       photo_url: '/api/properties/33333333-3333-4333-8333-333333333333/photo',
+      photo_blur: 'data:image/jpeg;base64, leg-blur',
     },
   ],
 };
@@ -35,6 +37,7 @@ describe('mapParticipant — DTO → entity', () => {
     expect(participant.photoUrl).toBe(
       '/api/users/12111111-1111-4111-8111-111111111121/photo',
     );
+    expect(participant.photoBlur).toBe('data:image/jpeg;base64, participant-blur');
     expect(participant.properties[0]).toMatchObject({
       type: 'apartment',
       photoUrl: '/api/properties/33333333-3333-4333-8333-333333333333/photo',
@@ -49,6 +52,7 @@ describe('mapParticipant — DTO → entity', () => {
       status: 'active',
       type: 'apartment',
       photoUrl: '/api/properties/33333333-3333-4333-8333-333333333333/photo',
+      photoBlur: 'data:image/jpeg;base64, leg-blur',
     });
   });
 
@@ -85,10 +89,12 @@ describe('mapParticipant — DTO → entity', () => {
           status: 'active',
           type: 'apartment',
           photo_url: '',
+          photo_blur: '',
         },
       ],
     });
 
     expect(legacy.properties[0]?.photoUrl).toBeNull();
+    expect(legacy.properties[0]?.photoBlur).toBeNull();
   });
 });

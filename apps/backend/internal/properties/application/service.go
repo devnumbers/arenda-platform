@@ -424,8 +424,9 @@ func (s *PropertyService) enrichSharedOwnerNames(ctx context.Context, properties
 		return
 	}
 	type ownerContact struct {
-		name     string
-		photoURL string
+		name      string
+		photoURL  string
+		photoBlur string
 	}
 	resolved := make(map[uuid.UUID]ownerContact)
 	for i := range properties {
@@ -444,7 +445,9 @@ func (s *PropertyService) enrichSharedOwnerNames(ctx context.Context, properties
 			}
 			contact = ownerContact{name: name}
 			if s.ownerPhotos != nil {
-				photoURL, photoErr := s.ownerPhotos.GetPhotoURL(ctx, ownerID)
+				// One row read carries both avatar artifacts (ADR 0065 аменд,
+				// #1603): the streaming path and the blur frame's base64.
+				photoURL, blur, photoErr := s.ownerPhotos.GetPhoto(ctx, ownerID)
 				if photoErr != nil {
 					s.logger.WarnContext(ctx, "failed to resolve owner photo",
 						slog.String("owner_id", ownerID.String()),
@@ -452,11 +455,13 @@ func (s *PropertyService) enrichSharedOwnerNames(ctx context.Context, properties
 					)
 				}
 				contact.photoURL = photoURL
+				contact.photoBlur = blur
 			}
 			resolved[ownerID] = contact
 		}
 		properties[i].OwnerName = contact.name
 		properties[i].OwnerPhotoURL = contact.photoURL
+		properties[i].OwnerPhotoBlur = contact.photoBlur
 	}
 }
 
@@ -801,7 +806,9 @@ func (s *PropertyService) resolveOwnerContacts(ctx context.Context, role sharedp
 		}
 	}
 	if s.ownerPhotos != nil {
-		photoURL, err := s.ownerPhotos.GetPhotoURL(ctx, property.OwnerID)
+		// One row read carries both avatar artifacts (ADR 0065 аменд, #1603):
+		// the streaming path and the blur frame's base64.
+		photoURL, blur, err := s.ownerPhotos.GetPhoto(ctx, property.OwnerID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to resolve owner photo",
 				slog.String("property_id", property.ID.String()),
@@ -809,6 +816,7 @@ func (s *PropertyService) resolveOwnerContacts(ctx context.Context, role sharedp
 			)
 		} else {
 			property.OwnerPhotoURL = photoURL
+			property.OwnerPhotoBlur = blur
 		}
 	}
 }
@@ -1926,16 +1934,18 @@ func (s *PropertyService) OpenPropertyPhoto(
 	}
 
 	if !wantThumb {
-		return body, size, contentType, *property.PhotoKey, nil
+		return s.openFullPropertyPhoto(ctx, property, body, size, contentType)
 	}
 
 	// The thumb variant (тикет миниатюр): the stored thumb serves as is; a
 	// pre-thumb upload materializes its thumb from the full bytes right
 	// here — generated once, stored for every later request. An undecodable
 	// format (webp) honestly falls back to the full object under the main
-	// key.
+	// key. The blur sink rides the serving's decode (тикет #1603): a NULL
+	// column fills from this request's bytes, the write is best-effort.
 	tb, ts, isThumb, err := photo.ServeOrMaterializeThumb(
-		ctx, s.photoStorage, *property.PhotoKey, derefString(property.PhotoContentType), body, s.logger)
+		ctx, s.photoStorage, *property.PhotoKey, contentType, body, s.logger,
+		s.photoBlurSink(ctx, property.OwnerID, property.ID, *property.PhotoKey, property.PhotoBlur == nil))
 	if err != nil {
 		return nil, 0, "", "", fmt.Errorf("serve property photo thumb: %w", err)
 	}
@@ -1947,6 +1957,50 @@ func (s *PropertyService) OpenPropertyPhoto(
 		return tb, ts, contentType, *property.PhotoKey, nil
 	}
 	return body, size, contentType, *property.PhotoKey, nil
+}
+
+// photoBlurSink builds the best-effort writer of the lazily materialized
+// blur frame (тикет #1603): the conditional write keys on the
+// still-advertised photo, a concurrent re-upload wins; a failed write only
+// logs — the column stays NULL and the next photo serve retries. A filled
+// column needs no sink, the serve skips the frame work entirely.
+func (s *PropertyService) photoBlurSink(ctx context.Context, scope, id uuid.UUID, key string, needed bool) func(string) {
+	if !needed {
+		return nil
+	}
+	return func(frame string) {
+		if _, err := s.repo.SetPropertyPhotoBlurIfKey(ctx, id, scope, key, frame); err != nil {
+			s.logger.WarnContext(ctx, "failed to store property photo blur frame",
+				slog.String("key", key),
+				slog.String("error", sanitizeError(err)),
+			)
+		}
+	}
+}
+
+// OpenFullPropertyPhoto serves the full object (the honest fallback and the
+// ?size-less requests) and materializes the blur frame from the very bytes
+// it hands out when the column is NULL (тикет #1603): one read, one decode,
+// the write best-effort. WebP streams untouched — the toolchain decodes no
+// frame from it.
+func (s *PropertyService) openFullPropertyPhoto(
+	ctx context.Context, property domain.Property, open io.ReadCloser, size int64, contentType string,
+) (body io.ReadCloser, served int64, ct, key string, err error) {
+	needed := property.PhotoBlur == nil && photo.FramePossible(contentType)
+	sink := s.photoBlurSink(ctx, property.OwnerID, property.ID, *property.PhotoKey, needed)
+	if sink == nil {
+		return open, size, contentType, *property.PhotoKey, nil
+	}
+	data, err := io.ReadAll(open)
+	if err != nil {
+		// The read that should have fed the frame cannot complete — the
+		// stream is consumed, there are no bytes left to serve.
+		return nil, 0, "", "", fmt.Errorf("read property photo for the blur frame: %w", err)
+	}
+	if frame, ok := photo.BlurFromStored(data, contentType); ok {
+		sink(frame)
+	}
+	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), contentType, *property.PhotoKey, nil
 }
 
 // SetPropertyPhoto replaces the object photo (ADR 0065, one image per
@@ -2001,7 +2055,10 @@ func (s *PropertyService) SetPropertyPhoto(
 			}
 		}
 
-		property, err = stores.repo.SetPropertyPhoto(ctx, propertyID, property.OwnerID, &key, &processed.ContentType)
+		// The blur frame rides the columns write (тикет #1603): nil when the
+		// upload has none (webp, within-bound) — the serve path
+		// materializes lazily.
+		property, err = stores.repo.SetPropertyPhoto(ctx, propertyID, property.OwnerID, &key, &processed.ContentType, processed.BlurPtr())
 		if err != nil {
 			return fmt.Errorf("set property photo: %w", err)
 		}
@@ -2079,7 +2136,7 @@ func (s *PropertyService) DeletePropertyPhoto(ctx context.Context, actor, proper
 		}
 		oldKey = property.PhotoKey
 
-		property, err = stores.repo.SetPropertyPhoto(ctx, propertyID, property.OwnerID, nil, nil)
+		property, err = stores.repo.SetPropertyPhoto(ctx, propertyID, property.OwnerID, nil, nil, nil)
 		if err != nil {
 			return fmt.Errorf("set property photo: %w", err)
 		}

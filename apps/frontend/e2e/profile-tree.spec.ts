@@ -314,12 +314,15 @@ test.describe('дерево профиля — ПК ≥1024', () => {
   test('вход в дерево по ссылке юзера в хедере', async ({ page, seededUser }) => {
     await openCabinetWithSeededSession(page, seededUser);
     await page.goto('/properties');
-    const header = screenHeader(page);
-
-    // «Крыло» UserButton — настоящий Link — ведёт на /profile.
-    await header.getByRole('link', { name: USER_WING }).click();
+    // «Крыло» UserButton — настоящий Link — ведёт на /profile. На ПК крыло
+    // живёт в постоянном слое ScreenLayout (анти-мигание аватара, 22.10),
+    // не внутри элемента шапки маршрута.
+    await page
+      .locator('.persistent-nav-wing')
+      .getByRole('link', { name: USER_WING })
+      .click();
     await expect(page).toHaveURL(/\/profile$/);
-    await expect(header.getByText('Профиль', { exact: true })).toBeVisible();
+    await expect(screenHeader(page).getByText('Профиль', { exact: true })).toBeVisible();
   });
 
   test('ПК: у хабов «Профиль» и «Уведомлений» крылья на месте', async ({
@@ -327,16 +330,17 @@ test.describe('дерево профиля — ПК ≥1024', () => {
     seededUser,
   }) => {
     await openCabinetWithSeededSession(page, seededUser);
-    const header = screenHeader(page);
+    const wing = page.locator('.persistent-nav-wing');
 
     // Крылья спрятаны ниже ПК (решение владельца 02.10); на ПК — всегда
-    // (макет 2329-148674: лого + имя + аватар у края вьюпорта).
+    // (макет 2329-148674: лого + имя + аватар у края вьюпорта). Слой
+    // постоянного крыла — ScreenLayout (22.10), не элемент шапки маршрута.
     await page.goto('/profile');
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
-    await expect(header.getByRole('link', { name: /Иван|Профиль/ })).toBeVisible();
+    await expect(wing.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(wing.getByRole('link', { name: /Иван|Профиль/ })).toBeVisible();
 
     await page.goto('/notifications');
-    await expect(header.getByRole('link', { name: 'Объекты' })).toBeVisible();
-    await expect(header.getByRole('link', { name: /Иван|Профиль/ })).toBeVisible();
+    await expect(wing.getByRole('link', { name: 'Объекты' })).toBeVisible();
+    await expect(wing.getByRole('link', { name: /Иван|Профиль/ })).toBeVisible();
   });
 });

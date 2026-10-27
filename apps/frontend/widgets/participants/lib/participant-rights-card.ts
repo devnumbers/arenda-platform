@@ -18,6 +18,8 @@ export type ParticipantRightsCard = {
   /** Путь фото профиля для аватара; undefined — у pending его не бывает,
    * поле держит аватар карточки в одном месте с остальными её полями. */
   readonly photoUrl: string | undefined;
+  /** Blur-кадр фото (ADR 0065 аменд, решение #1594) — сестра photoUrl. */
+  readonly photoBlur: string | undefined;
 };
 
 /** Общий литерал карточки D7-анатомии: различаются у владельческого
@@ -28,6 +30,7 @@ function buildPendingRightsCard(
   email: string,
   emailIcon: PropertyParticipantEmailIcon,
   photoUrl: string | undefined,
+  photoBlur: string | undefined,
 ): ParticipantRightsCard {
   return {
     title: ANONYMOUS_TITLE,
@@ -35,6 +38,7 @@ function buildPendingRightsCard(
     emailIcon,
     badge: accountNotCreatedBadge(),
     photoUrl,
+    photoBlur,
   };
 }
 
@@ -60,6 +64,7 @@ export function pendingParticipantRightsCard(
     participant.email ?? member.email ?? '',
     emailRoleIcon(member.role),
     participant.photoUrl ?? undefined,
+    participant.photoBlur ?? undefined,
   );
 }
 
@@ -78,5 +83,5 @@ export function pendingMemberRightsCard(
   if (member.status !== 'pending') {
     return undefined;
   }
-  return buildPendingRightsCard(member.email ?? '', emailRoleIcon(member.role), undefined);
+  return buildPendingRightsCard(member.email ?? '', emailRoleIcon(member.role), undefined, undefined);
 }

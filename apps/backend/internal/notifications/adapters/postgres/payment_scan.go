@@ -64,7 +64,7 @@ func (s *PaymentScanStore) ListDueTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.PropertyPhotoBlur,
 			row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID))
 	}
 	return targets, nil
@@ -89,7 +89,7 @@ func (s *PaymentScanStore) ListOverdueTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.PropertyPhotoBlur,
 			row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID))
 	}
 	return targets, nil
@@ -114,7 +114,7 @@ func (s *PaymentScanStore) ListAutoPaidTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.PropertyPhotoBlur,
 			row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID))
 	}
 	return targets, nil
@@ -164,11 +164,7 @@ func (s *PaymentScanStore) GetScheduledAutoPaidPayment(
 	if !live {
 		return application.PaymentScanTarget{}, false, err
 	}
-	return paymentScanTarget(
-		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
-		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
-	), true, nil
+	return scheduledAutoPaidScanTarget(row), true, nil
 }
 
 // ListScheduledDueTargets lists the operations whose due boundary — the
@@ -241,11 +237,7 @@ func (s *PaymentScanStore) GetScheduledDuePayment(
 	if !live {
 		return application.PaymentScanTarget{}, false, err
 	}
-	return paymentScanTarget(
-		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
-		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
-	), true, nil
+	return scheduledDueScanTarget(row), true, nil
 }
 
 // GetScheduledOverduePayment reloads one operation at its overdue boundary
@@ -265,11 +257,7 @@ func (s *PaymentScanStore) GetScheduledOverduePayment(
 	if !live {
 		return application.PaymentScanTarget{}, false, err
 	}
-	return paymentScanTarget(
-		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
-		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
-	), true, nil
+	return scheduledOverdueScanTarget(row), true, nil
 }
 
 // ListReminderTargets lists the zone's planned operations of rules with a
@@ -293,7 +281,7 @@ func (s *PaymentScanStore) ListReminderTargets(
 	for _, row := range rows {
 		targets = append(targets, paymentScanTarget(
 			row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+			row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.PropertyPhotoBlur,
 			row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID))
 	}
 	return targets, nil
@@ -344,11 +332,51 @@ func (s *PaymentScanStore) GetScheduledReminderPayment(
 	if !live {
 		return application.PaymentScanTarget{}, false, err
 	}
+	return scheduledReminderScanTarget(row), true, nil
+}
+
+// scheduledAutoPaidScanTarget maps the GetScheduledAutoPaidPaymentRow onto the application target — one adapter per
+// sqlc row type over the shared paymentScanTarget canon: the legs differ
+// in their query alone.
+func scheduledAutoPaidScanTarget(row postgres.GetScheduledAutoPaidPaymentRow) application.PaymentScanTarget {
 	return paymentScanTarget(
 		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
-		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto,
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.PropertyPhotoBlur,
 		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
-	), true, nil
+	)
+}
+
+// scheduledDueScanTarget maps the GetScheduledDuePaymentRow onto the application target — one adapter per
+// sqlc row type over the shared paymentScanTarget canon: the legs differ
+// in their query alone.
+func scheduledDueScanTarget(row postgres.GetScheduledDuePaymentRow) application.PaymentScanTarget {
+	return paymentScanTarget(
+		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.PropertyPhotoBlur,
+		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
+	)
+}
+
+// scheduledOverdueScanTarget maps the GetScheduledOverduePaymentRow onto the application target — one adapter per
+// sqlc row type over the shared paymentScanTarget canon: the legs differ
+// in their query alone.
+func scheduledOverdueScanTarget(row postgres.GetScheduledOverduePaymentRow) application.PaymentScanTarget {
+	return paymentScanTarget(
+		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.PropertyPhotoBlur,
+		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
+	)
+}
+
+// scheduledReminderScanTarget maps the GetScheduledReminderPaymentRow onto the application target — one adapter per
+// sqlc row type over the shared paymentScanTarget canon: the legs differ
+// in their query alone.
+func scheduledReminderScanTarget(row postgres.GetScheduledReminderPaymentRow) application.PaymentScanTarget {
+	return paymentScanTarget(
+		row.PaymentID, row.Date, row.Title, row.AmountKopecks,
+		row.PropertyID, row.PropertyName, row.PropertyAddress, row.PropertyType, row.PropertyPhoto, row.PropertyPhotoBlur,
+		row.PaymentCategorySlug, row.PaymentCategoryName, row.OwnerID,
+	)
 }
 
 // paymentScanTarget maps one scan row's fields to the application target.
@@ -360,7 +388,7 @@ func (s *PaymentScanStore) GetScheduledReminderPayment(
 // answer keeps the shape honest for rows read before the columns travelled.
 func paymentScanTarget(
 	paymentID pgtype.UUID, date pgtype.Date, title string, amountKopecks int64,
-	propertyID pgtype.UUID, propertyName, propertyAddress, propertyType, propertyPhoto string,
+	propertyID pgtype.UUID, propertyName, propertyAddress, propertyType, propertyPhoto, propertyPhotoBlur string,
 	categorySlug, categoryName pgtype.Text, ownerID pgtype.UUID,
 ) application.PaymentScanTarget {
 	var category *domain.PaymentCategoryRef
@@ -371,17 +399,18 @@ func paymentScanTarget(
 		category = &domain.PaymentCategoryRef{Source: domain.PaymentCategorySourceDefault, Slug: categorySlug.String}
 	}
 	return application.PaymentScanTarget{
-		PaymentID:       pgconv.UUIDFromPgtype(paymentID),
-		DueDate:         pgconv.DateFromPgtype(date),
-		Title:           title,
-		AmountKopecks:   amountKopecks,
-		PropertyID:      pgconv.UUIDFromPgtype(propertyID),
-		PropertyName:    propertyName,
-		PropertyAddress: propertyAddress,
-		PropertyType:    propertyType,
-		PropertyPhoto:   propertyPhoto,
-		Category:        category,
-		OwnerID:         pgconv.UUIDFromPgtype(ownerID),
+		PaymentID:         pgconv.UUIDFromPgtype(paymentID),
+		DueDate:           pgconv.DateFromPgtype(date),
+		Title:             title,
+		AmountKopecks:     amountKopecks,
+		PropertyID:        pgconv.UUIDFromPgtype(propertyID),
+		PropertyName:      propertyName,
+		PropertyAddress:   propertyAddress,
+		PropertyType:      propertyType,
+		PropertyPhoto:     propertyPhoto,
+		PropertyPhotoBlur: propertyPhotoBlur,
+		Category:          category,
+		OwnerID:           pgconv.UUIDFromPgtype(ownerID),
 	}
 }
 

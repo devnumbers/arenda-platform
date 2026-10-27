@@ -55,7 +55,11 @@ type OwnerEmailResolver interface {
 // path (ADR 0065, решение #1286) for the owner avatar on the detail and the
 // shared list rows. Optional.
 type OwnerPhotoResolver interface {
-	GetPhotoURL(ctx context.Context, userID uuid.UUID) (string, error)
+	// GetPhoto resolves the owner's profile photo for the owner avatar (ADR
+	// 0065, решение #1286): the streaming path and, in one row read, the
+	// blur frame's ready base64 (ADR 0065 аменд, #1603). '' — no photo or
+	// no frame.
+	GetPhoto(ctx context.Context, userID uuid.UUID) (url, blur string, err error)
 }
 
 // SharedSuspendedMembership is one suspended shared membership of the reading
@@ -277,9 +281,17 @@ type PropertyRepository interface {
 	// the actor, own and shared rows alike).
 	ActorPins(ctx context.Context, actor uuid.UUID, propertyIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
 	// SetPropertyPhoto writes the photo columns in one atomic UPDATE (ADR
-	// 0065): nil clears the photo. The scope is the property's owner — the
-	// edit capability is resolved by the service's policy before the call.
-	SetPropertyPhoto(ctx context.Context, id, scope uuid.UUID, key, contentType *string) (domain.Property, error)
+	// 0065): the key, the sniffed content type and the blur frame's base64
+	// (решение #1594, тикет #1603; nil blur — no frame), nils clear the
+	// photo. The scope is the property's owner — the edit capability is
+	// resolved by the service's policy before the call.
+	SetPropertyPhoto(ctx context.Context, id, scope uuid.UUID, key, contentType, blur *string) (domain.Property, error)
+	// SetPropertyPhotoBlurIfKey lands the lazily materialized blur frame
+	// (тикет #1603): the frame computed from this request's decode is
+	// written only while the row still advertises the key it was computed
+	// from — a concurrent re-upload wins. The affected-row count is the
+	// race verdict; the write is best-effort on the caller's side.
+	SetPropertyPhotoBlurIfKey(ctx context.Context, id, scope uuid.UUID, key, blur string) (int64, error)
 	// ClearPhotoIfKey repairs a dangling photo (ADR 0065): the storage has
 	// lost the advertised object, so the columns are cleared — but only
 	// while they still advertise the given key: a concurrent re-upload (a

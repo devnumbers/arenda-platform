@@ -9,6 +9,9 @@ export type User = {
   /** Путь приватного фото профиля (ADR 0065): same-origin стриминг через
    * бэкенд; null — фото нет. */
   readonly photoUrl: string | null;
+  /** Blur-кадр фото первого показа (ADR 0065 аменд, решение #1594):
+   * готовый base64 из DTO; null — кадра нет (webp, старые фото). */
+  readonly photoBlur: string | null;
   readonly subscription: {
     readonly tariff: {
       readonly name: string;

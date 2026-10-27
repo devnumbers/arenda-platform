@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
@@ -56,11 +56,6 @@ export function OperationsSearchScreen({
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Полевой фокус при входе на экран (Figma 1494-61633 — каретка в поле);
-  // jsx-a11y/no-autofocus запрещает сам проп.
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   const summaryQuery = usePropertyOperationsSummary(
     propertyId,
@@ -119,6 +114,7 @@ export function OperationsSearchScreen({
         }
       >
         <SearchField
+            focusOnMount
           ref={inputRef}
           placeholder="Найти операцию"
           aria-label="Найти операцию"

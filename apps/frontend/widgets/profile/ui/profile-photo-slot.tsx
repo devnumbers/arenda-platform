@@ -41,6 +41,9 @@ const PHOTO_BUTTON_CLASS =
 export type ProfilePhotoSlotProps = {
   /** same-origin стриминговый путь выдачи (ADR 0065), null — фото нет. */
   readonly photoUrl?: string | null;
+  /** Blur-кадр серверного фото (ADR 0065 аменд, решение #1594); при
+   * staged-превью не рисуется — байты уже на руках. */
+  readonly photoBlur?: string | null;
   /** Загрузка в круге: превью выбранного файла; failed — прошлый провал
    * (тап по кругу = повтор, см. onRetry). */
   readonly stage: MePhotoStage | null;
@@ -59,6 +62,7 @@ export type ProfilePhotoSlotProps = {
 
 export function ProfilePhotoSlot({
   photoUrl,
+  photoBlur,
   stage,
   busy,
   progress = null,
@@ -115,7 +119,10 @@ export function ProfilePhotoSlot({
       className={PHOTO_BUTTON_CLASS}
       onClick={retrying ? onRetry : openPicker}
     >
-      <ProfileAvatar photoUrl={displayUrl} />
+      <ProfileAvatar
+        photoUrl={displayUrl}
+        photoBlur={stage === null ? photoBlur : null}
+      />
     </button>
   );
 

@@ -162,6 +162,10 @@ type EntityRef struct {
 	Email   string    `json:"email,omitempty"`
 	Type    string    `json:"type,omitempty"`
 	Photo   string    `json:"photo,omitempty"`
+	// PhotoBlur is the blur frame's ready base64 (ADR 0065 аменд, #1603):
+	// the card paints it over the placeholder while photo loads; '' — no
+	// frame (webp, a within-16px image, a pre-blur photo).
+	PhotoBlur string `json:"photo_blur,omitempty"`
 }
 
 // TariffRef is the tariff snapshot of the billing events (слаг, период,

@@ -91,6 +91,7 @@ export function TasksPropertySelectPage({
               title={property.name}
               subtitle={property.address}
               photoUrl={property.photoUrl ?? undefined}
+              photoBlur={property.photoBlur}
               type={property.type}
               checked={draft.propertyIds.includes(property.id)}
               onCheck={() => toggle(property.id)}
@@ -119,6 +120,7 @@ function ObjectRowButton({
   title,
   subtitle,
   photoUrl,
+  photoBlur,
   type,
   isAll = false,
   checked,
@@ -127,6 +129,7 @@ function ObjectRowButton({
   readonly title: string;
   readonly subtitle?: string;
   readonly photoUrl?: string;
+  readonly photoBlur?: string | null;
   readonly type?: PropertyType;
   readonly isAll?: boolean;
   readonly checked: boolean;
@@ -147,6 +150,7 @@ function ObjectRowButton({
       <CircleIcon variant="white" aria-hidden className="relative overflow-hidden rounded-full">
         <CirclePhoto
           photoUrl={photoUrl}
+          photoBlur={photoBlur}
           loading="lazy"
           glyph={
             isAll ? (

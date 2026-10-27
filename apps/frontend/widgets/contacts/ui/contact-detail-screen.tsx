@@ -152,12 +152,13 @@ function ContactCardBody({
   const photoUrl = contact.photoUrl ?? null;
   const boundPhoto = boundProperty?.photoUrl;
   const boundPhotoUrl = boundPhoto != null && boundPhoto !== '' ? boundPhoto : null;
+  const boundPhotoBlur = boundProperty?.photoBlur ?? null;
 
   return (
     <div className="flex flex-col px-6 pb-8">
       {/* Блок ФИО и карточка «Информация» статичны: правка — через кебаб
        * шапки, единственным входом (решение владельца 18.10). */}
-      <ContactDetailHeader contact={contact} photoUrl={photoUrl} />
+      <ContactDetailHeader contact={contact} photoUrl={photoUrl} photoBlur={contact.photoBlur} />
 
       <ContactSectionCard className="mt-8" title="Информация">
         {emptyCaption !== null ? (
@@ -189,6 +190,7 @@ function ContactCardBody({
               >
                 <CirclePhoto
                   photoUrl={boundPhotoUrl}
+                  photoBlur={boundPhotoBlur}
                   loading="lazy"
                   glyph={
                     BoundPropertyGlyph !== undefined ? (

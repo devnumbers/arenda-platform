@@ -1,12 +1,13 @@
 import { expect, openCabinetWithSessionToken, test } from './fixtures';
 import type { Page } from '@playwright/test';
 
-// Теневые loading.tsx хабов (карта #1437, план 045, решение владельца
-// 16.10 «давай сразу все»): сегментный loading.tsx стримится первым кадром
-// холодной загрузки ВСЕХ детей сегмента — префетчащий ребёнок получает
-// скелетон родительского списка вместо своего архетипа. Снос файла чинит
-// детей (in-page fallback) и не меняет кадр самого хаба (тот же виджет
-// через in-page границу страницы).
+// Холодная загрузка хабов: история канона — план 044/045 (теневые
+// loading.tsx, карта #1437) сменила аменда #1605 (react/react#37014):
+// страницы с серверным префетчем больше не оборачиваются в Suspense, и
+// на маршрутах без loading.tsx HTML однофлушный — холодный вход рисует
+// кадр с данными и хромом из реестра, скелетон не стримится вовсе.
+// Гонка гидратации React 19.2 (batched Suspense reveal) закрыта по
+// построению; спеки ниже — гарды нового канона.
 //
 // Механика та же, что в properties-cold-loading.spec.ts (план 044):
 // MutationObserver-журнал из init-скрипта, троттлинг сети, сброс кеша.
@@ -53,23 +54,17 @@ async function readLog(page: Page): Promise<MarkerMap> {
   );
 }
 
-/** Журнал первого кадра хаба «Участники»: в момент первого появления
- * кадра загрузки снимается, был ли в DOM уже <header> (шапка TopNav).
- * Канон §7 — хром экрана рендерится вне фазы загрузки, поэтому в кадре
- * стриминга шапка обязана быть; голый скелетон = регрессия (класс C9,
- * «шапка прыгает»). */
+/** Журнал холодного входа хаба «Участники»: следит, чтобы скелетон хаба
+ * не появился ни разу. Канон однофлушного входа (аменда #1605) —
+ * скелетон на холодном входе не стримится вовсе, шапка приходит из
+ * реестра маршрутов в том же HTML; голая страница без шапки =
+ * регрессия (класс C9, «шапка прыгает»). */
 function firstFrameJournal(): void {
   const log: MarkerMap = {};
   (window as unknown as { __hubColdLog: MarkerMap }).__hubColdLog = log;
-  let frameSeen = false;
   const observer = new MutationObserver(() => {
-    if (frameSeen) {
-      return;
-    }
     if (document.querySelector('[data-testid="participants-list-loading"]') !== null) {
-      frameSeen = true;
       log['participants-list-loading'] = true;
-      log['participants-header-in-first-frame'] = document.querySelector('header') !== null;
     }
   });
   observer.observe(document, { childList: true, subtree: true });
@@ -118,7 +113,7 @@ test.describe('холодная загрузка детей хабов (план
     ).toBeUndefined();
   });
 
-  test('хаб «Контакты»: свой кадр живёт и после сноса loading.tsx', async ({
+  test('хаб «Контакты»: холодный вход однофлушный — скелетона нет, данные первым кадром', async ({
     page,
     seededUser,
   }) => {
@@ -132,16 +127,19 @@ test.describe('холодная загрузка детей хабов (план
     await page.waitForLoadState('load');
     await expect(page.getByText('Контакты').first()).toBeVisible();
 
-    // Гард регрессии сноса: кадр холодной загрузки хаба существует —
-    // после сноса сегментного файла его рисует in-page fallback страницы
-    // (тот же виджет), пустого окна быть не должно.
+    // Канон однофлушного холодного входа (аменда #1605, react/react#37014):
+    // ServerPrefetchBoundary ждёт данные до рендера, скелетон на холодном
+    // входе не стримится вовсе — первый кадр и есть кадр с данными.
     const log = await readLog(page);
-    expect(log['contacts-loading'], 'кадр загрузки хаба «Контакты» стримился').toBe(true);
+    expect(
+      log['contacts-loading'],
+      'скелетон хаба «Контакты» на холодном входе не стримится',
+    ).toBeUndefined();
   });
 });
 
 test.describe('холодная загрузка хаба «Участники» (гард хрома §7)', () => {
-  test('кадр холодной загрузки несёт хром экрана — шапка стримится вместе со скелетоном', async ({
+  test('кадр холодной загрузки несёт хром экрана — шапка из реестра в первом кадре, скелетона нет', async ({
     page,
     seededUser,
   }) => {
@@ -156,14 +154,16 @@ test.describe('холодная загрузка хаба «Участники»
     await expect(page.getByText('Участники').first()).toBeVisible();
 
     const log = await readLog(page);
-    // Кадр стримился (in-page fallback страницы — единственный кадр
-    // холодной загрузки хаба после сноса loading.tsx, план 045).
-    expect(log['participants-list-loading'], 'кадр загрузки хаба «Участники» стримился').toBe(true);
-    // Хром в первом кадре: в момент появления кадра загрузки шапка уже в
-    // DOM. Голый скелетон без TopNav = регрессия «шапка прыгает».
+    // Однофлушный вход (аменда #1605): скелетон хаба не стримится вовсе.
     expect(
-      log['participants-header-in-first-frame'],
-      'шапка в первом кадре холодной загрузки /participants',
-    ).toBe(true);
+      log['participants-list-loading'],
+      'скелетон хаба «Участники» на холодном входе не стримится',
+    ).toBeUndefined();
+    // Хром первого кадра: шапка персистентной шапки приходит из реестра
+    // маршрутов в том же однофлушном HTML (голая страница без шапки =
+    // регрессия «шапка прыгает»).
+    await expect(
+      page.locator('header[aria-label="Навигация экрана"]'),
+    ).toBeVisible();
   });
 });

@@ -142,7 +142,16 @@ type ContactStore interface {
 	// a key and the sniffed content type, or nils to clear. The scope is
 	// the book owner; existence and the edit capability are proven by the
 	// caller.
-	SetPhoto(ctx context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error)
+	// SetPhoto writes the card photo columns in one UPDATE (ADR 0065): a key,
+	// the sniffed content type and the blur frame's base64 (решение #1594,
+	// тикет #1603; nil blur — no frame), or nils to clear.
+	SetPhoto(ctx context.Context, id, ownerID uuid.UUID, key, contentType, blur *string) (domain.Contact, error)
+	// SetPhotoBlurIfKey lands the lazily materialized blur frame (тикет
+	// #1603): the frame computed from this request's decode is written only
+	// while the row still advertises the key it was computed from — a
+	// concurrent re-upload wins. The affected-row count is the race
+	// verdict; the write is best-effort on the caller's side.
+	SetPhotoBlurIfKey(ctx context.Context, id, ownerID uuid.UUID, key, blur string) (int64, error)
 	// ClearPhotoIfKey repairs a dangling photo (ADR 0065): the storage has
 	// lost the advertised object, so the columns are cleared — but only
 	// while they still advertise the given key: a concurrent re-upload (a

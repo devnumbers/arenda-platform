@@ -41,6 +41,8 @@ export type HistoryActorGroup = {
   /** Фото актёра (ADR 0065, решение #1286) — путь стриминга из первой
    * записи группы; null — фото нет или запись обезличена. */
   readonly photoUrl: string | null;
+  /** Blur-кадр фото актёра (ADR 0065 аменд, решение #1594) — сестра photoUrl. */
+  readonly photoBlur: string | null;
   readonly entries: readonly HistoryEntry[];
 };
 
@@ -62,6 +64,7 @@ type MutableActorGroup = {
   key: string;
   name: string;
   photoUrl: string | null;
+  photoBlur: string | null;
   entries: HistoryEntry[];
 };
 type MutableObjectGroup = {
@@ -107,6 +110,7 @@ export function groupHistoryByDay(
         key: actorKey,
         name: actorDisplayName(entry),
         photoUrl: entry.actorPhotoUrl,
+        photoBlur: entry.actorPhotoBlur,
         entries: [],
       };
       object_.actors.push(actor);

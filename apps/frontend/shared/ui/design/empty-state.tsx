@@ -3,6 +3,7 @@
 import type { JSX, ReactNode } from 'react';
 import Image from 'next/image';
 import { cn } from '@/shared/lib/cn';
+import { onIllustrationLoad, rememberIllustrationRef } from '@/shared/ui/design/illustration-decode-registry';
 
 /** Пустое состояние дизайн-слоя — канон полноэкранных и внутристраничных
  * «пусто» (унификация 2026-09-04; анатомия по макету хаба «Объектов»
@@ -65,6 +66,8 @@ export function EmptyState({
         sizes="256px"
         quality={90}
         priority
+        ref={rememberIllustrationRef}
+        onLoad={onIllustrationLoad}
         className={cn('h-32 w-32', imageRounded && 'rounded-pill object-cover')}
       />
       {(title !== undefined || description !== undefined) && (

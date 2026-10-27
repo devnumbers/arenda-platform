@@ -25,10 +25,11 @@ type AccessEventUserReader interface {
 
 // AccessEventUser is the display-relevant projection of a registered user.
 type AccessEventUser struct {
-	Name     *string
-	Surname  *string
-	Email    string
-	PhotoKey *string
+	Name      *string
+	Surname   *string
+	Email     string
+	PhotoKey  *string
+	PhotoBlur *string
 }
 
 // AccessViewStore answers the access events' display questions (#751) over
@@ -62,7 +63,7 @@ func (a *accessEventUserAdapter) GetByID(ctx context.Context, id uuid.UUID) (Acc
 	if err != nil {
 		return AccessEventUser{}, err
 	}
-	return AccessEventUser{Name: u.Name, Surname: u.Surname, Email: u.Email.String(), PhotoKey: u.PhotoKey}, nil
+	return AccessEventUser{Name: u.Name, Surname: u.Surname, Email: u.Email.String(), PhotoKey: u.PhotoKey, PhotoBlur: u.PhotoBlur}, nil
 }
 
 // The adapter satisfies the consumer-declared port (CODING_STANDARDS).
@@ -78,7 +79,10 @@ func (s *AccessViewStore) PropertyView(ctx context.Context, propertyID uuid.UUID
 		}
 		return application.AccessPropertyView{}, fmt.Errorf("get property view %s: %w", propertyID, err)
 	}
-	return application.AccessPropertyView{Name: row.Name, Address: row.Address, Type: row.Type, Photo: row.PropertyPhoto}, nil
+	return application.AccessPropertyView{
+		Name: row.Name, Address: row.Address, Type: row.Type,
+		Photo: row.PropertyPhoto, PhotoBlur: row.PropertyPhotoBlur,
+	}, nil
 }
 
 // UserProfileView returns the user's display snapshot: the display name (the
@@ -93,10 +97,15 @@ func (s *AccessViewStore) UserProfileView(ctx context.Context, userID uuid.UUID)
 	if err != nil {
 		return application.AccessUserProfile{}, fmt.Errorf("get user profile %s: %w", userID, err)
 	}
+	blur := ""
+	if u.PhotoBlur != nil {
+		blur = *u.PhotoBlur
+	}
 	return application.AccessUserProfile{
 		DisplayName: accessEventDisplayName(u.Name, u.Surname),
 		Email:       u.Email,
 		Photo:       photo.UserPhotoPath(userID, u.PhotoKey),
+		PhotoBlur:   blur,
 	}, nil
 }
 

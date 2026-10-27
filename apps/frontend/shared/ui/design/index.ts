@@ -59,7 +59,13 @@ export { StickyBottomBar, type StickyBottomBarProps } from './sticky-bottom-bar'
 export { fullscreenSurfaceClass } from './fullscreen-surface';
 export { StatusIcon, type StatusIconProps, type StatusIconStatus } from './status-icon';
 export { PageContent, type PageContentProps } from './page-content';
-export { TopNav, type TopNavProps, TopNavTitle, type TopNavTitleProps } from './top-nav';
+export { TopNav, type TopNavProps } from './top-nav';
+export { TopNavView, TopNavTitle, type TopNavTitleProps } from './top-nav-view';
+export { topNavPatchStore, mergeTopNavConfig } from './top-nav-registration';
+export {
+  PersistentTopNavHostProvider,
+  useHostsPersistentTopNav,
+} from './persistent-top-nav-host';
 export { TopNavBackButton, type TopNavBackButtonProps } from './top-nav-back-button';
 export { HubTitle, type HubTitleProps } from './hub-title';
 export { SubScreenShell, type SubScreenShellProps } from './sub-screen-shell';

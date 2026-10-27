@@ -14,12 +14,14 @@ export function mapPropertyResponse(
     attributes: coerceAttributes(dto.attributes),
     status: dto.status,
     photoUrl: dto.photo_url ?? null,
+    photoBlur: dto.photo_blur ?? null,
     access: dto.access
       ? {
           role: dto.access.role,
           ownerName: dto.access.owner_name,
           ownerEmail: dto.access.owner_email,
           ownerPhotoUrl: dto.access.owner_photo_url ?? null,
+          ownerPhotoBlur: dto.access.owner_photo_blur ?? null,
         }
       : undefined,
     created_at: dto.created_at,

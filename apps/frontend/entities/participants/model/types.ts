@@ -25,6 +25,8 @@ export type ParticipantPropertyLeg = {
   readonly status: ParticipantAccessStatus;
   readonly type: components['schemas']['PropertyType'];
   readonly photoUrl: string | null;
+  /** Blur-кадр фото объекта (ADR 0065 аменд, решение #1594); null — кадра нет. */
+  readonly photoBlur: string | null;
 };
 
 /**
@@ -49,6 +51,9 @@ export type Participant = {
    * /api/users/{userId}/photo; null — pending-строка или у юзера нет
    * фото. Отозванный доступ отвечает 404 — onError деградирует в заглушку. */
   readonly photoUrl: string | null;
+  /** Blur-кадр фото первого показа (ADR 0065 аменд, решение #1594);
+   * null — кадра нет. */
+  readonly photoBlur: string | null;
   /** Число объектов с активным доступом. */
   readonly accessiblePropertiesCount: number;
   /** Ноги доступа на объектах сцопа читающего. */

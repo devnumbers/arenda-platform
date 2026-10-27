@@ -40,6 +40,7 @@ import {
   TopNav,
 } from "@/shared/ui/design";
 import { SnapRail } from "@/shared/ui/snap-rail";
+import { onIllustrationLoad, rememberIllustrationRef } from "@/shared/ui/design/illustration-decode-registry";
 import { globalFavoritePayments,
   globalOverduePayments,
   globalPaymentObjectHasOverdue,
@@ -200,12 +201,15 @@ export function PaymentsGlobalScreen(): JSX.Element {
             />
 
             {pending && (
-              <>
+              /* Маркер pending-фазы data-слоя — гард e2e #1602 (холодный
+               * вход и возврат без скелетон-свопа); contents не меняет
+               * раскладку — секции остаются flex-детьми обёртки хаба. */
+              <div className="contents" data-testid="payments-hub-pending">
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
                 <PaymentsGlobalSectionSkeleton />
-              </>
+              </div>
             )}
 
             {!pending && (
@@ -302,6 +306,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                             name: object.name,
                             type: object.type,
                             photoUrl: object.photoUrl,
+                            photoBlur: object.photoBlur,
                             hasOverdue: globalPaymentObjectHasOverdue(object),
                           }))
                           .slice(0, SECTION_CARDS_LIMIT)}
@@ -623,6 +628,7 @@ function ObjectsSectionBody({
       name: string;
       type: PropertyType;
       photoUrl: string | null;
+      photoBlur: string | null;
       hasOverdue: boolean;
     }>
   >;
@@ -641,6 +647,7 @@ function ObjectsSectionBody({
             // откатывается к глифу, канон #1275. Точка просрочки — у аватара.
             <PaymentObjectAvatar
               photoUrl={object.photoUrl}
+              photoBlur={object.photoBlur}
               type={object.type}
               surface="card"
               hasNotification={object.hasOverdue}
@@ -695,6 +702,8 @@ function PaymentsGlobalPlaceholder({
         sizes="128px"
         quality={90}
         priority
+        ref={rememberIllustrationRef}
+        onLoad={onIllustrationLoad}
         className="h-16 w-16 shrink-0 animate-[dl-fade-in_350ms_var(--dl-ease)_both]"
       />
     </div>
