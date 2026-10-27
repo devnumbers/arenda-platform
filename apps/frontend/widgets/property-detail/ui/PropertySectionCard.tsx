@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { SmallArrowRight } from '@/shared/assets/icons';
 import { Button } from '@/shared/ui/design';
+import { onIllustrationLoad, rememberIllustrationRef } from '@/shared/ui/design/illustration-decode-registry';
 import type { PropertySectionEmptyCopy } from '../lib/property-sections';
 import styles from './PropertySectionCard.module.css';
 
@@ -121,6 +122,8 @@ export function PropertySectionEmpty({
         sizes="128px"
         quality={90}
         priority
+        ref={rememberIllustrationRef}
+        onLoad={onIllustrationLoad}
         className="h-16 w-16"
       />
       <div className="mt-4 flex w-full flex-col items-center gap-6">

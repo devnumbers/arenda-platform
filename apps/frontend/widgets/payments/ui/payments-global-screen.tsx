@@ -40,6 +40,7 @@ import {
   TopNav,
 } from "@/shared/ui/design";
 import { SnapRail } from "@/shared/ui/snap-rail";
+import { onIllustrationLoad, rememberIllustrationRef } from "@/shared/ui/design/illustration-decode-registry";
 import { globalFavoritePayments,
   globalOverduePayments,
   globalPaymentObjectHasOverdue,
@@ -698,6 +699,8 @@ function PaymentsGlobalPlaceholder({
         sizes="128px"
         quality={90}
         priority
+        ref={rememberIllustrationRef}
+        onLoad={onIllustrationLoad}
         className="h-16 w-16 shrink-0 animate-[dl-fade-in_350ms_var(--dl-ease)_both]"
       />
     </div>
