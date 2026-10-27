@@ -289,3 +289,34 @@ Tailwind-дефолтной кривой (не `--dl-ease`), при закрыт
   `duration-300 ease-apple`; JSDoc не упоминает
   `--radix-collapsible-content-height`; DESIGN.md §8 содержит новый
   буллет.
+
+## Постскриптум — живая приёмка 27.10 (структурная правка Target)
+
+Живая приёмка (/ui-walkthrough, Chrome 156, стенд live) вскрыла, что
+модель Target в принципе не заводилась: `.collapsible-content` был block
+(класс `grid` потерян ещё в плане 013) — grid-rows не анимировал ничего;
+закрытие выглядело «контент исчез, пустая карточка повисла, схлопнулась
+по hidden». После добавления `grid` transitions не завелись всё равно:
+Presence-детектор Radix щупает CollapsibleContent инлайн-стилями
+(`transition-duration: 0s; animation-name: none`) тем же коммитом, что и
+смену data-state, — первая перекраска закрытия проходит с нулевой
+длительностью, transitions не рождаются (доказано MutationObserver-логом
+и ручным флипом data-state, при котором transitions стартуют).
+
+**Фактический Target** (исполнен и принят): движение перенесено с
+элемента, который щупает Radix, на внутренний слой — структура
+`CollapsibleContent(.collapsible-content, только Presence-стражи) >
+.collapsible-motion (display:grid + transition 300/300, на закрытии
+opacity 150ms; значения через потомков `.collapsible-content[data-state]
+.collapsible-motion`; entry — @starting-style на внутреннем слое) >
+div.overflow-hidden (единственный грид-айтем, обнуляет min-size, иначе
+0fr не доезжает до нуля). Граница «не трогать reduced-блок» также снята
+ревью: триггеру дан класс `.collapsible-trigger`, reduced-блок покрывает
+стражи/слой движения/стрелку/паддинг (150ms).
+
+Принято живой приёмкой на этой структуре: закрытие 264→0 за 300ms по
+--dl-ease с fade-first (opacity 0 к ~150ms), открытие 0→264 + проявление,
+прерывание на 114ms разворачивается ретаргетом из 27px без провала,
+Presence держит контент до конца перехода, reduced-motion — 150ms,
+одна строка схлопывается ровно в 0, CLS холодной загрузки 0, ширины
+1440/768/375/320 каноничны.

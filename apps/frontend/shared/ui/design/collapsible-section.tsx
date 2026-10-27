@@ -64,12 +64,17 @@ export function CollapsibleSection({
           aria-hidden
         />
       </CollapsibleTrigger>
-      <CollapsibleContent
-        className={cn(
-          'collapsible-content overflow-hidden',
-        )}
-      >
-        {children}
+      <CollapsibleContent className={cn('collapsible-content')}>
+        {/* Движение живёт на внутреннем грид-слое: Presence-детектор Radix
+            щупает сам CollapsibleContent инлайн-стилями (transition-duration:
+            0s, animation-name: none) тем же коммитом, что и смену
+            data-state, — transitions на нём не рождаются. Обрезающий див —
+            единственный грид-айтем: его overflow-hidden обнуляет
+            автоматический минимум, иначе трек 0fr не доезжает до нуля
+            (канон tariff-faq: сетка снаружи, обрез внутри). */}
+        <div className="collapsible-motion">
+          <div className="overflow-hidden">{children}</div>
+        </div>
       </CollapsibleContent>
     </Collapsible>
   );
