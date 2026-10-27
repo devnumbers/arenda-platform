@@ -325,6 +325,17 @@ export function Showcase() {
       // пальцем и через кольцо контроллеров дёргал вторую ленту
       updateOnWindowResize: false,
       preventClicks: true,
+      // Плашки — drag-поверхность: без сужения списка драг, начатый на
+      // поверхности сфокусированной кнопки (mousedown её фокусирует),
+      // глотается guard'ом ядра (e.target === activeElement и матчится
+      // focusableElements → data.isMoved = true до чтения startTranslate),
+      // и первый же обработанный move считает позицию от хвоста
+      // touchEventsData прошлой тяги — лента телепортирует на разницу
+      // одним кадром («секции проскакивают», приёмка 27.10). У div-слайдов
+      // фотоленты role="button" с 'button' не матчится — там бага нет;
+      // сужено в обеих лентах на упрочнение. Развод тапа и драга у ядра
+      // свой (allowClick/threshold), список на него не влияет.
+      focusableElements: "input, select, textarea",
       // клик по плашке ведёт её копию в центр; фотолента едет следом
       // через контроллер (клик после драга ядро гасит сам)
       slideToClickedSlide: true,
@@ -365,6 +376,8 @@ export function Showcase() {
       // пальцем и через кольцо контроллеров дёргал вторую ленту
       updateOnWindowResize: false,
       preventClicks: true,
+      // см. комментарий в конфиге плашек выше
+      focusableElements: "input, select, textarea",
       slideToClickedSlide: true,
       // ведёт плашечную ленту (создана выше); плашки ведут фотоленту
       // через plates.controller.control — кольцо замкнуто в обе стороны
