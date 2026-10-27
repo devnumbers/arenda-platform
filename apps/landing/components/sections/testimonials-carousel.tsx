@@ -27,16 +27,24 @@ import slide5 from "@/assets/sections/slide-5.webp";
 //   обрезом под 3 слота (978px): активная 338×450 (растёт вправо от
 //   левой линии — origin-left), соседние 300×400 (зазор 20, r40).
 //
-// Механика — точная копия секции «Опыт наших партнёров»
-// pay.yandex.ru/business (решение владельца): управление ТОЛЬКО кликом по
-// видимой карточке на всех ярусах (мышь не тянет, колесо и тач не скроллят
-// ленту); клик по соседней сдвигает на 1, клик через одну и дальше —
-// прыжок сразу на цель одной анимацией; переход 360ms ease-out: входящая
-// едет на место активной, дорастая и проявляясь 0.4→1, бывшая активная
-// растворяется на месте (сжатие до 0.6, прозрачность в ноль — у Яндекса
-// её translateX равен 0 на каждом кадре при любом прыжке), соседние
-// приглушены до 0.4; лента бесконечная (после последней снова первая),
-// текст левой колонки меняется мгновенно, автоплея/стрелок/точек нет.
+// Механика — ПК (решение владельца 27.10): клик по видимой карточке
+// (соседняя — шаг на 1, через одну и дальше — прыжок сразу на цель одной
+// анимацией) плюс Shift+колесо мыши и горизонтальный тракпад — шаг на
+// событие по канону лент (DESIGN.md §3: вертикальное колесо скроллит
+// страницу, события в полёте глотаются, не в очередь); мышь по-прежнему
+// не тянет (канон Яндекса сохранён), тач-ярусы — только клик, как было.
+// Переход 440ms ease-desk (мягкие вход/выход, см. slide-desk в
+// globals.css): входящая едет на место активной, дорастая и
+// проявляясь 0.4→1, бывшая активная растворяется на месте (сжатие до
+// 0.6, прозрачность в ноль — у Яндекса её translateX равен 0 на каждом
+// кадре при любом прыжке), соседние приглушены до 0.4; лента бесконечная
+// (после последней снова первая), текст левой колонки меняется мгновенно,
+// автоплея/стрелок/точек нет. Хореография шага назад (колесо вверх) —
+// зеркало шага вперёд без заморозки: карточка из «стопки» проявляется и
+// дорастает на месте активной, бывшая активная съезжает вправо в очередь
+// (сжатие и приглушение в движении), хвост очереди телепортируется в
+// стопку мгновенным кадром (slide-vanish-desk) — с обычным переходом он
+// перелетал бы видимую ленту от обреза к активной позиции.
 //
 // Реализация: нативного скролла нет — карточки absolute, каждый слайд
 // несёт свой transform по кольцевой позиции относительно активного
@@ -114,6 +122,8 @@ const COUNT = REVIEWS.length;
 // классах ненадёжна — Tailwind съедает часть значения).
 const DESK_TRANSITION_CLASS = "slide-desk";
 const DESK_JUMP_TRANSITION_CLASS = "slide-jump-desk";
+// Исчезновение в стопку шагом назад (см. шапку файла).
+const DESK_VANISH_TRANSITION_CLASS = "slide-vanish-desk";
 // Заморозка растворения держится чуть дольше перехода (растворение должно
 // доиграть до конца, невидимая перестановка — после).
 const DESK_FREEZE_MS = 480;
@@ -157,7 +167,12 @@ function useClickCarousel(count: number, freezeMs: number) {
     // перезапись дальним) прыгает на своё место покоя без анимации
     // transform — она стоит в стопке и двигаться должна незаметно.
     const released = frozen !== null ? [frozen] : [];
-    if (k >= 2) {
+    // Заморозка — только дальним прыжкам вперёд (клик через одну и
+    // дальше). Шаг назад по колесу приходит с k = count−1 и живёт без
+    // неё: его входящая материализуется из стопки на месте активной,
+    // а бывшая активная съезжает в очередь обычным переходом (см. шапку
+    // файла) — заморозка оставила бы дыру в очереди на время таймера.
+    if (k >= 2 && k < count - 1) {
       setFrozen(active.index);
       setThawed(released);
       if (frozenTimer.current) {
@@ -177,7 +192,23 @@ function useClickCarousel(count: number, freezeMs: number) {
   const relOf = (index: number, of: number) => (index - of + count) % count;
   const stateOf = (index: number) => ({
     rel: relOf(index, active.index),
-    jumping: relOf(index, active.previous) === count - 1 || thawed.includes(index),
+    // Выход из стопки — телепорт с проявлением (дальние прыжки вперёд).
+    // Материализация на месте активной (шаг назад) — не прыжок: она
+    // доезжает обычным переходом, зеркаля растворение шага вперёд.
+    jumping:
+      (relOf(index, active.previous) === count - 1 &&
+        relOf(index, active.index) !== 0) ||
+      thawed.includes(index),
+    // Мгновенное исчезновение — только хвост очереди на шаге назад
+    // (размер шага count−1): он идёт в стопку из-за обреза, и с обычным
+    // переходом его полёт прошёл бы по всей видимой ленте. Уходящая
+    // активная при обычных шагах тоже входит в стопку (rel count−1),
+    // но её растворение на месте анимируется — канон шага вперёд,
+    // поймано ревью: без гейта по размеру шага vanish телепортировал
+    // и её, и голову очереди при дальнем прыжке.
+    vanishing:
+      relOf(active.index, active.previous) === count - 1 &&
+      relOf(index, active.index) === count - 1,
     frozen: index === frozen,
   });
 
@@ -744,6 +775,15 @@ export function TestimonialsDesktop() {
   // (чуть длиннее растворения — DESK_FREEZE_MS и так с запасом к 440ms).
   const stripRef = useRef<HTMLDivElement>(null);
   const layerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Shift+колесо и горизонтальный тракпад — шаг (решение владельца 27.10;
+  // канон лент DESIGN.md §3 и onWheel strip-engine: вертикальное колесо
+  // скроллит страницу, 1 событие = 1 шаг, события в полёте глотаются).
+  // Зона — вся десктопная карусель (цитата + лента), как eventsTarget
+  // зоны секции у showcase. Нативный passive:false — React-овский onWheel
+  // пассивен, preventDefault внутри него кидает ошибку консоли (мост —
+  // как у моб-яруса).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const busyUntil = useRef(0);
   useEffect(
     () => () => {
       if (layerTimer.current) {
@@ -753,6 +793,10 @@ export function TestimonialsDesktop() {
     [],
   );
   const activate = (index: number) => {
+    // Окно занятости колеса: от активации (клик, клавиатура, колесо) до
+    // конца перехода с запасом заморозки; клик, перебивая переход (канон
+    // §3), перезаводит окно — колесо в нём глотается.
+    busyUntil.current = performance.now() + DESK_FREEZE_MS;
     const root = stripRef.current;
     if (root) {
       for (const el of root.querySelectorAll<HTMLElement>("[data-desk-slide]")) {
@@ -772,13 +816,50 @@ export function TestimonialsDesktop() {
     }
     setActive(index);
   };
+  // Мосты для нативного wheel-листенера: последний известный актив и
+  // активация — синхронизация в эффекте (реф-доступ только в событии),
+  // порядок «мост после activate» требует линтер react-hooks.
+  const activateRef = useRef<(index: number) => void>(() => {});
+  const activeRef = useRef(active);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+  useEffect(() => {
+    activateRef.current = activate;
+  });
+  // Нативный листенер шага колеса: гейт оси, preventDefault, окно
+  // занятости — ровно как в strip-engine. Шаг назад заворачивается по
+  // кольцу (индекс −1 → count−1) — его хореографию обслуживает
+  // useClickCarousel (см. шапку файла).
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) {
+      return;
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+        return;
+      }
+      event.preventDefault();
+      if (performance.now() < busyUntil.current) {
+        return;
+      }
+      const step = event.deltaX > 0 ? 1 : -1;
+      // Окно занятости заводит activate (единая точка активации).
+      activateRef.current(((activeRef.current + step) % COUNT + COUNT) % COUNT);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, []);
   const review = REVIEWS[active];
   if (!review) {
     return null;
   }
 
   return (
-    <div className="flex gap-14">
+    <div ref={rootRef} className="flex gap-14">
       {/* Отзыв активной карточки меняется мгновенно — как у Яндекса. */}
       <div className="w-[472px] shrink-0">
         <blockquote className="text-h3 font-medium leading-10">
@@ -823,14 +904,21 @@ function DesktopSlides({
   stateOf,
   activate,
 }: {
-  stateOf: (index: number) => { rel: number; jumping: boolean; frozen: boolean };
+  stateOf: (index: number) => {
+    rel: number;
+    jumping: boolean;
+    vanishing: boolean;
+    frozen: boolean;
+  };
   activate: (index: number) => void;
 }) {
   return REVIEWS.map((item, index) => {
-    const { rel, jumping, frozen } = stateOf(index);
-    const transition = jumping
-      ? DESK_JUMP_TRANSITION_CLASS
-      : DESK_TRANSITION_CLASS;
+    const { rel, jumping, vanishing, frozen } = stateOf(index);
+    const transition = vanishing
+      ? DESK_VANISH_TRANSITION_CLASS
+      : jumping
+        ? DESK_JUMP_TRANSITION_CLASS
+        : DESK_TRANSITION_CLASS;
     const className = `absolute left-0 top-[25px] h-[400px] w-[300px] origin-left overflow-hidden rounded-[40px] ${transition}`;
     const style = slideStyle(rel, DESK_STEP, DESK_EXTRA, ACTIVE_SCALE, frozen);
     // Кликабельны только видимые позиции — очередь №1 и №2 (№3 за
