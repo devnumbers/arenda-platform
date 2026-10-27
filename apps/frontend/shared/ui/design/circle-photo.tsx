@@ -193,14 +193,15 @@ export function CirclePhoto({
           alt=""
           decoding="async"
           data-blur-layer
-          // Кадр 16px растянут за край круга на запас кернела CSS-размытия —
-          // бахромы по ободу клипа нет. Размер бокса явный: replaced-элемент
-          // с auto-шириной взял бы интринсик 16px и лёг точкой в углу.
-          // Радиус размытия и запас — CSS-переменные с прод-дефолтами
-          // (6px/8px, решение #1604 приёмки): лаборатория /ui-kit крутит их
-          // каскадом, прод их не задаёт и рендерит дефолты.
+          // Кадр растянут на запас кернела CSS-размытия за край круга —
+          // против бахромы по ободу клипа; прод-дефолт запаса — 0 (решение
+          // владельца 27.10.2026, #1604: бахрома не замечена, растяжки нет).
+          // Размер бокса явный: replaced-элемент с auto-шириной взял бы
+          // интринсик 16px и лёг точкой в углу. max-w-none ОБЯЗАТЕЛЕН:
+          // preflight img{max-width:100%} душил ширину до родителя — слой
+          // ужимался влево, и фаза «съезжала» при появлении thumb.
           className={cn(
-            'absolute inset-[calc(0px_-_var(--photo-blur-bleed,8px))] h-[calc(100%_+_2*var(--photo-blur-bleed,8px))] w-[calc(100%_+_2*var(--photo-blur-bleed,8px))] object-cover blur-[var(--photo-blur-radius,6px)] transition-opacity',
+            'absolute inset-[calc(0px_-_var(--photo-blur-bleed,0px))] h-[calc(100%_+_2*var(--photo-blur-bleed,0px))] w-[calc(100%_+_2*var(--photo-blur-bleed,0px))] max-w-none object-cover blur-[var(--photo-blur-radius,6px)] transition-opacity',
             view.blurActive ? 'opacity-100' : 'opacity-0',
           )}
         />

@@ -114,7 +114,7 @@ const SCENES: ReadonlyArray<{ readonly key: SceneKey; readonly label: string; re
 
 /** Прод-дефолты ручек (§10): кнопка «Как в проде» и начальное состояние. */
 const PROD_RADIUS = 6;
-const PROD_BLEED = 8;
+const PROD_BLEED = 0;
 /** Прод-параметры кадра у бэка (#1603) — начальные значения слайдеров. */
 const PROD_FRAME_SIZE = 16;
 const PROD_FRAME_QUALITY = 50;
