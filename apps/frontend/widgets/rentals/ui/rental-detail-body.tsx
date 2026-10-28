@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { useState, type JSX, type ReactNode } from 'react';
+import { useState, type JSX } from 'react';
 import { Calendar, Check, Edit, Key, TrashBin } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDayMonthWithYear } from '@/shared/lib/date-format';
@@ -26,9 +26,10 @@ import { CategoryIcon, categoryStyle } from '@/features/payment-categories';
 import { useContact } from '@/features/contacts';
 import type { Rental } from '@/entities/rental';
 import { PaymentRowButton } from '@/entities/payment';
-import { ListRow, PageContent, RoundActionButton, ConfirmDialog } from '@/shared/ui/design';
+import { PageContent, RoundActionButton, ConfirmDialog } from '@/shared/ui/design';
 import { RentalGroup } from './rental-group';
 import { TermRows } from './term-row';
+import { ManageRow } from './manage-row';
 import { TenantRow } from './tenant-row';
 
 /**
@@ -254,6 +255,10 @@ export function RentalDetailBody({
             contentGap="gap-4"
             onOpen={() => pushPage(router, ROUTES.propertyRentalTerms(propertyId))}
             openLabel="Открыть условия аренды"
+            // Контент статичен (TermRows без действий) — кликается вся
+            // карточка, канон секций «Платежей объекта» (решение владельца
+            // 28.10).
+            contentInteractive={false}
           >
             <TermRows rows={rentalTeaserRows(rental)} />
           </RentalGroup>
@@ -284,8 +289,12 @@ export function RentalDetailBody({
               (домен «Продление», #804; как круглая кнопка #533). Смотрящему
               секции нет — все строки мутирующие. */}
           {canMutate && (
-            <RentalGroup title="Управление" className="pb-3">
-              <div className="flex flex-col">
+            <RentalGroup title="Управление" className="pb-0">
+              {/* Геометрия и отклик строк — канон «Управления» объекта
+                  (PropertyManageSection, Figma 1554:98469, решение
+                  владельца 28.10 «точно такие же стили»): контейнер 12/12,
+                  строки-кнопки 52 со скруглением и фоновым hover/active. */}
+              <div className="flex flex-col px-3 pb-3">
                 <ManageRow
                   icon={<Edit className="h-6 w-6 text-content" />}
                   label="Редактировать аренду"
@@ -358,24 +367,6 @@ export function RentalDetailBody({
       />
     </PageContent>
   );
-}
-
-/** Строка секции «Управление» (Figma 1232:62297): строчная иконка 24 и
- * подпись; канонный ListRow без хвостовых слотов. Подпись — ReactNode:
- * деструктивные строки несут красный текст (канон #535). Отклик на
- * наведение/нажатие — фоном, как у секции «Управление» объекта
- * (hoverEffect="background", решение владельца 17.10.2026: меню по стилю
- * то же — и отклик должен совпадать). */
-function ManageRow({
-  icon,
-  label,
-  onClick,
-}: {
-  readonly icon: ReactNode;
-  readonly label: ReactNode;
-  readonly onClick: () => void;
-}): JSX.Element {
-  return <ListRow leading={icon} title={label} onSelect={onClick} hoverEffect="background" />;
 }
 
 /** Строка платежа секции (Figma 1323:61126): иконка категории 44 с синим

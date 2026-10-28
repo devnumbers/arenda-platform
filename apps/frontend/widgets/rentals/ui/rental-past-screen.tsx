@@ -105,15 +105,22 @@ function PastRentalCard({
       openLabel={`Открыть аренду от ${rental.startDate}`}
       className="pb-4"
       contentGap="gap-4"
+      // Контент карточки статичен (сводка условий и арендатор без
+      // действий) — кликается вся карточка, канон секций «Платежей
+      // объекта» (решение владельца 28.10).
+      contentInteractive={false}
     >
-      <TermRows rows={pastRentalRows(rental)} />
-      {tenant !== null && (
-        <PastTenantRow
-          name={rentalTenantTitle(tenant)}
-          photoUrl={tenantContactQuery.data?.photoUrl}
-          photoBlur={tenantContactQuery.data?.photoBlur}
-        />
-      )}
+      {/* Зазор 16 от дат до арендатора (1302:52463). */}
+      <div className="flex flex-col gap-4">
+        <TermRows rows={pastRentalRows(rental)} />
+        {tenant !== null && (
+          <PastTenantRow
+            name={rentalTenantTitle(tenant)}
+            photoUrl={tenantContactQuery.data?.photoUrl}
+            photoBlur={tenantContactQuery.data?.photoBlur}
+          />
+        )}
+      </div>
     </RentalGroup>
   );
 }

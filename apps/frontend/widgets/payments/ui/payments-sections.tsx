@@ -8,7 +8,7 @@ import {
 } from '@/entities/payment';
 import type { GlobalPayment, IsoDate, Payment, PaymentOperation } from '@/entities/payment';
 import { propertyTypeIcons, type PropertyType } from '@/entities/property';
-import { CircleIcon, CirclePhoto, circleIconRing, EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
+import { CardBackgroundButton, CircleIcon, CirclePhoto, circleIconRing, EmptyState, Skeleton, SkeletonListRow, skeletonRowWidths } from '@/shared/ui/design';
 import { CategoryIcon, categoryStyle, type CategoryIconSurface } from '@/features/payment-categories';
 import { daysOverdue } from '../lib/overdue-days';
 import { paymentRowSubtitle, PAYMENT_COMPLETED_LABEL } from '../lib/payment-row-subtitle';
@@ -197,28 +197,6 @@ function EmptySectionCardButton({
       </span>
       <p className={`${hintClass} mt-2 max-w-[360px]`}>{hint}</p>
     </button>
-  );
-}
-
-/** Фон-кнопка кликабельной карточки: клик по свободному фону ведёт на
- * страницу секции — то же, что заголовок (решение владельца 28.10).
- * Лежит ПОД контентом (контент pointer-events-none, интерактивные дети —
- * pointer-events-auto), поэтому клики по строкам и заголовку до неё не
- * доходят; вне tab-порядка и скрыта от AT — клавиатурный путь карточки —
- * кнопка заголовка. */
-function CardBackgroundButton({
-  onOpen,
-}: {
-  readonly onOpen: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-hidden
-      tabIndex={-1}
-      className="absolute inset-0 cursor-pointer rounded-card outline-none"
-    />
   );
 }
 
