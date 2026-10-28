@@ -144,11 +144,15 @@ export function PaymentObjectAvatar({
 /**
  * Секции экрана «Платежи объекта» (Figma 1043:57610/1043:62920): серые
  * группы-карточки с заголовком-ссылкой и стрелкой, пустое состояние —
- * подзаголовок внутри карточки, строка платежа (подзаголовок — дата
- * следующего вхождения или «На паузе», звезда избранного). Секции страницы
- * платежа продолжают использовать PaymentsGroup; PaymentsSection —
- * новый вид секции главного экрана: клик по заголовку открывает страницу
- * секции, где виден весь список.
+ * вся карточка одна кнопка на страницу секции (решение владельца 28.10:
+ * кликается целиком, а не только заголовок), строка платежа (подзаголовок —
+ * дата следующего вхождения или «На паузе», звезда избранного). Клик по
+ * фону карточки с данными ведёт туда же, куда заголовок; клики по строкам
+ * остаются строкам (guard от интерактивных детей). Отступы секций: пустая —
+ * низ 24, с данными — низ 12 (решение владельца 28.10, отменяет
+ * c146227e4). Секции страницы платежа продолжают использовать
+ * PaymentsGroup; PaymentsSection — новый вид секции главного экрана: клик
+ * по заголовку открывает страницу секции, где виден весь список.
  */
 
 // Заголовок секции — 20/24. text-left явный: заголовки-стрелки живут
@@ -164,12 +168,70 @@ const hintClass = 'text-sm leading-4 text-content-secondary';
  * payments/GLOSSARY.md, UI-copy exception). */
 export const PAYMENT_HISTORY_EMPTY_HINT = 'Платежей еще не было';
 
+/** Пустая секция с действием: вся карточка одна кнопка на страницу секции
+ * (решение владельца 28.10: пустые состояния кликаются целиком, а не только
+ * заголовок); низ 24 — py-6, канон отступов секций (пустая 24 / с данными
+ * 12, решение владельца 28.10). Общий вид пустых карточек PaymentsSection
+ * и PaymentsGroup с open. */
+function EmptySectionCardButton({
+  title,
+  hint,
+  openLabel,
+  onOpen,
+}: {
+  readonly title: string;
+  readonly hint: string;
+  readonly openLabel: string;
+  readonly onOpen: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={openLabel}
+      className="pressable block w-full cursor-pointer rounded-card bg-surface-muted px-6 py-6 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+    >
+      <span className="flex items-center justify-between gap-3">
+        <h2 className={headingClass}>{title}</h2>
+        <SmallArrowDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
+      </span>
+      <p className={`${hintClass} mt-2 max-w-[360px]`}>{hint}</p>
+    </button>
+  );
+}
+
+/** Фон-кнопка кликабельной карточки: клик по свободному фону ведёт на
+ * страницу секции — то же, что заголовок (решение владельца 28.10).
+ * Лежит ПОД контентом (контент pointer-events-none, интерактивные дети —
+ * pointer-events-auto), поэтому клики по строкам и заголовку до неё не
+ * доходят; вне tab-порядка и скрыта от AT — клавиатурный путь карточки —
+ * кнопка заголовка. */
+function CardBackgroundButton({
+  onOpen,
+}: {
+  readonly onOpen: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-hidden
+      tabIndex={-1}
+      className="absolute inset-0 cursor-pointer rounded-card outline-none"
+    />
+  );
+}
+
 /**
  * Секция-карточка «Платежей объекта» (1043:57610, 1043:62920): заголовок
  * слева, шеврон-стрелка — у правого края карточки (как в SectionHeader и
- * секциях страницы платежа), вся строка — кнопка на страницу секции; пока
- * строк нет — серый подзаголовок-пояснение под заголовком (14/16,
- * Mobile/Text/M/400).
+ * секциях страницы платежа); пока строк нет — вся карточка одна кнопка
+ * (заголовок, шеврон и серый подзаголовок-пояснение 14/16,
+ * Mobile/Text/M/400); со строками — клик по фону карточки ведёт туда же,
+ * куда заголовок, клики по строкам остаются строкам. Канон взаимодействия
+ * заголовка (pressable/hover/focus) и отступы: пустая — низ 24, с данными —
+ * низ 12 (решения владельца 28.10). overflow-hidden: серые плашки строк
+ * не выпускают press-фон за скругление карточки.
  */
 export function PaymentsSection({
   title,
@@ -187,21 +249,38 @@ export function PaymentsSection({
   readonly children: ReactNode;
 }): JSX.Element {
   const isEmpty = children === null;
+  if (isEmpty) {
+    return (
+      <section data-testid={testId} className="mx-6 overflow-hidden">
+        <EmptySectionCardButton
+          title={title}
+          hint={emptyHint}
+          openLabel={openLabel}
+          onOpen={onOpen}
+        />
+      </section>
+    );
+  }
   return (
-    <section data-testid={testId} className="mx-6 rounded-card bg-surface-muted pb-6">
-      <div className="px-6 pt-6">
-        <button
-          type="button"
-          onClick={onOpen}
-          aria-label={openLabel}
-          className="pressable flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
-        >
-          <h2 className={headingClass}>{title}</h2>
-          <SmallArrowDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
-        </button>
-        {isEmpty && <p className={`${hintClass} mt-2 max-w-[360px]`}>{emptyHint}</p>}
+    <section
+      data-testid={testId}
+      className="relative mx-6 overflow-hidden rounded-card bg-surface-muted pb-3"
+    >
+      <CardBackgroundButton onOpen={onOpen} />
+      <div className="pointer-events-none relative">
+        <div className="px-6 pt-6">
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-label={openLabel}
+            className="pointer-events-auto pressable flex w-full cursor-pointer items-center justify-between gap-3 rounded-pill outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+          >
+            <h2 className={headingClass}>{title}</h2>
+            <SmallArrowDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
+          </button>
+        </div>
+        <div className="pointer-events-auto mt-2 flex flex-col">{children}</div>
       </div>
-      {!isEmpty && <div className="mt-2 flex flex-col">{children}</div>}
     </section>
   );
 }
@@ -211,8 +290,13 @@ export function PaymentsSection({
  * стрелкой-навигацией в заголовке (стрелки секций страницы платежа —
  * резолюция #452, все три секции со стрелками по макету 3214:76417,
  * #1194); кликабельна вся линия заголовка, не только шеврон. Пустое
- * состояние — серый подзаголовок внутри карточки, 14/16 Medium
- * (1127:31705; вес — 3214:76912). */
+ * состояние с open — вся карточка одна кнопка (решение владельца 28.10:
+ * пустые состояния кликаются целиком), без open — статичная карточка с
+ * подзаголовком (вести некуда — «Ближайший платеж» без графика); отступы:
+ * пустая — низ 24, с данными — низ 12 (решение владельца 28.10). Со
+ * строками клик по фону карточки ведёт туда же, куда заголовок (клики по
+ * строкам остаются строкам — guard). overflow-hidden: press-фон плашек не
+ * выпускает за скругление карточки. */
 export function PaymentsGroup({
   title,
   open,
@@ -225,29 +309,65 @@ export function PaymentsGroup({
   readonly children: ReactNode;
 }): JSX.Element {
   const isEmpty = children === null;
-  return (
-    <section className="mx-6 rounded-card bg-surface-muted pb-3">
-      <div className="px-6 pb-2 pt-6">
-        {open !== undefined ? (
-          <button
-            type="button"
-            onClick={open.onOpen}
-            aria-label={open.label}
-            className="pressable flex w-full cursor-pointer items-center justify-between rounded-pill outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
-          >
-            <h2 className={headingClass}>{title}</h2>
-            <SmallArrowDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
-          </button>
-        ) : (
+  if (isEmpty) {
+    if (open !== undefined && emptyHint !== undefined) {
+      return (
+        <section className="mx-6 overflow-hidden">
+          <EmptySectionCardButton
+            title={title}
+            hint={emptyHint}
+            openLabel={open.label}
+            onOpen={open.onOpen}
+          />
+        </section>
+      );
+    }
+    return (
+      <section className="mx-6 overflow-hidden rounded-card bg-surface-muted">
+        <div className="px-6 pt-6">
           <h2 className={headingClass}>{title}</h2>
+        </div>
+        {emptyHint !== undefined && (
+          <p className={`${hintClass} mt-2 px-6 pb-6`}>{emptyHint}</p>
         )}
-      </div>
-      {isEmpty ? (
-        emptyHint !== undefined ? (
-          <p className={`${hintClass} px-6 pb-4 font-medium`}>{emptyHint}</p>
-        ) : null
+      </section>
+    );
+  }
+  const clickable = open !== undefined;
+  return (
+    <section
+      className={cn(
+        'mx-6 overflow-hidden rounded-card bg-surface-muted pb-3',
+        clickable && 'relative',
+      )}
+    >
+      {clickable ? (
+        <>
+          <CardBackgroundButton onOpen={open.onOpen} />
+          <div className="pointer-events-none relative">
+            <div className="px-6 pb-2 pt-6">
+              <button
+                type="button"
+                onClick={open.onOpen}
+                aria-label={open.label}
+                className="pointer-events-auto pressable flex w-full cursor-pointer items-center justify-between rounded-pill outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+              >
+                <h2 className={headingClass}>{title}</h2>
+                <SmallArrowDown className="-rotate-90 shrink-0 text-content-tertiary" aria-hidden />
+              </button>
+            </div>
+            {/* Строки поверх фоновой кнопки: контейнер возвращает
+             * pointer-events, иначе клики строк проваливаются в фон. */}
+            <div className="pointer-events-auto flex flex-col">{children}</div>
+          </div>
+        </>
       ) : (
-        children
+        <>
+          <div className="px-6 pb-2 pt-6">
+            <h2 className={headingClass}>{title}</h2>
+          </div>
+          {children}
+        </>
       )}
     </section>
   );
