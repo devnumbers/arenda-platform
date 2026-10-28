@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar, Cancel, Check } from '@/shared/assets/icons';
@@ -20,13 +20,19 @@ import {
 } from '@/features/notifications';
 import {
   buildRentalUpdateCommand,
+  clearRentalTermsEditSessionDraft,
+  consumeRentalTermsEditSessionContact,
   currentRentalOf,
   formAfterPaymentDayChange,
+  keepRentalTermsEditSessionAlive,
+  openRentalTermsEditSession,
   paymentDayLabel,
   plannedEndDateMinDate,
+  readRentalTermsEditSessionDraft,
   rentalEditFormFromRental,
   rentalPlannedEndDateEditError,
   RENTAL_COMMENT_MAX,
+  setRentalTermsEditSessionForm,
   useRentals,
   useUpdateRental,
   type RentalEditForm,
@@ -52,6 +58,7 @@ import {
   UtilitiesPickerField,
 } from './wizard-chrome';
 import { RentalTermsEditFormSkeleton } from './rental-skeletons';
+import { TermsContactSection } from './terms-contact-section';
 
 /**
  * Экран «Изменить условия» (#532, Figma 1302:53055): форма, не визард —
@@ -64,18 +71,22 @@ import { RentalTermsEditFormSkeleton } from './rental-skeletons';
  * канон шага создания), ряд «Включить уведомления об оплате на почту»
  * (после пикера напоминания — канон #1552), комментарий 0/2000.
  *
- * «Начало аренды» — read-only (ADR 0053 §3: «Начало не правится», PATCH
- * startDate не принимает; иконки календаря у поля нет). Арендатор вырезан
- * (тело #532); email-ряд макета был вырезан тем же решением — карта #1551
- * (тикет #1557) разворачивает эту часть: ряд возвращён как NotifyEmailRow
- * (карта #1551), свитч — персональная галочка почты аренды
- * (`rentPayment.notifyEmail`, сервер держит флаг на Платеже и переносит
- * при правке, #1555), предзаполнение из флага аренды; глобальный мастер
- * категории «Аренда» решает видимость ряда вовсе — общий предикат
- * с компонентом ряда решает и видимость, и «едет ли notifyEmail в PATCH»
- * (при off и сбое — дифф без поля, канон #1552); гейта от пикера
- * напоминаний у аренды нет — ряд независим (решение владельца
- * 22.10.2026). Окончание — канонический бесконечный календарь: снятая
+ * Секция «Контакт арендатора» возвращена (решение владельца 28.10.2026,
+ * #1623; макеты 40000101:153003/153262) — TermsContactSection между рядом
+ * почты и комментарием: выбор/создание/кебаб 1-в-1 с шагом 4 визарда,
+ * смена едет общим диффом формы (tri-state PATCH contactId), значения
+ * формы переживают под-маршруты секции в носителе сессии
+ * (rental-terms-edit-session). «Начало аренды» — read-only (ADR 0053 §3:
+ * «Начало не правится», PATCH startDate не принимает; иконки календаря
+ * у поля нет). Email-ряд — NotifyEmailRow (карта #1551, тикет #1557):
+ * свитч — персональная галочка почты аренды (`rentPayment.notifyEmail`,
+ * сервер держит флаг на Платеже и переносит при правке, #1555),
+ * предзаполнение из флага аренды; глобальный мастер категории «Аренда»
+ * решает видимость ряда вовсе — общий предикат с компонентом ряда решает
+ * и видимость, и «едет ли notifyEmail в PATCH» (при off и сбое — дифф
+ * без поля, канон #1552); гейта от пикера напоминаний у аренды нет —
+ * ряд независим (решение владельца 22.10.2026). Окончание —
+ * канонический бесконечный календарь: снятая
  * дата — бессрочная (tri-state null), будущие дни открыты, дни ≤ начала
  * и дни до первого вхождения дня оплаты погашены (minDate, #1156 —
  * валидатор слитой пары на сервере, #1154); смена дня оплаты молча чистит
@@ -188,17 +199,41 @@ function RentalTermsEditForm({
     emailMasterQuery.data?.[RENTAL_EMAIL_CATEGORY],
   );
 
-  const [form, setForm] = useState<RentalEditForm>(() => rentalEditFormFromRental(rental));
+  // Форма переживает круговые маршруты секции «Контакт арендатора»
+  // (решение владельца 28.10.2026, #1623): снимок хранится в носителе
+  // сессии, при возврате восстанавливается, гостевой контакт (пикер,
+  // ветвь создания) потребляется один раз. useState-инициализатор чистый
+  // (StrictMode зовёт его дважды), ожидание снимает эффект ниже.
+  const [form, setForm] = useState<RentalEditForm>(() => {
+    const { form: saved, pendingContactId } = readRentalTermsEditSessionDraft(rental.propertyId);
+    const base = saved ?? rentalEditFormFromRental(rental);
+    return pendingContactId === null ? base : { ...base, contactId: pendingContactId };
+  });
+  const propertyId = rental.propertyId;
+  useEffect(() => {
+    consumeRentalTermsEditSessionContact(propertyId);
+    return openRentalTermsEditSession(propertyId);
+  }, [propertyId]);
+  // Уход в под-маршрут секции: флаг живости и полный снимок формы —
+  // синхронно в клике, до router.push (канон носителя визарда #1159).
+  const openSubRoute = (): void => {
+    keepRentalTermsEditSessionAlive(rental.propertyId);
+    setRentalTermsEditSessionForm(rental.propertyId, form);
+  };
   // «Сырые» набранные значения денег — источник отображения (группировка
   // не сбрасывает каретку); копейки едут в форму для диффа и валидации.
+  // «Сырые» набранные значения денег — источник отображения; на старте
+  // читают форму, а не аренду: восстановленный из носителя снимок (возврат
+  // из под-маршрута секции) должен показаться целиком, иначе правка денег
+  // жива в диффе, а на экране старое значение (находка приёмки #1623).
   const [amountRaw, setAmountRaw] = useState(() =>
-    kopecksToAmountInputString(rental.rentPayment.amountKopecks),
+    form.amountKopecks === undefined ? '' : kopecksToAmountInputString(form.amountKopecks),
   );
   const [depositRaw, setDepositRaw] = useState(() =>
-    rental.depositKopecks === null ? '' : kopecksToAmountInputString(rental.depositKopecks),
+    form.depositKopecks === null ? '' : kopecksToAmountInputString(form.depositKopecks),
   );
   const [commissionRaw, setCommissionRaw] = useState(() =>
-    rental.commissionKopecks === null ? '' : kopecksToAmountInputString(rental.commissionKopecks),
+    form.commissionKopecks === null ? '' : kopecksToAmountInputString(form.commissionKopecks),
   );
 
   const [dayPickerOpen, setDayPickerOpen] = useState(false);
@@ -226,6 +261,7 @@ function RentalTermsEditForm({
     }
     try {
       await updateRental.mutateAsync(command);
+      clearRentalTermsEditSessionDraft(rental.propertyId);
       notify.scenarios.rentals.updated();
       onClose();
     } catch (error) {
@@ -355,6 +391,16 @@ function RentalTermsEditForm({
             caption={emailReminderCaption('об оплате', email)}
             checked={form.notifyEmail}
             onCheckedChange={(notifyEmail) => update('notifyEmail', notifyEmail)}
+          />
+
+          {/* Секция арендатора (решение владельца 28.10.2026, #1623):
+              между рядом почты и комментарием — порядок макета
+              40000101:153003; смена едет общим диффом формы. */}
+          <TermsContactSection
+            propertyId={rental.propertyId}
+            contactId={form.contactId}
+            onContactChange={(contactId) => update('contactId', contactId)}
+            onSubRouteOpen={openSubRoute}
           />
 
           <TextField

@@ -19,7 +19,10 @@ import {
   type ContactFormFields,
   type ContactPhotoStage,
 } from '@/features/contacts';
-import { setRentalWizardSessionDraft } from '@/features/rentals';
+import {
+  setRentalTermsEditSessionContact,
+  setRentalWizardSessionDraft,
+} from '@/features/rentals';
 import {
   Button,
   IconButton,
@@ -63,14 +66,16 @@ const SHORT_TEXT_MAX = 256;
 export function ContactCreateScreen({
   propertyId,
   initialRole,
-  returnToRentalWizard = false,
+  pickReturn,
 }: {
   readonly propertyId?: string;
   readonly initialRole: string;
-  /** Ветвь «Создать контакт» визарда аренды (#530): после создания
-   * возвращаемся в визард с id нового контакта (арендатор выбран сразу),
-   * а не на карточку. */
-  readonly returnToRentalWizard?: boolean;
+  /** Ветвь «Создать контакт» арендного потока: после создания id нового
+   * контакта едет гостевой записью в носитель соответствующей сессии
+   * (арендатор выбран сразу), а не на карточку. 'rental' — шаг 4 визарда
+   * создания аренды (#530), 'terms' — форма «Изменить условия» (решение
+   * владельца 28.10.2026, #1623, ?pick=terms). */
+  readonly pickReturn?: 'rental' | 'terms';
 }): JSX.Element {
   const router = useRouter();
   const createContact = useCreateContact();
@@ -82,9 +87,9 @@ export function ContactCreateScreen({
   const contextPropertyQuery = useProperty(propertyId ?? '');
   const gate = contactCreateGate(contextPropertyQuery);
   const backHref = propertyId !== undefined ? ROUTES.propertyContacts(propertyId) : ROUTES.contacts;
-  // Ветвь визарда аренды глушит футер, как его шаги (#807, P3): вне ветви
-  // (книга, страница объекта) TabBar остаётся.
-  useTabBarSuppression(returnToRentalWizard);
+  // Ветви арендного потока глушат футер, как шаги визарда (#807, P3):
+  // вне ветвей (книга, страница объекта) TabBar остаётся.
+  useTabBarSuppression(pickReturn !== undefined);
 
   const [form, setForm] = useState<ContactFormFields>(() => ({
     firstName: '',
@@ -162,7 +167,15 @@ export function ContactCreateScreen({
             setPhotoProgress(null);
           });
       }
-      if (returnToRentalWizard && propertyId !== undefined) {
+      if (pickReturn === 'terms' && propertyId !== undefined) {
+        // Возврат на «Изменить условия» (#1623): контакт выбирается
+        // арендатором гостевой записью в носитель сессии формы (переживёт
+        // goBack), запись истории создания выталкивается.
+        setRentalTermsEditSessionContact(propertyId, created.id);
+        goBack(router, ROUTES.propertyRentalTermsEdit(propertyId));
+        return;
+      }
+      if (pickReturn === 'rental' && propertyId !== undefined) {
         // Возврат в визард аренды (#530): контакт выбирается арендатором
         // гостевой записью в носитель сессии (переживёт goBack), запись
         // истории создания выталкивается — Back из визарда не приводит

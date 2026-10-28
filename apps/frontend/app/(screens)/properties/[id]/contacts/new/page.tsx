@@ -20,11 +20,14 @@ export default async function ContactNewRoutePage({
   const query = await searchParams;
   const initialRole = parseStringParam(query.role)?.trim() ?? '';
 
+  const pickReturn =
+    query.pick === 'rental' ? 'rental' : query.pick === 'terms' ? 'terms' : undefined;
+
   return (
     <ContactCreateScreen
       propertyId={id}
       initialRole={initialRole}
-      returnToRentalWizard={query.pick === 'rental'}
+      pickReturn={pickReturn}
     />
   );
 }

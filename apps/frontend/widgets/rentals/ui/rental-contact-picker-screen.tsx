@@ -13,7 +13,10 @@ import {
   ContactsNoResults,
   useContacts,
 } from '@/features/contacts';
-import { setRentalWizardSessionDraft } from '@/features/rentals';
+import {
+  setRentalTermsEditSessionContact,
+  setRentalWizardSessionDraft,
+} from '@/features/rentals';
 import {
   IconButton,
   InfiniteQueryTail,
@@ -37,13 +40,24 @@ import {
  */
 export function RentalContactPickerScreen({
   propertyId,
+  returnTo = 'wizard',
 }: {
   readonly propertyId: string;
+  /** Куда возвращать выбор (решение владельца 28.10.2026, #1623):
+   * 'wizard' — шаг 4 визарда создания (носитель сессии визарда),
+   * 'terms' — форма «Изменить условия» (?return=terms, носитель её
+   * сессии). */
+  readonly returnTo?: 'wizard' | 'terms';
 }): JSX.Element {
   const router = useRouter();
   // Футер глушится на ветви визарда (#807, P3): шаги визарда его глушат —
   // экран выбора не исключение.
   useTabBarSuppression();
+
+  const backFallback =
+    returnTo === 'terms'
+      ? ROUTES.propertyRentalTermsEdit(propertyId)
+      : ROUTES.propertyRentalNew(propertyId);
 
   const [search, setSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -71,7 +85,7 @@ export function RentalContactPickerScreen({
           <IconButton
             icon={<ArrowLeft />}
             label="Назад"
-            onClick={() => goBack(router, ROUTES.propertyRentalNew(propertyId))}
+            onClick={() => goBack(router, backFallback)}
           />
         }
       >
@@ -119,9 +133,14 @@ export function RentalContactPickerScreen({
     </>
   );
 
-  /** Выбор арендатора: id едет гостевой записью в носитель сессии визарда
-   * (переживёт goBack), запись истории экрана выбора выталкивается. */
+  /** Выбор арендатора: id едет гостевой записью в носитель соответствующей
+   * сессии (переживёт goBack), запись истории экрана выбора выталкивается. */
   function pick(contactId: string): void {
+    if (returnTo === 'terms') {
+      setRentalTermsEditSessionContact(propertyId, contactId);
+      goBack(router, ROUTES.propertyRentalTermsEdit(propertyId));
+      return;
+    }
     setRentalWizardSessionDraft(propertyId, (prev) => ({ ...prev, contactId }));
     goBack(router, ROUTES.propertyRentalNew(propertyId));
   }

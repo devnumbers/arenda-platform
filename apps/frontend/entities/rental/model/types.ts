@@ -144,6 +144,11 @@ export type RentalUpdateCommand = {
   readonly utilities?: RentalUtilities;
   readonly depositKopecks?: number | null;
   readonly commissionKopecks?: number | null;
+  /** Tri-state арендатор (решение владельца 28.10.2026, #1623): опущенное
+   * остаётся, явный null — «Контакта нет», uuid ставит. Сервер назначает
+   * контакт инварианту арендатора: карточка без объекта привязывается к
+   * объекту аренды, чужого — 409 (ADR 0054 §6). */
+  readonly contactId?: string | null;
   readonly comment?: string | null;
 };
 

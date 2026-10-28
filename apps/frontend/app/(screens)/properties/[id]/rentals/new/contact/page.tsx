@@ -9,9 +9,10 @@ export const metadata: Metadata = {
 };
 
 export default async function RentalContactPickerRoutePage(
-  { params }: PageProps<'/properties/[id]/rentals/new/contact'>,
+  { params, searchParams }: PageProps<'/properties/[id]/rentals/new/contact'>,
 ) {
   const { id } = await params;
+  const query = await searchParams;
 
-  return <RentalContactPickerScreen propertyId={id} />;
+  return <RentalContactPickerScreen propertyId={id} returnTo={query.return === 'terms' ? 'terms' : 'wizard'} />;
 }
