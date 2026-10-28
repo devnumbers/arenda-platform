@@ -197,16 +197,15 @@ function OverdueRowIcon({
   );
 }
 
-/** Пустое состояние (885:18755): иллюстрация overdue-empty.webp 128 и две
- * тёмные подписи — заголовок и подсказка. Центрируется в доступной
- * высоте, как пустое состояние избранных. */
+/** Пустое состояние (макет 885:18755 перекрыт свежим — канон посадки
+ * 28.10, карта #1613): иллюстрация overdue-empty.webp 128 и две тёмные
+ * подписи — заголовок и подсказка прижаты к верху — pt-16, как соседние
+ * внутренние экраны хаба; центрирование страницы запрещено. */
 function OverdueEmpty(): JSX.Element {
   return (
-    <div
-      data-testid="payments-overdue-empty"
-      className="flex min-h-[calc(100dvh-216px)] flex-1 items-center justify-center"
-    >
+    <div data-testid="payments-overdue-empty">
       <EmptyState
+        className="pt-16 pb-16"
         imageSrc="/images/payments/overdue-empty.webp"
         title="У вас нет просроченных платежей"
         description="Здесь будут платежи, которые не успели отметить вовремя"
