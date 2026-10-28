@@ -222,7 +222,7 @@ export function ContactCreateScreen({
         <>
           <CancelHeader onClick={() => goBack(router, backHref)} />
           <PageContent>
-            <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+            <div className="flex flex-col items-center gap-3 px-6 pt-10 text-center">
               <h2 className="text-xl font-semibold leading-6 text-content">
                 Не удалось загрузить объект
               </h2>
@@ -246,7 +246,7 @@ export function ContactCreateScreen({
         <>
           <CancelHeader onClick={() => goBack(router, backHref)} />
           <PageContent>
-            <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+            <div className="flex flex-col items-center gap-3 px-6 pt-10 text-center">
               <h2 className="text-xl font-semibold leading-6 text-content">
                 Создание недоступно
               </h2>

@@ -439,11 +439,11 @@ export function PropertyParticipantsScreen({
           )
         ) : searchMode && query.length === 0 ? (
           // Подсказка пустого поиска (макет 1980-108531) — вместо списка.
-          <p className="px-6 pt-16 text-center text-base leading-[18px] text-content-secondary">
+          <p className="px-6 pt-10 text-center text-base leading-[18px] text-content-secondary">
             Введите имя или почту участника
           </p>
         ) : searching && visible.length === 0 ? (
-          <p className="px-6 pt-16 text-center text-base leading-[18px] text-content-secondary">
+          <p className="px-6 pt-10 text-center text-base leading-[18px] text-content-secondary">
             Участник не найден
           </p>
         ) : searchMode ? (

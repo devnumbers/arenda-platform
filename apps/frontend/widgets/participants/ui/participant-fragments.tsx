@@ -80,7 +80,7 @@ export function ObjectAvatarGlyph({
  * #698, экраны прав и приглашения — тот же агрегат). */
 export function ParticipantNotFound(): JSX.Element {
   return (
-    <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
+    <p className="pt-10 text-center text-base leading-[18px] text-content-secondary">
       Участник не найден
     </p>
   );

@@ -120,7 +120,7 @@ export function MeFlowSuccessScreen({
         leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />}
       />
       <PageContent>
-        <div className="flex flex-col items-center px-6 pt-16">
+        <div className="flex flex-col items-center px-6 pt-10">
           <StatusIcon status="good" className="h-24 w-24" />
           <h1 className="m-0 mt-10 text-center text-xl font-semibold leading-6 text-content">
             {message}

@@ -78,11 +78,11 @@ export function ParticipantsSearchScreen(): JSX.Element {
             className="mt-6"
           />
         ) : !searching ? (
-          <p className="px-6 pt-16 text-center text-base leading-[18px] text-content-secondary">
+          <p className="px-6 pt-10 text-center text-base leading-[18px] text-content-secondary">
             Ищите по имени или почте участника
           </p>
         ) : visible.length === 0 ? (
-          <p className="px-6 pt-16 text-center text-base leading-[18px] text-content-secondary">
+          <p className="px-6 pt-10 text-center text-base leading-[18px] text-content-secondary">
             Участник не найден
           </p>
         ) : (

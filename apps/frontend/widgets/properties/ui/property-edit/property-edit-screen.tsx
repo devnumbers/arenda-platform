@@ -161,7 +161,7 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
       <>
         <EditChrome propertyId={propertyId} onSave={undefined} />
         <PageContent>
-          <div className="flex flex-col items-center gap-4 pt-16 text-center">
+          <div className="flex flex-col items-center gap-4 pt-10 text-center">
             <p className="max-w-[280px] text-sm leading-4 text-content-secondary">
               Не удалось загрузить объект. Проверьте соединение и попробуйте снова
             </p>
@@ -201,7 +201,7 @@ export function PropertyEditScreen({ propertyId }: PropertyEditScreenProps): JSX
           <TopNavTitle title="Редактирование объекта" />
         </TopNav>
         <PageContent>
-          <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+          <div className="flex flex-col items-center gap-3 px-6 pt-10 text-center">
             <h2 className="text-xl font-semibold leading-6 text-content">Правка недоступна</h2>
             <p className="max-w-[360px] text-base leading-[18px] text-content-secondary">
               {property.status === 'archived'

@@ -572,7 +572,7 @@ export function HistoryFeedScreen({
         {scope === null ? (
           /* Фильтры выбраны «в ноль» — результат пуст по семантике
             * (запроса нет, #711). */
-          <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
+          <p className="pt-10 text-center text-base leading-[18px] text-content-secondary">
             Ничего не найдено
           </p>
         ) : feedQuery.isPending ? (
@@ -591,7 +591,7 @@ export function HistoryFeedScreen({
               * 2092-166866; канон «пусто без иллюстрации» #624); активные
               * фильтры с пустой выдачей — тот же канон (#711: действия
               * были, но не подходят под фильтр). */
-            <p className="pt-16 text-center text-base leading-[18px] text-content-secondary">
+            <p className="pt-10 text-center text-base leading-[18px] text-content-secondary">
               Ничего не найдено
             </p>
           ) : (

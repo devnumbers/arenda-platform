@@ -31,7 +31,9 @@ export function WizardSuccess({ created, onAddRental, onOpen }: WizardSuccessPro
   const Icon = propertyTypeIcons[created.type];
 
   return (
-    <div className="flex flex-col gap-8 px-8 pt-16">
+    <div className="flex flex-col gap-8 px-8 pt-10">
+      {/* Верх — 64 от шапки суммарно: pt-10 + pt-6 PageContent (канон
+       * посадки 28.10). */}
       <div className="flex flex-col items-center gap-8">
         {/* Композиция фрейма 1425:55793: круг 96, глиф 52 по центру, бейдж
             «готово» 52 накладывается со смещением (61, 61) — выходит за

@@ -593,7 +593,7 @@ function OperationPaidSuccess({
         }
       />
       <PageContent>
-        <div className="flex flex-col items-center gap-8 px-6 pt-16">
+        <div className="flex flex-col items-center gap-8 px-6 pt-10">
           <span className="relative block h-24 w-24">
             <span
               className="flex h-24 w-24 items-center justify-center rounded-pill"

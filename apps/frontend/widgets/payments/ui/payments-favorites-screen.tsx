@@ -388,14 +388,15 @@ export function PaymentFavoritesScreen(): JSX.Element {
 
 
 /** Пустое состояние (макет 889:28111 перекрыт свежим — канон посадки
- * 28.10, карта #1613): иллюстрация favorites-empty.webp 128 и две тёмные
- * подписи — заголовок и подсказка (оба #171A1C в макете) прижаты к верху —
- * pt-16, как соседние внутренние экраны хаба; центрирование запрещено. */
+ * 28.10, карта #1613; аменда того же дня: 64 от шапки суммарно):
+ * иллюстрация favorites-empty.webp 128 и две тёмные подписи — заголовок
+ * и подсказка (оба #171A1C в макете) прижаты к верху — pt-10 поверх
+ * pt-6 PageContent = 64 от шапки; центрирование запрещено. */
 function FavoritesEmpty(): JSX.Element {
   return (
     <div data-testid="favorites-empty">
       <EmptyState
-        className="pt-16 pb-16"
+        className="pt-10 pb-16"
         imageSrc="/images/payments/favorites-empty.webp"
         title="Вы пока не добавляли платежи в избранное"
         description="Добавьте платеж в избранное и он появится здесь"

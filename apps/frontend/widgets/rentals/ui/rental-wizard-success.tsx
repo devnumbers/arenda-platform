@@ -36,7 +36,9 @@ export function RentalWizardSuccess({
   });
 
   return (
-    <div className="flex flex-col gap-8 px-6 pt-16">
+    <div className="flex flex-col gap-8 px-6">
+      {/* Верхнего паддинга нет — его несёт обёртка flow (pt-10 + pt-6
+       * PageContent = 64 от шапки, канон 28.10). */}
       <div className="flex flex-col items-center gap-8">
         {/* Композиция фрейма 1371:63757: круг 96, бейдж 48 накладывается
             со смещением (60, 60) — как на экране успеха платежей. */}

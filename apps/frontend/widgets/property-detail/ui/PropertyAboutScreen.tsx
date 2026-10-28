@@ -48,7 +48,7 @@ export function PropertyAboutScreen(): JSX.Element {
     if (propertyQuery.isError || !property) {
         return (
             <SubScreenShell title="Об объекте" fallbackHref={ROUTES.property(id)}>
-                <div className="flex justify-center pt-16">
+                <div className="flex justify-center pt-10">
                     <Button
                         variant="secondary"
                         size="small"

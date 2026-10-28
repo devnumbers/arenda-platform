@@ -69,7 +69,9 @@ export function WizardSuccess({
       : `+${formatMoneyKopecks(created.amountKopecks)}`;
 
   return (
-    <div className="flex flex-col items-center px-8 pt-16">
+    <div className="flex flex-col items-center px-8">
+      {/* Верхнего паддинга нет — его несёт обёртка flow (pt-10 + pt-6
+       * PageContent = 64 от шапки, канон 28.10). */}
       <div className="flex flex-col items-center gap-8">
         {/* Композиция фрейма 1858:105549 (канон успеха операций): кружок
             категории 96 (глиф ~52), бейдж ~52 накладывается в угол

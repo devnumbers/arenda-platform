@@ -238,7 +238,7 @@ export function ContactDetailSkeleton(): JSX.Element {
  * по центру (textStyle Mobile/Text/R/400, textAlignHorizontal CENTER). */
 export function ContactsSearchHint(): JSX.Element {
   return (
-    <p className={`${searchNoteClass} px-6 pt-16 text-center`}>
+    <p className={`${searchNoteClass} px-6 pt-10 text-center`}>
       Начните искать по имени, номеру телефона, электронной почте, имени пользователя или по роли
     </p>
   );
@@ -252,7 +252,7 @@ export function ContactsUnavailableCard({
   readonly hint: string;
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+    <div className="flex flex-col items-center gap-3 px-6 pt-10 text-center">
       <h2 className={headingClass}>Правка недоступна</h2>
       <p className={`${hintClass} max-w-[360px]`}>{hint}</p>
     </div>

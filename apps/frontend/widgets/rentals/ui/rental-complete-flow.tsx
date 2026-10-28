@@ -137,7 +137,7 @@ export function RentalCompleteFlow({
         leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={finishFlow} />}
       />
         <PageContent>
-          <div className="flex flex-col items-center gap-4 px-8 pt-16">
+          <div className="flex flex-col items-center gap-4 px-8 pt-10">
             {/* Иллюстрация финала 128 (Figma 1433:61073); priority —
               * финальный экран above the fold (22.10.2026). */}
             <Image
