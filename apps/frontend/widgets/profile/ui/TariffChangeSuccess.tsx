@@ -4,7 +4,7 @@ import { useEffect, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/shared/ui/design';
-import { CheckNoneLine, StatusIconDanger } from '@/shared/assets/icons';
+import { CancelColor, CheckNoneLine } from '@/shared/assets/icons';
 import {
   useSubscription,
   useSubscriptionPayment,
@@ -71,7 +71,9 @@ export function TariffChangeSuccess(): JSX.Element {
     };
   } else if (paymentId && payment?.status === 'failed') {
     state = {
-      icon: <StatusIconDanger className="h-16 w-16" aria-hidden />,
+      // Иконка как у отключения #622 — CancelColor вместо StatusIconDanger
+      // (слово владельца 28.10: «взять со страницы Тариф отключен»).
+      icon: <CancelColor className="h-16 w-16" aria-hidden />,
       title: 'Оплата не прошла',
       descriptions: ['Попробуйте сменить тариф ещё раз'],
       action: (
