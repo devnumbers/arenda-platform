@@ -2,7 +2,12 @@
 
 import type { JSX, ReactNode } from 'react';
 import { cn } from '@/shared/lib/cn';
-import { fullscreenSurfaceClass, StickyBottomBar } from '@/shared/ui/design';
+import {
+  fullscreenSurfaceClass,
+  StickyBottomBar,
+  TopNav,
+  TopNavTitle,
+} from '@/shared/ui/design';
 
 type TariffSuccessScreenProps = {
   /** Иконка 64 вверху (CheckNoneLine/CancelColor/…), aria-hidden у
@@ -12,7 +17,7 @@ type TariffSuccessScreenProps = {
   /** Заголовок H3 — он же aria-label диалога (хелперы tariff-about/tariff-disable). */
   readonly title: string;
   /** Серые строки описания под заголовком (успех смены тарифа #623);
-   * без пропа — каркас #621/#622 с одной парой «иконка + заголовок». */
+   * без пропа — каркас #621/#622 без описаний. */
   readonly descriptions?: ReadonlyArray<string>;
   /** Нижнее действие целиком — переход (goBack/router.replace) остаётся
    * у вызывающего, архетип знает только раскладку. */
@@ -20,12 +25,17 @@ type TariffSuccessScreenProps = {
 };
 
 /** Общий каркас полноэкранных успехов тарифа (#621 возобновление, #622
- * отключение, #623 смена): шапки нет, контент прижат к верху — колонка
- * «иконка 64 + заголовок H3» с pt-16 (64px) от верха поверхности
- * (канон раскладки карты #1613; решение владельца 28.10 переводит
- * осознанное центрирование #621/#622/#623 на канон — 64 сверху, колонка
- * горизонтально центрирована; описания — серые 14/16), внизу
- * StickyBottomBar с одним действием. Поверхность — fullscreenSurfaceClass
+ * отключение, #623 смена): обычный хедер на всех ярусах — overlay
+ * `TopNav` с тайтлом «Тариф» без ведущей кнопки (единственный выход —
+ * нижнее действие; на ПК крылья рисует сама поверхность, канон #865),
+ * контент прижат к верху — колонка «иконка 64 + заголовок H3» на pt-16
+ * (64px) от шапки (канон раскладки карты #1613; решение владельца
+ * 28.10 перевело осознанное центрирование #621/#622/#623 на канон,
+ * аменда того же дня добавила хедер и пересчитала 64 от него; описания —
+ * серые 14/16, горизонтально центрированы), внизу StickyBottomBar с одним
+ * действием. tablet:mt-[72px] — компенсация закреплённого TopNav
+ * (прецедент визарда аренды/календаря: на планшете/ПК бар фиксируется
+ * и выпадает из потока поверхности). Поверхность — fullscreenSurfaceClass
  * (полноэкранный диалог без собственного фона). */
 export function TariffSuccessScreen({
   icon,
@@ -35,7 +45,10 @@ export function TariffSuccessScreen({
 }: TariffSuccessScreenProps): JSX.Element {
   return (
     <div className={fullscreenSurfaceClass} role="dialog" aria-label={title}>
-      <div className="relative flex flex-1 flex-col pt-16 px-6">
+      <TopNav overlay>
+        <TopNavTitle title="Тариф" />
+      </TopNav>
+      <div className="relative flex flex-1 flex-col pt-16 px-6 tablet:mt-[72px]">
         <div
           className={cn(
             'flex flex-col items-center gap-4',
