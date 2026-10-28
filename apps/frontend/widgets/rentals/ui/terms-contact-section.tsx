@@ -123,7 +123,7 @@ export function TermsContactSection({
         <div className="flex items-center gap-1">
           <ContactRowButton
             contact={selectedTenant}
-            surface="muted"
+            surface="white"
             className="min-w-0 flex-1"
             /* Тап по выбранному — карточка контакта (канон шага 4);
                 смена арендатора — через «Выбрать другой». */
