@@ -124,8 +124,8 @@ type TaskOverdueDeliverer interface {
 }
 
 // TasksPublisher is the task events' publisher (issue #750) on the delivery
-// pipeline (карта #734, #740): a task's boundary has passed — «Задача» goes
-// to the owner and the active members, or to the owner
+// pipeline (карта #734, #740): a task's boundary has passed — «Напоминание
+// о задаче» goes to the owner and the active members, or to the owner
 // alone for the task without a property. The hourly sweep has two legs: the
 // scheduled one books the dated tasks' boundary jobs — the timed ones at the
 // term's minute, the date-only ones at the day-after midnight (issue #777) —
@@ -291,7 +291,7 @@ func (p *TasksPublisher) publish(ctx context.Context, target TaskOverdueTarget) 
 	return p.pipeline.Publish(ctx, Publication{
 		EventType: domain.EventTaskOverdue,
 		DedupKey:  domain.DedupKey(taskOverdueDedupKey(target.TaskID)),
-		Title:     "Задача",
+		Title:     "Напоминание о задаче",
 		Body:      taskOverdueBody(target),
 		// The line above the title is the property the task hangs on — the
 		// feed's context label vocabulary (решение #737); the task without a
@@ -307,12 +307,12 @@ func (p *TasksPublisher) publish(ctx context.Context, target TaskOverdueTarget) 
 }
 
 // taskOverdueBody renders the catalog's body template (решение #737,
-// аменд решением владельца 28.10.2026 — слово «просрочена» из копии убрано):
-// the task's name, the property line only when the task hangs on
-// one, and the wall-clock «Срок» — the day, plus the minute for the
-// timed task.
+// аменды решениями владельца 28.10.2026 — без «просрочена» и без слова
+// «Задача»: его называет заголовок): the task's name in quotes, the
+// property line only when the task hangs on one, and the wall-clock
+// «Срок» — the day, plus the minute for the timed task.
 func taskOverdueBody(target TaskOverdueTarget) string {
-	name := fmt.Sprintf("Задача «%s»", target.Title)
+	name := fmt.Sprintf("«%s»", target.Title)
 	due := formatDayMonth(target.DueDate)
 	if target.DueTime != nil {
 		due += ", " + target.DueTime.String()
