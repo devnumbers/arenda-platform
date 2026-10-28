@@ -188,7 +188,7 @@ export function PaymentsSection({
 }): JSX.Element {
   const isEmpty = children === null;
   return (
-    <section data-testid={testId} className="mx-6 rounded-card bg-surface-muted pb-3">
+    <section data-testid={testId} className="mx-6 rounded-card bg-surface-muted pb-6">
       <div className="px-6 pt-6">
         <button
           type="button"
