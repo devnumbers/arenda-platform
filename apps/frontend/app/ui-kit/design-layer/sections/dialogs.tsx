@@ -37,33 +37,28 @@ export function ModalSection(): JSX.Element {
     );
 }
 
-type SupportModalSectionProps = {
-    readonly open: boolean;
-    /** Модалка одна на витрину: пилюля десктопной навигации открывает её же —
-     * состояние живёт на сборке (#820). */
-    readonly onOpenChange: (open: boolean) => void;
-};
+export function SupportModalSection(): JSX.Element {
+    const [supportOpen, setSupportOpen] = useState(false);
 
-export function SupportModalSection({ open, onOpenChange }: SupportModalSectionProps): JSX.Element {
     return (
         <div className={styles.group}>
-            <h3 className={styles.groupTitle}>SupportModal · «Связаться с нами» (#766)</h3>
+            <h3 className={styles.groupTitle}>SupportModal · «Связаться с нами»</h3>
             <p className={styles.groupTitle}>
-                Единая поверхность поддержки вместо страницы /support (карта #761):
-                канва Modal — карточка ≥768 / vaul-шит ниже; лого HeaderLogo 112×28,
-                заголовок H1 28/32 + подпись 16/18, Primary «Написать в Телеграм»
-                (внешняя ссылка в новой вкладке) и Secondary-строка почты с копированием
-                в буфер (Figma 2355:52709 — десктоп, 2355:52684 — планшет, 2355:52746 —
-                мобайл). Карточка макета уже канона — max-w-400. Триггеры в продукте:
-                пилюля «Поддержка» десктопа, шестая ячейка шита «Еще», кнопка экрана
-                «Тариф», пилюли «Написать в поддержку» шагов входа.
+                Модалка шагов входа (28.10): с восстановлением страницы /support
+                (макеты 40000074:80636/40000075:80950) осталась только на логине —
+                гость не покидает флоу входа. Канва Modal — карточка ≥768 / vaul-шит
+                ниже; лого HeaderLogo 112×28, заголовок H1 28/32 + подпись 16/18,
+                Primary «Написать в Телеграм» (внешняя ссылка в новой вкладке) и
+                Secondary-строка почты с копированием в буфер (Figma 2355:52709 —
+                десктоп, 2355:52684 — планшет, 2355:52746 — мобайл). Карточка макета
+                уже канона — max-w-400.
             </p>
             <div className={styles.grid}>
-                <Button onClick={() => onOpenChange(true)}>
+                <Button onClick={() => setSupportOpen(true)}>
                     Открыть «Связаться с нами»
                 </Button>
             </div>
-            <SupportModal open={open} onOpenChange={onOpenChange} />
+            <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
         </div>
     );
 }

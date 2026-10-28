@@ -13,8 +13,8 @@ import {
   allNavSections,
   mainNavSections,
   moreSheetNavSections,
+  navSectionById,
   secondaryNavSections,
-  supportNavSection,
 } from './navigation';
 
 describe('единый конфиг разделов навигации (#558)', () => {
@@ -40,6 +40,7 @@ describe('единый конфиг разделов навигации (#558)',
     ]);
     expect(secondaryNavSections.map((section) => section.label)).toStrictEqual([
       'Уведомления',
+      'Поддержка',
     ]);
   });
 
@@ -54,6 +55,7 @@ describe('единый конфиг разделов навигации (#558)',
     ]);
     expect(secondaryNavSections.map((section) => section.Icon)).toStrictEqual([
       NotificationSettings,
+      Support,
     ]);
   });
 
@@ -66,24 +68,26 @@ describe('единый конфиг разделов навигации (#558)',
       ['contacts', '/contacts'],
       ['participants', '/participants'],
       ['notifications', '/notifications'],
+      ['support', '/support'],
     ]);
   });
 
-  it('«Поддержка» — действие хрома, не раздел с маршрутом (#766): модалка вместо страницы', () => {
-    expect(supportNavSection.id).toBe('support');
-    expect(supportNavSection.label).toBe('Поддержка');
-    expect(supportNavSection.Icon).toBe(Support);
-    expect(supportNavSection.href).toBeUndefined();
-    expect(allNavSections).not.toContain(supportNavSection);
+  it('«Поддержка» — сервисный раздел хрома: пилюля ПК и шестая ячейка шита «Еще» ведут на страницу /support (макеты 40000074:80636/40000075:80950, 28.10)', () => {
+    const support = navSectionById('support');
+    expect(support.label).toBe('Поддержка');
+    expect(support.href).toBe('/support');
+    expect(secondaryNavSections).toContain(support);
+    expect(allNavSections).toContain(support);
   });
 
-  it('шит «Еще»: 5 разделов-ссылок, шестая ячейка — «Поддержка»-действие', () => {
+  it('шит «Еще»: 6 разделов-ссылок, «Поддержка» — шестая ячейка', () => {
     expect(moreSheetNavSections.map((section) => section.id)).toStrictEqual([
       'payments',
       'operations',
       'tasks',
       'contacts',
       'participants',
+      'support',
     ]);
     expect(moreSheetNavSections.map((section) => section.label)).toStrictEqual([
       'Платежи',
@@ -91,8 +95,8 @@ describe('единый конфиг разделов навигации (#558)',
       'Задачи',
       'Контакты',
       'Участники',
+      'Поддержка',
     ]);
-    expect(moreSheetNavSections).not.toContain(supportNavSection);
   });
 
   it('шит «Еще»: без табов TabBar («Объекты», «Уведомления»); адреса уникальны', () => {

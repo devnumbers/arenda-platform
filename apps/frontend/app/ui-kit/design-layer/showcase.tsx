@@ -64,13 +64,11 @@ import { SearchPillSection } from './sections/search-pill';
  * Tailwind на токенах, шрифт Onest. Внешний вид сверен с экспортами
  * Figma-фреймов «Рентли. Новые экраны сервиса» (node-id — резолюция #449).
  * Секции — по компоненту на группу, демо-состояние живёт в своей секции
- * (#820); здесь только сборка в исходном порядке и два демо-значения,
- * шарящиеся между секциями: searchValue связывает SearchField и демо-поиск
- * в TopNav, supportModalOpen — модалку «Связаться с нами» и пилюлю
- * «Поддержка» десктопной навигации. */
+ * (#820); здесь только сборка в исходном порядке и одно демо-значение,
+ * шарящееся между секциями: searchValue связывает SearchField и демо-поиск
+ * в TopNav. */
 export function DesignLayerShowcase(): JSX.Element {
     const [searchValue, setSearchValue] = useState('');
-    const [supportModalOpen, setSupportModalOpen] = useState(false);
 
     return (
         <>
@@ -111,9 +109,9 @@ export function DesignLayerShowcase(): JSX.Element {
                 <SubScreenShellSection />
                 <PageContentSection />
                 <ModalSection />
-                <SupportModalSection open={supportModalOpen} onOpenChange={setSupportModalOpen} />
+                <SupportModalSection />
                 <MoreSheetSection />
-                <DesktopMenuButtonSection onSupportOpen={() => setSupportModalOpen(true)} />
+                <DesktopMenuButtonSection />
                 <TextareaSection />
                 <PickerFieldSection />
                 <EmptyStateSection />

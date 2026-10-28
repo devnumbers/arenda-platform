@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import NextLink from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { CreditCard, Support, TimeHistory } from '@/shared/assets/icons';
-import { Button, Skeleton, SupportModal } from '@/shared/ui/design';
+import { Button, Skeleton } from '@/shared/ui/design';
 import { billingKeys } from '@/shared/api/query-keys';
 import { ROUTES } from '@/shared/config/routes';
+import { pushPage } from '@/shared/lib/navigation';
 import { useSubscription } from '@/features/billing';
 import { dateToIsoLocal } from '@/shared/lib/calendar';
 import { NO_SUBSCRIPTION } from '@/widgets/profile/lib/no-subscription';
@@ -26,7 +28,7 @@ export function TariffScreen(): JSX.Element {
   const { data, isPending, isError, refetch } = useSubscription();
   const subscription = data ?? NO_SUBSCRIPTION;
   const queryClient = useQueryClient();
-  const [supportOpen, setSupportOpen] = useState(false);
+  const router = useRouter();
   // Правило года (владелец 13.10): «сегодня» клиентское — серверного в
   // контракте подписки нет (ADR 0061 §7), годовой тариф живёт в следующем.
   const today = dateToIsoLocal(new Date());
@@ -72,18 +74,17 @@ export function TariffScreen(): JSX.Element {
 
       <TariffFaq />
 
-      {/* «Поддержка» — модалка «Связаться с нами» (#766): страницы /support
-       * больше нет. Иконка слева — как было на ссылке-кнопке. */}
+      {/* «Поддержка» — страница /support (макет 40000074:80636, 28.10):
+       * модалка #766 осталась только на шагах входа. Иконка слева —
+       * как было на ссылке-кнопке. */}
       <Button
         type="button"
         variant="secondary"
         leadingIcon={<Support className="h-6 w-6" aria-hidden />}
-        onClick={() => setSupportOpen(true)}
+        onClick={() => pushPage(router, ROUTES.support)}
       >
         Поддержка
       </Button>
-
-      <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
     </div>
   );
 }
