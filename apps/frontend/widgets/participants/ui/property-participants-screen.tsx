@@ -353,7 +353,7 @@ export function PropertyParticipantsScreen({
           leading={<TopNavBackButton fallbackHref={ROUTES.property(propertyId)} />}
           trailing={
             headerActionsVisible ? (
-              <span className="flex items-center gap-1 pr-3.5">
+              <span className="flex items-center gap-1">
                 <IconButton
                   icon={<Search />}
                   label="Поиск участников"
@@ -401,7 +401,7 @@ export function PropertyParticipantsScreen({
             ) : emptyHistoryVisible ? (
               /* Пустой список с живым журналом (решение владельца
                * 13.10.2026): вместо кебаба — одна иконка истории. */
-              <span className="flex items-center pr-3.5">
+              <span className="flex items-center">
                 <IconButton
                   icon={<TimeHistory className="h-6 w-6" />}
                   label="История объекта"
