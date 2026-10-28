@@ -140,8 +140,9 @@ func dueTimePtr(h, m int) *TaskDueTime {
 }
 
 // The timed task's trigger (решение #737, тип №4: в минуту срока): the
-// overdue sweep or the due-minute job publishes «Задача просрочена» to the
-// owner and the active members, the body names the wall-clock «Срок был».
+// overdue sweep or the due-minute job publishes «Задача» to the owner and
+// the active members, the body names the wall-clock «Срок» (текст без
+// «просрочена» — решение владельца 28.10.2026).
 func TestTasksPublisher_PublishesOverdueTimedTask(t *testing.T) {
 	t.Parallel()
 
@@ -164,9 +165,9 @@ func TestTasksPublisher_PublishesOverdueTimedTask(t *testing.T) {
 	for _, n := range h.feed.inserted {
 		assert.Equal(t, domain.EventTaskOverdue, n.EventType)
 		assert.Equal(t, domain.CategoryTasks, n.Category)
-		assert.Equal(t, "Задача просрочена", n.Title)
+		assert.Equal(t, "Задача", n.Title)
 		assert.Equal(t,
-			"Задача «Показ квартиры» по объекту «Квартира на Ленина» просрочена. Срок был: 18 сентября, 15:13",
+			"Задача «Показ квартиры» по объекту «Квартира на Ленина». Срок: 18 сентября, 15:13",
 			n.Body)
 		assert.Equal(t, "Квартира на Ленина", n.ContextLabel)
 		// The dedup key is the task id alone (решение #737, тип №4): one
@@ -193,7 +194,7 @@ func TestTasksPublisher_PublishesOverdueTimedTask(t *testing.T) {
 	assert.Len(t, h.queue.pushes, 2)
 }
 
-// The date-only task's copy carries no time — «Срок был» names the day alone
+// The date-only task's copy carries no time — «Срок» names the day alone
 // (решение #737: {дата, время}, the time half exists only when the task has
 // one).
 func TestTasksPublisher_PublishesOverdueDateOnlyTask(t *testing.T) {
@@ -210,7 +211,7 @@ func TestTasksPublisher_PublishesOverdueDateOnlyTask(t *testing.T) {
 
 	n := h.feed.inserted[0]
 	assert.Equal(t,
-		"Задача «Сменить замок» по объекту «Квартира на Ленина» просрочена. Срок был: 17 сентября",
+		"Задача «Сменить замок» по объекту «Квартира на Ленина». Срок: 17 сентября",
 		n.Body)
 }
 
@@ -236,7 +237,7 @@ func TestTasksPublisher_PublishesTaskWithoutProperty(t *testing.T) {
 	require.Len(t, h.feed.inserted, 1)
 
 	n := h.feed.inserted[0]
-	assert.Equal(t, "Задача «Позвонить в ЖЭК» просрочена. Срок был: 16 сентября", n.Body)
+	assert.Equal(t, "Задача «Позвонить в ЖЭК». Срок: 16 сентября", n.Body)
 	assert.Empty(t, n.ContextLabel, "no property — no context label (макет)")
 	assert.Nil(t, n.Payload.Property)
 	require.NotNil(t, n.Payload.TaskID)
@@ -298,8 +299,8 @@ func TestTasksPublisher_SchedulingFailuresAreIsolated(t *testing.T) {
 }
 
 // The due-minute job's payload: reload the task and publish. The row is the
-// same «Задача просрочена» the sweep would write — the dedup key keeps the
-// two legs to one notification whichever fires first.
+// same «Задача» the sweep would write — the dedup key keeps the two legs to
+// one notification whichever fires first.
 func TestTasksPublisher_DeliverTaskOverduePublishes(t *testing.T) {
 	t.Parallel()
 
@@ -347,7 +348,7 @@ func TestTasksPublisher_DeliverTaskOverduePublishesDateOnlyAtMidnight(t *testing
 	require.NoError(t, p.DeliverTaskOverdue(context.Background(), task))
 	require.Len(t, h.feed.inserted, 1)
 	assert.Equal(t,
-		"Задача «Сменить замок» по объекту «Квартира на Ленина» просрочена. Срок был: 17 сентября",
+		"Задача «Сменить замок» по объекту «Квартира на Ленина». Срок: 17 сентября",
 		h.feed.inserted[0].Body)
 	assert.Equal(t, domain.DedupKey("task_overdue:"+task.String()), h.feed.inserted[0].DedupKey)
 }

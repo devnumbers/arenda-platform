@@ -61,7 +61,7 @@ type DeliverPushArgs struct {
 // Kind identifies the job kind to River.
 func (DeliverPushArgs) Kind() string { return "notifications:deliver_push" }
 
-// TaskOverdueArgs publishes one dated task's «Задача просрочена» at its
+// TaskOverdueArgs publishes one dated task's «Задача» at its
 // boundary instant — the timed term's minute or the date-only day-after
 // midnight (issues #750, #777). The args are the job's dedup key: one task
 // has at most one overdue job in flight — the hourly scan re-asks freely
