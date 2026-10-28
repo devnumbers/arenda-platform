@@ -19,7 +19,7 @@
  * sync with `app/manifest.ts` and the inline copy in `public/sw.js` (guard —
  * `icon-urls.test.ts`).
  */
-const PUSH_ICON_PATH = '/icons/icon-192.png?v=20261027';
+const PUSH_ICON_PATH = '/icons/icon-192.png?v=20261028';
 
 /** Fallback destination when the payload carries no `url`. */
 export const DEFAULT_PUSH_CLICK_URL = '/properties';

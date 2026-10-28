@@ -559,7 +559,7 @@ var DEFAULT_PUSH_TAG = 'rentli-notification';
 // ?v= is mandatory: /icons/* is served immutable for a year, so a new art
 // under the same URL never reaches cached clients. Keep in sync with
 // app/manifest.ts and shared/lib/pwa/push-payload.ts (icon-urls.test.ts).
-var PUSH_ICON_PATH = '/icons/icon-192.png?v=20261027';
+var PUSH_ICON_PATH = '/icons/icon-192.png?v=20261028';
 
 // Inline copy of resolveClickTarget: only same-origin absolute paths are kept,
 // everything else falls back to the default. Stops a hostile or malformed

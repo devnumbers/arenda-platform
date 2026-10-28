@@ -38,13 +38,13 @@ export default function manifest(): MetadataRoute.Manifest {
         // public/sw.js); guard test — shared/lib/pwa/icon-urls.test.ts.
         icons: [
             {
-                src: '/icons/icon-192.png?v=20261027',
+                src: '/icons/icon-192.png?v=20261028',
                 sizes: '192x192',
                 type: 'image/png',
                 purpose: 'any',
             },
             {
-                src: '/icons/icon-512.png?v=20261027',
+                src: '/icons/icon-512.png?v=20261028',
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'any',
@@ -55,7 +55,7 @@ export default function manifest(): MetadataRoute.Manifest {
                 // assets/icons/source-maskable-android.png (downscale
                 // 1024→512). Current process and file mapping —
                 // assets/icons/README.md.
-                src: '/icons/icon-maskable-512.png?v=20261027',
+                src: '/icons/icon-maskable-512.png?v=20261028',
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'maskable',
@@ -64,7 +64,7 @@ export default function manifest(): MetadataRoute.Manifest {
                 // Android 13+ Material You themed icons — house silhouette only,
                 // system tints it with the wallpaper color. Glass effects cannot
                 // survive the tint, so this is a separate source.
-                src: '/icons/icon-monochrome-512.png?v=20261027',
+                src: '/icons/icon-monochrome-512.png?v=20261028',
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'monochrome',
