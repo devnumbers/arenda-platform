@@ -94,6 +94,13 @@ export function createPageTransitionMachine(
   let coverStartedAt = 0;
   let vtHandle: ViewTransitionHandle | null = null;
   const vtResolvers = new Set<() => void>();
+  /** Коммит случился после старта VT-перехода. Update-колбэк браузер
+   * вызывает через кадр после startViewTransition — коммит может
+   * приехать раньше него (Back в полёте, заменяющий клик): колбэк тогда
+   * обязан закрыться сразу и не дёргать навигацию. По доке View
+   * Transitions страница держит старый снимок, пока промис колбэка не
+   * закрыт, — незакрытый промис навсегда морозит экран. */
+  let vtCommitSeen = false;
 
   const clearTimer = (timer: Timer | null): Timer | null => {
     if (timer !== null) clearTimeout(timer);
@@ -147,17 +154,32 @@ export function createPageTransitionMachine(
   // Update-колбэк view transition: выполняет навигацию после снятия
   // снимка старого экрана и ждёт коммита (notifyNavigated). Заменённые
   // переходы добавляют резолверы в общий набор — коммит закрывает все.
+  // Промис обязан закрыться всегда: реджект (бросок perform) и вечное
+  // ожидание одинаково ломают экран — браузер держит старый снимок до
+  // закрытия колбэка. perform в try/catch: упавшая навигация раскрывается
+  // фолбэк-таймерами, ошибка анимации не становится ошибкой страницы.
   const runVtUpdate = (): Promise<void> =>
     new Promise<void>((resolve) => {
+      if (vtCommitSeen) {
+        // URL уже сменился мимо колбэка (Back, заменяющий клик):
+        // повторная навигация драла бы URL туда-сюда.
+        resolve();
+        return;
+      }
       const navigate = pendingNavigate;
       pendingNavigate = null;
-      navigate?.();
+      try {
+        navigate?.();
+      } catch {
+        // фолбэк-таймер (NAVIGATION_FALLBACK_MS) закроет переход
+      }
       vtResolvers.add(resolve);
     });
 
   const navigateVt = (runner: StartViewTransition, perform: () => void): void => {
     skipVt();
     fallbackTimer = clearTimer(fallbackTimer);
+    vtCommitSeen = false;
     pendingNavigate = perform;
     setPhase('vt-pending');
     watchdogTimer = setTimeout(() => {
@@ -201,6 +223,7 @@ export function createPageTransitionMachine(
     },
 
     notifyNavigated: (): void => {
+      vtCommitSeen = true;
       resolveVtResolvers();
       if (phase === 'vt-pending') {
         // Обычный кроссфейд: браузер анимирует пару old/new сам по CSS
@@ -240,6 +263,9 @@ export function createPageTransitionMachine(
       revealTimer = clearTimer(revealTimer);
       fallbackTimer = clearTimer(fallbackTimer);
       watchdogTimer = clearTimer(watchdogTimer);
+      // После сброса (bfcache, pageshow) живой колбэк закрывается сразу:
+      // выполнять его отложенную навигацию за пределами страницы нельзя.
+      vtCommitSeen = true;
       resolveVtResolvers();
       vtHandle?.skip();
       vtHandle = null;

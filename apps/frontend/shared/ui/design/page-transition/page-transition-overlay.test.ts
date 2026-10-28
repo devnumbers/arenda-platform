@@ -77,6 +77,16 @@ describe('Переходы между страницами: стражи дре�
     expect(globalsCss).toContain('animation-timing-function: var(--dl-ease)');
   });
 
+  it('промисы перехода погашены: ready/finished ловятся, бросок startViewTransition не роняет навигацию', () => {
+    // По доке View Transitions: ready ренджектится на каждом skipTransition
+    // (watchdog, замена, bfcache) — без обработчика это необработанный
+    // AbortError в консоли; сам startViewTransition бросает на неактивном
+    // документе — навигация тогда едет напрямую, без анимации.
+    expect(overlaySource).toContain('transition.ready.catch');
+    expect(overlaySource).toContain('transition.finished.catch');
+    expect(overlaySource).toMatch(/try \{[\s\S]*document\.startViewTransition[\s\S]*\} catch \{/);
+  });
+
   it('лист собран на утилитах тех же токенов, reduced-motion короче', () => {
     expect(overlaySource).toContain('duration-(--pt-reveal-duration)');
     expect(overlaySource).toContain('data-[phase=covering]:duration-(--pt-cover-duration)');
