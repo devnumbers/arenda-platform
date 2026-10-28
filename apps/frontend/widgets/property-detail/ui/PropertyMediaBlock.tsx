@@ -33,7 +33,7 @@ export function PropertyMediaBlock({
   children,
 }: PropertyMediaBlockProps): JSX.Element {
   return (
-    <section className="flex flex-col items-center px-0 pt-6 text-center">
+    <section className="flex flex-col items-center px-0 text-center">
       <div aria-hidden>
         <PropertyAvatar
           surface="hero"
