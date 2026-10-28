@@ -5,8 +5,8 @@ import { cn } from '@/shared/lib/cn';
 import { fullscreenSurfaceClass, StickyBottomBar } from '@/shared/ui/design';
 
 type TariffSuccessScreenProps = {
-  /** Иконка 64 в центре (CheckNoneLine/CancelColor/…), aria-hidden у
-   * вызывающего; может отсутствовать — каркас центрирует заголовок один
+  /** Иконка 64 вверху (CheckNoneLine/CancelColor/…), aria-hidden у
+   * вызывающего; может отсутствовать — каркас рисует заголовок один
    * (платёж в обработке живёт без иконки, решение владельца 30.09). */
   readonly icon?: ReactNode;
   /** Заголовок H3 — он же aria-label диалога (хелперы tariff-about/tariff-disable). */
@@ -20,10 +20,13 @@ type TariffSuccessScreenProps = {
 };
 
 /** Общий каркас полноэкранных успехов тарифа (#621 возобновление, #622
- * отключение, #623 смена): шапки нет, в центре — иконка 64 и заголовок H3
- * (с описаниями — они центрируются, серые 14/16), внизу StickyBottomBar
- * с одним действием. Поверхность — fullscreenSurfaceClass (полноэкранный
- * диалог без собственного фона). */
+ * отключение, #623 смена): шапки нет, контент прижат к верху — колонка
+ * «иконка 64 + заголовок H3» с pt-16 (64px) от верха поверхности
+ * (канон раскладки карты #1613; решение владельца 28.10 переводит
+ * осознанное центрирование #621/#622/#623 на канон — 64 сверху, колонка
+ * горизонтально центрирована; описания — серые 14/16), внизу
+ * StickyBottomBar с одним действием. Поверхность — fullscreenSurfaceClass
+ * (полноэкранный диалог без собственного фона). */
 export function TariffSuccessScreen({
   icon,
   title,
@@ -32,7 +35,7 @@ export function TariffSuccessScreen({
 }: TariffSuccessScreenProps): JSX.Element {
   return (
     <div className={fullscreenSurfaceClass} role="dialog" aria-label={title}>
-      <div className="relative flex flex-1 items-center justify-center px-6">
+      <div className="relative flex flex-1 flex-col pt-16 px-6">
         <div
           className={cn(
             'flex flex-col items-center gap-4',
