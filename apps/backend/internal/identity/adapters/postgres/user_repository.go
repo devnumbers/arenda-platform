@@ -172,13 +172,15 @@ func (r *UserRepository) UpdateEmailVerified(
 	return mapUser(userSourceFromUser(row).toUserRow())
 }
 
-// SetPhoto writes the profile photo columns (ADR 0065): the key and the
-// sniffed content type move together, nils clear the photo.
-func (r *UserRepository) SetPhoto(ctx context.Context, id uuid.UUID, key, contentType *string) (domain.User, error) {
+// SetPhoto writes the profile photo columns (ADR 0065): the key, the
+// sniffed content type and the blur frame's base64 (решение #1594, #1603)
+// move together, nils clear the photo.
+func (r *UserRepository) SetPhoto(ctx context.Context, id uuid.UUID, key, contentType, blur *string) (domain.User, error) {
 	row, err := r.q().SetUserPhoto(ctx, pgen.SetUserPhotoParams{
 		ID:               pgconv.UUIDToPgtype(id),
 		PhotoKey:         pgconv.StringPtrToPgtype(key),
 		PhotoContentType: pgconv.StringPtrToPgtype(contentType),
+		PhotoBlur:        pgconv.StringPtrToPgtype(blur),
 	})
 	if err != nil {
 		if notFound(err) {
@@ -200,6 +202,21 @@ func (r *UserRepository) ClearPhotoIfKey(ctx context.Context, id uuid.UUID, key 
 	})
 	if err != nil {
 		return 0, fmt.Errorf("clear user photo: %w", err)
+	}
+	return rows, nil
+}
+
+// SetPhotoBlurIfKey lands the lazily materialized blur frame (ADR 0065
+// аменд, #1603): the conditional UPDATE keys on the still-advertised photo,
+// a concurrent re-upload wins. The affected-row count is the race verdict.
+func (r *UserRepository) SetPhotoBlurIfKey(ctx context.Context, id uuid.UUID, key, blur string) (int64, error) {
+	rows, err := r.q().SetUserPhotoBlurIfKey(ctx, pgen.SetUserPhotoBlurIfKeyParams{
+		ID:        pgconv.UUIDToPgtype(id),
+		PhotoKey:  pgconv.StringPtrToPgtype(&key),
+		PhotoBlur: pgconv.StringPtrToPgtype(&blur),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("set user photo blur: %w", err)
 	}
 	return rows, nil
 }
@@ -253,5 +270,6 @@ func mapUser(row userRow) (domain.User, error) {
 		Timezone:         tz,
 		PhotoKey:         pgconv.TextToPtrString(row.PhotoKey),
 		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
+		PhotoBlur:        pgconv.TextToPtrString(row.PhotoBlur),
 	}, nil
 }

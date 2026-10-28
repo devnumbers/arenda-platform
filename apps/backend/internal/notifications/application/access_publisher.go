@@ -18,8 +18,10 @@ type AccessPropertyView struct {
 	Address string
 	Type    string
 	// Photo is the snapshot's same-origin streaming path, '' when the
-	// object has no photo (#1275).
-	Photo string
+	// object has no photo (#1275). PhotoBlur is the frame's ready base64
+	// (ADR 0065 аменд, #1603), '' — кадра нет.
+	Photo     string
+	PhotoBlur string
 }
 
 // AccessUserProfile is the display snapshot of a user an access event names:
@@ -32,6 +34,9 @@ type AccessUserProfile struct {
 	DisplayName string
 	Email       string
 	Photo       string
+	// PhotoBlur is the avatar's blur frame's ready base64 (ADR 0065 аменд,
+	// #1603); '' — кадра нет.
+	PhotoBlur string
 }
 
 // AccessEventViewSource resolves the display snapshots of the access
@@ -400,20 +405,22 @@ func accessPayload(
 ) domain.Payload {
 	payload := domain.Payload{
 		Property: &domain.EntityRef{
-			ID:      propertyID,
-			Name:    property.Name,
-			Address: property.Address,
-			Type:    property.Type,
-			Photo:   property.Photo,
+			ID:        propertyID,
+			Name:      property.Name,
+			Address:   property.Address,
+			Type:      property.Type,
+			Photo:     property.Photo,
+			PhotoBlur: property.PhotoBlur,
 		},
 		MembershipID: &membershipID,
 	}
 	if actor != nil && actorID != uuid.Nil {
 		payload.Actor = &domain.EntityRef{
-			ID:    actorID,
-			Name:  actor.DisplayName,
-			Email: actor.Email,
-			Photo: actor.Photo,
+			ID:        actorID,
+			Name:      actor.DisplayName,
+			Email:     actor.Email,
+			Photo:     actor.Photo,
+			PhotoBlur: actor.PhotoBlur,
 		}
 	}
 	return payload

@@ -10,21 +10,27 @@ import {
   PageTransitionOverlay,
   PersistentNavWings,
   PersistentNavWingsProvider,
+  PersistentTopNavHostProvider,
   TabBar,
   TabBarVisibilityProvider,
 } from '@/shared/ui/design';
 import { RealtimeStreamProvider } from '@/features/realtime';
 import { HubPrefetchProvider } from './hub-prefetch-provider';
 import { NotificationStreamGate } from './notification-stream-gate';
+import { PersistentTopNav } from './persistent-top-nav';
 import { PushPermissionGate } from './push-permission-gate';
 import { TopNavUserProvider } from './top-nav-user-provider';
 
 /** Оболочка новых экранов (#460) — единственная оболочка приложения
- * (карта #556: старый кабинет снесён в #568): хром собирают сами экраны
- * своим TopNav — он же единый хедер (Figma 1185:40818–19): мобайл (560 и
- * уже) — полоса в потоке страницы во всю ширину; планшет и ПК (от 561) —
- * закреплён над прокруткой, центральная часть — колонка max-560, по краям
- * лого и кнопка профиля; высоту 72 компенсирует `tablet:pt-[72px]` (хедер
+ * (карта #556: старый кабинет снесён в #568): хедер — один персистентный
+ * узел PersistentTopNav над контентом (решение владельца 23.10.2026,
+ * issue #1592 — анти-дёргание аватара: узел переживает клиентские
+ * навигации, экраны декларируют контент шимом TopNav, статика первого
+ * кадра — из реестра маршрутов widgets/screen-layout/model). Вёрстка
+ * прежняя (Figma 1185:40818–19): мобайл (560 и уже) — полоса в потоке
+ * страницы во всю ширину; планшет и ПК (от 561) — закреплён над
+ * прокруткой, центральная часть — колонка max-560, по краям лого и
+ * кнопка профиля; высоту 72 компенсирует `tablet:pt-[72px]` (хедер
  * закреплён от 561). На ПК (от 1024, решение владельца 08.09 #561) хром
  * дополняет десктопная навигация (Figma 1603:89079): сайдбар из 6 разделов
  * слева под хедером (DesktopSidebar) и плавающие пилюли
@@ -67,9 +73,19 @@ export function ScreenLayout({ children }: { readonly children: ReactNode }): JS
                * под провайдером своё ПК-крыло гасят. Мобайл/планшет — крылья
                * самих экранов, мигание гасит реестр загруженных фото. */}
               <PersistentNavWings />
-              <div className="flex min-w-0 flex-1 flex-col">
-                {children}
-              </div>
+              {/* Персистентная шапка (решение владельца 23.10.2026,
+               * issue #1592 — анти-дёргание аватара): DOM-узел один,
+               * переживает навигации; экраны декларируют контент своим
+               * TopNav-шимом, статика первого кадра — из реестра
+               * маршрутов. Вёрстка прежняя: мобайл — в потоке, планшет/
+               * ПК — закреплена. Провайдер границей режима: под ним шим
+               * TopNav регистрирует пропы вместо рендера DOM. */}
+              <PersistentTopNavHostProvider>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <PersistentTopNav />
+                  {children}
+                </div>
+              </PersistentTopNavHostProvider>
               <DesktopNavPills notificationsBadge={notificationsBadge ?? 0} />
               <TabBar notificationsUnread={(notificationsBadge ?? 0) > 0} />
               <ServiceWorkerRegister />

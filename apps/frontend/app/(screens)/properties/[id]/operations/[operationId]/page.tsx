@@ -1,9 +1,8 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
 import { sanitizeReturnTo } from '@/shared/lib/navigation';
 import { parseStringParam } from '@/shared/lib/parse-string-param';
-import { OperationDetailLoading, OperationDetailScreen } from '@/widgets/payments';
+import { OperationDetailScreen } from '@/widgets/payments';
 import {
   paymentDetailQueryOptions,
   paymentOperationQueryOptions,
@@ -14,6 +13,12 @@ import { paymentOperationKeys } from '@/shared/api/query-keys';
 import type { PaymentOperation } from '@/entities/payment';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
+
+// Кабинетная страница: куки-сессия и URL-состояние — всегда динамический
+// рендер; force-dynamic снимает требование Suspense-границы для
+// useSearchParams при статическом экспорте (аменда #1605 — in-page
+// Suspense убран ради однофлушного HTML, react/react#37014).
+export const dynamic = 'force-dynamic';
 
 /**
  * Страница операции: вхождение правила с «Отметить оплаченной» (и экраном
@@ -68,10 +73,8 @@ export default async function OperationRoutePage({
   const sanitizedReturnTo = sanitizeReturnTo(parseStringParam(returnTo));
 
   return (
-    <Suspense fallback={<OperationDetailLoading propertyId={id} />}>
-      <ServerPrefetchBoundary prefetch={(queryClient) => prefetchOperationScreen(queryClient, id, operationId)}>
-        <OperationDetailScreen propertyId={id} operationId={operationId} returnTo={sanitizedReturnTo} />
-      </ServerPrefetchBoundary>
-    </Suspense>
+<ServerPrefetchBoundary prefetch={(queryClient) => prefetchOperationScreen(queryClient, id, operationId)}>
+  <OperationDetailScreen propertyId={id} operationId={operationId} returnTo={sanitizedReturnTo} />
+</ServerPrefetchBoundary>
   );
 }

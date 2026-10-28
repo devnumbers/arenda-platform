@@ -196,9 +196,13 @@ func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UU
 		return OpenedPhoto{}, fmt.Errorf("open profile photo: %w", err)
 	}
 	if !wantThumb {
-		return OpenedPhoto{Body: body, Size: size, ContentType: contentType, Key: *user.PhotoKey}, nil
+		return s.openFullPhoto(ctx, userID, user, body, size, contentType)
 	}
-	tb, ts, isThumb, err := photo.ServeOrMaterializeThumb(ctx, s.photos, *user.PhotoKey, derefString(user.PhotoContentType), body, s.logger)
+	// The blur sink rides the serving's decode (тикет #1603): a NULL column
+	// fills from this request's bytes, the write is best-effort. A filled
+	// column serves without the frame work.
+	sink := s.blurSink(ctx, userID, *user.PhotoKey, user.PhotoBlur == nil && photo.FramePossible(contentType))
+	tb, ts, isThumb, err := photo.ServeOrMaterializeThumb(ctx, s.photos, *user.PhotoKey, contentType, body, s.logger, sink)
 	if err != nil {
 		return OpenedPhoto{}, fmt.Errorf("serve profile photo thumb: %w", err)
 	}
@@ -210,6 +214,49 @@ func (s *ProfileService) OpenPhoto(ctx context.Context, viewerID, userID uuid.UU
 		return OpenedPhoto{Body: tb, Size: ts, ContentType: contentType, Key: *user.PhotoKey}, nil
 	}
 	return OpenedPhoto{Body: body, Size: size, ContentType: contentType, Key: *user.PhotoKey}, nil
+}
+
+// blurSink builds the best-effort writer of the lazily materialized blur
+// frame (тикет #1603): the conditional write keys on the still-advertised
+// photo, a concurrent re-upload wins; a failed write only logs — the column
+// stays NULL and the next photo serve retries. A filled column needs no
+// sink, the serve skips the frame work entirely.
+func (s *ProfileService) blurSink(ctx context.Context, userID uuid.UUID, key string, needed bool) func(string) {
+	if !needed {
+		return nil
+	}
+	return func(frame string) {
+		if _, err := s.users.SetPhotoBlurIfKey(ctx, userID, key, frame); err != nil {
+			s.logger.WarnContext(ctx, "failed to store profile photo blur frame",
+				slog.String("key", key),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+}
+
+// OpenFullPhoto serves the full object (the honest fallback and the
+// ?size-less requests) and materializes the blur frame from the very bytes
+// it hands out when the column is NULL (тикет #1603): one read, one decode,
+// the write best-effort. WebP streams untouched — the toolchain decodes no
+// frame from it.
+func (s *ProfileService) openFullPhoto(
+	ctx context.Context, userID uuid.UUID, user domain.User, body io.ReadCloser, size int64, contentType string,
+) (OpenedPhoto, error) {
+	sink := s.blurSink(ctx, userID, *user.PhotoKey, user.PhotoBlur == nil && photo.FramePossible(contentType))
+	if sink == nil {
+		return OpenedPhoto{Body: body, Size: size, ContentType: contentType, Key: *user.PhotoKey}, nil
+	}
+	data, err := io.ReadAll(body)
+	if err != nil {
+		// The read that should have fed the frame cannot complete — the
+		// stream is consumed, there are no bytes left to serve.
+		return OpenedPhoto{}, fmt.Errorf("read profile photo for the blur frame: %w", err)
+	}
+	if frame, ok := photo.BlurFromStored(data, contentType); ok {
+		sink(frame)
+	}
+	return OpenedPhoto{Body: io.NopCloser(bytes.NewReader(data)), Size: int64(len(data)), ContentType: contentType, Key: *user.PhotoKey}, nil
 }
 
 // SetProfilePhoto replaces the profile photo (ADR 0065, one image per
@@ -255,7 +302,11 @@ func (s *ProfileService) SetProfilePhoto(ctx context.Context, userID uuid.UUID, 
 			}
 		}
 
-		updated, err = stores.users.SetPhoto(ctx, userID, &key, &processed.ContentType)
+		// The blur frame rides the columns write (тикет #1603): nil when the
+		// upload has none (webp, within-bound) — the serve path materializes
+		// lazily.
+		blur := processed.BlurPtr()
+		updated, err = stores.users.SetPhoto(ctx, userID, &key, &processed.ContentType, blur)
 		if err != nil {
 			return fmt.Errorf("set user photo: %w", err)
 		}
@@ -302,7 +353,7 @@ func (s *ProfileService) DeleteProfilePhoto(ctx context.Context, userID uuid.UUI
 		}
 		oldKey = user.PhotoKey
 
-		updated, err = stores.users.SetPhoto(ctx, userID, nil, nil)
+		updated, err = stores.users.SetPhoto(ctx, userID, nil, nil, nil)
 		if err != nil {
 			return fmt.Errorf("set user photo: %w", err)
 		}

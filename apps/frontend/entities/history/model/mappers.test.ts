@@ -146,6 +146,7 @@ describe('mapHistoryFilterOptions', () => {
         email: 'ivan@example.com',
         firstName: 'Иван',
         photoUrl: null,
+        photoBlur: null,
         isOwner: true,
         role: 'owner',
         status: 'current',
@@ -156,14 +157,15 @@ describe('mapHistoryFilterOptions', () => {
         email: 'anna@example.com',
         firstName: 'Анна',
         photoUrl: null,
+        photoBlur: null,
         isOwner: false,
         role: 'viewer',
         status: 'removed',
       },
     ]);
     expect(options.objects).toEqual([
-      { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photoUrl: 'https://cdn/x.jpg', type: 'apartment' },
-      { id: 'property-2', name: 'Гараж', address: '', photoUrl: '', type: 'garage' },
+      { id: 'property-1', name: 'Моя квартира', address: 'Ленина 1', photoUrl: 'https://cdn/x.jpg', photoBlur: null, type: 'apartment' },
+      { id: 'property-2', name: 'Гараж', address: '', photoUrl: '', photoBlur: null, type: 'garage' },
     ]);
   });
 });

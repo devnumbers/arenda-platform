@@ -17,6 +17,8 @@ type PropertyContactsBlockProps = {
    * дублировать строку (#1335), а keyset-порция видит не всю книгу.
    * undefined — карточки нет или у неё нет фото. */
   readonly tenantPhotoUrl: string | undefined;
+  /** Blur-кадр фото арендатора (ADR 0065 аменд, решение #1594). */
+  readonly tenantPhotoBlur: string | undefined;
   readonly contacts: ReadonlyArray<Contact>;
   readonly onOpenContact: (contactId: string) => void;
 };
@@ -30,12 +32,15 @@ type PropertyContactsBlockProps = {
 function TenantRowButton({
   tenant,
   photoUrl,
+  photoBlur,
   onSelect,
 }: {
   readonly tenant: RentalTenant;
   /** Фото контакта-арендатора — из его карточки (ADR 0065, решение
    * #1286); undefined — карточки нет или у неё нет фото. */
   readonly photoUrl: string | undefined;
+  /** Blur-кадр фото (ADR 0065 аменд, решение #1594). */
+  readonly photoBlur: string | undefined;
   readonly onSelect: () => void;
 }): JSX.Element {
   const activatorProps = useKeyboardActivation({ onSelect });
@@ -45,7 +50,7 @@ function TenantRowButton({
       className="pressable flex w-full cursor-pointer items-center gap-2 py-2 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dl-surface-muted)]"
       data-testid="property-tenant-row"
     >
-      <UserAvatar variant="muted" photoUrl={photoUrl} />
+      <UserAvatar variant="muted" photoUrl={photoUrl} photoBlur={photoBlur} />
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
         <span className="truncate text-base font-medium text-content">
           {rentalTenantTitle(tenant)}
@@ -65,6 +70,7 @@ function TenantRowButton({
 export function PropertyContactsBlock({
   tenant,
   tenantPhotoUrl,
+  tenantPhotoBlur,
   contacts,
   onOpenContact,
 }: PropertyContactsBlockProps): JSX.Element {
@@ -74,6 +80,7 @@ export function PropertyContactsBlock({
         <TenantRowButton
           tenant={tenant}
           photoUrl={tenantPhotoUrl}
+          photoBlur={tenantPhotoBlur}
           onSelect={() => onOpenContact(tenant.contactId)}
         />
       )}

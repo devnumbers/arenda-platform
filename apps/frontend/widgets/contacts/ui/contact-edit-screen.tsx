@@ -383,6 +383,7 @@ function ContactEditForm({
         <ContactForm
           form={form}
           photoUrl={contact.photoUrl}
+          photoBlur={contact.photoBlur}
           photoStage={photoStage}
           photoBusy={photoBusy}
           photoProgress={photoProgress}

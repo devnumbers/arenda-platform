@@ -7,6 +7,8 @@ export type PropertyOwnerSectionProps = {
   /** Путь стриминга фото профиля владельца (ADR 0065, решение #1286);
    * null — фото нет. */
   readonly ownerPhotoUrl?: string | null;
+  /** Blur-кадр фото владельца (ADR 0065 аменд, решение #1594). */
+  readonly ownerPhotoBlur?: string | null;
   /** Почта владельца (Figma 2200-97365 — контактный ряд владельца на
    * детали чужого объекта; owner_email в access-контракте). Пустая или
    * не пришедшая — сабтайтл не рисуется. */
@@ -27,11 +29,12 @@ export function PropertyOwnerSection({
   ownerName,
   ownerEmail,
   ownerPhotoUrl,
+  ownerPhotoBlur,
 }: PropertyOwnerSectionProps): JSX.Element {
   return (
     <PropertySectionCard title="Владелец объекта">
       <div className="flex items-center gap-3 px-6 pb-4 pt-4">
-        <UserAvatar variant="muted" photoUrl={ownerPhotoUrl} />
+        <UserAvatar variant="muted" photoUrl={ownerPhotoUrl} photoBlur={ownerPhotoBlur} />
         <span className="flex min-w-0 flex-col justify-center gap-1">
           <span className="truncate text-base font-medium leading-[18px] text-content">
             {ownerName}

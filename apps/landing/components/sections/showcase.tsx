@@ -162,6 +162,14 @@ const G = N * COPIES; // узлов в каждой ленте
 const INITIAL = N + 2; // «2-комнатная на Ленина»: средняя копия, карта 2
 const SPEED_MS = 600; // любой программный переход — как у Яндекса (замер 26.10)
 
+// Флик-бросок (таб/моб, решение владельца 27.10 «свайп легче»): быстрый
+// короткий бросок листает на один шаг. Гейты распознавания броска —
+// см. flickRelease в эффекте инициализации; критерий скорости — само
+// окно FLICK_MS (бросок быстрее 300мс), отдельной скорости не нужно.
+const FLICK_MS = 300; // дольше — это тяга, релизит ratio-ветка
+const FLICK_MIN_PX = 30; // короче (в translate ядра) — микросдвиг у тапа
+const FLICK_MAX_SHARE = 0.5; // дальше полшага — тяга, релизит ratio-ветка
+
 // Метрики центральных состояний по ярусам — зеркало CSS-переменных
 // showcase.module.css. Боковое состояние = центральное × 0.8 — его
 // считает coverflow (scale 0.8), внутренних арифметик больше нет.
@@ -188,6 +196,13 @@ const coverflowOf = (stretch: number) => ({
   modifier: 1,
   slideShadows: false,
 });
+
+// Порог перелиста тягой — доля шага (longSwipesRatio ядра), мерится в
+// translate ядра: на таб/моб 0.15 (решение владельца 27.10 «свайп
+// легче»: 75px на планшете, 45px на мобиле вместо полшага 250/150px),
+// на ПК 0.5 — релиз по ближайшему снапу (решение 26.10: там колесо и
+// клики по боковым, жалоб нет).
+const releaseRatioOf = (t: Tier) => (t === "desk" ? 0.5 : 0.15);
 
 export function Showcase() {
   const [mounted, setMounted] = useState(false);
@@ -276,6 +291,45 @@ export function Showcase() {
       sw.setTransition(0);
     };
 
+    // Флик-бросок: без самописного движения — в touchEnd, ДО релиз-ветки
+    // ядра (emit «touchEnd» стоит в начале onTouchEnd), по признакам
+    // броска подменяем longSwipesMs на время одного релиза: ядро уходит
+    // в shortSwipes-ветку (слайдит на шаг от интервала, где отпустили
+    // палец), параметр возвращает микро-задача. Медленные и длинные тяги
+    // остаются в ratio-ветке ближайшего снапа: фикс «перелёта на шаг»
+    // 26.10 живёт именно там (дефолтная shortSwipes-ветка слайдила от
+    // интервала мимо снапа), поэтому бросок длиннее полшага фликом не
+    // считается — ровно-на-шаг перетаскашка доезжает до ratio-ветки и
+    // садится на ближайший снап, как принято 26.10. Скорость броска —
+    // само окно FLICK_MS: за 300мс дольше 30px (в translate ядра,
+    // touchRatio сжимает путь пальца) протащить «медленно» нельзя.
+    const flickRelease = (sw: SwiperType) => {
+      if (tier === "desk") return;
+      const { startTranslate, currentTranslate, touchStartTime } = sw.touchEventsData;
+      if (
+        typeof startTranslate !== "number" ||
+        typeof currentTranslate !== "number" ||
+        typeof touchStartTime !== "number"
+      ) {
+        return;
+      }
+      const duration = Date.now() - touchStartTime; // часы ядра = Date.now()
+      const diff = Math.abs(currentTranslate - startTranslate);
+      const step = sw.slidesSizesGrid[0] ?? 0;
+      if (
+        duration <= 0 ||
+        duration >= FLICK_MS ||
+        diff < FLICK_MIN_PX ||
+        (step > 0 && diff >= FLICK_MAX_SHARE * step)
+      ) {
+        return;
+      }
+      sw.params.longSwipesMs = Number.MAX_SAFE_INTEGER;
+      queueMicrotask(() => {
+        if (!sw.destroyed) sw.params.longSwipesMs = 1;
+      });
+    };
+
     // window-resize: обновляем геометрию обеих лент сами (у ядра
     // updateOnWindowResize выключен параметром). Пока юзер держит
     // ленту — только флаг: ядерный update() в этот момент телепортировал
@@ -309,13 +363,15 @@ export function Showcase() {
       slidesPerView: "auto",
       centeredSlides: true,
       spaceBetween: 0,
-      // релиз всегда по ближайшему снапу (решение владельца 26.10):
-      // longSwipesMs: 1 переводит любой релиз в ratio-ветку ядра
-      // (порог половины шага в обе стороны); дефолтная shortSwipes-ветка
-      // для prev считает по границе интервала сетки — быстрая
-      // перетаскашка боковой плашки ровно на шаг улетала на шаг дальше
+      // релиз тягой — ratio-ветка ядра: longSwipesMs: 1 отправляет в
+      // неё любой релиз; порог — releaseRatioOf (решение владельца
+      // 26.10, на 27.10 понижен на таб/моб, см. releaseRatioOf).
+      // shortSwipes-ветка открывается только гейтами флика (flickRelease):
+      // без гейтов она считает prev по границе интервала сетки, и
+      // перетаскашка ровно на шаг улетала на шаг дальше (баг 26.10)
       longSwipes: true,
       longSwipesMs: 1,
+      longSwipesRatio: releaseRatioOf(tier),
       // догруз картинки внутри контейнера (дефолт lazyPreload: true)
       // зовёт update() со мгновенным slideTo(*, 0) — телепорт ленты
       // под пальцем; картинки секции грузятся eagerly, слушатель не нужен
@@ -325,6 +381,17 @@ export function Showcase() {
       // пальцем и через кольцо контроллеров дёргал вторую ленту
       updateOnWindowResize: false,
       preventClicks: true,
+      // Плашки — drag-поверхность: без сужения списка драг, начатый на
+      // поверхности сфокусированной кнопки (mousedown её фокусирует),
+      // глотается guard'ом ядра (e.target === activeElement и матчится
+      // focusableElements → data.isMoved = true до чтения startTranslate),
+      // и первый же обработанный move считает позицию от хвоста
+      // touchEventsData прошлой тяги — лента телепортирует на разницу
+      // одним кадром («секции проскакивают», приёмка 27.10). У div-слайдов
+      // фотоленты role="button" с 'button' не матчится — там бага нет;
+      // сужено в обеих лентах на упрочнение. Развод тапа и драга у ядра
+      // свой (allowClick/threshold), список на него не влияет.
+      focusableElements: "input, select, textarea",
       // клик по плашке ведёт её копию в центр; фотолента едет следом
       // через контроллер (клик после драга ядро гасит сам)
       slideToClickedSlide: true,
@@ -334,6 +401,7 @@ export function Showcase() {
         sliderFirstMove: () => stripEl.classList.add(s.dragging ?? ""),
         touchEnd: () => {
           stripEl.classList.remove(s.dragging ?? "");
+          flickRelease(plates);
           applyResizeDeferred();
         },
       },
@@ -349,13 +417,10 @@ export function Showcase() {
       slidesPerView: "auto",
       centeredSlides: true,
       spaceBetween: 0,
-      // релиз всегда по ближайшему снапу (решение владельца 26.10):
-      // longSwipesMs: 1 переводит любой релиз в ratio-ветку ядра
-      // (порог половины шага в обе стороны); дефолтная shortSwipes-ветка
-      // для prev считает по границе интервала сетки — быстрая
-      // перетаскашка боковой плашки ровно на шаг улетала на шаг дальше
+      // релиз тягой — см. комментарий в конфиге плашек выше
       longSwipes: true,
       longSwipesMs: 1,
+      longSwipesRatio: releaseRatioOf(tier),
       // догруз картинки внутри контейнера (дефолт lazyPreload: true)
       // зовёт update() со мгновенным slideTo(*, 0) — телепорт ленты
       // под пальцем; картинки секции грузятся eagerly, слушатель не нужен
@@ -365,6 +430,8 @@ export function Showcase() {
       // пальцем и через кольцо контроллеров дёргал вторую ленту
       updateOnWindowResize: false,
       preventClicks: true,
+      // см. комментарий в конфиге плашек выше
+      focusableElements: "input, select, textarea",
       slideToClickedSlide: true,
       // ведёт плашечную ленту (создана выше); плашки ведут фотоленту
       // через plates.controller.control — кольцо замкнуто в обе стороны
@@ -383,6 +450,7 @@ export function Showcase() {
         sliderFirstMove: () => photoEl.classList.add(s.dragging ?? ""),
         touchEnd: () => {
           photoEl.classList.remove(s.dragging ?? "");
+          flickRelease(photos);
           applyResizeDeferred();
         },
       },
@@ -392,9 +460,9 @@ export function Showcase() {
     // драг любой ленты ведёт другую
     plates.controller.control = photos;
 
-    // Смена яруса: у обеих лент меняется только stretch (слоты полной
-    // ширины и spaceBetween 0 от яруса не зависят); update() строит
-    // сетки заново, пересадка возвращает активную карточку в центр.
+    // Смена яруса: у обеих лент меняются stretch и порог релиза (слоты
+    // полной ширины и spaceBetween 0 от яруса не зависят); update()
+    // строит сетки заново, пересадка возвращает активную карточку в центр.
     const onTierChange = () => {
       const nextTier = tierOf();
       if (nextTier === tier) return;
@@ -407,6 +475,7 @@ export function Showcase() {
         const cover = sw.params.coverflowEffect;
         if (!cover) continue;
         cover.stretch = stretch;
+        sw.params.longSwipesRatio = releaseRatioOf(nextTier);
         sw.update();
         sw.slideTo(sw.activeIndex, 0);
       }

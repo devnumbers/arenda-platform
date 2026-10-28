@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type JSX } from 'react';
+import { useRef, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -36,11 +36,6 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
   const { value, debounced, setValue, clear } = useSearchQueryState();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Полевой фокус при входе на экран (поисковая шапка — каретка в поле);
-  // jsx-a11y/no-autofocus запрещает сам проп.
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   const objectsQuery = useGlobalPaymentObjects(debounced, {
     enabled: debounced.trim() !== '',
@@ -75,6 +70,7 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={() => goBack(router, ROUTES.paymentsObjects)} />}
       >
         <SearchField
+            focusOnMount
           ref={inputRef}
           placeholder="Найти объект"
           aria-label="Найти объект"
@@ -141,6 +137,7 @@ export function PaymentsObjectsSearchScreen(): JSX.Element {
                   leading={
                     <PaymentObjectAvatar
                       photoUrl={object.photoUrl}
+                      photoBlur={object.photoBlur}
                       type={object.type}
                       surface="row"
                     />

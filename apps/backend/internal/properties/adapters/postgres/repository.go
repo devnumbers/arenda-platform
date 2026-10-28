@@ -116,6 +116,7 @@ func (r *PropertyRepository) GetByIDAndOwner(ctx context.Context, id, scope uuid
 		Status:           row.Status,
 		PhotoKey:         row.PhotoKey,
 		PhotoContentType: row.PhotoContentType,
+		PhotoBlur:        row.PhotoBlur,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 	}), nil
@@ -156,6 +157,7 @@ func (r *PropertyRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.
 		Status:           row.Status,
 		PhotoKey:         row.PhotoKey,
 		PhotoContentType: row.PhotoContentType,
+		PhotoBlur:        row.PhotoBlur,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 	}), nil
@@ -241,6 +243,7 @@ func (r *PropertyRepository) SearchVisible(
 			Status:           row.Status,
 			PhotoKey:         row.PhotoKey,
 			PhotoContentType: row.PhotoContentType,
+			PhotoBlur:        row.PhotoBlur,
 			CreatedAt:        row.CreatedAt,
 			UpdatedAt:        row.UpdatedAt,
 		})
@@ -338,12 +341,15 @@ func (r *PropertyRepository) ActorPins(ctx context.Context, actor uuid.UUID, pro
 // one image per entity, no gallery. Existence and the edit capability are
 // proven by the application under the row lock; the scope is the property's
 // owner.
-func (r *PropertyRepository) SetPropertyPhoto(ctx context.Context, id, scope uuid.UUID, key, contentType *string) (domain.Property, error) {
+func (r *PropertyRepository) SetPropertyPhoto(
+	ctx context.Context, id, scope uuid.UUID, key, contentType, blur *string,
+) (domain.Property, error) {
 	row, err := r.q().SetPropertyPhoto(ctx, postgres.SetPropertyPhotoParams{
 		ID:               pgconv.UUIDToPgtype(id),
 		OwnerID:          pgconv.UUIDToPgtype(scope),
 		PhotoKey:         pgconv.StringPtrToPgtype(key),
 		PhotoContentType: pgconv.StringPtrToPgtype(contentType),
+		PhotoBlur:        pgconv.StringPtrToPgtype(blur),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -366,6 +372,23 @@ func (r *PropertyRepository) ClearPhotoIfKey(ctx context.Context, id, scope uuid
 	})
 	if err != nil {
 		return 0, fmt.Errorf("clear property photo %s: %w", id, err)
+	}
+	return rows, nil
+}
+
+// SetPropertyPhotoBlurIfKey lands the lazily materialized blur frame (ADR
+// 0065 аменд, #1603): the conditional UPDATE keys on the still-advertised
+// photo, a concurrent re-upload wins. The affected-row count is the race
+// verdict.
+func (r *PropertyRepository) SetPropertyPhotoBlurIfKey(ctx context.Context, id, scope uuid.UUID, key, blur string) (int64, error) {
+	rows, err := r.q().SetPropertyPhotoBlurIfKey(ctx, postgres.SetPropertyPhotoBlurIfKeyParams{
+		ID:        pgconv.UUIDToPgtype(id),
+		OwnerID:   pgconv.UUIDToPgtype(scope),
+		PhotoKey:  pgconv.StringPtrToPgtype(&key),
+		PhotoBlur: pgconv.StringPtrToPgtype(&blur),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("set property photo blur %s: %w", id, err)
 	}
 	return rows, nil
 }
@@ -451,6 +474,7 @@ func propertyFromRow(row postgres.Property) domain.Property {
 		Status:           domain.PropertyStatus(row.Status),
 		PhotoKey:         pgconv.TextToPtrString(row.PhotoKey),
 		PhotoContentType: pgconv.TextToPtrString(row.PhotoContentType),
+		PhotoBlur:        pgconv.TextToPtrString(row.PhotoBlur),
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 		// The row carries no pin column: the actor's pin arrives through

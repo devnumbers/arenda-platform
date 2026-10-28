@@ -1570,28 +1570,49 @@ type Querier interface {
 	// LEFT JOIN row is unique per (property, user) and carries the role only;
 	// the visibility verdict is the function call in the WHERE.
 	SearchVisibleProperties(ctx context.Context, arg SearchVisiblePropertiesParams) ([]SearchVisiblePropertiesRow, error)
-	// The card photo write (ADR 0065, ticket #1227): the key and the sniffed
-	// content type move together; a NULL key clears the photo. The full-row
+	// The card photo write (ADR 0065, ticket #1227): the key, the sniffed
+	// content type and the blur frame's base64 (решение #1594, #1603) move
+	// together; a NULL key clears the photo and its frame. The full-row
 	// rewrite of the editable fields is untouched — the photo is not an
 	// UpdateContact field. Existence and the edit capability are proven by the
 	// caller; the scope is the book owner (ADR 0028).
 	SetContactPhoto(ctx context.Context, arg SetContactPhotoParams) (Contact, error)
+	// The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+	// from this request's decode lands only while the row still advertises the
+	// key it was computed from — a concurrent re-upload wins, the fresh photo
+	// carries its own blur. 0 affected rows is the race verdict; the write is
+	// best-effort on the caller's side.
+	SetContactPhotoBlurIfKey(ctx context.Context, arg SetContactPhotoBlurIfKeyParams) (int64, error)
 	// One rule's 1-based favorite position in the actor's personal order
 	// (ticket #576; the cutover #1308); the id match alone is the guard — the
 	// lock pass has already proven the actor's row and its visibility in the
 	// same transaction. :execrows keeps that ordering honest.
 	SetPaymentFavoriteOrder(ctx context.Context, arg SetPaymentFavoriteOrderParams) (int64, error)
-	// The object photo write (ADR 0065, ticket #1227): the key and the sniffed
-	// content type move together; a NULL key clears the photo — one image per
+	// The object photo write (ADR 0065, ticket #1227): the key, the sniffed
+	// content type and the blur frame's base64 (решение #1594, #1603) move
+	// together; a NULL key clears the photo and its frame — one image per
 	// entity, no gallery. The scope is the property's owner (ADR 0028): the
 	// actor may be the full-access member; existence and the edit capability
 	// (plus the archived-object guard) are proven by the caller under the row
 	// lock.
 	SetPropertyPhoto(ctx context.Context, arg SetPropertyPhotoParams) (Property, error)
-	// The profile photo write (ADR 0065, ticket #1227): the key and the sniffed
-	// content type move together; a NULL key clears the photo. Existence and the
+	// The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+	// from this request's decode lands only while the row still advertises the
+	// key it was computed from — a concurrent re-upload wins, the fresh photo
+	// carries its own blur. 0 affected rows is the race verdict; the write is
+	// best-effort on the caller's side.
+	SetPropertyPhotoBlurIfKey(ctx context.Context, arg SetPropertyPhotoBlurIfKeyParams) (int64, error)
+	// The profile photo write (ADR 0065, ticket #1227): the key, the sniffed
+	// content type and the blur frame's base64 (решение #1594, #1603) move
+	// together; a NULL key clears the photo and its frame. Existence and the
 	// self-only access are proven by the caller under the row lock.
 	SetUserPhoto(ctx context.Context, arg SetUserPhotoParams) (User, error)
+	// The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+	// from this request's decode lands only while the row still advertises the
+	// key it was computed from — a concurrent re-upload wins, the fresh photo
+	// carries its own blur. 0 affected rows is the race verdict; the write is
+	// best-effort on the caller's side.
+	SetUserPhotoBlurIfKey(ctx context.Context, arg SetUserPhotoBlurIfKeyParams) (int64, error)
 	// The other half of the coherent subscription time shift (issue #665): the
 	// dunning retry predicate counts payments created at or after the grace entry
 	// anchor, so the payments must travel by the same delta to keep the relative

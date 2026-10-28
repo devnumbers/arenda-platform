@@ -256,6 +256,7 @@ function AccountScreenView({ me }: AccountScreenViewProps): JSX.Element {
       <div className="flex justify-center">
         <ProfilePhotoSlot
           photoUrl={me.photoUrl}
+          photoBlur={me.photoBlur}
           stage={photoStage}
           busy={photoBusy}
           progress={photoProgress}

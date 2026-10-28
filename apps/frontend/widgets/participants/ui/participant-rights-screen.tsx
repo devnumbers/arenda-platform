@@ -244,7 +244,11 @@ export function ParticipantRightsScreen({
           className={PARTICIPANT_ROW_BASE_CLASS}
           data-testid="participant-rights-object-card"
         >
-          <ObjectAvatarGlyph photoUrl={leg?.photoUrl ?? property?.photoUrl ?? undefined} type={leg?.type ?? property?.type} />
+          <ObjectAvatarGlyph
+            photoUrl={leg?.photoUrl ?? property?.photoUrl ?? undefined}
+            photoBlur={leg?.photoBlur ?? property?.photoBlur}
+            type={leg?.type ?? property?.type}
+          />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="truncate text-base font-medium leading-[18px] text-content">
               {leg?.title ?? property?.name ?? ''}
@@ -374,7 +378,7 @@ function ParticipantRightsPending({
         className={PARTICIPANT_ROW_BASE_CLASS}
         data-testid="participant-rights-card"
       >
-        <UserAvatar photoUrl={card.photoUrl ?? null} />
+        <UserAvatar photoUrl={card.photoUrl ?? null} photoBlur={card.photoBlur ?? null} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-base font-medium leading-[18px] text-content">
             {card.title}

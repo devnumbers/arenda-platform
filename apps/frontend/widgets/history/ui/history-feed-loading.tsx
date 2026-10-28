@@ -2,7 +2,7 @@
 
 import type { JSX } from 'react';
 import { Button, PageContent, TopNav, TopNavBackButton, TopNavTitle } from '@/shared/ui/design';
-import { historyScreenBackHref, historyScreenTitle } from '../lib/screen-chrome';
+import { historyScreenBackHref, historyScreenTitle } from '@/features/history';
 import { historyFeedSkeleton } from './history-states';
 
 /**

@@ -108,6 +108,10 @@ func participantResponse(p accessapp.Participant) openapi.ParticipantResponse {
 		photoURL := p.PhotoURL
 		resp.PhotoUrl = &photoURL
 	}
+	if p.PhotoBlur != "" {
+		photoBlur := p.PhotoBlur
+		resp.PhotoBlur = &photoBlur
+	}
 	for _, leg := range p.Properties {
 		resp.Properties = append(resp.Properties, openapi.ParticipantPropertyResponse{
 			PropertyId: leg.PropertyID,
@@ -117,7 +121,8 @@ func participantResponse(p accessapp.Participant) openapi.ParticipantResponse {
 			Type:       openapi.PropertyType(leg.Type),
 			// '' (фото нет) → null: контракт nullable (ADR 0065), пустая
 			// строка на проводе глушит фолбэк заглушки клиента.
-			PhotoUrl: httpsupport.StringPtr(leg.PhotoURL),
+			PhotoUrl:  httpsupport.StringPtr(leg.PhotoURL),
+			PhotoBlur: httpsupport.StringPtr(leg.PhotoBlur),
 		})
 	}
 	return resp

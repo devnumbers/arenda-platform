@@ -211,17 +211,29 @@ DELETE FROM properties
 WHERE id = $1 AND owner_id = $2;
 
 -- name: SetPropertyPhoto :one
--- The object photo write (ADR 0065, ticket #1227): the key and the sniffed
--- content type move together; a NULL key clears the photo — one image per
+-- The object photo write (ADR 0065, ticket #1227): the key, the sniffed
+-- content type and the blur frame's base64 (решение #1594, #1603) move
+-- together; a NULL key clears the photo and its frame — one image per
 -- entity, no gallery. The scope is the property's owner (ADR 0028): the
 -- actor may be the full-access member; existence and the edit capability
 -- (plus the archived-object guard) are proven by the caller under the row
 -- lock.
 UPDATE properties
 SET photo_key = $3,
-    photo_content_type = $4
+    photo_content_type = $4,
+    photo_blur = $5
 WHERE id = $1 AND owner_id = $2
 RETURNING *;
+
+-- name: SetPropertyPhotoBlurIfKey :execrows
+-- The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+-- from this request's decode lands only while the row still advertises the
+-- key it was computed from — a concurrent re-upload wins, the fresh photo
+-- carries its own blur. 0 affected rows is the race verdict; the write is
+-- best-effort on the caller's side.
+UPDATE properties
+SET photo_blur = $4
+WHERE id = $1 AND owner_id = $2 AND photo_key = $3;
 
 -- name: ClearPropertyPhotoIfKey :execrows
 -- The dangling-object-photo self-heal (ADR 0065): the storage no longer
@@ -233,5 +245,6 @@ RETURNING *;
 -- already decided the 404 when it calls this.
 UPDATE properties
 SET photo_key = NULL,
-    photo_content_type = NULL
+    photo_content_type = NULL,
+    photo_blur = NULL
 WHERE id = $1 AND owner_id = $2 AND photo_key = $3;

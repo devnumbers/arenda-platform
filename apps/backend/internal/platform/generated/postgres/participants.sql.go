@@ -259,7 +259,8 @@ SELECT p.id, p.owner_id, p.name AS title, p.type,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
-                     END, '')::text AS photo_path
+                     END, '')::text AS photo_path,
+       COALESCE(p.photo_blur, '')::text AS photo_blur
 FROM properties p
 WHERE p.status <> 'archived'
   AND actor_can_manage(p.id, $1::uuid)
@@ -272,6 +273,7 @@ type ListParticipantScopePropertiesRow struct {
 	Title     string      `json:"title"`
 	Type      string      `json:"type"`
 	PhotoPath string      `json:"photo_path"`
+	PhotoBlur string      `json:"photo_blur"`
 }
 
 // The «Участник (владельца)» read model (issue #693): an aggregate over
@@ -316,6 +318,7 @@ func (q *Queries) ListParticipantScopeProperties(ctx context.Context, actorID pg
 			&i.Title,
 			&i.Type,
 			&i.PhotoPath,
+			&i.PhotoBlur,
 		); err != nil {
 			return nil, err
 		}

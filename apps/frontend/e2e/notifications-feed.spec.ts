@@ -67,6 +67,19 @@ test.describe('лента уведомлений — меню и пустые с
     // Строки погасли (прочитаны), счётчик чипа слетел.
     await expect(page.getByRole('button', { name: 'Непрочитанные', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Непрочитанные 2' })).toHaveCount(0);
+
+    // Счётчик известен и нулевой — читать нечего: пункт «Прочитать все»
+    // в меню больше не рисуется (решение владельца 27.10.2026), служебные
+    // два остаются.
+    await page.getByRole('button', { name: 'Действия с уведомлениями' }).last().click();
+    const menuAfter = page.getByRole('menu');
+    await expect(menuAfter.getByRole('menuitem', { name: 'Прочитать все' })).toHaveCount(0);
+    await expect(
+      menuAfter.getByRole('menuitem', { name: 'Настроить уведомления' }),
+    ).toBeVisible();
+    await expect(
+      menuAfter.getByRole('menuitem', { name: 'Удалить все уведомления' }),
+    ).toBeVisible();
   });
 
   test('пустая лента «Все»: «Нет уведомлений», шестерёнка в хедере, чипов нет', async ({
@@ -111,6 +124,16 @@ test.describe('лента уведомлений — меню и пустые с
       page.getByRole('button', { name: 'Действия с уведомлениями' }).first(),
     ).toBeVisible();
     await captureScreen(page, testInfo, 'notifications-empty-unread');
+
+    // Нулевой счётчик известен и на пустом фильтре — «Прочитать все» в
+    // меню нет (решение владельца 27.10.2026), служебные два остаются.
+    // Кликаем экземпляр контентной строки (последний): компактные слоты
+    // шапки накрыты (канон первого теста).
+    await page.getByRole('button', { name: 'Действия с уведомлениями' }).last().click();
+    const menu = page.getByRole('menu');
+    await expect(menu.getByRole('menuitem', { name: 'Прочитать все' })).toHaveCount(0);
+    await expect(menu.getByRole('menuitem', { name: 'Настроить уведомления' })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Удалить все уведомления' })).toBeVisible();
   });
 
   test('шапка ленты — хаб с крыльями и на мобайле (макет 3178)', async ({

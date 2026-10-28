@@ -322,22 +322,6 @@
   border-radius: inherit;
 }
 
-/* Стекло характеристик для тех, кто просит меньше прозрачности или
-   больший контраст: почти сплошная подложка, блюр снят целиком. */
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .cardGlass {
-    background: rgba(0, 0, 0, 0.82);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-}
-
-@media (prefers-contrast: more) {
-  .cardRing {
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
-  }
-}
-
 .cardRing {
   position: absolute;
   inset: 0;
@@ -382,6 +366,21 @@
 
 .cardLabel {
   opacity: 0.7;
+}
+
+/* Текст и рамка плашки — в собственных композитных слоях: iOS-WebKit
+   (Safari и Chrome на айфоне) при драге роняет бесслойных соседей
+   элемента с backdrop-filter, пока слайд непрерывно
+   перетрансформируется coverflow'ом — текст исчезает, приёмка 27.10
+   (?fix=textlz — бага нет; слой на родителе .card, снятие preserve-3d
+   и perspective не помогают; снятие блюра подтверждает триггер).
+   Рамка (.cardRing) падает тем же способом даже без блюра — тот же
+   ход. translateZ(0) вида не меняет: нулевая плоскость в 3D-контексте
+   слайда, на десктопе пиксельная сверка до/после без разницы. */
+.cardName,
+.cardRows,
+.cardRing {
+  transform: translateZ(0);
 }
 
 /* Белые градиентные шторки: прозрачный край у центральной карточки,

@@ -58,6 +58,8 @@ export type HistoryEntry = {
   /** Путь стриминга фото профиля актёра (ADR 0065, решение #1286), живой
    * на чтение; null — у актёра нет фото или запись обезличена. */
   readonly actorPhotoUrl: string | null;
+  /** Blur-кадр аватара актёра (ADR 0065 аменд, решение #1594); null — кадра нет. */
+  readonly actorPhotoBlur: string | null;
   readonly actorRole: HistoryActorRole;
   readonly baseAction: HistoryBaseAction;
   /** Стабильный точечный id действия, например operation.paid. */
@@ -87,6 +89,8 @@ export type HistoryParticipantOption = {
   /** Путь стриминга фото профиля (ADR 0065, решение #1286); null — фото
    * нет. Отозванный участник остаётся опцией: его путь отвечает 404. */
   readonly photoUrl: string | null;
+  /** Blur-кадр фото первого показа (ADR 0065 аменд, решение #1594); null — кадра нет. */
+  readonly photoBlur: string | null;
   readonly isOwner: boolean;
   readonly role: 'owner' | 'full_access' | 'viewer';
   readonly status: 'current' | 'removed';
@@ -100,6 +104,9 @@ export type HistoryObjectOption = {
   readonly name: string;
   readonly address: string;
   readonly photoUrl: string;
+  /** Blur-кадр фото первого показа (ADR 0065 аменд, решение #1594);
+   * null — кадра нет. */
+  readonly photoBlur: string | null;
   readonly type: components['schemas']['PropertyType'];
 };
 

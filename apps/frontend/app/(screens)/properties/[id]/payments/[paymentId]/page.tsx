@@ -1,7 +1,6 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { QueryClient } from '@tanstack/react-query';
-import { PaymentDetailLoading, PaymentDetailScreen } from '@/widgets/payments';
+import { PaymentDetailScreen } from '@/widgets/payments';
 import {
   paymentDetailQueryOptions,
   paymentOperationsGateQueryOptions,
@@ -11,6 +10,12 @@ import { propertyDetailQueryOptions } from '@/features/properties';
 import { OPERATIONS_FEED_SORT, paymentKeys } from '@/shared/api/query-keys';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
+
+// Кабинетная страница: куки-сессия и URL-состояние — всегда динамический
+// рендер; force-dynamic снимает требование Suspense-границы для
+// useSearchParams при статическом экспорте (аменда #1605 — in-page
+// Suspense убран ради однофлушного HTML, react/react#37014).
+export const dynamic = 'force-dynamic';
 
 /**
  * Страница платежа (#465): карточка правила, мутации паузы/оплаты/избранного,
@@ -65,10 +70,8 @@ export default async function PaymentRoutePage({ params }: PageProps<'/propertie
   const { id, paymentId } = await params;
 
   return (
-    <Suspense fallback={<PaymentDetailLoading propertyId={id} />}>
-      <ServerPrefetchBoundary prefetch={(queryClient) => prefetchPaymentScreen(queryClient, id, paymentId)}>
-        <PaymentDetailScreen propertyId={id} paymentId={paymentId} />
-      </ServerPrefetchBoundary>
-    </Suspense>
+<ServerPrefetchBoundary prefetch={(queryClient) => prefetchPaymentScreen(queryClient, id, paymentId)}>
+  <PaymentDetailScreen propertyId={id} paymentId={paymentId} />
+</ServerPrefetchBoundary>
   );
 }

@@ -39,19 +39,23 @@ func (a *UserEmailResolverAdapter) GetEmail(ctx context.Context, id uuid.UUID) (
 	return u.Email.String(), nil
 }
 
-// GetPhotoURL returns the user's profile photo streaming path (ADR 0065,
-// решение #1286): "" when the user is gone or has no photo. Serves the
-// properties context's OwnerPhotoResolver (the owner avatar on the detail
-// and the shared list rows).
-func (a *UserEmailResolverAdapter) GetPhotoURL(ctx context.Context, id uuid.UUID) (string, error) {
+// GetPhoto returns the user's profile photo streaming path (ADR 0065,
+// решение #1286) and the blur frame's base64 (ADR 0065 аменд, #1603) in one
+// row read — "" when the user is gone or has no photo, "" for a frameless
+// one. Serves the properties context's OwnerPhotoResolver (the owner avatar
+// on the detail and the shared list rows).
+func (a *UserEmailResolverAdapter) GetPhoto(ctx context.Context, id uuid.UUID) (url, blur string, err error) {
 	u, err := a.users.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, identityapp.ErrNotFound) {
-			return "", nil
+			return "", "", nil
 		}
-		return "", fmt.Errorf("get user by id: %w", err)
+		return "", "", fmt.Errorf("get user by id: %w", err)
 	}
-	return photo.UserPhotoPath(id, u.PhotoKey), nil
+	if u.PhotoBlur != nil {
+		blur = *u.PhotoBlur
+	}
+	return photo.UserPhotoPath(id, u.PhotoKey), blur, nil
 }
 
 var _ application.UserEmailResolver = (*UserEmailResolverAdapter)(nil)

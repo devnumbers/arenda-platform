@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -57,11 +57,6 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Полевой фокус при входе на экран (поисковая шапка — каретка в поле);
-  // jsx-a11y/no-autofocus запрещает сам проп.
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   const today = dateToIsoLocal(new Date());
 
@@ -129,6 +124,7 @@ export function OperationsGlobalSearchScreen(): JSX.Element {
         leading={<IconButton icon={<ArrowLeft />} label="Назад" onClick={closeSearch} />}
       >
         <SearchField
+            focusOnMount
           ref={inputRef}
           placeholder="Найти операцию"
           aria-label="Найти операцию"

@@ -426,11 +426,21 @@
     }
 }
 
-/* Сворачиваемая секция дизайн-слоя (#499; аудит #1418): grid-rows 0fr→1fr
-   + opacity на transition (канон #620, как tariff-faq) — без высотных
+/* Сворачиваемая секция дизайн-слоя (#499; аудит #1418, план 013; тайминги
+   27.10.2026 — решение владельца «закрытие топорное»). Движение —
+   grid-rows 0fr→1fr + opacity на transition ВНУТРЕННЕГО слоя
+   .collapsible-motion (канон #620, как tariff-faq) — без высотных
    keyframes: ре-клик посреди закрытия разворачивает секцию из текущей
-   позиции. Стражи Presence — по модели шита «Еще» (без визуального
-   эффекта, имена in/out разные — Presence ждёт animationend). */
+   позиции. Причина переноса с внешнего элемента: Presence-детектор Radix
+   щупает CollapsibleContent инлайн-стилями (transition-duration: 0s,
+   animation-name: none) тем же коммитом, что и смену data-state, —
+   transitions на нём не рождаются (живая приёмка 27.10). Тайминги —
+   паритет FAQ-канона: 300ms на --dl-ease в обе стороны; на выходе opacity
+   гаснет за 150ms — текст растворяется, пока коробка полная, обрез не
+   режет видимый текст. Стражи Presence на внешнем — по модели шита «Еще»
+   (без визуального эффекта, имена in/out разные — Presence ждёт
+   animationend); длительность стража = самой длинной ветке перехода
+   внутреннего слоя, иначе Radix поставит hidden на середине. */
 @keyframes collapsible-presence-in {
     from { --collapsible-presence: 0; }
     to   { --collapsible-presence: 1; }
@@ -442,27 +452,38 @@
 }
 
 .collapsible-content[data-state='open'] {
-    animation: collapsible-presence-in 200ms linear;
+    animation: collapsible-presence-in 300ms linear;
+}
+
+.collapsible-content[data-state='closed'] {
+    animation: collapsible-presence-out 300ms linear;
+}
+
+.collapsible-motion {
+    display: grid;
+    overflow: hidden;
+    transition:
+        grid-template-rows 300ms var(--dl-ease),
+        opacity 300ms var(--dl-ease);
+}
+
+.collapsible-content[data-state='open'] .collapsible-motion {
     grid-template-rows: 1fr;
     opacity: 1;
-    transition:
-        grid-template-rows 200ms var(--dl-ease),
-        opacity 200ms var(--dl-ease);
 }
 
 @starting-style {
-    .collapsible-content[data-state='open'] {
+    .collapsible-content[data-state='open'] .collapsible-motion {
         grid-template-rows: 0fr;
         opacity: 0;
     }
 }
 
-.collapsible-content[data-state='closed'] {
-    animation: collapsible-presence-out 150ms linear;
+.collapsible-content[data-state='closed'] .collapsible-motion {
     grid-template-rows: 0fr;
     opacity: 0;
     transition:
-        grid-template-rows 150ms var(--dl-ease),
+        grid-template-rows 300ms var(--dl-ease),
         opacity 150ms var(--dl-ease);
 }
 
@@ -696,12 +717,17 @@ body:has(.modal-overlay[data-state='open']) .desktop-chrome {
     }
 }
 
-/* Сворачиваемая секция (план 013): Presence-стражи и переход укорачиваются
-   до канонных 150ms — движение grid-rows+opacity остаётся. */
+/* Сворачиваемая секция (план 013, 058): Presence-стражи, переход слоя
+   движения, проворот стрелки и паддинг триггера укорачиваются до канонных
+   150ms — движение grid-rows+opacity остаётся. */
 @media (prefers-reduced-motion: reduce) {
     .collapsible-content[data-state='open'],
     .collapsible-content[data-state='closed'] {
         animation-duration: 150ms;
+    }
+
+    .collapsible-motion,
+    .collapsible-trigger {
         transition-duration: 150ms;
     }
 }

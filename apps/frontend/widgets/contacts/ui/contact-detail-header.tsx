@@ -6,6 +6,8 @@ export type ContactDetailHeaderProps = {
   readonly contact: Contact;
   /** Версионированный путь выдачи фото (ADR 0065); null/undefined — фото нет. */
   readonly photoUrl: string | null | undefined;
+  /** Blur-кадр первого показа (ADR 0065 аменд, решение #1594) — сестра photoUrl. */
+  readonly photoBlur?: string | null | undefined;
 };
 
 /**
@@ -18,10 +20,11 @@ export type ContactDetailHeaderProps = {
 export function ContactDetailHeader({
   contact,
   photoUrl,
+  photoBlur,
 }: ContactDetailHeaderProps): JSX.Element {
   return (
     <div className="flex flex-col items-center">
-      <UserAvatar size="hero" photoUrl={photoUrl} />
+      <UserAvatar size="hero" photoUrl={photoUrl} photoBlur={photoBlur} />
       {/* mb-0 гасит легаси-маржин h1 из @layer base (globals: margin
        * 0.67em) — иначе зазор до роли 27px вместо макетных 8. */}
       <h1 className="mt-4 mb-0 text-center text-[28px] font-semibold leading-8 text-content">

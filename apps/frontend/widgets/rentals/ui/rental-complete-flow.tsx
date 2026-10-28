@@ -85,6 +85,8 @@ export type RentalCompleteFlowProps = {
   /** Фото объекта строки «Объект» (ADR 0065, решение #1286); null — фото
    * нет. */
   readonly propertyPhotoUrl?: string | null;
+  /** Blur-кадр фото объекта (ADR 0065 аменд, решение #1594). */
+  readonly propertyPhotoBlur?: string | null;
   readonly onClose: () => void;
 };
 
@@ -93,6 +95,7 @@ export function RentalCompleteFlow({
   propertyName,
   propertyType,
   propertyPhotoUrl,
+  propertyPhotoBlur,
   onClose,
 }: RentalCompleteFlowProps): JSX.Element {
   const router = useRouter();
@@ -411,7 +414,9 @@ export function RentalCompleteFlow({
                   propertyName={propertyName}
                   propertyType={propertyType}
                   propertyPhotoUrl={propertyPhotoUrl}
+                  propertyPhotoBlur={propertyPhotoBlur}
                   tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
+                  tenantPhotoBlur={tenantContactQuery.data?.photoBlur}
                   depositReturn={
                     depositKopecks === null
                       ? comment.trim().length > 0

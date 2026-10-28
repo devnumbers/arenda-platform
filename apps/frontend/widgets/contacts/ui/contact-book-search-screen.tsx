@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -40,11 +40,6 @@ export function ContactBookSearchScreen(): JSX.Element {
   const [search, setSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Открытие поиска сразу делает поле активным (программный фокус —
-  // устоявшийся a11y-паттерн вместо autoFocus, как на платёжных экранах).
-  useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
 
   const debouncedSearch = useDebounce(search, CONTACTS_SEARCH_DEBOUNCE_MS);
   // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски.
@@ -67,6 +62,7 @@ export function ContactBookSearchScreen(): JSX.Element {
         }
       >
         <SearchField
+            focusOnMount
           ref={searchInputRef}
           aria-label="Поиск контактов"
           placeholder="Найти контакт"

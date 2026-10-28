@@ -18,6 +18,7 @@ export function TopNavUserProvider({ children }: { readonly children: ReactNode 
       value={{
         name: user?.name ?? undefined,
         photoUrl: user?.photoUrl ?? null,
+        photoBlur: user?.photoBlur ?? null,
         pending: !isError && user === undefined,
       }}
     >

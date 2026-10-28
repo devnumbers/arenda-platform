@@ -221,7 +221,7 @@ export function useDeleteContactPhoto(): UseMutationResult<
     mutationFn: ({ id }) => deleteContactPhoto({ id }),
     onSuccess: (_, { id }) => {
       queryClient.setQueryData<Contact>(contactKeys.detail(id), (prev) =>
-        prev === undefined ? prev : { ...prev, photoUrl: undefined },
+        prev === undefined ? prev : { ...prev, photoUrl: undefined, photoBlur: undefined },
       );
       void queryClient.invalidateQueries({ queryKey: contactKeys.all });
     },

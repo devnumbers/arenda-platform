@@ -62,7 +62,7 @@ export function mapNotification(dto: NotificationItemDto): Notification {
  * структуры не проходят. */
 function toEntityRef(value: unknown): NotificationEntityRef | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
-  const { id, name, address, email, type, photo } = value as Record<string, unknown>;
+  const { id, name, address, email, type, photo, photo_blur } = value as Record<string, unknown>;
   if (typeof id !== 'string' || typeof name !== 'string') return undefined;
   return withoutUndefinedSlots({
     id,
@@ -71,6 +71,7 @@ function toEntityRef(value: unknown): NotificationEntityRef | undefined {
     email: typeof email === 'string' ? email : undefined,
     type: typeof type === 'string' ? type : undefined,
     photo: typeof photo === 'string' ? photo : undefined,
+    photoBlur: typeof photo_blur === 'string' ? photo_blur : undefined,
   });
 }
 

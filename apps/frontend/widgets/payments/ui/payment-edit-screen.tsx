@@ -572,6 +572,7 @@ function PaymentEditForm({
         >
           {categorySearchOpen ? (
             <SearchField
+            focusOnMount
               ref={searchInputRef}
               value={categoryQuery}
               onChange={(event) => setCategoryQuery(event.target.value)}

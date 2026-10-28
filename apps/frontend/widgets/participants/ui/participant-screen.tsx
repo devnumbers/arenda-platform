@@ -165,6 +165,7 @@ export function ParticipantScreen({
                   leg={leg}
                   subtitle={propertyById.get(leg.propertyId)?.address}
                   photoUrl={leg.photoUrl ?? undefined}
+                  photoBlur={leg.photoBlur}
                   type={leg.type}
                   onSelect={() =>
                     pushPage(router,
@@ -229,7 +230,7 @@ function ParticipantHeader({ participant }: { readonly participant: Participant 
 
   return (
     <div className="flex flex-col items-center gap-6">
-      <UserAvatar size="hero" photoUrl={participant.photoUrl} />
+      <UserAvatar size="hero" photoUrl={participant.photoUrl} photoBlur={participant.photoBlur} />
       <div className="flex flex-col items-center gap-2">
         <h1 className="text-center text-[28px] font-semibold leading-8 text-content">
           {title}
@@ -278,12 +279,14 @@ function ParticipantPropertyRowButton({
   leg,
   subtitle,
   photoUrl,
+  photoBlur,
   type,
   onSelect,
 }: {
   readonly leg: ParticipantPropertyLeg;
   readonly subtitle: string | undefined;
   readonly photoUrl: string | undefined;
+  readonly photoBlur: string | null;
   readonly type: PropertyType | undefined;
   readonly onSelect: () => void;
 }): JSX.Element {
@@ -293,7 +296,7 @@ function ParticipantPropertyRowButton({
       onClick={onSelect}
       className={PARTICIPANT_ROW_BASE_CLASS}
     >
-      <ObjectAvatarGlyph photoUrl={photoUrl} type={type} />
+      <ObjectAvatarGlyph photoUrl={photoUrl} photoBlur={photoBlur} type={type} />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-base font-medium leading-[18px] text-content">
           {leg.title}

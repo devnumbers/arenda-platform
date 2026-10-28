@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from '@/shared/assets/icons';
 import { ROUTES } from '@/shared/config/routes';
@@ -48,11 +48,6 @@ export function RentalContactPickerScreen({
   const [search, setSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Открытие экрана сразу делает поле активным (устоявшийся a11y-паттерн
-  // поисковых страниц вместо autoFocus).
-  useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
 
   const debouncedSearch = useDebounce(search, CONTACTS_SEARCH_DEBOUNCE_MS);
   // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски.
@@ -81,6 +76,7 @@ export function RentalContactPickerScreen({
         }
       >
         <SearchField
+            focusOnMount
           ref={searchInputRef}
           aria-label="Поиск контактов"
           placeholder="Найти контакт"

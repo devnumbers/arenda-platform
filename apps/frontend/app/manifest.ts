@@ -29,27 +29,33 @@ export default function manifest(): MetadataRoute.Manifest {
         // background_color below. Android/iOS also pick this up.
         theme_color: '#ffffff',
         background_color: '#ffffff',
+        // URLs carry a ?v=YYYYMMDD version: /icons/* is served with
+        // `Cache-Control: immutable` for a year (next.config.ts), so changing
+        // the art under the same URL never reaches clients — browser caches
+        // and installed WebAPKs keep the old bytes, and reinstalling the PWA
+        // does not clear Chrome's HTTP cache. New art = bump ?v= here and in
+        // the push-icon consumers (shared/lib/pwa/push-payload.ts,
+        // public/sw.js); guard test — shared/lib/pwa/icon-urls.test.ts.
         icons: [
             {
-                src: '/icons/icon-192.png',
+                src: '/icons/icon-192.png?v=20261027',
                 sizes: '192x192',
                 type: 'image/png',
                 purpose: 'any',
             },
             {
-                src: '/icons/icon-512.png',
+                src: '/icons/icon-512.png?v=20261027',
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'any',
             },
             {
                 // Android Adaptive Icons — opaque square, content in the 80%
-                // safe zone. The icon set is assembled via
-                // RealFaviconGenerator; the maskable entry is an opaque
-                // square built from the square master source-square.svg
-                // (RFG output web-app-manifest-512x512.png). Current process
-                // and file mapping — assets/icons/README.md.
-                src: '/icons/icon-maskable-512.png',
+                // safe zone. Assembled from the master
+                // assets/icons/source-maskable-android.png (downscale
+                // 1024→512). Current process and file mapping —
+                // assets/icons/README.md.
+                src: '/icons/icon-maskable-512.png?v=20261027',
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'maskable',
@@ -58,7 +64,7 @@ export default function manifest(): MetadataRoute.Manifest {
                 // Android 13+ Material You themed icons — house silhouette only,
                 // system tints it with the wallpaper color. Glass effects cannot
                 // survive the tint, so this is a separate source.
-                src: '/icons/icon-monochrome-512.png',
+                src: '/icons/icon-monochrome-512.png?v=20261027',
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'monochrome',

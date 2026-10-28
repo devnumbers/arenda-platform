@@ -269,6 +269,7 @@ export function RentalDetailBody({
                 tenantName={rentalTenantTitle(tenant)}
                 phone={formatPhoneDisplay(tenant.phone)}
                 photoUrl={tenantContactQuery.data?.photoUrl}
+                photoBlur={tenantContactQuery.data?.photoBlur}
                 onSelect={() => pushPage(router, ROUTES.propertyContact(propertyId, tenant.contactId))}
               />
             </RentalGroup>

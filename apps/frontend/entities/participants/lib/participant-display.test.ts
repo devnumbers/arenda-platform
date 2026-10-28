@@ -16,6 +16,7 @@ function participant(
     displayName: 'Мария Петрова',
     aggregateStatus: 'all_properties',
     photoUrl: null,
+    photoBlur: null,
     accessiblePropertiesCount: 3,
     properties: [],
     ...overrides,
@@ -32,6 +33,7 @@ function leg(
     status: 'pending',
     type: 'apartment',
     photoUrl: null,
+    photoBlur: null,
     ...overrides,
   };
 }

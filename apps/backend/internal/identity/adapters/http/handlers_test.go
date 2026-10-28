@@ -509,6 +509,29 @@ func TestMeResponse_NilEmail(t *testing.T) {
 	}
 }
 
+// TestMeResponse_PhotoBlur travels the frame's base64 straight from the
+// row: nil without a frame (the wire's null), the value as stored with one
+// (ADR 0065 аменд, #1603).
+func TestMeResponse_PhotoBlur(t *testing.T) {
+	t.Parallel()
+	user := domain.User{
+		ID:        uuid.Must(uuid.NewV7()),
+		Role:      domain.RoleOwner,
+		PhotoBlur: nil,
+	}
+	resp := meResponse(user)
+	if resp.PhotoBlur != nil {
+		t.Fatalf("photoBlur = %v, want nil without a frame", *resp.PhotoBlur)
+	}
+
+	frame := "aGVsbG8="
+	user.PhotoBlur = &frame
+	resp = meResponse(user)
+	if resp.PhotoBlur == nil || *resp.PhotoBlur != frame {
+		t.Fatalf("photoBlur = %v, want the stored frame", resp.PhotoBlur)
+	}
+}
+
 func TestAuthRateLimits_NilLimiterAllowsAll(t *testing.T) {
 	t.Parallel()
 	limits := AuthRateLimits{} // All limiters nil.

@@ -273,6 +273,7 @@ type Contact struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	PhotoKey          pgtype.Text        `json:"photo_key"`
 	PhotoContentType  pgtype.Text        `json:"photo_content_type"`
+	PhotoBlur         pgtype.Text        `json:"photo_blur"`
 }
 
 type EmailChangeGrant struct {
@@ -434,6 +435,7 @@ type Property struct {
 	Attributes       []byte             `json:"attributes"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
+	PhotoBlur        pgtype.Text        `json:"photo_blur"`
 }
 
 type PropertyMember struct {
@@ -606,6 +608,7 @@ type User struct {
 	Timezone         string             `json:"timezone"`
 	PhotoKey         pgtype.Text        `json:"photo_key"`
 	PhotoContentType pgtype.Text        `json:"photo_content_type"`
+	PhotoBlur        pgtype.Text        `json:"photo_blur"`
 }
 
 type UserPaymentFavorite struct {

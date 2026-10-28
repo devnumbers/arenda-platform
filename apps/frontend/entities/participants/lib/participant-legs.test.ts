@@ -10,6 +10,7 @@ function leg(overrides: Partial<ParticipantPropertyLeg> = {}): ParticipantProper
     status: 'active',
     type: 'apartment',
     photoUrl: null,
+    photoBlur: null,
     ...overrides,
   };
 }

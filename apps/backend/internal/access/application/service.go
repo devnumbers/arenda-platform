@@ -50,8 +50,11 @@ type Member struct {
 	DisplayName string
 	// PhotoURL is the profile photo's streaming path (ADR 0065, решение
 	// #1286): every reader of the list shares the property with every
-	// listed participant; empty — no photo or a pending row.
+	// listed participant; empty — no photo or a pending row. PhotoBlur is
+	// the avatar's blur frame's ready base64 (ADR 0065 аменд, #1603); ''
+	// — кадра нет.
 	PhotoURL    string
+	PhotoBlur   string
 	Status      domain.MemberStatus // Active | suspended (always active for the owner; meaningless when Pending).
 	SuspendedAt *time.Time          // When the membership was suspended; nil when active.
 	// Pending marks a pending email invitation row: the invitee is not
@@ -765,6 +768,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 		IsOwner:     true,
 		DisplayName: displayName(ownerUser),
 		PhotoURL:    photo.UserPhotoPath(owner, ownerUser.PhotoKey),
+		PhotoBlur:   PhotoBlurOf(ownerUser.PhotoBlur),
 		Status:      domain.MemberStatusActive,
 	})
 
@@ -787,6 +791,7 @@ func (s *AccessService) ListMembers(ctx context.Context, actor, propertyID uuid.
 			IsOwner:     false,
 			DisplayName: displayName(u),
 			PhotoURL:    photo.UserPhotoPath(m.UserID, u.PhotoKey),
+			PhotoBlur:   PhotoBlurOf(u.PhotoBlur),
 			Status:      m.Status,
 			SuspendedAt: m.SuspendedAt,
 		})
@@ -911,6 +916,15 @@ func displayName(u MemberUser) string {
 		return name + " " + *u.Surname
 	}
 	return name
+}
+
+// PhotoBlurOf dereferences the blur frame for the payload structs: the ”
+// mirrors the PhotoURL convention — no frame travels as the empty string.
+func PhotoBlurOf(blur *string) string {
+	if blur == nil {
+		return ""
+	}
+	return *blur
 }
 
 // DisplayNameOf composes the public display name from user fields («Имя

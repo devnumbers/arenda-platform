@@ -73,6 +73,11 @@ type Contact struct {
 	// header.
 	PhotoKey         *string
 	PhotoContentType *string
+	// PhotoBlur is the blur-up frame's ready base64 (ADR 0065 аменд,
+	// решение #1594, тикет #1603); nil — штатное состояние: webp кадра не
+	// даёт, кадр в пределах 16px сам себе blur, старое фото ждёт ленивой
+	// материализации на выдаче фото.
+	PhotoBlur *string
 }
 
 // FullName returns the contact's name joined from the non-empty parts —

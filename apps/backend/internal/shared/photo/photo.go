@@ -74,12 +74,15 @@ const photoUploadFieldName = "file"
 // content type (the value stored alongside the object key), the size and
 // the ready-to-store thumbnail (nil when there is none — a within-bound
 // upload, or a webp the toolchain cannot decode; the serve path falls back
-// to the full object). The thumb is always an opaque jpeg.
+// to the full object). The thumb is always an opaque jpeg. Blur is the
+// blur-up frame's ready base64 (решение #1594, тикет #1603 — the value the
+// photo_blur column and the DTO field carry; empty when there is none).
 type Processed struct {
 	Data        []byte
 	ContentType string
 	Size        int64
 	Thumb       []byte
+	Blur        string
 }
 
 // limits carries the knobs the tests shrink; Process runs the production
@@ -145,8 +148,12 @@ func process(data []byte, lim limits) (Processed, error) {
 	}
 	// The thumb builds from the already-decoded, already-upright pixels —
 	// the strip pass did the decode, the orientation is baked. A second
-	// decode of the re-encoded bytes would be pure waste.
+	// decode of the re-encoded bytes would be pure waste. The blur-up frame
+	// rides the very same pixels (тикет #1603): ready base64, empty when
+	// there is none — a frame that cannot encode degrades to no frame, the
+	// upload never fails for it.
 	var thumb []byte
+	var blur string
 	if decoded != nil {
 		if small := downscaleArea(decoded, ThumbMaxEdge); small != nil {
 			var buf bytes.Buffer
@@ -155,8 +162,9 @@ func process(data []byte, lim limits) (Processed, error) {
 			}
 			thumb = buf.Bytes()
 		}
+		blur, _ = blurBase64(decoded)
 	}
-	return Processed{Data: out, ContentType: contentType, Size: int64(len(out)), Thumb: thumb}, nil
+	return Processed{Data: out, ContentType: contentType, Size: int64(len(out)), Thumb: thumb, Blur: blur}, nil
 }
 
 func newTooLargeError(size, limit int64) error {

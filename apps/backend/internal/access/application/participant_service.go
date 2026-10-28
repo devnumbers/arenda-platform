@@ -27,6 +27,9 @@ type ParticipantScopeProperty struct {
 	// same-origin streaming path (ADR 0065).
 	Type      string
 	PhotoPath string
+	// PhotoBlur is the leg avatar's blur frame's ready base64 (ADR 0065
+	// amend, #1603); '' means no frame.
+	PhotoBlur string
 }
 
 // ParticipantMembershipRow is a raw membership row inside the scope.
@@ -70,6 +73,9 @@ type ParticipantProperty struct {
 	Status     domain.ParticipantEntryStatus
 	Type       string
 	PhotoURL   string
+	// PhotoBlur is the leg avatar's blur frame's ready base64 (ADR 0065
+	// amend, #1603); '' means no frame.
+	PhotoBlur string
 }
 
 // Participant is the «Участник (владельца)» read model (issue #693): a person
@@ -91,6 +97,9 @@ type Participant struct {
 	// 0065, решение #1286); empty for a pending row or a user without a
 	// photo.
 	PhotoURL string
+	// PhotoBlur is the avatar's blur frame's ready base64 (ADR 0065 amend,
+	// #1603); '' means no frame.
+	PhotoBlur string
 	// Properties are the access legs sorted by title.
 	Properties []ParticipantProperty
 }
@@ -160,9 +169,10 @@ func (s *ParticipantService) GetParticipant(ctx context.Context, actor uuid.UUID
 // carries plus the avatar pair (the type and the photo path) that keeps the
 // leg self-sufficient (решение #1286).
 type scopeMeta struct {
-	titles map[uuid.UUID]string
-	types  map[uuid.UUID]string
-	photos map[uuid.UUID]string
+	titles     map[uuid.UUID]string
+	types      map[uuid.UUID]string
+	photos     map[uuid.UUID]string
+	photoBlurs map[uuid.UUID]string
 }
 
 // participantBuilder accumulates one person's legs while the raw scope rows
@@ -208,15 +218,17 @@ func (s *ParticipantService) buildParticipants(ctx context.Context, actor uuid.U
 	}
 	ids := make([]uuid.UUID, 0, len(scope))
 	meta := scopeMeta{
-		titles: make(map[uuid.UUID]string, len(scope)),
-		types:  make(map[uuid.UUID]string, len(scope)),
-		photos: make(map[uuid.UUID]string, len(scope)),
+		titles:     make(map[uuid.UUID]string, len(scope)),
+		types:      make(map[uuid.UUID]string, len(scope)),
+		photos:     make(map[uuid.UUID]string, len(scope)),
+		photoBlurs: make(map[uuid.UUID]string, len(scope)),
 	}
 	for _, p := range scope {
 		ids = append(ids, p.ID)
 		meta.titles[p.ID] = p.Title
 		meta.types[p.ID] = p.Type
 		meta.photos[p.ID] = p.PhotoPath
+		meta.photoBlurs[p.ID] = p.PhotoBlur
 	}
 
 	memberships, err := s.read.ListMembershipsByProperties(ctx, ids)
@@ -311,6 +323,9 @@ func (s *ParticipantService) resolveDisplayData(
 		// The photo path travels with the display data (ADR 0065, решение
 		// #1286): an empty string when the user has no photo.
 		b.participant.PhotoURL = photo.UserPhotoPath(id, u.PhotoKey)
+		// The blur frame travels with the display data (ADR 0065 amend,
+		// #1603): an empty string when the photo has no frame.
+		b.participant.PhotoBlur = PhotoBlurOf(u.PhotoBlur)
 		if s.emails == nil {
 			continue
 		}
@@ -390,6 +405,7 @@ func (b *participantBuilder) finish(meta scopeMeta, scopePropertyCount int) Part
 			Status:     leg.Status,
 			Type:       meta.types[leg.PropertyID],
 			PhotoURL:   meta.photos[leg.PropertyID],
+			PhotoBlur:  meta.photoBlurs[leg.PropertyID],
 		})
 	}
 	return b.participant

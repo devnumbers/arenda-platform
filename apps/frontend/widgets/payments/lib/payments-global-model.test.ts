@@ -118,6 +118,7 @@ describe('globalPaymentObjectHasOverdue', () => {
     type: 'apartment',
     pinnedAt: null,
     photoUrl: null,
+    photoBlur: null,
     autoPayRules: [],
     otherRules: [],
     ...overrides,

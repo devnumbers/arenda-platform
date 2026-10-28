@@ -147,8 +147,13 @@ type HistoryFilterOptionRow = {
   /** Фото профиля участника для ведущего аватара (leadingSize
    * 'participant', решение #1286). */
   readonly participantPhotoUrl?: string | null;
+  /** Blur-кадр фото участника (ADR 0065 аменд, решение #1594) — сестра
+   * participantPhotoUrl. */
+  readonly participantPhotoBlur?: string | null;
   /** Фото объекта для ведущего аватара (leadingSize 'object'). */
   readonly photoUrl?: string;
+  /** Blur-кадр фото объекта — сестра photoUrl. */
+  readonly photoBlur?: string | null;
   /** Тип объекта — глиф-плейсхолдер аватара (leadingSize 'object',
    * карта #1217, #1244). */
   readonly type?: PropertyType;
@@ -227,7 +232,13 @@ export type HistoryFiltersSheetProps = {
  * 36, иначе — и при битом фото (404 стрима, отозванный доступ) — заглушка
  * BoldUser. Механика показа — примитив CirclePhoto (#1423); строки шита —
  * ленивая подача. */
-function ParticipantFilterAvatar({ photoUrl }: { readonly photoUrl?: string | null }): JSX.Element {
+function ParticipantFilterAvatar({
+  photoUrl,
+  photoBlur,
+}: {
+  readonly photoUrl?: string | null;
+  readonly photoBlur?: string | null;
+}): JSX.Element {
   return (
     <span
       aria-hidden
@@ -238,6 +249,7 @@ function ParticipantFilterAvatar({ photoUrl }: { readonly photoUrl?: string | nu
     >
       <CirclePhoto
         photoUrl={photoUrl}
+        photoBlur={photoBlur}
         loading="lazy"
         glyph={<BoldUser className="h-4 w-4" />}
       />
@@ -322,6 +334,7 @@ export function HistoryFiltersSheet({
     subtitle: participant.email,
     leadingSize: 'participant',
     participantPhotoUrl: participant.photoUrl,
+    participantPhotoBlur: participant.photoBlur,
     isMe: participant.id === meId,
     isOwner: participant.isOwner,
   });
@@ -346,6 +359,7 @@ export function HistoryFiltersSheet({
     subtitle: object_.address,
     leadingSize: 'object',
     photoUrl: object_.photoUrl,
+    photoBlur: object_.photoBlur,
     type: object_.type,
   }));
 
@@ -698,11 +712,19 @@ function FilterOptionRow({
         </span>
       )}
       {row.leadingSize === 'participant' && (
-        <ParticipantFilterAvatar photoUrl={row.participantPhotoUrl} />
+        <ParticipantFilterAvatar
+          photoUrl={row.participantPhotoUrl}
+          photoBlur={row.participantPhotoBlur}
+        />
       )}
       {row.leadingSize === 'object' && (
         <span className="ml-4 shrink-0">
-          <PropertyAvatar photoUrl={row.photoUrl} type={row.type} surface="filter" />
+          <PropertyAvatar
+            photoUrl={row.photoUrl}
+            photoBlur={row.photoBlur}
+            type={row.type}
+            surface="filter"
+          />
         </span>
       )}
       <span

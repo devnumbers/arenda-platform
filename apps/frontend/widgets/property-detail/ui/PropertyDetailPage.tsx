@@ -658,7 +658,7 @@ export function PropertyDetailPage(): JSX.Element {
 
                 {!isLoading && !propertyQuery.isError && property && (
                     <>
-                        <PropertyMediaBlock name={property.name} address={property.address} photoUrl={property.photoUrl} type={property.type}>
+                        <PropertyMediaBlock name={property.name} address={property.address} photoUrl={property.photoUrl} photoBlur={property.photoBlur} type={property.type}>
                             {/* Пилюли шапки (#773): «В архиве» и/или роль
                              * доступа — ряд под адресом, канон 2200-97365
                              * и 1603-92103. */}
@@ -772,6 +772,7 @@ export function PropertyDetailPage(): JSX.Element {
                                 <PropertyContactsBlock
                                     tenant={tenant}
                                     tenantPhotoUrl={tenantContactQuery.data?.photoUrl}
+                                    tenantPhotoBlur={tenantContactQuery.data?.photoBlur}
                                     contacts={propertyContacts}
                                     onOpenContact={(contactId) =>
                                         pushPage(router, ROUTES.propertyContact(id, contactId))
@@ -857,6 +858,7 @@ export function PropertyDetailPage(): JSX.Element {
                                 ownerName={property.access.ownerName}
                                 ownerEmail={property.access.ownerEmail}
                                 ownerPhotoUrl={property.access.ownerPhotoUrl}
+                                ownerPhotoBlur={property.access.ownerPhotoBlur}
                             />
                         )}
 

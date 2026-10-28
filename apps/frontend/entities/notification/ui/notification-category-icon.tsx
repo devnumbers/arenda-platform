@@ -6,6 +6,7 @@ import { BoldKey, BoldOther, NotificationDot, StatusIconDanger } from '@/shared/
 import { cn } from '@/shared/lib/cn';
 import { categoryStyle } from '@/shared/model/payment-category-style';
 import { circleIconRing } from '@/shared/ui/design';
+import { onIllustrationLoad, rememberIllustrationRef } from '@/shared/ui/design/illustration-decode-registry';
 import { categoryIconComponents } from '@/shared/ui/payment-category-icon-registry';
 import { notificationHasWarningBadge } from '../model/event-badge';
 import type { NotificationCategory, NotificationPaymentCategoryRef } from '../model/types';
@@ -149,7 +150,20 @@ export function NotificationCategoryIcon({
             onError={() => setPhotoBroken(true)}
           />
         ) : visual.kind === 'image' ? (
-          <Image src={visual.src} alt="" width={112} height={112} className={sizes.image} unoptimized />
+          // unoptimized: currentSrc совпадает с прямым src — тот же
+          // decode-реестр, что у иллюстраций пустых состояний (#1601):
+          // лента уведомлений перемонтируется, 3D-категория в круге
+          // не повторяет decode-фазу на возврате.
+          <Image
+            src={visual.src}
+            alt=""
+            width={112}
+            height={112}
+            className={sizes.image}
+            unoptimized
+            ref={rememberIllustrationRef}
+            onLoad={onIllustrationLoad}
+          />
         ) : (
           <BoldKey className={cn(sizes.boldKey, 'text-white')} />
         )}

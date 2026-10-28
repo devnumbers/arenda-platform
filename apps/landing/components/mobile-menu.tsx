@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "./logo";
-import { Cancel } from "./ui/icons";
 import type { NavItem } from "@/lib/nav";
 
 // Мобильный/планшетный хедер (<1200px) — макеты 2859-4421 (закрыт) и
@@ -18,9 +17,11 @@ import type { NavItem } from "@/lib/nav";
 // гаснущем блоке. Закрытие — то же в обратную сторону: transition
 // симметричен, машина фаз closing (таймер среза, зеркальный каскад,
 // углы/тень до среза — хореография шторки apple.com от 29.09) снята
-// целиком. Бургер морфится в крест кроссфейдом двух слоёв с поворотом
-// (300ms); иконки — инлайн-SVG (канон лендинга), пара «бургер/крест» в
-// одном габарите 6..18 со штрихом 1.5. Тень карточки — только по скроллу
+// целиком. Бургер морфится в крест морфом трёх линий 16×1.5 с шагом 7
+// (геометрия SVG макета 2859-4421): средняя гаснет, крайние съезжаются на
+// центральную ось и поворачиваются в крест — 240ms, ease-menu (решение
+// владельца 27.10 — возврат морфа 29.09 вместо кроссфейда двух иконок
+// из референса Figma Make). Тень карточки — только по скроллу
 // (ScrollShadow), как в референсе: открытому меню у верхней позиции тень
 // не положена.
 //
@@ -40,28 +41,6 @@ import type { NavItem } from "@/lib/nav";
 // Зеркало --breakpoint-desk (globals.css) — та же строка, что в
 // rentals-carousel.tsx: tailwind-классы desk:* из JS не прочитать.
 const DESK_QUERY = "(min-width: 1200px)";
-
-// Бургер трёх линий в габарите креста Cancel (6..18, штрих 1.5).
-function MenuIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      className={className}
-    >
-      <path
-        d="M6 7H18M6 12H18M6 17H18"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 export function MobileMenu({
   nav,
@@ -134,20 +113,26 @@ export function MobileMenu({
             aria-label={open ? "Закрыть меню" : "Открыть меню"}
             className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl bg-surface transition-colors duration-200 active:duration-75 outline-none hover:bg-surface-hover active:bg-surface-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
-            {/* Кроссфейд бургер↔крест (референс): уходящий слой гаснет с
-                поворотом ±90 и сжатием, приходящий — раскрывается из
-                зеркального поворота. В Tailwind v4 rotate/scale — нативные
-                CSS-свойства, список перехода сужен до точного набора
-                (аудит анимаций DESIGN.md §8). */}
-            <span aria-hidden="true" className="relative block h-6 w-6 text-ink">
-              <MenuIcon
-                className={`absolute inset-0 transition-[rotate,scale,opacity] duration-300 ${
-                  open ? "rotate-90 scale-75 opacity-0" : "rotate-0 scale-100 opacity-100"
+            {/* Морф бургер↔крест (29.09, возвращён решением владельца 27.10):
+                три линии 16×1.5 с шагом 7 — средняя гаснет, крайние съезжаются
+                на центральную ось и складываются в крест. В Tailwind v4
+                translate/rotate — нативные CSS-свойства, список перехода сужен
+                до точного набора (аудит анимаций DESIGN.md §8); кривая —
+                токен --ease-menu. */}
+            <span aria-hidden="true" className="relative block h-6 w-6">
+              <span
+                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate,opacity] duration-[240ms] ease-menu ${
+                  open ? "opacity-0" : ""
                 }`}
               />
-              <Cancel
-                className={`absolute inset-0 transition-[rotate,scale,opacity] duration-300 ${
-                  open ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-75 opacity-0"
+              <span
+                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate] duration-[240ms] ease-menu ${
+                  open ? "translate-y-0 rotate-45" : "-translate-y-[7px]"
+                }`}
+              />
+              <span
+                className={`absolute left-1 top-[11px] block h-[1.5px] w-4 rounded-full bg-ink transition-[translate,rotate] duration-[240ms] ease-menu ${
+                  open ? "translate-y-0 -rotate-45" : "translate-y-[7px]"
                 }`}
               />
             </span>

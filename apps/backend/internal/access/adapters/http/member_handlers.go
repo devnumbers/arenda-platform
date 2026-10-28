@@ -222,6 +222,10 @@ func memberResponse(m accessapp.Member) openapi.PropertyAccessMemberResponse {
 		photoURL := m.PhotoURL
 		resp.PhotoUrl = &photoURL
 	}
+	if m.PhotoBlur != "" {
+		photoBlur := m.PhotoBlur
+		resp.PhotoBlur = &photoBlur
+	}
 	if !m.IsOwner {
 		id := m.ID
 		resp.Id = &id

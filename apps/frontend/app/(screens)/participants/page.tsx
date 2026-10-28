@@ -1,13 +1,18 @@
-import { Suspense } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { Metadata } from 'next';
-import { ParticipantsListLoading, ParticipantsListScreen, parseParticipantsListOrderParams } from '@/widgets/participants';
+import { ParticipantsListScreen, parseParticipantsListOrderParams } from '@/widgets/participants';
 import { participantsListQueryOptions } from '@/features/participants';
 import { subscriptionQueryOptions, type Subscription } from '@/features/subscription';
 import { isPaidTariff } from '@/entities/user';
 import { ServerPrefetchBoundary } from '@/shared/api/server-prefetch';
 import { serverApiClient } from '@/shared/api/server-client';
 import { subscriptionKeys } from '@/shared/api/query-keys';
+
+// Кабинетная страница: куки-сессия и URL-состояние — всегда динамический
+// рендер; force-dynamic снимает требование Suspense-границы для
+// useSearchParams при статическом экспорте (аменда #1605 — in-page
+// Suspense убран ради однофлушного HTML, react/react#37014).
+export const dynamic = 'force-dynamic';
 
 /** Раздел «Участники» — единая страница списка (D1–D4 #1313): хаб-карточки
  * и «Объекты пользователей» снесены, /participants — сам список. Состояние
@@ -38,10 +43,8 @@ export default async function ParticipantsRoutePage({
   const initialOrder = parseParticipantsListOrderParams(resolved.order);
 
   return (
-    <Suspense fallback={<ParticipantsListLoading />}>
-      <ServerPrefetchBoundary prefetch={prefetchParticipantsScreen}>
-        <ParticipantsListScreen initialOrder={initialOrder} />
-      </ServerPrefetchBoundary>
-    </Suspense>
+<ServerPrefetchBoundary prefetch={prefetchParticipantsScreen}>
+  <ParticipantsListScreen initialOrder={initialOrder} />
+</ServerPrefetchBoundary>
   );
 }

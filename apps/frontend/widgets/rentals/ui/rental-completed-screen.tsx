@@ -262,6 +262,7 @@ function RentalCompletedBody({
                 tenantName={rentalTenantTitle(tenant)}
                 phone={tenant.phone}
                 photoUrl={tenantContactQuery.data?.photoUrl}
+                photoBlur={tenantContactQuery.data?.photoBlur}
                 onSelect={openContact}
               />
             ) : (

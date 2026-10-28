@@ -11,6 +11,9 @@ export type UserAvatarProps = Omit<ComponentProps<'span'>, 'children'> & {
    * Битое фото (фото удалили, доступ отозван — 404 стрима) откатывается к
    * заглушке BoldUser (канон фолбэка #1275, решение #1286). */
   readonly photoUrl?: string | null;
+  /** Blur-кадр первого показа (ADR 0065 аменд, решение #1594, #1604) —
+   * сестра photoUrl из того же DTO; механика фазы — CirclePhoto. */
+  readonly photoBlur?: string | null;
   /** row — канон-круг 44 строк списков (глиф 24); hero — круг 96 шапок
    * экранов (глиф 52). */
   readonly size?: 'row' | 'hero';
@@ -42,6 +45,7 @@ const SIZE_GLYPH: Record<NonNullable<UserAvatarProps['size']>, string> = {
  */
 export function UserAvatar({
   photoUrl,
+  photoBlur,
   size = 'row',
   variant = 'white',
   loading,
@@ -65,6 +69,7 @@ export function UserAvatar({
     >
       <CirclePhoto
         photoUrl={photoUrl}
+        photoBlur={photoBlur}
         loading={effectiveLoading}
         glyph={<BoldUser className={SIZE_GLYPH[size]} />}
       />

@@ -35,11 +35,14 @@ type FeedEntry struct {
 	// row is anonymized. A revoked actor's path answers 404 and the client
 	// falls back to the placeholder.
 	ActorPhotoURL string
-	ActorRole     ActorRole
-	Kind          Kind
-	Action        Action
-	BaseAction    BaseAction
-	Segments      Segments
+	// ActorPhotoBlur is the actor's avatar blur frame's ready base64 (ADR
+	// 0065 аменд, #1603), live at read; '' when there is no frame.
+	ActorPhotoBlur string
+	ActorRole      ActorRole
+	Kind           Kind
+	Action         Action
+	BaseAction     BaseAction
+	Segments       Segments
 	// Details carries the new template's gray detail lines (DetailLines,
 	// решение #1317 §2); nil for the rows recorded before the template —
 	// those render as the header alone.
@@ -73,9 +76,12 @@ type FilterParticipant struct {
 	// PhotoURL is the profile photo's streaming path (ADR 0065, решение
 	// #1286), live at read; '' when the user has no photo.
 	PhotoURL string
-	IsOwner  bool
-	Role     string
-	Status   string
+	// PhotoBlur is the avatar's blur frame's ready base64 (ADR 0065 аменд,
+	// #1603), live at read; '' when there is no frame.
+	PhotoBlur string
+	IsOwner   bool
+	Role      string
+	Status    string
 }
 
 // FilterObject is one «Объекты» option of the filter sheet: the object with
@@ -85,6 +91,9 @@ type FilterObject struct {
 	Name     string
 	Address  string
 	PhotoURL string
+	// PhotoBlur is the card avatar's blur frame's ready base64 (ADR 0065
+	// аменд, #1603), live at read; '' when there is no frame.
+	PhotoBlur string
 	// Type is the property's type — the filter row's avatar placeholder
 	// glyph's key (карта #1217, #1244).
 	Type string

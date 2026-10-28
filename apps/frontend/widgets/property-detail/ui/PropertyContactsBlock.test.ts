@@ -78,6 +78,7 @@ describe('PropertyContactsBlock — фото арендатора (#1335)', () =
       inspect({
         tenant: TENANT,
         tenantPhotoUrl: '/api/contacts/contact-tenant/photo',
+        tenantPhotoBlur: undefined,
         contacts: [makeContact()],
         onOpenContact: () => {},
       }),
@@ -92,6 +93,7 @@ describe('PropertyContactsBlock — фото арендатора (#1335)', () =
       inspect({
         tenant: TENANT,
         tenantPhotoUrl: undefined,
+        tenantPhotoBlur: undefined,
         contacts: [],
         onOpenContact: () => {},
       }),
@@ -105,6 +107,7 @@ describe('PropertyContactsBlock — фото арендатора (#1335)', () =
     const elements = inspect({
       tenant: null,
       tenantPhotoUrl: undefined,
+      tenantPhotoBlur: undefined,
       contacts: [makeContact(), makeContact({ id: 'contact-2', firstName: 'Ольга' })],
       onOpenContact: () => {},
     });

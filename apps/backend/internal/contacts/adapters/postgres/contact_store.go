@@ -180,12 +180,13 @@ func (s *ContactStore) Delete(ctx context.Context, id, ownerID uuid.UUID) error 
 // SetPhoto writes the card's photo columns (ADR 0065): the key and the
 // sniffed content type move together, nils clear the photo. Zero rows means
 // the card is gone between the service's read and this write.
-func (s *ContactStore) SetPhoto(ctx context.Context, id, ownerID uuid.UUID, key, contentType *string) (domain.Contact, error) {
+func (s *ContactStore) SetPhoto(ctx context.Context, id, ownerID uuid.UUID, key, contentType, blur *string) (domain.Contact, error) {
 	row, err := s.q().SetContactPhoto(ctx, postgres.SetContactPhotoParams{
 		ID:               pgconv.UUIDToPgtype(id),
 		OwnerID:          pgconv.UUIDToPgtype(ownerID),
 		PhotoKey:         pgconv.StringPtrToPgtype(key),
 		PhotoContentType: pgconv.StringPtrToPgtype(contentType),
+		PhotoBlur:        pgconv.StringPtrToPgtype(blur),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -208,6 +209,22 @@ func (s *ContactStore) ClearPhotoIfKey(ctx context.Context, id, ownerID uuid.UUI
 	})
 	if err != nil {
 		return 0, fmt.Errorf("clear contact photo %s: %w", id, err)
+	}
+	return rows, nil
+}
+
+// SetPhotoBlurIfKey lands the lazily materialized blur frame (ADR 0065
+// аменд, #1603): the conditional UPDATE keys on the still-advertised photo,
+// a concurrent re-upload wins. The affected-row count is the race verdict.
+func (s *ContactStore) SetPhotoBlurIfKey(ctx context.Context, id, ownerID uuid.UUID, key, blur string) (int64, error) {
+	rows, err := s.q().SetContactPhotoBlurIfKey(ctx, postgres.SetContactPhotoBlurIfKeyParams{
+		ID:        pgconv.UUIDToPgtype(id),
+		OwnerID:   pgconv.UUIDToPgtype(ownerID),
+		PhotoKey:  pgconv.StringPtrToPgtype(&key),
+		PhotoBlur: pgconv.StringPtrToPgtype(&blur),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("set contact photo blur %s: %w", id, err)
 	}
 	return rows, nil
 }
@@ -262,6 +279,7 @@ func contactFromRow(row postgres.Contact) domain.Contact {
 		UpdatedAt:         pgconv.TimestamptzToTime(row.UpdatedAt),
 		PhotoKey:          pgconv.TextToPtrString(row.PhotoKey),
 		PhotoContentType:  pgconv.TextToPtrString(row.PhotoContentType),
+		PhotoBlur:         pgconv.TextToPtrString(row.PhotoBlur),
 	}
 }
 

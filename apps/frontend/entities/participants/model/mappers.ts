@@ -19,6 +19,7 @@ function mapLeg(dto: ParticipantPropertyDto): ParticipantPropertyLeg {
     // пустую строку вопреки nullable-контракту): нормализуем к null,
     // канону заглушек.
     photoUrl: dto.photo_url === '' ? null : dto.photo_url,
+    photoBlur: dto.photo_blur === '' ? null : (dto.photo_blur ?? null),
   };
 }
 
@@ -30,6 +31,7 @@ export function mapParticipant(dto: ParticipantDto): Participant {
     email: dto.email ?? undefined,
     displayName: dto.display_name ?? undefined,
     photoUrl: dto.photo_url ?? null,
+    photoBlur: dto.photo_blur ?? null,
     aggregateStatus: dto.aggregate_status,
     accessiblePropertiesCount: dto.accessible_properties_count,
     properties: dto.properties.map(mapLeg),

@@ -192,6 +192,7 @@ function NotificationDetailBody({
           icon={
             <PropertyCardAvatar
               photo={detail.payload.property.photo}
+              photoBlur={detail.payload.property.photoBlur}
               type={detail.payload.property.type}
             />
           }
@@ -201,7 +202,12 @@ function NotificationDetailBody({
       )}
       {detail.payload.actor && (
         <NotificationEntityCard
-          icon={<ActorAvatar photo={detail.payload.actor.photo} />}
+          icon={
+            <ActorAvatar
+              photo={detail.payload.actor.photo}
+              photoBlur={detail.payload.actor.photoBlur}
+            />
+          }
           name={detail.payload.actor.name}
           detail={detail.payload.actor.email}
         />
@@ -272,10 +278,17 @@ function NotificationEntityCardBody({
  * из снимка публикации; битое (фото удалили, доступ отозван — 404 стрима)
  * или отсутствующее — заглушка BoldUser, канон фолбэка #1275. Механика
  * показа — примитив CirclePhoto (#1423); глиф тон цвета канона снимка. */
-function ActorAvatar({ photo }: { readonly photo?: string }): JSX.Element {
+function ActorAvatar({
+  photo,
+  photoBlur,
+}: {
+  readonly photo?: string;
+  readonly photoBlur?: string;
+}): JSX.Element {
   return (
     <CirclePhoto
       photoUrl={photo}
+      photoBlur={photoBlur}
       loading="lazy"
       glyph={<BoldUser className="h-6 w-6 text-[#d3d7d9]" />}
     />
@@ -336,10 +349,19 @@ function PropertyGlyph({ type }: { readonly type: string | undefined }): JSX.Ele
  * заполняет круг; битое (фото или объект удалили после публикации — 404
  * стрима) откатывается к глифу типа. Механика — примитив CirclePhoto
  * (#1423), гард пустой строки снимка там же. */
-function PropertyCardAvatar({ photo, type }: { readonly photo?: string; readonly type?: string }): JSX.Element {
+function PropertyCardAvatar({
+  photo,
+  photoBlur,
+  type,
+}: {
+  readonly photo?: string;
+  readonly photoBlur?: string;
+  readonly type?: string;
+}): JSX.Element {
   return (
     <CirclePhoto
       photoUrl={photo}
+      photoBlur={photoBlur}
       loading="lazy"
       glyph={<PropertyGlyph type={type} />}
     />

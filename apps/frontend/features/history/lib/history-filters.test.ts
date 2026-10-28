@@ -326,6 +326,7 @@ describe('historyParticipantSections', () => {
     email: 'x@example.com',
     firstName: '',
     photoUrl: null,
+    photoBlur: null,
     isOwner: false,
     role: 'viewer',
   } as const;

@@ -342,8 +342,11 @@ func contactResponse(c domain.Contact) openapi.ContactResponse {
 		MessengerUsername: c.MessengerUsername,
 		Note:              c.Note,
 		PhotoUrl:          contactPhotoURL(c),
-		CreatedAt:         c.CreatedAt,
-		UpdatedAt:         c.UpdatedAt,
+		// '' (кадра нет) → null: тот же контракт nullable, что у photoUrl
+		// (ADR 0065 аменд, #1603).
+		PhotoBlur: c.PhotoBlur,
+		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
 	}
 }
 

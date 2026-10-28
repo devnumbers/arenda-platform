@@ -786,10 +786,14 @@ func (s *ContactService) OpenContactPhoto(
 		return nil, 0, "", "", fmt.Errorf("open contact photo: %w", err)
 	}
 	if !wantThumb {
-		return body, size, contentType, *contact.PhotoKey, nil
+		return s.openFullContactPhoto(ctx, contact, body, size, contentType)
 	}
+	// The blur sink rides the serving's decode (тикет #1603): a NULL column
+	// fills from this request's bytes, the write is best-effort. A filled
+	// column serves without the frame work.
 	tb, ts, isThumb, err := photo.ServeOrMaterializeThumb(
-		ctx, s.photos, *contact.PhotoKey, derefContactString(contact.PhotoContentType), body, s.logger)
+		ctx, s.photos, *contact.PhotoKey, contentType, body, s.logger,
+		s.blurSink(ctx, contact.ID, contact.OwnerID, *contact.PhotoKey, contact.PhotoBlur == nil))
 	if err != nil {
 		return nil, 0, "", "", fmt.Errorf("serve contact photo thumb: %w", err)
 	}
@@ -801,6 +805,49 @@ func (s *ContactService) OpenContactPhoto(
 		return tb, ts, contentType, *contact.PhotoKey, nil
 	}
 	return body, size, contentType, *contact.PhotoKey, nil
+}
+
+// blurSink builds the best-effort writer of the lazily materialized blur
+// frame (тикет #1603): the conditional write keys on the still-advertised
+// photo, a concurrent re-upload wins; a failed write only logs — the column
+// stays NULL and the next photo serve retries. A filled column needs no
+// sink, the serve skips the frame work entirely.
+func (s *ContactService) blurSink(ctx context.Context, id, ownerID uuid.UUID, key string, needed bool) func(string) {
+	if !needed {
+		return nil
+	}
+	return func(frame string) {
+		if _, err := s.contacts.SetPhotoBlurIfKey(ctx, id, ownerID, key, frame); err != nil {
+			s.logger.WarnContext(ctx, "failed to store contact photo blur frame",
+				slog.String("key", key),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+}
+
+// OpenFullContactPhoto serves the full object (the honest fallback and the
+// ?size-less requests) and materializes the blur frame from the very bytes
+// it hands out when the column is NULL (тикет #1603): one read, one decode,
+// the write best-effort. WebP streams untouched — the toolchain decodes no
+// frame from it.
+func (s *ContactService) openFullContactPhoto(
+	ctx context.Context, contact domain.Contact, open io.ReadCloser, size int64, contentType string,
+) (body io.ReadCloser, served int64, ct, key string, err error) {
+	sink := s.blurSink(ctx, contact.ID, contact.OwnerID, *contact.PhotoKey, contact.PhotoBlur == nil && photo.FramePossible(contentType))
+	if sink == nil {
+		return open, size, contentType, *contact.PhotoKey, nil
+	}
+	data, err := io.ReadAll(open)
+	if err != nil {
+		// The read that should have fed the frame cannot complete — the
+		// stream is consumed, there are no bytes left to serve.
+		return nil, 0, "", "", fmt.Errorf("read contact photo for the blur frame: %w", err)
+	}
+	if frame, ok := photo.BlurFromStored(data, contentType); ok {
+		sink(frame)
+	}
+	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), contentType, *contact.PhotoKey, nil
 }
 
 // SetContactPhoto replaces the card photo (ADR 0065, one image per card):
@@ -861,7 +908,10 @@ func (s *ContactService) SetContactPhoto(
 			}
 		}
 
-		updated, err = stores.contacts.SetPhoto(ctx, contact.ID, contact.OwnerID, &key, &processed.ContentType)
+		// The blur frame rides the columns write (тикет #1603): nil when the
+		// upload has none (webp, within-bound) — the serve path materializes
+		// lazily.
+		updated, err = stores.contacts.SetPhoto(ctx, contact.ID, contact.OwnerID, &key, &processed.ContentType, processed.BlurPtr())
 		if err != nil {
 			return fmt.Errorf("set contact photo: %w", err)
 		}
@@ -926,7 +976,7 @@ func (s *ContactService) DeleteContactPhoto(ctx context.Context, actor, contactI
 		}
 		oldKey = locked.PhotoKey
 
-		updated, err = stores.contacts.SetPhoto(ctx, contact.ID, contact.OwnerID, nil, nil)
+		updated, err = stores.contacts.SetPhoto(ctx, contact.ID, contact.OwnerID, nil, nil, nil)
 		if err != nil {
 			return fmt.Errorf("set contact photo: %w", err)
 		}

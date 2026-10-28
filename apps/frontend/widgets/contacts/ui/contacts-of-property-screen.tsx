@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ComponentProps, JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -94,13 +94,6 @@ export function ContactsOfPropertyScreen({
     write(serializeContactOrderToParams(order), { own: CONTACT_ORDER_PARAMS });
   };
 
-  // Открытие поиска сразу делает поле активным (программный фокус —
-  // устоявшийся a11y-паттерн вместо autoFocus, как на платёжных экранах).
-  useEffect(() => {
-    if (searchOpen) {
-      searchInputRef.current?.focus();
-    }
-  }, [searchOpen]);
 
   const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
   // Сервер фильтр не нормализует — пробелы по краям срезаем клиентски;
@@ -150,6 +143,7 @@ export function ContactsOfPropertyScreen({
           }
         >
           <SearchField
+            focusOnMount
             ref={searchInputRef}
             aria-label="Поиск контактов"
             placeholder="Найти контакт"

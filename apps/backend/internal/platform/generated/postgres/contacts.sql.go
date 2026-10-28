@@ -14,7 +14,8 @@ import (
 const clearContactPhotoIfKey = `-- name: ClearContactPhotoIfKey :execrows
 UPDATE contacts
 SET photo_key = NULL,
-    photo_content_type = NULL
+    photo_content_type = NULL,
+    photo_blur = NULL
 WHERE id = $1 AND owner_id = $2 AND photo_key = $3
 `
 
@@ -71,7 +72,7 @@ func (q *Queries) DeleteContact(ctx context.Context, arg DeleteContactParams) (i
 
 const getContactByID = `-- name: GetContactByID :one
 
-SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type FROM contacts
+SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type, photo_blur FROM contacts
 WHERE id = $1
 `
 
@@ -101,12 +102,13 @@ func (q *Queries) GetContactByID(ctx context.Context, id pgtype.UUID) (Contact, 
 		&i.UpdatedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
 
 const getContactByIDForUpdate = `-- name: GetContactByIDForUpdate :one
-SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type FROM contacts
+SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type, photo_blur FROM contacts
 WHERE id = $1
 FOR UPDATE
 `
@@ -134,6 +136,7 @@ func (q *Queries) GetContactByIDForUpdate(ctx context.Context, id pgtype.UUID) (
 		&i.UpdatedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
@@ -160,7 +163,7 @@ const insertContact = `-- name: InsertContact :one
 INSERT INTO contacts (id, owner_id, property_id, first_name, last_name, patronymic,
                       role, phone, email, messenger_name, messenger_username, note)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type
+RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type, photo_blur
 `
 
 type InsertContactParams struct {
@@ -211,12 +214,13 @@ func (q *Queries) InsertContact(ctx context.Context, arg InsertContactParams) (C
 		&i.UpdatedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }
 
 const listContacts = `-- name: ListContacts :many
-SELECT c.id, c.owner_id, c.property_id, c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_name, c.messenger_username, c.note, c.created_at, c.updated_at, c.photo_key, c.photo_content_type, p.name AS property_name
+SELECT c.id, c.owner_id, c.property_id, c.first_name, c.last_name, c.patronymic, c.role, c.phone, c.email, c.messenger_name, c.messenger_username, c.note, c.created_at, c.updated_at, c.photo_key, c.photo_content_type, c.photo_blur, p.name AS property_name
 FROM contacts c
 LEFT JOIN properties p ON p.id = c.property_id
 WHERE (
@@ -421,6 +425,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 			&i.Contact.UpdatedAt,
 			&i.Contact.PhotoKey,
 			&i.Contact.PhotoContentType,
+			&i.Contact.PhotoBlur,
 			&i.PropertyName,
 		); err != nil {
 			return nil, err
@@ -434,7 +439,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 }
 
 const listContactsAdmin = `-- name: ListContactsAdmin :many
-SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type
+SELECT id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type, photo_blur
 FROM contacts
 WHERE property_id = $1
 ORDER BY created_at ASC, id ASC
@@ -475,6 +480,7 @@ func (q *Queries) ListContactsAdmin(ctx context.Context, arg ListContactsAdminPa
 			&i.UpdatedAt,
 			&i.PhotoKey,
 			&i.PhotoContentType,
+			&i.PhotoBlur,
 		); err != nil {
 			return nil, err
 		}
@@ -489,9 +495,10 @@ func (q *Queries) ListContactsAdmin(ctx context.Context, arg ListContactsAdminPa
 const setContactPhoto = `-- name: SetContactPhoto :one
 UPDATE contacts
 SET photo_key = $3,
-    photo_content_type = $4
+    photo_content_type = $4,
+    photo_blur = $5
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type
+RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type, photo_blur
 `
 
 type SetContactPhotoParams struct {
@@ -499,10 +506,12 @@ type SetContactPhotoParams struct {
 	OwnerID          pgtype.UUID `json:"owner_id"`
 	PhotoKey         pgtype.Text `json:"photo_key"`
 	PhotoContentType pgtype.Text `json:"photo_content_type"`
+	PhotoBlur        pgtype.Text `json:"photo_blur"`
 }
 
-// The card photo write (ADR 0065, ticket #1227): the key and the sniffed
-// content type move together; a NULL key clears the photo. The full-row
+// The card photo write (ADR 0065, ticket #1227): the key, the sniffed
+// content type and the blur frame's base64 (решение #1594, #1603) move
+// together; a NULL key clears the photo and its frame. The full-row
 // rewrite of the editable fields is untouched — the photo is not an
 // UpdateContact field. Existence and the edit capability are proven by the
 // caller; the scope is the book owner (ADR 0028).
@@ -512,6 +521,7 @@ func (q *Queries) SetContactPhoto(ctx context.Context, arg SetContactPhotoParams
 		arg.OwnerID,
 		arg.PhotoKey,
 		arg.PhotoContentType,
+		arg.PhotoBlur,
 	)
 	var i Contact
 	err := row.Scan(
@@ -531,8 +541,40 @@ func (q *Queries) SetContactPhoto(ctx context.Context, arg SetContactPhotoParams
 		&i.UpdatedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
+}
+
+const setContactPhotoBlurIfKey = `-- name: SetContactPhotoBlurIfKey :execrows
+UPDATE contacts
+SET photo_blur = $4
+WHERE id = $1 AND owner_id = $2 AND photo_key = $3
+`
+
+type SetContactPhotoBlurIfKeyParams struct {
+	ID        pgtype.UUID `json:"id"`
+	OwnerID   pgtype.UUID `json:"owner_id"`
+	PhotoKey  pgtype.Text `json:"photo_key"`
+	PhotoBlur pgtype.Text `json:"photo_blur"`
+}
+
+// The lazy blur materialization (ADR 0065 аменд, #1603): the frame computed
+// from this request's decode lands only while the row still advertises the
+// key it was computed from — a concurrent re-upload wins, the fresh photo
+// carries its own blur. 0 affected rows is the race verdict; the write is
+// best-effort on the caller's side.
+func (q *Queries) SetContactPhotoBlurIfKey(ctx context.Context, arg SetContactPhotoBlurIfKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setContactPhotoBlurIfKey,
+		arg.ID,
+		arg.OwnerID,
+		arg.PhotoKey,
+		arg.PhotoBlur,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateContact = `-- name: UpdateContact :one
@@ -548,7 +590,7 @@ UPDATE contacts SET
     messenger_username = $11,
     note = $12
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type
+RETURNING id, owner_id, property_id, first_name, last_name, patronymic, role, phone, email, messenger_name, messenger_username, note, created_at, updated_at, photo_key, photo_content_type, photo_blur
 `
 
 type UpdateContactParams struct {
@@ -602,6 +644,7 @@ func (q *Queries) UpdateContact(ctx context.Context, arg UpdateContactParams) (C
 		&i.UpdatedAt,
 		&i.PhotoKey,
 		&i.PhotoContentType,
+		&i.PhotoBlur,
 	)
 	return i, err
 }

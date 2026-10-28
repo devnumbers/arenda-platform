@@ -56,6 +56,7 @@ import {
     SkeletonShowcaseSection,
 } from './sections/feedback';
 import { LiveValueSection } from './sections/live-value';
+import { PhotosSection } from './sections/photos';
 import { SnapRailSection } from './sections/snap-rail';
 import { SearchPillSection } from './sections/search-pill';
 
@@ -102,6 +103,7 @@ export function DesignLayerShowcase(): JSX.Element {
                 <MonthDaysGridSection />
                 <ListRowSection />
                 <CircleIconSection />
+                <PhotosSection />
                 <CategoryIconSection />
                 <PaymentButtonsSection />
                 <TopNavSection value={searchValue} onValueChange={setSearchValue} />

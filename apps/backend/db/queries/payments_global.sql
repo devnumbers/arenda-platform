@@ -315,7 +315,8 @@ SELECT p.id,
        COALESCE(CASE WHEN p.photo_key IS NOT NULL
                      THEN '/api/properties/' || p.id::text || '/photo'
                      || '?v=' || left(encode(sha256(p.photo_key::bytea), 'hex'), 32)
-                     END, '')::text AS photo_url
+                     END, '')::text AS photo_url,
+       COALESCE(p.photo_blur, '')::text AS photo_blur
 FROM properties p
 LEFT JOIN user_property_pins up
        ON up.property_id = p.id

@@ -39,7 +39,7 @@ export function Contact() {
                 className="object-cover"
               />
             </div>
-            <div className="relative flex w-full flex-col gap-8 tab:h-full tab:w-[350px] tab:shrink-0 tab:justify-between desk:w-auto desk:flex-1">
+            <div className="relative z-10 flex w-full flex-col gap-8 tab:h-full tab:w-[350px] tab:shrink-0 tab:justify-between desk:w-auto desk:flex-1">
               <div className="flex flex-col gap-3 desk:gap-6">
                 {/* Переносы явные только на планшете: браузерный Onest уже
                     фиргинского (паттерн прежнего блока; баланс строк —
@@ -84,7 +84,10 @@ export function Contact() {
               height={406}
               sizes="(min-width: 1200px) 406px, (min-width: 481px) 458px, 302px"
               /* Бокс картинки заходит на зону кнопок браузеров (прозрачная
-                  часть мокапа) — без pointer-events-none он глотает клики. */
+                  часть мокапа; на мобайле и узком планшете заезд видимый) —
+                  без pointer-events-none он глотает клики; z-10 на
+                  контентной колонке держит кнопки и тексты поверх мокапа
+                  при любом росте контента. */
               className="pointer-events-none absolute right-0 top-[409px] h-[302px] w-[302px] tab:top-[191px] tab:h-[458px] tab:w-[458px] desk:bottom-0 desk:top-auto desk:h-[406px] desk:w-[406px]"
             />
           </div>
