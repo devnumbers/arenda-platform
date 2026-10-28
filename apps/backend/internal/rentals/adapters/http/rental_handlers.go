@@ -90,6 +90,10 @@ var staticRentalProblems = []httpsupport.ErrorProblem{
 		Err: rentalsapp.ErrRentalStarted, Status: http.StatusConflict,
 		Title: httpsupport.ProblemTitleConflict, Detail: "Начавшуюся аренду можно только завершить",
 	},
+	{
+		Err: rentalsapp.ErrTenantBoundToOtherProperty, Status: http.StatusConflict,
+		Title: httpsupport.ProblemTitleConflict, Detail: "Контакт привязан к другому объекту",
+	},
 }
 
 // writeRentalsError maps an error with a fixed outcome onto the wire via the

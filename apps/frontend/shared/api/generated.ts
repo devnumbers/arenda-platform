@@ -4188,7 +4188,7 @@ export interface components {
             commissionKopecks?: number | null;
             /**
              * Format: uuid
-             * @description Арендатор — контакт из книги владельца скоупа.
+             * @description Арендатор — контакт из книги владельца скоупа, привязанный к этому объекту. Карточка без объекта привязывается к объекту аренды в той же транзакции; карточка чужого объекта — 409 (решение владельца 28.10.2026, #1622).
              */
             contactId?: string | null;
             comment?: string;
@@ -4230,7 +4230,7 @@ export interface components {
             commissionKopecks?: number | null;
             /**
              * Format: uuid
-             * @description Явный null — «Контакта нет».
+             * @description Явный null — «Контакта нет». Новый контакт подчиняется инварианту арендатора: карточка без объекта привязывается к объекту аренды, карточка чужого объекта — 409 (решение владельца 28.10.2026, #1622).
              */
             contactId?: string | null;
             comment?: string | null;
@@ -8841,7 +8841,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description Conflict: the property already has an unfinished rental, is archived, or is under maintenance. The maintenance guard answers code `property_maintenance` (ticket #1050) — every rental mutation of an unfinished rental stays blocked until the maintenance ends («Завершить ремонт» is the way back); the reads stay open. */
+            /** @description Conflict: the property already has an unfinished rental, is archived, is under maintenance, or the named tenant contact is bound to another property (решение владельца 28.10.2026, #1622). The maintenance guard answers code `property_maintenance` (ticket #1050) — every rental mutation of an unfinished rental stays blocked until the maintenance ends («Завершить ремонт» is the way back); the reads stay open. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8939,7 +8939,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description Conflict: the rental is completed, the property is archived, or the property is under maintenance — the maintenance guard answers code `property_maintenance` (ticket #1050) for every mutation of an unfinished rental, terms edits included (продление rides the same PATCH). */
+            /** @description Conflict: the rental is completed, the property is archived, the property is under maintenance, or the named tenant contact is bound to another property (решение владельца 28.10.2026, #1622) — the maintenance guard answers code `property_maintenance` (ticket #1050) for every mutation of an unfinished rental, terms edits included (продление rides the same PATCH). */
             409: {
                 headers: {
                     [name: string]: unknown;

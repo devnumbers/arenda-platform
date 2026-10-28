@@ -117,8 +117,9 @@ type ContactStore interface {
 	// service gates the result before it travels anywhere.
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Contact, error)
 	// GetByIDForUpdate is the row-locked variant for the photo mutations
-	// (ADR 0065): the previous photo key is captured under the lock inside
-	// the transaction.
+	// (ADR 0065) and the tenant bind (ADR 0054 §6): the guarded fact — the
+	// previous photo key, the card's binding — is captured under the lock
+	// inside the transaction.
 	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (domain.Contact, error)
 	// List returns the actor's visible contacts per the query's scope,
 	// search and sort (ADR 0054): the flat book scope reads the merged

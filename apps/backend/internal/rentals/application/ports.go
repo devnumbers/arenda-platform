@@ -248,3 +248,42 @@ type TenantReader interface {
 	// and false, not an error.
 	ValidatedTenantLabel(ctx context.Context, scope, contactID uuid.UUID) (string, bool, error)
 }
+
+// TenantBinding is the verdict of assigning a contact card to a rental's
+// property (решение владельца 28.10.2026, #1622): the assigned tenant always
+// serves the rental's property. Bound reports whether the assignment wrote
+// the card's binding inside the transaction — the unbound card's
+// авторебинд — so the caller folds the bind's own audit, journal and
+// realtime seams into the mutation's outcome.
+type TenantBinding struct {
+	// Label is the card's display name (the ФИО) — the journal rows'
+	// snapshot at action time.
+	Label string
+	// Bound is true when the assignment changed the card's binding.
+	Bound bool
+}
+
+// TenantBinder is the transactional write half of the tenant port: the
+// check-and-bind of the card inside the open mutation transaction. The
+// property check is the invariant (решение владельца 28.10.2026, #1622): a
+// card of another property is refused — moving a card between properties is
+// the owner's rebind act (D10 #1309), never a rental write's side effect.
+type TenantBinder interface {
+	// AssignTenant checks the card for a rental on propertyID and binds an
+	// unbound card to the property in the same transaction. The boolean
+	// reports whether the card belongs to the scope owner's book at all —
+	// an unknown or foreign card is false with a nil error (the reader
+	// port's verdict, ErrInvalidInput's territory); a card bound to another
+	// property is ErrTenantBoundToOtherProperty.
+	AssignTenant(
+		ctx context.Context, scope, propertyID, contactID uuid.UUID,
+	) (TenantBinding, bool, error)
+}
+
+// TenantBookGateway is the tx-binding factory of the tenant port (the
+// payments gateway's shape, stores.go): the wire fits it over the contacts
+// store, the conveyor's txStores carries the tx-bound binder — a binding
+// write can never escape the mutation's transaction.
+type TenantBookGateway interface {
+	WithTx(tx transaction.Tx) (TenantBinder, error)
+}

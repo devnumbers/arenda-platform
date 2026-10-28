@@ -35,4 +35,10 @@ var (
 	// ErrRentalStarted marks the deletion of an unfinished rental that has
 	// already started: it can only go through the completion (ADR 0053 §3).
 	ErrRentalStarted = errors.New("rentals: started rental can only be completed")
+	// ErrTenantBoundToOtherProperty marks a tenant assignment of a card
+	// bound to another property (решение владельца 28.10.2026, #1622): the
+	// assigned tenant always serves the rental's property — a foreign
+	// card's move is the owner's rebind act (D10 #1309), never this side
+	// effect. The honest 409; the picker simply never offers such cards.
+	ErrTenantBoundToOtherProperty = errors.New("rentals: tenant contact is bound to another property")
 )
