@@ -1,4 +1,5 @@
 import { easeOut } from "@/components/carousel-ease";
+import { wheelAxisOf } from "@/components/wheel-axis";
 
 // Движок лент-каруселей лендинга — канон карусели
 // pay.yandex.ru/business/acquiring (замер 02.10): единственная позиция p
@@ -360,7 +361,8 @@ export function createStripEngine(
   // Shift+Scroll и горизонтальный трекпад — ровно один шаг на событие;
   // события во время анимации или drag глотаются (не в очередь) — серия
   // подряд даёт один шаг, как у референса. Вертикальное колесо не наша
-  // ось — скроллит страницу.
+  // ось — скроллит страницу. Shift-нормализация — wheel-axis (macOS не
+  // ремапит ось колеса в событии, как Mousewheel-модуль Swiper).
   // Нативный drag-and-drop (картинки, выделенный текст, ссылки) забирает
   // указатель себе — Chromium даёт pointercancel и жест умирает на первом
   // же движении. Полоса — жестовая поверхность: dragstart гасится целиком
@@ -370,14 +372,15 @@ export function createStripEngine(
   };
 
   const onWheel = (e: WheelEvent) => {
-    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) {
+    const { x, y } = wheelAxisOf(e);
+    if (Math.abs(x) <= Math.abs(y)) {
       return;
     }
     e.preventDefault();
     if (st.anim || st.dragging) {
       return;
     }
-    stepBy(e.deltaX > 0 ? 1 : -1);
+    stepBy(x > 0 ? 1 : -1);
   };
 
   viewport.addEventListener("pointerdown", onPointerDown);
