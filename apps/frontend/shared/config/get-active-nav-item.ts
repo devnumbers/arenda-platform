@@ -35,8 +35,8 @@ export function getActiveNavItem(
 
   for (const section of sections) {
     const { href } = section;
-    // Пункты-действия без маршрута («Поддержка», #766) не подсвечиваются:
-    // им нечем совпасть с URL.
+    // Страховка от будущего пункта-действия без маршрута: ему нечем
+    // совпасть с URL.
     if (href === undefined) continue;
     const matches = matchesSection(pathname, section);
 
