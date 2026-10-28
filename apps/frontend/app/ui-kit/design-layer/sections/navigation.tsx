@@ -19,7 +19,7 @@ import {
     TopNavTitle,
 } from '@/shared/ui/design';
 import { cn } from '@/shared/lib/cn';
-import { navSectionById, supportNavSection } from '@/shared/config/navigation';
+import { navSectionById } from '@/shared/config/navigation';
 import styles from '../../page.module.css';
 
 type TopNavSectionProps = {
@@ -196,11 +196,7 @@ export function PageContentSection(): JSX.Element {
     );
 }
 
-type DesktopMenuButtonSectionProps = {
-    readonly onSupportOpen: () => void;
-};
-
-export function DesktopMenuButtonSection({ onSupportOpen }: DesktopMenuButtonSectionProps): JSX.Element {
+export function DesktopMenuButtonSection(): JSX.Element {
     return (
         <div className={styles.group}>
             <h3 className={styles.groupTitle}>DesktopMenuButton · десктопная навигация (#561)</h3>
@@ -209,14 +205,14 @@ export function DesktopMenuButtonSection({ onSupportOpen }: DesktopMenuButtonSec
                 подпись 14/16; фон по сету состояний (Figma 1652:82711) — невыбранная: белая
                 → hover bg-surface-muted → нажатие bg-surface-muted-hover; активная:
                 bg-surface-muted → hover bg-surface-muted-hover → нажатие
-                bg-surface-muted-active.
+                bg-surface-muted-active. Всегда ссылка из нав-модели (режим-кнопка снесён
+                вместе с модальной «Поддержкой», 28.10).
                 В продукте ScreenLayout рендерит из них DesktopSidebar (6 разделов слева под
                 хедером, Figma 1675:54050) и DesktopNavPills («Уведомления» — левый-низ 200,
                 «Поддержка» — правый-низ авто, Figma 1675:54098/54096) — только на ПК ≥1024
                 (561–1023 — планшетный хром с TabBar); пилюли глушатся вместе с TabBar,
-                пока открыт StickyBottomBar. С onClick рендерится кнопкой-действием
-                вместо ссылки — так живёт пилюля «Поддержка»: открывает SupportModal (#766).
-                Живой вид — на любом экране продукта при ширине ≥1024.
+                пока открыт StickyBottomBar. Живой вид — на любом экране продукта при
+                ширине ≥1024.
             </p>
             <div className={styles.grid}>
                 <div className="flex flex-col gap-0.5">
@@ -227,8 +223,7 @@ export function DesktopMenuButtonSection({ onSupportOpen }: DesktopMenuButtonSec
                 <div className="flex flex-col items-start gap-2">
                     <DesktopMenuButton section={navSectionById('notifications')} active />
                     <DesktopMenuButton
-                        section={supportNavSection}
-                        onClick={onSupportOpen}
+                        section={navSectionById('support')}
                         className="w-fit"
                     />
                 </div>
@@ -244,9 +239,10 @@ export function MoreSheetSection(): JSX.Element {
         <div className={styles.group}>
             <h3 className={styles.groupTitle}>MoreSheet · шит «Еще» мобильного TabBar</h3>
             <p className={styles.groupTitle}>
-                Выезжающий снизу шит навигации: ручка 48×4, два ряда разделов из нав-модели,
-                шестая ячейка — «Поддержка»-действие (TabNavAction, открывает SupportModal —
-                #766), нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560). Выезд
+                Выезжающий снизу шит навигации: ручка 48×4, два ряда ссылок из нав-модели —
+                шестая ячейка «Поддержка» ведёт на страницу /support (макет 40000075:80950,
+                28.10), нижний ряд — сам TabBar с активным «Еще» (Figma 1721:57140, #560).
+                Выезд
                 440ms (`--dl-duration-sheet-in`), оверлей гаснет синхронно; закрытие 330ms —
                 оверлей, свайп вниз, повторный тап «Еще». В продукте живёт в TabBar (мобайл/планшет ≤768), здесь —
                 с ручным триггером.

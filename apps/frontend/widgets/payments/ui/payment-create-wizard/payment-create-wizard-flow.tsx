@@ -172,7 +172,9 @@ export function PaymentCreateWizardFlow({
           }
         />
         <PageContent>
-          <div className="pt-16">
+          {/* Верх — 64 от шапки суммарно: pt-10 обёртки + pt-6 PageContent
+           * (канон посадки 28.10); свой верх у success-компонента снят. */}
+          <div className="pt-10">
             <WizardSuccess
               propertyId={created.propertyId}
               created={created.payment}

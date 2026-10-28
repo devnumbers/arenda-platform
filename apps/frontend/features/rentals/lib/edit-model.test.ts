@@ -51,6 +51,7 @@ describe('rentalEditFormFromRental', () => {
       depositKopecks: 5600000,
       commissionKopecks: null,
       comment: 'Предыдущий жилец съехал',
+      contactId: null,
     });
   });
 
@@ -73,7 +74,23 @@ describe('rentalEditFormFromRental', () => {
       depositKopecks: null,
       commissionKopecks: null,
       comment: '',
+      contactId: null,
     });
+  });
+
+  it('арендатор предзаполняется из ссылки аренды (контакт #1623)', () => {
+    const withTenant: Rental = {
+      ...RENTAL,
+      tenant: {
+        contactId: '0198c7a2-0000-7000-8000-0000000000aa',
+        firstName: 'Александр',
+        lastName: '',
+        phone: '',
+      },
+    };
+    expect(rentalEditFormFromRental(withTenant).contactId).toBe(
+      '0198c7a2-0000-7000-8000-0000000000aa',
+    );
   });
 });
 
@@ -318,5 +335,47 @@ describe('formAfterPaymentDayChange', () => {
     const form = rentalEditFormFromRental(RENTAL);
     const next = formAfterPaymentDayChange(RENTAL, { ...form, plannedEndDate: null }, 25);
     expect(next.plannedEndDate).toBeNull();
+  });
+});
+
+
+describe('дифф арендатора в buildRentalUpdateCommand (#1623)', () => {
+  const TENANT_ID = '0198c7a2-0000-7000-8000-0000000000aa';
+  const RENTAL_WITH_TENANT: Rental = {
+    ...RENTAL,
+    tenant: { contactId: TENANT_ID, firstName: 'Александр', lastName: '', phone: '' },
+  };
+
+  it('смена арендатора едет в PATCH новым id', () => {
+    const form = {
+      ...rentalEditFormFromRental(RENTAL_WITH_TENANT),
+      contactId: '0198c7a2-0000-7000-8000-0000000000bb',
+    };
+    expect(buildRentalUpdateCommand(RENTAL_WITH_TENANT, form)?.contactId).toBe(
+      '0198c7a2-0000-7000-8000-0000000000bb',
+    );
+  });
+
+  it('снятие арендатора едет явным null (tri-state)', () => {
+    const form = {
+      ...rentalEditFormFromRental(RENTAL_WITH_TENANT),
+      contactId: null,
+    };
+    const command = buildRentalUpdateCommand(RENTAL_WITH_TENANT, form);
+    expect(command).toBeDefined();
+    expect(command).toHaveProperty('contactId', null);
+  });
+
+  it('назначение арендатора пустой аренде едет id', () => {
+    const form = {
+      ...rentalEditFormFromRental(RENTAL),
+      contactId: TENANT_ID,
+    };
+    expect(buildRentalUpdateCommand(RENTAL, form)?.contactId).toBe(TENANT_ID);
+  });
+
+  it('нетронутый арендатор в дифф не едет', () => {
+    const untouched = rentalEditFormFromRental(RENTAL_WITH_TENANT);
+    expect(buildRentalUpdateCommand(RENTAL_WITH_TENANT, untouched)).toBeUndefined();
   });
 });

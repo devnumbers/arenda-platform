@@ -30,13 +30,13 @@ import {
   ConfirmDialog,
   EmptyState,
   IconButton,
-  ListRow,
   PageContent,
   RoundActionButton,
   Skeleton,
   TopNav,
   TopNavTitle,
 } from '@/shared/ui/design';
+import { ManageRow } from './manage-row';
 import { RentalGroup } from './rental-group';
 import { RentalCompletedSkeleton } from './rental-skeletons';
 import { TermRows } from './term-row';
@@ -212,6 +212,10 @@ function RentalCompletedBody({
             contentGap="gap-4"
             onOpen={() => pushPage(router, ROUTES.propertyRentalCompletedTerms(propertyId, rental.id))}
             openLabel="Открыть условия аренды"
+            // Контент статичен (TermRows без действий) — кликается вся
+            // карточка, канон секций «Платежей объекта» (решение владельца
+            // 28.10).
+            contentInteractive={false}
           >
             <TermRows rows={rentalTeaserRows(rental)} />
           </RentalGroup>
@@ -270,17 +274,18 @@ function RentalCompletedBody({
             )}
           </RentalGroup>
 
-          {/* Удаление — только владельцу; у смотрящего секции нет. Отклик
-              строки — фоном, как у «Управления» объекта (решение владельца
-              17.10.2026). */}
+          {/* Удаление — только владельцу; у смотрящего секции нет. Строка —
+              канон «Управления» объекта (ManageRow, решение владельца
+              28.10: те же стили, что на аренде и объекте). */}
           {canMutate && (
-            <RentalGroup title="Управление" className="pb-3">
-              <ListRow
-                leading={<TrashBin className="h-6 w-6 text-danger" />}
-                title={<span className="text-danger">Удалить аренду</span>}
-                onSelect={() => setDeleteOpen(true)}
-                hoverEffect="background"
-              />
+            <RentalGroup title="Управление" className="pb-0">
+              <div className="flex flex-col px-3 pb-3">
+                <ManageRow
+                  icon={<TrashBin className="h-6 w-6 text-danger" />}
+                  label={<span className="text-danger">Удалить аренду</span>}
+                  onClick={() => setDeleteOpen(true)}
+                />
+              </div>
             </RentalGroup>
           )}
         </div>

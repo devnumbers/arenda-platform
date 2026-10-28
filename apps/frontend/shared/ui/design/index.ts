@@ -113,6 +113,7 @@ export {
   CollapsibleSection,
   type CollapsibleSectionProps,
 } from './collapsible-section';
+export { CardBackgroundButton } from './card-background-button';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog';
 export { EmptyState, type EmptyStateProps } from './empty-state';
 export { ErrorCard, type ErrorCardProps } from './error-card';

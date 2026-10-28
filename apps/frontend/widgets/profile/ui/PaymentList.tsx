@@ -64,9 +64,11 @@ function HistorySkeleton(): JSX.Element {
  * группировка по датам (канон дат shared/lib), строки Row Button с
  * аватаром тарифа, знаковой суммой и маской карты. Название экрана —
  * копирайт-решение владельца; домен — Subscription Payments, с учётными
- * «Операциями» (доходы/расходы) не смешивается. Пусто — центрированный
- * серый текст без иллюстрации (макет 1886-109856 проще канона EmptyState
- * с PNG — отклонение зафиксировано в тикете). */
+ * «Операциями» (доходы/расходы) не смешивается. Пусто — серая строка без
+ * иллюстрации (макет 1886-109856 проще канона EmptyState с PNG),
+ * прижатая к верху по канону посадки §3 (карта #1613, тикет #1618):
+ * центрирование страницы запрещено решением владельца 28.10.2026;
+ * свежий макет этой пустоты в тикете ещё не приложен (HITL). */
 export function PaymentList(): JSX.Element {
   const { data: payments, isPending, isError, refetch } = useSubscriptionPayments();
   const router = useRouter();
@@ -89,10 +91,13 @@ export function PaymentList(): JSX.Element {
   }
 
   if (payments.length === 0) {
+    /* Серая строка без иллюстрации (макет 1886-109856) на верху колонки
+      * — pt-10 + pt-6 PageContent = 64 от шапки, канон §3 (карта #1613,
+      * тикет #1618); свежий макет пустоты ещё не приложен (HITL). */
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="m-0 text-base leading-[18px] text-content-secondary">Нет операций</p>
-      </div>
+      <p className="pt-10 text-center text-base leading-[18px] text-content-secondary">
+        Нет операций
+      </p>
     );
   }
 

@@ -502,6 +502,15 @@ export function Showcase() {
       if (resizeRaf !== 0) cancelAnimationFrame(resizeRaf);
       photoEl.classList.remove(s.dragging ?? "");
       stripEl.classList.remove(s.dragging ?? "");
+      // Passive-cleanup React выполняет уже после удаления поддерева из
+      // DOM: destroy-хук Mousewheel-модуля пересчитывает eventsTarget
+      // через document.querySelector и с селектором канваса получает
+      // null — SPA-переход с главной на юрстраницы падал (#1620).
+      // Слушатели снимаем с захваченного swiper.el: removeEventListener
+      // на отсоединённом элементе безопасен.
+      if (photos.params.mousewheel) {
+        photos.params.mousewheel.eventsTarget = "container";
+      }
       photos.destroy(true, true);
       plates.destroy(true, true);
       if (photoSwRef.current === photos) photoSwRef.current = null;

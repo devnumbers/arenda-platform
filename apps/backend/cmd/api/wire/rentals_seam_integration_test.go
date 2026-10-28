@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditpg "github.com/nambers/arenda-planform/apps/backend/internal/audit/adapters/postgres"
 	auditapp "github.com/nambers/arenda-planform/apps/backend/internal/audit/application"
+	contactspg "github.com/nambers/arenda-planform/apps/backend/internal/contacts/adapters/postgres"
 	historypg "github.com/nambers/arenda-planform/apps/backend/internal/history/adapters/postgres"
 	paymentspg "github.com/nambers/arenda-planform/apps/backend/internal/payments/adapters/postgres"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
@@ -82,6 +83,7 @@ func newSeamHarness(t *testing.T) *seamHarness {
 		paymentspg.NewPropertyStore(pool),
 		gateway,
 		nil,
+		NewTenantBookGateway(contactspg.NewContactStore(pool)),
 		audit,
 		historypg.NewRecorder(pool),
 		pgdb.NewUoW(pool, logger),
@@ -858,4 +860,94 @@ func TestSeam_ListRentalsBatchesTheProgressCounters(t *testing.T) {
 	secondSingle, err := h.svc.GetRental(context.Background(), h.owner, h.propID, second.Rental.ID)
 	require.NoError(t, err)
 	assert.Equal(t, secondSingle.Progress, secondView.Progress)
+}
+
+// Решение владельца 28.10.2026 (#1622): the assigned tenant always serves
+// the rental's property. The seam test of the wire's tenant book gateway
+// over the real contacts store: the unbound card binds inside the creation
+// transaction, and the bind's audit and journal rows land with it.
+func TestSeam_UnboundTenantCardBindsOnRentalCreate(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	contactID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = h.pool.Exec(context.Background(),
+		`INSERT INTO contacts (id, owner_id, first_name, role) VALUES ($1, $2, 'Иван', 'Арендатор')`,
+		contactID, h.owner)
+	require.NoError(t, err)
+
+	_, err = h.svc.CreateRental(context.Background(), h.owner, h.propID,
+		rentalsapp.CreateRentalCommand{
+			AmountKopecks: 5_000_000,
+			PaymentDay:    rentalsdomain.MustPaymentDay(15),
+			StartDate:     seamToday,
+			Utilities:     rentalsdomain.UtilitiesIncluded,
+			ContactID:     &contactID,
+		})
+	require.NoError(t, err)
+
+	// The card bound in the same transaction: the property link is on.
+	var boundProperty uuid.UUID
+	require.NoError(t, h.pool.QueryRow(context.Background(),
+		`SELECT property_id FROM contacts WHERE id = $1`, contactID).Scan(&boundProperty))
+	assert.Equal(t, h.propID, boundProperty)
+
+	// The bind's audit row: contact.updated with the destination property.
+	var auditContext map[string]any
+	require.NoError(t, h.pool.QueryRow(context.Background(),
+		`SELECT context FROM audit_log WHERE action = 'contact.updated' AND entity_id = $1`,
+		contactID).Scan(&auditContext))
+	assert.Equal(t, h.propID.String(), auditContext["property_id"])
+
+	// The journal row on the object: «Контакт привязан к объекту: Иван».
+	var searchable string
+	require.NoError(t, h.pool.QueryRow(context.Background(),
+		`SELECT searchable FROM action_journal WHERE action = 'contact.bound' AND property_id = $1`,
+		h.propID).Scan(&searchable))
+	assert.Contains(t, searchable, "Контакт привязан к объекту")
+	assert.Contains(t, searchable, "Иван")
+}
+
+// The invariant's refusal: a card of another property is the 409, nothing
+// is created behind it (решение владельца 28.10.2026, #1622).
+func TestSeam_TenantCardOfOtherPropertyIsRefused(t *testing.T) {
+	t.Parallel()
+	h := newSeamHarness(t)
+	h.seedOwner()
+	otherProperty, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = h.pool.Exec(context.Background(),
+		`INSERT INTO properties (id, owner_id, name, type, address, status)
+		 VALUES ($1, $2, 'Дача', 'house', 'Москва, Рублёвка 2', 'active')`,
+		otherProperty, h.owner)
+	require.NoError(t, err)
+	contactID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = h.pool.Exec(context.Background(),
+		`INSERT INTO contacts (id, owner_id, first_name, property_id) VALUES ($1, $2, 'Пётр', $3)`,
+		contactID, h.owner, otherProperty)
+	require.NoError(t, err)
+
+	_, err = h.svc.CreateRental(context.Background(), h.owner, h.propID,
+		rentalsapp.CreateRentalCommand{
+			AmountKopecks: 5_000_000,
+			PaymentDay:    rentalsdomain.MustPaymentDay(15),
+			StartDate:     seamToday,
+			Utilities:     rentalsdomain.UtilitiesIncluded,
+			ContactID:     &contactID,
+		})
+	require.ErrorIs(t, err, rentalsapp.ErrTenantBoundToOtherProperty)
+
+	// Nothing was written: no rental, no managed payment, the card unmoved.
+	var rentals, payments, links int
+	require.NoError(t, h.pool.QueryRow(context.Background(),
+		`SELECT
+			(SELECT count(*) FROM rentals WHERE property_id = $1),
+			(SELECT count(*) FROM payments WHERE property_id = $1),
+			(SELECT count(*) FROM contacts WHERE id = $2 AND property_id = $1)`,
+		h.propID, contactID).Scan(&rentals, &payments, &links))
+	assert.Zero(t, rentals)
+	assert.Zero(t, payments)
+	assert.Zero(t, links)
 }

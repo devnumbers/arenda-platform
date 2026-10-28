@@ -20,6 +20,7 @@ type txStores struct {
 	rentals    RentalStore
 	properties paymentsapp.PropertyStore
 	pay        RentPaymentGatewayTx
+	tenantBook TenantBinder
 	audit      auditapp.Recorder
 	history    historyapp.Recorder
 }
@@ -35,6 +36,7 @@ type txStoreFactory struct {
 	properties paymentsapp.PropertyStore
 	gateway    RentPaymentGateway
 	tenants    TenantReader
+	tenantBook TenantBookGateway
 	audit      auditapp.Recorder
 	history    historyapp.Recorder
 	uow        transaction.UoW
@@ -45,10 +47,13 @@ type txStoreFactory struct {
 // audit defaults to a Noop recorder so a caller that does not care about
 // audit still gets a safe factory. The type stays unexported; callers use :=
 // to hold it (standard Go pattern for a factory returning an unexported
-// type).
+// type). A nil tenant book gateway keeps the pre-#1622 shape: the use cases
+// refuse a command that names a contact loudly, reads never needed the
+// writer.
 func NewTxStoreFactory(
 	rentals RentalStore, properties paymentsapp.PropertyStore,
 	gateway RentPaymentGateway, tenants TenantReader,
+	tenantBook TenantBookGateway,
 	audit auditapp.Recorder, history historyapp.Recorder, uow transaction.UoW,
 ) txStoreFactory {
 	if audit == nil {
@@ -62,6 +67,7 @@ func NewTxStoreFactory(
 		properties: properties,
 		gateway:    gateway,
 		tenants:    tenants,
+		tenantBook: tenantBook,
 		audit:      audit,
 		history:    history,
 		uow:        uow,
@@ -69,10 +75,10 @@ func NewTxStoreFactory(
 }
 
 // runInTx opens a Unit-of-Work, binds the rentals repository, the payments
-// property store and the payments gateway to the transaction, and runs work
-// with them. UoW commits on nil error and rolls back otherwise; a panic in
-// work rolls back and re-panics. A missing UoW is a wiring mistake and fails
-// loudly and immediately.
+// property store, the payments gateway and the tenant book to the
+// transaction, and runs work with them. UoW commits on nil error and rolls
+// back otherwise; a panic in work rolls back and re-panics. A missing UoW is
+// a wiring mistake and fails loudly and immediately.
 func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error) error {
 	if f.uow == nil {
 		return errors.New("rentals runInTx: Unit-of-Work is not configured")
@@ -90,10 +96,18 @@ func (f *txStoreFactory) runInTx(ctx context.Context, work func(*txStores) error
 		if err != nil {
 			return fmt.Errorf("bind rent payment gateway to tx: %w", err)
 		}
+		var tenantBook TenantBinder
+		if f.tenantBook != nil {
+			tenantBook, err = f.tenantBook.WithTx(tx)
+			if err != nil {
+				return fmt.Errorf("bind tenant book to tx: %w", err)
+			}
+		}
 		return work(&txStores{
 			rentals:    rentals,
 			properties: properties,
 			pay:        pay,
+			tenantBook: tenantBook,
 			audit:      f.audit.WithTx(tx),
 			history:    f.history.WithTx(tx),
 		})

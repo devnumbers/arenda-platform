@@ -1,27 +1,15 @@
 'use client';
 
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 import { usePathname } from 'next/navigation';
 import { Drawer } from 'vaul';
 import { getActiveNavItem } from '@/shared/config/get-active-nav-item';
-import { moreSheetNavSections, supportNavSection } from '@/shared/config/navigation';
+import { moreSheetNavSections } from '@/shared/config/navigation';
 import { SheetDragHandle } from './sheet-drag-handle';
-import { SupportModal } from './support-modal';
-import { TabNavLink, TabNavAction } from './tab-bar-row';
+import { TabNavLink } from './tab-bar-row';
 
 /** Пунктов в ряду шита — три, рядов два (Figma 1721:57140). */
 const SHEET_ROW_LENGTH = 3;
-
-/** Ячейки сетки шита: пять разделов-ссылок, шестая — «Поддержка»-действие
- * (#766): страница /support снесена, ячейка открывает модалку. */
-type MoreSheetCell =
-  | { readonly kind: 'link'; readonly section: (typeof moreSheetNavSections)[number] }
-  | { readonly kind: 'support' };
-
-const moreSheetCells: ReadonlyArray<MoreSheetCell> = [
-  ...moreSheetNavSections.map((section) => ({ kind: 'link' as const, section })),
-  { kind: 'support' },
-];
 
 export type MoreSheetProps = {
   readonly open: boolean;
@@ -39,9 +27,11 @@ export type MoreSheetProps = {
  * (в non-modal ни Radix, ни vaul фон не локают). Высота контента
  * заканчивается над баром: pb = 72px ряда + его safe-area паддинг,
  * белое тело листа продолжается за баром до низа экрана. Ручка 48×4
- * и drag-закрытие vaul сохранены; шестая ячейка — «Поддержка»
- * (#766): шит закрывается, открывается модалка «Связаться с нами».
- * Активность пунктов сетки — из нав-модели (getActiveNavItem).
+ * и drag-закрытие vaul сохранены; все шесть ячеек — ссылки разделов,
+ * «Поддержка» (шестая) с 28.10 ведёт на страницу /support
+ * (макет 40000075:80950), не открывает модалку. Активность пунктов
+ * сетки — из нав-модели (getActiveNavItem): на /support шестая ячейка
+ * подсвечена активной.
  *
  * Движение — прерываемая transition-модель в globals.css
  * (.more-sheet-*), тайминги по образцу системных шитов iOS (решение
@@ -55,7 +45,6 @@ export type MoreSheetProps = {
  * #558). */
 export function MoreSheet({ open, onOpenChange }: MoreSheetProps): JSX.Element {
   const pathname = usePathname();
-  const [supportOpen, setSupportOpen] = useState(false);
   const activeSectionId = getActiveNavItem(pathname)?.id;
 
   // vaul во время drag ведёт шит inline-стилями (transition:none + текущий
@@ -87,11 +76,6 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps): JSX.Element {
       document.body.style.overflow = previous;
     };
   }, [open]);
-
-  const openSupport = (): void => {
-    handleOpenChange(false);
-    setSupportOpen(true);
-  };
 
   return (
     <Drawer.Root
@@ -127,30 +111,21 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps): JSX.Element {
           <div className="flex flex-col gap-2 py-2">
             {[0, SHEET_ROW_LENGTH].map((rowStart) => (
               <div key={rowStart} className="flex min-h-[72px] items-stretch px-4">
-                {moreSheetCells
+                {moreSheetNavSections
                   .slice(rowStart, rowStart + SHEET_ROW_LENGTH)
-                  .map((cell) =>
-                    cell.kind === 'link' ? (
-                      <TabNavLink
-                        key={cell.section.id}
-                        section={cell.section}
-                        active={activeSectionId === cell.section.id}
-                        onClick={() => handleOpenChange(false)}
-                      />
-                    ) : (
-                      <TabNavAction
-                        key={supportNavSection.id}
-                        section={supportNavSection}
-                        onClick={openSupport}
-                      />
-                    ),
-                  )}
+                  .map((section) => (
+                    <TabNavLink
+                      key={section.id}
+                      section={section}
+                      active={activeSectionId === section.id}
+                      onClick={() => handleOpenChange(false)}
+                    />
+                  ))}
               </div>
             ))}
           </div>
         </Drawer.Content>
       </Drawer.Portal>
-      <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
     </Drawer.Root>
   );
 }

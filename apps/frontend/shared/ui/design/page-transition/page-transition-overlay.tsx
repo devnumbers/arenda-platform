@@ -21,8 +21,24 @@ const machine = createPageTransitionMachine(
   typeof document === 'undefined' || typeof document.startViewTransition !== 'function'
     ? undefined
     : (update) => {
-        const transition = document.startViewTransition(update);
-        return { skip: () => transition.skipTransition() };
+        try {
+          const transition = document.startViewTransition(update);
+          // Промисы перехода по доке ренджектятся сами по себе: ready —
+          // на каждый skipTransition (watchdog, замена, bfcache), finished —
+          // на реджект колбэка. Без обработчика это красная консоль
+          // «Uncaught (in promise) AbortError» на каждом скипе; анимация —
+          // усовершенствование, её отказ не ошибка навигации.
+          transition.ready.catch(() => {});
+          transition.finished.catch(() => {});
+          return { skip: () => transition.skipTransition() };
+        } catch {
+          // startViewTransition бросает на неактивном документе (спека:
+          // InvalidStateError — prerender/bfcache-выброс). Навигация не
+          // должна умирать из-за анимации: update выполняется напрямую,
+          // скипать нечего. У машины остаются watchdog и фолбэк.
+          void update();
+          return { skip: () => {} };
+        }
       },
 );
 

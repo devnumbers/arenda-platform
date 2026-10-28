@@ -31,5 +31,5 @@ export function ContactsErrorCard({
 
 /** Поиск без совпадений (1527:74825): «Такого контакта нет», по центру. */
 export function ContactsNoResults(): JSX.Element {
-  return <p className={`${searchNoteClass} px-6 pt-16 text-center`}>Такого контакта нет</p>;
+  return <p className={`${searchNoteClass} px-6 pt-10 text-center`}>Такого контакта нет</p>;
 }

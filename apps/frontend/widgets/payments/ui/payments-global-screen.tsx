@@ -241,6 +241,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                         ).slice(0, SECTION_CARDS_LIMIT)}
                         favoriteCount={feedQuery.data?.favoriteCount ?? 0}
                         onSelectPayment={openPayment}
+                        onOpen={() => pushPage(router, ROUTES.paymentsFavorites)}
                         onOpenAll={() =>
                           pushPage(router, ROUTES.paymentsFavorites)
                         }
@@ -265,6 +266,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                           )
                         }
                         onSelectPayment={openPayment}
+                        onOpen={() => pushPage(router, ROUTES.paymentsOverdue)}
                         onOpenAll={() => pushPage(router, ROUTES.paymentsOverdue)}
                       />
                     </PaymentsGlobalSection>
@@ -290,6 +292,7 @@ export function PaymentsGlobalScreen(): JSX.Element {
                             ),
                           )
                         }
+                        onOpen={() => pushPage(router, ROUTES.paymentsDue)}
                         onOpenAll={() => pushPage(router, ROUTES.paymentsDue)}
                       />
                     </PaymentsGlobalSection>
@@ -414,21 +417,24 @@ function SectionRail({
 
 /** Тело секции «Избранные»: лента карточек + замыкающая «Все избранные»
  * (синяя звезда, счётчик целого скоупа) от трёх карточек — решение
- * владельца #1339, — либо плейсхолдер (880:18354). */
+ * владельца #1339, — либо плейсхолдер (880:18354), кликабельный целиком
+ * на страницу секции (решение владельца 28.10). */
 function FavoritesSectionBody({
   favorites,
   favoriteCount,
   onSelectPayment,
+  onOpen,
   onOpenAll,
 }: {
   readonly favorites: ReadonlyArray<GlobalPayment>;
   readonly favoriteCount: number;
   readonly onSelectPayment: (payment: GlobalPayment) => void;
+  readonly onOpen: () => void;
   readonly onOpenAll: () => void;
 }): JSX.Element {
   if (favorites.length === 0) {
     return (
-      <PaymentsGlobalPlaceholder image="/images/payments/favorites-empty.webp">
+      <PaymentsGlobalPlaceholder image="/images/payments/favorites-empty.webp" onOpen={onOpen}>
         Здесь будут платежи, которые вы добавите в избранное
       </PaymentsGlobalPlaceholder>
     );
@@ -476,6 +482,7 @@ function OverdueSectionBody({
   overdueOperationsCount,
   onSelectOperation,
   onSelectPayment,
+  onOpen,
   onOpenAll,
 }: {
   readonly overdue: ReadonlyArray<GlobalPayment>;
@@ -485,11 +492,12 @@ function OverdueSectionBody({
     operationId: string,
   ) => void;
   readonly onSelectPayment: (payment: GlobalPayment) => void;
+  readonly onOpen: () => void;
   readonly onOpenAll: () => void;
 }): JSX.Element {
   if (overdue.length === 0) {
     return (
-      <PaymentsGlobalPlaceholder image="/images/payments/overdue-empty.webp">
+      <PaymentsGlobalPlaceholder image="/images/payments/overdue-empty.webp" onOpen={onOpen}>
         Здесь будут просроченные платежи
       </PaymentsGlobalPlaceholder>
     );
@@ -557,16 +565,18 @@ function DueSectionBody({
   due,
   dueOperationsCount,
   onSelectPayment,
+  onOpen,
   onOpenAll,
 }: {
   readonly due: ReadonlyArray<PaymentDueItem>;
   readonly dueOperationsCount: number;
   readonly onSelectPayment: (item: PaymentDueItem) => void;
+  readonly onOpen: () => void;
   readonly onOpenAll: () => void;
 }): JSX.Element {
   if (due.length === 0) {
     return (
-      <PaymentsGlobalPlaceholder image="/images/payments/due-empty.webp">
+      <PaymentsGlobalPlaceholder image="/images/payments/due-empty.webp" onOpen={onOpen}>
         Здесь будут платежи на оплату
       </PaymentsGlobalPlaceholder>
     );
@@ -676,16 +686,24 @@ function ObjectsSectionBody({
 /** Пустая секция (1043:52801/52802, сверно 13.10): серая карточка —
  * текст-плейсхолдер слева и 3D-иллюстрация 64 из Figma справа; высота —
  * hug по контенту, боковые поля асимметричны (28 слева / 24 справа,
- * как в макете). */
-function PaymentsGlobalPlaceholder({
+ * как в макете). Вся карточка — кнопка на страницу секции: кликается
+ * целиком, а не только заголовок (решение владельца 28.10), канон
+ * взаимодействия заголовков-кнопок. Экспорт для тестов. */
+export function PaymentsGlobalPlaceholder({
   image,
+  onOpen,
   children,
 }: {
   readonly image: string;
+  readonly onOpen: () => void;
   readonly children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex w-full min-h-[96px] items-center gap-6 rounded-card bg-surface-muted pl-7 pr-6">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="pressable flex min-h-[96px] w-full cursor-pointer items-center gap-6 rounded-card bg-surface-muted pl-7 pr-6 text-left outline-none hover:opacity-80 focus-visible:ring-4 focus-visible:ring-primary"
+    >
       <p className="min-w-0 flex-1 text-base leading-[18px] text-content-secondary">
         {children}
       </p>
@@ -706,7 +724,7 @@ function PaymentsGlobalPlaceholder({
         onLoad={onIllustrationLoad}
         className="h-16 w-16 shrink-0 animate-[dl-fade-in_350ms_var(--dl-ease)_both]"
       />
-    </div>
+    </button>
   );
 }
 

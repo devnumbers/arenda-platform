@@ -187,6 +187,63 @@ describe('Фазовая машина шторки переходов', () => {
     expect(phases).toEqual([]);
   });
 
+  it('Back в полёте: коммит до вызова update-колбэка закрывает промис без повторной навигации', async () => {
+    const { machine, phases, fakeAt } = createVtMachine();
+    const perform = vi.fn();
+
+    machine.navigate(perform);
+    // URL сменился мимо машины (браузерный Back) до того, как браузер
+    // вызвал update-колбэк: notifyNavigated гасит таймеры и забывает
+    // ручку. Колбэк браузер вызовет позже — по официальной доке View
+    // Transitions экран держит старый снимок, пока промис колбэка не
+    // закрыт: вечный промис = вечная заморозка страницы.
+    machine.notifyNavigated();
+
+    await fakeAt(0).update?.();
+
+    expect(perform).not.toHaveBeenCalled();
+    expect(machine.getPhase()).toBe('idle');
+    expect(phases).toEqual(['vt-pending', 'idle']);
+  });
+
+  it('замена в полёте: колбэк преемника после чужого коммита закрывается, навигация не дёргается', async () => {
+    const { machine, fakeAt } = createVtMachine();
+    const first = vi.fn();
+    const second = vi.fn();
+
+    machine.navigate(first);
+    const update1Promise = fakeAt(0).update?.();
+    expect(first).toHaveBeenCalledTimes(1);
+    machine.navigate(second);
+    machine.notifyNavigated();
+    await update1Promise;
+
+    // Колбэк преемника вызван уже после коммита (URL у первой цели):
+    // промис обязан закрыться сразу — навигацию дёргать поздно, URL уже
+    // у поселившегося коммита, а незакрытый промис морозил бы экран.
+    await fakeAt(1).update?.();
+
+    expect(second).not.toHaveBeenCalled();
+    expect(machine.getPhase()).toBe('idle');
+  });
+
+  it('update-колбэк не реджектится, даже если perform бросил', async () => {
+    const { machine, fakeAt } = createVtMachine();
+    const perform = vi.fn(() => {
+      throw new Error('router сломался');
+    });
+
+    machine.navigate(perform);
+    const updatePromise = fakeAt(0).update?.();
+    machine.notifyNavigated();
+
+    // Реджект колбэка ренджектит updateCallbackDone/finished — необработанная
+    // ошибка анимации не должна становиться ошибкой навигации; раскрытие
+    // остаётся за фолбэк-таймерами машины.
+    await expect(updatePromise).resolves.toBeUndefined();
+    expect(machine.getPhase()).toBe('idle');
+  });
+
   it('reset гасит таймеры и возвращает лист в idle (bfcache, pageshow)', () => {
     const { machine, phases } = createMachine();
     const navigate = vi.fn();

@@ -5085,7 +5085,9 @@ paths:
         '409':
           description: >-
             Conflict: the property already has an unfinished rental, is
-            archived, or is under maintenance. The maintenance guard answers
+            archived, is under maintenance, or the named tenant contact is
+            bound to another property (решение владельца 28.10.2026, #1622).
+            The maintenance guard answers
             code `property_maintenance` (ticket #1050) — every rental mutation
             of an unfinished rental stays blocked until the maintenance ends
             («Завершить ремонт» is the way back); the reads stay open.
@@ -5170,8 +5172,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: >-
-            Conflict: the rental is completed, the property is archived, or
-            the property is under maintenance — the maintenance guard answers
+            Conflict: the rental is completed, the property is archived, the
+            property is under maintenance, or the named tenant contact is
+            bound to another property (решение владельца 28.10.2026, #1622)
+            — the maintenance guard answers
             code `property_maintenance` (ticket #1050) for every mutation of
             an unfinished rental, terms edits included (продление rides the
             same PATCH).
@@ -9481,7 +9485,11 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Арендатор — контакт из книги владельца скоупа.
+          description: >-
+            Арендатор — контакт из книги владельца скоупа, привязанный к
+            этому объекту. Карточка без объекта привязывается к объекту
+            аренды в той же транзакции; карточка чужого объекта — 409
+            (решение владельца 28.10.2026, #1622).
         comment:
           type: string
           maxLength: 2000
@@ -9573,7 +9581,11 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Явный null — «Контакта нет».
+          description: >-
+            Явный null — «Контакта нет». Новый контакт подчиняется
+            инварианту арендатора: карточка без объекта привязывается к
+            объекту аренды, карточка чужого объекта — 409 (решение
+            владельца 28.10.2026, #1622).
         comment:
           type: string
           maxLength: 2000

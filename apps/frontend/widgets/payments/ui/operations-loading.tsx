@@ -213,7 +213,7 @@ export function OperationsSearchLoading(): JSX.Element {
       <PageContent>
         <EmptyState
           imageSrc="/images/payments/operations-search.webp"
-          className="pt-16 pb-16"
+          className="pt-10 pb-16"
           description="Введите название операции, сумму, категорию"
         />
       </PageContent>

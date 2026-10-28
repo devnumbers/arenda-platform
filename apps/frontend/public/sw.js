@@ -547,8 +547,8 @@ function fetchAndCacheStaticAsset(request, cache, url) {
  * served from /sw.js and cannot import TypeScript at runtime, so it keeps its
  * own copy; the guard test in `push-payload.test.ts` ("service worker handlers
  * stay in sync") fails if the two drift on the key markers (showNotification,
- * clients.openWindow, default click url, branded icon). Keep the logic in sync
- * when changing behaviour.
+ * clients.openWindow, default click url, branded icon, monochrome badge). Keep
+ * the logic in sync when changing behaviour.
  */
 
 // Fallbacks — must mirror DEFAULT_PUSH_TITLE / DEFAULT_PUSH_CLICK_URL in
@@ -559,7 +559,11 @@ var DEFAULT_PUSH_TAG = 'rentli-notification';
 // ?v= is mandatory: /icons/* is served immutable for a year, so a new art
 // under the same URL never reaches cached clients. Keep in sync with
 // app/manifest.ts and shared/lib/pwa/push-payload.ts (icon-urls.test.ts).
-var PUSH_ICON_PATH = '/icons/icon-192.png?v=20261027';
+var PUSH_ICON_PATH = '/icons/icon-192.png?v=20261028';
+// Android renders the notification badge as a solid silhouette — the color
+// icon would turn into a blob there, so the badge uses the monochrome art
+// (same file as the manifest purpose "monochrome"; owner decision 28.10).
+var PUSH_BADGE_PATH = '/icons/icon-monochrome-512.png?v=20261028';
 
 // Inline copy of resolveClickTarget: only same-origin absolute paths are kept,
 // everything else falls back to the default. Stops a hostile or malformed
@@ -610,7 +614,7 @@ self.addEventListener('push', function (event) {
     body: payload ? payload.body : '',
     tag: payload ? payload.tag : DEFAULT_PUSH_TAG,
     icon: PUSH_ICON_PATH,
-    badge: PUSH_ICON_PATH,
+    badge: PUSH_BADGE_PATH,
     data: { url: payload ? payload.url : DEFAULT_PUSH_CLICK_URL },
   };
   event.waitUntil(self.registration.showNotification(title, options));

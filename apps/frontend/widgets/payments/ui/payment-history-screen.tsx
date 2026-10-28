@@ -202,7 +202,7 @@ export function PaymentHistoryScreen({
                 // Пустая история (Figma 858:21271): иллюстрация 128 и одна
                 // строка 16/18 — без карточки и подсказки; текст — тот же,
                 // что у пустого блока страницы платежа (#1338).
-                <div className="flex flex-col items-center gap-4 pt-24">
+                <div className="flex flex-col items-center gap-4 pt-16">
                   <Image
                     src="/images/payments/history-empty.webp"
                     alt=""

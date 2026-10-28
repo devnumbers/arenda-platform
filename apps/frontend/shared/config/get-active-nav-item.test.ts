@@ -50,16 +50,17 @@ describe('правила активности навигации (#558)', () => 
     expect(activeSectionId('/participants')).toBe('participants');
   });
 
+  it('«Поддержка» — раздел /support (макеты 40000074:80636/40000075:80950, 28.10)', () => {
+    expect(activeSectionId('/support')).toBe('support');
+    expect(getActiveMobileTab('/support')).toBe('more');
+  });
+
   it('остальное — без активного пункта («Еще» на мобайле, без подсветки на десктопе)', () => {
     expect(activeSectionId('/')).toBeNull();
     expect(activeSectionId('/login')).toBeNull();
     expect(activeSectionId('/subscription')).toBeNull();
     expect(activeSectionId('/ui-kit')).toBeNull();
     expect(activeSectionId('/profile/info/terms')).toBeNull();
-    // «Поддержка» — действие хрома (модалка #766), а не раздел: маршрута
-    // больше нет, страница снесена — активного пункта нет и быть не может.
-    expect(activeSectionId('/support')).toBeNull();
-    expect(activeSectionId('/support/faq')).toBeNull();
   });
 
   it('соседний префикс не подсвечивает раздел', () => {

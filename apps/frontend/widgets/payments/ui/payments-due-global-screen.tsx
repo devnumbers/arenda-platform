@@ -196,16 +196,16 @@ function DueRow({
   );
 }
 
-/** Пустое состояние (1041:46762): 3D-кошелёк, «Нет платежей на оплату» и
- * подсказка про уведомление. Центрируется в доступной высоте, как пустое
- * «Просроченных». */
+/** Пустое состояние (макет 1041:46762 перекрыт свежим — канон посадки
+ * 28.10, карта #1613; аменда того же дня: 64 отсчитывается от шапки
+ * суммарно): 3D-кошелёк, «Нет платежей на оплату» и подсказка про
+ * уведомление прижаты к верху — pt-10 поверх pt-6 PageContent = 64 от
+ * шапки; центрирование страницы запрещено. */
 function PaymentsDueEmpty(): JSX.Element {
   return (
-    <div
-      data-testid="payments-due-empty"
-      className="flex min-h-[calc(100dvh-216px)] flex-1 items-center justify-center"
-    >
+    <div data-testid="payments-due-empty">
       <EmptyState
+        className="pt-10 pb-16"
         imageSrc="/images/payments/due-empty.webp"
         title="Нет платежей на оплату"
         description="Когда вам придет уведомление об оплате, платеж появится здесь"

@@ -226,7 +226,7 @@ func (s *RentalService) CreateRental(
 			if err := validateCreate(cmd, today); err != nil {
 				return mutationOutcome{}, err
 			}
-			tenantName, err := s.validatedTenantName(ctx, scope, cmd.ContactID)
+			tenant, err := s.assignTenant(ctx, stores, scope, propertyID, cmd.ContactID)
 			if err != nil {
 				return mutationOutcome{}, err
 			}
@@ -272,17 +272,19 @@ func (s *RentalService) CreateRental(
 			if err := stores.rentals.Create(ctx, draft); err != nil {
 				return mutationOutcome{}, fmt.Errorf("create rental: %w", err)
 			}
-			return mutationOutcome{
+			out := mutationOutcome{
 				RentalID: rentalID,
 				Audit:    auditActionRentalCreated,
-				History:  new(historydomain.RentalCreated(rentalID, tenantName, cmd.StartDate, derefDate(cmd.PlannedEndDate))),
+				History:  new(historydomain.RentalCreated(rentalID, tenant.Label, cmd.StartDate, derefDate(cmd.PlannedEndDate))),
 				Changed: []realtimedom.Change{
 					realtimedom.On(realtimedom.EntityRentals, propertyID),
 					realtimedom.On(realtimedom.EntityPayments, propertyID),   // The managed payment is born with the rental.
 					realtimedom.On(realtimedom.EntityOperations, propertyID), // The tick materializes the first planned in the same transaction.
 				},
 				Tick: true, // The new payment materializes its first planned.
-			}, nil
+			}
+			tenantBindingSeams(&out, cmd.ContactID, propertyID, tenant)
+			return out, nil
 		})
 	if err != nil {
 		return RentalView{}, err
@@ -418,10 +420,14 @@ func (s *RentalService) updatedRentalOutcome(
 	// The journal label is resolved once: a set contact carries the name
 	// its validation already read, an unchanged one reads the stored card.
 	var tenantName string
+	var tenant TenantBinding
+	var setTenantID *uuid.UUID
 	if cmd.ContactID != nil && cmd.ContactID.Value != nil {
-		if tenantName, err = s.validatedTenantName(ctx, scope, cmd.ContactID.Value); err != nil {
+		setTenantID = cmd.ContactID.Value
+		if tenant, err = s.assignTenant(ctx, stores, scope, propertyID, setTenantID); err != nil {
 			return mutationOutcome{}, err
 		}
+		tenantName = tenant.Label
 	}
 	if paymentChanged {
 		if err := stores.pay.Update(ctx, scope, propertyID, *rental.PaymentID, actor, change, today); err != nil {
@@ -442,7 +448,7 @@ func (s *RentalService) updatedRentalOutcome(
 		// The tick re-stands the planned operations in the same transaction.
 		changed = append(changed, realtimedom.On(realtimedom.EntityOperations, propertyID))
 	}
-	return mutationOutcome{
+	out := mutationOutcome{
 		RentalID: rental.ID,
 		Audit:    auditActionRentalUpdated,
 		AuditCtx: map[string]any{"fields": updatedRentalFields(cmd)},
@@ -450,7 +456,9 @@ func (s *RentalService) updatedRentalOutcome(
 			rental.ID, oldTenant, tenantName, oldFrom, oldTo, rental.StartDate, derefDate(rental.PlannedEndDate))),
 		Changed: changed,
 		Tick:    paymentChanged,
-	}, nil
+	}
+	tenantBindingSeams(&out, setTenantID, propertyID, tenant)
+	return out, nil
 }
 
 // CompleteRental records the completion (решение №8, ревизия ADR 0053
@@ -1046,29 +1054,55 @@ func (s *RentalService) tenantName(ctx context.Context, scope uuid.UUID, contact
 	return name, nil
 }
 
-// validatedTenantName checks a create/update contact reference and resolves
-// its display name for the action journal row: an unknown or foreign card is
-// ErrInvalidInput, a nil contact is a tenant-less rental. The card is read
-// once — the owner check and the label come from the same port call. A
-// missing reader is a wiring mistake only when a command actually names a
-// contact.
-func (s *RentalService) validatedTenantName(
-	ctx context.Context, scope uuid.UUID, contactID *uuid.UUID,
-) (string, error) {
+// assignTenant checks a create/update contact reference inside the open
+// transaction and binds an unbound card to the rental's property (решение
+// владельца 28.10.2026, #1622): the assigned tenant always serves the
+// rental's property. An unknown or foreign card is ErrInvalidInput, a card
+// of another property is ErrTenantBoundToOtherProperty (the owner's rebind
+// act, D10 #1309 — never this write's side effect); a nil contact is a
+// tenant-less rental. The binding verdict carries the ФИО label for the
+// journal rows and whether the card's binding was written — the bind's own
+// audit, journal and realtime seams ride it.
+func (s *RentalService) assignTenant(
+	ctx context.Context, stores *txStores, scope, propertyID uuid.UUID, contactID *uuid.UUID,
+) (TenantBinding, error) {
 	if contactID == nil {
-		return "", nil
+		return TenantBinding{}, nil
 	}
-	if s.tenants == nil {
-		return "", errors.New("rentals: tenant reader must be configured to name a contact")
+	if stores.tenantBook == nil {
+		return TenantBinding{}, errors.New("rentals: tenant book writer must be configured to assign a contact")
 	}
-	label, ok, err := s.tenants.ValidatedTenantLabel(ctx, scope, *contactID)
+	binding, ok, err := stores.tenantBook.AssignTenant(ctx, scope, propertyID, *contactID)
 	if err != nil {
-		return "", fmt.Errorf("check tenant contact: %w", err)
+		return TenantBinding{}, fmt.Errorf("assign tenant contact: %w", err)
 	}
 	if !ok {
-		return "", ErrInvalidInput
+		return TenantBinding{}, ErrInvalidInput
 	}
-	return label, nil
+	return binding, nil
+}
+
+// tenantBindingSeams folds the assignment's bind into the compound outcome
+// (решение владельца 28.10.2026, #1622): a card the assignment bound audits
+// its own contact.updated with the destination property, journals the bind
+// row on the same object (ADR 0061 — the conveyor scopes the extra rows to
+// the mutation's property, which is the bind's destination) and rides the
+// card's realtime pair (ADR 0062). A card already serving the property
+// writes no seams.
+func tenantBindingSeams(out *mutationOutcome, contactID *uuid.UUID, propertyID uuid.UUID, binding TenantBinding) {
+	if contactID == nil || !binding.Bound {
+		return
+	}
+	id := *contactID
+	out.ExtraAudit = append(out.ExtraAudit, auditdomain.Entry{
+		Action:     auditdomain.ActionContactUpdated,
+		EntityType: auditdomain.EntityContact,
+		EntityID:   &id,
+		Context:    map[string]any{"property_id": propertyID},
+	})
+	bindRow := historydomain.ContactBound(id, binding.Label)
+	out.ExtraHistory = append(out.ExtraHistory, &bindRow)
+	out.Changed = append(out.Changed, realtimedom.On(realtimedom.EntityContacts, propertyID))
 }
 
 // derefDate materializes an optional date for the row-text builders: a nil

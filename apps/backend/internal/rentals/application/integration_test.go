@@ -245,6 +245,7 @@ func newRentalsHarness(t *testing.T) *rentalsHarness {
 		paymentspg.NewPropertyStore(pool),
 		gateway,
 		nil,
+		nil,
 		audit,
 		historypg.NewRecorder(pool),
 		pgdb.NewUoW(pool, slog.New(slog.DiscardHandler)),

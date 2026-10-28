@@ -94,7 +94,7 @@ export function ParticipantScreen({
         fallbackHref={ROUTES.participants}
         trailing={
           kebabVisible ? (
-            <span className="flex items-center pr-3.5">
+            <span className="flex items-center">
               <Menu>
                 <MenuTrigger asChild>
                   <IconButton icon={<Kebab />} label="Еще — действия с участником" />

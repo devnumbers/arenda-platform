@@ -3,6 +3,7 @@
 import Image, { type StaticImageData } from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TabletStrip } from "@/components/tablet-strip";
+import { wheelAxisOf } from "@/components/wheel-axis";
 import reviewAvatar1 from "@/assets/sections/review-avatar-1.webp";
 import reviewAvatar2 from "@/assets/sections/review-avatar-2.webp";
 import reviewAvatar3 from "@/assets/sections/review-avatar-3.webp";
@@ -31,7 +32,9 @@ import slide5 from "@/assets/sections/slide-5.webp";
 // (соседняя — шаг на 1, через одну и дальше — прыжок сразу на цель одной
 // анимацией) плюс Shift+колесо мыши и горизонтальный тракпад — шаг на
 // событие по канону лент (DESIGN.md §3: вертикальное колесо скроллит
-// страницу, события в полёте глотаются, не в очередь); мышь по-прежнему
+// страницу, события в полёте глотаются, не в очередь; Shift+колесо
+// нормализуется как в Mousewheel Swiper — macOS-браузеры ось в событии
+// не ремапят, см. wheel-axis); мышь по-прежнему
 // не тянет (канон Яндекса сохранён), тач-ярусы — только клик, как было.
 // Переход 440ms ease-desk (мягкие вход/выход, см. slide-desk в
 // globals.css): входящая едет на место активной, дорастая и
@@ -485,20 +488,22 @@ function TestimonialsMobileCarousel() {
   useEffect(() => {
     goToRef.current = goTo;
   }, [goTo]);
-  // Трекпад/горизонтальное колесо — шаг (пассивный React-листенер не
-  // может preventDefault: гориз. свайп трекпада уводил бы в историю).
-  // В полёте шаг перебивает переход с текущей позиции (канон DESIGN.md §3).
+  // Трекпад/Shift+колесо/горизонтальное колесо — шаг (пассивный
+  // React-листенер не может preventDefault: гориз. свайп трекпада
+  // уводил бы в историю). Shift-нормализация — wheel-axis (macOS не
+  // ремапит ось). В полёте шаг перебивает переход (канон DESIGN.md §3).
   useEffect(() => {
     const el = rootRef.current;
     if (!el) {
       return;
     }
     const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaX) < 40) {
+      const { x } = wheelAxisOf(event);
+      if (Math.abs(x) < 40) {
         return;
       }
       event.preventDefault();
-      goToRef.current(activeRef.current + (event.deltaX > 0 ? 1 : -1));
+      goToRef.current(activeRef.current + (x > 0 ? 1 : -1));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => {
@@ -827,9 +832,10 @@ export function TestimonialsDesktop() {
   useEffect(() => {
     activateRef.current = activate;
   });
-  // Нативный листенер шага колеса: гейт оси, preventDefault, окно
-  // занятости — ровно как в strip-engine. Шаг назад заворачивается по
-  // кольцу (индекс −1 → count−1) — его хореографию обслуживает
+  // Нативный листенер шага колеса: нормализация Shift+колеса (macOS не
+  // ремапит ось — wheel-axis), гейт оси, preventDefault, окно занятости
+  // — ровно как в strip-engine. Шаг назад заворачивается по кольцу
+  // (индекс −1 → count−1) — его хореографию обслуживает
   // useClickCarousel (см. шапку файла).
   useEffect(() => {
     const el = rootRef.current;
@@ -837,16 +843,16 @@ export function TestimonialsDesktop() {
       return;
     }
     const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+      const { x, y } = wheelAxisOf(event);
+      if (Math.abs(x) <= Math.abs(y)) {
         return;
       }
       event.preventDefault();
       if (performance.now() < busyUntil.current) {
         return;
       }
-      const step = event.deltaX > 0 ? 1 : -1;
       // Окно занятости заводит activate (единая точка активации).
-      activateRef.current(((activeRef.current + step) % COUNT + COUNT) % COUNT);
+      activateRef.current(((activeRef.current + (x > 0 ? 1 : -1)) % COUNT + COUNT) % COUNT);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => {

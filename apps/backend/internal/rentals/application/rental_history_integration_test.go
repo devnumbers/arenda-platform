@@ -38,6 +38,7 @@ func TestHistory_FailingJournalRollsRentalBack(t *testing.T) {
 		paymentspg.NewPropertyStore(pool),
 		gateway,
 		nil,
+		nil,
 		auditapp.NewService(auditpg.NewWriter(pool), nil),
 		&historytest.CapturingRecorder{Err: errJournalDown},
 		pgdb.NewUoW(pool, slog.New(slog.DiscardHandler)),

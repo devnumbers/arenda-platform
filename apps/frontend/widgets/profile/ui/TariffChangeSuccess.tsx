@@ -4,7 +4,7 @@ import { useEffect, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/shared/ui/design';
-import { CheckNoneLine, StatusIconDanger } from '@/shared/assets/icons';
+import { CancelColor, CheckNoneLine } from '@/shared/assets/icons';
 import {
   useSubscription,
   useSubscriptionPayment,
@@ -17,7 +17,7 @@ import { isPaymentFormExpired } from '../lib/payment-history-model';
 import { TariffSuccessScreen } from './tariff/tariff-success-screen';
 
 type TariffChangeSuccessState = {
-  /** Иконка центра есть у исходов успеха/неуспеха; платёж в обработке
+  /** Иконка есть у исходов успеха/неуспеха; платёж в обработке
    * живёт без иконки (решение владельца 30.09 — спиннеров нет). */
   readonly icon?: JSX.Element;
   readonly title: string;
@@ -26,8 +26,10 @@ type TariffChangeSuccessState = {
 };
 
 /** Успех смены тарифа (#623, канон полноэкранных успехов #621/#622):
- * шапки нет — в центре иконка 64, заголовок H3 и серое описание, внизу
- * StickyBottomBar с одним действием (каркас — общий TariffSuccessScreen).
+ * хедер «Тариф» на всех ярусах (аменда 28.10), контент прижат к верху —
+ * иконка 64 на отступе 64px от шапки, заголовок H3 и серое описание,
+ * внизу StickyBottomBar с одним действием (каркас — общий
+ * TariffSuccessScreen).
  * Три варианта поверх одного каркаса: платёж в обработке (polling статуса
  * по paymentId из редиректа банка), неуспех («Попробовать снова» на экран
  * выбора) и успех («Хорошо» на главный «Тариф»; отложенный даунгрейд
@@ -69,7 +71,9 @@ export function TariffChangeSuccess(): JSX.Element {
     };
   } else if (paymentId && payment?.status === 'failed') {
     state = {
-      icon: <StatusIconDanger className="h-16 w-16" aria-hidden />,
+      // Иконка как у отключения #622 — CancelColor вместо StatusIconDanger
+      // (слово владельца 28.10: «взять со страницы Тариф отключен»).
+      icon: <CancelColor className="h-16 w-16" aria-hidden />,
       title: 'Оплата не прошла',
       descriptions: ['Попробуйте сменить тариф ещё раз'],
       action: (

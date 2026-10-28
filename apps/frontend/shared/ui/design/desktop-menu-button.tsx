@@ -8,10 +8,6 @@ import { useNavIntentLink } from './nav-intent';
 
 export type DesktopMenuButtonProps = {
   readonly section: NavSection;
-  /** Пункт-действие вместо ссылки: рендерится <button> с той же анатомией
-   * («Поддержка» пилюли открывает модалку, #766). У такого section нет
-   * href, поэтому действие задаётся явно. */
-  readonly onClick?: () => void;
   readonly active?: boolean;
   readonly className?: string;
   /** Число непрочитанных (пилюля «Уведомления», #747): канон NumbersAlerts
@@ -39,7 +35,6 @@ export type DesktopMenuButtonProps = {
  * распространяются на потомков, поэтому варианты работают на span. */
 export function DesktopMenuButton({
   section,
-  onClick,
   active = false,
   className,
   badge,
@@ -50,6 +45,11 @@ export function DesktopMenuButton({
     'focus-visible:ring-2 focus-visible:ring-primary',
     className,
   );
+  const resolvedHref = section.href;
+  if (resolvedHref === undefined) {
+    // Программная ошибка: пункт пилюль/сайдбара без адреса не существует.
+    throw new Error('DesktopMenuButton: у раздела без href нет адреса ссылки');
+  }
   const content = (
       <span
         className={cn(
@@ -76,20 +76,6 @@ export function DesktopMenuButton({
       )}
     </span>
   );
-
-  if (onClick !== undefined) {
-    return (
-      <button type="button" onClick={onClick} className={triggerClass}>
-        {content}
-      </button>
-    );
-  }
-
-  const resolvedHref = section.href;
-  if (resolvedHref === undefined) {
-    // Программная ошибка: пункт без адреса обязан быть действием (onClick).
-    throw new Error('DesktopMenuButton: у раздела без href нужен onClick');
-  }
 
   return (
     <Link

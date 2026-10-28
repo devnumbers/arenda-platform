@@ -38,6 +38,10 @@ export type RentalEditForm = {
   readonly depositKopecks: number | null;
   readonly commissionKopecks: number | null;
   readonly comment: string;
+  /** Выбранный арендатор; null — «Контакта нет» (решение владельца
+   * 28.10.2026, #1623): дифф с арендой решает tri-state PATCH — нетронутое
+   * опускается, явный null снимает, id ставит. */
+  readonly contactId: string | null;
 };
 
 /** Опции диффа правки. */
@@ -61,6 +65,7 @@ export function rentalEditFormFromRental(rental: Rental): RentalEditForm {
     depositKopecks: rental.depositKopecks,
     commissionKopecks: rental.commissionKopecks,
     comment: rental.comment,
+    contactId: rental.tenant?.contactId ?? null,
   };
 }
 
@@ -165,6 +170,12 @@ export function buildRentalUpdateCommand(
   }
   if (form.commissionKopecks !== rental.commissionKopecks) {
     patch.commissionKopecks = form.commissionKopecks;
+  }
+  // Арендатор (решение владельца 28.10.2026, #1623): tri-state — нетронутый
+  // опускается, явный null снимает («Контакта нет»), id ставит; сервер
+  // назначение проверяет инвариантом арендатора (ADR 0054 §6).
+  if (form.contactId !== (rental.tenant?.contactId ?? null)) {
+    patch.contactId = form.contactId;
   }
   // Пустой комментарий — очистка: явный null (tri-state контракта).
   if (form.comment !== rental.comment) {

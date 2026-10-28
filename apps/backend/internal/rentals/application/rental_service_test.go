@@ -18,6 +18,8 @@ import (
 	historydomain "github.com/nambers/arenda-planform/apps/backend/internal/history/domain"
 	"github.com/nambers/arenda-planform/apps/backend/internal/history/historytest"
 	paymentsapp "github.com/nambers/arenda-planform/apps/backend/internal/payments/application"
+	realtimedom "github.com/nambers/arenda-planform/apps/backend/internal/realtime/domain"
+	"github.com/nambers/arenda-planform/apps/backend/internal/realtime/realtimetest"
 	"github.com/nambers/arenda-planform/apps/backend/internal/rentals/domain"
 	sharedpolicy "github.com/nambers/arenda-planform/apps/backend/internal/shared/policy"
 	"github.com/nambers/arenda-planform/apps/backend/internal/transaction"
@@ -64,6 +66,10 @@ const (
 	eventRentalsUpdate = "rentals.Update"
 	eventPayUpdate     = "pay.Update"
 	eventPayRunTick    = "pay.RunTick"
+
+	eventTenantBookAssign     = "tenantBook.AssignTenant"
+	eventRentalsHasUnfinished = "rentals.HasUnfinished"
+	testTenantLabel           = "Иван Tenant"
 )
 
 // journal records the cross-fake call order.
@@ -133,7 +139,46 @@ func (r fakeTenantReader) ValidatedTenantLabel(
 	if !r.exists {
 		return "", false, nil
 	}
-	return "Иван Tenant", true, nil
+	return testTenantLabel, true, nil
+}
+
+// tenantVerdict is the scripted answer of fakeTenantBook: the tx-bound
+// binder's verdict for the next AssignTenant call.
+type tenantVerdict struct {
+	label string
+	ok    bool
+	bound bool
+	err   error
+}
+
+// fakeTenantBook is the tx-binding gateway double of the tenant port
+// (#1622): WithTx hands out the tx-bound binder, its call rides the shared
+// call-order journal like the real stores'.
+type fakeTenantBook struct {
+	journal *journal
+	tx      *fakeTenantBookTx
+	next    tenantVerdict
+}
+
+func (g *fakeTenantBook) WithTx(transaction.Tx) (TenantBinder, error) {
+	g.tx = &fakeTenantBookTx{journal: g.journal, gateway: g}
+	return g.tx, nil
+}
+
+type fakeTenantBookTx struct {
+	journal *journal
+	gateway *fakeTenantBook
+}
+
+func (b *fakeTenantBookTx) AssignTenant(
+	_ context.Context, _, _, _ uuid.UUID,
+) (TenantBinding, bool, error) {
+	b.journal.add(eventTenantBookAssign)
+	v := b.gateway.next
+	if v.err != nil {
+		return TenantBinding{}, false, v.err
+	}
+	return TenantBinding{Label: v.label, Bound: v.bound}, v.ok, nil
 }
 
 type fakeRentalStore struct {
@@ -199,7 +244,7 @@ func (s *fakeRentalStore) Delete(_ context.Context, id, _ uuid.UUID) error {
 }
 
 func (s *fakeRentalStore) HasUnfinished(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
-	s.journal.add("rentals.HasUnfinished")
+	s.journal.add(eventRentalsHasUnfinished)
 	return s.hasUnfinished, nil
 }
 
@@ -343,16 +388,17 @@ func (g *fakeGateway) SummarizePaidOperations(
 
 // harness bundles the doubles into a service like the wire does.
 type harness struct {
-	t         *testing.T
-	journal   *journal
-	store     *fakeRentalStore
-	gateway   *fakeGateway
-	audit     *fakeAudit
-	history   *historytest.CapturingRecorder
-	svc       *RentalService
-	owner     uuid.UUID
-	property  uuid.UUID
-	propStore fakePropertyStore
+	t          *testing.T
+	journal    *journal
+	store      *fakeRentalStore
+	gateway    *fakeGateway
+	audit      *fakeAudit
+	history    *historytest.CapturingRecorder
+	svc        *RentalService
+	owner      uuid.UUID
+	property   uuid.UUID
+	propStore  fakePropertyStore
+	tenantBook *fakeTenantBook
 }
 
 func newHarness(t *testing.T) *harness {
@@ -382,11 +428,12 @@ func newHarnessWithPropertyFlags(t *testing.T, archived, maintenance bool) *harn
 	audit := &fakeAudit{journal: j}
 	propStore := fakePropertyStore{owner: owner, archived: archived, maintenance: maintenance}
 	history := journalingHistory(j)
-	factory := NewTxStoreFactory(store, propStore, gateway, fakeTenantReader{exists: true}, audit, history, fakeUoW{})
+	tenantBook := &fakeTenantBook{journal: j, next: tenantVerdict{label: testTenantLabel, ok: true}}
+	factory := NewTxStoreFactory(store, propStore, gateway, fakeTenantReader{exists: true}, tenantBook, audit, history, fakeUoW{})
 	svc := NewRentalService(factory, fakeCalendar{}, fakePolicy{role: sharedpolicy.RoleOwner})
 	return &harness{
 		t: t, journal: j, store: store, gateway: gateway, audit: audit, history: history,
-		svc: svc, owner: owner, property: property, propStore: propStore,
+		svc: svc, owner: owner, property: property, propStore: propStore, tenantBook: tenantBook,
 	}
 }
 
@@ -412,7 +459,7 @@ func TestCreateRental_HappyPath(t *testing.T) {
 	// payment first (the rentals row references it), then the rentals row,
 	// the audit, and the tick for the new payment.
 	assert.Equal(t, []string{
-		"rentals.HasUnfinished",
+		eventRentalsHasUnfinished,
 		"pay.Create",
 		"rentals.Create",
 		eventAuditRecord,
@@ -664,7 +711,7 @@ func TestCreateRental_SecondUnfinishedIs409(t *testing.T) {
 
 	_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, createCmd())
 	require.ErrorIs(t, err, ErrPropertyOccupied)
-	assert.Equal(t, []string{"rentals.HasUnfinished"}, h.journal.events,
+	assert.Equal(t, []string{eventRentalsHasUnfinished}, h.journal.events,
 		"nothing is created on the occupied property")
 }
 
@@ -672,11 +719,13 @@ func TestCreateRental_UnknownTenantIsInvalid(t *testing.T) {
 	t.Parallel()
 	j := &journal{}
 	owner, property := mustID(t), mustID(t)
+	book := &fakeTenantBook{journal: j} // The zero verdict: not the book's card.
 	factory := NewTxStoreFactory(
 		&fakeRentalStore{journal: j, rentals: map[uuid.UUID]domain.Rental{}},
 		fakePropertyStore{owner: owner},
 		&fakeGateway{journal: j},
 		fakeTenantReader{exists: false},
+		book,
 		&fakeAudit{journal: j},
 		journalingHistory(j),
 		fakeUoW{},
@@ -688,6 +737,163 @@ func TestCreateRental_UnknownTenantIsInvalid(t *testing.T) {
 
 	_, err := svc.CreateRental(t.Context(), owner, property, cmd)
 	require.ErrorIs(t, err, ErrInvalidInput)
+	assert.Equal(t, []string{eventTenantBookAssign}, j.events,
+		"nothing is written behind a card outside the book")
+}
+
+// Решение владельца 28.10.2026 (#1622): назначенный арендатор всегда
+// привязан к объекту аренды — безобъектная карточка привязывается в той же
+// транзакции создания аренды, и её швы едут исходом составной мутации.
+func TestCreateRental_UnboundTenantBindsToProperty(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.tenantBook.next = tenantVerdict{label: testTenantLabel, ok: true, bound: true}
+	contact := mustID(t)
+	cmd := createCmd()
+	cmd.ContactID = &contact
+
+	_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+	require.NoError(t, err)
+
+	// The conveyor discipline: the card check sits with the app checks,
+	// before any write; the bind's audit and journal rows ride the compound
+	// outcome between the primary row and the tick.
+	assert.Equal(t, []string{
+		eventTenantBookAssign,
+		eventRentalsHasUnfinished,
+		"pay.Create",
+		"rentals.Create",
+		eventAuditRecord,
+		eventAuditRecord,
+		eventHistoryRecord,
+		eventHistoryRecord,
+		eventPayRunTick,
+	}, h.journal.events)
+
+	// The bind's audit row: contact.updated with the destination property.
+	require.Len(t, h.audit.entries, 2)
+	bindAudit := h.audit.entries[1]
+	assert.Equal(t, auditdomain.ActionContactUpdated, bindAudit.Action)
+	assert.Equal(t, auditdomain.EntityContact, bindAudit.EntityType)
+	require.NotNil(t, bindAudit.EntityID)
+	assert.Equal(t, contact, *bindAudit.EntityID)
+	assert.Equal(t, h.property, bindAudit.Context["property_id"])
+
+	// The journal: RentalCreated first, the card's bind row second.
+	require.Len(t, h.history.Entries, 2)
+	assert.Equal(t, historydomain.ActionRentalCreated, h.history.Entries[0].Action)
+	assert.Equal(t, historydomain.ActionContactBound, h.history.Entries[1].Action)
+}
+
+// The card's realtime pair rides the same dispatch when the bind wrote.
+func TestCreateRental_UnboundTenantPublishesContactsPair(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	realtime := &realtimetest.RecordingPublisher{}
+	h.svc.SetRealtimePublisher(realtime)
+	h.tenantBook.next = tenantVerdict{label: testTenantLabel, ok: true, bound: true}
+	contact := mustID(t)
+	cmd := createCmd()
+	cmd.ContactID = &contact
+
+	_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+	require.NoError(t, err)
+
+	assert.Contains(t, realtime.Pairs(),
+		string(realtimedom.EntityContacts)+":"+h.property.String())
+}
+
+// A card already serving the property writes no bind seams.
+func TestCreateRental_TenantOfThisPropertySkipsBindSeams(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.tenantBook.next = tenantVerdict{label: testTenantLabel, ok: true}
+	contact := mustID(t)
+	cmd := createCmd()
+	cmd.ContactID = &contact
+
+	_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+	require.NoError(t, err)
+
+	require.Len(t, h.audit.entries, 1)
+	assert.Equal(t, auditdomain.ActionRentalCreated, h.audit.entries[0].Action)
+	require.Len(t, h.history.Entries, 1)
+	assert.Equal(t, historydomain.ActionRentalCreated, h.history.Entries[0].Action)
+}
+
+// A card of another property is refused: moving cards between properties is
+// the owner's rebind act (D10 #1309), never a rental write's side effect.
+func TestCreateRental_TenantBoundToOtherPropertyIsConflict(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.tenantBook.next = tenantVerdict{err: ErrTenantBoundToOtherProperty}
+	contact := mustID(t)
+	cmd := createCmd()
+	cmd.ContactID = &contact
+
+	_, err := h.svc.CreateRental(t.Context(), h.owner, h.property, cmd)
+	require.ErrorIs(t, err, ErrTenantBoundToOtherProperty)
+	assert.Equal(t, []string{eventTenantBookAssign}, h.journal.events,
+		"nothing is written behind a refused card")
+}
+
+// The same assignment policy on the terms edit: an unbound card binds, the
+// seams ride the update's compound outcome.
+func TestUpdateRental_SetUnboundTenantBinds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.tenantBook.next = tenantVerdict{label: testTenantLabel, ok: true, bound: true}
+	rentalID := h.seedRental(nil)
+	contact := mustID(t)
+
+	cmd := UpdateRentalCommand{ContactID: &ContactUpdate{Value: &contact}}
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+	require.NoError(t, err)
+
+	// The contact-only patch ticks nothing: audit and journal carry the
+	// primary rental.updated row plus the bind's own rows.
+	assert.Equal(t, []string{
+		eventTenantBookAssign,
+		eventRentalsUpdate,
+		eventAuditRecord,
+		eventAuditRecord,
+		eventHistoryRecord,
+		eventHistoryRecord,
+	}, h.journal.events)
+	require.Len(t, h.audit.entries, 2)
+	assert.Equal(t, auditdomain.ActionContactUpdated, h.audit.entries[1].Action)
+	require.Len(t, h.history.Entries, 2)
+	assert.Equal(t, historydomain.ActionContactBound, h.history.Entries[1].Action)
+}
+
+func TestUpdateRental_SetForeignPropertyTenantIsConflict(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.tenantBook.next = tenantVerdict{err: ErrTenantBoundToOtherProperty}
+	rentalID := h.seedRental(nil)
+	contact := mustID(t)
+
+	cmd := UpdateRentalCommand{ContactID: &ContactUpdate{Value: &contact}}
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+	require.ErrorIs(t, err, ErrTenantBoundToOtherProperty)
+	assert.NotContains(t, h.journal.events, eventRentalsUpdate,
+		"nothing is written behind a refused card")
+}
+
+// Clearing the tenant names no card — no assignment runs.
+func TestUpdateRental_ClearTenantSkipsAssign(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	rentalID := h.seedRental(func(r *domain.Rental) {
+		contact := mustID(t)
+		r.ContactID = &contact
+	})
+
+	cmd := UpdateRentalCommand{ContactID: &ContactUpdate{Value: nil}}
+	_, err := h.svc.UpdateRental(t.Context(), h.owner, h.property, rentalID, cmd)
+	require.NoError(t, err)
+
+	assert.NotContains(t, h.journal.events, eventTenantBookAssign)
 }
 
 func TestUpdateRental_PaymentTermsSyncAndTick(t *testing.T) {
@@ -1352,7 +1558,8 @@ func TestRoleMatrix(t *testing.T) {
 		t.Parallel()
 		stranger := fakePolicy{role: sharedpolicy.RoleNone}
 		svc := NewRentalService(
-			NewTxStoreFactory(h.store, h.propStore, h.gateway, fakeTenantReader{exists: true}, h.audit, journalingHistory(h.journal), fakeUoW{}),
+			NewTxStoreFactory(h.store, h.propStore, h.gateway,
+				fakeTenantReader{exists: true}, nil, h.audit, journalingHistory(h.journal), fakeUoW{}),
 			fakeCalendar{}, stranger,
 		)
 		_, err := svc.GetRental(t.Context(), h.owner, h.property, mustID(t))

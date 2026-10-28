@@ -52,6 +52,7 @@ func WireRentals(p platformDeps) (*Rentals, error) {
 		propertyStore,
 		gateway,
 		NewTenantBookReader(contactStore),
+		NewTenantBookGateway(contactStore),
 		p.AuditRecorder,
 		p.HistoryRecorder,
 		p.UoW,
@@ -446,4 +447,67 @@ func (r *tenantBookReader) ValidatedTenantLabel(
 		return "", false, nil
 	}
 	return contact.FullName(), true, nil
+}
+
+// tenantBookGateway fits the rentals tenant book gateway to the contacts
+// store (решение владельца 28.10.2026, #1622): the tx-binding half of the
+// tenant port, the payments gateway's shape — the conveyor's txStores
+// carries the tx-bound binder, so a card's binding write can never escape
+// the mutation's transaction.
+type tenantBookGateway struct {
+	contacts contactsapp.ContactStore
+}
+
+// NewTenantBookGateway builds the tenant book gateway over the contacts
+// store.
+func NewTenantBookGateway(contacts contactsapp.ContactStore) rentalsapp.TenantBookGateway {
+	return &tenantBookGateway{contacts: contacts}
+}
+
+// WithTx binds the contacts store to the mutation's transaction.
+func (g *tenantBookGateway) WithTx(tx transaction.Tx) (rentalsapp.TenantBinder, error) {
+	contacts, err := g.contacts.WithTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("bind contacts store to tx: %w", err)
+	}
+	return &tenantBookBinder{contacts: contacts}, nil
+}
+
+// tenantBookBinder is the tx-bound writer of the tenant port: the
+// check-and-bind of the card under the row lock. The property check is the
+// invariant (решение владельца 28.10.2026, #1622): the assigned tenant
+// always serves the rental's property — a card of another property is
+// ErrTenantBoundToOtherProperty (the owner's rebind act, D10 #1309), an
+// unbound card binds to the rental's property in the same transaction.
+type tenantBookBinder struct {
+	contacts contactsapp.ContactStore
+}
+
+// AssignTenant reads the card for update, answers the book verdict and
+// binds an unbound card to the rental's property. The read is FOR UPDATE:
+// the binding write races neither a concurrent card edit nor its deletion.
+func (b *tenantBookBinder) AssignTenant(
+	ctx context.Context, scope, propertyID, contactID uuid.UUID,
+) (rentalsapp.TenantBinding, bool, error) {
+	contact, err := b.contacts.GetByIDForUpdate(ctx, contactID)
+	if errors.Is(err, contactsapp.ErrNotFound) {
+		return rentalsapp.TenantBinding{}, false, nil
+	}
+	if err != nil {
+		return rentalsapp.TenantBinding{}, false, err
+	}
+	if contact.OwnerID != scope {
+		return rentalsapp.TenantBinding{}, false, nil
+	}
+	if contact.PropertyID != nil && *contact.PropertyID != propertyID {
+		return rentalsapp.TenantBinding{}, false, rentalsapp.ErrTenantBoundToOtherProperty
+	}
+	if contact.PropertyID == nil {
+		contact.PropertyID = &propertyID
+		if _, err := b.contacts.Update(ctx, contact); err != nil {
+			return rentalsapp.TenantBinding{}, false, fmt.Errorf("bind tenant card to property: %w", err)
+		}
+		return rentalsapp.TenantBinding{Label: contact.FullName(), Bound: true}, true, nil
+	}
+	return rentalsapp.TenantBinding{Label: contact.FullName()}, true, nil
 }

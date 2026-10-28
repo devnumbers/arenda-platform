@@ -89,12 +89,16 @@ describe('buildShowNotificationOptions', () => {
         });
         // Иконка обязана быть версионированной (?v=): /icons/* раздаётся
         // immutable — URL без версии доезжает до клиентов старыми байтами
-        // (guard версий — icon-urls.test.ts).
+        // (guard версий — icon-urls.test.ts). Badge — монохромный силуэт:
+        // Android рисует badge сплошным силуэтом, цветная иконка там
+        // превращается в пятно.
         expect(options).toEqual({
             body: 'Тело уведомления',
             tag: 'subscription_grace',
             icon: expect.stringMatching(/^\/icons\/icon-192\.png\?v=\d{8}$/),
-            badge: expect.stringMatching(/^\/icons\/icon-192\.png\?v=\d{8}$/),
+            badge: expect.stringMatching(
+                /^\/icons\/icon-monochrome-512\.png\?v=\d{8}$/,
+            ),
             data: { url: '/profile/tariff' },
         });
     });
@@ -218,5 +222,11 @@ describe('service worker handlers stay in sync', () => {
 
     it('public/sw.js uses the branded 192px icon', () => {
         expect(swSource).toContain('/icons/icon-192.png');
+    });
+
+    it('public/sw.js uses the monochrome notification badge', () => {
+        expect(swSource, 'SW must badge notifications with the monochrome art').toContain(
+            '/icons/icon-monochrome-512.png',
+        );
     });
 });

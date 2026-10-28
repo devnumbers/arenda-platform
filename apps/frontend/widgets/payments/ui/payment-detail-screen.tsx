@@ -785,7 +785,7 @@ function PaymentCompleteSuccess({
         leading={<IconButton icon={<Cancel />} label="Закрыть" onClick={onClose} />}
       />
       <PageContent>
-        <div className="flex flex-col items-center gap-8 px-6 pt-16">
+        <div className="flex flex-col items-center gap-8 px-6 pt-10">
           {/* Композиция фрейма 1858:105549: кружок категории 96 (глиф ~52),
            * бейдж ~52 накладывается в угол (61, 61). */}
           <span className="relative block h-24 w-24">

@@ -27,9 +27,7 @@ export type NavSectionId =
 export type NavSection = {
   readonly id: NavSectionId;
   readonly label: string;
-  /** Маршрут раздела. Не у пунктов-действий: «Поддержка» (#766) — модалка
-   * «Связаться с нами», не страница, поэтому её нет в списках разделов
-   * и правила активности её не подсвечивают (supportNavSection ниже). */
+  /** Маршрут раздела. */
   readonly href?: string;
   /** Иконка канон-каталога (DESIGN.md §10): Icon/R 24×24, цвет = currentColor. */
   readonly Icon: FC<SVGProps<SVGSVGElement>>;
@@ -47,15 +45,23 @@ export const mainNavSections: ReadonlyArray<NavSection> = [
   { id: 'participants', label: 'Участники', href: ROUTES.participants, Icon: Team },
 ];
 
-/** «Уведомления» — вне шестёрки главных: на десктопе это плавающая пилюля
- * левого-нижнего угла (Figma 1675:54098), на мобайле — средний таб TabBar.
- * Вторая пилюля, «Поддержка», пунктом-разделом больше не является (#766). */
+/** Сервисные разделы — вне шестёрки главных, свои плавающие пилюли
+ * десктопа (Figma 1675:54098/54096): «Уведомления» — левый-нижний угол,
+ * на мобайле средний таб TabBar; «Поддержка» — правый-нижний угол и
+ * шестая ячейка шита «Еще» (макеты 40000074:80636/40000075:80950,
+ * 28.10): страница /support восстановлена вместо модалки #766. */
 export const secondaryNavSections: ReadonlyArray<NavSection> = [
   {
     id: 'notifications',
     label: 'Уведомления',
     href: ROUTES.notifications,
     Icon: NotificationSettings,
+  },
+  {
+    id: 'support',
+    label: 'Поддержка',
+    href: ROUTES.support,
+    Icon: Support,
   },
 ];
 
@@ -78,23 +84,14 @@ export function navSectionById(id: NavSectionId): NavSection {
   return section;
 }
 
-/** Пункт хрома «Поддержка» — действие, не раздел (карта #761, тикет #766,
- * решение владельца 18.09): страница /support снесена, пилюля десктопа и
- * шестая ячейка шита «Еще» открывают модалку «Связаться с нами»
- * (SupportModal). Вне списков разделов — без href активность невозможна. */
-export const supportNavSection: NavSection = {
-  id: 'support',
-  label: 'Поддержка',
-  Icon: Support,
-};
-
 /** Пункты-ссылки шита «Еще» (Figma 1721:57140, тикет #560): главные
- * разделы, кроме «Объектов» (он — таб TabBar). Шестая ячейка второго ряда —
- * «Поддержка»-действие (supportNavSection), её рендерит MoreSheet. */
+ * разделы, кроме «Объектов» (он — таб TabBar), плюс «Поддержка» —
+ * шестая ячейка второго ряда (макет 40000075:80950, 28.10). */
 export const moreSheetNavSections: ReadonlyArray<NavSection> = [
   navSectionById('payments'),
   navSectionById('operations'),
   navSectionById('tasks'),
   navSectionById('contacts'),
   navSectionById('participants'),
+  navSectionById('support'),
 ];

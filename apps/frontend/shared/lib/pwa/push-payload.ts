@@ -19,7 +19,16 @@
  * sync with `app/manifest.ts` and the inline copy in `public/sw.js` (guard —
  * `icon-urls.test.ts`).
  */
-const PUSH_ICON_PATH = '/icons/icon-192.png?v=20261027';
+const PUSH_ICON_PATH = '/icons/icon-192.png?v=20261028';
+
+/**
+ * Notification badge (`NotificationOptions.badge`): Android renders it as a
+ * solid silhouette in the shade/status bar, so the color icon would turn into
+ * a blob there — the monochrome white-on-transparent art is the correct asset.
+ * Same file as the manifest `purpose: "monochrome"` icon (owner decision
+ * 28.10.2026: one art for both roles). `?v=` rules — see PUSH_ICON_PATH.
+ */
+const PUSH_BADGE_PATH = '/icons/icon-monochrome-512.png?v=20261028';
 
 /** Fallback destination when the payload carries no `url`. */
 export const DEFAULT_PUSH_CLICK_URL = '/properties';
@@ -86,7 +95,8 @@ export function parsePushPayload(
 /**
  * Build the `showNotification` options for a parsed payload.
  *
- * `icon`/`badge` point at the branded 192px icon; `tag` enables the browser to
+ * `icon` points at the branded 192px icon; `badge` at the monochrome
+ * silhouette; `tag` enables the browser to
  * replace an existing notification with the same tag (e.g. one per event type)
  * instead of stacking duplicates; `data.url` carries the click destination.
  */
@@ -97,7 +107,7 @@ export function buildShowNotificationOptions(
         body: payload.body,
         tag: payload.tag,
         icon: PUSH_ICON_PATH,
-        badge: PUSH_ICON_PATH,
+        badge: PUSH_BADGE_PATH,
         data: { url: payload.url },
     };
 }
